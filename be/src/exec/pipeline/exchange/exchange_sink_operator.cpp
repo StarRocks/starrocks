@@ -288,7 +288,7 @@ bool ExchangeSinkOperator::is_finished() const {
     return _is_finished && _buffer->is_finished();
 }
 
-bool ExchangeSinkOperator::need_input() const {
+bool ExchangeSinkOperator::need_input() {
     return !_is_finished && !_buffer->is_full();
 }
 

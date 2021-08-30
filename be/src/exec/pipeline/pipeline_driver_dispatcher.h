@@ -28,7 +28,18 @@ public:
     virtual void initialize(int32_t num_threads) {}
     virtual void change_num_threads(int32_t num_threads) {}
     virtual void dispatch(DriverPtr driver){};
-    virtual void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) = 0;
+
+    // When all the root drivers (the drivers have no successors in the same fragment) have finished,
+    // just notify FE timely the completeness of fragment via invocation of report_exec_state, but
+    // the FragmentContext is not unregistered until all the drivers has finished, because some
+    // non-root drivers maybe has pending io task executed in io threads asynchronously has reference
+    // to objects owned by FragmentContext. so here:
+    // 1. for the first time report_exec_state, clean is false, means not unregister FragmentContext
+    // when all root drivers has finished.
+    //
+    // 2. for the second time report_exec_state, clean is true means that allthe drivers has finished,
+    // so now FragmentContext can be unregistered safely.
+    virtual void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done, bool clean) = 0;
 };
 
 class GlobalDriverDispatcher final : public FactoryMethod<DriverDispatcher, GlobalDriverDispatcher> {
@@ -38,7 +49,7 @@ public:
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
     void dispatch(DriverPtr driver) override;
-    void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) override;
+    void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done, bool clean) override;
 
 private:
     void run();

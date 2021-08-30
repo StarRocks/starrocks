@@ -43,7 +43,12 @@ void GlobalDriverDispatcher::run() {
 
         if (fragment_ctx->is_canceled()) {
             VLOG_ROW << "[Driver] Canceled: error=" << fragment_ctx->final_status().to_string();
-            driver->finalize(runtime_state, DriverState::CANCELED);
+            if (driver->source_operator()->async_pending()) {
+                driver->set_driver_state(DriverState::ASYNC_PENDING);
+                _blocked_driver_poller->add_blocked_driver(driver);
+            } else {
+                driver->finalize(runtime_state, DriverState::CANCELED);
+            }
             continue;
         }
 
@@ -53,7 +58,12 @@ void GlobalDriverDispatcher::run() {
         if (!status.ok()) {
             VLOG_ROW << "[Driver] Process error: error=" << status.status().to_string();
             fragment_ctx->cancel(status.status());
-            driver->finalize(runtime_state, DriverState::INTERNAL_ERROR);
+            if (driver->source_operator()->async_pending()) {
+                driver->set_driver_state(DriverState::ASYNC_PENDING);
+                _blocked_driver_poller->add_blocked_driver(driver);
+            } else {
+                driver->finalize(runtime_state, DriverState::INTERNAL_ERROR);
+            }
             continue;
         }
         auto driver_state = status.value();
@@ -75,7 +85,8 @@ void GlobalDriverDispatcher::run() {
             break;
         }
         case INPUT_EMPTY:
-        case OUTPUT_FULL: {
+        case OUTPUT_FULL:
+        case ASYNC_PENDING: {
             VLOG_ROW << strings::Substitute("[Driver] Blocked, source=$0, state=$1",
                                             driver->source_operator()->get_name(), ds_to_string(driver_state));
             _blocked_driver_poller->add_blocked_driver(driver);
@@ -91,8 +102,9 @@ void GlobalDriverDispatcher::dispatch(DriverPtr driver) {
     this->_driver_queue->put_back(driver);
 }
 
-void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) {
-    this->_exec_state_reporter->submit(fragment_ctx, status, done);
+void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done,
+                                               bool clean) {
+    this->_exec_state_reporter->submit(fragment_ctx, status, done, clean);
 }
 } // namespace pipeline
 } // namespace starrocks

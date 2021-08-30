@@ -25,9 +25,9 @@ public:
 
     // Result sink will send result chunk to BufferControlBlock directly,
     // Then FE will pull result from BufferControlBlock
-    bool has_output() const override { return false; }
+    bool has_output() override { return false; }
 
-    bool need_input() const override;
+    bool need_input() override;
 
     bool is_finished() const override { return _is_finished && !_fetch_data_result; }
 

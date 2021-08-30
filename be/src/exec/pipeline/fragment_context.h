@@ -5,6 +5,7 @@
 #include <unordered_map>
 
 #include "exec/exec_node.h"
+#include "exec/pipeline/morsel.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -79,6 +80,8 @@ public:
 
     bool is_canceled() { return _cancel_flag.load(std::memory_order_acquire) == true; }
 
+    MorselQueueMap& morsel_queues() { return _morsel_queues; }
+
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -91,6 +94,10 @@ private:
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     Pipelines _pipelines;
     Drivers _drivers;
+    // _morsel_queues is mapping from an source_id to its corresponding
+    // MorselQueue that is shared among drivers created from the same pipeline,
+    // drivers contend for Morsels from MorselQueue.
+    MorselQueueMap _morsel_queues;
     // when _num_root_drivers counts down to zero, means that all the root drivers are finished,
     // the fragment instance produces the entire result required, all the outstanding drivers
     // should finish computation.

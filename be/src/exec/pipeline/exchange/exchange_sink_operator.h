@@ -36,9 +36,9 @@ public:
 
     Status close(RuntimeState* state) override;
 
-    bool has_output() const override { return false; }
+    bool has_output() override { return false; }
 
-    bool need_input() const override;
+    bool need_input() override;
 
     bool is_finished() const override;
 
