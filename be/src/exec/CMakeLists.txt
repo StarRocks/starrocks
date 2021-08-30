@@ -141,6 +141,9 @@ set(EXEC_FILES
     vectorized/repeat_node.cpp
     vectorized/table_function_node.cpp
     vectorized/mysql_scan_node.cpp
+    vectorized/es_http_scan_node.cpp
+    vectorized/es_http_scanner.cpp
+    vectorized/es_http_components.cpp
     parquet/column_chunk_reader.cpp
     parquet/column_reader.cpp
     parquet/encoding.cpp

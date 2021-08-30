@@ -23,6 +23,7 @@
 
 #include "runtime/date_value.h"
 #include "runtime/vectorized/time_types.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks::vectorized {
 TimestampValue TimestampValue::MAX_TIMESTAMP_VALUE{timestamp::MAX_TIMESTAMP};
@@ -815,6 +816,24 @@ int64_t TimestampValue::to_unix_second() const {
     result += timestamp::to_time(_timestamp) / USECS_PER_SEC;
     result -= timestamp::UNIX_EPOCH_SECONDS;
     return result;
+}
+
+bool TimestampValue::from_unixtime(int64_t second, const std::string& timezone) {
+    cctz::time_zone ctz;
+    if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
+        return false;
+    }
+    return from_unixtime(second, ctz);
+}
+
+bool TimestampValue::from_unixtime(int64_t second, const cctz::time_zone& ctz) {
+    static const cctz::time_point<cctz::sys_seconds> epoch =
+            std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));
+    cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(second);
+
+    const auto tp = cctz::convert(t, ctz);
+    from_timestamp(tp.year(), tp.month(), tp.day(), tp.hour(), tp.minute(), tp.second(), 0);
+    return true;
 }
 
 void TimestampValue::from_unix_second(int64_t second) {

@@ -28,6 +28,7 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Catalog;
@@ -349,6 +350,9 @@ public class EsScanNode extends ScanNode {
     @Override
     public void setUseVectorized(boolean flag) {
         this.useVectorized = flag;
+        for (Expr expr : conjuncts) {
+            expr.setUseVectorized(flag);
+        }
     }
 
 }
