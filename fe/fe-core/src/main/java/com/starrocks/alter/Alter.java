@@ -140,16 +140,18 @@ public class Alter {
             } else {
                 boolean hasfindTable = false;
                 for (Table t : db.getTables()) {
-                    OlapTable olapTable = (OlapTable) t;
-                    for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
-                        if (olapTable.getIndexNameById(mvIdx.getId()).equals(stmt.getMvName())) {
-                            table = olapTable;
-                            hasfindTable = true;
+                    if (t instanceof OlapTable) {
+                        OlapTable olapTable = (OlapTable) t;
+                        for (MaterializedIndex mvIdx : olapTable.getVisibleIndex()) {
+                            if (olapTable.getIndexNameById(mvIdx.getId()).equals(stmt.getMvName())) {
+                                table = olapTable;
+                                hasfindTable = true;
+                                break;
+                            }
+                        }
+                        if (hasfindTable) {
                             break;
                         }
-                    }
-                    if (hasfindTable) {
-                        break;
                     }
                 }
             }

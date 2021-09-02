@@ -28,6 +28,10 @@ public class ColumnRefSet implements Cloneable {
         }
     }
 
+    public ColumnRefSet(BitSet bitSet) {
+        this.bitSet = bitSet;
+    }
+
     public int[] getColumnIds() {
         return bitSet.stream().toArray();
     }

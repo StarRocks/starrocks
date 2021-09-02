@@ -945,4 +945,18 @@ public class MVRewriteTest {
         // mv lacks of `commission` field, so can not use mv.
         starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
     }
+
+    @Test
+    public void testJoinProjectRewrite() throws Exception {
+        String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME +
+                " as select time, empid, bitmap_union(to_bitmap(deptno)) from " + EMPS_TABLE_NAME + " group by time, empid";
+        dorisAssert.withMaterializedView(createEmpsMVSQL);
+        String query = "select count(distinct emps.deptno) from emps, depts";
+        dorisAssert.query(query).explainContains("emps_mv", "bitmap_union_count(7: mv_bitmap_union_deptno)");
+
+        query = "select unnest, count(distinct deptno) from " +
+                "(select deptno, unnest from emps,unnest(split(name, \",\"))) t" +
+                " group by unnest";
+        dorisAssert.query(query).explainContains("emps_mv", "bitmap_union_count(7: mv_bitmap_union_deptno)");
+    }
 }
