@@ -23,7 +23,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.ArrayList;
-import java.util.BitSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -144,21 +143,17 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<Void, Materia
     public Void visitLogicalTableFunction(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
         optExpression.getInputs().forEach(e -> rewrite(e, context));
 
-        BitSet bitSet = new BitSet();
+        ColumnRefSet bitSet = new ColumnRefSet();
         LogicalTableFunctionOperator tableFunctionOperator = (LogicalTableFunctionOperator) optExpression.getOp();
         for (Integer columnId : tableFunctionOperator.getOuterColumnRefSet().getColumnIds()) {
             if (columnId == context.queryColumnRef.getId()) {
-                BitSet b = new BitSet();
-                b.set(context.mvColumnRef.getId());
-                bitSet.or(b);
+                bitSet.union(context.mvColumnRef.getId());
             } else {
-                BitSet b = new BitSet();
-                b.set(columnId);
-                bitSet.or(b);
+                bitSet.union(columnId);
             }
         }
 
-        tableFunctionOperator.setOuterColumnRefSet(new ColumnRefSet(bitSet));
+        tableFunctionOperator.setOuterColumnRefSet(bitSet);
         return null;
     }
 

@@ -100,8 +100,9 @@ public class MaterializedViewRule extends Rule {
                         }
                         rewriteContext.removeAll(percentileContexts);
 
+                        MaterializedViewRewriter rewriter = new MaterializedViewRewriter();
                         for (MaterializedViewRule.RewriteContext rc : rewriteContext) {
-                            new MaterializedViewRewriter().rewrite(input, rc);
+                            rewriter.rewrite(input, rc);
                         }
                     }
                 }
