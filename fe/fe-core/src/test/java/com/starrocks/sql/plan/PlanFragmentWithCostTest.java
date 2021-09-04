@@ -469,4 +469,27 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  <slot 15> : 15: mv_bitmap_union_k8"));
         Assert.assertTrue(planFragment.contains("rollup: bitmap_mv"));
     }
+
+    @Test
+    public void testReplicatedJoin() throws Exception {
+        connectContext.getSessionVariable().setEnableReplicationJoin(true);
+        String sql = "select s_name, s_address from supplier, nation where s_suppkey in " +
+                "( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'forest%' ) and ps_availqty > " +
+                "( select 0.5 * sum(l_quantity) from lineitem where l_partkey = ps_partkey and l_suppkey = ps_suppkey and " +
+                "l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year ) ) " +
+                "and s_nationkey = n_nationkey and n_name = 'CANADA' order by s_name;";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains(" 3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (REPLICATED)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: S_NATIONKEY = 9: N_NATIONKEY"));
+        Assert.assertTrue(plan.contains("18:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: S_SUPPKEY = 15: PS_SUPPKEY"));
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
+    }
 }
