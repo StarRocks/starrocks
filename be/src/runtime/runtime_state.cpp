@@ -30,6 +30,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
+#include "exprs/agg/distinct.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "runtime/buffered_block_mgr2.h"
 #include "runtime/bufferpool/reservation_tracker.h"
@@ -203,7 +204,7 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
     _db_name = "insert_stmt";
     _import_label = print_id(fragment_instance_id);
     _runtime_filter_port = _obj_pool->add(new RuntimeFilterPort(this));
-
+    _distinct_bitmap = _obj_pool->add(new DistinctBitmap());
     return Status::OK();
 }
 
