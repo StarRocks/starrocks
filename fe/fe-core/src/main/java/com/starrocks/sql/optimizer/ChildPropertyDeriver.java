@@ -136,6 +136,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         if (node.getJoinType().isCrossJoin() || JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN.equals(node.getJoinType())
                 || (node.getJoinType().isInnerJoin() && equalOnPredicate.isEmpty())
                 || "BROADCAST".equalsIgnoreCase(hint)) {
+            tryReplicationCrossJoin(context);
             return visitJoinRequirements(node, context);
         }
 
@@ -166,6 +167,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         if ("SHUFFLE".equalsIgnoreCase(hint)) {
             return visitJoinRequirements(node, context);
         }
+
+        tryReplicationHashJoin(leftDistribution, rightDistribution);
 
         // Colocate join and bucket shuffle join only support column to column binary predicate
         if (equalOnPredicate.stream().anyMatch(p -> !isColumnToColumnBinaryPredicate(p))) {
@@ -282,6 +285,58 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
             PhysicalPropertySet leftLocalProperty = createPropertySetByDistribution(
                     createLocalByByHashColumns(leftScanDistribution.getShuffleColumns()));
 
+            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
+                    Lists.newArrayList(leftLocalProperty, rightLocalProperty)));
+        }
+    }
+
+    private void tryReplicationCrossJoin(ExpressionContext context) {
+        if (!ConnectContext.get().getSessionVariable().isEnableReplicationJoin()) {
+            return;
+        }
+
+        GroupExpression rightChild = context.getChildGroupExpression(1);
+        List<LogicalOlapScanOperator> scanLists = Lists.newArrayList();
+        Utils.extractOlapScanOperator(rightChild, scanLists);
+
+        if (scanLists.size() != 1) {
+            return;
+        }
+
+        LogicalOlapScanOperator rightScan = scanLists.get(0);
+        if (rightScan.canDoReplicationJoin()) {
+            HashDistributionSpec rightScanDistribution = rightScan.getDistributionSpec();
+            PhysicalPropertySet rightLocalProperty = createPropertySetByDistribution(
+                    createLocalByByHashColumns(rightScanDistribution.getShuffleColumns()));
+            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
+                    Lists.newArrayList(PhysicalPropertySet.EMPTY, rightLocalProperty)));
+        }
+    }
+
+    private void tryReplicationHashJoin(HashDistributionSpec leftShuffleDistribution,
+                                        HashDistributionSpec rightShuffleDistribution) {
+        if (!ConnectContext.get().getSessionVariable().isEnableReplicationJoin()) {
+            return;
+        }
+
+        Optional<LogicalOlapScanOperator> leftTable = findLogicalOlapScanOperator(leftShuffleDistribution);
+        if (!leftTable.isPresent()) {
+            return;
+        }
+
+        Optional<LogicalOlapScanOperator> rightTable = findLogicalOlapScanOperator(rightShuffleDistribution);
+        if (!rightTable.isPresent()) {
+            return;
+        }
+        LogicalOlapScanOperator left = leftTable.get();
+        LogicalOlapScanOperator right = rightTable.get();
+        if (right.canDoReplicationJoin()) {
+            HashDistributionSpec leftScanDistribution = left.getDistributionSpec();
+            HashDistributionSpec rightScanDistribution = right.getDistributionSpec();
+            PhysicalPropertySet leftLocalProperty = createPropertySetByDistribution(
+                    createLocalByByHashColumns(leftScanDistribution.getShuffleColumns()));
+            PhysicalPropertySet rightLocalProperty = createPropertySetByDistribution(
+                    createLocalByByHashColumns(rightScanDistribution.getShuffleColumns()));
             outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
                     Lists.newArrayList(leftLocalProperty, rightLocalProperty)));
         }

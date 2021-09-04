@@ -74,10 +74,7 @@ public class RuntimeFilterDescription {
             return false;
         }
         float sel = (1.0f - buildCardinality * 1.0f / card);
-        if (sel < ProbeMinSelectivity) {
-            return false;
-        }
-        return true;
+        return !(sel < ProbeMinSelectivity);
     }
 
     public void enterExchangeNode() {
@@ -123,6 +120,7 @@ public class RuntimeFilterDescription {
     public boolean isLocalApplicable() {
         return joinMode.equals(HashJoinNode.DistributionMode.BROADCAST) ||
                 joinMode.equals(HashJoinNode.DistributionMode.COLOCATE) ||
+                joinMode.equals(HashJoinNode.DistributionMode.REPLICATED) ||
                 joinMode.equals(HashJoinNode.DistributionMode.BUCKET_SHUFFLE);
     }
 

@@ -69,7 +69,7 @@ public class HashJoinNode extends PlanNode {
     private String colocateReason = ""; // if can not do colocate join, set reason here
     private boolean isBucketShuffle = false; // the flag for bucket shuffle join
 
-    private List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
+    private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
@@ -237,7 +237,6 @@ public class HashJoinNode extends PlanNode {
         createDefaultSmap(analyzer);
 
         computeStats(analyzer);
-        //assignedConjuncts = analyzr.getAssignedConjuncts();
 
         ExprSubstitutionMap combinedChildSmap = getCombinedChildWithoutTupleIsNullSmap();
         List<Expr> newEqJoinConjuncts =
@@ -294,15 +293,6 @@ public class HashJoinNode extends PlanNode {
                 continue;
             }
             long numDistinct = stats.getNumDistinctValues();
-            // TODO rownum
-            //Table rhsTbl = slotDesc.getParent().getTableFamilyGroup().getBaseTable();
-            // if (rhsTbl != null && rhsTbl.getNumRows() != -1) {
-            // we can't have more distinct values than rows in the table, even though
-            // the metastore stats may think so
-            // LOG.info(
-            //   "#distinct=" + numDistinct + " #rows=" + Long.toString(rhsTbl.getNumRows()));
-            // numDistinct = Math.min(numDistinct, rhsTbl.getNumRows());
-            // }
             maxNumDistinct = Math.max(maxNumDistinct, numDistinct);
             LOG.debug("min slotref: {}, #distinct: {}", rhsSlotRef.toSql(), numDistinct);
         }
@@ -517,7 +507,8 @@ public class HashJoinNode extends PlanNode {
         BROADCAST("BROADCAST"),
         PARTITIONED("PARTITIONED"),
         BUCKET_SHUFFLE("BUCKET_SHUFFLE"),
-        COLOCATE("COLOCATE");
+        COLOCATE("COLOCATE"),
+        REPLICATED("REPLICATED");
 
         private final String description;
 

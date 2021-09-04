@@ -102,10 +102,6 @@ public class Tablet extends MetaObject implements Writable {
         isConsistent = true;
     }
 
-    public void setIdForRestore(long tabletId) {
-        this.id = tabletId;
-    }
-
     public long getId() {
         return this.id;
     }
@@ -234,6 +230,30 @@ public class Tablet extends MetaObject implements Writable {
                 }
             }
         }
+    }
+
+    public int getQueryableReplicasSize(long visibleVersion, long visibleVersionHash, int schemaHash) {
+        int size = 0;
+        for (Replica replica : replicas) {
+            if (replica.isBad()) {
+                continue;
+            }
+
+            // Skip the missing version replica
+            if (replica.getLastFailedVersion() > 0) {
+                continue;
+            }
+
+            ReplicaState state = replica.getState();
+            if (state.canQuery()) {
+                // replica.getSchemaHash() == -1 is for compatibility
+                if (replica.checkVersionCatchUp(visibleVersion, visibleVersionHash, false)
+                        && (replica.getSchemaHash() == -1 || replica.getSchemaHash() == schemaHash)) {
+                    size++;
+                }
+            }
+        }
+        return size;
     }
 
     public Replica getReplicaById(long replicaId) {
@@ -504,8 +524,8 @@ public class Tablet extends MetaObject implements Writable {
             }
             if (stable < (replicationNum / 2) + 1) {
                 return Pair.create(TabletStatus.REPLICA_RELOCATING, TabletSchedCtx.Priority.NORMAL);
-            } else if (stable < replicationNum) {
-                return Pair.create(TabletStatus.REPLICA_RELOCATING, TabletSchedCtx.Priority.LOW);
+            } else {
+                return Pair.create(TabletStatus.REPLICA_RELOCATING, Priority.LOW);
             }
         }
 
@@ -596,7 +616,7 @@ public class Tablet extends MetaObject implements Writable {
         boolean ready = false;
         switch (priority) {
             case HIGH:
-                ready = currentTime - lastStatusCheckTime > Config.tablet_repair_delay_factor_second * 1000 * 1;
+                ready = currentTime - lastStatusCheckTime > Config.tablet_repair_delay_factor_second * 1000;
                 break;
             case NORMAL:
                 ready = currentTime - lastStatusCheckTime > Config.tablet_repair_delay_factor_second * 1000 * 2;

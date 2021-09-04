@@ -86,7 +86,6 @@ import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.thrift.TRuntimeFilterParams;
 import com.starrocks.thrift.TRuntimeFilterProberParams;
-import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
@@ -186,10 +185,11 @@ public class Coordinator {
     // force schedule local be for HybridBackendSelector
     // only for hive now
     private boolean forceScheduleLocal = false;
-    private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     private final Set<Integer> colocateFragmentIds = new HashSet<>();
-
+    private final Set<Integer> replicateFragmentIds = new HashSet<>();
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
+
+    private final Map<PlanFragmentId, Map<Integer, TNetworkAddress>> fragmentIdToSeqToAddressMap = Maps.newHashMap();
     // fragment_id -> < bucket_seq -> < scannode_id -> scan_range_params >>
     private final Map<PlanFragmentId, BucketSeqToScanRange> fragmentIdBucketSeqToScanRangeMap = Maps.newHashMap();
     // fragment_id -> bucket_num
@@ -1060,20 +1060,30 @@ public class Coordinator {
                     TNetworkAddress key = tNetworkAddressMapEntry.getKey();
                     Map<Integer, List<TScanRangeParams>> value = tNetworkAddressMapEntry.getValue();
 
-                    for (Integer planNodeId : value.keySet()) {
-                        List<TScanRangeParams> perNodeScanRanges = value.get(planNodeId);
-                        int expectedInstanceNum = 1;
-                        if (parallelExecInstanceNum > 1) {
-                            //the scan instance num should not larger than the tablets num
-                            expectedInstanceNum = Math.min(perNodeScanRanges.size(), parallelExecInstanceNum);
+                    boolean isReplicated = isRelicatedFragment(fragment.getPlanRoot());
+                    if (isReplicated) {
+                        // TODO(KKS): Support multiple instances
+                        FInstanceExecParam instanceParam = new FInstanceExecParam(null, key, 0, params);
+                        for (Integer planNodeId : value.keySet()) {
+                            List<TScanRangeParams> perNodeScanRanges = value.get(planNodeId);
+                            instanceParam.perNodeScanRanges.put(planNodeId, perNodeScanRanges);
                         }
-                        List<List<TScanRangeParams>> perInstanceScanRanges = ListUtil.splitBySize(perNodeScanRanges,
-                                expectedInstanceNum);
+                    } else {
+                        for (Integer planNodeId : value.keySet()) {
+                            List<TScanRangeParams> perNodeScanRanges = value.get(planNodeId);
+                            int expectedInstanceNum = 1;
+                            if (parallelExecInstanceNum > 1) {
+                                //the scan instance num should not larger than the tablets num
+                                expectedInstanceNum = Math.min(perNodeScanRanges.size(), parallelExecInstanceNum);
+                            }
+                            List<List<TScanRangeParams>> perInstanceScanRanges = ListUtil.splitBySize(perNodeScanRanges,
+                                    expectedInstanceNum);
 
-                        for (List<TScanRangeParams> scanRangeParams : perInstanceScanRanges) {
-                            FInstanceExecParam instanceParam = new FInstanceExecParam(null, key, 0, params);
-                            instanceParam.perNodeScanRanges.put(planNodeId, scanRangeParams);
-                            params.instanceExecParams.add(instanceParam);
+                            for (List<TScanRangeParams> scanRangeParams : perInstanceScanRanges) {
+                                FInstanceExecParam instanceParam = new FInstanceExecParam(null, key, 0, params);
+                                instanceParam.perNodeScanRanges.put(planNodeId, scanRangeParams);
+                                params.instanceExecParams.add(instanceParam);
+                            }
                         }
                     }
                 }
@@ -1095,20 +1105,6 @@ public class Coordinator {
 
     // One fragment could only have one HashJoinNode
     private boolean isColocateFragment(PlanNode node) {
-        if (Config.disable_colocate_join) {
-            return false;
-        }
-
-        // TODO(cmy): some internal process, such as broker load task, do not have ConnectContext.
-        // Any configurations needed by the Coordinator should be passed in Coordinator initialization.
-        // Refine this later.
-        // Currently, just ignore the session variables if ConnectContext does not exist
-        if (ConnectContext.get() != null) {
-            if (ConnectContext.get().getSessionVariable().isDisableColocateJoin()) {
-                return false;
-            }
-        }
-
         //cache the colocateFragmentIds
         if (colocateFragmentIds.contains(node.getFragmentId().asInt())) {
             return true;
@@ -1122,6 +1118,24 @@ public class Coordinator {
         boolean childHasColocate = false;
         for (PlanNode childNode : node.getChildren()) {
             childHasColocate |= isColocateFragment(childNode);
+        }
+
+        return childHasColocate;
+    }
+
+    private boolean isRelicatedFragment(PlanNode node) {
+        if (replicateFragmentIds.contains(node.getFragmentId().asInt())) {
+            return true;
+        }
+
+        if (node.isReplicated()) {
+            replicateFragmentIds.add(node.getFragmentId().asInt());
+            return true;
+        }
+
+        boolean childHasColocate = false;
+        for (PlanNode childNode : node.getChildren()) {
+            childHasColocate |= isRelicatedFragment(childNode);
         }
 
         return childHasColocate;
@@ -1187,10 +1201,6 @@ public class Coordinator {
             value = defaultVal;
         }
         return value;
-    }
-
-    private long getScanRangeLength(final TScanRange scanRange) {
-        return 1;
     }
 
     private void computeColocateJoinInstanceParam(PlanFragmentId fragmentId, int parallelExecInstanceNum,
@@ -1305,7 +1315,7 @@ public class Coordinator {
             FragmentScanRangeAssignment assignment =
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
             if (scanNode instanceof HdfsScanNode) {
-                HybridBackendSelector selector = new HybridBackendSelector(scanNode, locations, assignment,
+                HDFSBackendSelector selector = new HDFSBackendSelector(scanNode, locations, assignment,
                         ScanRangeAssignType.SCAN_DATA_SIZE);
                 List<Long> scanRangesBytes = Lists.newArrayList();
                 for (TScanRangeLocations scanRangeLocations : locations) {
@@ -1317,8 +1327,11 @@ public class Coordinator {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
                 boolean hasBucket =
                         isBucketShuffleJoin(scanNode.getFragmentId().asInt(), scanNode.getFragment().getPlanRoot());
-
-                if (hasColocate && hasBucket) {
+                boolean hasRelicated = isRelicatedFragment(scanNode.getFragment().getPlanRoot());
+                if (assignment.size() > 0 && hasRelicated && scanNode.canDoReplicationJoin()) {
+                    BackendSelector selector = new RelicatedBackendSelector(scanNode, locations, assignment);
+                    selector.computeScanRangeAssignment();
+                } else if (hasColocate && hasBucket) {
                     BackendSelector selector = new BucketShuffleBackendSelector((OlapScanNode) scanNode);
                     selector.computeScanRangeAssignment();
                 } else if (hasColocate) {
@@ -1328,7 +1341,7 @@ public class Coordinator {
                     BackendSelector selector = new BucketShuffleBackendSelector((OlapScanNode) scanNode);
                     selector.computeScanRangeAssignment();
                 } else {
-                    BackendSelector selector = new LocalBackendSelector(scanNode, locations, assignment);
+                    BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
                     selector.computeScanRangeAssignment();
                 }
             }
@@ -1872,13 +1885,13 @@ public class Coordinator {
         }
     }
 
-    private class LocalBackendSelector implements BackendSelector {
+    private class NormalBackendSelector implements BackendSelector {
         private final ScanNode scanNode;
         private final List<TScanRangeLocations> locations;
         private final FragmentScanRangeAssignment assignment;
 
-        public LocalBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                                    FragmentScanRangeAssignment assignment) {
+        public NormalBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
+                                     FragmentScanRangeAssignment assignment) {
             this.scanNode = scanNode;
             this.locations = locations;
             this.assignment = assignment;
@@ -1898,9 +1911,8 @@ public class Coordinator {
                         minLocation = location;
                     }
                 }
-                Long scanRangeLength = getScanRangeLength(scanRangeLocations.scan_range);
                 assignedBytesPerHost.put(minLocation.server,
-                        assignedBytesPerHost.get(minLocation.server) + scanRangeLength);
+                        assignedBytesPerHost.get(minLocation.server) + 1);
 
                 Reference<Long> backendIdRef = new Reference<Long>();
                 TNetworkAddress execHostPort = SimpleScheduler.getHost(minLocation.backend_id,
@@ -1978,6 +1990,34 @@ public class Coordinator {
             }
             addressToBackendID.put(execHostPort, backendIdRef.getRef());
             fragmentIdToSeqToAddressMap.get(fragmentId).put(bucketSeq, execHostPort);
+        }
+    }
+
+    private class RelicatedBackendSelector implements BackendSelector {
+        private final ScanNode scanNode;
+        private final List<TScanRangeLocations> locations;
+        private final FragmentScanRangeAssignment assignment;
+
+        public RelicatedBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
+                                        FragmentScanRangeAssignment assignment) {
+            this.scanNode = scanNode;
+            this.locations = locations;
+            this.assignment = assignment;
+        }
+
+        @Override
+        public void computeScanRangeAssignment() {
+            for (TScanRangeLocations scanRangeLocations : locations) {
+                for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> kv : assignment.entrySet()) {
+                    Map<Integer, List<TScanRangeParams>> scanRanges = kv.getValue();
+                    List<TScanRangeParams> scanRangeParamsList = findOrInsert(
+                            scanRanges, scanNode.getId().asInt(), new ArrayList<>());
+                    // add scan range
+                    TScanRangeParams scanRangeParams = new TScanRangeParams();
+                    scanRangeParams.scan_range = scanRangeLocations.scan_range;
+                    scanRangeParamsList.add(scanRangeParams);
+                }
+            }
         }
     }
 
@@ -2070,7 +2110,7 @@ public class Coordinator {
      * If force_schedule_local variable is set, HybridBackendSelector will force to
      * assign scan ranges to local backend if there has one.
      */
-    private class HybridBackendSelector implements BackendSelector {
+    private class HDFSBackendSelector implements BackendSelector {
         // be -> assigned scans
         // type:
         //     SCAN_RANGE_NUM: assigned scan range num
@@ -2087,8 +2127,8 @@ public class Coordinator {
         private final List<Long> remoteScanRangesBytes = Lists.newArrayList();
         // TODO: disk stats
 
-        public HybridBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                                     FragmentScanRangeAssignment assignment, ScanRangeAssignType assignType) {
+        public HDFSBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
+                                   FragmentScanRangeAssignment assignment, ScanRangeAssignType assignType) {
             this.scanNode = scanNode;
             this.locations = locations;
             this.assignment = assignment;

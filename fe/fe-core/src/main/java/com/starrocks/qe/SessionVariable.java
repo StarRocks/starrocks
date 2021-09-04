@@ -160,6 +160,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
     public static final String CBO_MAX_REORDER_NODE_USE_DP = "cbo_max_reorder_node_use_dp";
     public static final String CBO_ENABLE_GREEDY_JOIN_REORDER = "cbo_enable_greedy_join_reorder";
+    public static final String CBO_ENABLE_REPLICATION_JOIN = "cbo_enable_replication_join";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -300,6 +301,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = DISABLE_COLOCATE_JOIN)
     private boolean disableColocateJoin = false;
+
+    @VariableMgr.VarAttr(name = CBO_ENABLE_REPLICATION_JOIN)
+    private boolean enableReplicationJoin = true;
 
     @VariableMgr.VarAttr(name = PREFER_JOIN_METHOD)
     private String preferJoinMethod = "broadcast";
@@ -731,6 +735,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnablePipelineEngine() {
         return enablePipelineEngine;
+    }
+
+    public boolean isEnableReplicationJoin() {
+        return enableReplicationJoin;
+    }
+
+    public void setEnableReplicationJoin(boolean enableReplicationJoin) {
+        this.enableReplicationJoin = enableReplicationJoin;
     }
 
     // Serialize to thrift object

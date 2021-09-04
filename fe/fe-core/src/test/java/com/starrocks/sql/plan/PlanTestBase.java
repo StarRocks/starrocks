@@ -59,11 +59,12 @@ public class PlanTestBase {
         starRocksAssert = new StarRocksAssert(connectContext);
         String DB_NAME = "test";
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+        starRocksAssert.enableNewPlanner();
 
         connectContext.getSessionVariable().setEnableMockTpch(true);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
-        starRocksAssert.enableNewPlanner();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000000000L);
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
 
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -635,12 +636,8 @@ public class PlanTestBase {
     }
 
     public String getFragmentPlan(String sql) throws Exception {
-        String ret = UtFrameUtils.getNewPlanAndFragment(connectContext, sql).second.
+        return UtFrameUtils.getNewPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);
-        System.out.println("============");
-        System.out.println(sql);
-        System.out.println(ret);
-        return ret;
     }
 
     public String getVerboseExplain(String sql) throws Exception {

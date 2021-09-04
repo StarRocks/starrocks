@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
@@ -110,12 +111,9 @@ public class ExpressionContext {
         }
     }
 
-    public ExpressionContext getChildContext(int index) {
-        if (expression != null) {
-            return new ExpressionContext(expression.getInputs().get(index));
-        } else {
-            return new ExpressionContext(groupExpression.getInputs().get(index).getFirstLogicalExpression());
-        }
+    public GroupExpression getChildGroupExpression(int index) {
+        Preconditions.checkNotNull(groupExpression);
+        return groupExpression.getInputs().get(index).getFirstLogicalExpression();
     }
 
     public Statistics getStatistics() {
