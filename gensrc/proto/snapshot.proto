@@ -1,0 +1,28 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+
+syntax="proto2";
+
+package starrocks;
+option java_package = "com.starrocks.proto";
+
+enum SnapshotTypePB {
+    SNAPSHOT_TYPE_UNKNOWN = 0;
+    SNAPSHOT_TYPE_INCREMENTAL = 1;
+    SNAPSHOT_TYPE_FULL = 2;
+}
+
+message SnapshotMetaFooterPB {
+    // See gensrc/thrift/types.thrift
+    optional int32 format_version = 1;
+    optional SnapshotTypePB snapshot_type = 2;
+    optional int64 snapshot_version = 3;
+    repeated int64 rowset_meta_offsets = 4;
+    // delvec_segids[i] is the segment id of the i'th delete vector.
+    repeated int64 delvec_segids = 5;
+    // delvec_offsets[i] is the file offset of the i'th delete vector.
+    repeated int64 delvec_offsets = 6;
+    // delvec_versions[i] is the version of i'th delete vector.
+    repeated int64 delvec_versions = 7;
+    optional int64 tablet_meta_offset = 8;
+}
+

@@ -1,0 +1,146 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+
+package com.starrocks.sql.optimizer.dump;
+
+import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class QueryDumpInfo implements DumpInfo {
+    private String originStmt = "";
+    // tableId-><dbName, table>
+    private Map<Long, Pair<String, Table>> tableMap = new HashMap<>();
+    // tableName->partitionName->partitionRowCount
+    private Map<String, Map<String, Long>> partitionRowCountMap = new HashMap<>();
+    // tableName->columnName->column statistics
+    private Map<String, Map<String, ColumnStatistic>> tableStatisticsMap = new HashMap<>();
+    private SessionVariable sessionVariable;
+    // tableName->createTableStmt
+    private Map<String, String> createTableStmtMap = new HashMap<>();
+    private List<String> exceptionList = new ArrayList<>();
+    private int beNum;
+
+    public QueryDumpInfo(SessionVariable sessionVariable) {
+        this.sessionVariable = sessionVariable;
+    }
+
+    public QueryDumpInfo() {
+        this.sessionVariable = VariableMgr.newSessionVariable();
+    }
+
+    @Override
+    public void setOriginStmt(String stmt) {
+        originStmt = stmt;
+    }
+
+    public String getOriginStmt() {
+        return originStmt;
+    }
+
+    public SessionVariable getSessionVariable() {
+        return sessionVariable;
+    }
+
+    public void setSessionVariable(SessionVariable sessionVariable) {
+        this.sessionVariable = sessionVariable;
+    }
+
+    @Override
+    public void addTable(String dbName, Table table) {
+        tableMap.put(table.getId(), new Pair<>(dbName, table));
+    }
+
+    @Override
+    public void addPartitionRowCount(Table table, String partition, long rowCount) {
+        String tableName = getTableName(table.getId());
+        addPartitionRowCount(tableName, partition, rowCount);
+    }
+
+    @Override
+    public void reset() {
+        this.originStmt = "";
+        this.tableMap.clear();
+        this.partitionRowCountMap.clear();
+        this.tableStatisticsMap.clear();
+        this.createTableStmtMap.clear();
+        this.exceptionList.clear();
+    }
+
+    public void addPartitionRowCount(String tableName, String partition, long rowCount) {
+        if (!partitionRowCountMap.containsKey(tableName)) {
+            partitionRowCountMap.put(tableName, new HashMap<>());
+        }
+        partitionRowCountMap.get(tableName).put(partition, rowCount);
+    }
+
+    public Map<String, Map<String, Long>> getPartitionRowCountMap() {
+        return partitionRowCountMap;
+    }
+
+    public Long getRowCount(long tableId, String partition) {
+        return partitionRowCountMap.get(tableId).get(partition);
+    }
+
+    @Override
+    public void addTableStatistics(Table table, String column, ColumnStatistic columnStatistic) {
+        if (!tableStatisticsMap.containsKey(getTableName(table.getId()))) {
+            tableStatisticsMap.put(getTableName(table.getId()), new HashMap<>());
+        }
+        tableStatisticsMap.get(getTableName(table.getId())).put(column, columnStatistic);
+    }
+
+    public void addTableStatistics(String tableName, String column, ColumnStatistic columnStatistic) {
+        if (!tableStatisticsMap.containsKey(tableName)) {
+            tableStatisticsMap.put(tableName, new HashMap<>());
+        }
+        tableStatisticsMap.get(tableName).put(column, columnStatistic);
+    }
+
+    public Map<String, Map<String, ColumnStatistic>> getTableStatisticsMap() {
+        return tableStatisticsMap;
+    }
+
+    public Map<Long, Pair<String, Table>> getTableMap() {
+        return tableMap;
+    }
+
+    public Map<String, String> getCreateTableStmtMap() {
+        return createTableStmtMap;
+    }
+
+    // return table full name
+    public String getTableName(long tableId) {
+        Table table = tableMap.get(tableId).second;
+        Preconditions.checkState(table != null);
+        return tableMap.get(tableId).first + "." + tableMap.get(tableId).second.getName();
+    }
+
+    public void addTableCreateStmt(String tableName, String createTableStmt) {
+        createTableStmtMap.put(tableName, createTableStmt);
+    }
+
+    @Override
+    public void addException(String exception) {
+        this.exceptionList.add(exception);
+    }
+
+    public List<String> getExceptionList() {
+        return this.exceptionList;
+    }
+
+    public void setBeNum(int beNum) {
+        this.beNum = beNum;
+    }
+
+    public int getBeNum() {
+        return this.beNum;
+    }
+}

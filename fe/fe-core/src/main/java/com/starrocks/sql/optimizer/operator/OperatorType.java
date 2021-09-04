@@ -1,0 +1,79 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+
+package com.starrocks.sql.optimizer.operator;
+
+public enum OperatorType {
+    /**
+     * Logical operator
+     */
+    LOGICAL,
+    LOGICAL_PROJECT,
+    LOGICAL_OLAP_SCAN,
+    LOGICAL_HIVE_SCAN,
+    LOGICAL_SCHEMA_SCAN,
+    LOGICAL_MYSQL_SCAN,
+    LOGICAL_ES_SCAN,
+    LOGICAL_JOIN,
+    LOGICAL_AGGR,
+    LOGICAL_FILTER,
+    LOGICAL_LIMIT,
+    LOGICAL_TOPN,
+    LOGICAL_APPLY,
+    LOGICAL_ASSERT_ONE_ROW,
+    LOGICAL_WINDOW,
+    LOGICAL_UNION,
+    LOGICAL_EXCEPT,
+    LOGICAL_INTERSECT,
+    LOGICAL_VALUES,
+    LOGICAL_REPEAT,
+    LOGICAL_TABLE_FUNCTION,
+
+    /**
+     * Physical operator
+     */
+    PHYSICAL,
+    PHYSICAL_DISTRIBUTION,
+    PHYSICAL_HASH_AGG,
+    PHYSICAL_HASH_JOIN,
+    PHYSICAL_OLAP_SCAN,
+    PHYSICAL_HIVE_SCAN,
+    PHYSICAL_SCHEMA_SCAN,
+    PHYSICAL_MYSQL_SCAN,
+    PHYSICAL_ES_SCAN,
+    PHYSICAL_PROJECT,
+    PHYSICAL_SORT,
+    PHYSICAL_TOPN,
+    PHYSICAL_UNION,
+    PHYSICAL_EXCEPT,
+    PHYSICAL_INTERSECT,
+    PHYSICAL_ASSERT_ONE_ROW,
+    PHYSICAL_WINDOW,
+    PHYSICAL_VALUES,
+    PHYSICAL_REPEAT,
+    PHYSICAL_FILTER,
+    PHYSICAL_TABLE_FUNCTION,
+
+    /**
+     * Scalar operator
+     */
+    SCALAR,
+    ARRAY,
+    ARRAY_ELEMENT,
+    VARIABLE,
+    CONSTANT,
+    CALL,
+    BETWEEN,
+    BINARY,
+    COMPOUND,
+    EXISTS,
+    IN,
+    IS_NULL,
+    LIKE,
+
+    /**
+     * PATTERN
+     */
+    PATTERN,
+    PATTERN_LEAF,
+    PATTERN_MULTI_LEAF,
+}

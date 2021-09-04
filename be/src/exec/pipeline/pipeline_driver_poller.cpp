@@ -1,0 +1,71 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+
+#include "pipeline_driver_poller.h"
+
+#include <chrono>
+namespace starrocks {
+namespace pipeline {
+
+void PipelineDriverPoller::start() {
+    DCHECK(this->_polling_thread == nullptr);
+    auto status = Thread::create(
+            "pipeline", "PipelineDriverPoller", [this]() { run_internal(); }, nullptr);
+    if (!status.ok()) {
+        LOG(FATAL) << "Fail to create PipelineDriverPoller: error=" << status.to_string();
+    }
+    while (!this->_is_polling_thread_initialized.load(std::memory_order_acquire)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+}
+void PipelineDriverPoller::shutdown() {
+    this->_is_shutdown.store(true, std::memory_order_release);
+    this->_polling_thread->join();
+}
+
+void PipelineDriverPoller::run_internal() {
+    this->_polling_thread = Thread::current_thread();
+    this->_is_polling_thread_initialized.store(true, std::memory_order_release);
+    typeof(this->_blocked_drivers) local_blocked_drivers;
+    while (!_is_shutdown.load(std::memory_order_acquire)) {
+        {
+            std::unique_lock<std::mutex> lock(this->_mutex);
+            local_blocked_drivers.splice(local_blocked_drivers.end(), _blocked_drivers);
+            if (local_blocked_drivers.empty() && _blocked_drivers.empty()) {
+                _cond.wait(lock, [this]() {
+                    return !this->_is_shutdown.load(std::memory_order_acquire) && !this->_blocked_drivers.empty();
+                });
+                if (_is_shutdown.load(std::memory_order_acquire)) {
+                    break;
+                }
+                local_blocked_drivers.splice(local_blocked_drivers.end(), _blocked_drivers);
+            }
+        }
+        auto driver_it = local_blocked_drivers.begin();
+        while (driver_it != local_blocked_drivers.end()) {
+            auto& driver = *driver_it;
+            if (driver->is_finished()) {
+                local_blocked_drivers.erase(driver_it++);
+            } else if (driver->fragment_ctx()->is_canceled() || driver->is_not_blocked()) {
+                _dispatch_queue->put_back(*driver_it);
+                local_blocked_drivers.erase(driver_it++);
+            } else {
+                ++driver_it;
+            }
+        }
+
+        if (local_blocked_drivers.empty()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
+}
+
+void PipelineDriverPoller::add_blocked_driver(DriverPtr driver) {
+    std::unique_lock<std::mutex> lock(this->_mutex);
+    this->_blocked_drivers.push_back(driver);
+    this->_cond.notify_one();
+}
+
+} // namespace pipeline
+} // namespace starrocks

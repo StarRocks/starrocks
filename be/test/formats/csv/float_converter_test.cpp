@@ -1,0 +1,93 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+
+#include <gtest/gtest.h>
+
+#include "column/column_helper.h"
+#include "formats/csv/converter.h"
+#include "formats/csv/output_stream_string.h"
+#include "runtime/types.h"
+
+namespace starrocks::vectorized::csv {
+
+class FloatConverterTest : public ::testing::Test {
+public:
+    FloatConverterTest() { _type.type = TYPE_DOUBLE; }
+
+protected:
+    TypeDescriptor _type;
+};
+
+// NOLINTNEXTLINE
+TEST_F(FloatConverterTest, test_read_string) {
+    auto conv = csv::get_converter(_type, false);
+    auto col = ColumnHelper::create_column(_type, false);
+
+    EXPECT_TRUE(conv->read_string(col.get(), "0.01", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "-0.01", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "1e-2", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "1E-2", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "-1e-2", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "-1E-2", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "1.23e-3", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "1.23E-3", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "1E2", Converter::Options()));
+    EXPECT_TRUE(conv->read_string(col.get(), "1e2", Converter::Options()));
+
+    EXPECT_EQ(10, col->size());
+    EXPECT_FLOAT_EQ(0.01, col->get(0).get_double());
+    EXPECT_FLOAT_EQ(-0.01, col->get(1).get_double());
+    EXPECT_FLOAT_EQ(0.01, col->get(2).get_double());
+    EXPECT_FLOAT_EQ(0.01, col->get(3).get_double());
+    EXPECT_FLOAT_EQ(-0.01, col->get(4).get_double());
+    EXPECT_FLOAT_EQ(-0.01, col->get(5).get_double());
+    EXPECT_FLOAT_EQ(0.00123, col->get(6).get_double());
+    EXPECT_FLOAT_EQ(0.00123, col->get(7).get_double());
+    EXPECT_FLOAT_EQ(100, col->get(8).get_double());
+    EXPECT_FLOAT_EQ(100, col->get(9).get_double());
+}
+
+// NOLINTNEXTLINE
+TEST_F(FloatConverterTest, test_read_quoted_string) {
+    auto conv = csv::get_converter(_type, false);
+    auto col = ColumnHelper::create_column(_type, false);
+
+    EXPECT_TRUE(conv->read_quoted_string(col.get(), "0.01", Converter::Options()));
+    EXPECT_TRUE(conv->read_quoted_string(col.get(), "-0.01", Converter::Options()));
+
+    EXPECT_EQ(2, col->size());
+    EXPECT_FLOAT_EQ(0.01, col->get(0).get_double());
+    EXPECT_FLOAT_EQ(-0.01, col->get(1).get_double());
+}
+
+// NOLINTNEXTLINE
+TEST_F(FloatConverterTest, test_read_string_invalid_value) {
+    auto conv = csv::get_converter(_type, false);
+    auto col = ColumnHelper::create_column(_type, false);
+
+    EXPECT_FALSE(conv->read_string(col.get(), "", Converter::Options()));
+    EXPECT_FALSE(conv->read_string(col.get(), "abc", Converter::Options()));
+    EXPECT_FALSE(conv->read_string(col.get(), "100a", Converter::Options()));
+    EXPECT_FALSE(conv->read_string(col.get(), "a1000", Converter::Options()));
+    EXPECT_FALSE(conv->read_string(col.get(), "\"100\"", Converter::Options()));
+    EXPECT_FALSE(conv->read_quoted_string(col.get(), "\"100\"", Converter::Options()));
+
+    EXPECT_EQ(0, col->size());
+}
+
+// NOLINTNEXTLINE
+TEST_F(FloatConverterTest, test_write_string) {
+    auto conv = csv::get_converter(_type, false);
+    auto col = ColumnHelper::create_column(_type, false);
+    col->append_datum((double)1.1);
+    col->append_datum((double)-0.1);
+
+    csv::OutputStreamString buff;
+    ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
+    ASSERT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
+    ASSERT_TRUE(conv->write_quoted_string(&buff, *col, 0, Converter::Options()).ok());
+    ASSERT_TRUE(conv->write_quoted_string(&buff, *col, 1, Converter::Options()).ok());
+    ASSERT_TRUE(buff.finalize().ok());
+    ASSERT_EQ("1.1-0.11.1-0.1", buff.as_string());
+}
+
+} // namespace starrocks::vectorized::csv
