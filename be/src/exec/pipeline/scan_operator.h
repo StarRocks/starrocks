@@ -31,7 +31,7 @@ public:
 
     bool has_output() override;
 
-    bool async_pending() override;
+    bool pending_finish() override;
 
     bool is_finished() const override;
 
@@ -55,8 +55,6 @@ private:
     const vectorized::RuntimeFilterProbeCollector& _runtime_filters;
     PriorityThreadPool* _io_threads = nullptr;
     OptionalChunkSourceFuture _pending_chunk_source_future;
-    std::optional<PriorityThreadPool::Task> _pending_task;
-    std::optional<StatusOr<vectorized::ChunkPtr>> _pending_chunk;
 };
 
 class ScanOperatorFactory final : public OperatorFactory {

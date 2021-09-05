@@ -158,7 +158,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 driver->set_morsel_queue(morsel_queue.get());
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
                 if (pipeline_scan_mode == 1) {
-                    scan_operator->set_io_threads(exec_env->thread_pool());
+                    scan_operator->set_io_threads(exec_env->pipeline_thread_pool());
                 } else {
                     scan_operator->set_io_threads(nullptr);
                 }

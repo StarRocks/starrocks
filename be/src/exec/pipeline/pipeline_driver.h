@@ -32,7 +32,7 @@ enum DriverState : uint32_t {
     FINISH = 5,
     CANCELED = 6,
     INTERNAL_ERROR = 7,
-    ASYNC_PENDING = 8,
+    PENDING_FINISH = 8,
 };
 
 static inline std::string ds_to_string(DriverState ds) {
@@ -53,8 +53,8 @@ static inline std::string ds_to_string(DriverState ds) {
         return "CANCELED";
     case INTERNAL_ERROR:
         return "INTERNAL_ERROR";
-    case ASYNC_PENDING:
-        return "ASYNC_PENDING";
+    case PENDING_FINISH:
+        return "PENDING_FINISH";
     }
     DCHECK(false);
     return "UNKNOWN_STATE";
@@ -134,7 +134,7 @@ public:
         return _state == DriverState::FINISH || _state == DriverState::CANCELED ||
                _state == DriverState::INTERNAL_ERROR;
     }
-    bool async_pending() { return _state == DriverState::ASYNC_PENDING; }
+    bool pending_finish() { return _state == DriverState::PENDING_FINISH; }
 
     bool is_not_blocked() {
         if (_state == DriverState::OUTPUT_FULL) {

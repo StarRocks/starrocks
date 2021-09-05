@@ -146,6 +146,7 @@ public:
         _put_cv.notify_all();
     }
 
+    size_t get_capacity() const { return _max_element; }
     uint32_t get_size() const {
         std::unique_lock<std::mutex> l(_lock);
         return _heap.size();

@@ -43,13 +43,13 @@ void PipelineDriverPoller::run_internal() {
         auto driver_it = local_blocked_drivers.begin();
         while (driver_it != local_blocked_drivers.end()) {
             auto& driver = *driver_it;
-            // driver->async_pending() return true means that when a driver's sink operator is finished,
+            // driver->pending_finish() return true means that when a driver's sink operator is finished,
             // but its source operator still has pending io task that executed in io threads and has
             // reference to object outside(such as desc_tbl) owned by FragmentContext. So an driver in
-            // ASYNC_PENDING state should should wait for pending io task's completion, then turn into
+            // PENDING_FINISH state should should wait for pending io task's completion, then turn into
             // FINISH state, otherwise, pending tasks shall reference to destructed objects in
             // FragmentContext since FragmentContext is unregistered prematurely.
-            if (driver->async_pending() && !driver->source_operator()->async_pending()) {
+            if (driver->pending_finish() && !driver->source_operator()->pending_finish()) {
                 driver->set_driver_state(DriverState::FINISH);
                 _dispatch_queue->put_back(*driver_it);
                 local_blocked_drivers.erase(driver_it++);

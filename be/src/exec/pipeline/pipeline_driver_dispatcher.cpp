@@ -43,8 +43,8 @@ void GlobalDriverDispatcher::run() {
 
         if (fragment_ctx->is_canceled()) {
             VLOG_ROW << "[Driver] Canceled: error=" << fragment_ctx->final_status().to_string();
-            if (driver->source_operator()->async_pending()) {
-                driver->set_driver_state(DriverState::ASYNC_PENDING);
+            if (driver->source_operator()->pending_finish()) {
+                driver->set_driver_state(DriverState::PENDING_FINISH);
                 _blocked_driver_poller->add_blocked_driver(driver);
             } else {
                 driver->finalize(runtime_state, DriverState::CANCELED);
@@ -58,8 +58,8 @@ void GlobalDriverDispatcher::run() {
         if (!status.ok()) {
             VLOG_ROW << "[Driver] Process error: error=" << status.status().to_string();
             fragment_ctx->cancel(status.status());
-            if (driver->source_operator()->async_pending()) {
-                driver->set_driver_state(DriverState::ASYNC_PENDING);
+            if (driver->source_operator()->pending_finish()) {
+                driver->set_driver_state(DriverState::PENDING_FINISH);
                 _blocked_driver_poller->add_blocked_driver(driver);
             } else {
                 driver->finalize(runtime_state, DriverState::INTERNAL_ERROR);
@@ -86,7 +86,7 @@ void GlobalDriverDispatcher::run() {
         }
         case INPUT_EMPTY:
         case OUTPUT_FULL:
-        case ASYNC_PENDING: {
+        case PENDING_FINISH: {
             VLOG_ROW << strings::Substitute("[Driver] Blocked, source=$0, state=$1",
                                             driver->source_operator()->get_name(), ds_to_string(driver_state));
             _blocked_driver_poller->add_blocked_driver(driver);
