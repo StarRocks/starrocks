@@ -242,7 +242,7 @@ public class ExportMgr {
                 infoMap.put("broker", job.getBrokerDesc().getName());
                 infoMap.put("column separator", job.getColumnSeparator());
                 infoMap.put("row delimiter", job.getRowDelimiter());
-                infoMap.put("exec mem limit", job.getExecMemLimit());
+                infoMap.put("mem limit", job.getMemLimit());
                 infoMap.put("coord num", job.getCoordList().size());
                 infoMap.put("tablet num", job.getTabletLocations() == null ? -1 : job.getTabletLocations().size());
                 jobInfo.add(new Gson().toJson(infoMap));
