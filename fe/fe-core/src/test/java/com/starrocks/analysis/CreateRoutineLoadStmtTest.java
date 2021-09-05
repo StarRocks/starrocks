@@ -24,7 +24,9 @@ package com.starrocks.analysis;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import mockit.Injectable;
 import mockit.Mock;
@@ -141,4 +143,95 @@ public class CreateRoutineLoadStmtTest {
         Assert.assertEquals("+08:00", createRoutineLoadStmt.getTimezone());
     }
 
+    @Test
+    public void testKafkaOffset(@Injectable Analyzer analyzer) throws UserException {
+        new MockUp<StatementBase>() {
+            @Mock
+            public void analyze(Analyzer analyzer1) {
+                return;
+            }
+        };
+
+        String jobName = "job1";
+        String dbName = "db1";
+        String tableNameString = "table1";
+        String kafkaDefaultOffsetsKey = "property." + CreateRoutineLoadStmt.KAFKA_DEFAULT_OFFSETS;
+
+        // load property
+        List<String> partitionNameString = Lists.newArrayList();
+        partitionNameString.add("p1");
+        PartitionNames partitionNames = new PartitionNames(false, partitionNameString);
+        ColumnSeparator columnSeparator = new ColumnSeparator(",");
+        List<ParseNode> loadPropertyList = new ArrayList<>();
+        loadPropertyList.add(columnSeparator);
+        loadPropertyList.add(partitionNames);
+
+        // 1. kafka_offsets
+        // 1 -> OFFSET_BEGINNING, 2 -> OFFSET_END
+        Map<String, String> customProperties = getCustomProperties();
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, "1,2");
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY, "OFFSET_BEGINNING,OFFSET_END");
+        LabelName labelName = new LabelName(dbName, jobName);
+        CreateRoutineLoadStmt createRoutineLoadStmt = new CreateRoutineLoadStmt(
+                labelName, tableNameString, loadPropertyList, Maps.newHashMap(),
+                LoadDataSourceType.KAFKA.name(), customProperties);
+        createRoutineLoadStmt.analyze(analyzer);
+        List<Pair<Integer, Long>> partitionOffsets = createRoutineLoadStmt.getKafkaPartitionOffsets();
+        Assert.assertEquals(2, partitionOffsets.size());
+        Assert.assertEquals(KafkaProgress.OFFSET_BEGINNING_VAL, (long) partitionOffsets.get(0).second);
+        Assert.assertEquals(KafkaProgress.OFFSET_END_VAL, (long) partitionOffsets.get(1).second);
+
+        // 2. no kafka_offsets and property.kafka_default_offsets
+        // 1,2 -> OFFSET_END
+        customProperties = getCustomProperties();
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, "1,2");
+        labelName = new LabelName(dbName, jobName);
+        createRoutineLoadStmt =
+                new CreateRoutineLoadStmt(labelName, tableNameString, loadPropertyList, Maps.newHashMap(),
+                        LoadDataSourceType.KAFKA.name(), customProperties);
+        createRoutineLoadStmt.analyze(analyzer);
+        partitionOffsets = createRoutineLoadStmt.getKafkaPartitionOffsets();
+        Assert.assertEquals(2, partitionOffsets.size());
+        Assert.assertEquals(KafkaProgress.OFFSET_END_VAL, (long) partitionOffsets.get(0).second);
+        Assert.assertEquals(KafkaProgress.OFFSET_END_VAL, (long) partitionOffsets.get(1).second);
+
+        // 3. property.kafka_default_offsets
+        // 1,2 -> 10
+        customProperties = getCustomProperties();
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, "1,2");
+        customProperties.put(kafkaDefaultOffsetsKey, "10");
+        labelName = new LabelName(dbName, jobName);
+        createRoutineLoadStmt =
+                new CreateRoutineLoadStmt(labelName, tableNameString, loadPropertyList, Maps.newHashMap(),
+                        LoadDataSourceType.KAFKA.name(), customProperties);
+        createRoutineLoadStmt.analyze(analyzer);
+        partitionOffsets = createRoutineLoadStmt.getKafkaPartitionOffsets();
+        Assert.assertEquals(2, partitionOffsets.size());
+        Assert.assertEquals(10, (long) partitionOffsets.get(0).second);
+        Assert.assertEquals(10, (long) partitionOffsets.get(1).second);
+
+        // 4. both kafka_offsets and property.kafka_default_offsets
+        // 1 -> OFFSET_BEGINNING, 2 -> OFFSET_END, 3 -> 11
+        customProperties = getCustomProperties();
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY, "1,2,3");
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY, "OFFSET_BEGINNING,OFFSET_END,11");
+        customProperties.put(kafkaDefaultOffsetsKey, "10");
+        labelName = new LabelName(dbName, jobName);
+        createRoutineLoadStmt =
+                new CreateRoutineLoadStmt(labelName, tableNameString, loadPropertyList, Maps.newHashMap(),
+                        LoadDataSourceType.KAFKA.name(), customProperties);
+        createRoutineLoadStmt.analyze(analyzer);
+        partitionOffsets = createRoutineLoadStmt.getKafkaPartitionOffsets();
+        Assert.assertEquals(3, partitionOffsets.size());
+        Assert.assertEquals(KafkaProgress.OFFSET_BEGINNING_VAL, (long) partitionOffsets.get(0).second);
+        Assert.assertEquals(KafkaProgress.OFFSET_END_VAL, (long) partitionOffsets.get(1).second);
+        Assert.assertEquals(11, (long) partitionOffsets.get(2).second);
+    }
+
+    private Map<String, String> getCustomProperties() {
+        Map<String, String> customProperties = Maps.newHashMap();
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_TOPIC_PROPERTY, "topic1");
+        customProperties.put(CreateRoutineLoadStmt.KAFKA_BROKER_LIST_PROPERTY, "127.0.0.1:8080");
+        return customProperties;
+    }
 }
