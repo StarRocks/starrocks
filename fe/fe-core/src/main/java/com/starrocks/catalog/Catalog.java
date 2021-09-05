@@ -1189,7 +1189,8 @@ public class Catalog {
         // Log meta_version
         int communityMetaVersion = MetaContext.get().getMetaVersion();
         int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
-        if (communityMetaVersion < FeConstants.meta_version || starrocksMetaVersion < FeConstants.starrocks_meta_version) {
+        if (communityMetaVersion < FeConstants.meta_version ||
+                starrocksMetaVersion < FeConstants.starrocks_meta_version) {
             editLog.logMetaVersion(new MetaVersion(FeConstants.meta_version, FeConstants.starrocks_meta_version));
             MetaContext.get().setMetaVersion(FeConstants.meta_version);
             MetaContext.get().setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
@@ -4837,8 +4838,12 @@ public class Catalog {
                         DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
                         Preconditions.checkNotNull(dataProperty,
                                 partition.getName() + ", pId:" + partitionId + ", db: " + dbId + ", tbl: " + tableId);
+                        // only normal state table can migrate.
+                        // PRIMARY_KEYS table does not support local migration.
                         if (dataProperty.getStorageMedium() == TStorageMedium.SSD
-                                && dataProperty.getCooldownTimeMs() < currentTimeMs) {
+                                && dataProperty.getCooldownTimeMs() < currentTimeMs
+                                && olapTable.getState() == OlapTableState.NORMAL
+                                && olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
                             // expire. change to HDD.
                             // record and change when holding write lock
                             Multimap<Long, Long> multimap = changedPartitionsMap.get(dbId);

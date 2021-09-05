@@ -2,12 +2,14 @@
 
 package com.starrocks.clone;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -34,6 +36,22 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * DiskAndTabletLoadReBalancer is responsible for the balancing of disk usage and tablet distribution.
+ * There are two balance types:
+ * 1. balance between different backends in the cluster, through remote clone.
+ * 2. balance between different disks in single backend, through local migration.
+ * <p>
+ * ReBalancer balance cluster first, then balance disks within backend.
+ * <p>
+ * When the disk space usage rate is relatively low (maxUsedPercent < 50%), or
+ * when the usage rate is almost the same (maxUsedPercent - minUsedPercent < 10%),
+ * Balancer will balance by tablet distribution. Otherwise, it will balance by disk usage.
+ * <p>
+ * Different storage medium will be scheduled separately.
+ * <p>
+ * Backend balance can also balance colocate table.
+ */
 public class DiskAndTabletLoadReBalancer extends Rebalancer {
     private static final Logger LOG = LogManager.getLogger(DiskAndTabletLoadReBalancer.class);
     // tabletId -> replicaId
@@ -48,22 +66,28 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     protected List<TabletSchedCtx> selectAlternativeTabletsForCluster(
             String clusterName, ClusterLoadStatistic clusterStat, TStorageMedium medium) {
         List<TabletSchedCtx> alternativeTablets;
-        if (!isDiskBalanced(clusterStat, medium)) {
-            alternativeTablets = balanceDisk(clusterName, clusterStat, medium);
-            if (alternativeTablets.size() > 0) {
-                LOG.info("select tablets to balance disk: total {}, tablets[show up to 100]: {}",
-                        alternativeTablets.size(),
-                        alternativeTablets.stream().mapToLong(TabletSchedCtx::getTabletId).limit(100).toArray());
-            }
+        String balanceType = "";
+        if (!isClusterDiskBalanced(clusterStat, medium)) {
+            alternativeTablets = balanceClusterDisk(clusterName, clusterStat, medium);
+            balanceType = "cluster disk";
+        } else if (!isBackendDiskBalanced(clusterStat, medium)) {
+            alternativeTablets = balanceBackendDisk(clusterName, clusterStat, medium);
+            balanceType = "backend disk";
         } else {
-            alternativeTablets = balanceTablet(clusterName, clusterStat, medium);
-            if (alternativeTablets.size() > 0) {
-                LOG.info("select tablets to balance tablet distribution: total {}, tablets[show up to 100]: {}",
-                        alternativeTablets.size(),
-                        alternativeTablets.stream().mapToLong(TabletSchedCtx::getTabletId).limit(100).toArray());
+            alternativeTablets = balanceClusterTablet(clusterName, clusterStat, medium);
+            balanceType = "cluster tablet distribution";
+
+            if (alternativeTablets.isEmpty()) {
+                alternativeTablets = balanceBackendTablet(clusterName, clusterStat, medium);
+                balanceType = "backend tablet distribution";
             }
         }
 
+        if (alternativeTablets.size() > 0) {
+            LOG.info("select tablets to balance {}: total {}, medium {}, tablets[show up to 100]: {}",
+                    balanceType, alternativeTablets.size(), medium,
+                    alternativeTablets.stream().mapToLong(TabletSchedCtx::getTabletId).limit(100).toArray());
+        }
         return alternativeTablets;
     }
 
@@ -76,6 +100,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             throw new SchedException(SchedException.Status.UNRECOVERABLE, "cluster does not exist");
         }
 
+        long replicaSize = tabletCtx.getSrcReplica().getDataSize();
+        boolean isLocalBalance = (tabletCtx.getDestBackendId() == tabletCtx.getSrcBackendId());
         // tabletCtx may wait a long time from the pending state to the running state, so we must double-check the task
         if (tabletCtx.getBalanceType() == BalanceType.DISK) {
             BackendLoadStatistic srcBeStat = clusterStat.getBackendLoadStatistic(tabletCtx.getSrcBackendId());
@@ -83,61 +109,132 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             if (srcBeStat == null || destBeStat == null) {
                 throw new SchedException(SchedException.Status.UNRECOVERABLE, "src be or dest be statistic not exist");
             }
-            long srcBeTotalCapacity = srcBeStat.getTotalCapacityB(medium);
-            long destBeTotalCapacity = destBeStat.getTotalCapacityB(medium);
-            if (srcBeTotalCapacity <= 0 || destBeTotalCapacity <= 0) {
-                throw new SchedException(SchedException.Status.UNRECOVERABLE, "medium not exists on src or dest be");
+
+            long srcTotalCapacity = 0L;
+            long destTotalCapacity = 0L;
+            long srcTotalUsedCapacity = 0L;
+            long destTotalUsedCapacity = 0L;
+            if (isLocalBalance) {
+                // get src disk and dest disk info that are on the same be.
+                RootPathLoadStatistic srcPathStat = destBeStat.getPathStatistic(tabletCtx.getSrcPathHash());
+                RootPathLoadStatistic destPathStat = destBeStat.getPathStatistic(tabletCtx.getDestPathHash());
+                if (srcPathStat == null || destPathStat == null) {
+                    throw new SchedException(SchedException.Status.UNRECOVERABLE,
+                            "src disk or dest disk statistic not exist");
+                }
+
+                if (srcPathStat.getUsedPercent() < destPathStat.getUsedPercent()) {
+                    throw new SchedException(SchedException.Status.UNRECOVERABLE,
+                            "src be disk used percent is smaller than dest be");
+                }
+
+                srcTotalCapacity = srcPathStat.getCapacityB();
+                destTotalCapacity = destPathStat.getCapacityB();
+                srcTotalUsedCapacity = srcPathStat.getUsedCapacityB();
+                destTotalUsedCapacity = destPathStat.getUsedCapacityB();
+            } else {
+                // get src be disks and dest be disks info, src be and dest be are different.
+                if (srcBeStat.getUsedPercent(medium) < destBeStat.getUsedPercent(medium)) {
+                    throw new SchedException(SchedException.Status.UNRECOVERABLE,
+                            "src be disk used percent is smaller than dest be");
+                }
+
+                srcTotalCapacity = srcBeStat.getTotalCapacityB(medium);
+                destTotalCapacity = destBeStat.getTotalCapacityB(medium);
+                srcTotalUsedCapacity = srcBeStat.getTotalUsedCapacityB(medium);
+                destTotalUsedCapacity = destBeStat.getTotalUsedCapacityB(medium);
             }
-            long srcBeUsedTotalCapacity = srcBeStat.getTotalUsedCapacityB(medium);
-            long destBeUsedTotalCapacity = destBeStat.getTotalUsedCapacityB(medium);
-            long replicaSize = tabletCtx.getSrcReplica().getDataSize();
-            double srcBeUsedPercent = (double) (srcBeUsedTotalCapacity - replicaSize) / srcBeTotalCapacity;
-            double destBeUsedPercent = (double) (destBeUsedTotalCapacity + replicaSize) / destBeTotalCapacity;
-            if ((destBeUsedPercent > (Config.storage_flood_stage_usage_percent / 100.0)) ||
-                    ((destBeTotalCapacity - destBeUsedTotalCapacity - replicaSize) <
-                            Config.storage_flood_stage_left_capacity_bytes)) {
-                throw new SchedException(SchedException.Status.UNRECOVERABLE, "be disk used exceed limit");
+
+            // check total and used percent before clone
+            if (srcTotalCapacity <= 0 || destTotalCapacity <= 0) {
+                throw new SchedException(SchedException.Status.UNRECOVERABLE, "src or dest total capacity error");
             }
             if (srcBeStat.getUsedPercent(medium) < destBeStat.getUsedPercent(medium)) {
                 throw new SchedException(SchedException.Status.UNRECOVERABLE,
                         "src be disk used percent is smaller than dest be");
             }
-            if (srcBeUsedPercent < destBeUsedPercent) {
+
+            // check used percent after clone
+            double srcUsedPercent = (double) (srcTotalUsedCapacity - replicaSize) / srcTotalCapacity;
+            double destUsedPercent = (double) (destTotalUsedCapacity + replicaSize) / destTotalCapacity;
+            if ((destUsedPercent > (Config.storage_flood_stage_usage_percent / 100.0)) ||
+                    ((destTotalCapacity - destTotalUsedCapacity - replicaSize) <
+                            Config.storage_flood_stage_left_capacity_bytes)) {
+                throw new SchedException(SchedException.Status.UNRECOVERABLE, "dest be disk used exceed limit");
+            }
+            if (srcUsedPercent < destUsedPercent) {
                 throw new SchedException(SchedException.Status.UNRECOVERABLE,
-                        "src be disk used percent is smaller than dest be after copy");
+                        "src be disk used percent is smaller than dest be after clone");
             }
         } else {
             // for tablet balance task, first check whether it can preserve disk balance,
             // then check whether it can make tablet distribution balance better
             double maxUsedPercent = 0.0;
             double minUsedPercent = Double.MAX_VALUE;
-            for (BackendLoadStatistic beStat : clusterStat.getAllBackendLoadStatistic()) {
-                if (beStat.getTotalCapacityB(medium) <= 0) {
-                    continue;
+
+            if (isLocalBalance) {
+                BackendLoadStatistic beStat = clusterStat.getBackendLoadStatistic(tabletCtx.getDestBackendId());
+                if (beStat == null) {
+                    throw new SchedException(SchedException.Status.UNRECOVERABLE, "dest be statistic not exist");
                 }
 
-                long totalCapacity = beStat.getTotalCapacityB(medium);
-                long totalUsedCapacity = beStat.getTotalUsedCapacityB(medium);
-                long replicaSize = tabletCtx.getSrcReplica().getDataSize();
-                if (beStat.getBeId() == tabletCtx.getSrcBackendId()) {
-                    totalUsedCapacity -= tabletCtx.getSrcReplica().getDataSize();
-                }
-                if (beStat.getBeId() == tabletCtx.getDestBackendId()) {
-                    totalUsedCapacity += tabletCtx.getSrcReplica().getDataSize();
-                }
-                double usedPercent = (double) totalUsedCapacity / totalCapacity;
+                List<RootPathLoadStatistic> pathStats = beStat.getPathStatistics(medium);
+                for (RootPathLoadStatistic pathStat : pathStats) {
+                    if (pathStat.getCapacityB() <= 0) {
+                        continue;
+                    }
 
-                if ((usedPercent > (Config.storage_flood_stage_usage_percent / 100.0)) ||
-                        ((totalCapacity - totalUsedCapacity - replicaSize) <
-                                Config.storage_flood_stage_left_capacity_bytes)) {
-                    throw new SchedException(SchedException.Status.UNRECOVERABLE, "be disk used exceed limit");
-                }
+                    long totalCapacity = pathStat.getCapacityB();
+                    long totalUsedCapacity = pathStat.getUsedCapacityB();
+                    if (pathStat.getPathHash() == tabletCtx.getSrcPathHash()) {
+                        totalUsedCapacity -= replicaSize;
+                    } else if (pathStat.getPathHash() == tabletCtx.getDestPathHash()) {
+                        totalUsedCapacity += replicaSize;
+                    } else {
+                        continue;
+                    }
 
-                if (usedPercent > maxUsedPercent) {
-                    maxUsedPercent = usedPercent;
+                    double usedPercent = (double) totalUsedCapacity / totalCapacity;
+                    if ((usedPercent > (Config.storage_flood_stage_usage_percent / 100.0)) ||
+                            ((totalCapacity - totalUsedCapacity) < Config.storage_flood_stage_left_capacity_bytes)) {
+                        throw new SchedException(SchedException.Status.UNRECOVERABLE, "be disk used exceed limit");
+                    }
+
+                    if (usedPercent > maxUsedPercent) {
+                        maxUsedPercent = usedPercent;
+                    }
+                    if (usedPercent < minUsedPercent) {
+                        minUsedPercent = usedPercent;
+                    }
                 }
-                if (usedPercent < minUsedPercent) {
-                    minUsedPercent = usedPercent;
+            } else {
+                for (BackendLoadStatistic beStat : clusterStat.getAllBackendLoadStatistic()) {
+                    if (beStat.getTotalCapacityB(medium) <= 0) {
+                        continue;
+                    }
+
+                    long totalCapacity = beStat.getTotalCapacityB(medium);
+                    long totalUsedCapacity = beStat.getTotalUsedCapacityB(medium);
+                    if (beStat.getBeId() == tabletCtx.getSrcBackendId()) {
+                        totalUsedCapacity -= replicaSize;
+                    } else if (beStat.getBeId() == tabletCtx.getDestBackendId()) {
+                        totalUsedCapacity += replicaSize;
+                    } else {
+                        continue;
+                    }
+
+                    double usedPercent = (double) totalUsedCapacity / totalCapacity;
+                    if ((usedPercent > (Config.storage_flood_stage_usage_percent / 100.0)) ||
+                            ((totalCapacity - totalUsedCapacity) < Config.storage_flood_stage_left_capacity_bytes)) {
+                        throw new SchedException(SchedException.Status.UNRECOVERABLE, "be disk used exceed limit");
+                    }
+
+                    if (usedPercent > maxUsedPercent) {
+                        maxUsedPercent = usedPercent;
+                    }
+                    if (usedPercent < minUsedPercent) {
+                        minUsedPercent = usedPercent;
+                    }
                 }
             }
             if ((maxUsedPercent > Config.balance_load_disk_safe_threshold) &&
@@ -145,13 +242,23 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 throw new SchedException(SchedException.Status.UNRECOVERABLE, "disk balance will be broken");
             }
 
-            int tabletNumOnSrcBe =
-                    getPartitionTabletNumOnBe(tabletCtx.getDbId(), tabletCtx.getTblId(), tabletCtx.getPartitionId(),
-                            tabletCtx.getIndexId(), tabletCtx.getSrcBackendId());
-            int tabletNumOnDestBe =
-                    getPartitionTabletNumOnBe(tabletCtx.getDbId(), tabletCtx.getTblId(), tabletCtx.getPartitionId(),
-                            tabletCtx.getIndexId(), tabletCtx.getDestBackendId());
-            if (tabletNumOnSrcBe - tabletNumOnDestBe <= 1) {
+            long dbId = tabletCtx.getDbId();
+            long tableId = tabletCtx.getTblId();
+            long partitionId = tabletCtx.getPartitionId();
+            long indexId = tabletCtx.getIndexId();
+            long srcPathHash = -1;
+            long destPathHash = -1;
+            if (isLocalBalance) {
+                srcPathHash = tabletCtx.getSrcPathHash();
+                destPathHash = tabletCtx.getDestPathHash();
+            }
+            int tabletNumOnSrc =
+                    getPartitionTabletNumOnBePath(dbId, tableId, partitionId, indexId, tabletCtx.getSrcBackendId(),
+                            srcPathHash);
+            int tabletNumOnDest =
+                    getPartitionTabletNumOnBePath(dbId, tableId, partitionId, indexId, tabletCtx.getDestBackendId(),
+                            destPathHash);
+            if (tabletNumOnSrc - tabletNumOnDest <= 1) {
                 throw new SchedException(SchedException.Status.UNRECOVERABLE,
                         "can not make tablet distribution balance better");
             }
@@ -162,7 +269,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         checkAndUseWorkingSlots(tabletCtx.getDestBackendId(), tabletCtx.getDestPathHash(), backendsWorkingSlots);
         tabletCtx.setDestPathResourceHold();
 
-        setCachedReplicaId(tabletCtx.getTabletId(), tabletCtx.getSrcReplica().getId());
+        // local balance in the same backend does not need set this.
+        if (!isLocalBalance) {
+            setCachedReplicaId(tabletCtx.getTabletId(), tabletCtx.getSrcReplica().getId());
+        }
     }
 
     @Override
@@ -188,12 +298,21 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     }
 
     /**
-     * cluster disk is balanced if:
-     * 1. all be disk used percent smaller than Config.balance_load_disk_safe_threshold
+     * Disk is balanced if:
+     * 1. max used percent smaller than Config.balance_load_disk_safe_threshold
      * or
      * 2. difference between max used percent and min used percent smaller than Config.balance_load_score_threshold
      */
-    private boolean isDiskBalanced(ClusterLoadStatistic clusterStat, TStorageMedium medium) {
+    private boolean isDiskBalanced(double maxUsedPercent, double minUsedPercent) {
+        return maxUsedPercent < Config.balance_load_disk_safe_threshold ||
+                (maxUsedPercent - minUsedPercent) < Config.balance_load_score_threshold;
+    }
+
+    /**
+     * Cluster disk is balanced if disk usage on all backends in the cluster is balanced.
+     * Disk used percent is based on all disks on each backend.
+     */
+    private boolean isClusterDiskBalanced(ClusterLoadStatistic clusterStat, TStorageMedium medium) {
         List<BackendLoadStatistic> beStats = getValidBeStats(clusterStat, medium);
         double maxUsedPercent = Double.MIN_VALUE;
         double minUsedPercent = Double.MAX_VALUE;
@@ -207,12 +326,31 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
         }
 
-        return maxUsedPercent < Config.balance_load_disk_safe_threshold ||
-                ((maxUsedPercent - minUsedPercent) < Config.balance_load_score_threshold);
+        return isDiskBalanced(maxUsedPercent, minUsedPercent);
     }
 
     /**
-     * disk balance is the base for tablet balance, so we balance disk as much as possible
+     * Backend disk is balanced if all disk usage on each backend is balanced.
+     * Disk used percent is based on each disk in single backend.
+     */
+    private boolean isBackendDiskBalanced(ClusterLoadStatistic clusterStat, TStorageMedium medium) {
+        List<BackendLoadStatistic> beStats = getValidBeStats(clusterStat, medium);
+        for (BackendLoadStatistic beStat : beStats) {
+            Pair<Double, Double> maxMinUsedPercent = beStat.getMaxMinPathUsedPercent(medium);
+            if (maxMinUsedPercent == null) {
+                continue;
+            }
+
+            if (!isDiskBalanced(maxMinUsedPercent.first, maxMinUsedPercent.second)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Cluster disk balance is the base for tablet balance, so we balance disk as much as possible
      * 1. sort be according to used percent in asc order: b1, b2, ... bn
      * 2. calculate average used percent for all be as avgUsedPercent
      * 3. init srcBEIndex as n, destBEIndex as 1
@@ -223,8 +361,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
      * <p>
      * we prefer to choose tablets in partition that numOfTablet(srcBE) is more than numOfTablet(destBE)
      */
-    private List<TabletSchedCtx> balanceDisk(String clusterName, ClusterLoadStatistic clusterStat,
-                                             TStorageMedium medium) {
+    private List<TabletSchedCtx> balanceClusterDisk(String clusterName, ClusterLoadStatistic clusterStat,
+                                                    TStorageMedium medium) {
         List<TabletSchedCtx> alternativeTablets = Lists.newArrayList();
 
         List<BackendLoadStatistic> beStats = getValidBeStats(clusterStat, medium);
@@ -236,73 +374,221 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         // sort be by disk used percent in asc order
         beStats.sort(new BackendLoadStatistic.BeStatComparatorForUsedPercent(medium));
+        LOG.debug("get backend stats for cluster disk balance. be stats: {}", beStats);
 
-        // cache selected tablets to avoid select same tablet
-        Set<Long> selectedTablets = Sets.newHashSet();
-        // aliveBeIds to check tablet health
-        List<Long> aliveBeIds = infoService.getClusterBackendIds(clusterName, true);
-        Map<String, List<Long>> hostGroups = getHostGroups(aliveBeIds);
-        int srcBEIndex = beStats.size() - 1;
-        int destBEIndex = 0;
-        long srcBEUsedCap = beStats.get(srcBEIndex).getTotalUsedCapacityB(medium);
-        long destBEUsedCap = beStats.get(destBEIndex).getTotalUsedCapacityB(medium);
-        // (partition, index) => tabletIds
-        Map<Pair<Long, Long>, Set<Long>> srcBEPartitionTablets =
-                getPartitionTablets(beStats.get(srcBEIndex).getBeId(), medium);
-        Map<Pair<Long, Long>, Set<Long>> destBEPartitionTablets =
-                getPartitionTablets(beStats.get(destBEIndex).getBeId(), medium);
-        boolean srcBEChanged = false;
-        boolean destBEChanged = false;
-        Map<Pair<Long, Long>, PartitionStat> partitionStats = getPartitionStats(null, medium);
-        OUT:
-        while (srcBEIndex > destBEIndex) {
-            BackendLoadStatistic srcBEStat = beStats.get(srcBEIndex);
-            BackendLoadStatistic destBEStat = beStats.get(destBEIndex);
-            if (srcBEChanged) {
-                srcBEUsedCap = srcBEStat.getTotalUsedCapacityB(medium);
-                srcBEPartitionTablets = getPartitionTablets(srcBEStat.getBeId(), medium);
-            }
-            if (destBEChanged) {
-                destBEUsedCap = destBEStat.getTotalUsedCapacityB(medium);
-                destBEPartitionTablets = getPartitionTablets(destBEStat.getBeId(), medium);
-            }
+        balanceDisk(clusterName, medium, avgUsedPercent, alternativeTablets, false, beStats, null, -1, 0);
+        return alternativeTablets;
+    }
 
-            Backend destBackend = infoService.getBackend(destBEStat.getBeId());
-            if (destBackend == null) {
-                destBEIndex++;
-                destBEChanged = true;
+    /**
+     * Backend disk balance is same with cluster disk balance.
+     * 1. select unbalanced be and sort be by path min|max used percent skew in desc order.
+     * 2. balance each backend in order.
+     * 2.1. sort disk according to used percent in asc order: path1, path2, ... pathn
+     * 2.2. calculate average used percent for all disks as avgUsedPercent
+     * 2.3. init srcPathIndex as n, destPathIndex as 1
+     * 2.4. copy tablets from srcPath to destPath until
+     * 1) usedPercent of srcPath less than avgUsedPercent, srcPathIndex--
+     * 2) usedPercent of destPath more than avgUsedPercent, destPathIndex++
+     * 2.5. repeat 2.4, until srcPathIndex <= destPathIndex
+     * <p>
+     * we prefer to choose tablets in partition that numOfTablet(srcPath) is more than numOfTablet(destPath)
+     */
+    private List<TabletSchedCtx> balanceBackendDisk(String clusterName, ClusterLoadStatistic clusterStat,
+                                                    TStorageMedium medium) {
+        List<TabletSchedCtx> alternativeTablets = Lists.newArrayList();
+
+        // select unbalanced be
+        List<BackendLoadStatistic> beStats = getValidBeStats(clusterStat, medium);
+        if (beStats.isEmpty()) {
+            return alternativeTablets;
+        }
+
+        List<BackendLoadStatistic> unbalancedBeStats = Lists.newArrayList();
+        for (BackendLoadStatistic beStat : beStats) {
+            Pair<Double, Double> maxMinUsedPercent = beStat.getMaxMinPathUsedPercent(medium);
+            if (maxMinUsedPercent == null) {
                 continue;
             }
 
-            List<Long> destBeHostGroup = hostGroups.get(destBackend.getHost());
+            if (!isDiskBalanced(maxMinUsedPercent.first, maxMinUsedPercent.second)) {
+                unbalancedBeStats.add(beStat);
+            }
+        }
+
+        // sort be by path min|max used percent skew in desc order
+        unbalancedBeStats.sort(new BackendLoadStatistic.BeStatComparatorForPathUsedPercentSkew(medium));
+        LOG.debug("select unbalanced backends for backend disk balance. be stats: {}", unbalancedBeStats);
+
+        for (BackendLoadStatistic beStat : unbalancedBeStats) {
+            long beId = beStat.getBeId();
+            if (!infoService.checkBackendAvailable(beId)) {
+                continue;
+            }
+
+            List<RootPathLoadStatistic> pathStats = getValidBePathStats(beStat, medium);
+            if (pathStats.size() <= 1) {
+                continue;
+            }
+
+            double avgUsedPercent = beStat.getUsedPercent(medium);
+
+            // sort disk by used percent in asc order
+            Collections.sort(pathStats);
+            LOG.debug("get backend path stats for backend disk balance. be id: {}, path stats: {}", beId, pathStats);
+
+            balanceDisk(clusterName, medium, avgUsedPercent, alternativeTablets, true, null, pathStats, beId,
+                    beStats.size());
+            if (alternativeTablets.size() >= Config.max_balancing_tablets) {
+                break;
+            }
+        }
+        return alternativeTablets;
+    }
+
+    /**
+     * Base balance disk for cluster disk balance and backend disk balance.
+     * cluster balance args: beStats, isLocalBalance is false.
+     * backend balance args: pathStats, beId, beNum, isLocalBalance is true.
+     */
+    private void balanceDisk(String clusterName, TStorageMedium medium, double avgUsedPercent,
+                             List<TabletSchedCtx> alternativeTablets, boolean isLocalBalance,
+                             List<BackendLoadStatistic> beStats,
+                             List<RootPathLoadStatistic> pathStats, long beId, int beNum) {
+        if (!isLocalBalance) {
+            Preconditions.checkArgument(beStats != null && beStats.size() > 1);
+        } else {
+            Preconditions.checkArgument(pathStats != null && pathStats.size() > 1 && beId > -1 && beNum > 0);
+        }
+
+        // aliveBeIds to check tablet health
+        List<Long> aliveBeIds = infoService.getClusterBackendIds(clusterName, true);
+
+        // for cluster balance
+        // cache selected tablets to avoid select same tablet
+        Set<Long> selectedTablets = Sets.newHashSet();
+        Map<String, List<Long>> hostGroups = getHostGroups(aliveBeIds);
+
+        // src|dest be or path index
+        int srcIndex = 0;
+        int destIndex = 0;
+        long srcUsedCap = 0;
+        long destUsedCap = 0;
+        long srcBeId = beId;
+        long srcPathHash = -1;
+        long destBeId = beId;
+        long destPathHash = -1;
+        if (!isLocalBalance) {
+            srcIndex = beStats.size() - 1;
+            srcUsedCap = beStats.get(srcIndex).getTotalUsedCapacityB(medium);
+            destUsedCap = beStats.get(destIndex).getTotalUsedCapacityB(medium);
+            srcBeId = beStats.get(srcIndex).getBeId();
+            destBeId = beStats.get(destIndex).getBeId();
+            srcPathHash = -1;
+            destPathHash = -1;
+        } else {
+            srcIndex = pathStats.size() - 1;
+            srcUsedCap = pathStats.get(srcIndex).getUsedCapacityB();
+            destUsedCap = pathStats.get(destIndex).getUsedCapacityB();
+            srcBeId = beId;
+            destBeId = beId;
+            srcPathHash = pathStats.get(srcIndex).getPathHash();
+            destPathHash = pathStats.get(destIndex).getPathHash();
+        }
+        // (partition, index) => tabletIds
+        Map<Pair<Long, Long>, Set<Long>> srcPartitionTablets = getPartitionTablets(srcBeId, medium, srcPathHash);
+        Map<Pair<Long, Long>, Set<Long>> destPartitionTablets = getPartitionTablets(destBeId, medium, destPathHash);
+        boolean srcChanged = false;
+        boolean destChanged = false;
+        Map<Pair<Long, Long>, PartitionStat> partitionStats = getPartitionStats(medium, isLocalBalance, null, null);
+        OUT:
+        while (srcIndex > destIndex) {
+            // for cluster balance
+            BackendLoadStatistic srcBEStat = null;
+            BackendLoadStatistic destBEStat = null;
+            List<Long> destBeHostGroup = null;
+            // for backend balance
+            RootPathLoadStatistic srcPathStat = null;
+            RootPathLoadStatistic destPathStat = null;
+
+            if (!isLocalBalance) {
+                srcBEStat = beStats.get(srcIndex);
+                destBEStat = beStats.get(destIndex);
+                if (srcChanged) {
+                    srcUsedCap = srcBEStat.getTotalUsedCapacityB(medium);
+                    srcBeId = srcBEStat.getBeId();
+                    srcPathHash = -1;
+                    srcPartitionTablets = getPartitionTablets(srcBeId, medium, srcPathHash);
+                    srcChanged = false;
+                }
+                if (destChanged) {
+                    destUsedCap = destBEStat.getTotalUsedCapacityB(medium);
+                    destBeId = destBEStat.getBeId();
+                    destPathHash = -1;
+                    destPartitionTablets = getPartitionTablets(destBeId, medium, destPathHash);
+                    destChanged = false;
+                }
+
+                Backend destBackend = infoService.getBackend(destBEStat.getBeId());
+                if (destBackend == null) {
+                    destIndex++;
+                    destChanged = true;
+                    continue;
+                }
+
+                destBeHostGroup = hostGroups.get(destBackend.getHost());
+            } else {
+                srcPathStat = pathStats.get(srcIndex);
+                destPathStat = pathStats.get(destIndex);
+                if (srcChanged) {
+                    srcUsedCap = srcPathStat.getUsedCapacityB();
+                    srcBeId = beId;
+                    srcPathHash = srcPathStat.getPathHash();
+                    srcPartitionTablets = getPartitionTablets(srcBeId, medium, srcPathHash);
+                    srcChanged = false;
+                }
+                if (destChanged) {
+                    destUsedCap = destPathStat.getUsedCapacityB();
+                    destBeId = beId;
+                    destPathHash = destPathStat.getPathHash();
+                    destPartitionTablets = getPartitionTablets(destBeId, medium, destPathHash);
+                    destChanged = false;
+                }
+            }
 
             // we store tablets that can make tablet distribution balance better to balancedTablets,
             // and those make tablet distribution balance worse to unbalancedTablets.
             List<Long> balancedTablets = Lists.newArrayList();
             List<Long> unbalancedTablets = Lists.newArrayList();
-            for (Map.Entry<Pair<Long, Long>, Set<Long>> partitionTablets : srcBEPartitionTablets.entrySet()) {
+            for (Map.Entry<Pair<Long, Long>, Set<Long>> partitionTablets : srcPartitionTablets.entrySet()) {
                 PartitionStat pStat = partitionStats.get(partitionTablets.getKey());
                 if (pStat == null) {
                     continue;
                 }
 
-                Set<Long> destTablets =
-                        destBEPartitionTablets.getOrDefault(partitionTablets.getKey(), Sets.newHashSet());
+                Set<Long> destTablets = destPartitionTablets.getOrDefault(partitionTablets.getKey(), Sets.newHashSet());
                 Set<Long> srcTablets = partitionTablets.getValue();
-                int avgNum = pStat.replicaNum / beStats.size();
+                int avgNum = 0;
+                if (!isLocalBalance) {
+                    avgNum = pStat.replicaNum / beStats.size();
+                } else {
+                    avgNum = pStat.replicaNum / (beNum * pathStats.size());
+                }
                 // num of tablets that make tablet distribution balance better
-                // avgNum - destTablets.size() is max tablets num moved to that will preserve dest be tablet distribution balance
-                // srcTablets.size() - avgNum is max tablets num moved from that will preserve src be tablet distribution balance
+                // avgNum - destTablets.size() is max tablets num moved to that will preserve dest be|path tablet distribution balance
+                // srcTablets.size() - avgNum is max tablets num moved from that will preserve src be|path tablet distribution balance
                 // so we take the smallest value between the two as balanceNum
                 int balanceNum = Math.min(avgNum - destTablets.size(), srcTablets.size() - avgNum);
                 for (Long tabletId : srcTablets) {
-                    // do not choose selected tablet
-                    if (selectedTablets.contains(tabletId)) {
-                        continue;
-                    }
-                    // do not choose tablet that exists in backends whose host is same with dest be
-                    if (isTabletExistsInBackends(tabletId, destBeHostGroup)) {
-                        continue;
+                    if (!isLocalBalance) {
+                        // do not choose selected tablet
+                        if (selectedTablets.contains(tabletId)) {
+                            continue;
+                        }
+                        // do not choose tablet that exists in backends whose host is same with dest be
+                        if (isTabletExistsInBackends(tabletId, destBeHostGroup)) {
+                            continue;
+                        }
                     }
 
                     if (balanceNum > 0) {
@@ -320,45 +606,59 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             List<Long> tablets = Lists.newArrayList(balancedTablets);
             tablets.addAll(unbalancedTablets);
 
+            // for cluster balance
             // copy tablets from srcBE high load paths to destBE low load paths
-            Set<Long> srcBEPaths =
-                    srcBEStat.getPathStatisticForMIDAndClazz(BackendLoadStatistic.Classification.HIGH, medium);
-            List<Long> destBEPaths = new ArrayList<>(
-                    destBEStat.getPathStatisticForMIDAndClazz(BackendLoadStatistic.Classification.LOW, medium));
-            if (destBEPaths.size() <= 0) {
-                destBEIndex++;
-                destBEChanged = true;
-                continue;
-            }
+            Set<Long> srcBEPaths = null;
+            List<Long> destBEPaths = null;
             int destBEPathsIndex = 0;  // round robin to select dest be path
-            long srcBETotalCap = srcBEStat.getTotalCapacityB(medium);
-            long destBETotalCap = destBEStat.getTotalCapacityB(medium);
+            if (!isLocalBalance) {
+                srcBEPaths = srcBEStat.getPathStatisticForMIDAndClazz(BackendLoadStatistic.Classification.HIGH, medium);
+                destBEPaths = Lists.newArrayList(
+                        destBEStat.getPathStatisticForMIDAndClazz(BackendLoadStatistic.Classification.LOW, medium));
+                if (destBEPaths.size() <= 0) {
+                    destIndex++;
+                    destChanged = true;
+                    continue;
+                }
+            }
+
+            long srcTotalCap = 0;
+            long destTotalCap = 0;
+            if (!isLocalBalance) {
+                srcTotalCap = srcBEStat.getTotalCapacityB(medium);
+                destTotalCap = destBEStat.getTotalCapacityB(medium);
+            } else {
+                srcTotalCap = srcPathStat.getCapacityB();
+                destTotalCap = destPathStat.getCapacityB();
+            }
             for (Long tabletId : tablets) {
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
                 if (tabletMeta == null) {
                     continue;
                 }
-                Replica replica = invertedIndex.getReplica(tabletId, srcBEStat.getBeId());
+                Replica replica = invertedIndex.getReplica(tabletId, srcBeId);
                 if (replica == null || replica.getPathHash() == -1L) {
                     continue;
                 }
 
-                // only move tablet on high load disk
-                if (!srcBEPaths.contains(replica.getPathHash())) {
-                    continue;
+                if (!isLocalBalance) {
+                    // only move tablet on high load disk
+                    if (!srcBEPaths.contains(replica.getPathHash())) {
+                        continue;
+                    }
                 }
 
                 // check used percent after move
-                double destBEUsedPercent = (double) (destBEUsedCap + replica.getDataSize()) / destBETotalCap;
-                double srcBEUsedPercent = (double) (srcBEUsedCap - replica.getDataSize()) / srcBETotalCap;
-                if (Math.abs(destBEUsedPercent - avgUsedPercent) > 1e-6 && (destBEUsedPercent > avgUsedPercent)) {
-                    destBEIndex++;
-                    destBEChanged = true;
+                double destUsedPercent = (double) (destUsedCap + replica.getDataSize()) / destTotalCap;
+                double srcUsedPercent = (double) (srcUsedCap - replica.getDataSize()) / srcTotalCap;
+                if (Math.abs(destUsedPercent - avgUsedPercent) > 1e-6 && (destUsedPercent > avgUsedPercent)) {
+                    destIndex++;
+                    destChanged = true;
                     continue OUT;
                 }
-                if (Math.abs(srcBEUsedPercent - avgUsedPercent) > 1e-6 && (srcBEUsedPercent < avgUsedPercent)) {
-                    srcBEIndex--;
-                    srcBEChanged = true;
+                if (Math.abs(srcUsedPercent - avgUsedPercent) > 1e-6 && (srcUsedPercent < avgUsedPercent)) {
+                    srcIndex--;
+                    srcChanged = true;
                     continue OUT;
                 }
 
@@ -368,54 +668,61 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 }
 
                 // NOTICE: state has been changed, the tablet must be selected
-                destBEUsedCap += replica.getDataSize();
-                srcBEUsedCap -= replica.getDataSize();
+                destUsedCap += replica.getDataSize();
+                srcUsedCap -= replica.getDataSize();
                 Pair<Long, Long> p = new Pair<>(tabletMeta.getPartitionId(), tabletMeta.getIndexId());
-                //p: partition <partitionId, indexId>
-                //k: partition same to p
-                srcBEPartitionTablets.compute(p, (k, pTablets) -> {
+                // p: partition <partitionId, indexId>
+                // k: partition same to p
+                srcPartitionTablets.compute(p, (k, pTablets) -> {
                     if (pTablets != null) {
                         pTablets.remove(tabletId);
                     }
                     return pTablets;
                 });
-                destBEPartitionTablets.compute(p, (k, pTablets) -> {
+                destPartitionTablets.compute(p, (k, pTablets) -> {
                     if (pTablets != null) {
                         pTablets.add(tabletId);
                         return pTablets;
                     }
                     return Sets.newHashSet(tabletId);
                 });
-                // round robin to select dest be path
-                Long destPathHash = destBEPaths.get(destBEPathsIndex);
-                destBEPathsIndex = (destBEPathsIndex + 1) % destBEPaths.size();
 
-                TabletSchedCtx schedCtx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, clusterName,
-                        tabletMeta.getDbId(), tabletMeta.getTableId(), tabletMeta.getPartitionId(),
-                        tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
+                if (!isLocalBalance) {
+                    // round robin to select dest be path
+                    destPathHash = destBEPaths.get(destBEPathsIndex);
+                    destBEPathsIndex = (destBEPathsIndex + 1) % destBEPaths.size();
+                } else {
+                    destPathHash = destPathStat.getPathHash();
+                }
+
+                TabletSchedCtx schedCtx =
+                        new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, clusterName, tabletMeta.getDbId(),
+                                tabletMeta.getTableId(), tabletMeta.getPartitionId(),
+                                tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
                 schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
                 schedCtx.setSrc(replica);
-                schedCtx.setDest(destBEStat.getBeId(), destPathHash);
+                schedCtx.setDest(destBeId, destPathHash);
                 schedCtx.setBalanceType(BalanceType.DISK);
-                selectedTablets.add(tabletId);
                 alternativeTablets.add(schedCtx);
+
+                if (!isLocalBalance) {
+                    selectedTablets.add(tabletId);
+                }
                 if (alternativeTablets.size() >= Config.max_balancing_tablets) {
-                    break OUT;
+                    return;
                 }
             }
 
             // code reach here means that all tablets have moved to destBE, but srcBE and destBE both have not reached the average.
             // it is not easy to judge whether src or dest should be retained for next round, just random
             if ((int) (Math.random() * 100) % 2 == 0) {
-                srcBEIndex--;
-                srcBEChanged = true;
+                srcIndex--;
+                srcChanged = true;
             } else {
-                destBEIndex++;
-                destBEChanged = true;
+                destIndex++;
+                destChanged = true;
             }
         }
-
-        return alternativeTablets;
     }
 
     /**
@@ -429,6 +736,16 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
         }
         return validBeStats;
+    }
+
+    public List<RootPathLoadStatistic> getValidBePathStats(BackendLoadStatistic beStat, TStorageMedium medium) {
+        List<RootPathLoadStatistic> validPathStats = Lists.newArrayList();
+        for (RootPathLoadStatistic pathStat : beStat.getPathStatistics(medium)) {
+            if (pathStat.getDiskState() == DiskInfo.DiskState.ONLINE) {
+                validPathStats.add(pathStat);
+            }
+        }
+        return validPathStats;
     }
 
     // group backends by hostname
@@ -470,13 +787,20 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     /**
      * @return map : (partition, index) => tablets
      */
-    private Map<Pair<Long, Long>, Set<Long>> getPartitionTablets(long beId, TStorageMedium medium) {
+    private Map<Pair<Long, Long>, Set<Long>> getPartitionTablets(long beId, TStorageMedium medium, long pathHash) {
         Map<Pair<Long, Long>, Set<Long>> partitionTablets = Maps.newHashMap();
         List<Long> tabletIds = invertedIndex.getTabletIdsByBackendIdAndStorageMedium(beId, medium);
         for (Long tabletId : tabletIds) {
             TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
             if (tabletMeta == null) {
                 continue;
+            }
+
+            if (pathHash != -1) {
+                Replica replica = invertedIndex.getReplica(tabletId, beId);
+                if (replica.getPathHash() != pathHash) {
+                    continue;
+                }
             }
 
             Pair<Long, Long> key = new Pair<>(tabletMeta.getPartitionId(), tabletMeta.getIndexId());
@@ -489,15 +813,16 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         return partitionTablets;
     }
 
-    private int getPartitionTabletNumOnBe(long dbId, long tableId, long partitionId, long indexId, long beId) {
+    private int getPartitionTabletNumOnBePath(long dbId, long tableId, long partitionId, long indexId, long beId,
+                                              long pathHash) {
         Catalog catalog = Catalog.getCurrentCatalog();
         Database db = catalog.getDbIncludeRecycleBin(dbId);
         if (db == null) {
             return 0;
         }
 
+        db.readLock();
         try {
-            db.readLock();
             OlapTable table = (OlapTable) catalog.getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
                 return 0;
@@ -521,9 +846,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 }
 
                 for (Replica replica : replicas) {
-                    if (replica.getState() == ReplicaState.NORMAL
-                            && replica.getBackendId() == beId) {
-                        cnt++;
+                    if (replica.getState() == ReplicaState.NORMAL && replica.getBackendId() == beId) {
+                        if (pathHash == -1 || (pathHash != -1 && replica.getPathHash() == pathHash)) {
+                            cnt++;
+                        }
                     }
                 }
             }
@@ -534,30 +860,24 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     }
 
     /**
-     * balance Tablet should preserve disk balance
+     * balance cluster tablet should preserve disk balance
      * 1. for every partition, calculate the distribution skew, skew is (max tablet number on be) - (min tablet number on be)
      * 2. sort partition by skew in desc order
      * 3. for every partition, sort be by tablet number
      * 4. try to copy one tablet from maxTabletsNum be to other be, minTabletsNum be first
      * 5. repeat 3 and 4, until no tablet can copy
      */
-    private List<TabletSchedCtx> balanceTablet(String clusterName, ClusterLoadStatistic clusterStat,
-                                               TStorageMedium medium) {
+    private List<TabletSchedCtx> balanceClusterTablet(String clusterName, ClusterLoadStatistic clusterStat,
+                                                      TStorageMedium medium) {
         List<TabletSchedCtx> alternativeTablets = Lists.newArrayList();
-        List<BackendLoadStatistic> beStatList = getValidBeStats(clusterStat, medium);
-        if (beStatList.size() <= 1) {
+        List<BackendLoadStatistic> beStats = getValidBeStats(clusterStat, medium);
+        if (beStats.size() <= 1) {
             return alternativeTablets;
         }
 
-        // beId => (totalCapacity, totalUsedCapacity)
-        Map<Long, Pair<Long, Long>> beDiskCap = Maps.newHashMap();
         // beId => (paths, index) , low or mid be disks to hold moved tablets
         Map<Long, Pair<List<Long>, Integer>> beDisks = Maps.newHashMap();
-        List<Long> beIds = Lists.newArrayList();
-        for (BackendLoadStatistic beStat : beStatList) {
-            beDiskCap.put(beStat.getBeId(),
-                    new Pair<>(beStat.getTotalCapacityB(medium), beStat.getTotalUsedCapacityB(medium)));
-            beIds.add(beStat.getBeId());
+        for (BackendLoadStatistic beStat : beStats) {
             List<Long> pathHashList = Lists.newArrayList();
             for (RootPathLoadStatistic pathStat : beStat.getPathStatistics()) {
                 if (pathStat.getStorageMedium() == medium
@@ -567,23 +887,96 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
             beDisks.put(beStat.getBeId(), new Pair<>(pathHashList, 0));
         }
+        LOG.debug("get backend stats for cluster tablet distribution balance. be stats: {}, be disks: {}", beStats,
+                beDisks);
 
-        Map<Pair<Long, Long>, PartitionStat> partitionStats = getPartitionStats(beIds, medium);
+        balanceTablet(clusterName, medium, alternativeTablets, false, beStats, beDisks, null, -1);
+        return alternativeTablets;
+    }
+
+    /**
+     * balance backend tablet is same with cluster tablet balance
+     * for every backend:
+     * 1. for every partition, calculate the distribution skew, skew is (max tablet number on path) - (min tablet number on path)
+     * 2. sort partition by skew in desc order
+     * 3. for every partition, sort be by tablet number
+     * 4. try to copy one tablet from maxTabletsNum path to other path, minTabletsNum path first
+     * 5. repeat 3 and 4, until no tablet can copy
+     */
+    private List<TabletSchedCtx> balanceBackendTablet(String clusterName, ClusterLoadStatistic clusterStat,
+                                                      TStorageMedium medium) {
+        List<TabletSchedCtx> alternativeTablets = Lists.newArrayList();
+        for (BackendLoadStatistic beStat : getValidBeStats(clusterStat, medium)) {
+            long beId = beStat.getBeId();
+            if (!infoService.checkBackendAvailable(beId)) {
+                continue;
+            }
+
+            List<RootPathLoadStatistic> pathStats = getValidBePathStats(beStat, medium);
+            LOG.debug("get backend path stats for backend tablet distribution balance. be id: {}, path stats: {}", beId,
+                    pathStats);
+            if (pathStats.size() <= 1) {
+                continue;
+            }
+
+            balanceTablet(clusterName, medium, alternativeTablets, true, null, null, pathStats, beId);
+            if (alternativeTablets.size() >= Config.max_balancing_tablets) {
+                break;
+            }
+        }
+        return alternativeTablets;
+    }
+
+    /**
+     * Base balance tablet for cluster tablet balance and backend tablet balance.
+     * cluster balance args: beStats, beDisks, isLocalBalance is false.
+     * backend balance args: pathStats, beId, isLocalBalance is true.
+     */
+    private void balanceTablet(String clusterName, TStorageMedium medium,
+                               List<TabletSchedCtx> alternativeTablets, boolean isLocalBalance,
+                               List<BackendLoadStatistic> beStats, Map<Long, Pair<List<Long>, Integer>> beDisks,
+                               List<RootPathLoadStatistic> pathStats, long beId) {
+        if (!isLocalBalance) {
+            Preconditions.checkArgument(beStats != null && beStats.size() > 1);
+        } else {
+            Preconditions.checkArgument(pathStats != null && pathStats.size() > 1 && beId > -1);
+        }
+
+        // beId|pathHash => (totalCapacity, totalUsedCapacity)
+        Map<Long, Pair<Long, Long>> diskCapMap = Maps.newHashMap();
+        List<Long> beIds = null;
+        List<Long> paths = null;
+        Map<Pair<Long, Long>, PartitionStat> partitionStats = null;
+        if (!isLocalBalance) {
+            for (BackendLoadStatistic beStat : beStats) {
+                diskCapMap.put(beStat.getBeId(),
+                        new Pair<>(beStat.getTotalCapacityB(medium), beStat.getTotalUsedCapacityB(medium)));
+            }
+            beIds = Lists.newArrayList(diskCapMap.keySet());
+            partitionStats = getPartitionStats(medium, false, beIds, null);
+        } else {
+            for (RootPathLoadStatistic pathStat : pathStats) {
+                diskCapMap
+                        .put(pathStat.getPathHash(), Pair.create(pathStat.getCapacityB(), pathStat.getUsedCapacityB()));
+            }
+            paths = Lists.newArrayList(diskCapMap.keySet());
+            partitionStats = getPartitionStats(medium, true, null, Pair.create(beId, paths));
+        }
 
         List<Pair<Long, Long>> partitions = new ArrayList<>(partitionStats.keySet());
-        // sort all partition by distribution skew in desc order, skew is (max tablet number on be) - (min tablet number on be)
+        // sort all partition by distribution skew in desc order, skew is (max tablet number on be|path) - (min tablet number on be|path)
+        Map<Pair<Long, Long>, PartitionStat> finalPartitionStats = partitionStats;
         partitions.sort((o1, o2) -> {
-            PartitionStat pStat1 = partitionStats.get(o1);
-            PartitionStat pStat2 = partitionStats.get(o2);
+            PartitionStat pStat1 = finalPartitionStats.get(o1);
+            PartitionStat pStat2 = finalPartitionStats.get(o2);
             return pStat2.skew - pStat1.skew;
         });
 
-        DiskBalanceChecker diskBalanceChecker = new DiskBalanceChecker(beDiskCap);
+        DiskBalanceChecker diskBalanceChecker = new DiskBalanceChecker(diskCapMap);
         diskBalanceChecker.init();
         Set<Long> selectedTablets = Sets.newHashSet();
         List<Long> aliveBeIds = infoService.getBackendIds(true);
         Map<String, List<Long>> hostGroups = getHostGroups(aliveBeIds);
-        OUT:
         for (Pair<Long, Long> partition : partitions) {
             PartitionStat pStat = partitionStats.get(partition);
             // skew <= 1 means partition is balanced
@@ -591,18 +984,25 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 break;
             }
 
-            List<Pair<Long, Set<Long>>> beTablets =
-                    getPartitionTabletsOnAllBE(pStat.dbId, pStat.tableId, partition.first, partition.second, beIds);
-            boolean tabletFound;
+            // List<Pair<beId|pathHash, Set<tabletId>>>
+            List<Pair<Long, Set<Long>>> tablets = null;
+            if (!isLocalBalance) {
+                tablets =
+                        getPartitionTablets(pStat.dbId, pStat.tableId, partition.first, partition.second, beIds, null);
+            } else {
+                tablets = getPartitionTablets(pStat.dbId, pStat.tableId, partition.first, partition.second, null,
+                        Pair.create(beId, paths));
+            }
+            boolean tabletFound = false;
             do {
                 tabletFound = false;
-                // sort be by tablets num in desc order, and used percent in desc order for bes with same tablets num
-                beTablets.sort((t1, t2) -> {
+                // sort be by tablets num in desc order, and used percent in desc order for bes|paths with same tablets num
+                tablets.sort((t1, t2) -> {
                     if (t1.second.size() != t2.second.size()) {
                         return t2.second.size() - t1.second.size();
                     } else {
-                        double diff = diskBalanceChecker.getBeDiskUsedPercent(t2.first) -
-                                diskBalanceChecker.getBeDiskUsedPercent(t1.first);
+                        double diff = diskBalanceChecker.getDiskUsedPercent(t2.first) -
+                                diskBalanceChecker.getDiskUsedPercent(t1.first);
                         if (Math.abs(diff) < 1e-6) {
                             return 0;
                         } else if (diff > 0) {
@@ -613,36 +1013,47 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     }
                 });
 
-                // try to copy one tablet from maxTabletsNum be to other be, minTabletsNum be first.
-                Pair<Long, Set<Long>> srcBETablets = beTablets.get(0);
-                for (int i = beTablets.size() - 1; i > 0; i--) {
-                    Pair<Long, Set<Long>> destBETablets = beTablets.get(i);
+                // try to copy one tablet from maxTabletsNum be to other be|path, minTabletsNum be|path first.
+                Pair<Long, Set<Long>> srcTablets = tablets.get(0);
+                for (int i = tablets.size() - 1; i > 0; i--) {
+                    Pair<Long, Set<Long>> destTablets = tablets.get(i);
 
                     // partition is balanced
-                    if (srcBETablets.second.size() - destBETablets.second.size() <= 1) {
+                    if (srcTablets.second.size() - destTablets.second.size() <= 1) {
                         break;
                     }
 
-                    Backend destBackend = infoService.getBackend(destBETablets.first);
-                    if (destBackend == null) {
-                        continue;
+                    TabletSchedCtx schedCtx = null;
+                    if (!isLocalBalance) {
+                        Backend destBackend = infoService.getBackend(destTablets.first);
+                        if (destBackend == null) {
+                            continue;
+                        }
+                        schedCtx = tryToBalanceTablet(clusterName, srcTablets, destTablets, diskBalanceChecker,
+                                selectedTablets, aliveBeIds, isLocalBalance,
+                                hostGroups.get(destBackend.getHost()), -1);
+                    } else {
+                        schedCtx = tryToBalanceTablet(clusterName, srcTablets, destTablets, diskBalanceChecker,
+                                selectedTablets, aliveBeIds, isLocalBalance,
+                                null, beId);
                     }
 
-                    TabletSchedCtx schedCtx =
-                            tryToBalanceTablet(clusterName, srcBETablets, destBETablets, diskBalanceChecker,
-                                    selectedTablets, aliveBeIds, hostGroups.get(destBackend.getHost()));
                     if (schedCtx != null) {
                         // NOTICE: state has been changed, the tablet must be selected
+                        // set dest beId and pathHash
+                        if (!isLocalBalance) {
+                            //round robin to select dest be path
+                            Pair<List<Long>, Integer> destPaths = beDisks.get(destTablets.first);
+                            Long pathHash = destPaths.first.get(destPaths.second);
+                            destPaths.second = (destPaths.second + 1) % destPaths.first.size();
 
-                        //round robin to select dest be path
-                        Pair<List<Long>, Integer> destPaths = beDisks.get(destBETablets.first);
-                        Long pathHash = destPaths.first.get(destPaths.second);
-                        destPaths.second = (destPaths.second + 1) % destPaths.first.size();
-
-                        schedCtx.setDest(destBETablets.first, pathHash);
+                            schedCtx.setDest(destTablets.first, pathHash);
+                        } else {
+                            schedCtx.setDest(beId, destTablets.first);
+                        }
                         alternativeTablets.add(schedCtx);
                         if (alternativeTablets.size() >= Config.max_balancing_tablets) {
-                            break OUT;
+                            return;
                         }
                         tabletFound = true;
                         break;
@@ -650,30 +1061,49 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 }
             } while (tabletFound);
         }
-
-        return alternativeTablets;
     }
 
-    private TabletSchedCtx tryToBalanceTablet(String clusterName, Pair<Long, Set<Long>> srcBE,
-                                              Pair<Long, Set<Long>> destBE,
+    /**
+     * cluster tablet balance args:
+     * srcTablets: beId => Set<tabletId>
+     * destTablets: beId => Set<tabletId>
+     * destBackendHostGroup
+     * isLocalBalance: false
+     * backend tablet balance args:
+     * srcTablets: pathHash => Set<tabletId>
+     * destTablets: pathHash => Set<tabletId>
+     * beId
+     * isLocalBalance: true
+     */
+    private TabletSchedCtx tryToBalanceTablet(String clusterName, Pair<Long, Set<Long>> srcTablets,
+                                              Pair<Long, Set<Long>> destTablets,
                                               DiskBalanceChecker diskBalanceChecker, Set<Long> selectedTablets,
                                               List<Long> aliveBeIds,
-                                              List<Long> destBackendHostGroup) {
-        for (Long tabletId : srcBE.second) {
-            if (isTabletExistsInBackends(tabletId, destBackendHostGroup)) {
-                continue;
+                                              boolean isLocalBalance, List<Long> destBackendHostGroup, long beId) {
+        Preconditions.checkArgument(!isLocalBalance || beId != -1);
+
+        for (Long tabletId : srcTablets.second) {
+            if (!isLocalBalance) {
+                if (destBackendHostGroup != null && isTabletExistsInBackends(tabletId, destBackendHostGroup)) {
+                    continue;
+                }
             }
 
             if (selectedTablets.contains(tabletId)) {
                 continue;
             }
 
-            Replica replica = invertedIndex.getReplica(tabletId, srcBE.first);
+            Replica replica = null;
+            if (!isLocalBalance) {
+                replica = invertedIndex.getReplica(tabletId, srcTablets.first);
+            } else {
+                replica = invertedIndex.getReplica(tabletId, beId);
+            }
             if (replica == null || replica.getPathHash() == -1L) {
                 continue;
             }
 
-            if (!diskBalanceChecker.check(srcBE.first, destBE.first, replica.getDataSize())) {
+            if (!diskBalanceChecker.check(srcTablets.first, destTablets.first, replica.getDataSize())) {
                 continue;
             }
 
@@ -695,17 +1125,24 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             // update state
             selectedTablets.add(tabletId);
-            diskBalanceChecker.moveReplica(srcBE.first, destBE.first, replica.getDataSize());
-            srcBE.second.remove(tabletId);
-            destBE.second.add(tabletId);
+            diskBalanceChecker.moveReplica(srcTablets.first, destTablets.first, replica.getDataSize());
+            srcTablets.second.remove(tabletId);
+            destTablets.second.add(tabletId);
             return schedCtx;
         }
 
         return null;
     }
 
-    private List<Pair<Long, Set<Long>>> getPartitionTabletsOnAllBE(Long dbId, Long tableId, Long partitionId,
-                                                                   Long indexId, List<Long> beIds) {
+    /**
+     * Get beId or pathHash to tablets by partitionId and indexId.
+     * If beIds is not null, return beId => Set<tabletId>.
+     * If bePaths is not null, return pathHash => Set<tabletId>.
+     */
+    private List<Pair<Long, Set<Long>>> getPartitionTablets(Long dbId, Long tableId, Long partitionId, Long indexId,
+                                                            List<Long> beIds, Pair<Long, List<Long>> bePaths) {
+        Preconditions.checkArgument(beIds != null || bePaths != null);
+
         List<Pair<Long, Set<Long>>> result = Lists.newArrayList();
         Catalog catalog = Catalog.getCurrentCatalog();
 
@@ -731,9 +1168,16 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 return result;
             }
 
-            Map<Long, Set<Long>> tabletsOnBE = Maps.newHashMap();
-            for (Long beId : beIds) {
-                tabletsOnBE.put(beId, Sets.newHashSet());
+            // tablets on be|path
+            Map<Long, Set<Long>> tablets = Maps.newHashMap();
+            if (beIds != null) {
+                for (Long beId : beIds) {
+                    tablets.put(beId, Sets.newHashSet());
+                }
+            } else {
+                for (Long pathHash : bePaths.second) {
+                    tablets.put(pathHash, Sets.newHashSet());
+                }
             }
             for (Tablet tablet : index.getTablets()) {
                 List<Replica> replicas = tablet.getReplicas();
@@ -746,14 +1190,25 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         continue;
                     }
 
-                    tabletsOnBE.computeIfPresent(replica.getBackendId(), (k, v) -> {
-                        v.add(tablet.getId());
-                        return v;
-                    });
+                    if (beIds != null) {
+                        tablets.computeIfPresent(replica.getBackendId(), (k, v) -> {
+                            v.add(tablet.getId());
+                            return v;
+                        });
+                    } else {
+                        if (replica.getBackendId() != bePaths.first ||
+                                !bePaths.second.contains(replica.getPathHash())) {
+                            continue;
+                        }
+                        tablets.computeIfPresent(replica.getPathHash(), (k, v) -> {
+                            v.add(tablet.getId());
+                            return v;
+                        });
+                    }
                 }
             }
 
-            for (Map.Entry<Long, Set<Long>> entry : tabletsOnBE.entrySet()) {
+            for (Map.Entry<Long, Set<Long>> entry : tablets.entrySet()) {
                 result.add(new Pair<>(entry.getKey(), entry.getValue()));
             }
         } finally {
@@ -832,8 +1287,24 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         }
     }
 
-    // beIds can be null, skew will not be set in this case
-    private Map<Pair<Long, Long>, PartitionStat> getPartitionStats(List<Long> beIds, TStorageMedium medium) {
+    /**
+     * Get Map<(partition, index) => PartitionStat>
+     * <p>
+     * both beIds and bePaths can be null, skew will not be set in this case.
+     * if beIds is not null, skew is between backends.
+     * if bePaths is not null, skew is between paths in single backend.
+     * <p>
+     * if isLocalBalance, stable colocate table can be scheduled.
+     */
+    private Map<Pair<Long, Long>, PartitionStat> getPartitionStats(TStorageMedium medium, boolean isLocalBalance,
+                                                                   List<Long> beIds, Pair<Long, List<Long>> bePaths) {
+        if (beIds != null) {
+            Preconditions.checkArgument(beIds.size() > 1);
+        }
+        if (bePaths != null) {
+            Preconditions.checkArgument(bePaths.first != -1 && bePaths.second.size() > 1);
+        }
+
         Catalog catalog = Catalog.getCurrentCatalog();
         Map<Pair<Long, Long>, PartitionStat> partitionStats = Maps.newHashMap();
         List<Long> dbIds = catalog.getDbIdsIncludeRecycleBin();
@@ -850,7 +1321,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             db.readLock();
             try {
                 for (Table table : catalog.getTablesIncludeRecycleBin(db)) {
-                    if (!table.needSchedule()) {
+                    // check table is olap table or colocate table
+                    if (!table.needSchedule(isLocalBalance)) {
                         continue;
                     }
 
@@ -887,14 +1359,21 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             PartitionStat pStat = new PartitionStat(dbId, table.getId(), 0, replicaNum);
                             partitionStats.put(new Pair<>(partition.getId(), idx.getId()), pStat);
 
-                            if (beIds == null || beIds.size() <= 0) {
+                            if (beIds == null && bePaths == null) {
                                 continue;
                             }
 
                             // calculate skew
-                            Map<Long, Integer> replicaNumOnBE = Maps.newHashMap();
-                            for (Long beId : beIds) {
-                                replicaNumOnBE.put(beId, 0);
+                            // replicaNum on be|path
+                            Map<Long, Integer> replicaNums = Maps.newHashMap();
+                            if (beIds != null) {
+                                for (Long beId : beIds) {
+                                    replicaNums.put(beId, 0);
+                                }
+                            } else {
+                                for (Long pathHash : bePaths.second) {
+                                    replicaNums.put(pathHash, 0);
+                                }
                             }
                             for (Tablet tablet : idx.getTablets()) {
                                 List<Replica> replicas = tablet.getReplicas();
@@ -904,13 +1383,21 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                             continue;
                                         }
 
-                                        replicaNumOnBE.computeIfPresent(replica.getBackendId(), (k, v) -> (v + 1));
+                                        if (beIds != null) {
+                                            replicaNums.computeIfPresent(replica.getBackendId(), (k, v) -> (v + 1));
+                                        } else {
+                                            if (replica.getBackendId() != bePaths.first) {
+                                                continue;
+                                            }
+
+                                            replicaNums.computeIfPresent(replica.getPathHash(), (k, v) -> (v + 1));
+                                        }
                                     }
                                 }
                             }
                             int maxNum = Integer.MIN_VALUE;
                             int minNum = Integer.MAX_VALUE;
-                            for (int num : replicaNumOnBE.values()) {
+                            for (int num : replicaNums.values()) {
                                 if (maxNum < num) {
                                     maxNum = num;
                                 }
@@ -935,17 +1422,18 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     // we check disk balance using 0.9 * Config.balance_load_score_threshold to avoid trigger disk unbalance
     // todo optimization using segment tree
     public static class DiskBalanceChecker {
-        // beId => (totalCapacity, totalUsedCapacity)
-        Map<Long, Pair<Long, Long>> beDiskCap;
+        // beId => (totalCapacity, totalUsedCapacity) for cluster balance
+        // pathHash => (totalCapacity, totalUsedCapacity) for backend balance
+        Map<Long, Pair<Long, Long>> diskCap;
         double maxUsedPercent;
         double minUsedPercent;
 
-        public DiskBalanceChecker(Map<Long, Pair<Long, Long>> beDiskCap) {
-            this.beDiskCap = beDiskCap;
+        public DiskBalanceChecker(Map<Long, Pair<Long, Long>> diskCap) {
+            this.diskCap = diskCap;
         }
 
-        public double getBeDiskUsedPercent(Long beId) {
-            Pair<Long, Long> cap = beDiskCap.get(beId);
+        public double getDiskUsedPercent(Long key) {
+            Pair<Long, Long> cap = diskCap.get(key);
             if (cap == null) {
                 return 0;
             }
@@ -955,7 +1443,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         public void init() {
             maxUsedPercent = Double.MIN_VALUE;
             minUsedPercent = Double.MAX_VALUE;
-            for (Map.Entry<Long, Pair<Long, Long>> entry : beDiskCap.entrySet()) {
+            for (Map.Entry<Long, Pair<Long, Long>> entry : diskCap.entrySet()) {
                 double usedPercent = ((double) entry.getValue().second) / entry.getValue().first;
                 if (usedPercent > maxUsedPercent) {
                     maxUsedPercent = usedPercent;
@@ -966,26 +1454,26 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
         }
 
-        public boolean check(Long srcBeId, Long destBeId, Long size) {
-            Pair<Long, Long> srcBeCap = beDiskCap.get(srcBeId);
-            Pair<Long, Long> destBeCap = beDiskCap.get(destBeId);
-            double srcBeUsedPercent = (double) (srcBeCap.second - size) / srcBeCap.first;
-            double destBeUsedPercent = (double) (destBeCap.second + size) / destBeCap.first;
+        public boolean check(Long src, Long dest, Long size) {
+            Pair<Long, Long> srcCap = diskCap.get(src);
+            Pair<Long, Long> destCap = diskCap.get(dest);
+            double srcUsedPercent = (double) (srcCap.second - size) / srcCap.first;
+            double destUsedPercent = (double) (destCap.second + size) / destCap.first;
 
-            // first check dest be capacity limit
-            if ((destBeUsedPercent > (Config.storage_flood_stage_usage_percent / 100.0)) ||
-                    ((destBeCap.first - destBeCap.second - size) < Config.storage_flood_stage_left_capacity_bytes)) {
+            // first check dest be|path capacity limit
+            if ((destUsedPercent > (Config.storage_flood_stage_usage_percent / 100.0)) ||
+                    ((destCap.first - destCap.second - size) < Config.storage_flood_stage_left_capacity_bytes)) {
                 return false;
             }
 
             double maxUsedPercentAfterBalance = Double.MIN_VALUE;
             double minUsedPercentAfterBalance = Double.MAX_VALUE;
-            for (Map.Entry<Long, Pair<Long, Long>> entry : beDiskCap.entrySet()) {
+            for (Map.Entry<Long, Pair<Long, Long>> entry : diskCap.entrySet()) {
                 double usedPercent = 0.0;
-                if (entry.getKey().equals(srcBeId)) {
-                    usedPercent = srcBeUsedPercent;
-                } else if (entry.getKey().equals(destBeId)) {
-                    usedPercent = destBeUsedPercent;
+                if (entry.getKey().equals(src)) {
+                    usedPercent = srcUsedPercent;
+                } else if (entry.getKey().equals(dest)) {
+                    usedPercent = destUsedPercent;
                 } else {
                     usedPercent = ((double) entry.getValue().second) / entry.getValue().first;
                 }
@@ -1011,11 +1499,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             return maxUsedPercentAfterBalance - minUsedPercentAfterBalance < 0.9 * Config.balance_load_score_threshold;
         }
 
-        public void moveReplica(Long srcBeId, Long destBeId, Long size) {
-            Pair<Long, Long> srcBeCap = beDiskCap.get(srcBeId);
-            Pair<Long, Long> destBeCap = beDiskCap.get(destBeId);
-            srcBeCap.second -= size;
-            destBeCap.second += size;
+        public void moveReplica(Long src, Long dest, Long size) {
+            Pair<Long, Long> srcCap = diskCap.get(src);
+            Pair<Long, Long> destCap = diskCap.get(dest);
+            srcCap.second -= size;
+            destCap.second += size;
 
             init();
         }

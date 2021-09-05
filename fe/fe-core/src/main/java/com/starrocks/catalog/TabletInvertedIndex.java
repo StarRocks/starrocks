@@ -579,12 +579,25 @@ public class TabletInvertedIndex {
         return tabletIds;
     }
 
-    public int getTabletNumByBackendId(long backendId) {
+    public long getTabletNumByBackendId(long backendId) {
         readLock();
         try {
             Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
             if (replicaMetaWithBackend != null) {
                 return replicaMetaWithBackend.size();
+            }
+        } finally {
+            readUnlock();
+        }
+        return 0;
+    }
+
+    public long getTabletNumByBackendIdAndPathHash(long backendId, long pathHash) {
+        readLock();
+        try {
+            Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
+            if (replicaMetaWithBackend != null) {
+                return replicaMetaWithBackend.values().stream().filter(r -> r.getPathHash() == pathHash).count();
             }
         } finally {
             readUnlock();
