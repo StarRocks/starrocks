@@ -427,34 +427,44 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             throw new AnalysisException(KAFKA_TOPIC_PROPERTY + " is a required property");
         }
 
+        // check custom kafka property before check partitions,
+        // because partitions can use kafka_default_offsets property
+        analyzeCustomProperties(dataSourceProperties, customKafkaProperties);
+
         // check partitions
         String kafkaPartitionsString = dataSourceProperties.get(KAFKA_PARTITIONS_PROPERTY);
         if (kafkaPartitionsString != null) {
-            analyzeKafkaPartitionProperty(kafkaPartitionsString, this.kafkaPartitionOffsets);
+            analyzeKafkaPartitionProperty(kafkaPartitionsString, customKafkaProperties, kafkaPartitionOffsets);
         }
 
         // check offset
         String kafkaOffsetsString = dataSourceProperties.get(KAFKA_OFFSETS_PROPERTY);
         if (kafkaOffsetsString != null) {
-            analyzeKafkaOffsetProperty(kafkaOffsetsString, this.kafkaPartitionOffsets);
+            analyzeKafkaOffsetProperty(kafkaOffsetsString, kafkaPartitionOffsets);
         }
-
-        // check custom kafka property
-        analyzeCustomProperties(this.dataSourceProperties, this.customKafkaProperties);
     }
 
     public static void analyzeKafkaPartitionProperty(String kafkaPartitionsString,
+                                                     Map<String, String> customKafkaProperties,
                                                      List<Pair<Integer, Long>> kafkaPartitionOffsets)
             throws AnalysisException {
         kafkaPartitionsString = kafkaPartitionsString.replaceAll(" ", "");
         if (kafkaPartitionsString.isEmpty()) {
             throw new AnalysisException(KAFKA_PARTITIONS_PROPERTY + " could not be a empty string");
         }
-        String[] kafkaPartionsStringList = kafkaPartitionsString.split(",");
-        for (String s : kafkaPartionsStringList) {
+
+        // get kafka default offset if set
+        Long kafkaDefaultOffset = null;
+        if (customKafkaProperties.containsKey(KAFKA_DEFAULT_OFFSETS)) {
+            kafkaDefaultOffset = getKafkaOffset(customKafkaProperties.get(KAFKA_DEFAULT_OFFSETS));
+        }
+
+        String[] kafkaPartitionsStringList = kafkaPartitionsString.split(",");
+        for (String s : kafkaPartitionsStringList) {
             try {
-                kafkaPartitionOffsets.add(Pair.create(getIntegerValueFromString(s, KAFKA_PARTITIONS_PROPERTY),
-                        KafkaProgress.OFFSET_END_VAL));
+                kafkaPartitionOffsets.add(
+                        Pair.create(getIntegerValueFromString(s, KAFKA_PARTITIONS_PROPERTY),
+                                kafkaDefaultOffset == null ? KafkaProgress.OFFSET_END_VAL : kafkaDefaultOffset));
             } catch (AnalysisException e) {
                 throw new AnalysisException(KAFKA_PARTITIONS_PROPERTY
                         + " must be a number string with comma-separated");
@@ -475,25 +485,31 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
 
         for (int i = 0; i < kafkaOffsetsStringList.length; i++) {
-            // defined in librdkafka/rdkafkacpp.h
-            // OFFSET_BEGINNING: -2
-            // OFFSET_END: -1
-            try {
-                kafkaPartitionOffsets.get(i).second = getLongValueFromString(kafkaOffsetsStringList[i],
-                        KAFKA_OFFSETS_PROPERTY);
-                if (kafkaPartitionOffsets.get(i).second < 0) {
-                    throw new AnalysisException("Can not specify offset smaller than 0");
-                }
-            } catch (AnalysisException e) {
-                if (kafkaOffsetsStringList[i].equalsIgnoreCase(KafkaProgress.OFFSET_BEGINNING)) {
-                    kafkaPartitionOffsets.get(i).second = KafkaProgress.OFFSET_BEGINNING_VAL;
-                } else if (kafkaOffsetsStringList[i].equalsIgnoreCase(KafkaProgress.OFFSET_END)) {
-                    kafkaPartitionOffsets.get(i).second = KafkaProgress.OFFSET_END_VAL;
-                } else {
-                    throw e;
-                }
+            kafkaPartitionOffsets.get(i).second = getKafkaOffset(kafkaOffsetsStringList[i]);
+        }
+    }
+
+    // Get kafka offset from string
+    // defined in librdkafka/rdkafkacpp.h
+    // OFFSET_BEGINNING: -2
+    // OFFSET_END: -1
+    public static long getKafkaOffset(String offsetStr) throws AnalysisException {
+        long offset = -1;
+        try {
+            offset = getLongValueFromString(offsetStr, "kafka offset");
+            if (offset < 0) {
+                throw new AnalysisException("Can not specify offset smaller than 0");
+            }
+        } catch (AnalysisException e) {
+            if (offsetStr.equalsIgnoreCase(KafkaProgress.OFFSET_BEGINNING)) {
+                offset = KafkaProgress.OFFSET_BEGINNING_VAL;
+            } else if (offsetStr.equalsIgnoreCase(KafkaProgress.OFFSET_END)) {
+                offset = KafkaProgress.OFFSET_END_VAL;
+            } else {
+                throw e;
             }
         }
+        return offset;
     }
 
     public static void analyzeCustomProperties(Map<String, String> dataSourceProperties,
@@ -509,6 +525,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 customKafkaProperties.put(propertyKey.substring(propertyKey.indexOf(".") + 1), propertyValue);
             }
             // can be extended in the future which other prefix
+        }
+
+        // check kafka_default_offsets
+        if (customKafkaProperties.containsKey(KAFKA_DEFAULT_OFFSETS)) {
+            getKafkaOffset(customKafkaProperties.get(KAFKA_DEFAULT_OFFSETS));
         }
     }
 
