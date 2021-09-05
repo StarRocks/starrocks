@@ -882,12 +882,6 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
         StarRocksMetrics::instance()->clone_requests_total.increment(1);
         LOG(INFO) << "get clone task. signature:" << agent_task_req.signature;
 
-        std::vector<std::string> error_msgs;
-        std::vector<TTabletInfo> tablet_infos;
-        EngineCloneTask engine_task(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), clone_req,
-                                    worker_pool_this->_master_info, agent_task_req.signature, &error_msgs,
-                                    &tablet_infos, &status);
-        worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
         // Return result to fe
         TStatus task_status;
         TFinishTaskRequest finish_task_request;
@@ -896,16 +890,54 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_signature(agent_task_req.signature);
 
         TStatusCode::type status_code = TStatusCode::OK;
-        if (status != STARROCKS_SUCCESS && status != STARROCKS_CREATE_TABLE_EXIST) {
-            StarRocksMetrics::instance()->clone_requests_failed.increment(1);
-            status_code = TStatusCode::RUNTIME_ERROR;
-            LOG(WARNING) << "clone failed. signature: " << agent_task_req.signature;
-            error_msgs.push_back("clone failed.");
+        std::vector<std::string> error_msgs;
+        std::vector<TTabletInfo> tablet_infos;
+        if (clone_req.__isset.is_local && clone_req.is_local) {
+            DataDir* dest_store = StorageEngine::instance()->get_store(clone_req.dest_path_hash);
+            if (dest_store == nullptr) {
+                LOG(WARNING) << "fail to get dest store. path_hash:" << clone_req.dest_path_hash;
+                status_code = TStatusCode::RUNTIME_ERROR;
+            } else {
+                EngineStorageMigrationTask engine_task(clone_req.tablet_id, clone_req.schema_hash, dest_store);
+                OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+                if (res != OLAP_SUCCESS) {
+                    status_code = TStatusCode::RUNTIME_ERROR;
+                    LOG(WARNING) << "storage migrate failed. status:" << res
+                                 << ", signature:" << agent_task_req.signature;
+                    error_msgs.push_back("storage migrate failed.");
+                } else {
+                    LOG(INFO) << "storage migrate success. status:" << res
+                              << ", signature:" << agent_task_req.signature;
+
+                    TTabletInfo tablet_info;
+                    AgentStatus status = worker_pool_this->_get_tablet_info(clone_req.tablet_id, clone_req.schema_hash,
+                                                                            agent_task_req.signature, &tablet_info);
+                    if (status != STARROCKS_SUCCESS) {
+                        LOG(WARNING) << "storage migrate success, but get tablet info failed"
+                                     << ". status:" << status << ", signature:" << agent_task_req.signature;
+                    } else {
+                        tablet_infos.push_back(tablet_info);
+                    }
+                    finish_task_request.__set_finish_tablet_infos(tablet_infos);
+                }
+            }
         } else {
-            LOG(INFO) << "clone success, set tablet infos."
-                      << "signature:" << agent_task_req.signature;
-            finish_task_request.__set_finish_tablet_infos(tablet_infos);
+            EngineCloneTask engine_task(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), clone_req,
+                                        worker_pool_this->_master_info, agent_task_req.signature, &error_msgs,
+                                        &tablet_infos, &status);
+            worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+            if (status != STARROCKS_SUCCESS && status != STARROCKS_CREATE_TABLE_EXIST) {
+                StarRocksMetrics::instance()->clone_requests_failed.increment(1);
+                status_code = TStatusCode::RUNTIME_ERROR;
+                LOG(WARNING) << "clone failed. signature: " << agent_task_req.signature;
+                error_msgs.push_back("clone failed.");
+            } else {
+                LOG(INFO) << "clone success, set tablet infos. status:" << status
+                          << ", signature:" << agent_task_req.signature;
+                finish_task_request.__set_finish_tablet_infos(tablet_infos);
+            }
         }
+
         task_status.__set_status_code(status_code);
         task_status.__set_error_msgs(error_msgs);
         finish_task_request.__set_task_status(task_status);
@@ -941,24 +973,74 @@ void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_t
         TStatusCode::type status_code = TStatusCode::OK;
         std::vector<std::string> error_msgs;
         TStatus task_status;
-        EngineStorageMigrationTask engine_task(storage_medium_migrate_req);
-        OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-        if (res != OLAP_SUCCESS) {
-            LOG(WARNING) << "storage media migrate failed. status: " << res
-                         << ", signature: " << agent_task_req.signature;
-            status_code = TStatusCode::RUNTIME_ERROR;
-        } else {
-            LOG(INFO) << "storage media migrate success. status:" << res << ","
-                      << ", signature:" << agent_task_req.signature;
-        }
-
-        task_status.__set_status_code(status_code);
-        task_status.__set_error_msgs(error_msgs);
-
         TFinishTaskRequest finish_task_request;
         finish_task_request.__set_backend(worker_pool_this->_backend);
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
+
+        do {
+            TTabletId tablet_id = storage_medium_migrate_req.tablet_id;
+            TSchemaHash schema_hash = storage_medium_migrate_req.schema_hash;
+            TStorageMedium::type storage_medium = storage_medium_migrate_req.storage_medium;
+
+            TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash);
+            if (tablet == nullptr) {
+                LOG(WARNING) << "can't find tablet. tablet_id=" << tablet_id << ", schema_hash=" << schema_hash;
+                status_code = TStatusCode::RUNTIME_ERROR;
+                break;
+            }
+
+            TStorageMedium::type src_storage_medium = tablet->data_dir()->storage_medium();
+            if (src_storage_medium == storage_medium) {
+                // status code is ok
+                LOG(INFO) << "tablet is already on specified storage medium. "
+                          << "storage_medium=" << storage_medium;
+                break;
+            }
+
+            uint32_t count = StorageEngine::instance()->available_storage_medium_type_count();
+            if (count <= 1) {
+                LOG(INFO) << "available storage medium type count is less than 1, "
+                          << "no need to migrate. count=" << count;
+                status_code = TStatusCode::RUNTIME_ERROR;
+                break;
+            }
+
+            // get a random store of specified storage medium
+            auto stores = StorageEngine::instance()->get_stores_for_create_tablet(storage_medium);
+            if (stores.empty()) {
+                LOG(WARNING) << "fail to get path for migration. storage_medium=" << storage_medium;
+                status_code = TStatusCode::RUNTIME_ERROR;
+                break;
+            }
+
+            EngineStorageMigrationTask engine_task(tablet_id, schema_hash, stores[0]);
+            OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+            if (res != OLAP_SUCCESS) {
+                LOG(WARNING) << "storage media migrate failed. status: " << res
+                             << ", signature: " << agent_task_req.signature;
+                status_code = TStatusCode::RUNTIME_ERROR;
+            } else {
+                // status code is ok
+                LOG(INFO) << "storage media migrate success. "
+                          << "signature:" << agent_task_req.signature;
+
+                std::vector<TTabletInfo> tablet_infos;
+                TTabletInfo tablet_info;
+                AgentStatus status = worker_pool_this->_get_tablet_info(tablet_id, schema_hash,
+                                                                        agent_task_req.signature, &tablet_info);
+                if (status != STARROCKS_SUCCESS) {
+                    LOG(WARNING) << "storage migrate success, but get tablet info failed"
+                                 << ". status:" << status << ", signature:" << agent_task_req.signature;
+                } else {
+                    tablet_infos.push_back(tablet_info);
+                }
+                finish_task_request.__set_finish_tablet_infos(tablet_infos);
+            }
+        } while (0);
+
+        task_status.__set_status_code(status_code);
+        task_status.__set_error_msgs(error_msgs);
         finish_task_request.__set_task_status(task_status);
 
         worker_pool_this->_finish_task(finish_task_request);

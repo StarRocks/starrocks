@@ -1549,9 +1549,16 @@ OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletRe
     if (!base_migration_rlock.owns_lock()) {
         return OLAP_ERR_RWLOCK_ERROR;
     }
+    if (Tablet::check_migrate(base_tablet)) {
+        return OLAP_ERR_OTHER_ERROR;
+    }
+
     std::shared_lock new_migration_rlock(new_tablet->get_migration_lock(), std::try_to_lock);
     if (!new_migration_rlock.owns_lock()) {
         return OLAP_ERR_RWLOCK_ERROR;
+    }
+    if (Tablet::check_migrate(new_tablet)) {
+        return OLAP_ERR_OTHER_ERROR;
     }
 
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
