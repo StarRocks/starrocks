@@ -104,12 +104,12 @@ public class RoutineLoadDataSourceProperties {
         // check partitions
         final String kafkaPartitionsString = properties.get(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY);
         if (kafkaPartitionsString != null) {
-
             if (!properties.containsKey(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY)) {
                 throw new AnalysisException("Partition and offset must be specified at the same time");
             }
 
-            CreateRoutineLoadStmt.analyzeKafkaPartitionProperty(kafkaPartitionsString, kafkaPartitionOffsets);
+            CreateRoutineLoadStmt.analyzeKafkaPartitionProperty(kafkaPartitionsString, Maps.newHashMap(),
+                    kafkaPartitionOffsets);
         } else {
             if (properties.containsKey(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY)) {
                 throw new AnalysisException("Missing kafka partition info");
@@ -135,7 +135,7 @@ public class RoutineLoadDataSourceProperties {
         StringBuilder sb = new StringBuilder();
         sb.append("type: ").append(type);
         sb.append(", kafka partition offsets: ").append(kafkaPartitionOffsets);
-        sb.append(", custome properties: ").append(customKafkaProperties);
+        sb.append(", custom properties: ").append(customKafkaProperties);
         return sb.toString();
     }
 }
