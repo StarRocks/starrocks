@@ -27,6 +27,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.Partition;
@@ -53,9 +54,10 @@ import java.util.Set;
 //
 // syntax:
 //      EXPORT TABLE tablename [PARTITION (name1[, ...])]
+//          [(col1, col2[, ...])]
 //          TO 'export_target_path'
 //          [PROPERTIES("key"="value")]
-//          BY BROKER 'broker_name' [( $broker_attrs)]
+//          WITH BROKER 'broker_name' [( $broker_attrs)]
 public class ExportStmt extends StatementBase {
     private static final Logger LOG = LogManager.getLogger(ExportStmt.class);
 
@@ -70,6 +72,7 @@ public class ExportStmt extends StatementBase {
 
     private TableName tblName;
     private List<String> partitions;
+    private List<String> columnNames;
     // path should include "/"
     private String path;
     private String fileNamePrefix;
@@ -81,9 +84,10 @@ public class ExportStmt extends StatementBase {
 
     private TableRef tableRef;
 
-    public ExportStmt(TableRef tableRef, String path,
+    public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc) {
         this.tableRef = tableRef;
+        this.columnNames = columnNames;
         this.path = path.trim();
         if (properties != null) {
             this.properties = properties;
@@ -100,6 +104,10 @@ public class ExportStmt extends StatementBase {
 
     public List<String> getPartitions() {
         return partitions;
+    }
+
+    public List<String> getColumnNames() {
+        return columnNames;
     }
 
     public String getPath() {
@@ -166,7 +174,7 @@ public class ExportStmt extends StatementBase {
                     tblName.getTbl());
         }
 
-        // check table && partitions whether exist
+        // check table && partitions && columns whether exist
         checkTable(analyzer.getCatalog());
 
         // check path is valid
@@ -204,12 +212,6 @@ public class ExportStmt extends StatementBase {
                 throw new AnalysisException("Table[" + tblName.getTbl() + "] does not exist");
             }
 
-            if (partitions == null) {
-                return;
-            }
-            if (!table.isPartitioned()) {
-                throw new AnalysisException("Table[" + tblName.getTbl() + "] is not partitioned.");
-            }
             Table.TableType tblType = table.getType();
             switch (tblType) {
                 case MYSQL:
@@ -220,14 +222,45 @@ public class ExportStmt extends StatementBase {
                 case INLINE_VIEW:
                 case VIEW:
                 default:
-                    throw new AnalysisException("Table[" + tblName.getTbl() + "] is "
-                            + tblType.toString() + " type, do not support EXPORT.");
+                    throw new AnalysisException("Table[" + tblName.getTbl() + "] is " + tblType.toString() +
+                            " type, do not support EXPORT.");
             }
 
-            for (String partitionName : partitions) {
-                Partition partition = table.getPartition(partitionName);
-                if (partition == null) {
-                    throw new AnalysisException("Partition [" + partitionName + "] does not exist");
+            if (partitions != null) {
+                for (String partitionName : partitions) {
+                    Partition partition = table.getPartition(partitionName);
+                    if (partition == null) {
+                        throw new AnalysisException("Partition [" + partitionName + "] does not exist.");
+                    }
+                }
+            }
+
+            // check columns
+            if (columnNames != null) {
+                if (columnNames.isEmpty()) {
+                    throw new AnalysisException("Columns is empty.");
+                }
+
+                Map<String, Integer> tableColumnToIndex = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+                int index = 0;
+                for (Column column : table.getBaseSchema()) {
+                    tableColumnToIndex.put(column.getName(), index++);
+                }
+                Set<String> uniqColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+                int prevIndex = -1;
+                int currentIndex = -1;
+                for (String columnName : columnNames) {
+                    if (!uniqColumnNames.add(columnName)) {
+                        throw new AnalysisException("Duplicated column [" + columnName + "]");
+                    }
+                    if (!tableColumnToIndex.containsKey(columnName)) {
+                        throw new AnalysisException("Column [" + columnName + "] does not exist in table.");
+                    }
+                    currentIndex = tableColumnToIndex.get(columnName);
+                    if (prevIndex > currentIndex) {
+                        throw new AnalysisException("Columns order should be same with the schema.");
+                    }
+                    prevIndex = currentIndex;
                 }
             }
         } finally {

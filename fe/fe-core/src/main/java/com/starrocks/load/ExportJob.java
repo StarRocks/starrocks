@@ -124,6 +124,7 @@ public class ExportJob implements Writable {
     private Map<String, String> properties = Maps.newHashMap();
     private List<String> partitions;
     private TableName tableName;
+    private List<String> columnNames;
     private String sql = "";
     private JobState state;
     private long createTimeMs;
@@ -190,6 +191,7 @@ public class ExportJob implements Writable {
         }
 
         this.partitions = stmt.getPartitions();
+        this.columnNames = stmt.getColumnNames();
 
         db.readLock();
         try {
@@ -213,13 +215,31 @@ public class ExportJob implements Writable {
         plan();
     }
 
-    private void registerToDesc() {
+    private void registerToDesc() throws UserException {
         TableRef ref = new TableRef(tableName, null, partitions == null ? null : new PartitionNames(false, partitions));
         BaseTableRef tableRef = new BaseTableRef(ref, exportTable, tableName);
         exportTupleDesc = desc.createTupleDescriptor();
         exportTupleDesc.setTable(exportTable);
         exportTupleDesc.setRef(tableRef);
-        for (Column col : exportTable.getBaseSchema()) {
+
+        Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        List<Column> tableColumns = exportTable.getBaseSchema();
+        List<Column> exportColumns = Lists.newArrayList();
+        for (Column column : tableColumns) {
+            nameToColumn.put(column.getName(), column);
+        }
+        if (columnNames == null) {
+            exportColumns.addAll(tableColumns);
+        } else {
+            for (String columnName : columnNames) {
+                if (!nameToColumn.containsKey(columnName)) {
+                    throw new UserException("Column [" + columnName + "] does not exist in table.");
+                }
+                exportColumns.add(nameToColumn.get(columnName));
+            }
+        }
+
+        for (Column col : exportColumns) {
             SlotDescriptor slot = desc.addSlotDescriptor(exportTupleDesc);
             slot.setIsMaterialized(true);
             slot.setColumn(col);
@@ -434,6 +454,10 @@ public class ExportJob implements Writable {
 
     public List<String> getPartitions() {
         return partitions;
+    }
+
+    public List<String> getColumnNames() {
+        return columnNames;
     }
 
     public int getProgress() {
