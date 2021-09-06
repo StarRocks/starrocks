@@ -43,17 +43,19 @@ struct DistinctAggregateState {};
 
 // 0 original version
 // 1 two-level hash set.
-#define DISTINCT_AGG_IMPL 0
+#define DISTINCT_AGG_IMPL 1
 
 #if DISTINCT_AGG_IMPL == 0
 template <PrimitiveType PT>
 struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     using SumType = RunTimeCppType<SumResultPT<PT>>;
+    using MyHashSet = HashSet<T>;
+    static const size_t value_size = phmap::item_serialize_size<MyHashSet>::value;
 
     size_t update(T key) {
         auto pair = set.insert(key);
-        return pair.second * phmap::item_serialize_size<HashSet<T>>::value;
+        return pair.second * value_size;
     }
 
     int64_t disctint_count() const { return set.size(); }
@@ -71,12 +73,12 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
         auto old_size = set.size();
         if (old_size == 0) {
             set.load(input);
-            return set.size() * phmap::item_serialize_size<HashSet<T>>::value;
+            return set.size() * value_size;
         } else {
-            HashSet<T> set_src;
+            MyHashSet set_src;
             set_src.load(input);
             set.merge(set_src);
-            return (set.size() - old_size) * phmap::item_serialize_size<HashSet<T>>::value;
+            return (set.size() - old_size) * value_size;
         }
     }
 
@@ -93,7 +95,7 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
         return sum;
     }
 
-    HashSet<T> set;
+    MyHashSet set;
 };
 
 #elif DISTINCT_AGG_IMPL == 1
@@ -102,13 +104,14 @@ template <PrimitiveType PT>
 struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     using SumType = RunTimeCppType<SumResultPT<PT>>;
-    using TwoLevelHashSet = phmap::parallel_flat_hash_set<T, StdHash<T>>;
+    using MyHashSet = phmap::parallel_flat_hash_set<T, StdHash<T>>;
+    static const size_t value_size = phmap::item_serialize_size<MyHashSet>::value;
 
     DistinctAggregateState() {}
 
     size_t update(T key) {
         auto pair = set.insert(key);
-        return pair.second * phmap::item_serialize_size<HashSet<T>>::value;
+        return pair.second * value_size;
     }
 
     int64_t disctint_count() const { return set.size(); }
@@ -127,12 +130,12 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
         auto old_size = set.size();
         if (old_size == 0) {
             set.load(input);
-            total_size = set.size() * phmap::item_serialize_size<TwoLevelHashSet>::value;
+            total_size = set.size() * value_size;
         } else {
-            TwoLevelHashSet set_src;
+            MyHashSet set_src;
             set_src.load(input);
             set.merge(set_src);
-            total_size = (set.size() - old_size) * phmap::item_serialize_size<TwoLevelHashSet>::value;
+            total_size = (set.size() - old_size) * value_size;
         }
         return total_size;
     }
@@ -151,7 +154,7 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
         return sum;
     }
 
-    TwoLevelHashSet set;
+    MyHashSet set;
 };
 
 #endif
