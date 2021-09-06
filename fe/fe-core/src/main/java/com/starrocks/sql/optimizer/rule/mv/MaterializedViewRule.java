@@ -8,6 +8,7 @@ import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
@@ -98,8 +99,11 @@ public class MaterializedViewRule extends Rule {
                                     factory, relationId, input, percentileContexts);
                         }
                         rewriteContext.removeAll(percentileContexts);
-                        MVAggProjectScanRewrite.getInstance().rewriteOptExpressionTree(
-                                factory, relationId, input, rewriteContext);
+
+                        MaterializedViewRewriter rewriter = new MaterializedViewRewriter();
+                        for (MaterializedViewRule.RewriteContext rc : rewriteContext) {
+                            rewriter.rewrite(input, rc);
+                        }
                     }
                 }
             }
@@ -565,8 +569,7 @@ public class MaterializedViewRule extends Rule {
             FunctionSet.MULTI_DISTINCT_COUNT
     );
 
-    private void keyColumnsToExprList(Map<String, Integer> columnToIds, MaterializedIndexMeta mvMeta,
-                                      List<CallOperator> result) {
+    private void keyColumnsToExprList(Map<String, Integer> columnToIds, MaterializedIndexMeta mvMeta, List<CallOperator> result) {
         for (Column column : mvMeta.getSchema()) {
             if (!column.isAggregated()) {
                 ColumnRefOperator columnRef = factory.getColumnRef(columnToIds.get(column.getName()));
@@ -699,7 +702,7 @@ public class MaterializedViewRule extends Rule {
         Column mvColumn = factory.getColumn(mvColumnRef);
         if (mvColumn.getDefineExpr() != null && queryFnChild0 instanceof CallOperator) {
             CallOperator queryCall = (CallOperator) queryFnChild0;
-            String mvName = mvColumn.getDefineExpr().getFn().getFunctionName().getFunction();
+            String mvName = ((FunctionCallExpr) mvColumn.getDefineExpr()).getFnName().getFunction();
             String queryName = queryCall.getFnName();
             return mvName.equalsIgnoreCase(queryName);
         }
