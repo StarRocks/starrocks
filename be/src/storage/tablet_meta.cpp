@@ -328,7 +328,12 @@ OLAPStatus TabletMeta::create_from_file(const string& file_path) {
     TabletMetaPB tablet_meta_pb;
     ProtobufFile file(file_path);
     Status st = file.load(&tablet_meta_pb);
-    return st.ok() ? OLAP_SUCCESS : OLAP_ERR_IO_ERROR;
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to load tablet meta file: " << st;
+        return OLAP_ERR_IO_ERROR;
+    }
+    init_from_pb(&tablet_meta_pb);
+    return OLAP_SUCCESS;
 }
 
 OLAPStatus TabletMeta::reset_tablet_uid(const string& file_path) {
