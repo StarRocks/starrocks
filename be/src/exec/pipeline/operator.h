@@ -26,10 +26,10 @@ public:
     virtual Status close(RuntimeState* state);
 
     // Whether we could pull chunk from this operator
-    virtual bool has_output() = 0;
+    virtual bool has_output() const = 0;
 
     // Whether we could push chunk to this operator
-    virtual bool need_input() = 0;
+    virtual bool need_input() const = 0;
 
     // Is this operator completely finished processing and no more
     // output chunks will be produced
@@ -52,6 +52,8 @@ public:
     int32_t get_plan_node_id() const { return _plan_node_id; }
 
     MemTracker* get_memtracker() const { return _mem_tracker.get(); }
+
+    RuntimeProfile* get_runtime_profile() const { return _runtime_profile.get(); }
 
     std::string get_name() const { return _name + "_" + std::to_string(_id); }
 

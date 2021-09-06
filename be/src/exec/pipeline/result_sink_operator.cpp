@@ -65,7 +65,7 @@ StatusOr<vectorized::ChunkPtr> ResultSinkOperator::pull_chunk(RuntimeState* stat
     CHECK(false) << "Shouldn't pull chunk from result sink operator";
 }
 
-bool ResultSinkOperator::need_input() {
+bool ResultSinkOperator::need_input() const {
     if (is_finished()) {
         return false;
     }

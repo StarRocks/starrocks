@@ -41,7 +41,7 @@ public:
 
     Status close(RuntimeState* state) override;
 
-    bool has_next_chunk() override;
+    bool has_next_chunk() const override;
 
     StatusOr<vectorized::ChunkUniquePtr> get_next_chunk() override;
     void cache_next_chunk_blocking() override;

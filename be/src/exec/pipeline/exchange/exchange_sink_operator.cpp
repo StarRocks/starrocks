@@ -220,6 +220,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(int32_t id, int32_t plan_node_id, con
 }
 
 Status ExchangeSinkOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare(state));
     _be_number = state->be_number();
 
     // Set compression type according to query options
@@ -288,7 +289,7 @@ bool ExchangeSinkOperator::is_finished() const {
     return _is_finished && _buffer->is_finished();
 }
 
-bool ExchangeSinkOperator::need_input() {
+bool ExchangeSinkOperator::need_input() const {
     return !_is_finished && !_buffer->is_full();
 }
 

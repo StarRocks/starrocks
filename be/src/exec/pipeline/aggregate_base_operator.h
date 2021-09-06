@@ -2,60 +2,27 @@
 
 #pragma once
 
-#include <any>
+#include "column/vectorized_fwd.h"
+#include "exec/pipeline/operator.h"
+#include "exec/vectorized/aggregate/aggregate_base_node.h"
+#include "runtime/types.h"
 
-#include "column/column_helper.h"
-#include "column/type_traits.h"
-#include "exec/exec_node.h"
-#include "exec/vectorized/aggregate/agg_hash_variant.h"
-#include "exprs/agg/aggregate_factory.h"
-#include "exprs/expr.h"
-#include "runtime/descriptors.h"
-#include "runtime/runtime_state.h"
+namespace starrocks {
 
-namespace starrocks::vectorized {
+class ObjectPool;
 
-struct AggFunctionTypes {
-    TypeDescriptor result_type;
-    TypeDescriptor serde_type; // for serialize
-    std::vector<FunctionContext::TypeDesc> arg_typedescs;
-    bool has_nullable_child;
-    bool is_nullable; // agg function result whether is nullable
-};
+namespace pipeline {
 
-struct GroupByColumnTypes {
-    TypeDescriptor result_type;
-    bool is_nullable;
-};
-
-enum AggrPhase { AggrPhase1, AggrPhase2 };
-
-struct StreamingHtMinReductionEntry {
-    int min_ht_mem;
-    double streaming_ht_min_reduction;
-};
-
-static const StreamingHtMinReductionEntry STREAMING_HT_MIN_REDUCTION[] = {
-        {0, 0.0},
-        {256 * 1024, 1.1},
-        {2 * 1024 * 1024, 2.0},
-};
-
-static const int STREAMING_HT_MIN_REDUCTION_SIZE =
-        sizeof(STREAMING_HT_MIN_REDUCTION) / sizeof(STREAMING_HT_MIN_REDUCTION[0]);
-
-class AggregateBaseNode : public ExecNode {
+class AggregateBaseOperator : public Operator {
 public:
-    AggregateBaseNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~AggregateBaseNode() override;
+    AggregateBaseOperator(int32_t id, std::string name, int32_t plan_node_id, const TPlanNode& tnode);
 
-    Status init(const TPlanNode& tnode, RuntimeState* state) override;
+    ~AggregateBaseOperator() override = default;
+
+    bool reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
+
     Status prepare(RuntimeState* state) override;
-    // Only for compatibility
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     Status close(RuntimeState* state) override;
-    void push_down_join_runtime_filter(RuntimeState* state,
-                                       vectorized::RuntimeFilterProbeCollector* collector) override;
 
 protected:
     bool _should_expand_preagg_hash_tables(size_t input_chunk_size, int64_t ht_mem, int64_t ht_rows) const;
@@ -80,7 +47,7 @@ protected:
         hash_map_with_key.compute_agg_states(
                 chunk_size, _group_by_columns, _mem_pool.get(),
                 [this]() {
-                    AggDataPtr agg_state =
+                    vectorized::AggDataPtr agg_state =
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
                     for (int i = 0; i < _agg_functions.size(); i++) {
                         _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
@@ -95,7 +62,7 @@ protected:
         hash_map_with_key.compute_agg_states(
                 chunk_size, _group_by_columns,
                 [this]() {
-                    AggDataPtr agg_state =
+                    vectorized::AggDataPtr agg_state =
                             _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
                     for (int i = 0; i < _agg_functions.size(); i++) {
                         _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
@@ -128,21 +95,22 @@ protected:
     }
 
     // Create new aggregate function result column by type
-    Columns _create_agg_result_columns();
-    Columns _create_group_by_columns();
+    vectorized::Columns _create_agg_result_columns();
+    vectorized::Columns _create_group_by_columns();
 
     // Convert one row agg states to chunk
-    void _convert_to_chunk_no_groupby(ChunkPtr* chunk);
+    void _convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);
 
     template <typename HashMapWithKey>
-    void _convert_hash_map_to_chunk(HashMapWithKey& hash_map_with_key, int32_t chunk_size, ChunkPtr* chunk) {
+    void _convert_hash_map_to_chunk(HashMapWithKey& hash_map_with_key, int32_t chunk_size,
+                                    vectorized::ChunkPtr* chunk) {
         SCOPED_TIMER(_get_results_timer);
         using Iterator = typename HashMapWithKey::Iterator;
         auto it = std::any_cast<Iterator>(_it_hash);
         auto end = hash_map_with_key.hash_map.end();
 
-        Columns group_by_columns = _create_group_by_columns();
-        Columns agg_result_column = _create_agg_result_columns();
+        vectorized::Columns group_by_columns = _create_group_by_columns();
+        vectorized::Columns agg_result_column = _create_agg_result_columns();
 
         int32_t read_index = 0;
         {
@@ -188,7 +156,13 @@ protected:
                     DCHECK(group_by_columns.size() == 1);
                     DCHECK(group_by_columns[0]->is_nullable());
                     group_by_columns[0]->append_default();
-                    (this->*_serialize_or_finalize)(hash_map_with_key.null_key_data, agg_result_column);
+
+                    if (_needs_finalize) {
+                        _finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_column);
+                    } else {
+                        _serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_column);
+                    }
+
                     ++read_index;
                 } else {
                     // Output null key in next round
@@ -200,7 +174,7 @@ protected:
 
         _it_hash = it;
 
-        ChunkPtr _result_chunk = std::make_shared<Chunk>();
+        vectorized::ChunkPtr _result_chunk = std::make_shared<vectorized::Chunk>();
         // For different agg phase, we should use different TupleDescriptor
         if (_needs_finalize) {
             for (size_t i = 0; i < group_by_columns.size(); i++) {
@@ -224,13 +198,13 @@ protected:
     }
 
     template <typename HashSetWithKey>
-    void _convert_hash_set_to_chunk(HashSetWithKey& hash_set, int32_t chunk_size, ChunkPtr* chunk) {
+    void _convert_hash_set_to_chunk(HashSetWithKey& hash_set, int32_t chunk_size, vectorized::ChunkPtr* chunk) {
         SCOPED_TIMER(_get_results_timer);
         using Iterator = typename HashSetWithKey::Iterator;
         auto it = std::any_cast<Iterator>(_it_hash);
         auto end = hash_set.hash_set.end();
 
-        Columns group_by_columns = _create_group_by_columns();
+        vectorized::Columns group_by_columns = _create_group_by_columns();
 
         // Computer group by columns and aggregate result column
         int32_t read_index = 0;
@@ -268,7 +242,7 @@ protected:
 
         _it_hash = it;
 
-        ChunkPtr result_chunk = std::make_shared<Chunk>();
+        vectorized::ChunkPtr result_chunk = std::make_shared<vectorized::Chunk>();
         // For different agg phase, we should use different TupleDescriptor
         if (_needs_finalize) {
             for (size_t i = 0; i < group_by_columns.size(); i++) {
@@ -283,7 +257,7 @@ protected:
         *chunk = std::move(result_chunk);
     }
 
-    void _process_limit(ChunkPtr* chunk) {
+    void _process_limit(vectorized::ChunkPtr* chunk) {
         if (reached_limit()) {
             int64_t num_rows_over = _num_rows_returned - _limit;
             (*chunk)->set_num_rows((*chunk)->num_rows() - num_rows_over);
@@ -293,90 +267,73 @@ protected:
         }
     }
 
-    // When convert to chunk, we serialize the aggregate state
-    void _serialize_to_chunk(ConstAggDataPtr state, const Columns& agg_result_columns);
+    void _serialize_to_chunk(vectorized::ConstAggDataPtr state, const vectorized::Columns& agg_result_columns);
+    void _finalize_to_chunk(vectorized::ConstAggDataPtr state, const vectorized::Columns& agg_result_columns);
 
-    // When convert to chunk, we finalize the aggregate state
-    void _finalize_to_chunk(ConstAggDataPtr state, const Columns& agg_result_columns);
+    void _evaluate_group_by_exprs(vectorized::Chunk* chunk);
+    void _evaluate_agg_fn_exprs(vectorized::Chunk* chunk);
 
-    void (AggregateBaseNode::*_serialize_or_finalize)(ConstAggDataPtr state,
-                                                      const Columns& agg_result_columns) = nullptr;
-
-    void (AggregateBaseNode::*_compute_agg_states)(size_t chunk_size) = nullptr;
-
-    void _evaluate_exprs(Chunk* chunk);
-
-    void _output_chunk_by_streaming(ChunkPtr* chunk);
+    void _output_chunk_by_streaming(vectorized::ChunkPtr* chunk);
 
     // Elements queried in HashTable will be added to HashTable,
     // elements that cannot be queried are not processed,
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     // selection[i] = 0: found in hash table
     // selection[1] = 1: not found in hash table
-    void _output_chunk_by_streaming(ChunkPtr* chunk, const std::vector<uint8_t>& filter);
+    void _output_chunk_by_streaming(vectorized::ChunkPtr* chunk, const std::vector<uint8_t>& filter);
 
     Status _check_hash_map_memory_usage(RuntimeState* state);
-
     Status _check_hash_set_memory_usage(RuntimeState* state);
-
-#ifdef NDEBUG
-    static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
-#else
-    static constexpr size_t two_level_memory_threshold = 64;
-#endif
-
-#ifdef NDEBUG
-    static constexpr size_t streaming_hash_table_size_threshold = 10000000;
-#else
-    static constexpr size_t streaming_hash_table_size_threshold = 4;
-#endif
 
     // At first, we use single hash map, if hash map is too big,
     // we convert the single hash map to two level hash map.
     // two level hash map is better in large data set.
     void _try_convert_to_two_level_map();
 
+#ifdef NDEBUG
+    static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
+    static constexpr size_t streaming_hash_table_size_threshold = 10000000;
+    static constexpr size_t memory_check_batch_size = 65535;
+#else
+    static constexpr size_t two_level_memory_threshold = 64;
+    static constexpr size_t streaming_hash_table_size_threshold = 4;
+    static constexpr size_t memory_check_batch_size = 1;
+#endif
+
+    // TODO(hcf) the following fields were introduced due to compatibility
+    // can it be removed?
     const TPlanNode _tnode;
+    ObjectPool* _pool;
+    RuntimeProfile::Counter* _rows_returned_counter;
+    int64_t _limit = -1;
+    int64_t _prev_num_rows_returned = 0;
+    int64_t _num_rows_returned = 0;
 
     // Certain aggregates require a finalize step, which is the final step of the
     // aggregate after consuming all input rows. The finalize step converts the aggregate
     // value into its final form. This is true if this node contains aggregate that requires
     // a finalize step.
     bool _needs_finalize;
-
     bool _is_finished = false;
-
     bool _is_only_group_by_columns = false;
-
     // At least one group by column is nullable
     bool _has_nullable_key = false;
-
     int64_t _num_input_rows = 0;
-
     // memory used for hashmap or hashset
     int64_t _last_ht_memory_usage = 0;
-
     // memory used for agg function
     int64_t _last_agg_func_memory_usage = 0;
-
     int64_t _num_pass_through_rows = 0;
     bool _hash_table_eos = false;
     bool _child_eos = false;
 
     TStreamingPreaggregationMode::type _streaming_preaggregation_mode;
     // The key is all group by column, the value is all agg function column
-    HashMapVariant _hash_map_variant;
-    HashSetVariant _hash_set_variant;
-    // The Iterator for hash table
+    vectorized::HashMapVariant _hash_map_variant;
+    vectorized::HashSetVariant _hash_set_variant;
     std::any _it_hash;
 
     std::unique_ptr<MemPool> _mem_pool;
-
-#ifdef NDEBUG
-    static constexpr size_t memory_check_batch_size = 65535;
-#else
-    static constexpr size_t memory_check_batch_size = 1;
-#endif
 
     // The offset of the n-th aggregate function in a row of aggregate functions.
     std::vector<size_t> _agg_states_offsets;
@@ -386,25 +343,25 @@ protected:
     size_t _max_agg_state_align_size = 1;
     // The followings are aggregate function information:
     std::vector<starrocks_udf::FunctionContext*> _agg_fn_ctxs;
-    std::vector<const AggregateFunction*> _agg_functions;
+    std::vector<const vectorized::AggregateFunction*> _agg_functions;
     // agg state when no group by columns
-    AggDataPtr _single_agg_state = nullptr;
+    vectorized::AggDataPtr _single_agg_state = nullptr;
     // The expr used to evaluate agg input columns
     // one agg function could have multi input exprs
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    std::vector<std::vector<ColumnPtr>> _agg_intput_columns;
+    std::vector<std::vector<vectorized::ColumnPtr>> _agg_intput_columns;
     //raw pointers in order to get multi-column values
-    std::vector<std::vector<const Column*>> _agg_input_raw_columns;
+    std::vector<std::vector<const vectorized::Column*>> _agg_input_raw_columns;
     // Indicates we should use update or merge method to process aggregate column data
     std::vector<bool> _is_merge_funcs;
     // In order batch update agg states
-    Buffer<AggDataPtr> _tmp_agg_states;
-    std::vector<AggFunctionTypes> _agg_fn_types;
+    vectorized::Buffer<vectorized::AggDataPtr> _tmp_agg_states;
+    std::vector<vectorized::AggFunctionTypes> _agg_fn_types;
 
     // Exprs used to evaluate group by column
     std::vector<ExprContext*> _group_by_expr_ctxs;
-    Columns _group_by_columns;
-    std::vector<GroupByColumnTypes> _group_by_types;
+    vectorized::Columns _group_by_columns;
+    std::vector<vectorized::GroupByColumnTypes> _group_by_types;
 
     RuntimeProfile::Counter* _get_results_timer{};
     RuntimeProfile::Counter* _iter_timer{};
@@ -427,8 +384,19 @@ protected:
     TupleId _output_tuple_id;
     TupleDescriptor* _output_tuple_desc;
 
-    AggrPhase _aggr_phase = AggrPhase1;
+    vectorized::AggrPhase _aggr_phase = vectorized::AggrPhase1;
     std::vector<uint8_t> _streaming_selection;
 };
 
-} // namespace starrocks::vectorized
+class AggregateBaseOperatorFactory : public OperatorFactory {
+public:
+    AggregateBaseOperatorFactory(int32_t id, int32_t plan_node_id, const TPlanNode& tnode)
+            : OperatorFactory(id, plan_node_id), _tnode(tnode) {}
+
+    ~AggregateBaseOperatorFactory() override = default;
+
+protected:
+    const TPlanNode _tnode;
+};
+} // namespace pipeline
+} // namespace starrocks
