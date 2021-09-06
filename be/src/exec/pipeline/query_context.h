@@ -29,6 +29,7 @@ public:
         }
     }
     bool count_down_fragment() { return _num_fragments.fetch_sub(1) == 1; }
+
 private:
     std::unique_ptr<RuntimeState> _runtime_state;
     std::shared_ptr<RuntimeProfile> _runtime_profile;

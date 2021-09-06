@@ -94,7 +94,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _thread_mgr = new ThreadResourceMgr();
     _thread_pool = new PriorityThreadPool(config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
-    _pipeline_thread_pool = new PriorityThreadPool(4, config::doris_scanner_thread_pool_queue_size);
+    _pipeline_io_thread_pool = new PriorityThreadPool(4, config::doris_scanner_thread_pool_queue_size);
     _num_scan_operators = 0;
     _etl_thread_pool = new PriorityThreadPool(config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
     _fragment_mgr = new FragmentMgr(this);
