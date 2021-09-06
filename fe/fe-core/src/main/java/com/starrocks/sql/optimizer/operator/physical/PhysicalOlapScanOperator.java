@@ -23,7 +23,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-public class PhysicalOlapScan extends PhysicalOperator {
+public class PhysicalOlapScanOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> outputColumns;
     private final Map<ColumnRefOperator, Column> columnRefMap;
     private final ImmutableMap<Column, Integer> columnToIds;
@@ -36,10 +36,10 @@ public class PhysicalOlapScan extends PhysicalOperator {
     private boolean isPreAggregation;
     private String turnOffReason;
 
-    public PhysicalOlapScan(OlapTable table,
-                            List<ColumnRefOperator> outputColumns,
-                            Map<ColumnRefOperator, Column> columnRefMap,
-                            ImmutableMap<Column, Integer> columnToIds) {
+    public PhysicalOlapScanOperator(OlapTable table,
+                                    List<ColumnRefOperator> outputColumns,
+                                    Map<ColumnRefOperator, Column> columnRefMap,
+                                    ImmutableMap<Column, Integer> columnToIds) {
         super(OperatorType.PHYSICAL_OLAP_SCAN);
         this.table = table;
         this.outputColumns = outputColumns;
@@ -117,11 +117,11 @@ public class PhysicalOlapScan extends PhysicalOperator {
 
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof PhysicalOlapScan)) {
+        if (!(obj instanceof PhysicalOlapScanOperator)) {
             return false;
         }
 
-        PhysicalOlapScan rhs = (PhysicalOlapScan) obj;
+        PhysicalOlapScanOperator rhs = (PhysicalOlapScanOperator) obj;
         if (this == rhs) {
             return true;
         }

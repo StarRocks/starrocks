@@ -35,10 +35,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalDistribution;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregate;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProject;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -552,7 +552,7 @@ public class OptimizerTaskTest {
 
         assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_PROJECT);
         assertEquals(physicalTree.getInputs().get(0).getOp().getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
-        PhysicalOlapScan physicalOlapScan = (PhysicalOlapScan) physicalTree.getInputs().get(0).getOp();
+        PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) physicalTree.getInputs().get(0).getOp();
         assertEquals(physicalOlapScan.getOutputColumns(), Lists.newArrayList(column1));
 
         assertEquals(optimizer.getContext().getMemo().getRootGroup().
@@ -596,7 +596,7 @@ public class OptimizerTaskTest {
 
         assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_PROJECT);
         assertEquals(physicalTree.getInputs().get(0).getOp().getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
-        PhysicalOlapScan physicalOlapScan = (PhysicalOlapScan) physicalTree.getInputs().get(0).getOp();
+        PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) physicalTree.getInputs().get(0).getOp();
         assertEquals(physicalOlapScan.getOutputColumns(), Lists.newArrayList(column1));
 
         assertEquals(optimizer.getContext().getMemo().getRootGroup().
@@ -685,7 +685,8 @@ public class OptimizerTaskTest {
                 new ColumnRefSet(Lists.newArrayList(column2, column3)));
 
         Memo memo = optimizer.getContext().getMemo();
-        PhysicalOlapScan scan = (PhysicalOlapScan) memo.getGroups().get(0).getPhysicalExpressions().get(0).getOp();
+        PhysicalOlapScanOperator
+                scan = (PhysicalOlapScanOperator) memo.getGroups().get(0).getPhysicalExpressions().get(0).getOp();
         assertEquals(scan.getOutputColumns(), Lists.newArrayList(column1, column2, column3));
 
         assertEquals(optimizer.getContext().getMemo().getRootGroup().
@@ -755,7 +756,8 @@ public class OptimizerTaskTest {
         assertEquals(physicalTree.getLogicalProperty().getOutputColumns(), new ColumnRefSet(column5.getId()));
 
         Memo memo = optimizer.getContext().getMemo();
-        PhysicalOlapScan scan = (PhysicalOlapScan) memo.getGroups().get(0).getPhysicalExpressions().get(0).getOp();
+        PhysicalOlapScanOperator
+                scan = (PhysicalOlapScanOperator) memo.getGroups().get(0).getPhysicalExpressions().get(0).getOp();
         assertEquals(scan.getOutputColumns(), Lists.newArrayList(column1));
     }
 
@@ -799,7 +801,8 @@ public class OptimizerTaskTest {
         assertEquals(physicalTree.getLogicalProperty().getOutputColumns(), new ColumnRefSet(column4.getId()));
 
         Memo memo = optimizer.getContext().getMemo();
-        PhysicalOlapScan scan = (PhysicalOlapScan) memo.getGroups().get(0).getPhysicalExpressions().get(0).getOp();
+        PhysicalOlapScanOperator
+                scan = (PhysicalOlapScanOperator) memo.getGroups().get(0).getPhysicalExpressions().get(0).getOp();
         assertEquals(scan.getOutputColumns(), Lists.newArrayList(column1));
 
         assertEquals(optimizer.getContext().getMemo().getRootGroup().
@@ -851,7 +854,7 @@ public class OptimizerTaskTest {
 
         Operator operator = physicalTree.inputAt(0).getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate globalAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator globalAgg = (PhysicalHashAggregateOperator) operator;
         assertEquals(1, globalAgg.getLimit());
     }
 
@@ -905,7 +908,8 @@ public class OptimizerTaskTest {
                 new ColumnRefSet(Lists.newArrayList(column1, column2)));
 
         Memo memo = optimizer.getContext().getMemo();
-        PhysicalOlapScan scan = (PhysicalOlapScan) memo.getGroups().get(0).getPhysicalExpressions().get(0).getOp();
+        PhysicalOlapScanOperator
+                scan = (PhysicalOlapScanOperator) memo.getGroups().get(0).getPhysicalExpressions().get(0).getOp();
         assertEquals(scan.getOutputColumns(), Lists.newArrayList(column1, column2));
 
         assertEquals(optimizer.getContext().getMemo().getRootGroup().
@@ -954,7 +958,7 @@ public class OptimizerTaskTest {
 
         Operator operator = physicalTree.getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate globalAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator globalAgg = (PhysicalHashAggregateOperator) operator;
         assertTrue(globalAgg.getType().isGlobal());
 
         operator = physicalTree.inputAt(0).getOp();
@@ -962,7 +966,7 @@ public class OptimizerTaskTest {
 
         operator = physicalTree.inputAt(0).inputAt(0).getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate localAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator localAgg = (PhysicalHashAggregateOperator) operator;
         assertTrue(localAgg.getType().isLocal());
 
         operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).getOp();
@@ -1018,7 +1022,7 @@ public class OptimizerTaskTest {
 
         Operator operator = physicalTree.getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate globalAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator globalAgg = (PhysicalHashAggregateOperator) operator;
         assertTrue(globalAgg.getType().isGlobal());
 
         operator = physicalTree.inputAt(0).getOp();
@@ -1026,7 +1030,7 @@ public class OptimizerTaskTest {
 
         operator = physicalTree.inputAt(0).inputAt(0).getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate localAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator localAgg = (PhysicalHashAggregateOperator) operator;
         assertTrue(localAgg.getType().isLocal());
         ctx.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -1089,12 +1093,12 @@ public class OptimizerTaskTest {
 
         Operator operator = physicalTree.getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate globalAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator globalAgg = (PhysicalHashAggregateOperator) operator;
         assertTrue(globalAgg.getType().isGlobal());
 
         operator = physicalTree.inputAt(0).getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate interMediateAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator interMediateAgg = (PhysicalHashAggregateOperator) operator;
         assertTrue(interMediateAgg.getType().isDistinctGlobal());
 
         operator = physicalTree.inputAt(0).inputAt(0).getOp();
@@ -1102,7 +1106,7 @@ public class OptimizerTaskTest {
 
         operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate localAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator localAgg = (PhysicalHashAggregateOperator) operator;
         assertTrue(localAgg.getType().isLocal());
 
         operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).getOp();
@@ -1165,7 +1169,7 @@ public class OptimizerTaskTest {
 
         Operator operator = physicalTree.getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate globalAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator globalAgg = (PhysicalHashAggregateOperator) operator;
         assertTrue(globalAgg.getType().isGlobal());
 
         operator = physicalTree.inputAt(0).getOp();
@@ -1173,12 +1177,12 @@ public class OptimizerTaskTest {
 
         operator = physicalTree.inputAt(0).inputAt(0).getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate distinctLocalAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator distinctLocalAgg = (PhysicalHashAggregateOperator) operator;
         assertTrue(distinctLocalAgg.getType().isDistinctLocal());
 
         operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate distinctGlobalAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator distinctGlobalAgg = (PhysicalHashAggregateOperator) operator;
         assertTrue(distinctGlobalAgg.getType().isDistinctGlobal());
 
         operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).getOp();
@@ -1186,7 +1190,7 @@ public class OptimizerTaskTest {
 
         operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0).getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate localAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator localAgg = (PhysicalHashAggregateOperator) operator;
         assertTrue(localAgg.getType().isLocal());
 
         operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0).getOp();
@@ -1244,7 +1248,7 @@ public class OptimizerTaskTest {
 
         operator = physicalTree.inputAt(0).getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate globalAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator globalAgg = (PhysicalHashAggregateOperator) operator;
         assertTrue(globalAgg.getType().isGlobal());
 
         operator = physicalTree.inputAt(0).inputAt(0).getOp();
@@ -1252,7 +1256,7 @@ public class OptimizerTaskTest {
 
         operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate localAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator localAgg = (PhysicalHashAggregateOperator) operator;
         assertTrue(localAgg.getType().isLocal());
 
         operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).getOp();
@@ -1309,7 +1313,7 @@ public class OptimizerTaskTest {
 
         Operator operator = physicalTree.inputAt(0).getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate globalAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator globalAgg = (PhysicalHashAggregateOperator) operator;
         assertEquals(globalAgg.getPredicate(), predicate);
     }
 
@@ -1367,12 +1371,12 @@ public class OptimizerTaskTest {
 
         Operator operator = physicalTree.inputAt(0).getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregate globalAgg = (PhysicalHashAggregate) operator;
+        PhysicalHashAggregateOperator globalAgg = (PhysicalHashAggregateOperator) operator;
         assertNull(globalAgg.getPredicate());
 
         operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0).getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
-        PhysicalOlapScan scan = (PhysicalOlapScan) operator;
+        PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) operator;
         assertNotNull(scan.getPredicate());
         ctx.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -1418,7 +1422,7 @@ public class OptimizerTaskTest {
 
         assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_PROJECT);
         assertEquals(physicalTree.getInputs().get(0).getOp().getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
-        PhysicalOlapScan physicalOlapScan = (PhysicalOlapScan) physicalTree.getInputs().get(0).getOp();
+        PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) physicalTree.getInputs().get(0).getOp();
         assertTrue(physicalOlapScan.getPredicate() instanceof BinaryPredicateOperator);
 
         assertTrue(physicalOlapScan.getColumnRefMap().containsKey(column2));
@@ -1466,7 +1470,7 @@ public class OptimizerTaskTest {
 
         assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_PROJECT);
 
-        PhysicalProject pp = (PhysicalProject) physicalTree.getOp();
+        PhysicalProjectOperator pp = (PhysicalProjectOperator) physicalTree.getOp();
 
         assertEquals(1, pp.getColumnRefMap().size());
         assertTrue(pp.getColumnRefMap().containsKey(column5));
@@ -1474,7 +1478,7 @@ public class OptimizerTaskTest {
 
         Operator operator = physicalTree.inputAt(0).getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
-        PhysicalOlapScan physicalOlapScan = (PhysicalOlapScan) operator;
+        PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) operator;
         assertTrue(physicalOlapScan.getPredicate() instanceof BinaryPredicateOperator);
     }
 
@@ -1526,7 +1530,7 @@ public class OptimizerTaskTest {
                 new ColumnRefSet(outputColumns), columnRefFactory);
 
         assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_PROJECT);
-        PhysicalProject physicalProject = (PhysicalProject) physicalTree.getOp();
+        PhysicalProjectOperator physicalProject = (PhysicalProjectOperator) physicalTree.getOp();
         assertEquals(physicalProject.getCommonSubOperatorMap().size(), 1);
 
         ColumnRefOperator column7 = columnRefFactory.getColumnRef(7);
@@ -1535,7 +1539,7 @@ public class OptimizerTaskTest {
 
         assertEquals(physicalTree.getInputs().get(0).getOp().getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
 
-        PhysicalOlapScan physicalOlapScan = (PhysicalOlapScan) physicalTree.getInputs().get(0).getOp();
+        PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) physicalTree.getInputs().get(0).getOp();
         assertEquals(physicalOlapScan.getOutputColumns(), Lists.newArrayList(column1));
 
         assertEquals(optimizer.getContext().getMemo().getRootGroup().
@@ -1799,7 +1803,7 @@ public class OptimizerTaskTest {
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
                 new ColumnRefSet(outputColumns), columnRefFactory);
         assertEquals(physicalTree.getInputs().get(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
-        PhysicalDistribution rightOperator = (PhysicalDistribution) physicalTree.getInputs().get(1).getOp();
+        PhysicalDistributionOperator rightOperator = (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
         assertEquals(rightOperator.getDistributionSpec().getType(), DistributionSpec.DistributionType.BROADCAST);
     }
 
@@ -1901,7 +1905,7 @@ public class OptimizerTaskTest {
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
                 new ColumnRefSet(outputColumns), columnRefFactory);
         assertEquals(physicalTree.getInputs().get(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
-        PhysicalDistribution rightOperator = (PhysicalDistribution) physicalTree.getInputs().get(1).getOp();
+        PhysicalDistributionOperator rightOperator = (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
         assertEquals(rightOperator.getDistributionSpec().getType(), DistributionSpec.DistributionType.SHUFFLE);
     }
 
@@ -2007,9 +2011,10 @@ public class OptimizerTaskTest {
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
                 new ColumnRefSet(outputColumns), columnRefFactory);
         assertEquals(physicalTree.getInputs().get(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
-        PhysicalDistribution rightOperator = (PhysicalDistribution) physicalTree.getInputs().get(1).getOp();
+        PhysicalDistributionOperator rightOperator = (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
         assertEquals(rightOperator.getDistributionSpec().getType(), DistributionSpec.DistributionType.BROADCAST);
-        PhysicalOlapScan rightScan = (PhysicalOlapScan) physicalTree.getInputs().get(1).getInputs().get(0).getOp();
+        PhysicalOlapScanOperator
+                rightScan = (PhysicalOlapScanOperator) physicalTree.getInputs().get(1).getInputs().get(0).getOp();
         assertEquals(olapTable2.getId(), rightScan.getTable().getId());
 
         new Expectations() {
@@ -2062,9 +2067,9 @@ public class OptimizerTaskTest {
         physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
                 new ColumnRefSet(outputColumns), columnRefFactory);
         assertEquals(physicalTree.getInputs().get(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
-        rightOperator = (PhysicalDistribution) physicalTree.getInputs().get(1).getOp();
+        rightOperator = (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
         assertEquals(rightOperator.getDistributionSpec().getType(), DistributionSpec.DistributionType.BROADCAST);
-        rightScan = (PhysicalOlapScan) physicalTree.getInputs().get(1).getInputs().get(0).getOp();
+        rightScan = (PhysicalOlapScanOperator) physicalTree.getInputs().get(1).getInputs().get(0).getOp();
         assertEquals(olapTable1.getId(), rightScan.getTable().getId());
     }
 }

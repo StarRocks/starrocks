@@ -12,13 +12,13 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-public class PhysicalRepeat extends PhysicalOperator {
+public class PhysicalRepeatOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> outputGrouping;
     private final List<Set<ColumnRefOperator>> repeatColumnRef;
     private final List<List<Long>> groupingIds;
 
-    public PhysicalRepeat(List<ColumnRefOperator> outputGrouping, List<Set<ColumnRefOperator>> repeatColumnRef,
-                          List<List<Long>> groupingIds) {
+    public PhysicalRepeatOperator(List<ColumnRefOperator> outputGrouping, List<Set<ColumnRefOperator>> repeatColumnRef,
+                                  List<List<Long>> groupingIds) {
         super(OperatorType.PHYSICAL_REPEAT);
         this.outputGrouping = outputGrouping;
         this.repeatColumnRef = repeatColumnRef;
@@ -55,7 +55,7 @@ public class PhysicalRepeat extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        PhysicalRepeat that = (PhysicalRepeat) o;
+        PhysicalRepeatOperator that = (PhysicalRepeatOperator) o;
         return Objects.equals(outputGrouping, that.outputGrouping) &&
                 Objects.equals(repeatColumnRef, that.repeatColumnRef);
     }

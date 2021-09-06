@@ -5,7 +5,7 @@ package com.starrocks.sql.optimizer.base;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalDistribution;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 
 public class DistributionProperty implements PhysicalProperty {
     private final DistributionSpec spec;
@@ -47,7 +47,7 @@ public class DistributionProperty implements PhysicalProperty {
     }
 
     public GroupExpression appendEnforcers(Group child) {
-        return new GroupExpression(new PhysicalDistribution(spec), Lists.newArrayList(child));
+        return new GroupExpression(new PhysicalDistributionOperator(spec), Lists.newArrayList(child));
     }
 
     @Override

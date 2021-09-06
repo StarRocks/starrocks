@@ -12,9 +12,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregate;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProject;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -59,7 +59,7 @@ public class PreAggregateTurnOnRule {
 
         @Override
         public Void visitPhysicalHashAggregate(OptExpression optExpression, PreAggregationContext context) {
-            PhysicalHashAggregate aggregate = (PhysicalHashAggregate) optExpression.getOp();
+            PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) optExpression.getOp();
             // Only save the recently aggregate
             context.aggregations =
                     aggregate.getAggregations().values().stream().map(CallOperator::clone).collect(Collectors.toList());
@@ -72,7 +72,7 @@ public class PreAggregateTurnOnRule {
 
         @Override
         public Void visitPhysicalProject(OptExpression optExpression, PreAggregationContext context) {
-            PhysicalProject project = (PhysicalProject) optExpression.getOp();
+            PhysicalProjectOperator project = (PhysicalProjectOperator) optExpression.getOp();
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(project.getColumnRefMap());
             ReplaceColumnRefRewriter subRewriter =
                     new ReplaceColumnRefRewriter(project.getCommonSubOperatorMap(), true);
@@ -90,7 +90,7 @@ public class PreAggregateTurnOnRule {
 
         @Override
         public Void visitPhysicalOlapScan(OptExpression optExpression, PreAggregationContext context) {
-            PhysicalOlapScan scan = (PhysicalOlapScan) optExpression.getOp();
+            PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
 
             // default false
             scan.setPreAggregation(false);
@@ -136,7 +136,7 @@ public class PreAggregateTurnOnRule {
             return null;
         }
 
-        private boolean checkGroupings(PreAggregationContext context, PhysicalOlapScan scan) {
+        private boolean checkGroupings(PreAggregationContext context, PhysicalOlapScanOperator scan) {
             Map<ColumnRefOperator, Column> refColumnMap = scan.getColumnRefMap();
 
             List<ColumnRefOperator> groups = Lists.newArrayList();
@@ -154,7 +154,7 @@ public class PreAggregateTurnOnRule {
             return false;
         }
 
-        private boolean checkAggregations(PreAggregationContext context, PhysicalOlapScan scan) {
+        private boolean checkAggregations(PreAggregationContext context, PhysicalOlapScanOperator scan) {
             Map<ColumnRefOperator, Column> refColumnMap = scan.getColumnRefMap();
 
             for (final ScalarOperator so : context.aggregations) {

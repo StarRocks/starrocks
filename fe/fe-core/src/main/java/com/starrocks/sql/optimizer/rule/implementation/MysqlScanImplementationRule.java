@@ -8,7 +8,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScan;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -21,7 +21,7 @@ public class MysqlScanImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalMysqlScanOperator logical = (LogicalMysqlScanOperator) input.getOp();
-        PhysicalMysqlScan physical = new PhysicalMysqlScan(logical.getTable(), logical.getColumnRefMap());
+        PhysicalMysqlScanOperator physical = new PhysicalMysqlScanOperator(logical.getTable(), logical.getColumnRefMap());
 
         physical.setPredicate(logical.getPredicate());
         physical.setLimit(logical.getLimit());

@@ -363,7 +363,8 @@ public class QueryAnalyzer {
                             SetQualifier.convert(operation.getQualifier()), outputExpressions, outputScope);
                 }
             } else {
-                throw new StarRocksPlannerException("Unsupported set operation " + stmt.getOperands().get(i).getOperation(),
+                throw new StarRocksPlannerException(
+                        "Unsupported set operation " + stmt.getOperands().get(i).getOperation(),
                         INTERNAL_ERROR);
             }
         }
@@ -393,7 +394,7 @@ public class QueryAnalyzer {
              */
             ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
             for (int fieldIdx = 0; fieldIdx < query.getOutputScope().getRelationFields().getAllFields().size();
-                 ++fieldIdx) {
+                    ++fieldIdx) {
                 Field originField = query.getOutputScope().getRelationFields().getFieldByIndex(fieldIdx);
 
                 String database = originField.getRelationAlias() == null ? session.getDatabase() :
@@ -727,7 +728,7 @@ public class QueryAnalyzer {
                  */
                 ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
                 for (int fieldIdx = 0; fieldIdx < qb.getOutputScope().getRelationFields().getAllFields().size();
-                     ++fieldIdx) {
+                        ++fieldIdx) {
                     Field originField = qb.getOutputScope().getRelationFields().getAllFields().get(fieldIdx);
                     outputFields.add(new Field(
                             originField.getName(), originField.getType(), tableName,

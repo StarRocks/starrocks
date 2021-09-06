@@ -5,7 +5,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.SortPhase;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTopN;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 
 /**
  * Rewrite PhysicalDistribute with child topN(FINAL) to
@@ -27,18 +27,18 @@ public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression,
 
     @Override
     public OptExpression visitPhysicalDistribution(OptExpression optExpr, Void context) {
-        if (optExpr.arity() == 1 && optExpr.inputAt(0).getOp() instanceof PhysicalTopN) {
-            PhysicalTopN topN = (PhysicalTopN) optExpr.inputAt(0).getOp();
+        if (optExpr.arity() == 1 && optExpr.inputAt(0).getOp() instanceof PhysicalTopNOperator) {
+            PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpr.inputAt(0).getOp();
 
             if (topN.getSortPhase().isFinal() && !topN.isSplit() && topN.getLimit() == -1) {
-                OptExpression child = OptExpression.create(new PhysicalTopN(
+                OptExpression child = OptExpression.create(new PhysicalTopNOperator(
                         topN.getOrderSpec(),
                         topN.getLimit(), topN.getOffset(), SortPhase.PARTIAL, false, false
                 ), optExpr.inputAt(0).getInputs());
                 child.setLogicalProperty(optExpr.inputAt(0).getLogicalProperty());
                 child.setStatistics(optExpr.getStatistics());
 
-                OptExpression newOpt = OptExpression.create(new PhysicalTopN(
+                OptExpression newOpt = OptExpression.create(new PhysicalTopNOperator(
                         topN.getOrderSpec(),
                         topN.getLimit(), topN.getOffset(),
                         SortPhase.FINAL, true, false), Lists.newArrayList(child));

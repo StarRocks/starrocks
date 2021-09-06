@@ -8,7 +8,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoin;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -24,8 +24,8 @@ public class HashJoinImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
-        PhysicalHashJoin physicalHashJoin =
-                new PhysicalHashJoin(joinOperator.getJoinType(), joinOperator.getOnPredicate(),
+        PhysicalHashJoinOperator physicalHashJoin =
+                new PhysicalHashJoinOperator(joinOperator.getJoinType(), joinOperator.getOnPredicate(),
                         joinOperator.getPruneOutputColumns());
         physicalHashJoin.setPredicate(joinOperator.getPredicate());
         physicalHashJoin.setLimit(joinOperator.getLimit());
