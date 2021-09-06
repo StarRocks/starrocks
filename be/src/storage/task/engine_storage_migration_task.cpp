@@ -89,7 +89,7 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
         int64_t partition_id;
         std::set<int64_t> transaction_ids;
         StorageEngine::instance()->txn_manager()->get_tablet_related_txns(
-                tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid(), &partition_id, &transaction_ids);
+                _tablet_id, _schema_hash, tablet->tablet_uid(), &partition_id, &transaction_ids);
         if (!transaction_ids.empty()) {
             LOG(WARNING) << "could not migration because has unfinished txns.";
             return OLAP_ERR_HEADER_HAS_PENDING_DATA;
@@ -132,8 +132,7 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
 
         auto mem_tracker = std::make_unique<MemTracker>();
         TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta(mem_tracker.get()));
-        Status st = TabletMetaManager::get_tablet_meta(_dest_store, tablet->tablet_id(), tablet->schema_hash(),
-                                                       new_tablet_meta);
+        Status st = TabletMetaManager::get_tablet_meta(_dest_store, _tablet_id, _schema_hash, new_tablet_meta);
         if (st.ok()) {
             LOG(WARNING) << "tablet_meta already exists. data_dir:" << _dest_store->path()
                          << "tablet:" << tablet->full_name();
@@ -175,7 +174,7 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
         int64_t partition_id;
         std::set<int64_t> transaction_ids;
         StorageEngine::instance()->txn_manager()->get_tablet_related_txns(
-                tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid(), &partition_id, &transaction_ids);
+                _tablet_id, _schema_hash, tablet->tablet_uid(), &partition_id, &transaction_ids);
         if (!transaction_ids.empty()) {
             LOG(WARNING) << "could not migration because has unfinished txns.";
             need_remove_new_path = true;
@@ -185,8 +184,7 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
 
         auto mem_tracker = std::make_unique<MemTracker>();
         TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta(mem_tracker.get()));
-        Status st = TabletMetaManager::get_tablet_meta(_dest_store, tablet->tablet_id(), tablet->schema_hash(),
-                                                       new_tablet_meta);
+        Status st = TabletMetaManager::get_tablet_meta(_dest_store, _tablet_id, _schema_hash, new_tablet_meta);
         if (st.ok()) {
             LOG(WARNING) << "tablet_meta already exists. data_dir:" << _dest_store->path()
                          << "tablet:" << tablet->full_name();
