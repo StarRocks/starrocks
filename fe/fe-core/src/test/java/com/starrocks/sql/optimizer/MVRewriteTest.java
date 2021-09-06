@@ -144,6 +144,12 @@ public class MVRewriteTest {
                 + "max(commission) from " + EMPS_TABLE_NAME + " group by deptno;";
         String query = "select sum(salary), deptno from " + EMPS_TABLE_NAME + " group by deptno;";
         starRocksAssert.withMaterializedView(createMVSQL).query(query).explainContains(QUERY_USE_EMPS_MV);
+
+        query = "select sum(salary), max(commission) from " + EMPS_TABLE_NAME;
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+
+        query = "select sum(salary), max(commission) from emps, depts";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
     }
 
     @Test
@@ -944,5 +950,34 @@ public class MVRewriteTest {
                 DEPTS_TABLE_NAME + ".deptno";
         // mv lacks of `commission` field, so can not use mv.
         starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
+    }
+
+    @Test
+    public void testJoinProjectRewrite() throws Exception {
+        String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME +
+                " as select time, empid, bitmap_union(to_bitmap(deptno)),hll_union(hll_hash(salary)) from " + EMPS_TABLE_NAME + " group by time, empid";
+        starRocksAssert.withMaterializedView(createEmpsMVSQL);
+        String query = "select count(distinct emps.deptno) from emps, depts";
+        starRocksAssert.query(query).explainContains("emps_mv", "bitmap_union_count(7: mv_bitmap_union_deptno)");
+
+        query = "select count(distinct emps.deptno) from emps, depts where emps.deptno = depts.deptno";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+
+        query = "select count(distinct emps.deptno) from emps, depts where emps.time = depts.time";
+        starRocksAssert.query(query).explainContains(EMPS_MV_NAME);
+
+        query = "select count(distinct emps.deptno) from emps left outer join depts on emps.time = depts.time";
+        starRocksAssert.query(query).explainContains("emps_mv");
+
+        query = "select emps.time, count(distinct emps.deptno) from emps, depts where emps.time = depts.time group by emps.time";
+        starRocksAssert.query(query).explainContains("emps_mv");
+
+        query = "select unnest, count(distinct deptno) from " +
+                "(select deptno, unnest from emps,unnest(split(name, \",\"))) t" +
+                " group by unnest";
+        starRocksAssert.query(query).explainContains("emps_mv", "bitmap_union_count(7: mv_bitmap_union_deptno)");
+
+        query = "select approx_count_distinct(salary) from emps left outer join depts on emps.time = depts.time";
+        starRocksAssert.query(query).explainContains("emps_mv");
     }
 }
