@@ -36,6 +36,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -61,6 +62,7 @@ import com.starrocks.task.SnapshotTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.task.UploadTask;
 import com.starrocks.thrift.TBackend;
+import com.starrocks.thrift.TBackendMeta;
 import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TMasterResult;
@@ -70,14 +72,62 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.thrift.TGetTableMetaRequest;
+import com.starrocks.thrift.TGetTableMetaResponse;
+import com.starrocks.thrift.TReplicaMeta;
+import com.starrocks.thrift.TTabletMeta;
+import com.starrocks.thrift.TIndexMeta;
+import com.starrocks.thrift.TIndexInfo;
+import com.starrocks.thrift.TSchemaMeta;
+import com.starrocks.thrift.TColumnDef;
+import com.starrocks.thrift.TColumnDesc;
+import com.starrocks.thrift.THashDistributionInfo;
+import com.starrocks.thrift.TRandomDistributionInfo;
+
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Index;
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.thrift.TPartitionMeta;
+import com.starrocks.thrift.TPartitionInfo;
+import com.starrocks.thrift.TTableMeta;
+import com.starrocks.thrift.TDistributionDesc;
+import com.starrocks.thrift.TBeginRemoteTxnRequest;
+import com.starrocks.thrift.TBeginRemoteTxnResponse;
+import com.starrocks.thrift.TCommitRemoteTxnRequest;
+import com.starrocks.thrift.TCommitRemoteTxnResponse;
+import com.starrocks.thrift.TAbortRemoteTxnRequest;
+import com.starrocks.thrift.TAbortRemoteTxnResponse;
+import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.common.UserException;
+import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import com.starrocks.transaction.TransactionState.TxnCoordinator;
+import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.transaction.TransactionState.LoadJobSourceType;
+
+import com.starrocks.service.FrontendOptions;
+
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 
 public class MasterImpl {
     private static final Logger LOG = LogManager.getLogger(MasterImpl.class);
@@ -821,5 +871,338 @@ public class MasterImpl {
             LOG.warn("failed to handle finish alter task: {}, {}", task.getSignature(), e.getMessage());
         }
         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
+    }
+
+    public TGetTableMetaResponse getTableMeta(TGetTableMetaRequest request) {
+        String dbName = request.getDb_name();
+        String tableName = request.getTable_name();
+        TTableMeta tableMeta;
+        TGetTableMetaResponse response = new TGetTableMetaResponse();
+
+        if (Strings.isNullOrEmpty(dbName) || Strings.isNullOrEmpty(tableName)) {
+            TStatus status = new TStatus(TStatusCode.INVALID_ARGUMENT);
+            status.setError_msgs(Lists.newArrayList("missing db or table name"));
+            response.setStatus(status);
+            return response;
+        }
+
+        String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
+        // checkTblAuth(ConnectContext.get().getCurrentUserIdentity(), fullDbName, tableName, PrivPredicate.SELECT);
+        Database db = Catalog.getCurrentCatalog().getDb(fullDbName);
+        if (db == null) {
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            status.setError_msgs(Lists.newArrayList("db not exist"));
+            response.setStatus(status);
+            return response;
+        }
+
+        try {
+            db.readLock();
+
+            Table table = db.getTable(tableName);
+            if (table == null) {
+                TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+                status.setError_msgs(Lists.newArrayList("table " + tableName + " not exist"));
+                response.setStatus(status);
+                return response;
+            }
+
+            // just only support OlapTable, ignore others such as ESTable
+            if (!(table instanceof OlapTable)) {
+                TStatus status = new TStatus(TStatusCode.NOT_IMPLEMENTED_ERROR);
+                status.setError_msgs(Lists.newArrayList("only olap table supported"));
+                response.setStatus(status);
+                return response;
+            }
+
+            OlapTable olapTable = (OlapTable) table;
+            tableMeta = new TTableMeta();
+            tableMeta.setTable_id(table.getId());
+            tableMeta.setTable_name(tableName);
+            tableMeta.setDb_id(db.getId());
+            tableMeta.setDb_name(dbName);
+            tableMeta.setCluster_id(Catalog.getCurrentCatalog().getClusterId());
+            tableMeta.setState(olapTable.getState().name());
+            tableMeta.setBloomfilter_fpp(olapTable.getBfFpp());
+            if (olapTable.getCopiedBfColumns() != null) {
+                for (String bfColumn : olapTable.getCopiedBfColumns()) {
+                    tableMeta.addToBloomfilter_columns(bfColumn);
+                }
+            }
+            tableMeta.setBase_index_id(olapTable.getBaseIndexId());
+            tableMeta.setColocate_group(olapTable.getColocateGroup());
+            tableMeta.setKey_type(olapTable.getKeysType().name());
+
+            TDistributionDesc distributionDesc = new TDistributionDesc();
+            DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+            distributionDesc.setDistribution_type(distributionInfo.getType().name());
+            if (distributionInfo.getType() == DistributionInfoType.HASH) {
+                THashDistributionInfo tHashDistributionInfo = new THashDistributionInfo();
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo)distributionInfo;
+                tHashDistributionInfo.setBucket_num(hashDistributionInfo.getBucketNum());
+                for (Column column : hashDistributionInfo.getDistributionColumns()) {
+                    tHashDistributionInfo.addToDistribution_columns(column.getName());
+                }
+                distributionDesc.setHash_distribution(tHashDistributionInfo);
+            } else {
+                TRandomDistributionInfo tRandomDistributionInfo = new TRandomDistributionInfo();
+                RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo)distributionInfo;
+                tRandomDistributionInfo.setBucket_num(randomDistributionInfo.getBucketNum());
+                distributionDesc.setRandom_distribution(tRandomDistributionInfo);
+            }
+            tableMeta.setDistribution_desc(distributionDesc);
+
+            TableProperty tableProperty = olapTable.getTableProperty();
+            for (Map.Entry<String, String> property : tableProperty.getProperties().entrySet()) {
+                tableMeta.putToProperties(property.getKey(), property.getValue());
+            }
+
+            TPartitionInfo tPartitionInfo = new TPartitionInfo();
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            tPartitionInfo.setType(partitionInfo.getType().name());
+
+            // fill partition meta info
+            for (Partition partition : olapTable.getAllPartitions()) {
+                TPartitionMeta partitionMeta = new TPartitionMeta();
+                partitionMeta.setPartition_id(partition.getId());
+                partitionMeta.setPartition_name(partition.getName());
+                partitionMeta.setState(partition.getState().name());
+                partitionMeta.setCommit_version_hash(partition.getCommittedVersionHash());
+                partitionMeta.setVisible_version(partition.getVisibleVersion());
+                partitionMeta.setVisible_version_hash(partition.getVisibleVersionHash());
+                partitionMeta.setVisible_time(partition.getVisibleVersionTime());
+                partitionMeta.setNext_version(partition.getNextVersion());
+                partitionMeta.setNext_version_hash(partition.getNextVersionHash());
+                tableMeta.addToPartitions(partitionMeta);
+                Short replicaNum = partitionInfo.getReplicationNum(partition.getId());
+                boolean inMemory = partitionInfo.getIsInMemory(partition.getId());
+                tPartitionInfo.putToReplica_num_map(partition.getId(), replicaNum);
+                tPartitionInfo.putToIn_memory_map(partition.getId(), inMemory);
+            }
+            tableMeta.setPartition_info(tPartitionInfo);
+
+            // fill index meta info
+            for (Index index : olapTable.getIndexes()) {
+                TIndexInfo indexInfo = new TIndexInfo();
+                indexInfo.setIndex_name(index.getIndexName());
+                indexInfo.setIndex_type(index.getIndexType().name());
+                indexInfo.setComment(index.getComment());
+                for (String column : index.getColumns()) {
+                    indexInfo.addToColumns(column);
+                }
+                tableMeta.addToIndex_infos(indexInfo);
+            }
+
+            for (Partition partition : olapTable.getPartitions()) {
+                List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.ALL);
+                for (MaterializedIndex index : indexes) {
+                    TIndexMeta indexMeta = new TIndexMeta();
+                    indexMeta.setIndex_id(index.getId());
+                    indexMeta.setIndex_state(index.getState().name());
+                    indexMeta.setRow_count(index.getRowCount());
+                    indexMeta.setRollup_index_id(index.getRollupIndexId());
+                    indexMeta.setRollup_finished_version(index.getRollupFinishedVersion());
+                    TSchemaMeta schemaMeta = new TSchemaMeta();
+                    MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByIndexId(index.getId());
+                    schemaMeta.setSchema_version(materializedIndexMeta.getSchemaVersion());
+                    schemaMeta.setSchema_hash(materializedIndexMeta.getSchemaHash());
+                    schemaMeta.setShort_key_col_count(materializedIndexMeta.getShortKeyColumnCount());
+                    schemaMeta.setStorage_type(materializedIndexMeta.getStorageType());
+                    schemaMeta.setKeys_type(materializedIndexMeta.getKeysType().name());
+                    for (Column column : materializedIndexMeta.getSchema()) {
+                        TColumnDef columnDef = new TColumnDef();
+                        TColumnDesc columnDesc = new TColumnDesc();
+                        columnDesc.setColumnName(column.getName());
+                        columnDesc.setColumnType(column.getPrimitiveType().toThrift());
+                        columnDesc.setKey(column.isKey());
+                        if (column.getAggregationType() != null) {
+                            columnDesc.setAggregationType(column.getAggregationType().name());
+                        }
+                        columnDef.setColumnDesc(columnDesc);
+                        columnDef.setComment(column.getComment());
+                        schemaMeta.addToColumns(columnDef);
+                    }
+                    indexMeta.setSchema_meta(schemaMeta);
+                    // fill in tablet info
+                    for (Tablet tablet : index.getTablets()) {
+                        TTabletMeta tTabletMeta = new TTabletMeta();
+                        tTabletMeta.setTablet_id(tablet.getId());
+                        tTabletMeta.setChecked_version(tablet.getCheckedVersion());
+                        tTabletMeta.setChecked_version_hash(tablet.getCheckedVersionHash());
+                        tTabletMeta.setConsistent(tablet.isConsistent());
+                        TabletMeta tabletMeta = Catalog.getCurrentInvertedIndex().getTabletMeta(tablet.getId());
+                        tTabletMeta.setDb_id(tabletMeta.getDbId());
+                        tTabletMeta.setTable_id(tabletMeta.getTableId());
+                        tTabletMeta.setPartition_id(tabletMeta.getPartitionId());
+                        tTabletMeta.setIndex_id(tabletMeta.getIndexId());
+                        tTabletMeta.setStorage_medium(tabletMeta.getStorageMedium());
+                        tTabletMeta.setOld_schema_hash(tabletMeta.getOldSchemaHash());
+                        tTabletMeta.setNew_schema_hash(tabletMeta.getNewSchemaHash());
+                        // fill replica info
+                        for (Replica replica : tablet.getReplicas()) {
+                            TReplicaMeta replicaMeta = new TReplicaMeta();
+                            replicaMeta.setReplica_id(replica.getId());
+                            replicaMeta.setBackend_id(replica.getBackendId());
+                            replicaMeta.setSchema_hash(replica.getSchemaHash());
+                            replicaMeta.setVersion(replica.getVersion());
+                            replicaMeta.setVersion_hash(replica.getVersionHash());
+                            replicaMeta.setData_size(replica.getDataSize());
+                            replicaMeta.setRow_count(replica.getRowCount());
+                            replicaMeta.setState(replica.getState().name());
+                            replicaMeta.setLast_failed_version(replica.getLastFailedVersion());
+                            replicaMeta.setLast_failed_version_hash(replica.getLastFailedVersionHash());
+                            replicaMeta.setLast_failed_time(replica.getLastFailedTimestamp());
+                            replicaMeta.setLast_success_version(replica.getLastSuccessVersion());
+                            replicaMeta.setLast_success_version_hash(replica.getLastSuccessVersionHash());
+                            replicaMeta.setVersion_count(replica.getVersionCount());
+                            replicaMeta.setPath_hash(replica.getPathHash());
+                            replicaMeta.setBad(replica.isBad());
+                            // TODO(wulei) fill backend info
+                            tTabletMeta.addToReplicas(replicaMeta);
+                        }
+                        indexMeta.addToTablets(tTabletMeta);
+                    }
+                    tableMeta.addToIndexes(indexMeta);
+                }
+                break;
+            }
+
+            List<TBackendMeta> backends = new ArrayList<>();
+            for (Backend backend : Catalog.getCurrentCatalog().getCurrentSystemInfo().getClusterBackends(db.getClusterName())) {
+                TBackendMeta backendMeta = new TBackendMeta();
+                backendMeta.setBackend_id(backend.getId());
+                backendMeta.setHost(backend.getHost());
+                backendMeta.setBe_port(backend.getBeRpcPort());
+                backendMeta.setRpc_port(backend.getBrpcPort());
+                backendMeta.setHttp_port(backend.getHttpPort());
+                backendMeta.setAlive(backend.isAlive());
+                backendMeta.setState(backend.getBackendState().ordinal());
+                backends.add(backendMeta);
+            }
+            response.setStatus(new TStatus(TStatusCode.OK));
+            response.setTable_meta(tableMeta);
+            response.setBackends(backends);
+        } catch (Exception e) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            LOG.info("exception: {}", e.getStackTrace());
+            response.setStatus(status);
+        } finally {
+            db.readUnlock();
+            return response;
+        }
+    }
+
+    public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {
+        TBeginRemoteTxnResponse response = new TBeginRemoteTxnResponse();
+        Database db = Catalog.getCurrentCatalog().getDb(request.getDb_name());
+        if (db == null) {
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            status.setError_msgs(Lists.newArrayList("db not exist"));
+            response.setStatus(status);
+            return response;
+        }
+
+        List tableIds = Lists.newArrayList();
+        for (String tableName : request.getTable_name()) {
+            Table table = db.getTable(tableName);
+            if (table == null) {
+                TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+                String errMsg = "table " + "'" + tableName + "' not exist";
+                status.setError_msgs(Lists.newArrayList(errMsg));
+                response.setStatus(status);
+                return response;
+            }
+            tableIds.add(table.getId());
+        }
+
+        long txnId;
+        try {
+            txnId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+                tableIds, request.getLabel(),
+                new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
+        } catch (Exception e) {
+            LOG.info("begin remote txn error, label {}, msg {}", request.getLabel(), e.getStackTrace());
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            response.setStatus(status);
+            return response;
+        }
+
+        TStatus status = new TStatus(TStatusCode.OK);
+        response.setStatus(status);
+        response.setTxn_id(txnId);
+        response.setTxn_label(request.getLabel());
+        LOG.info("begin remote txn, label: {}, txn_id: {}", request.getLabel(), txnId);
+        return response;
+    }
+
+    public TCommitRemoteTxnResponse commitRemoteTxn(TCommitRemoteTxnRequest request) throws TException {
+        TCommitRemoteTxnResponse response = new TCommitRemoteTxnResponse();
+
+        Catalog catalog = Catalog.getCurrentCatalog();
+        Database db = catalog.getDb(request.getDb_id());
+        if (db == null) {
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            status.setError_msgs(Lists.newArrayList("db not exist or already deleted"));
+            response.setStatus(status);
+            return response;
+        }
+
+        try {
+            TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.getCommit_attachment());
+            long timeoutMs = request.isSetCommit_timeout_ms() ? request.getCommit_timeout_ms() : 5000;
+            // // Make publish timeout is less than thrift_rpc_timeout_ms
+            // // Otherwise, the publish will be successful but commit timeout in FE
+            // // It will results as error like "call frontend service failed"
+            timeoutMs = timeoutMs * 3 / 4;
+            boolean ret = Catalog.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
+                            db, request.getTxn_id(),
+                            TabletCommitInfo.fromThrift(request.getCommit_infos()),
+                            timeoutMs, attachment);
+            if (!ret) {
+                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+                status.setError_msgs(Lists.newArrayList("commit and publish txn failed"));
+                response.setStatus(status);
+                return response;
+            }
+        } catch (UserException e) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            response.setStatus(status);
+            return response;
+        }
+
+        TStatus status = new TStatus(TStatusCode.OK);
+        response.setStatus(status);
+        LOG.info("commit remote transaction: {} success", request.getTxn_id());
+        return response;
+    }
+
+    public TAbortRemoteTxnResponse abortRemoteTxn(TAbortRemoteTxnRequest request) throws TException {
+        TAbortRemoteTxnResponse response = new TAbortRemoteTxnResponse();
+        Catalog catalog = Catalog.getCurrentCatalog();
+        Database db = catalog.getDb(request.getDb_id());
+        if (db == null) {
+            TStatus status = new TStatus(TStatusCode.NOT_FOUND);
+            status.setError_msgs(Lists.newArrayList("db not exist or already deleted"));
+            response.setStatus(status);
+            return response;
+        }
+
+        try {
+            Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
+                request.getDb_id(), request.getTxn_id(), request.getError_msg());
+        } catch (Exception e) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            response.setStatus(status);
+            return response;
+        }
+
+        TStatus status = new TStatus(TStatusCode.OK);
+        response.setStatus(status);
+        return response;
     }
 }

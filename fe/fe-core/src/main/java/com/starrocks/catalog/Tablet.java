@@ -192,9 +192,9 @@ public class Tablet extends MetaObject implements Writable {
     }
 
     // return map of (BE id -> path hash) of normal replicas
-    public Multimap<Long, Long> getNormalReplicaBackendPathMap() {
+    public Multimap<Long, Long> getNormalReplicaBackendPathMap(int clusterId) {
         Multimap<Long, Long> map = HashMultimap.create();
-        SystemInfoService infoService = Catalog.getCurrentSystemInfo();
+        SystemInfoService infoService = Catalog.getCurrentCatalog().getOrCreateSystemInfo(clusterId);
         for (Replica replica : replicas) {
             if (replica.isBad()) {
                 continue;

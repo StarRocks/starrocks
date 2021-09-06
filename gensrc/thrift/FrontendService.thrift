@@ -53,6 +53,8 @@ struct TColumnDesc {
   4: optional i32 columnPrecision
   5: optional i32 columnScale
   20: optional string columnKey
+  21: optional bool key
+  22: optional string aggregationType
 }
 
 // A column definition; used by CREATE TABLE and DESCRIBE <table> statements. A column
@@ -670,6 +672,182 @@ struct TRefreshTableResponse {
     1: required Status.TStatus status
 }
 
+struct TGetTableMetaRequest {
+    1: required string db_name
+    2: required string table_name
+    3: optional TAuthenticateParams auth_info
+}
+
+struct TBackendMeta {
+    1: required i64 backend_id
+    2: required string host
+    3: required i32 be_port
+    4: required i32 rpc_port
+    5: required i32 http_port
+    6: required bool alive
+    7: required i32  state
+}
+
+struct TReplicaMeta {
+    1: required i64 replica_id
+    2: required i64 backend_id
+    3: required i32 schema_hash
+    4: required i64 version
+    5: required i64 version_hash
+    6: required i64 data_size
+    7: required i64 row_count
+    8: required string state
+    9: required i64 last_failed_version
+    10: required i64 last_failed_version_hash
+    11: required i64 last_failed_time
+    12: required i64 last_success_version
+    13: required i64 last_success_version_hash
+    14: required i64 version_count
+    15: required i64 path_hash
+    16: required bool bad
+}
+
+struct TTabletMeta {
+    1: required i64 tablet_id
+    2: required i64 db_id
+    3: required i64 table_id
+    4: required i64 partition_id
+    5: required i64 index_id
+    6: required Types.TStorageMedium storage_medium
+    7: required i32 old_schema_hash
+    8: required i32 new_schema_hash
+    9: required i64 checked_version
+    10: required i64 checked_version_hash
+    11: required bool consistent
+    // 12: required i64 last_check_time
+    12: required list<TReplicaMeta> replicas
+}
+
+struct TIndexInfo {
+    1: required string index_name
+    2: required list<string> columns
+    3: required string index_type
+    4: optional string comment
+}
+
+struct TSchemaMeta {
+    1: required list<TColumnDef> columns
+    2: required i32 schema_version
+    3: required i32 schema_hash
+    4: required i16 short_key_col_count
+    5: required Types.TStorageType storage_type
+    6: required string keys_type
+}
+
+struct TIndexMeta {
+    1: required i64 index_id
+    2: required string index_state
+    3: required i64 row_count
+    4: required i64 rollup_index_id
+    5: required i64 rollup_finished_version
+    6: required TSchemaMeta schema_meta
+    7: required list<TTabletMeta> tablets
+}
+
+struct TPartitionInfo {
+    1: required string type
+    2: required map<i64, i16> replica_num_map
+    3: required map<i64, bool> in_memory_map
+}
+
+struct TPartitionMeta {
+    1: required i64 partition_id
+    2: required string partition_name
+    3: required string state
+    4: required i64 commit_version_hash
+    5: required i64 visible_version
+    6: required i64 visible_version_hash
+    7: required i64 visible_time
+    8: required i64 next_version
+    9: required i64 next_version_hash
+}
+
+struct THashDistributionInfo {
+    1: required i32 bucket_num
+    2: required list<string> distribution_columns
+}
+
+struct TRandomDistributionInfo {
+    1: required i32 bucket_num
+}
+
+struct TDistributionDesc {
+    1: required string distribution_type
+    2: optional THashDistributionInfo hash_distribution
+    3: optional TRandomDistributionInfo random_distribution
+}
+
+struct TTableMeta {
+    1: required i64 table_id
+    2: required string table_name
+    3: required i64 db_id
+    4: required string db_name
+    5: required i32 cluster_id
+    6: required string state
+    7: required double bloomfilter_fpp
+    8: required i64 base_index_id
+    9: required string key_type
+    // 11: required TSchemaMeta schema
+    10: required TDistributionDesc distribution_desc
+    11: required map<string, string> properties
+    12: required list<TIndexMeta> indexes
+    13: required TPartitionInfo partition_info
+    14: optional list<TPartitionMeta> partitions
+    15: optional list<TIndexInfo> index_infos
+    16: optional string colocate_group
+    17: optional list<string> bloomfilter_columns
+}
+
+struct TGetTableMetaResponse {
+    1: required Status.TStatus status
+    2: optional TTableMeta table_meta
+    3: optional list<TBackendMeta> backends
+}
+
+struct TBeginRemoteTxnRequest {
+    1: required string db_name
+    2: required list<string> table_name
+    3: required string label
+    4: required i32 source_type
+    5: required i64 timeout_second
+    6: optional TAuthenticateParams auth_info
+}
+
+struct TBeginRemoteTxnResponse {
+    1: required Status.TStatus status
+    2: required string txn_label
+    3: required i64 txn_id
+}
+
+struct TCommitRemoteTxnRequest {
+    1: required i64 txn_id
+    2: required i64 db_id
+    3: optional TAuthenticateParams auth_info
+    4: optional i32 commit_timeout_ms
+    5: optional list<Types.TTabletCommitInfo> commit_infos
+    6: optional TTxnCommitAttachment commit_attachment
+}
+
+struct TCommitRemoteTxnResponse {
+    1: required Status.TStatus status
+}
+
+struct TAbortRemoteTxnRequest {
+    1: required i64 txn_id
+    2: required i64 db_id
+    3: required string error_msg
+    4: optional TAuthenticateParams auth_info
+}
+
+struct TAbortRemoteTxnResponse {
+    1: required Status.TStatus status
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -686,9 +864,9 @@ service FrontendService {
     MasterService.TMasterResult report(1:MasterService.TReportRequest request)
     MasterService.TFetchResourceResult fetchResource()
     
-    TFeResult isMethodSupported(TIsMethodSupportedRequest request)
+    TFeResult isMethodSupported(1: TIsMethodSupportedRequest request)
 
-    TMasterOpResult forward(TMasterOpRequest params)
+    TMasterOpResult forward(1: TMasterOpRequest params)
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
 
@@ -703,5 +881,12 @@ service FrontendService {
     Status.TStatus snapshotLoaderReport(1: TSnapshotLoaderReportRequest request)
 
     TRefreshTableResponse refreshTable(1:TRefreshTableRequest request)
+
+    TGetTableMetaResponse getTableMeta(1: TGetTableMetaRequest request)
+
+    TBeginRemoteTxnResponse  beginRemoteTxn(1: TBeginRemoteTxnRequest request)
+    TCommitRemoteTxnResponse commitRemoteTxn(1: TCommitRemoteTxnRequest request)
+    TAbortRemoteTxnResponse  abortRemoteTxn(1: TAbortRemoteTxnRequest request)
+
 }
 
