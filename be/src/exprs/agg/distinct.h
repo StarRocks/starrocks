@@ -30,9 +30,49 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/sum.h"
 #include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 #include "udf/udf_internal.h"
-#include "util/bitmap_value.h"
 #include "util/phmap/phmap_dump.h"
+
+namespace starrocks {
+class DistinctBitmap {
+public:
+    static const size_t BITMAP_MAX_VALUE = 2 * 1024 * 1024;
+    static const size_t BITMAP_MAX_SIZE = BITMAP_MAX_VALUE / 8;
+    static_assert(BITMAP_MAX_VALUE % 64 == 0);
+    static_assert(BITMAP_MAX_SIZE >= (1 << 16)); // at least hold uint16_t.
+    static const size_t MAX_GROUP_BY_NUMBER = 16;
+    static const size_t BITMAP_TOTAL_SIZE = MAX_GROUP_BY_NUMBER * BITMAP_MAX_SIZE;
+
+    DistinctBitmap() {}
+    ~DistinctBitmap() {
+        free(_data);
+        _data = nullptr;
+    }
+
+    uint8_t* alloc() {
+        if (_data == nullptr) {
+            _data = reinterpret_cast<uint8_t*>(malloc(BITMAP_TOTAL_SIZE));
+            _bits = (1 << MAX_GROUP_BY_NUMBER) - 1;
+        }
+        if (_bits == 0) return nullptr;
+        int x = __builtin_ctz(_bits);
+        _bits ^= (1 << x);
+        return _data + (x * BITMAP_MAX_SIZE);
+        return nullptr;
+    }
+
+    void free(uint8_t* ptr) {
+        if (ptr == nullptr) return;
+        int idx = (ptr - _data) / BITMAP_MAX_SIZE;
+        _bits |= (1 << idx);
+    }
+
+private:
+    uint32_t _bits = (1 << MAX_GROUP_BY_NUMBER) - 1;
+    uint8_t* _data = nullptr;
+};
+}; // namespace starrocks
 
 namespace starrocks::vectorized {
 
@@ -44,7 +84,7 @@ struct DistinctAggregateState {};
 // 0 original version
 // 1 two-level hash set.
 // 2. 1-level hash set with multiple sizes.
-// 3. original version with always_inline.
+// 3. bitmap filter.
 #define DISTINCT_AGG_IMPL 3
 
 #if DISTINCT_AGG_IMPL == 0
@@ -275,12 +315,87 @@ template <PrimitiveType PT>
 struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     using SumType = RunTimeCppType<SumResultPT<PT>>;
-    using MyHashSet = HashSet<T>;
-    static const size_t value_size = phmap::item_serialize_size<MyHashSet>::value;
 
-    inline __attribute__((always_inline)) size_t update(T key) {
+    DistinctAggregateState() {}
+    ~DistinctAggregateState() {
+        if (state != nullptr) {
+            state->distinct_bitmap()->free(bitmap);
+        }
+    }
+
+    size_t value_size() const { return phmap::item_serialize_size<HashSet<T>>::value; }
+
+    size_t update(RuntimeState* state, T key) {
+        bool ok = update_ok(state, key);
+        return ok * phmap::item_serialize_size<HashSet<T>>::value;
+    }
+
+    bool update_ok(RuntimeState* state, const T& key) {
+        // try to acquire a bitmap from runtime state at the first time.
+        if (this->state == nullptr) {
+            this->state = state;
+        }
+
+        if (!try_update_bitmap(key)) {
+            return false;
+        }
         auto pair = set.insert(key);
-        return pair.second * value_size;
+        return pair.second;
+    }
+
+    bool try_update_bitmap(const T& key) {
+        if constexpr (sizeof(T) == 4 || sizeof(T) == 8) {
+            // we decided not to use bitmap.
+            if (samples_number == 0 && bitmap == nullptr) {
+                return true;
+            }
+
+            int64_t value = 0;
+            if constexpr (sizeof(T) == 4) {
+                value = *reinterpret_cast<const int32_t*>(&key);
+            } else {
+                value = *reinterpret_cast<const int64_t*>(&key);
+            }
+
+            if (samples_number > 0) {
+                sample_min = std::min(sample_min, value);
+                sample_max = std::max(sample_max, value);
+                samples_number -= 1;
+                if (samples_number == 0) {
+                    if ((sample_max - sample_min) < DistinctBitmap::BITMAP_MAX_VALUE) {
+                        bitmap = this->state->distinct_bitmap()->alloc();
+                    }
+                    if (bitmap == nullptr) {
+                        return true;
+                    }
+                } else {
+                    return true;
+                }
+            }
+
+            // use median value as center value.
+            int64_t shift = value - sample_min;
+            // zigzag to wrap negative value.
+            uint64_t index = (shift >> 63) ^ (shift << 1);
+
+            if (index < DistinctBitmap::BITMAP_MAX_VALUE) {
+                if (!update_bitmap(index)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    bool update_bitmap(uint64_t value) {
+        static const uint8_t shift_values[8] = {0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80};
+        uint8_t mask = shift_values[value % 8];
+        uint8_t old = bitmap[value / 8];
+        if (old & mask) {
+            return false;
+        }
+        bitmap[value / 8] = (old | mask);
+        return true;
     }
 
     int64_t disctint_count() const { return set.size(); }
@@ -290,21 +405,23 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
     void serialize(uint8_t* dst) const {
         phmap::InMemoryOutput output(reinterpret_cast<char*>(dst));
         set.dump(output);
-        DCHECK(output.length() == set.dump_bound());
+        // DCHECK(output.length() == set.dump_bound());
     }
 
     size_t deserialize_and_merge(const uint8_t* src, size_t len) {
+        size_t total_size = 0;
         phmap::InMemoryInput input(reinterpret_cast<const char*>(src));
         auto old_size = set.size();
         if (old_size == 0) {
             set.load(input);
-            return set.size() * value_size;
+            total_size = set.size() * value_size();
         } else {
-            MyHashSet set_src;
+            HashSet<T> set_src;
             set_src.load(input);
             set.merge(set_src);
-            return (set.size() - old_size) * value_size;
+            total_size = (set.size() - old_size) * value_size();
         }
+        return total_size;
     }
 
     SumType sum_distinct() const {
@@ -320,7 +437,12 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
         return sum;
     }
 
-    MyHashSet set;
+    int64_t sample_min = std::numeric_limits<int64_t>::max();
+    int64_t sample_max = std::numeric_limits<int64_t>::min();
+    int32_t samples_number = 1024;
+    RuntimeState* state = nullptr;
+    uint8_t* bitmap = nullptr;
+    HashSet<T> set;
 };
 
 #endif
@@ -402,7 +524,7 @@ public:
         if constexpr (IsSlice<T>) {
             mem_usage = this->data(state).update(ctx->impl()->mem_pool(), column->get_slice(row_num));
         } else {
-            mem_usage = this->data(state).update(column->get_data()[row_num]);
+            mem_usage = this->data(state).update(ctx->impl()->state(), column->get_data()[row_num]);
         }
         ctx->impl()->add_mem_usage(mem_usage);
     }
@@ -421,7 +543,7 @@ public:
                 mem_usage += this->data(state).deserialize_and_merge((const uint8_t*)slice.data, slice.size);
             } else {
                 T key = *reinterpret_cast<T*>(slice.data);
-                mem_usage += this->data(state).update(key);
+                mem_usage += this->data(state).update(ctx->impl()->state(), key);
             }
         }
         ctx->impl()->add_mem_usage(mem_usage);
