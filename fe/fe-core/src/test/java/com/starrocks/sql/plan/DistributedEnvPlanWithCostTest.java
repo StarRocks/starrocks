@@ -275,8 +275,9 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "group by supp_nation, cust_nation, l_year order by supp_nation, cust_nation, l_year;";
         String plan = getCostExplain(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains("     probe runtime filters:\n"
-                + "     - filter_id = 2, probe_expr = (11: L_SUPPKEY)\n"));
+        Assert.assertTrue(plan.contains("probe runtime filters:\n" +
+                "     - filter_id = 2, probe_expr = (9: L_ORDERKEY)\n" +
+                "     - filter_id = 3, probe_expr = (11: L_SUPPKEY)"));
     }
 
     @Test
@@ -420,5 +421,67 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (CAST(18: O_ORDERKEY AS BIGINT) + 1), remote = false\n" +
                 "  |  cardinality: 600000000"));
+    }
+
+    @Test
+    public void testNotEvalStringTypePredicateCardinality() throws Exception {
+        String sql = "select\n" +
+                "            n1.n_name as supp_nation,\n" +
+                "            n2.n_name as cust_nation\n" +
+                "        from\n" +
+                "            supplier,\n" +
+                "            customer,\n" +
+                "            nation n1,\n" +
+                "            nation n2\n" +
+                "        where \n" +
+                "          s_nationkey = n1.n_nationkey\n" +
+                "          and c_nationkey = n2.n_nationkey\n" +
+                "          and (\n" +
+                "                (n1.n_name = 'CANADA' and n2.n_name = 'IRAN')\n" +
+                "                or (n1.n_name = 'IRAN' and n2.n_name = 'CANADA')\n" +
+                "            )";
+        String plan = getCostExplain(sql);
+        // not eval char/varchar type predicate cardinality in scan node
+        Assert.assertTrue(plan.contains("Predicates: 24: N_NAME IN ('IRAN', 'CANADA')"));
+        Assert.assertTrue(plan.contains("cardinality: 25"));
+        // eval char/varchar type predicate cardinality in join node
+        Assert.assertTrue(plan.contains(" 5:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: ((19: N_NAME = 'CANADA') AND (24: N_NAME = 'IRAN')) OR ((19: N_NAME = 'IRAN') AND (24: N_NAME = 'CANADA'))\n" +
+                "  |  cardinality: 2"));
+    }
+
+    @Test
+    public void testEvalPredicateCardinality() throws Exception {
+        String sql = "select\n" +
+                "            n1.n_name as supp_nation,\n" +
+                "            n2.n_name as cust_nation\n" +
+                "        from\n" +
+                "            supplier,\n" +
+                "            customer,\n" +
+                "            nation n1,\n" +
+                "            nation n2\n" +
+                "        where \n" +
+                "          s_nationkey = n1.n_nationkey\n" +
+                "          and c_nationkey = n2.n_nationkey\n" +
+                "          and (\n" +
+                "                (n1.n_nationkey = 1 and n2.n_nationkey = 2)\n" +
+                "                or (n1.n_nationkey = 2 and n2.n_nationkey = 1)\n" +
+                "            )";
+        String plan = getCostExplain(sql);
+        // eval predicate cardinality in scan node
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     table: nation, rollup: nation\n" +
+                "     preAggregation: on\n" +
+                "     Predicates: 23: N_NATIONKEY IN (2, 1)\n" +
+                "     partitionsRatio=1/1, tabletsRatio=1/1\n" +
+                "     tabletList=10185\n" +
+                "     actualRows=0, avgRowSize=29.0\n" +
+                "     cardinality: 2"));
+        // eval predicate cardinality in join node
+        Assert.assertTrue(plan.contains("3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
+                "  |  cardinality: 2"));
     }
 }

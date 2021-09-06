@@ -48,7 +48,7 @@ partitions=1/1
 rollup: lineitem
 tabletRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-cardinality=8142250
+cardinality=8142251
 avgRowSize=28.0
 numNodes=0
 use vectorized: true
