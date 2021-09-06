@@ -371,7 +371,7 @@ public class ExportJob implements Writable {
             Coordinator coord = new Coordinator(
                     id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode), clusterName,
                     TimeUtils.DEFAULT_TIME_ZONE);
-            coord.setExecMemoryLimit(getExecMemLimit());
+            coord.setExecMemoryLimit(getMemLimit());
             this.coordList.add(coord);
             LOG.info("split export job to tasks. job id: {}, task idx: {}, task query id: {}",
                     id, i, DebugUtil.printId(queryId));
@@ -419,8 +419,13 @@ public class ExportJob implements Writable {
         return this.rowDelimiter;
     }
 
-    public long getExecMemLimit() {
-        return Long.parseLong(properties.get(LoadStmt.LOAD_MEM_LIMIT));
+    public long getMemLimit() {
+        // The key is exec_mem_limit before version 1.18, check first
+        if (properties.containsKey(LoadStmt.LOAD_MEM_LIMIT)) {
+            return Long.parseLong(properties.get(LoadStmt.LOAD_MEM_LIMIT));
+        } else {
+            return 0;
+        }
     }
 
     public int getTimeoutSecond() {
