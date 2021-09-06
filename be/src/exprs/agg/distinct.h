@@ -43,7 +43,9 @@ struct DistinctAggregateState {};
 
 // 0 original version
 // 1 two-level hash set.
-#define DISTINCT_AGG_IMPL 1
+// 2. 1-level hash set with multiple sizes.
+// 3. original version with always_inline.
+#define DISTINCT_AGG_IMPL 3
 
 #if DISTINCT_AGG_IMPL == 0
 template <PrimitiveType PT>
@@ -157,6 +159,170 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
     MyHashSet set;
 };
 
+#elif DISTINCT_AGG_IMPL == 2
+
+template <PrimitiveType PT>
+struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
+    using T = RunTimeCppType<PT>;
+    using SumType = RunTimeCppType<SumResultPT<PT>>;
+    using MyHashSet = HashSet<T>;
+    struct __attribute__((packed)) uint24_t {
+        uint16_t a;
+        uint8_t b;
+        bool operator==(const uint24_t& x) const { return memcmp(&a, &x, 3) == 0; }
+        uint24_t(const uint64_t x) { memcpy(&a, &x, 3); }
+        inline __attribute__((always_inline)) uint64_t to_int() const { return ((uint32_t)a << 8) | b; }
+    };
+    class hash_uint24_t {
+    public:
+        inline __attribute__((always_inline)) std::size_t operator()(uint24_t value) const {
+            return phmap_mix<sizeof(size_t)>()(value.to_int());
+        }
+    };
+    using HashSetUint24 = phmap::flat_hash_set<uint24_t, hash_uint24_t>;
+
+    static const size_t my_value_size = phmap::item_serialize_size<MyHashSet>::value;
+    static const size_t value_size_24 = phmap::item_serialize_size<HashSetUint24>::value;
+
+    inline __attribute__((always_inline)) size_t update(T key) {
+        if constexpr (sizeof(T) == 4 || sizeof(T) == 8) {
+            uint64_t value = 0;
+            if (sizeof(T) == 4) {
+                value = *(uint32_t*)(&key);
+            } else {
+                value = *(uint64_t*)(&key);
+            }
+            if (value < (1ULL << 24)) {
+                uint24_t key24(value);
+                auto pair = set24.insert(std::move(key24));
+                return pair.second * value_size_24;
+            }
+        }
+
+        auto pair = set.insert(key);
+        return pair.second * my_value_size;
+    }
+
+    int64_t disctint_count() const { return set.size() + set24.size(); }
+
+    size_t serialize_size() const { return set.dump_bound() + set24.dump_bound() + 2 * sizeof(size_t); }
+
+    void serialize(uint8_t* dst) const {
+        size_t offset = 2 * sizeof(size_t);
+
+#define MOP(index, name)                                                     \
+    do {                                                                     \
+        phmap::InMemoryOutput output(reinterpret_cast<char*>(dst + offset)); \
+        name.dump(output);                                                   \
+        size_t sz = output.length();                                         \
+        offset += sz;                                                        \
+        memcpy(dst + index * sizeof(size_t), &sz, sizeof(sz));               \
+    } while (0)
+
+        MOP(0, set);
+        MOP(1, set24);
+#undef MOP
+    }
+
+    size_t deserialize_and_merge(const uint8_t* src, size_t len) {
+        size_t offset = 2 * sizeof(size_t);
+        size_t total_size = 0;
+
+#define MOP(index, name, value_size)                                             \
+    do {                                                                         \
+        size_t sz = 0;                                                           \
+        memcpy(&sz, src + index * sizeof(size_t), sizeof(size_t));               \
+        phmap::InMemoryInput input(reinterpret_cast<const char*>(src + offset)); \
+        size_t old_size = name.size();                                           \
+        if (old_size == 0) {                                                     \
+            name.load(input);                                                    \
+            total_size += name.size() * value_size;                              \
+        } else {                                                                 \
+            typeof(name) set_src;                                                \
+            set_src.load(input);                                                 \
+            name.merge(set_src);                                                 \
+            total_size += (name.size() - old_size) * value_size;                 \
+        }                                                                        \
+        offset += sz;                                                            \
+    } while (0)
+        MOP(0, set, my_value_size);
+        MOP(1, set24, value_size_24);
+#undef MOP
+        return total_size;
+    }
+
+    SumType sum_distinct() const {
+        SumType sum{};
+        // Sum distinct doesn't support timestamp and date type
+        if constexpr (IsDateTime<SumType>) {
+            return sum;
+        }
+
+        for (auto& key : set) {
+            sum += key;
+        }
+        // todo(yan):
+        return sum;
+    }
+
+    MyHashSet set;
+    HashSetUint24 set24;
+};
+
+#elif DISTINCT_AGG_IMPL == 3
+
+template <PrimitiveType PT>
+struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
+    using T = RunTimeCppType<PT>;
+    using SumType = RunTimeCppType<SumResultPT<PT>>;
+    using MyHashSet = HashSet<T>;
+    static const size_t value_size = phmap::item_serialize_size<MyHashSet>::value;
+
+    inline __attribute__((always_inline)) size_t update(T key) {
+        auto pair = set.insert(key);
+        return pair.second * value_size;
+    }
+
+    int64_t disctint_count() const { return set.size(); }
+
+    size_t serialize_size() const { return set.dump_bound(); }
+
+    void serialize(uint8_t* dst) const {
+        phmap::InMemoryOutput output(reinterpret_cast<char*>(dst));
+        set.dump(output);
+        DCHECK(output.length() == set.dump_bound());
+    }
+
+    size_t deserialize_and_merge(const uint8_t* src, size_t len) {
+        phmap::InMemoryInput input(reinterpret_cast<const char*>(src));
+        auto old_size = set.size();
+        if (old_size == 0) {
+            set.load(input);
+            return set.size() * value_size;
+        } else {
+            MyHashSet set_src;
+            set_src.load(input);
+            set.merge(set_src);
+            return (set.size() - old_size) * value_size;
+        }
+    }
+
+    SumType sum_distinct() const {
+        SumType sum{};
+        // Sum distinct doesn't support timestamp and date type
+        if constexpr (IsDateTime<SumType>) {
+            return sum;
+        }
+
+        for (auto& key : set) {
+            sum += key;
+        }
+        return sum;
+    }
+
+    MyHashSet set;
+};
+
 #endif
 
 template <PrimitiveType PT>
@@ -229,8 +395,8 @@ class DistinctAggregateFunction final
                                               DistinctAggregateFunction<PT, DistinctType, T>> {
 public:
     using ColumnType = RunTimeColumnType<PT>;
-
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+    inline __attribute__((always_inline)) void update(FunctionContext* ctx, const Column** columns, AggDataPtr state,
+                                                      size_t row_num) const override {
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
         size_t mem_usage;
         if constexpr (IsSlice<T>) {
