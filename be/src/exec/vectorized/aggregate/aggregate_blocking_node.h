@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "exec/exec_node.h"
+#include "exec/pipeline/operator.h"
 #include "exec/vectorized/aggregate/aggregate_base_node.h"
 
 // Aggregate means this node handle query with aggregate functions.
@@ -15,5 +17,8 @@ public:
     };
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
+
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
 };
 } // namespace starrocks::vectorized

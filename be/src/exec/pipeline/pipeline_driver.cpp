@@ -3,10 +3,13 @@
 
 #include "exec/pipeline/pipeline_driver.h"
 
+#include <sstream>
+
 #include "column/chunk.h"
 #include "exec/pipeline/source_operator.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+
 namespace starrocks {
 namespace pipeline {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
@@ -28,7 +31,20 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         bool should_yield = false;
         size_t num_operators = _operators.size();
         size_t _new_first_unfinished = _first_unfinished;
-        for (int i = _first_unfinished; i < num_operators - 1; ++i) {
+        if (VLOG_ROW_IS_ON) {
+            std::stringstream ss;
+            ss << "[Driver] pipeline: [";
+            for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
+                if (i == 0) {
+                    ss << _operators[i]->get_name();
+                } else {
+                    ss << " -> " << _operators[i]->get_name();
+                }
+            }
+            ss << "] start, driver=" << this;
+            VLOG_ROW << ss.str();
+        }
+        for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
             {
                 SCOPED_RAW_TIMER(&time_spent);
                 auto& curr_op = _operators[i];
@@ -38,7 +54,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 if (curr_op->is_finished()) {
                     if (i == 0) {
                         // For source operators
+                        if (VLOG_ROW_IS_ON) {
+                            VLOG_ROW << "[Driver] " << curr_op->get_name() << " finish, driver=" << this;
+                        }
                         curr_op->finish(runtime_state);
+                    }
+                    if (VLOG_ROW_IS_ON) {
+                        VLOG_ROW << "[Driver] " << next_op->get_name() << " finish, driver=" << this;
                     }
                     next_op->finish(runtime_state);
                     _new_first_unfinished = i + 1;
@@ -70,8 +92,11 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 }
 
                 if (status.ok()) {
-                    DCHECK(pulled_chunk.value());
                     if (pulled_chunk.value() && pulled_chunk.value()->num_rows() > 0) {
+                        if (VLOG_ROW_IS_ON) {
+                            VLOG_ROW << "[Driver] transfer chunk(" << pulled_chunk.value()->num_rows() << ") from "
+                                     << curr_op->get_name() << " to " << next_op->get_name() << ", driver=" << this;
+                        }
                         next_op->push_chunk(runtime_state, std::move(pulled_chunk.value()));
                     }
                     num_chunk_moved += 1;
@@ -82,7 +107,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 if (curr_op->is_finished()) {
                     if (i == 0) {
                         // For source operators
+                        if (VLOG_ROW_IS_ON) {
+                            VLOG_ROW << "[Driver] " << curr_op->get_name() << " finish, driver=" << this;
+                        }
                         curr_op->finish(runtime_state);
+                    }
+                    if (VLOG_ROW_IS_ON) {
+                        VLOG_ROW << "[Driver] " << next_op->get_name() << " finish, driver=" << this;
                     }
                     next_op->finish(runtime_state);
                     _new_first_unfinished = i + 1;

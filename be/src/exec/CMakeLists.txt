@@ -172,6 +172,9 @@ set(EXEC_FILES
     pipeline/exec_state_reporter.cpp
     pipeline/fragment_context.cpp
     pipeline/query_context.cpp
+    pipeline/aggregate_base_operator.cpp
+    pipeline/aggregate_blocking_operator.cpp
+    pipeline/aggregate_streaming_operator.cpp
 )
 
 if (WITH_MYSQL)
