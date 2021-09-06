@@ -716,7 +716,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     if (!st.ok() || total_rows2 != total_rows) {
         LOG(WARNING) << "load primary index get_rowsets_total_stats error " << st;
     }
-    DCHECK(total_rows2 != total_rows);
+    DCHECK(total_rows2 == total_rows);
     if (total_data_size > 4000000000 || total_rows > 10000000 || total_segments > 400) {
         LOG(INFO) << "load large primary index start tablet:" << tablet->tablet_id() << " version:" << apply_version
                   << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " #row:" << total_rows << " -"
