@@ -17,15 +17,13 @@ public:
 
     Status add_chunk(vectorized::Chunk* chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
-    bool has_output() const override;
+    bool has_output() override;
 
     bool is_finished() const override;
 
     void finish(RuntimeState* state) override { _is_finished = true; }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
-
-    void add_morsel(Morsel* morsel) {}
 
 private:
     std::atomic<bool> _is_finished{false};

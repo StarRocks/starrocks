@@ -5,14 +5,13 @@
 #include <unordered_map>
 
 #include "exec/exchange_node.h"
-#include "exec/pipeline/driver_source.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
-#include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/morsel.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/result_sink_operator.h"
+#include "exec/pipeline/scan_operator.h"
 #include "exec/scan_node.h"
 #include "gen_cpp/starrocks_internal_service.pb.h"
 #include "gutil/casts.h"
@@ -29,7 +28,7 @@ namespace starrocks::pipeline {
 Morsels convert_scan_range_to_morsel(const std::vector<TScanRangeParams>& scan_ranges, int node_id) {
     Morsels morsels;
     for (auto scan_range : scan_ranges) {
-        morsels.emplace_back(std::make_shared<OlapMorsel>(node_id, scan_range));
+        morsels.emplace_back(std::make_unique<OlapMorsel>(node_id, scan_range));
     }
     return morsels;
 }
@@ -93,6 +92,14 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     if (request.query_options.__isset.query_threads) {
         driver_instance_count = request.query_options.query_threads;
     }
+    // pipeline scan mode
+    // 0: use sync io
+    // 1: use async io and exec->thread_pool()
+    int32_t pipeline_scan_mode = 1;
+    if (request.query_options.__isset.pipeline_scan_mode) {
+        pipeline_scan_mode = request.query_options.pipeline_scan_mode;
+    }
+
     PipelineBuilderContext context(*_fragment_ctx, driver_instance_count);
     PipelineBuilder builder(context);
     _fragment_ctx->set_pipelines(builder.build(*_fragment_ctx, plan));
@@ -114,17 +121,16 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     std::vector<TScanRangeParams> no_scan_ranges;
     plan->collect_scan_nodes(&scan_nodes);
 
-    std::unordered_map<int32_t, DriverSourcePtr> sources;
+    MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
     for (int i = 0; i < scan_nodes.size(); ++i) {
         ScanNode* scan_node = down_cast<ScanNode*>(scan_nodes[i]);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
         Morsels morsels = convert_scan_range_to_morsel(scan_ranges, scan_node->id());
-        sources.emplace(scan_node->id(), std::make_unique<DriverSource>(morsels, scan_node->id()));
+        morsel_queues.emplace(scan_node->id(), std::make_unique<MorselQueue>(std::move(morsels)));
     }
 
     Drivers drivers;
-    std::map<int32_t, Pipeline*> source_to_pipelines;
     const auto& pipelines = _fragment_ctx->pipelines();
     const size_t num_pipelines = pipelines.size();
     for (auto n = 0; n < num_pipelines; ++n) {
@@ -134,28 +140,31 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         // are constructed from fragment instance that is organized as an ExecNode tree via
         // post-order traversal.
         const bool is_root = (n == num_pipelines - 1);
+        const auto driver_instance_count = pipeline->get_driver_instance_count();
 
         if (pipeline->get_op_factories()[0]->is_source()) {
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
-            auto& source = sources[source_id];
-            const auto morsel_size = source->get_morsels().size();
-            // for a leaf pipeline(contains ScanOperator), the parallelism degree is morse_size,
+            auto& morsel_queue = morsel_queues[source_id];
+            const auto instance_count = std::min<size_t>(morsel_queue->num_morsels(), driver_instance_count);
             if (is_root) {
-                _fragment_ctx->set_num_root_drivers(morsel_size);
+                _fragment_ctx->set_num_root_drivers(instance_count);
             }
-            for (auto i = 0; i < morsel_size; ++i) {
+            for (auto i = 0; i < instance_count; ++i) {
                 Operators operators;
                 for (const auto& factory : pipeline->get_op_factories()) {
-                    operators.emplace_back(factory->create(morsel_size, i));
+                    operators.emplace_back(factory->create(instance_count, i));
                 }
                 DriverPtr driver = std::make_shared<PipelineDriver>(operators, _query_ctx, _fragment_ctx, 0, is_root);
-                driver->set_morsel(source->get_morsels()[i]);
+                driver->set_morsel_queue(morsel_queue.get());
+                auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
+                if (pipeline_scan_mode == 1) {
+                    scan_operator->set_io_threads(exec_env->pipeline_io_thread_pool());
+                } else {
+                    scan_operator->set_io_threads(nullptr);
+                }
                 drivers.emplace_back(std::move(driver));
             }
         } else {
-            // for a non-leaf pipeline(contains no ScanOperator), the parallelism degree is
-            // driver_instance_count.
-            const auto driver_instance_count = pipeline->get_driver_instance_count();
             if (is_root) {
                 _fragment_ctx->set_num_root_drivers(driver_instance_count);
             }

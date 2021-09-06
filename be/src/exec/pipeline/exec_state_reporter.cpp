@@ -156,7 +156,7 @@ ExecStateReporter::ExecStateReporter() {
     }
 }
 
-void ExecStateReporter::submit(FragmentContext* fragment_ctx, const Status& status, bool done) {
+void ExecStateReporter::submit(FragmentContext* fragment_ctx, const Status& status, bool done, bool clean) {
     auto report_func = [=]() {
         auto params = create_report_exec_status_params(fragment_ctx, status, done);
         auto status = report_exec_status(params, fragment_ctx->runtime_state()->exec_env(), fragment_ctx->fe_addr());
@@ -167,12 +167,14 @@ void ExecStateReporter::submit(FragmentContext* fragment_ctx, const Status& stat
             LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id="
                       << fragment_ctx->fragment_instance_id();
         }
-        auto query_id = fragment_ctx->query_id();
-        FragmentContextManager::instance()->unregister(fragment_ctx->fragment_instance_id());
-        auto* query_ctx = QueryContextManager::instance()->get_raw(query_id);
-        DCHECK(query_ctx != nullptr);
-        if (query_ctx->count_down_fragment()) {
-            QueryContextManager::instance()->unregister(query_id);
+        if (clean) {
+            auto query_id = fragment_ctx->query_id();
+            FragmentContextManager::instance()->unregister(fragment_ctx->fragment_instance_id());
+            auto* query_ctx = QueryContextManager::instance()->get_raw(query_id);
+            DCHECK(query_ctx != nullptr);
+            if (query_ctx->count_down_fragment()) {
+                QueryContextManager::instance()->unregister(query_id);
+            }
         }
     };
     _thread_pool->submit_func(report_func);

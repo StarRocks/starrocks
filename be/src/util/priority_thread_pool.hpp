@@ -22,11 +22,10 @@
 #ifndef STARROCKS_BE_SRC_COMMON_UTIL_PRIORITY_THREAD_POOL_HPP
 #define STARROCKS_BE_SRC_COMMON_UTIL_PRIORITY_THREAD_POOL_HPP
 
-#include "util/blocking_priority_queue.hpp"
-
+#include <boost/thread.hpp>
 #include <functional>
 
-#include <boost/thread.hpp>
+#include "util/blocking_priority_queue.hpp"
 
 namespace starrocks {
 
@@ -37,15 +36,13 @@ public:
     // Signature of a work-processing function. Takes the integer id of the thread which is
     // calling it (ids run from 0 to num_threads - 1) and a reference to the item to
     // process.
-    typedef std::function<void ()> WorkFunction;
+    typedef std::function<void()> WorkFunction;
 
     struct Task {
     public:
         int priority = 0;
         WorkFunction work_function;
-        bool operator< (const Task& o) const {
-            return priority < o.priority;
-        }
+        bool operator<(const Task& o) const { return priority < o.priority; }
 
         Task& operator++() {
             priority += 2;
@@ -59,13 +56,9 @@ public:
     //     queue exceeds this size, subsequent calls to Offer will block until there is
     //     capacity available.
     //  -- work_function: the function to run every time an item is consumed from the queue
-    PriorityThreadPool(uint32_t num_threads, uint32_t queue_size) :
-            _work_queue(queue_size),
-            _shutdown(false) {
+    PriorityThreadPool(uint32_t num_threads, uint32_t queue_size) : _work_queue(queue_size), _shutdown(false) {
         for (int i = 0; i < num_threads; ++i) {
-            _threads.create_thread(
-                    std::bind<void>(
-                        std::mem_fn(&PriorityThreadPool::work_thread), this, i));
+            _threads.create_thread(std::bind<void>(std::mem_fn(&PriorityThreadPool::work_thread), this, i));
         }
     }
 
@@ -87,13 +80,9 @@ public:
     //
     // Returns true if the work item was successfully added to the queue, false otherwise
     // (which typically means that the thread pool has already been shut down).
-    bool offer(const Task& task) {
-        return _work_queue.blocking_put(task);
-    }
+    bool offer(const Task& task) { return _work_queue.blocking_put(task); }
 
-    bool try_offer(const Task& task) {
-        return _work_queue.try_put(task);
-    }
+    bool try_offer(const Task& task) { return _work_queue.try_put(task); }
 
     bool offer(WorkFunction func) {
         PriorityThreadPool::Task task = {0, std::move(func)};
@@ -114,13 +103,11 @@ public:
 
     // Blocks until all threads are finished. shutdown does not need to have been called,
     // since it may be called on a separate thread.
-    void join() {
-        _threads.join_all();
-    }
+    void join() { _threads.join_all(); }
 
-    uint32_t get_queue_size() const {
-        return _work_queue.get_size();
-    }
+    size_t get_queue_capacity() const { return _work_queue.get_capacity(); }
+
+    uint32_t get_queue_size() const { return _work_queue.get_size(); }
 
     // Blocks until the work queue is empty, and then calls shutdown to stop the worker
     // threads and Join to wait until they are finished.
@@ -174,6 +161,6 @@ private:
     std::condition_variable _empty_cv;
 };
 
-}
+} // namespace starrocks
 
 #endif

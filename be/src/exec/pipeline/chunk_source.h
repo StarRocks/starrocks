@@ -2,9 +2,12 @@
 
 #pragma once
 
+#include <future>
+
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/morsel.h"
+#include "util/exclusive_ptr.h"
 
 namespace starrocks {
 class RuntimeState;
@@ -12,7 +15,7 @@ namespace pipeline {
 
 class ChunkSource {
 public:
-    ChunkSource(Morsel* morsel) : _morsel(morsel) {}
+    ChunkSource(MorselPtr&& morsel) : _morsel(std::move(morsel)) {}
 
     virtual ~ChunkSource() = default;
 
@@ -23,13 +26,18 @@ public:
     virtual bool has_next_chunk() = 0;
 
     virtual StatusOr<vectorized::ChunkUniquePtr> get_next_chunk() = 0;
+    virtual void cache_next_chunk_blocking() = 0;
+    virtual StatusOr<vectorized::ChunkUniquePtr> get_next_chunk_nonblocking() = 0;
 
 protected:
     // The morsel will own by pipeline driver
-    Morsel* _morsel;
+    MorselPtr _morsel;
 };
 
-using ChunkSourcePtr = std::unique_ptr<ChunkSource>;
-
+using ChunkSourcePtr = starrocks::exclusive_ptr<ChunkSource>;
+using ChunkSourcePromise = std::promise<ChunkSourcePtr>;
+using ChunkSourceFromisePtr = starrocks::exclusive_ptr<ChunkSourcePromise>;
+using ChunkSourceFuture = std::future<ChunkSourcePtr>;
+using OptionalChunkSourceFuture = std::optional<ChunkSourceFuture>;
 } // namespace pipeline
 } // namespace starrocks
