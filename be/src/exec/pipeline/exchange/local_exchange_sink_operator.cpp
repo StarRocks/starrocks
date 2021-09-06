@@ -12,7 +12,7 @@ Status LocalExchangeSinkOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-bool LocalExchangeSinkOperator::need_input() const {
+bool LocalExchangeSinkOperator::need_input() {
     return !_is_finished && _exchanger->need_input();
 }
 

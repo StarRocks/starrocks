@@ -42,7 +42,7 @@ bool LocalExchangeSourceOperator::is_finished() const {
     return _is_finished && _full_chunk == nullptr;
 }
 
-bool LocalExchangeSourceOperator::has_output() const {
+bool LocalExchangeSourceOperator::has_output() {
     std::lock_guard<std::mutex> l(_chunk_lock);
     return _full_chunk != nullptr;
 }

@@ -252,6 +252,14 @@ StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk() {
     return std::move(chunk);
 }
 
+void OlapChunkSource::cache_next_chunk_blocking() {
+    _chunk = get_next_chunk();
+}
+
+StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk_nonblocking() {
+    return std::move(_chunk);
+}
+
 Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized::Chunk* chunk) {
     if (state->is_cancelled()) {
         return Status::Cancelled("canceled state");

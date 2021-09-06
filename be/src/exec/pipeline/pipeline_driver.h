@@ -12,6 +12,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/source_operator.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -31,6 +32,10 @@ enum DriverState : uint32_t {
     FINISH = 5,
     CANCELED = 6,
     INTERNAL_ERROR = 7,
+    // PENDING_FINISH means a driver's SinkOperator has finished, but its SourceOperator still have a pending
+    // io task executed by io threads synchronously, a driver turns to FINISH from PENDING_FINISH after the
+    // pending io task's completion.
+    PENDING_FINISH = 8,
 };
 
 static inline std::string ds_to_string(DriverState ds) {
@@ -51,6 +56,8 @@ static inline std::string ds_to_string(DriverState ds) {
         return "CANCELED";
     case INTERNAL_ERROR:
         return "INTERNAL_ERROR";
+    case PENDING_FINISH:
+        return "PENDING_FINISH";
     }
     DCHECK(false);
     return "UNKNOWN_STATE";
@@ -117,19 +124,21 @@ public:
     int32_t source_node_id() { return _source_node_id; }
     int32_t driver_id() const { return _driver_id; }
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
-    void set_morsel(const MorselPtr& morsel) { _morsel = morsel; }
+    void set_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; }
     Status prepare(RuntimeState* runtime_state);
     StatusOr<DriverState> process(RuntimeState* runtime_state);
     void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() { return _state; }
     void set_driver_state(DriverState state) { _state = state; }
-    OperatorPtr& source_operator() { return _operators.front(); }
-    OperatorPtr& sink_operator() { return _operators.back(); }
+    SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
+    Operator* sink_operator() { return _operators.back().get(); }
     bool is_finished() {
         return _state == DriverState::FINISH || _state == DriverState::CANCELED ||
                _state == DriverState::INTERNAL_ERROR;
     }
+    bool pending_finish() { return _state == DriverState::PENDING_FINISH; }
+
     bool is_not_blocked() {
         if (_state == DriverState::OUTPUT_FULL) {
             return sink_operator()->need_input() || sink_operator()->is_finished();
@@ -152,7 +161,7 @@ private:
     const bool _is_root;
     DriverAcct _driver_acct;
     // The first one is source operator
-    MorselPtr _morsel = nullptr;
+    MorselQueue* _morsel_queue = nullptr;
     DriverState _state;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
     std::shared_ptr<MemTracker> _mem_tracker = nullptr;

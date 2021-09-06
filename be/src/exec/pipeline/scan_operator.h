@@ -2,8 +2,11 @@
 
 #pragma once
 
+#include <optional>
+
 #include "exec/pipeline/source_operator.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 namespace vectorized {
@@ -26,21 +29,32 @@ public:
 
     Status close(RuntimeState* state) override;
 
-    bool has_output() const override;
+    bool has_output() override;
+
+    bool pending_finish() override;
 
     bool is_finished() const override;
 
     void finish(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
 
-    void add_morsel(Morsel* morsel) override;
+private:
+    void _pickup_morsel(RuntimeState* state);
+    void _trigger_read_chunk();
+    bool _has_output_blocking();
+    bool _has_output_nonblocking();
+    StatusOr<vectorized::ChunkPtr> _pull_chunk_blocking(RuntimeState* state);
+    StatusOr<vectorized::ChunkPtr> _pull_chunk_nonblocking(RuntimeState* state);
 
 private:
     bool _is_finished = false;
     const TOlapScanNode& _olap_scan_node;
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const vectorized::RuntimeFilterProbeCollector& _runtime_filters;
+    PriorityThreadPool* _io_threads = nullptr;
+    OptionalChunkSourceFuture _pending_chunk_source_future;
 };
 
 class ScanOperatorFactory final : public OperatorFactory {

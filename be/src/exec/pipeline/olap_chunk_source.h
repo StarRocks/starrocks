@@ -22,16 +22,16 @@ namespace pipeline {
 
 class OlapChunkSource final : public ChunkSource {
 public:
-    OlapChunkSource(Morsel* morsel, int32_t tuple_id, const std::vector<ExprContext*>& conjunct_ctxs,
+    OlapChunkSource(MorselPtr&& morsel, int32_t tuple_id, const std::vector<ExprContext*>& conjunct_ctxs,
                     const vectorized::RuntimeFilterProbeCollector& runtime_filters,
                     const std::vector<std::string>& key_column_names, bool skip_aggregation)
-            : ChunkSource(morsel),
+            : ChunkSource(std::move(morsel)),
               _tuple_id(tuple_id),
               _conjunct_ctxs(conjunct_ctxs),
               _runtime_filters(runtime_filters),
               _key_column_names(key_column_names),
               _skip_aggregation(skip_aggregation) {
-        OlapMorsel* olap_morsel = (OlapMorsel*)morsel;
+        OlapMorsel* olap_morsel = (OlapMorsel*)_morsel.get();
         _scan_range = olap_morsel->get_scan_range();
     }
 
@@ -44,6 +44,8 @@ public:
     bool has_next_chunk() override;
 
     StatusOr<vectorized::ChunkUniquePtr> get_next_chunk() override;
+    void cache_next_chunk_blocking() override;
+    StatusOr<vectorized::ChunkUniquePtr> get_next_chunk_nonblocking() override;
 
 private:
     Status _get_tablet(const TInternalScanRange* scan_range);
@@ -64,6 +66,7 @@ private:
     TInternalScanRange* _scan_range;
 
     Status _status = Status::OK();
+    StatusOr<vectorized::ChunkUniquePtr> _chunk;
     // Same size with |_conjunct_ctxs|, indicate which element has been normalized.
     std::vector<bool> _normalized_conjuncts;
     // The conjuncts couldn't push down to storage engine
