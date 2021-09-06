@@ -36,6 +36,9 @@ public class MVColumnBitmapUnionPattern implements MVColumnPattern {
         if (!fnNameString.equalsIgnoreCase(FunctionSet.BITMAP_UNION)) {
             return false;
         }
+        if (fnExpr.getChild(0) instanceof CastExpr) {
+            return false;
+        }
         if (fnExpr.getChild(0) instanceof SlotRef) {
             SlotRef slotRef = (SlotRef) fnExpr.getChild(0);
             if (slotRef.getType().getPrimitiveType() == PrimitiveType.BITMAP && slotRef.getColumn() != null) {
