@@ -719,8 +719,8 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     DCHECK(total_rows2 != total_rows);
     if (total_data_size > 4000000000 || total_rows > 10000000 || total_segments > 400) {
         LOG(INFO) << "load large primary index start tablet:" << tablet->tablet_id() << " version:" << apply_version
-                  << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " #row:" << total_rows
-                  << " #del:" << total_dels << " bytes:" << total_data_size;
+                  << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " #row:" << total_rows << " -"
+                  << total_dels << "=" << total_rows - total_dels << " bytes:" << total_data_size;
     }
     if (total_rows > total_dels) {
         _pkey_to_rssid_rowid->reserve(total_rows - total_dels);
