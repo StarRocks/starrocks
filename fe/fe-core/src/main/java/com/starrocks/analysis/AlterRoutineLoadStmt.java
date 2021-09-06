@@ -33,7 +33,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * ALTER ROUTINE LOAD db.label
+ * ALTER ROUTINE LOAD FOR db.label
  * PROPERTIES(
  * ...
  * )
