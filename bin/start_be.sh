@@ -37,6 +37,7 @@ while true; do
 done
 
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
+export DORIS_HOME="$STARROCKS_HOME"
 source $STARROCKS_HOME/bin/common.sh
 
 # export env variables from be.conf
