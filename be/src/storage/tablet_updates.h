@@ -259,6 +259,8 @@ private:
 
     void _clear_rowset_del_vec_cache(const Rowset& rowset);
 
+    void _update_total_stats(const std::vector<uint32_t>& rowsets);
+
 private:
     Tablet& _tablet;
 
@@ -297,6 +299,11 @@ private:
     // used to for compaction policy.
     // protected by |_rowset_stats_lock|.
     OrderedMap<uint32_t, std::unique_ptr<RowsetStats>> _rowset_stats;
+    // stats for current applied version's total rows/total deletes
+    // it will be updated after new EditVersion applied
+    // currently just for debug/logging purpose
+    size_t _cur_total_rows = 0;
+    size_t _cur_total_dels = 0;
 
     // state used in compaction process
     std::unique_ptr<vectorized::CompactionState> _compaction_state;
