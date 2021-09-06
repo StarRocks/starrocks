@@ -14,19 +14,19 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRow;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalDistribution;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalFilter;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregate;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoin;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeat;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunction;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTopN;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalValues;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalWindow;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -176,7 +176,7 @@ public class OperatorStrings {
          * Physical operator visitor
          */
         public OperatorStr visitPhysicalOlapScan(OptExpression optExpression, Integer step) {
-            PhysicalOlapScan scan = (PhysicalOlapScan) optExpression.getOp();
+            PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("SCAN (");
             sb.append("columns").append(scan.getOutputColumns());
             sb.append(" predicate[").append(scan.getPredicate()).append("]");
@@ -189,7 +189,7 @@ public class OperatorStrings {
 
         @Override
         public OperatorStr visitPhysicalSchemaScan(OptExpression optExpression, Integer step) {
-            PhysicalSchemaScan scan = (PhysicalSchemaScan) optExpression.getOp();
+            PhysicalSchemaScanOperator scan = (PhysicalSchemaScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("SCAN (");
             sb.append("columns").append(scan.getUsedColumns());
             sb.append(" predicate[").append(scan.getPredicate()).append("]");
@@ -202,7 +202,7 @@ public class OperatorStrings {
 
         @Override
         public OperatorStr visitPhysicalMysqlScan(OptExpression optExpression, Integer step) {
-            PhysicalMysqlScan scan = (PhysicalMysqlScan) optExpression.getOp();
+            PhysicalMysqlScanOperator scan = (PhysicalMysqlScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("SCAN (");
             sb.append("columns").append(scan.getUsedColumns());
             sb.append(" predicate[").append(scan.getPredicate()).append("]");
@@ -219,7 +219,7 @@ public class OperatorStrings {
 
         public OperatorStr visitPhysicalHashAggregate(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
-            PhysicalHashAggregate aggregate = (PhysicalHashAggregate) optExpression.getOp();
+            PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("AGGREGATE ([").append(aggregate.getType()).append("]");
             sb.append(" aggregate [" + aggregate.getAggregations() + "]");
             sb.append(" group by [" + aggregate.getGroupBys() + "]");
@@ -229,7 +229,7 @@ public class OperatorStrings {
 
         public OperatorStr visitPhysicalTopN(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
-            PhysicalTopN topn = (PhysicalTopN) optExpression.getOp();
+            PhysicalTopNOperator topn = (PhysicalTopNOperator) optExpression.getOp();
             String sb = "TOP-N (" + "order by [" + topn.getOrderSpec().getOrderDescs() + "]" +
                     ")";
             return new OperatorStr(sb, step, Collections.singletonList(child));
@@ -237,7 +237,7 @@ public class OperatorStrings {
 
         public OperatorStr visitPhysicalDistribution(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
-            PhysicalDistribution exchange = (PhysicalDistribution) optExpression.getOp();
+            PhysicalDistributionOperator exchange = (PhysicalDistributionOperator) optExpression.getOp();
 
             if (exchange.getDistributionSpec() instanceof HashDistributionSpec) {
                 HashDistributionDesc desc =
@@ -254,7 +254,7 @@ public class OperatorStrings {
             OperatorStr left = visit(optExpression.getInputs().get(0), step + 1);
             OperatorStr right = visit(optExpression.getInputs().get(1), step + 1);
 
-            PhysicalHashJoin join = (PhysicalHashJoin) optExpression.getOp();
+            PhysicalHashJoinOperator join = (PhysicalHashJoinOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("").append(join.getJoinType()).append(" (");
             sb.append("join-predicate [").append(join.getJoinPredicate()).append("] ");
             sb.append("post-join-predicate [").append(join.getPredicate()).append("]");
@@ -267,7 +267,7 @@ public class OperatorStrings {
         public OperatorStr visitPhysicalAssertOneRow(OptExpression optExpression, Integer step) {
             OperatorStr left = visit(optExpression.getInputs().get(0), step + 1);
 
-            PhysicalAssertOneRow assertOneRow = (PhysicalAssertOneRow) optExpression.getOp();
+            PhysicalAssertOneRowOperator assertOneRow = (PhysicalAssertOneRowOperator) optExpression.getOp();
             return new OperatorStr(
                     "ASSERT " + assertOneRow.getAssertion().name() + " " + assertOneRow.getCheckRows(), step,
                     Collections.singletonList(left));
@@ -276,7 +276,7 @@ public class OperatorStrings {
         @Override
         public OperatorStr visitPhysicalAnalytic(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
-            PhysicalWindow analytic = (PhysicalWindow) optExpression.getOp();
+            PhysicalWindowOperator analytic = (PhysicalWindowOperator) optExpression.getOp();
             return new OperatorStr("ANALYTIC (" +
                     analytic.getAnalyticCall().toString() + " " +
                     analytic.getPartitionExpressions() + " " +
@@ -320,7 +320,7 @@ public class OperatorStrings {
 
         @Override
         public OperatorStr visitPhysicalValues(OptExpression optExpression, Integer step) {
-            PhysicalValues values = (PhysicalValues) optExpression.getOp();
+            PhysicalValuesOperator values = (PhysicalValuesOperator) optExpression.getOp();
             StringBuilder valuesStr = new StringBuilder("VALUES ");
 
             for (List<ScalarOperator> row : values.getRows()) {
@@ -341,7 +341,7 @@ public class OperatorStrings {
                 childString.add(operatorStr);
             }
 
-            PhysicalRepeat repeat = (PhysicalRepeat) optExpression.getOp();
+            PhysicalRepeatOperator repeat = (PhysicalRepeatOperator) optExpression.getOp();
 
             return new OperatorStr("REPEAT " + repeat.getRepeatColumnRef(), step, new ArrayList<>(childString));
         }
@@ -354,7 +354,7 @@ public class OperatorStrings {
                 childString.add(operatorStr);
             }
 
-            PhysicalFilter filter = (PhysicalFilter) optExpression.getOp();
+            PhysicalFilterOperator filter = (PhysicalFilterOperator) optExpression.getOp();
 
             return new OperatorStr("PREDICATE " + filter.getPredicate(), step, new ArrayList<>(childString));
         }
@@ -367,7 +367,7 @@ public class OperatorStrings {
                 childString.add(operatorStr);
             }
 
-            PhysicalTableFunction tableFunction = (PhysicalTableFunction) optExpression.getOp();
+            PhysicalTableFunctionOperator tableFunction = (PhysicalTableFunctionOperator) optExpression.getOp();
 
             String s = "TABLE FUNCTION (" + tableFunction.getFn().functionName() + ")";
             if (tableFunction.getLimit() != -1) {

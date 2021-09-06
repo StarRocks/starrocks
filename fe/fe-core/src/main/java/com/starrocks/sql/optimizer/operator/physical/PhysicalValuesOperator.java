@@ -12,11 +12,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.List;
 import java.util.Objects;
 
-public class PhysicalValues extends PhysicalOperator {
+public class PhysicalValuesOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> columnRefSet;
     private final List<List<ScalarOperator>> rows;
 
-    public PhysicalValues(List<ColumnRefOperator> columnRefSet, List<List<ScalarOperator>> rows) {
+    public PhysicalValuesOperator(List<ColumnRefOperator> columnRefSet, List<List<ScalarOperator>> rows) {
         super(OperatorType.PHYSICAL_VALUES);
         this.columnRefSet = columnRefSet;
         this.rows = rows;
@@ -48,7 +48,7 @@ public class PhysicalValues extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        PhysicalValues empty = (PhysicalValues) o;
+        PhysicalValuesOperator empty = (PhysicalValuesOperator) o;
         return Objects.equals(columnRefSet, empty.columnRefSet);
     }
 

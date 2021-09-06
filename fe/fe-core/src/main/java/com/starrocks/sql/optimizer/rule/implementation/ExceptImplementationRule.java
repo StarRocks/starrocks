@@ -7,7 +7,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalExcept;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -22,8 +22,8 @@ public class ExceptImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalSetOperator setOperator = (LogicalSetOperator) input.getOp();
-        PhysicalExcept physicalExcept =
-                new PhysicalExcept(setOperator.getOutputColumnRefOp(), setOperator.getChildOutputColumns());
+        PhysicalExceptOperator physicalExcept =
+                new PhysicalExceptOperator(setOperator.getOutputColumnRefOp(), setOperator.getChildOutputColumns());
         physicalExcept.setLimit(setOperator.getLimit());
         return Lists.newArrayList(OptExpression.create(physicalExcept, input.getInputs()));
     }

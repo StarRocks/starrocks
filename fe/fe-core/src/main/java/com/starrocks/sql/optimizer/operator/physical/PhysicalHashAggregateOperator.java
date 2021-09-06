@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-public class PhysicalHashAggregate extends PhysicalOperator {
+public class PhysicalHashAggregateOperator extends PhysicalOperator {
     private final AggType type;
     private final List<ColumnRefOperator> groupBys;
     // For normal aggregate function, partitionByColumns are same with groupingKeys
@@ -37,12 +37,12 @@ public class PhysicalHashAggregate extends PhysicalOperator {
     // two stage aggregate or three stage aggregate
     private boolean isSplit;
 
-    public PhysicalHashAggregate(AggType type,
-                                 List<ColumnRefOperator> groupBys,
-                                 List<ColumnRefOperator> partitionByColumns,
-                                 Map<ColumnRefOperator, CallOperator> aggregations,
-                                 int singleDistinctFunctionPos,
-                                 boolean isSplit) {
+    public PhysicalHashAggregateOperator(AggType type,
+                                         List<ColumnRefOperator> groupBys,
+                                         List<ColumnRefOperator> partitionByColumns,
+                                         Map<ColumnRefOperator, CallOperator> aggregations,
+                                         int singleDistinctFunctionPos,
+                                         boolean isSplit) {
         super(OperatorType.PHYSICAL_HASH_AGG);
         this.type = type;
         this.groupBys = groupBys;
@@ -87,11 +87,11 @@ public class PhysicalHashAggregate extends PhysicalOperator {
 
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof PhysicalHashAggregate)) {
+        if (!(obj instanceof PhysicalHashAggregateOperator)) {
             return false;
         }
 
-        PhysicalHashAggregate rhs = (PhysicalHashAggregate) obj;
+        PhysicalHashAggregateOperator rhs = (PhysicalHashAggregateOperator) obj;
         if (this == rhs) {
             return true;
         }

@@ -160,7 +160,7 @@ public class Memo {
         // will change, so we must reinsert the GroupExpression to groupExpressions map
         List<GroupExpression> needReinsertedExpressions = Lists.newArrayList();
         for (Iterator<Map.Entry<GroupExpression, GroupExpression>>
-             iterator = groupExpressions.entrySet().iterator(); iterator.hasNext(); ) {
+                iterator = groupExpressions.entrySet().iterator(); iterator.hasNext(); ) {
             GroupExpression groupExpr = iterator.next().getKey();
 
             // 1 Find which group expression need to reinsert
@@ -234,7 +234,7 @@ public class Memo {
         groups.remove(group);
 
         for (Iterator<Map.Entry<GroupExpression, GroupExpression>>
-             iterator = groupExpressions.entrySet().iterator(); iterator.hasNext(); ) {
+                iterator = groupExpressions.entrySet().iterator(); iterator.hasNext(); ) {
             GroupExpression groupExpr = iterator.next().getKey();
             if (groupExpr.getGroup() == group) {
                 iterator.remove();

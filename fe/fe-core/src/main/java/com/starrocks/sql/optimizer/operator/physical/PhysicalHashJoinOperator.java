@@ -14,14 +14,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 
-public class PhysicalHashJoin extends PhysicalOperator {
+public class PhysicalHashJoinOperator extends PhysicalOperator {
     private final JoinOperator joinType;
     private final ScalarOperator joinPredicate;
     private String joinHint;
     private final List<ColumnRefOperator> pruneOutputColumns;
 
-    public PhysicalHashJoin(JoinOperator joinType, ScalarOperator joinPredicate,
-                            List<ColumnRefOperator> pruneOutputColumns) {
+    public PhysicalHashJoinOperator(JoinOperator joinType, ScalarOperator joinPredicate,
+                                    List<ColumnRefOperator> pruneOutputColumns) {
         super(OperatorType.PHYSICAL_HASH_JOIN);
         this.joinType = joinType;
         this.joinPredicate = joinPredicate;
@@ -82,7 +82,7 @@ public class PhysicalHashJoin extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        PhysicalHashJoin that = (PhysicalHashJoin) o;
+        PhysicalHashJoinOperator that = (PhysicalHashJoinOperator) o;
         return joinType == that.joinType && Objects.equal(joinPredicate, that.joinPredicate) &&
                 Objects.equal(joinHint, that.joinHint) && Objects.equal(pruneOutputColumns, that.pruneOutputColumns);
     }

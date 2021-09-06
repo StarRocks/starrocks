@@ -11,9 +11,9 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalDistribution;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoin;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProject;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -36,20 +36,20 @@ public class AddProjectForJoinOnBinaryPredicatesRule implements PhysicalOperator
             root.setChild(i, this.rewrite(root.inputAt(i), factory));
         }
 
-        if (!(root.getOp() instanceof PhysicalHashJoin)) {
+        if (!(root.getOp() instanceof PhysicalHashJoinOperator)) {
             return root;
         }
 
-        if (!(root.inputAt(0).getOp() instanceof PhysicalDistribution &&
-                ((PhysicalDistribution) root.inputAt(0).getOp()).getDistributionSpec().getType() ==
+        if (!(root.inputAt(0).getOp() instanceof PhysicalDistributionOperator &&
+                ((PhysicalDistributionOperator) root.inputAt(0).getOp()).getDistributionSpec().getType() ==
                         DistributionSpec.DistributionType.SHUFFLE) ||
-                !(root.inputAt(1).getOp() instanceof PhysicalDistribution &&
-                        ((PhysicalDistribution) root.inputAt(1).getOp()).getDistributionSpec().getType() ==
+                !(root.inputAt(1).getOp() instanceof PhysicalDistributionOperator &&
+                        ((PhysicalDistributionOperator) root.inputAt(1).getOp()).getDistributionSpec().getType() ==
                                 DistributionSpec.DistributionType.SHUFFLE)) {
             return root;
         }
 
-        PhysicalHashJoin joinOperator = (PhysicalHashJoin) root.getOp();
+        PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) root.getOp();
         List<ScalarOperator> predicateLists = Utils.extractConjuncts(joinOperator.getJoinPredicate());
         for (ScalarOperator predicate : predicateLists) {
             if (!(predicate instanceof BinaryPredicateOperator)) {
@@ -122,7 +122,7 @@ public class AddProjectForJoinOnBinaryPredicatesRule implements PhysicalOperator
 
         // 2 Build new project expr
         OptExpression resultProject;
-        if (childExpr.getOp() instanceof PhysicalProject) {
+        if (childExpr.getOp() instanceof PhysicalProjectOperator) {
             // TODO(kks): Should merge these two project exprs
             Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = Maps.newHashMap();
             ColumnRefSet newOutputColumns = new ColumnRefSet();
@@ -131,7 +131,7 @@ public class AddProjectForJoinOnBinaryPredicatesRule implements PhysicalOperator
             newOutputColumns.union(column);
 
             // Put old project column if join operator or join parent operator use it
-            PhysicalProject projectOperator = (PhysicalProject) childExpr.getOp();
+            PhysicalProjectOperator projectOperator = (PhysicalProjectOperator) childExpr.getOp();
             for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : projectOperator.getColumnRefMap().entrySet()) {
                 if (isUsedByJoinOrJoinParent(joinExpr, kv.getKey().getId())) {
                     newColumnRefMap.put(kv.getKey(), kv.getKey());
@@ -140,7 +140,7 @@ public class AddProjectForJoinOnBinaryPredicatesRule implements PhysicalOperator
             }
 
             // Build new project expr
-            PhysicalProject newProjectOperator = new PhysicalProject(newColumnRefMap, Maps.newHashMap());
+            PhysicalProjectOperator newProjectOperator = new PhysicalProjectOperator(newColumnRefMap, Maps.newHashMap());
             OptExpression projectExpr = OptExpression.create(newProjectOperator, childExpr);
             projectExpr.setLogicalProperty(new LogicalProperty(newOutputColumns));
             resultProject = projectExpr;
@@ -161,14 +161,14 @@ public class AddProjectForJoinOnBinaryPredicatesRule implements PhysicalOperator
             }
 
             // Build new project expr
-            PhysicalProject projectOperator = new PhysicalProject(maps, Maps.newHashMap());
+            PhysicalProjectOperator projectOperator = new PhysicalProjectOperator(maps, Maps.newHashMap());
             OptExpression projectExpr = OptExpression.create(projectOperator, childExpr);
             projectExpr.setLogicalProperty(new LogicalProperty(projectOutputs));
             resultProject = projectExpr;
         }
 
         // 3 Rewrite distributionExpr shuffle columns
-        reWriteDistributionShuffleColumns((PhysicalDistribution) distributionExpr.getOp(), childCall, column);
+        reWriteDistributionShuffleColumns((PhysicalDistributionOperator) distributionExpr.getOp(), childCall, column);
 
         // 4 Generate a new LogicalProperty for distributionExpr to avoid affecting the output of other nodes
         LogicalProperty distributionLogicalProperty =
@@ -182,7 +182,7 @@ public class AddProjectForJoinOnBinaryPredicatesRule implements PhysicalOperator
     private boolean isUsedByJoinOrJoinParent(OptExpression join, int columnId) {
         // 1 Join output columns
         ColumnRefSet usedColumns = (ColumnRefSet) join.getLogicalProperty().getOutputColumns().clone();
-        PhysicalHashJoin joinOp = (PhysicalHashJoin) join.getOp();
+        PhysicalHashJoinOperator joinOp = (PhysicalHashJoinOperator) join.getOp();
         // 2 Join on predicates used columns
         usedColumns.union(joinOp.getJoinPredicate().getUsedColumns());
         // 3 Join predicates used columns
@@ -192,7 +192,7 @@ public class AddProjectForJoinOnBinaryPredicatesRule implements PhysicalOperator
         return usedColumns.contains(columnId);
     }
 
-    private void reWriteDistributionShuffleColumns(PhysicalDistribution distribution,
+    private void reWriteDistributionShuffleColumns(PhysicalDistributionOperator distribution,
                                                    ScalarOperator oldCall,
                                                    ColumnRefOperator newColumn) {
         HashDistributionDesc desc =

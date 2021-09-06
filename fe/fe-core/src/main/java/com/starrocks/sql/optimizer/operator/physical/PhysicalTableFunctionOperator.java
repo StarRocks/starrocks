@@ -9,7 +9,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
-public class PhysicalTableFunction extends PhysicalOperator {
+public class PhysicalTableFunctionOperator extends PhysicalOperator {
     private final TableFunction fn;
     //ColumnRefSet represent output by table function
     private final ColumnRefSet fnResultColumnRefSet;
@@ -18,8 +18,8 @@ public class PhysicalTableFunction extends PhysicalOperator {
     //table function input parameters
     private final ColumnRefSet fnParamColumnRefSet;
 
-    public PhysicalTableFunction(ColumnRefSet fnResultColumnRefSet, TableFunction fn,
-                                 ColumnRefSet fnParamColumnRefSet, ColumnRefSet outerColumnRefSet) {
+    public PhysicalTableFunctionOperator(ColumnRefSet fnResultColumnRefSet, TableFunction fn,
+                                         ColumnRefSet fnParamColumnRefSet, ColumnRefSet outerColumnRefSet) {
         super(OperatorType.PHYSICAL_TABLE_FUNCTION);
         this.fnResultColumnRefSet = fnResultColumnRefSet;
         this.fn = fn;
@@ -67,7 +67,7 @@ public class PhysicalTableFunction extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        PhysicalTableFunction that = (PhysicalTableFunction) o;
+        PhysicalTableFunctionOperator that = (PhysicalTableFunctionOperator) o;
         return Objects.equal(fn, that.fn) && Objects.equal(fnResultColumnRefSet, that.fnResultColumnRefSet) &&
                 Objects.equal(outerColumnRefSet, that.outerColumnRefSet) &&
                 Objects.equal(fnParamColumnRefSet, that.fnParamColumnRefSet);

@@ -21,25 +21,25 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRow;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalDistribution;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalExcept;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalFilter;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregate;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoin;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersect;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProject;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeat;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunction;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTopN;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalUnion;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalValues;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalWindow;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 
 /**
  * OperatorVisitor is used to traverse Operator
@@ -137,79 +137,79 @@ public abstract class OperatorVisitor<R, C> {
     /**
      * Physical operator visitor
      */
-    public R visitPhysicalDistribution(PhysicalDistribution node, C context) {
+    public R visitPhysicalDistribution(PhysicalDistributionOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalProject(PhysicalProject node, C context) {
+    public R visitPhysicalProject(PhysicalProjectOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalHashAggregate(PhysicalHashAggregate node, C context) {
+    public R visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalHashJoin(PhysicalHashJoin node, C context) {
+    public R visitPhysicalHashJoin(PhysicalHashJoinOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalOlapScan(PhysicalOlapScan node, C context) {
+    public R visitPhysicalOlapScan(PhysicalOlapScanOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalHiveScan(PhysicalHiveScan node, C context) {
+    public R visitPhysicalHiveScan(PhysicalHiveScanOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalSchemaScan(PhysicalSchemaScan node, C context) {
+    public R visitPhysicalSchemaScan(PhysicalSchemaScanOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalMysqlScan(PhysicalMysqlScan node, C context) {
+    public R visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalEsScan(PhysicalEsScan node, C context) {
+    public R visitPhysicalEsScan(PhysicalEsScanOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalTopN(PhysicalTopN node, C context) {
+    public R visitPhysicalTopN(PhysicalTopNOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalAssertOneRow(PhysicalAssertOneRow node, C context) {
+    public R visitPhysicalAssertOneRow(PhysicalAssertOneRowOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalAnalytic(PhysicalWindow node, C context) {
+    public R visitPhysicalAnalytic(PhysicalWindowOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalUnion(PhysicalUnion node, C context) {
+    public R visitPhysicalUnion(PhysicalUnionOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalExcept(PhysicalExcept node, C context) {
+    public R visitPhysicalExcept(PhysicalExceptOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalIntersect(PhysicalIntersect node, C context) {
+    public R visitPhysicalIntersect(PhysicalIntersectOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalValues(PhysicalValues node, C context) {
+    public R visitPhysicalValues(PhysicalValuesOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalRepeat(PhysicalRepeat node, C context) {
+    public R visitPhysicalRepeat(PhysicalRepeatOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalFilter(PhysicalFilter node, C context) {
+    public R visitPhysicalFilter(PhysicalFilterOperator node, C context) {
         return visitOperator(node, context);
     }
 
-    public R visitPhysicalTableFunction(PhysicalTableFunction node, C context) {
+    public R visitPhysicalTableFunction(PhysicalTableFunctionOperator node, C context) {
         return visitOperator(node, context);
     }
 }

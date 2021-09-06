@@ -36,20 +36,18 @@ public class Utils {
             return Lists.newArrayList();
         }
 
+        LinkedList<ScalarOperator> list = new LinkedList<>();
         if (!OperatorType.COMPOUND.equals(root.getOpType())) {
-            return new LinkedList<ScalarOperator>() {{
-                add(root);
-            }};
+            list.add(root);
+            return list;
         }
 
         CompoundPredicateOperator cpo = (CompoundPredicateOperator) root;
         if (!cpo.isAnd()) {
-            return new LinkedList<ScalarOperator>() {{
-                add(root);
-            }};
+            list.add(root);
+            return list;
         }
 
-        LinkedList<ScalarOperator> list = new LinkedList<>();
         list.addAll(extractConjuncts(cpo.getChild(0)));
         list.addAll(extractConjuncts(cpo.getChild(1)));
         return list;
@@ -60,14 +58,13 @@ public class Utils {
             return Lists.newArrayList();
         }
 
+        LinkedList<ScalarOperator> list = new LinkedList<>();
         if (!OperatorType.COMPOUND.equals(root.getOpType())) {
-            return new LinkedList<ScalarOperator>() {{
-                add(root);
-            }};
+            list.add(root);
+            return list;
         }
 
         CompoundPredicateOperator cpo = (CompoundPredicateOperator) root;
-        LinkedList<ScalarOperator> list = new LinkedList<>();
 
         if (cpo.isOr()) {
             list.addAll(extractDisjunctive(cpo.getChild(0)));
@@ -83,13 +80,12 @@ public class Utils {
             return Collections.emptyList();
         }
 
+        LinkedList<ColumnRefOperator> list = new LinkedList<>();
         if (OperatorType.VARIABLE.equals(root.getOpType())) {
-            return new LinkedList<ColumnRefOperator>() {{
-                add((ColumnRefOperator) root);
-            }};
+            list.add((ColumnRefOperator) root);
+            return list;
         }
 
-        LinkedList<ColumnRefOperator> list = new LinkedList<>();
         for (ScalarOperator child : root.getChildren()) {
             list.addAll(extractColumnRef(child));
         }

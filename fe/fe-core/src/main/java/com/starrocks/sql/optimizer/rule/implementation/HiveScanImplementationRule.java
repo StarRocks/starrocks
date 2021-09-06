@@ -9,7 +9,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScan;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -25,7 +25,7 @@ public class HiveScanImplementationRule extends ImplementationRule {
         OptExpression result = null;
         LogicalHiveScanOperator scan = (LogicalHiveScanOperator) input.getOp();
         if (scan.getTableType() == Table.TableType.HIVE) {
-            PhysicalHiveScan physicalHiveScan = new PhysicalHiveScan(scan.getTable(),
+            PhysicalHiveScanOperator physicalHiveScan = new PhysicalHiveScanOperator(scan.getTable(),
                     scan.getOutputColumns(),
                     scan.getColumnRefMap(),
                     scan.getSelectedPartitionIds(),

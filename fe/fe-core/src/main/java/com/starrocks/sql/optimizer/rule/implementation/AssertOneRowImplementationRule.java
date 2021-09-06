@@ -8,7 +8,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRow;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -23,8 +23,8 @@ public class AssertOneRowImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAssertOneRowOperator logical = (LogicalAssertOneRowOperator) input.getOp();
 
-        PhysicalAssertOneRow physical =
-                new PhysicalAssertOneRow(logical.getAssertion(), logical.getCheckRows(), logical.getTips());
+        PhysicalAssertOneRowOperator physical =
+                new PhysicalAssertOneRowOperator(logical.getAssertion(), logical.getCheckRows(), logical.getTips());
 
         return Lists.newArrayList(OptExpression.create(physical, input.getInputs()));
     }

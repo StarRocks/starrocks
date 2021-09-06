@@ -7,7 +7,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalUnion;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -22,8 +22,8 @@ public class UnionImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalUnionOperator union = (LogicalUnionOperator) input.getOp();
-        PhysicalUnion physicalUnion =
-                new PhysicalUnion(union.getOutputColumnRefOp(), union.getChildOutputColumns(), union.isUnionAll());
+        PhysicalUnionOperator physicalUnion =
+                new PhysicalUnionOperator(union.getOutputColumnRefOp(), union.getChildOutputColumns(), union.isUnionAll());
         physicalUnion.setLimit(union.getLimit());
         return Lists.newArrayList(OptExpression.create(physicalUnion, input.getInputs()));
     }

@@ -9,9 +9,9 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoin;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProject;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -38,12 +38,12 @@ public class AddProjectForJoinPruneRule implements PhysicalOperatorTreeRewriteRu
         usedColumns.union(((PhysicalOperator) root.getOp()).getUsedColumns());
 
         if (OperatorType.PHYSICAL_PROJECT != root.getOp().getOpType()
-                && root.getInputs().stream().anyMatch(d -> d.getOp() instanceof PhysicalHashJoin)) {
+                && root.getInputs().stream().anyMatch(d -> d.getOp() instanceof PhysicalHashJoinOperator)) {
             // check child output and add project
             for (int i = 0; i < root.arity(); ++i) {
                 OptExpression child = root.getInputs().get(i);
 
-                if (!(child.getOp() instanceof PhysicalHashJoin)) {
+                if (!(child.getOp() instanceof PhysicalHashJoinOperator)) {
                     continue;
                 }
 
@@ -68,7 +68,7 @@ public class AddProjectForJoinPruneRule implements PhysicalOperatorTreeRewriteRu
                     projections.put(ref, ref);
                 }
 
-                PhysicalProject projects = new PhysicalProject(projections, Maps.newHashMap());
+                PhysicalProjectOperator projects = new PhysicalProjectOperator(projections, Maps.newHashMap());
 
                 OptExpression opt = OptExpression.create(projects, child);
                 opt.setStatistics(child.getStatistics());

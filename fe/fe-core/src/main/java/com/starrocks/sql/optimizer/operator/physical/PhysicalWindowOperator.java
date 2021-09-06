@@ -17,14 +17,14 @@ import java.util.Objects;
 
 import static com.starrocks.sql.optimizer.operator.OperatorType.PHYSICAL_WINDOW;
 
-public class PhysicalWindow extends PhysicalOperator {
+public class PhysicalWindowOperator extends PhysicalOperator {
     private final Map<ColumnRefOperator, CallOperator> analyticCall;
     private final List<ScalarOperator> partitionExpressions;
     private final List<Ordering> orderByElements;
     private final AnalyticWindow analyticWindow;
 
-    public PhysicalWindow(Map<ColumnRefOperator, CallOperator> analyticCall, List<ScalarOperator> partitionExpressions,
-                          List<Ordering> orderByElements, AnalyticWindow analyticWindow) {
+    public PhysicalWindowOperator(Map<ColumnRefOperator, CallOperator> analyticCall, List<ScalarOperator> partitionExpressions,
+                                  List<Ordering> orderByElements, AnalyticWindow analyticWindow) {
         super(PHYSICAL_WINDOW);
         this.analyticCall = analyticCall;
         this.partitionExpressions = partitionExpressions;
@@ -66,7 +66,7 @@ public class PhysicalWindow extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        PhysicalWindow that = (PhysicalWindow) o;
+        PhysicalWindowOperator that = (PhysicalWindowOperator) o;
         return Objects.equals(analyticCall, that.analyticCall) &&
                 Objects.equals(partitionExpressions, that.partitionExpressions) &&
                 Objects.equals(orderByElements, that.orderByElements) &&

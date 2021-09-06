@@ -9,14 +9,14 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
-public class PhysicalAssertOneRow extends PhysicalOperator {
+public class PhysicalAssertOneRowOperator extends PhysicalOperator {
     private final AssertNumRowsElement.Assertion assertion;
 
     private final long checkRows;
 
     private final String tips;
 
-    public PhysicalAssertOneRow(AssertNumRowsElement.Assertion assertion, long checkRows, String tips) {
+    public PhysicalAssertOneRowOperator(AssertNumRowsElement.Assertion assertion, long checkRows, String tips) {
         super(OperatorType.PHYSICAL_ASSERT_ONE_ROW);
         this.assertion = assertion;
         this.checkRows = checkRows;
@@ -53,7 +53,7 @@ public class PhysicalAssertOneRow extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        PhysicalAssertOneRow that = (PhysicalAssertOneRow) o;
+        PhysicalAssertOneRowOperator that = (PhysicalAssertOneRowOperator) o;
         return checkRows == that.checkRows && assertion == that.assertion && Objects.equal(tips, that.tips);
     }
 

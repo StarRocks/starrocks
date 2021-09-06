@@ -13,13 +13,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
 
-public class PhysicalProject extends PhysicalOperator {
+public class PhysicalProjectOperator extends PhysicalOperator {
     private final Map<ColumnRefOperator, ScalarOperator> columnRefMap;
     // Used for common operator compute result reuse
     private final Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap;
 
-    public PhysicalProject(Map<ColumnRefOperator, ScalarOperator> columnRefMap,
-                           Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap) {
+    public PhysicalProjectOperator(Map<ColumnRefOperator, ScalarOperator> columnRefMap,
+                                   Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap) {
         super(OperatorType.PHYSICAL_PROJECT);
         this.columnRefMap = columnRefMap;
         this.commonSubOperatorMap = commonSubOperatorMap;
@@ -41,7 +41,7 @@ public class PhysicalProject extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        PhysicalProject that = (PhysicalProject) o;
+        PhysicalProjectOperator that = (PhysicalProjectOperator) o;
         return Objects.equal(columnRefMap, that.columnRefMap) &&
                 Objects.equal(commonSubOperatorMap, that.commonSubOperatorMap);
     }

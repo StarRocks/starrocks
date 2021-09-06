@@ -13,13 +13,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.Map;
 
-public class PhysicalMysqlScan extends PhysicalOperator {
+public class PhysicalSchemaScanOperator extends PhysicalOperator {
     private final Table table;
 
     private final Map<ColumnRefOperator, Column> columnRefMap;
 
-    public PhysicalMysqlScan(Table table, Map<ColumnRefOperator, Column> columnRefMap) {
-        super(OperatorType.PHYSICAL_MYSQL_SCAN);
+    public PhysicalSchemaScanOperator(Table table, Map<ColumnRefOperator, Column> columnRefMap) {
+        super(OperatorType.PHYSICAL_SCHEMA_SCAN);
+
         this.table = table;
         this.columnRefMap = columnRefMap;
     }
@@ -34,12 +35,12 @@ public class PhysicalMysqlScan extends PhysicalOperator {
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitPhysicalMysqlScan(this, context);
+        return visitor.visitPhysicalSchemaScan(this, context);
     }
 
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
-        return visitor.visitPhysicalMysqlScan(optExpression, context);
+        return visitor.visitPhysicalSchemaScan(optExpression, context);
     }
 
     @Override
@@ -50,7 +51,7 @@ public class PhysicalMysqlScan extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        PhysicalMysqlScan that = (PhysicalMysqlScan) o;
+        PhysicalSchemaScanOperator that = (PhysicalSchemaScanOperator) o;
         return Objects.equal(table, that.table) && Objects.equal(columnRefMap, that.columnRefMap);
     }
 

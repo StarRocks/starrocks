@@ -9,7 +9,7 @@ import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTopN;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -24,8 +24,8 @@ public class TopNImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalTopNOperator logicalTopN = (LogicalTopNOperator) input.getOp();
 
-        PhysicalTopN physicalTopN =
-                new PhysicalTopN(new OrderSpec(logicalTopN.getOrderByElements()),
+        PhysicalTopNOperator physicalTopN =
+                new PhysicalTopNOperator(new OrderSpec(logicalTopN.getOrderByElements()),
                         logicalTopN.getLimit(),
                         logicalTopN.getOffset(),
                         logicalTopN.getSortPhase(),
