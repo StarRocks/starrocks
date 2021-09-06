@@ -55,6 +55,7 @@ import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -466,9 +467,18 @@ public class StmtExecutor {
                 if (insertStmt.isTransactionBegin() && context.getState().getStateType() == MysqlStateType.ERR) {
                     try {
                         String errMsg = Strings.emptyToNull(context.getState().getErrorMessage());
-                        Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
-                                insertStmt.getDbObj().getId(), insertStmt.getTransactionId(),
-                                (errMsg == null ? "unknown reason" : errMsg));
+                        if (insertStmt.getTargetTable() instanceof ExternalOlapTable) {
+                            ExternalOlapTable externalTable = (ExternalOlapTable)(insertStmt.getTargetTable());
+                            Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                            externalTable.getDbId(), insertStmt.getTransactionId(),
+                            externalTable.getExternalInfo().getHost(),
+                            externalTable.getExternalInfo().getPort(),
+                            errMsg == null ? "unknown reason" : errMsg);
+                        } else {
+                            Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
+                                    insertStmt.getDbObj().getId(), insertStmt.getTransactionId(),
+                                    (errMsg == null ? "unknown reason" : errMsg));
+                        }
                     } catch (Exception abortTxnException) {
                         LOG.warn("errors when abort txn", abortTxnException);
                     }
@@ -901,7 +911,8 @@ public class StmtExecutor {
                 }
             }
 
-            if (insertStmt.getTargetTable().getType() != TableType.OLAP) {
+            TableType tableType = insertStmt.getTargetTable().getType();
+            if ((tableType != TableType.OLAP) && (tableType != TableType.OLAP_EXTERNAL)) {
                 // no need to add load job.
                 // MySQL table is already being inserted.
                 context.getState().setOk(loadedRows, filteredRows, null);
@@ -910,38 +921,70 @@ public class StmtExecutor {
 
             if (loadedRows == 0 && filteredRows == 0) {
                 // if no data, just abort txn and return ok
-                Catalog.getCurrentGlobalTransactionMgr().abortTransaction(insertStmt.getDbObj().getId(),
-                        insertStmt.getTransactionId(), TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                if (insertStmt.getTargetTable() instanceof ExternalOlapTable) {
+                    ExternalOlapTable externalTable = (ExternalOlapTable)(insertStmt.getTargetTable());
+                    Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                    externalTable.getDbId(), insertStmt.getTransactionId(),
+                    externalTable.getExternalInfo().getHost(),
+                    externalTable.getExternalInfo().getPort(),
+                    TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                } else {
+                    Catalog.getCurrentGlobalTransactionMgr().abortTransaction(insertStmt.getDbObj().getId(),
+                            insertStmt.getTransactionId(), TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                }
                 context.getState().setOk();
                 return;
             }
 
-            if (Catalog.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
-                    insertStmt.getDbObj(), insertStmt.getTransactionId(),
-                    TabletCommitInfo.fromThrift(coord.getCommitInfos()),
-                    context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000)) {
-                txnStatus = TransactionStatus.VISIBLE;
-                MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
-                // collect table-level metrics
-                if (null != insertStmt.getTargetTable()) {
-                    TableMetricsEntity entity =
-                            TableMetricsRegistry.getInstance().getMetricsEntity(insertStmt.getTargetTable().getId());
-                    entity.COUNTER_INSERT_LOAD_FINISHED_TOTAL.increase(1L);
-                    entity.COUNTER_INSERT_LOAD_ROWS_TOTAL.increase(loadedRows);
-                    entity.COUNTER_INSERT_LOAD_BYTES_TOTAL
-                            .increase(Long.valueOf(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)));
+            if (insertStmt.getTargetTable() instanceof ExternalOlapTable) {
+                ExternalOlapTable externalTable = (ExternalOlapTable)(insertStmt.getTargetTable());
+                if (Catalog.getCurrentGlobalTransactionMgr().commitRemoteTransaction(
+                    externalTable.getDbId(), insertStmt.getTransactionId(),
+                    externalTable.getExternalInfo().getHost(),
+                    externalTable.getExternalInfo().getPort(),
+                    coord.getCommitInfos())) {
+                    txnStatus = TransactionStatus.VISIBLE;
+                    MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
+                } else {
+                    txnStatus = TransactionStatus.COMMITTED;
                 }
+                // TODO: wait remote txn finished
             } else {
-                txnStatus = TransactionStatus.COMMITTED;
+                if (Catalog.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
+                        insertStmt.getDbObj(), insertStmt.getTransactionId(),
+                        TabletCommitInfo.fromThrift(coord.getCommitInfos()),
+                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000)) {
+                    txnStatus = TransactionStatus.VISIBLE;
+                    MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
+                    // collect table-level metrics
+                    if (null != insertStmt.getTargetTable()) {
+                        TableMetricsEntity entity =
+                                TableMetricsRegistry.getInstance().getMetricsEntity(insertStmt.getTargetTable().getId());
+                        entity.COUNTER_INSERT_LOAD_FINISHED_TOTAL.increase(1L);
+                        entity.COUNTER_INSERT_LOAD_ROWS_TOTAL.increase(loadedRows);
+                        entity.COUNTER_INSERT_LOAD_BYTES_TOTAL
+                                .increase(Long.valueOf(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)));
+                    }
+                } else {
+                    txnStatus = TransactionStatus.COMMITTED;
+                }
             }
-
         } catch (Throwable t) {
             // if any throwable being thrown during insert operation, first we should abort this txn
             LOG.warn("handle insert stmt fail: {}", label, t);
             try {
-                Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
-                        insertStmt.getDbObj().getId(), insertStmt.getTransactionId(),
-                        t.getMessage() == null ? "unknown reason" : t.getMessage());
+                if (insertStmt.getTargetTable() instanceof ExternalOlapTable) {
+                    ExternalOlapTable externalTable = (ExternalOlapTable)(insertStmt.getTargetTable());
+                    Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                    externalTable.getDbId(), insertStmt.getTransactionId(),
+                    externalTable.getExternalInfo().getHost(),
+                    externalTable.getExternalInfo().getPort(),
+                    t.getMessage() == null ? "unknown reason" : t.getMessage());
+                } else {
+                    Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
+                            insertStmt.getDbObj().getId(), insertStmt.getTransactionId(),
+                            t.getMessage() == null ? "unknown reason" : t.getMessage());
+                }
             } catch (Exception abortTxnException) {
                 // just print a log if abort txn failed. This failure do not need to pass to user.
                 // user only concern abort how txn failed.
@@ -1260,22 +1303,35 @@ public class StmtExecutor {
                 "insert_" + DebugUtil.printId(context.getExecutionId()) : stmt.getLabel();
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        long transactionId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(
-                database.getId(),
-                Lists.newArrayList(targetTable.getId()),
-                label,
-                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
-                        FrontendOptions.getLocalHostAddress()),
-                sourceType,
-                ConnectContext.get().getSessionVariable().getQueryTimeoutS());
 
-        // add table indexes to transaction state
-        TransactionState txnState =
-                Catalog.getCurrentGlobalTransactionMgr().getTransactionState(database.getId(), transactionId);
-        if (txnState == null) {
-            throw new DdlException("txn does not exist: " + transactionId);
+        long transactionId = -1;
+        if (targetTable instanceof ExternalOlapTable) {
+            ExternalOlapTable externalTable = (ExternalOlapTable)targetTable;
+            transactionId = Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(database.getFullName(),
+                    Lists.newArrayList(targetTable.getName()), label,
+                    externalTable.getExternalInfo().getHost(),
+                    externalTable.getExternalInfo().getPort(),
+                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                    sourceType,
+                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+        } else {
+            transactionId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(
+                    database.getId(),
+                    Lists.newArrayList(targetTable.getId()),
+                    label,
+                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                            FrontendOptions.getLocalHostAddress()),
+                    sourceType,
+                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+
+            // add table indexes to transaction state
+            TransactionState txnState =
+                    Catalog.getCurrentGlobalTransactionMgr().getTransactionState(database.getId(), transactionId);
+            if (txnState == null) {
+                throw new DdlException("txn does not exist: " + transactionId);
+            }
+            txnState.addTableIndexes((OlapTable) targetTable);
         }
-        txnState.addTableIndexes((OlapTable) targetTable);
 
         // Every time set no send flag and clean all data in buffer
         if (context.getMysqlChannel() != null) {
@@ -1329,42 +1385,72 @@ public class StmtExecutor {
             }
 
             if (loadedRows == 0 && filteredRows == 0) {
-                Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
-                        database.getId(),
-                        transactionId,
-                        TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG
-                );
+                if (stmt.getTargetTable() instanceof ExternalOlapTable) {
+                    ExternalOlapTable externalTable = (ExternalOlapTable)(stmt.getTargetTable());
+                    Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                        externalTable.getDbId(), transactionId,
+                        externalTable.getExternalInfo().getHost(),
+                        externalTable.getExternalInfo().getPort(),
+                        TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                } else {
+                    Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
+                            database.getId(),
+                            transactionId,
+                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG
+                    );
+                }
                 context.getState().setOk();
                 return;
             }
 
-            if (Catalog.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
-                    database,
-                    transactionId,
-                    TabletCommitInfo.fromThrift(coord.getCommitInfos()),
-                    context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000)) {
-                txnStatus = TransactionStatus.VISIBLE;
-                MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
-                // collect table-level metrics
-                if (null != stmt.getTargetTable()) {
-                    TableMetricsEntity entity =
-                            TableMetricsRegistry.getInstance().getMetricsEntity(stmt.getTargetTable().getId());
-                    entity.COUNTER_INSERT_LOAD_FINISHED_TOTAL.increase(1L);
-                    entity.COUNTER_INSERT_LOAD_ROWS_TOTAL.increase(loadedRows);
-                    entity.COUNTER_INSERT_LOAD_BYTES_TOTAL
-                            .increase(Long.valueOf(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)));
+            if (targetTable instanceof ExternalOlapTable) {
+                ExternalOlapTable externalTable = (ExternalOlapTable)targetTable;
+                if (Catalog.getCurrentGlobalTransactionMgr().commitRemoteTransaction(
+                    externalTable.getDbId(), transactionId,
+                    externalTable.getExternalInfo().getHost(),
+                    externalTable.getExternalInfo().getPort(),
+                    coord.getCommitInfos())) {
+                    txnStatus = TransactionStatus.VISIBLE;
+                    MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
                 }
+                // TODO: wait remote txn finished
             } else {
-                txnStatus = TransactionStatus.COMMITTED;
+                if (Catalog.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
+                        database,
+                        transactionId,
+                        TabletCommitInfo.fromThrift(coord.getCommitInfos()),
+                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000)) {
+                    txnStatus = TransactionStatus.VISIBLE;
+                    MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
+                    // collect table-level metrics
+                    if (null != stmt.getTargetTable()) {
+                        TableMetricsEntity entity =
+                                TableMetricsRegistry.getInstance().getMetricsEntity(stmt.getTargetTable().getId());
+                        entity.COUNTER_INSERT_LOAD_FINISHED_TOTAL.increase(1L);
+                        entity.COUNTER_INSERT_LOAD_ROWS_TOTAL.increase(loadedRows);
+                        entity.COUNTER_INSERT_LOAD_BYTES_TOTAL
+                                .increase(Long.valueOf(coord.getLoadCounters().get(LoadJob.LOADED_BYTES)));
+                    }
+                } else {
+                    txnStatus = TransactionStatus.COMMITTED;
+                }
             }
-
         } catch (Throwable t) {
             // if any throwable being thrown during insert operation, first we should abort this txn
             LOG.warn("handle insert stmt fail: {}", label, t);
             try {
-                Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
-                        database.getId(), transactionId,
+                if (stmt.getTargetTable() instanceof ExternalOlapTable) {
+                    ExternalOlapTable externalTable = (ExternalOlapTable)(stmt.getTargetTable());
+                    Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                        externalTable.getDbId(), stmt.getTransactionId(),
+                        externalTable.getExternalInfo().getHost(),
+                        externalTable.getExternalInfo().getPort(),
                         t.getMessage() == null ? "Unknown reason" : t.getMessage());
+                } else {
+                    Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
+                            database.getId(), transactionId,
+                            t.getMessage() == null ? "Unknown reason" : t.getMessage());
+                }
             } catch (Exception abortTxnException) {
                 // just print a log if abort txn failed. This failure do not need to pass to user.
                 // user only concern abort how txn failed.
