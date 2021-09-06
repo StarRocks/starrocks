@@ -8,7 +8,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScan;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -21,8 +21,8 @@ public class EsScanImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalEsScanOperator logical = (LogicalEsScanOperator) input.getOp();
-        PhysicalEsScan physical =
-                new PhysicalEsScan(logical.getTable(), logical.getColumnRefMap(), logical.getSelectedIndex());
+        PhysicalEsScanOperator physical =
+                new PhysicalEsScanOperator(logical.getTable(), logical.getColumnRefMap(), logical.getSelectedIndex());
 
         physical.setPredicate(logical.getPredicate());
         physical.setLimit(logical.getLimit());

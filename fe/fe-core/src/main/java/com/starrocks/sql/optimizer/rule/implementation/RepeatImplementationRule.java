@@ -7,7 +7,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeat;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -22,7 +22,7 @@ public class RepeatImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalRepeatOperator repeatOperator = (LogicalRepeatOperator) input.getOp();
-        PhysicalRepeat physicalRepeat = new PhysicalRepeat(repeatOperator.getOutputGrouping(),
+        PhysicalRepeatOperator physicalRepeat = new PhysicalRepeatOperator(repeatOperator.getOutputGrouping(),
                 repeatOperator.getRepeatColumnRef(), repeatOperator.getGroupingIds());
         return Lists.newArrayList(OptExpression.create(physicalRepeat, input.getInputs()));
     }

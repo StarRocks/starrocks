@@ -9,26 +9,18 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.List;
 
-public class PhysicalUnion extends PhysicalSetOperation {
-    private final boolean isUnionAll;
-
-    public PhysicalUnion(List<ColumnRefOperator> columnRef, List<List<ColumnRefOperator>> childOutputColumns,
-                         boolean isUnionAll) {
-        super(OperatorType.PHYSICAL_UNION, columnRef, childOutputColumns);
-        this.isUnionAll = isUnionAll;
-    }
-
-    public boolean isUnionAll() {
-        return isUnionAll;
+public class PhysicalIntersectOperator extends PhysicalSetOperation {
+    public PhysicalIntersectOperator(List<ColumnRefOperator> columnRef, List<List<ColumnRefOperator>> childOutputColumns) {
+        super(OperatorType.PHYSICAL_INTERSECT, columnRef, childOutputColumns);
     }
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitPhysicalUnion(this, context);
+        return visitor.visitPhysicalIntersect(this, context);
     }
 
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
-        return visitor.visitPhysicalUnion(optExpression, context);
+        return visitor.visitPhysicalIntersect(optExpression, context);
     }
 }

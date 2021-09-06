@@ -70,24 +70,24 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRow;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalDistribution;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalFilter;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregate;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoin;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProject;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeat;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScan;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunction;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTopN;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalUnion;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalValues;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalWindow;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -203,7 +203,7 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalProject(OptExpression optExpr, ExecPlan context) {
-            PhysicalProject node = (PhysicalProject) optExpr.getOp();
+            PhysicalProjectOperator node = (PhysicalProjectOperator) optExpr.getOp();
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
 
             Preconditions.checkState(!node.getColumnRefMap().isEmpty());
@@ -264,7 +264,7 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalOlapScan(OptExpression optExpr, ExecPlan context) {
-            PhysicalOlapScan node = (PhysicalOlapScan) optExpr.getOp();
+            PhysicalOlapScanOperator node = (PhysicalOlapScanOperator) optExpr.getOp();
 
             OlapTable referenceTable = node.getTable();
             context.getDescTbl().addReferencedTable(referenceTable);
@@ -351,7 +351,7 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalHiveScan(OptExpression optExpression, ExecPlan context) {
-            PhysicalHiveScan node = (PhysicalHiveScan) optExpression.getOp();
+            PhysicalHiveScanOperator node = (PhysicalHiveScanOperator) optExpression.getOp();
 
             Table referenceTable = node.getTable();
             context.getDescTbl().addReferencedTable(referenceTable);
@@ -436,7 +436,7 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalSchemaScan(OptExpression optExpression, ExecPlan context) {
-            PhysicalSchemaScan node = (PhysicalSchemaScan) optExpression.getOp();
+            PhysicalSchemaScanOperator node = (PhysicalSchemaScanOperator) optExpression.getOp();
 
             context.getDescTbl().addReferencedTable(node.getTable());
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
@@ -479,7 +479,7 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalMysqlScan(OptExpression optExpression, ExecPlan context) {
-            PhysicalMysqlScan node = (PhysicalMysqlScan) optExpression.getOp();
+            PhysicalMysqlScanOperator node = (PhysicalMysqlScanOperator) optExpression.getOp();
 
             context.getDescTbl().addReferencedTable(node.getTable());
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
@@ -520,7 +520,7 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalEsScan(OptExpression optExpression, ExecPlan context) {
-            PhysicalEsScan node = (PhysicalEsScan) optExpression.getOp();
+            PhysicalEsScanOperator node = (PhysicalEsScanOperator) optExpression.getOp();
 
             context.getDescTbl().addReferencedTable(node.getTable());
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
@@ -563,7 +563,7 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalValues(OptExpression optExpr, ExecPlan context) {
-            PhysicalValues valuesOperator = (PhysicalValues) optExpr.getOp();
+            PhysicalValuesOperator valuesOperator = (PhysicalValuesOperator) optExpr.getOp();
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             for (ColumnRefOperator columnRefOperator : valuesOperator.getColumnRefSet()) {
@@ -617,7 +617,7 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalHashAggregate(OptExpression optExpr, ExecPlan context) {
-            PhysicalHashAggregate node = (PhysicalHashAggregate) optExpr.getOp();
+            PhysicalHashAggregateOperator node = (PhysicalHashAggregateOperator) optExpr.getOp();
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
 
             /*
@@ -833,7 +833,7 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalDistribution(OptExpression optExpr, ExecPlan context) {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
-            PhysicalDistribution distribution = (PhysicalDistribution) optExpr.getOp();
+            PhysicalDistributionOperator distribution = (PhysicalDistributionOperator) optExpr.getOp();
 
             ExchangeNode exchangeNode = new ExchangeNode(context.getPlanCtx().getNextNodeId(),
                     inputFragment.getPlanRoot(), false, distribution.getDistributionSpec().getType());
@@ -882,7 +882,7 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalTopN(OptExpression optExpr, ExecPlan context) {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
-            PhysicalTopN topN = (PhysicalTopN) optExpr.getOp();
+            PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpr.getOp();
             if (!topN.isSplit()) {
                 return buildPartialTopNFragment(optExpr, context, topN.getOrderSpec(), topN.getLimit(),
                         topN.getOffset(),
@@ -1004,7 +1004,7 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalHashJoin(OptExpression optExpr, ExecPlan context) {
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
-            PhysicalHashJoin node = (PhysicalHashJoin) optExpr.getOp();
+            PhysicalHashJoinOperator node = (PhysicalHashJoinOperator) optExpr.getOp();
 
             ColumnRefSet leftChildColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
             ColumnRefSet rightChildColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
@@ -1247,7 +1247,7 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalAssertOneRow(OptExpression optExpression, ExecPlan context) {
             PlanFragment inputFragment = visit(optExpression.inputAt(0), context);
 
-            PhysicalAssertOneRow assertOneRow = (PhysicalAssertOneRow) optExpression.getOp();
+            PhysicalAssertOneRowOperator assertOneRow = (PhysicalAssertOneRowOperator) optExpression.getOp();
             AssertNumRowsNode node =
                     new AssertNumRowsNode(context.getPlanCtx().getNextNodeId(), inputFragment.getPlanRoot(),
                             new AssertNumRowsElement(assertOneRow.getCheckRows(), assertOneRow.getTips(),
@@ -1260,7 +1260,7 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalAnalytic(OptExpression optExpr, ExecPlan context) {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
-            PhysicalWindow node = (PhysicalWindow) optExpr.getOp();
+            PhysicalWindowOperator node = (PhysicalWindowOperator) optExpr.getOp();
 
             List<Expr> analyticFnCalls = new ArrayList<>();
             TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
@@ -1334,7 +1334,7 @@ public class PlanFragmentBuilder {
             boolean isUnionAll = false;
             if (operatorType.equals(OperatorType.PHYSICAL_UNION)) {
                 setOperationNode = new UnionNode(context.getPlanCtx().getNextNodeId(), setOperationTuple.getId());
-                isUnionAll = ((PhysicalUnion) setOperation).isUnionAll();
+                isUnionAll = ((PhysicalUnionOperator) setOperation).isUnionAll();
                 setOperationNode.setFirstMaterializedChildIdx_(optExpr.arity());
 
                 List<Map<Integer, Integer>> passThroughSlotMaps = new ArrayList<>();
@@ -1427,7 +1427,7 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalRepeat(OptExpression optExpr, ExecPlan context) {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
-            PhysicalRepeat repeatOperator = (PhysicalRepeat) optExpr.getOp();
+            PhysicalRepeatOperator repeatOperator = (PhysicalRepeatOperator) optExpr.getOp();
 
             TupleDescriptor outputGroupingTuple = context.getDescTbl().createTupleDescriptor();
             for (ColumnRefOperator columnRefOperator : repeatOperator.getOutputGrouping()) {
@@ -1463,7 +1463,7 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalFilter(OptExpression optExpr, ExecPlan context) {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
-            PhysicalFilter filter = (PhysicalFilter) optExpr.getOp();
+            PhysicalFilterOperator filter = (PhysicalFilterOperator) optExpr.getOp();
 
             List<Expr> predicates = Utils.extractConjuncts(filter.getPredicate()).stream()
                     .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
@@ -1481,7 +1481,7 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalTableFunction(OptExpression optExpression, ExecPlan context) {
             PlanFragment inputFragment = visit(optExpression.inputAt(0), context);
-            PhysicalTableFunction physicalTableFunction = (PhysicalTableFunction) optExpression.getOp();
+            PhysicalTableFunctionOperator physicalTableFunction = (PhysicalTableFunctionOperator) optExpression.getOp();
 
             TupleDescriptor udtfOutputTuple = context.getDescTbl().createTupleDescriptor();
             for (int columnId : physicalTableFunction.getOutputColumns().getColumnIds()) {

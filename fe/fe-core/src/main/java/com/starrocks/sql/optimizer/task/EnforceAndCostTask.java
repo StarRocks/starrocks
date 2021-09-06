@@ -15,11 +15,11 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.cost.CostModel;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalDistribution;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregate;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoin;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProject;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTopN;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
@@ -119,9 +119,9 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
                 // Directly get back the best expr if the child group is optimized
                 // Don't allow enforce sort and distribution below project node
-                if (!inputProperty.isEmpty() && groupExpression.getOp() instanceof PhysicalProject &&
-                        (childBestExpr.getOp() instanceof PhysicalDistribution
-                                || childBestExpr.getOp() instanceof PhysicalTopN)) {
+                if (!inputProperty.isEmpty() && groupExpression.getOp() instanceof PhysicalProjectOperator &&
+                        (childBestExpr.getOp() instanceof PhysicalDistributionOperator
+                                || childBestExpr.getOp() instanceof PhysicalTopNOperator)) {
                     break;
                 }
 
@@ -203,7 +203,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         int parallelExecInstance = Math.max(1,
                 Math.min(groupExpression.getGroup().getLogicalProperty().getLeftMostScanTabletsNum(),
                         ConnectContext.get().getSessionVariable().getParallelExecInstanceNum()));
-        PhysicalHashJoin operator = (PhysicalHashJoin) groupExpression.getOp();
+        PhysicalHashJoinOperator operator = (PhysicalHashJoinOperator) groupExpression.getOp();
         if (leftChildStats.getOutputSize() < rightChildStats.getOutputSize() * parallelExecInstance * 10
                 && rightChildStats.getOutputRowCount() > ConnectContext.get().getSessionVariable()
                 .getBroadcastRowCountLimit() && !operator.getJoinHint().equalsIgnoreCase("BROADCAST")) {
@@ -259,12 +259,12 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
             return true;
         }
 
-        PhysicalHashAggregate aggregate = (PhysicalHashAggregate) groupExpression.getOp();
+        PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) groupExpression.getOp();
         return !aggregate.getType().isGlobal() || aggregate.isSplit() ||
                 !groupExpression.getGroup().getStatistics().getColumnStatistics().values().stream()
                         .allMatch(ColumnStatistic::isUnknown) ||
-                !(childBestExpr.getOp() instanceof PhysicalDistribution) ||
-                !((PhysicalDistribution) childBestExpr.getOp()).getDistributionSpec().getType()
+                !(childBestExpr.getOp() instanceof PhysicalDistributionOperator) ||
+                !((PhysicalDistributionOperator) childBestExpr.getOp()).getDistributionSpec().getType()
                         .equals(DistributionSpec.DistributionType.SHUFFLE);
     }
 

@@ -7,8 +7,8 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-public class PhysicalFilter extends PhysicalOperator {
-    public PhysicalFilter(ScalarOperator predicate) {
+public class PhysicalFilterOperator extends PhysicalOperator {
+    public PhysicalFilterOperator(ScalarOperator predicate) {
         super(OperatorType.PHYSICAL_FILTER);
         this.predicate = predicate;
     }
@@ -24,10 +24,10 @@ public class PhysicalFilter extends PhysicalOperator {
 
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof PhysicalFilter)) {
+        if (!(obj instanceof PhysicalFilterOperator)) {
             return false;
         }
-        PhysicalFilter rhs = (PhysicalFilter) obj;
+        PhysicalFilterOperator rhs = (PhysicalFilterOperator) obj;
         if (this == rhs) {
             return true;
         }

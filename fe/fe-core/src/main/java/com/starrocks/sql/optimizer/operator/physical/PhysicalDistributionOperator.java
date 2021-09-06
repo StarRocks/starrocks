@@ -8,8 +8,8 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
-public class PhysicalDistribution extends PhysicalOperator {
-    public PhysicalDistribution(DistributionSpec spec) {
+public class PhysicalDistributionOperator extends PhysicalOperator {
+    public PhysicalDistributionOperator(DistributionSpec spec) {
         super(OperatorType.PHYSICAL_DISTRIBUTION, spec);
     }
 

@@ -15,13 +15,13 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import java.util.List;
 import java.util.Map;
 
-public class PhysicalEsScan extends PhysicalOperator {
+public class PhysicalEsScanOperator extends PhysicalOperator {
     private final Table table;
     private final Map<ColumnRefOperator, Column> columnRefMap;
     private final List<EsShardPartitions> selectedIndex;
 
-    public PhysicalEsScan(Table table, Map<ColumnRefOperator, Column> columnRefMap,
-                          List<EsShardPartitions> selectedIndex) {
+    public PhysicalEsScanOperator(Table table, Map<ColumnRefOperator, Column> columnRefMap,
+                                  List<EsShardPartitions> selectedIndex) {
         super(OperatorType.PHYSICAL_ES_SCAN);
         this.table = table;
         this.columnRefMap = columnRefMap;
@@ -58,7 +58,7 @@ public class PhysicalEsScan extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        PhysicalEsScan that = (PhysicalEsScan) o;
+        PhysicalEsScanOperator that = (PhysicalEsScanOperator) o;
         return Objects.equal(table, that.table) && Objects.equal(columnRefMap, that.columnRefMap) &&
                 Objects.equal(selectedIndex, that.selectedIndex);
     }
