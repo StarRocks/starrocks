@@ -134,8 +134,8 @@ bool raw_hash_set<Policy, Hash, Eq, Alloc>::load(InputArchive& ar) {
 // dump/load for parallel_hash_set
 // ------------------------------------------------------------------------
 template <size_t N, template <class, class, class, class> class RefSet, class Mtx_, class Policy, class Hash, class Eq,
-          class Alloc>
-size_t parallel_hash_set<N, RefSet, Mtx_, Policy, Hash, Eq, Alloc>::dump_bound() const {
+          class Alloc, bool balance>
+size_t parallel_hash_set<N, RefSet, Mtx_, Policy, Hash, Eq, Alloc, balance>::dump_bound() const {
     size_t ret = sizeof(PVERSION);
     if constexpr (PVERSION > 1) {
         ret += sizeof(decltype(subcnt()));
@@ -147,9 +147,9 @@ size_t parallel_hash_set<N, RefSet, Mtx_, Policy, Hash, Eq, Alloc>::dump_bound()
 }
 
 template <size_t N, template <class, class, class, class> class RefSet, class Mtx_, class Policy, class Hash, class Eq,
-          class Alloc>
+          class Alloc, bool balance>
 template <typename OutputArchive>
-bool parallel_hash_set<N, RefSet, Mtx_, Policy, Hash, Eq, Alloc>::dump(OutputArchive& ar) const {
+bool parallel_hash_set<N, RefSet, Mtx_, Policy, Hash, Eq, Alloc, balance>::dump(OutputArchive& ar) const {
     static_assert(type_traits_internal::IsTriviallyCopyable<value_type>::value,
                   "value_type should be trivially copyable");
 
@@ -175,9 +175,9 @@ bool parallel_hash_set<N, RefSet, Mtx_, Policy, Hash, Eq, Alloc>::dump(OutputArc
 }
 
 template <size_t N, template <class, class, class, class> class RefSet, class Mtx_, class Policy, class Hash, class Eq,
-          class Alloc>
+          class Alloc, bool balance>
 template <typename InputArchive>
-bool parallel_hash_set<N, RefSet, Mtx_, Policy, Hash, Eq, Alloc>::load(InputArchive& ar) {
+bool parallel_hash_set<N, RefSet, Mtx_, Policy, Hash, Eq, Alloc, balance>::load(InputArchive& ar) {
     static_assert(type_traits_internal::IsTriviallyCopyable<value_type>::value,
                   "value_type should be trivially copyable");
 
