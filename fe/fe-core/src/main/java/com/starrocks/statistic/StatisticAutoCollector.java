@@ -7,6 +7,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.MasterDaemon;
@@ -16,6 +18,8 @@ import com.starrocks.statistic.Constants.ScheduleType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Comparator;
@@ -30,7 +34,7 @@ public class StatisticAutoCollector extends MasterDaemon {
     private static final StatisticExecutor statisticExecutor = new StatisticExecutor();
 
     public StatisticAutoCollector() {
-        super("statistic auto collector", Config.statistic_collect_interval_sec * 1000);
+        super("AutoStatistic", Config.statistic_collect_interval_sec * 1000);
     }
 
     private static class TableCollectJob {
@@ -73,7 +77,7 @@ public class StatisticAutoCollector extends MasterDaemon {
 
         collectStatistics(allJobs);
 
-        expireStatistic(allJobs);
+        expireStatistic();
     }
 
     private void initDefaultJob() {
@@ -91,6 +95,7 @@ public class StatisticAutoCollector extends MasterDaemon {
         analyzeJob.setScheduleType(ScheduleType.SCHEDULE);
         analyzeJob.setType(AnalyzeType.SAMPLE);
         analyzeJob.setStatus(ScheduleStatus.PENDING);
+        analyzeJob.setWorkTime(LocalDateTime.MIN);
 
         Catalog.getCurrentAnalyzeMgr().addAnalyzeJob(analyzeJob);
     }
@@ -125,20 +130,21 @@ public class StatisticAutoCollector extends MasterDaemon {
             Catalog.getCurrentAnalyzeMgr().updateAnalyzeJobWithoutLog(analyzeJob);
             for (TableCollectJob tcj : entry.getValue()) {
                 try {
-                    LOG.info("Statistic collect work once on job: {}, type: {}, db: {}, table: {}",
+                    LOG.info("Statistic collect work job: {}, type: {}, db: {}, table: {}",
                             analyzeJob.getId(), analyzeJob.getType(), tcj.db.getFullName(), tcj.table.getName());
                     tcj.tryCollect();
 
-                    // sleep 1s per column
-                    // @TODO: It's necessary?
-                    //                    trySleep(tcj.columns.size() * 1000);
                     Catalog.getCurrentStatisticStorage().expireColumnStatistics(tcj.table, tcj.columns);
                 } catch (Exception e) {
-                    LOG.warn("Statistic collect work once on job: {}, type: {}, db: {}, table: {}. throw exception.",
+                    LOG.warn("Statistic collect work job: {}, type: {}, db: {}, table: {}. throw exception.",
                             analyzeJob.getId(), analyzeJob.getType(), tcj.db.getFullName(), tcj.table.getName(), e);
-                    String error = analyzeJob.getReason() + "\n" + tcj.db.getFullName() + "." + tcj.table.getName() +
-                            ": " + e.getMessage();
-                    analyzeJob.setReason(error);
+
+                    if (analyzeJob.getReason().length() < 40) {
+                        String error =
+                                analyzeJob.getReason() + "\n" + tcj.db.getFullName() + "." + tcj.table.getName() +
+                                        ": " + e.getMessage();
+                        analyzeJob.setReason(error);
+                    }
                 }
             }
 
@@ -155,6 +161,7 @@ public class StatisticAutoCollector extends MasterDaemon {
 
     private List<TableCollectJob> generateAllJobs() {
         List<AnalyzeJob> allAnalyzeJobs = Catalog.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
+        // The jobs need to be sorted in order of execution to avoid duplicate collections
         allAnalyzeJobs.sort(Comparator.comparing(AnalyzeJob::getId));
 
         Map<Long, List<TableCollectJob>> allTableJobMap = Maps.newHashMap();
@@ -203,12 +210,8 @@ public class StatisticAutoCollector extends MasterDaemon {
                     continue;
                 }
 
-                Table table = db.getTable(analyzeJob.getTableId());
-                if (table == null || !Table.TableType.OLAP.equals(table.getType())) {
-                    continue;
-                }
-
-                createJobs(allTableJobMap, analyzeJob, db, table, analyzeJob.getColumns());
+                createTableJobs(allTableJobMap, analyzeJob, db, db.getTable(analyzeJob.getTableId()),
+                        analyzeJob.getColumns());
             }
         }
 
@@ -223,10 +226,25 @@ public class StatisticAutoCollector extends MasterDaemon {
             return;
         }
 
-        List<String> columns =
-                table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
-                        .collect(Collectors.toList());
-        createJobs(tableJobs, job, db, table, columns);
+        List<String> columns = table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
+                .collect(Collectors.toList());
+        createTableJobs(tableJobs, job, db, table, columns);
+    }
+
+    private void createTableJobs(Map<Long, List<TableCollectJob>> tableJobs, AnalyzeJob job,
+                                 Database db, Table table, List<String> columns) {
+        // check table has update
+        LocalDateTime updateTime = getTableLastUpdateTime(table);
+
+        // 1. If job is schedule and the table has update, we need re-collect data
+        // 2. If job is once and is happened after the table update, we need add it to avoid schedule-job cover data
+        if ((ScheduleType.SCHEDULE.equals(job.getScheduleType()) && job.getWorkTime().isBefore(updateTime))
+                || (ScheduleType.ONCE.equals(job.getScheduleType()) && job.getWorkTime().isAfter(updateTime))) {
+            createJobs(tableJobs, job, db, table, columns);
+        } else {
+            LOG.debug("Skip collect on table: " + table.getName() + ", updateTime: " + updateTime +
+                    ", JobId: " + job.getId() + ", lastCollectTime: " + job.getWorkTime());
+        }
     }
 
     private void createJobs(Map<Long, List<TableCollectJob>> result,
@@ -254,28 +272,33 @@ public class StatisticAutoCollector extends MasterDaemon {
         result.get(table.getId()).add(tableJob);
     }
 
-    private void expireStatistic(List<TableCollectJob> allJobs) {
+    private void expireStatistic() {
+        List<Long> dbIds = Catalog.getCurrentCatalog().getDbIds();
+        List<Long> tables = Lists.newArrayList();
+        for (Long dbId : dbIds) {
+            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+            if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
+                continue;
+            }
+
+            db.getTables().stream().map(Table::getId).forEach(tables::add);
+        }
         try {
-            if (allJobs.isEmpty()) {
+            List<String> expireTables = statisticExecutor.queryExpireTableSync(tables);
+
+            if (expireTables.isEmpty()) {
                 return;
             }
-
-            LocalDateTime expireTime =
-                    allJobs.stream().map(tcj -> LocalDateTime.now().minusSeconds(tcj.job.getExpireSec()))
-                            .min(LocalDateTime::compareTo).orElse(LocalDateTime.MIN);
-
-            List<String> tableIds = statisticExecutor.queryExpireTableSync(expireTime);
-
-            if (!tableIds.isEmpty()) {
-                LOG.info("Statistic expire tableIds: {}, expireTime: {}", tableIds, expireTime.toString());
-
-                for (int i = 0; i < tableIds.size() && i < 10; i++) {
-                    statisticExecutor.expireStatisticSync(tableIds.get(i));
-                }
-            }
+            LOG.info("Statistic expire tableIds: {}", expireTables);
+            statisticExecutor.expireStatisticSync(expireTables);
         } catch (Exception e) {
             LOG.warn("expire statistic failed.", e);
         }
     }
 
+    private LocalDateTime getTableLastUpdateTime(Table table) {
+        long maxTime = ((OlapTable) table).getPartitions().stream().map(Partition::getVisibleVersionTime)
+                .max(Long::compareTo).orElse(0L);
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
+    }
 }

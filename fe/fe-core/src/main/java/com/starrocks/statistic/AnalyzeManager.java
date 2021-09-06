@@ -7,6 +7,10 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -16,6 +20,8 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -59,30 +65,44 @@ public class AnalyzeManager implements Writable {
     public void expireAnalyzeJob() {
         List<AnalyzeJob> expireList = Lists.newArrayList();
 
+        LocalDateTime now = LocalDateTime.now();
         for (AnalyzeJob job : analyzeJobMap.values()) {
-            if (AnalyzeJob.DEFAULT_ALL_ID != job.getDbId()) {
-                // check db/table
-                Database db = Catalog.getCurrentCatalog().getDb(job.getDbId());
-                if (null == db) {
-                    expireList.add(job);
-                    continue;
-                }
-
-                if (AnalyzeJob.DEFAULT_ALL_ID != job.getTableId()) {
-                    if (null == db.getTable(job.getTableId())) {
-                        expireList.add(job);
-                        continue;
-                    }
-                }
-            }
-
             if (Constants.ScheduleStatus.FINISH != job.getStatus()) {
                 continue;
             }
 
-            // Job will keep two collection cycle
-            LocalDateTime expireTimePoint = LocalDateTime.now().minusSeconds(job.getExpireSec());
-            if (job.getWorkTime().isBefore(expireTimePoint)) {
+            if (AnalyzeJob.DEFAULT_ALL_ID == job.getDbId() || AnalyzeJob.DEFAULT_ALL_ID == job.getTableId()) {
+                // finish job must be schedule once job, must contains db and table
+                LOG.warn("expire analyze job check failed, contain default id job: " + job.getId());
+                continue;
+            }
+
+            // check db/table
+            Database db = Catalog.getCurrentCatalog().getDb(job.getDbId());
+            if (null == db) {
+                expireList.add(job);
+                continue;
+            }
+
+            Table table = db.getTable(job.getTableId());
+            if (null == table) {
+                expireList.add(job);
+                continue;
+            }
+
+            if (table.getType() != Table.TableType.OLAP) {
+                expireList.add(job);
+                continue;
+            }
+
+            long maxTime = ((OlapTable) table).getPartitions().stream().map(Partition::getVisibleVersionTime)
+                    .max(Long::compareTo).orElse(0L);
+
+            LocalDateTime updateTime =
+                    LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
+
+            // keep show some time
+            if (updateTime.plusSeconds(Config.statistic_expire_sec).isBefore(now)) {
                 expireList.add(job);
             }
         }

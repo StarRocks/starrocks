@@ -1236,10 +1236,10 @@ public class Config extends ConfigBase {
     public static long statistic_update_interval_sec = 24 * 60 * 60;
 
     /**
-     * The column statistic expire interval, default 5 day
+     * The column statistic expire interval, default 1 day
      */
     @ConfField(mutable = true, masterOnly = true)
-    public static long statistic_expire_sec = 5 * 24 * 60 * 60;
+    public static long statistic_expire_sec = 24 * 60 * 60;
 
     /**
      * The row number of simple collect, default 20w rows
