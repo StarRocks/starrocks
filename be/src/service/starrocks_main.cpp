@@ -226,7 +226,7 @@ int main(int argc, char** argv) {
         exit(1);
     }
 
-    // 2. bprc service
+    // 2. brpc service
     starrocks::BRpcService brpc_service(exec_env);
     status = brpc_service.start(starrocks::config::brpc_port);
     if (!status.ok()) {
@@ -240,6 +240,7 @@ int main(int argc, char** argv) {
                                         starrocks::config::webserver_num_workers);
     status = http_service.start();
     if (!status.ok()) {
+        LOG(ERROR) << "Internal Error:" << status.message();
         LOG(ERROR) << "StarRocks Be http service did not start correctly, exiting";
         starrocks::shutdown_logging();
         exit(1);

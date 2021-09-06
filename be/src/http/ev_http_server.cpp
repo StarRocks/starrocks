@@ -143,7 +143,8 @@ Status EvHttpServer::_bind() {
     if (_server_fd < 0) {
         char buf[64];
         std::stringstream ss;
-        ss << "tcp listen failed, errno=" << errno << ", errmsg=" << strerror_r(errno, buf, sizeof(buf));
+        ss << "tcp listen failed, errno=" << errno << ", errmsg=webserver_port:" << _port << ". "
+           << strerror_r(errno, buf, sizeof(buf));
         return Status::InternalError(ss.str());
     }
     if (_port == 0) {
