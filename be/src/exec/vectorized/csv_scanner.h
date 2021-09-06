@@ -90,7 +90,7 @@ private:
         using Field = Slice;
         using Fields = std::vector<Field>;
 
-        CSVReader(std::shared_ptr<SequentialFile> file, char record_delimiter, char field_delimiter)
+        CSVReader(std::shared_ptr<SequentialFile> file, char record_delimiter, string field_delimiter)
                 : _file(std::move(file)),
                   _record_delimiter(record_delimiter),
                   _field_delimiter(field_delimiter),
@@ -111,7 +111,7 @@ private:
 
         std::shared_ptr<SequentialFile> _file;
         char _record_delimiter;
-        char _field_delimiter;
+        string _field_delimiter;
         raw::RawVector<char> _storage;
         Buffer _buff;
         size_t _parsed_bytes = 0;
@@ -131,7 +131,7 @@ private:
     const TBrokerScanRange& _scan_range;
     std::vector<Column*> _column_raw_ptrs;
     char _record_delimiter;
-    char _field_delimiter;
+    string _field_delimiter;
     int _num_fields_in_csv = 0;
     int _curr_file_index = -1;
     CSVReaderPtr _curr_reader;

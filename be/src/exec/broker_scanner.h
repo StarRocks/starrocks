@@ -99,7 +99,7 @@ private:
 
     std::unique_ptr<TextConverter> _text_converter;
 
-    char _column_separator;
+    string _column_separator;
     char _row_delimiter;
 
     // Reader
