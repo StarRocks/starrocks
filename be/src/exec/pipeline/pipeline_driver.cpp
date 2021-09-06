@@ -148,7 +148,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     // object owned by FragmentContext.
     if (is_root()) {
         if (_fragment_ctx->count_down_root_drivers()) {
-            _fragment_ctx->cancel(Status::OK());
+            _fragment_ctx->finish();
             auto status = _fragment_ctx->final_status();
             _fragment_ctx->runtime_state()->exec_env()->driver_dispatcher()->report_exec_state(_fragment_ctx, status,
                                                                                                true, false);

@@ -78,6 +78,8 @@ public:
         set_final_status(status);
     }
 
+    void finish() { cancel(Status::OK()); }
+
     bool is_canceled() { return _cancel_flag.load(std::memory_order_acquire) == true; }
 
     MorselQueueMap& morsel_queues() { return _morsel_queues; }

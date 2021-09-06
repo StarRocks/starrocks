@@ -316,6 +316,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_QUERY_THREADS)
     private int pipelineQueryThreads = 1;
 
+    // 1 means that ScanOperators use async io, otherwise, use sync io instead.
     @VariableMgr.VarAttr(name = PIPELINE_SCAN_MODE)
     private int pipelineScanMode = 1;
 
