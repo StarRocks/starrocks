@@ -37,7 +37,7 @@ public:
     // 1. for the first time report_exec_state, clean is false, means not unregister FragmentContext
     // when all root drivers has finished.
     //
-    // 2. for the second time report_exec_state, clean is true means that allthe drivers has finished,
+    // 2. for the second time report_exec_state, clean is true means that all the drivers has finished,
     // so now FragmentContext can be unregistered safely.
     virtual void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done, bool clean) = 0;
 };

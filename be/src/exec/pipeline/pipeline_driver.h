@@ -32,6 +32,9 @@ enum DriverState : uint32_t {
     FINISH = 5,
     CANCELED = 6,
     INTERNAL_ERROR = 7,
+    // PENDING_FINISH means a driver's SinkOperator has finished, but its SourceOperator still have a pending
+    // io task executed by io threads synchronously, a driver turns to FINISH from PENDING_FINISH after the
+    // pending io task's completion.
     PENDING_FINISH = 8,
 };
 
