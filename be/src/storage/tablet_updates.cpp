@@ -763,7 +763,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             new_del_vecs[idx].second = std::make_shared<DelVector>();
             auto& del_ids = e.second;
             new_del_vecs[idx].second->init(version.major(), del_ids.data(), del_ids.size());
-            if (delvec_change_info.size() < 48) {
+            if (VLOG_IS_ON(1)) {
                 StringAppendF(&delvec_change_info, " %u:+%zu", rssid, del_ids.size());
             }
             new_del += del_ids.size();
@@ -792,7 +792,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
                         "v:$6",
                         _tablet.tablet_id(), rssid, cur_old, cur_add, cur_new, old_del_vec->version(), version.major());
             }
-            if (delvec_change_info.size() < 48) {
+            if (VLOG_IS_ON(1)) {
                 StringAppendF(&delvec_change_info, " %u:%zu(%ld)+%zu=%zu", rssid, cur_old, old_del_vec->version(),
                               cur_add, cur_new);
             }
@@ -857,10 +857,10 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
               << " total del/row:" << _cur_total_dels << "/" << _cur_total_rows << " " << del_percent << "%"
               << " rowset:" << rowset_id << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
               << " #del:" << old_total_del << "+" << new_del << "=" << total_del << " #dv:" << ndelvec
-              << delvec_change_info << " duration:" << t_write - t_start << "ms"
+              << " duration:" << t_write - t_start << "ms"
               << Substitute("($0/$1/$2/$3)", t_load - t_start, t_index - t_load, t_delvec - t_index,
                             t_write - t_delvec);
-    VLOG(1) << "rowset commit apply " << _debug_string(true, true);
+    VLOG(1) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
 }
 
 RowsetSharedPtr TabletUpdates::_get_rowset(uint32_t rowset_id) {
