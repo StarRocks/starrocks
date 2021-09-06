@@ -57,7 +57,6 @@ class ReservationTracker;
 class InitialReservations;
 class RowDescriptor;
 class RuntimeFilterPort;
-class DistinctBitmap;
 
 // A collection of items that are part of the global state of a
 // query and shared across all execution nodes of that query.
@@ -118,7 +117,6 @@ public:
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
     ThreadResourceMgr::ResourcePool* resource_pool() { return _resource_pool; }
     RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
-    DistinctBitmap* distinct_bitmap() { return _distinct_bitmap; }
 
     void set_fragment_root_id(PlanNodeId id) {
         DCHECK(_root_node_id == -1) << "Should not set this twice.";
@@ -431,7 +429,6 @@ private:
     RuntimeState(const RuntimeState&);
 
     RuntimeFilterPort* _runtime_filter_port;
-    DistinctBitmap* _distinct_bitmap = nullptr;
 };
 
 #define RETURN_IF_CANCELLED(state)                                                       \
