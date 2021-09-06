@@ -282,6 +282,13 @@ public:
     // get_next only works after done().
     virtual void get_next(ChunkPtr* chunk, bool* eos) = 0;
 
+    // This
+    Status finish(RuntimeState* state);
+    bool sink_complete();
+
+    // pull_chunk for pipeline.
+    virtual bool pull_chunk(ChunkPtr* chunk) = 0;
+
 protected:
     inline size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
 
@@ -302,6 +309,8 @@ protected:
     RuntimeProfile::Counter* _sort_timer = nullptr;
     RuntimeProfile::Counter* _merge_timer = nullptr;
     RuntimeProfile::Counter* _output_timer = nullptr;
+
+    std::atomic<bool> _is_sink_complete = false;
 };
 
 } // namespace starrocks::vectorized

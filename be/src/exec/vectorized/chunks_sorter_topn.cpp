@@ -97,6 +97,22 @@ void ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {
     _next_output_row += count;
 }
 
+bool ChunksSorterTopn::pull_chunk(ChunkPtr* chunk) {
+    if (_next_output_row >= _merged_segment.chunk->num_rows()) {
+        *chunk = nullptr;
+        return true;
+    }
+    size_t count = std::min(size_t(config::vector_chunk_size), _merged_segment.chunk->num_rows() - _next_output_row);
+    chunk->reset(_merged_segment.chunk->clone_empty(count).release());
+    (*chunk)->append_safe(*_merged_segment.chunk, _next_output_row, count);
+    _next_output_row += count;
+
+    if (_next_output_row >= _merged_segment.chunk->num_rows()) {
+        return true;
+    }
+    return false;
+}
+
 Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
     const size_t batch_size = _raw_chunks.size_of_rows;
 

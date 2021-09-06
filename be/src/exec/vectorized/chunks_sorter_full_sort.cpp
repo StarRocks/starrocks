@@ -282,6 +282,22 @@ void ChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
     _next_output_row += count;
 }
 
+bool ChunksSorterFullSort::pull_chunk(ChunkPtr* chunk) {
+    if (_next_output_row >= _sorted_permutation.size()) {
+        *chunk = nullptr;
+        return true;
+    }
+    size_t count = std::min(size_t(config::vector_chunk_size), _sorted_permutation.size() - _next_output_row);
+    chunk->reset(_sorted_segment->chunk->clone_empty(count).release());
+    _append_rows_to_chunk(chunk->get(), _sorted_segment->chunk.get(), _sorted_permutation, _next_output_row, count);
+    _next_output_row += count;
+
+    if (_next_output_row >= _sorted_permutation.size()) {
+        return true;
+    }
+    return false;
+}
+
 Status ChunksSorterFullSort::_sort_chunks(RuntimeState* state) {
     // Step1: construct permutation
     RETURN_IF_ERROR(_build_sorting_data(state));
