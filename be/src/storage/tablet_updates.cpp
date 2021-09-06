@@ -854,7 +854,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
 
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
     LOG(INFO) << "apply_rowset_commit finish. tablet:" << tablet_id << " version:" << version_info.version.to_string()
-              << " total #del/#rows" << _cur_total_dels << "/" << _cur_total_rows << " " << del_percent << "%"
+              << " total del/row:" << _cur_total_dels << "/" << _cur_total_rows << " " << del_percent << "%"
               << " rowset:" << rowset_id << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
               << " #del:" << old_total_del << "+" << new_del << "=" << total_del << " #dv:" << ndelvec
               << delvec_change_info << " duration:" << t_write - t_start << "ms"
@@ -1184,8 +1184,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     int64_t t_write = MonotonicMillis();
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
     LOG(INFO) << "apply_compaction_commit finish tablet:" << tablet_id
-              << " version:" << version_info.version.to_string() << " total #del/#rows" << _cur_total_dels << "/"
-              << del_percent << "%"
+              << " version:" << version_info.version.to_string() << " total del/row:" << _cur_total_dels << "/"
+              << _cur_total_rows << " " << del_percent << "%"
               << " rowset:" << rowset_id << " #row:" << total_rows << " #del:" << total_deletes
               << " #delvec:" << delvecs.size() << " duration:" << t_write - t_start << "ms"
               << Substitute("($0/$1/$2)", t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
