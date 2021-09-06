@@ -311,6 +311,28 @@ int64_t TabletUpdates::max_version() const {
     return _versions.empty() ? 0 : _versions.back()->version.major();
 }
 
+Status TabletUpdates::get_rowsets_total_stats(const std::vector<uint32_t>& rowsets, size_t* total_rows,
+                                              size_t* total_dels) {
+    string err_rowsets;
+    std::lock_guard lg(_rowset_stats_lock);
+    for (auto rowsetid : rowsets) {
+        auto itr = _rowset_stats.find(rowsetid);
+        if (itr != _rowset_stats.end()) {
+            *total_rows += itr->second->num_rows;
+            *total_dels += itr->second->num_dels;
+        } else {
+            StringAppendF(&err_rowsets, "%u,", rowsetid);
+        }
+    }
+    if (!err_rowsets.empty()) {
+        string msg = Substitute("get_rowset_total_stats() some rowset stats not found tablet:$0 rowsets:$1",
+                                _tablet.tablet_id(), err_rowsets);
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
+    return Status::OK();
+}
+
 void TabletUpdates::_sync_apply_version_idx(const EditVersion& v) {
     // usually applied version is at the end of _versions vector
     // so search from the back
