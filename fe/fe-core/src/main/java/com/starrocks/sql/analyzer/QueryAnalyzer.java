@@ -756,7 +756,6 @@ public class QueryAnalyzer {
         }
 
         if (tableRef instanceof FunctionTableRef) {
-            MetaUtils.normalizationTableName(session, tableRef.getAliasAsName());
             FunctionTableRef functionTableRef = (FunctionTableRef) tableRef;
 
             List<Expr> child = functionTableRef.getParams().exprs();

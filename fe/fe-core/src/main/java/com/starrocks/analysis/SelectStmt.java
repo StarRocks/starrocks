@@ -294,6 +294,9 @@ public class SelectStmt extends QueryStmt {
                 QueryStmt inlineStmt = ((InlineViewRef) tblRef).getViewStmt();
                 inlineStmt.withClause_ = this.withClause_;
                 inlineStmt.getDbs(context, dbs);
+            } else if (tblRef instanceof FunctionTableRef) {
+                //FunctionTableRef dbName is empty
+                continue;
             } else {
                 String dbName = tblRef.getName().getDb();
                 if (Strings.isNullOrEmpty(dbName)) {
