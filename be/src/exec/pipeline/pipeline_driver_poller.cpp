@@ -48,9 +48,9 @@ void PipelineDriverPoller::run_internal() {
                 // driver->pending_finish() return true means that when a driver's sink operator is finished,
                 // but its source operator still has pending io task that executed in io threads and has
                 // reference to object outside(such as desc_tbl) owned by FragmentContext. So an driver in
-                // PENDING_FINISH state should should wait for pending io task's completion, then turn into
-                // FINISH state, otherwise, pending tasks shall reference to destructed objects in
-                // FragmentContext since FragmentContext is unregistered prematurely.
+                // PENDING_FINISH state should wait for pending io task's completion, then turn into FINISH state,
+                // otherwise, pending tasks shall reference to destructed objects in FragmentContext since
+                // FragmentContext is unregistered prematurely.
                 driver->set_driver_state(DriverState::FINISH);
                 _dispatch_queue->put_back(*driver_it);
                 local_blocked_drivers.erase(driver_it++);
