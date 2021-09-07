@@ -343,10 +343,10 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
         return pair.second;
     }
 
-    bool try_update_bitmap(const T& key) {
+    inline __attribute__((always_inline)) bool try_update_bitmap(const T& key) {
         if constexpr (sizeof(T) == 4 || sizeof(T) == 8) {
             // we decided not to use bitmap.
-            if (samples_number == 0 && bitmap == nullptr) {
+            if (sample_number == -1) {
                 return true;
             }
 
@@ -357,27 +357,26 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
                 value = *reinterpret_cast<const int64_t*>(&key);
             }
 
-            if (samples_number > 0) {
+            if (sample_number > 0) {
                 sample_min = std::min(sample_min, value);
                 sample_max = std::max(sample_max, value);
-                samples_number -= 1;
-                if (samples_number == 0) {
-                    if ((sample_max - sample_min) < DistinctBitmap::BITMAP_MAX_VALUE) {
+                sample_number -= 1;
+                if (sample_number == 0) {
+                    int64_t size = sample_max - sample_min;
+                    if (size >= 0 && size < DistinctBitmap::BITMAP_MAX_VALUE) {
                         bitmap = this->state->distinct_bitmap()->alloc();
                     }
                     if (bitmap == nullptr) {
+                        sample_number = -1;
                         return true;
                     }
                 } else {
                     return true;
                 }
             }
-
-            // use median value as center value.
             int64_t shift = value - sample_min;
             // zigzag to wrap negative value.
             uint64_t index = (shift >> 63) ^ (shift << 1);
-
             if (index < DistinctBitmap::BITMAP_MAX_VALUE) {
                 if (!update_bitmap(index)) {
                     return false;
@@ -437,9 +436,10 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
         return sum;
     }
 
+    static const size_t MAX_SAMPLE_NUMBER = 1024;
     int64_t sample_min = std::numeric_limits<int64_t>::max();
     int64_t sample_max = std::numeric_limits<int64_t>::min();
-    int32_t samples_number = 1024;
+    int32_t sample_number = MAX_SAMPLE_NUMBER;
     RuntimeState* state = nullptr;
     uint8_t* bitmap = nullptr;
     HashSet<T> set;
