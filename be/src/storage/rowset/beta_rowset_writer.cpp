@@ -134,8 +134,8 @@ OLAPStatus BetaRowsetWriter::init() {
         tablet_format = kDataFormatV2;
     }
 
-    // StarRocks is powered by the Apache Doris and is compatible with its data format but
-    // has designed new storage formats for DATA/DATETIME/DECIMAL for better performance.
+    // StarRocks is built on earlier work on Apache Doris and is compatible with its data format but
+    // has newly designed storage formats for DATA/DATETIME/DECIMAL for better performance.
     // When loading data into a tablet created by Apache Doris, the real data format will
     // be different from the tablet schema, so here we create a new schema matched with the
     // real data format to init `SegmentWriter`.
