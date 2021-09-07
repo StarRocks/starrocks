@@ -56,7 +56,7 @@ public class DppConfig implements Writable {
     private static final String APPLICATIONS_PATH = "applications";
     private static final String OUTPUT_PATH = "output";
 
-    public static final String PALO_PATH = "hadoop_palo_path";
+    public static final String STARROCKS_PATH = "hadoop_palo_path";
     public static final String HTTP_PORT = "hadoop_http_port";
     public static final String HADOOP_CONFIGS = "hadoop_configs";
     public static final String PRIORITY = "priority";
@@ -98,10 +98,10 @@ public class DppConfig implements Writable {
             String key = entry.getKey();
             String value = entry.getValue();
 
-            if (key.equalsIgnoreCase(PALO_PATH)) {
+            if (key.equalsIgnoreCase(STARROCKS_PATH)) {
                 // palo path
                 if (Strings.isNullOrEmpty(value)) {
-                    throw new LoadException("Load cluster " + PALO_PATH + " is null");
+                    throw new LoadException("Load cluster " + STARROCKS_PATH + " is null");
                 }
                 paloPath = value.trim();
             } else if (key.equalsIgnoreCase(HTTP_PORT)) {
@@ -224,7 +224,7 @@ public class DppConfig implements Writable {
     }
 
     public void resetConfigByKey(String key) throws LoadException {
-        if (key.equalsIgnoreCase(PALO_PATH)) {
+        if (key.equalsIgnoreCase(STARROCKS_PATH)) {
             paloPath = null;
         } else if (key.equalsIgnoreCase(HTTP_PORT)) {
             httpPort = DEFAULT_HTTP_PORT;
@@ -251,7 +251,7 @@ public class DppConfig implements Writable {
 
     public void check() throws LoadException {
         if (Strings.isNullOrEmpty(paloPath)) {
-            throw new LoadException("Load cluster " + PALO_PATH + " is null");
+            throw new LoadException("Load cluster " + STARROCKS_PATH + " is null");
         }
 
         if (httpPort == -1) {
@@ -283,11 +283,11 @@ public class DppConfig implements Writable {
         return new DppConfig(paloPath, httpPort, copiedHadoopConfigs, priority);
     }
 
-    public static String getPaloPathKey() {
-        return PALO_PATH;
+    public static String getStarRocksPathKey() {
+        return STARROCKS_PATH;
     }
 
-    public String getPaloPath() {
+    public String getStarRocksPath() {
         return paloPath;
     }
 
