@@ -36,5 +36,7 @@ public class AnalyzeNotUseDBTest {
 
         analyzeSuccess("select * from test.t0 a join test.t1 b on a.v1 = b.v4");
         analyzeSuccess("select a.v2,b.v5 from test.t0 a join test.t1 b on a.v1 = b.v4");
+
+        analyzeSuccess("select v1,unnest from test.tarray, unnest(v3)");
     }
 }
