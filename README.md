@@ -35,5 +35,4 @@ Code in this repository is provided under the [Elastic License 2.0](https://www.
 ## Contributing to StarRocks
 
 A big thanks for your attention to StarRocks! 
-Contributions to StarRocks will be made under the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0).
 In order to accept your pull request, please follow the [CONTRIBUTING.md](CONTRIBUTING.md).
