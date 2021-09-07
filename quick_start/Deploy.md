@@ -4,12 +4,12 @@ Manual deployment allows users to quickly leverage Doris DB to do operation and 
 
 ## Get the Binary Package
 
-Please download the latest stable version of the DorisDB binary package.
+Please download the latest stable version of the StarRocks binary package.
 
-For example, below is what you get after decompressing the package “dorisdb-1.0.0.tar.gz”:
+For example, below is what you get after decompressing the package “starrocks-1.0.0.tar.gz”:
 
 ```Plain Text
-DorisDB-XX-1.0.0
+StarRocks-XX-1.0.0
 
 ├── be  # BE Catalog
 
@@ -25,7 +25,7 @@ DorisDB-XX-1.0.0
 
 │   ├── lib
 
-│   │   ├── dorisdb_be  # BE executable file
+│   │   ├── starrocks_be  # BE executable file
 
 │   │   └── meta_tool
 
@@ -45,7 +45,7 @@ DorisDB-XX-1.0.0
 
 │   ├── lib
 
-│   │   ├── dorisdb-fe.jar  # FE jar package
+│   │   ├── starrocks-fe.jar  # FE jar package
 
 │   │   └── *.jar           # FE dependent jar packages
 
@@ -61,7 +61,7 @@ You need three physical machines that support:
 * Linux (Centos 7+)
 * Java 1.8+
 
-The CPU needs to support AVX2 instruction sets. When running `cat /proc/cpuinfo |grep avx2`, you should get a result output indicating the support. If not, we recommend that you replace the machine. DorisDB uses vectorization technology that requires instruction set support to be effective.
+The CPU needs to support AVX2 instruction sets. When running `cat /proc/cpuinfo |grep avx2`, you should get a result output indicating the support. If not, we recommend that you replace the machine. StarRocks uses vectorization technology that requires instruction set support to be effective.
 
 You can distribute and decompress the binary package to the deployment path of your target host, and create a user account to manage it.
 
@@ -69,11 +69,11 @@ You can distribute and decompress the binary package to the deployment path of y
 
 ### Basic Configuration for FE
 
-The FE configuration file is `DorisDB-XX-1.0.0/fe/conf/fe.conf`. The default configuration is sufficient to start the cluster.
+The FE configuration file is `StarRocks-XX-1.0.0/fe/conf/fe.conf`. The default configuration is sufficient to start the cluster.
 
 ### FE Single Instance Deployment
 
-cd DorisDB-XX-1.0.0/fe
+cd StarRocks-XX-1.0.0/fe
 
 Step 1: Customize the configuration file `conf/fe.conf`.
 
@@ -81,7 +81,7 @@ Step 1: Customize the configuration file `conf/fe.conf`.
 JAVA_OPTS = "-Xmx4096m -XX:+UseMembar -XX:SurvivorRatio=8 -XX:MaxTenuringThreshold=7 -XX:+PrintGCDateStamps -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+CMSClassUnloadingEnabled -XX:-CMSParallelRemarkEnabled -XX:CMSInitiatingOccupancyFraction=80 -XX:SoftRefLRUPolicyMSPerMB=0 -Xloggc:$DORIS_HOME/log/fe.gc.log"
 ```
 
-You can adjust `-Xmx4096m` basd on the FE memory size. Recommend to set the memory size to 16G or above to avoid GC. All DorisDB metadata is stored in the memory.
+You can adjust `-Xmx4096m` basd on the FE memory size. Recommend to set the memory size to 16G or above to avoid GC. All StarRocks metadata is stored in the memory.
 
 Step 2: Create a metadata directory.
 
@@ -112,8 +112,7 @@ Step 4: Look up the log file (`log/fe.log`) to confirm that the FE has been star
 ```
 
 * If the FE fails to start, check if the port number is occupied. If so, modify the port number (`http_port`) in the configuration file.
-* You can also use the jps command to view the java process and see if DorisDbFe exists.
-* When you use a browser to access port 8030 and open DorisDB's WebUI, you should see the username is root and password is blank.
+* You can also use the jps command to view the java process and see if StarRocks FE exists.
 
 ### Use MySQL Client to Access FE
 
@@ -140,7 +139,7 @@ Name: 172.16.139.24_9010_1594200991015
 
 IP: 172.16.139.24
 
-HostName: doris-sandbox01
+HostName: starrocks-sandbox01
 
 EditLogPort: 9010
 
@@ -203,7 +202,7 @@ mysql> ALTER SYSTEM ADD OBSERVER "host:port";
 
 The host is the IP of the machine. If the machine has multiple IPs, select the IP in priority_networks. For example, `priority_networks=192.168.1.0/24` can be set to use the subnet `192.168.1.x` for communication. The port is `edit_log_port`, default to `9010`.
 
-> Note: Due to security considerations, DorisDB's FE and BE can only listen to one IP for communication. If a machine has multiple network cards, DorisDB may not be able to automatically find the correct IP. For example, run the `ifconfig` command to get that `eth0 IP` is `192.168.1.1`, `docker0 : 172.17.0.1`. We can set the word network `192.168.1.0/24` to designate eth0 as the communication IP. Here we use [CIDR](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing) notation to specify the subnet range where the IP is located, so that it can be used on all BE and FE. `priority_networks` is written in both `fe.conf` and `be.conf`. This attribute indicates which IP to use when the FE or BE is started. The example is as follows: `priority_networks=10.1.3.0/24`.
+> Note: Due to security considerations, StarRocks' FE and BE can only listen to one IP for communication. If a machine has multiple network cards, StarRocks may not be able to automatically find the correct IP. For example, run the `ifconfig` command to get that `eth0 IP` is `192.168.1.1`, `docker0 : 172.17.0.1`. We can set the word network `192.168.1.0/24` to designate eth0 as the communication IP. Here we use [CIDR](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing) notation to specify the subnet range where the IP is located, so that it can be used on all BE and FE. `priority_networks` is written in both `fe.conf` and `be.conf`. This attribute indicates which IP to use when the FE or BE is started. The example is as follows: `priority_networks=10.1.3.0/24`.
 
 If an error occurs, delete the FE by using the following command:
 
@@ -237,7 +236,7 @@ Name: 172.26.108.172_9010_1584965098874
 
 IP: 172.26.108.172
 
-HostName: doris-sandbox01
+HostName: starrocks-sandbox01
 
 ......
 
@@ -257,7 +256,7 @@ Name: 172.26.108.174_9010_1584965098874
 
 IP: 172.26.108.174
 
-HostName: doris-sandbox02
+HostName: starrocks-sandbox02
 
 ......
 
@@ -277,7 +276,7 @@ Name: 172.26.108.175_9010_1584965098874
 
 IP: 172.26.108.175
 
-HostName: doris-sandbox03
+HostName: starrocks-sandbox03
 
 ......
 
@@ -300,14 +299,14 @@ Alive is true, indicating the node is successfully added. In the above example, 
 
 ### Basic Configuration for BE
 
-The BE configuration file is `DorisDB-XX-1.0.0/be/conf/be.conf`. The default configuration is sufficient to start the cluster.
+The BE configuration file is `StarRocks-XX-1.0.0/be/conf/be.conf`. The default configuration is sufficient to start the cluster.
 
 ### BE Instance Deployment
 
-Users can use the following steps to add BE to the DorisDB cluster. In most cases, at least three BE instances are deployed. The steps for adding each instance are the same.
+Users can use the following steps to add BE to the StarRocks cluster. In most cases, at least three BE instances are deployed. The steps for adding each instance are the same.
 
 ```shell
-cd DorisDB-XX-1.0.0/be
+cd StarRocks-XX-1.0.0/be
 ```
 
 Step 1: Create a data storage directory.
@@ -348,7 +347,7 @@ Cluster: default\_cluster
 
 IP: 172.16.139.24
 
-HostName: doris-sandbox01
+HostName: starrocks-sandbox01
 
 HeartbeatPort: 9050
 
@@ -462,17 +461,17 @@ cumulative_compaction_check_interval_seconds = 2
 
 * **Parallelism**
 
-You can modify the parallelism of DorisDB (similar to clickhouse set max_threads= 8) when executing commands via the client. The parallelism can be set to half the number of the current machine's CPU cores.
+You can modify the parallelism of StarRocks (similar to clickhouse set max_threads= 8) when executing commands via the client. The parallelism can be set to half the number of the current machine's CPU cores.
 
 ```sql
 set global parallel_fragment_exec_instance_num =  8;
 ```
 
-## Use MySQL Client to Access DorisDB
+## Use MySQL Client to Access StarRocks
 
 ### Root User Login
 
-Use the MySQL client to connect to `query_port (9030)` of a certain FE instance. DorisDB has a built-in root user, its password is empty by default.
+Use the MySQL client to connect to `query_port (9030)` of a certain FE instance. StarRocks has a built-in root user, its password is empty by default.
 
 ```shell
 mysql -h fe_host -P9030 -u root
@@ -536,7 +535,7 @@ mysql -h 127.0.0.1 -P9030 -utest -p123456
 
 ### Create Tables
 
-DorisDB supports two ways of creating tables -- bucketing and composite partition.
+StarRocks supports two ways of creating tables -- bucketing and composite partition.
 
 In a composite partition:
 
@@ -559,7 +558,7 @@ Next, let’s see how to create a table with buckets.
 * siteid: The type is INT (4 bytes), the default value is 10
 * cidy_code: The type is SMALLINT (2 bytes)
 * username: The type is VARCHAR, the maximum length is 32, and the default value is an empty string
-* pv: The type is BIGINT (8 bytes), and the default value is 0. This is an indicator column. DorisDB internally aggregates indicator columns. The aggregation method is sum (SUM).
+* pv: The type is BIGINT (8 bytes), and the default value is 0. This is an indicator column. StarRocks internally aggregates indicator columns. The aggregation method is sum (SUM).
 
 ```sql
 mysql >
@@ -581,7 +580,7 @@ Then, let’s see how to create a composite partition table. The schema of the t
 * siteid: The type is INT (4 bytes), the default value is 10
 * cidy_code: The type is SMALLINT (2 bytes)
 * username: The type is VARCHAR, the maximum length is 32, and the default value is an empty string
-* pv: The type is BIGINT (8 bytes), the default value is 0. This is an indicator column. DorisDB internally aggregates indicator columns. The aggregation method of this column is sum (SUM).
+* pv: The type is BIGINT (8 bytes), the default value is 0. This is an indicator column. StarRocks internally aggregates indicator columns. The aggregation method of this column is sum (SUM).
 
 We use the `event_day` as the partition key to create three partitions (p1, p2, p3).
 
