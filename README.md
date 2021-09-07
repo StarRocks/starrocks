@@ -25,7 +25,7 @@ Please refer to [deploy](https://github.com/StarRocks/docs/blob/master/quick_sta
 
 ## Links
 
-* [StarRocks official site](https://www.dorisdb.com)
+* [StarRocks official website](https://www.dorisdb.com)
 * [StarRocks documentation](https://docs.dorisdb.com)
 
 ## LICENSE
