@@ -2,7 +2,7 @@
 
 ## Local File Import
 
-DorisDB provides five ways  to import data sources (e.g. HDFS, Kafka, local files, etc.), either asynchronously or synchronously.
+StarRocks provides five ways  to import data sources (e.g. HDFS, Kafka, local files, etc.), either asynchronously or synchronously.
 
 ### Broker Load
 
@@ -12,27 +12,27 @@ Broker Load is used when the source data is in a broker-accessible storage syste
 
 ### Spark Load
 
-Spark Load leverages the external Spark resources to pre-process imported data, which improves DorisDB’s performance of importing large data volumes and saves computing resources.
+Spark Load leverages the external Spark resources to pre-process imported data, which improves StarRocks’ performance of importing large data volumes and saves computing resources.
 
-Spark Load is suitable for initial migration of large data volumes (up to TB level) to DorisDB, and the source data is in a Spark-accessible storage system (e.g. HDFS).
+Spark Load is suitable for initial migration of large data volumes (up to TB level) to StarRocks, and the source data is in a Spark-accessible storage system (e.g. HDFS).
 
 ### Stream Load
 
-Stream Load is a synchronous import method. The user sends a request via the HTTP protocol to import a local file or data stream into DorisDB, and waits for the system to return a status indicating the import result.
+Stream Load is a synchronous import method. The user sends a request via the HTTP protocol to import a local file or data stream into StarRocks, and waits for the system to return a status indicating the import result.
 
 Stream Load is suitable for importing local files, or importing data from a data stream through a program. Data sources include Flink, CSV, etc.
 
 ### Routine Load
 
-Routine Load allows to automatically import data from a specified data source. The user submits a routine import job via the MySQL protocol, generating a runloop that reads data from a data source (such as Kafka) and imports it into DorisDB without interruption.
+Routine Load allows to automatically import data from a specified data source. The user submits a routine import job via the MySQL protocol, generating a runloop that reads data from a data source (such as Kafka) and imports it into StarRocks without interruption.
 
 ### Insert Into
 
-Similar to the  `Insert` statement of MySQL, DorisDB supports `INSERT INTO tbl SELECT ... ;` to read data and import it to a table and `INSERT INTO tbl VALUES(...) ;` to insert a single row of data. Data sources includes DataX/DTS, Kettle/Informatic, and DorisDB itself.
+Similar to the  `Insert` statement of MySQL, StarRocks supports `INSERT INTO tbl SELECT ... ;` to read data and import it to a table and `INSERT INTO tbl VALUES(...) ;` to insert a single row of data. Data sources includes DataX/DTS, Kettle/Informatic, and StarRocks itself.
 
-The overall ecological diagram of DorisDB data import is as follows.
+The overall ecological diagram of StarRocks data import is as follows.
 
-![dorisdb_ecology](../assets/2.5-1.png)
+![starrocks_ecology](../assets/2.5-1.png)
 
 Here is an example of stream load using the HTTP protocol.
 
@@ -206,7 +206,7 @@ CANCEL ALTER TABLE COLUMN FROM table1\G
 
 ### Create Roll up
 
-Rollup is a new pre-aggregate acceleration technique used by DorisDB, which can be regarded as a materialized indexing structure built on the base table. By materialized, it means data is stored independently. By indexting, it means rollup can adjust the column order to increase the hit rate of prefix indexes, and also reduce key columns to make data aggregation efficient.
+Rollup is a new pre-aggregate acceleration technique used by StarRocks, which can be regarded as a materialized indexing structure built on the base table. By materialized, it means data is stored independently. By indexting, it means rollup can adjust the column order to increase the hit rate of prefix indexes, and also reduce key columns to make data aggregation efficient.
 
 The schema of the original table1 is as follows:
 
