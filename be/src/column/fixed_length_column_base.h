@@ -94,6 +94,18 @@ public:
 
     bool append_strings(const std::vector<Slice>& slices __attribute__((unused))) override { return false; }
 
+    bool contain_value(size_t start, size_t end, T value) const {
+        DCHECK_LE(start, end);
+        DCHECK_LE(start, _data.size());
+        DCHECK_LE(end, _data.size());
+        for (size_t i = start; i < end; i++) {
+            if (_data[i] == value) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     size_t append_numbers(const void* buff, size_t length) override {
         const size_t count = length / sizeof(ValueType);
         const T* const ptr = reinterpret_cast<const T*>(buff);

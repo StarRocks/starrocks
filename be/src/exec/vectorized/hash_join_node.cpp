@@ -219,7 +219,13 @@ Status HashJoinNode::open(RuntimeState* state) {
 
     if (_ht.get_row_count() > 0) {
         if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && _ht.get_key_columns().size() == 1 &&
-            _ht.get_key_columns()[0]->has_null()) {
+            _has_null(_ht.get_key_columns()[0])) {
+            // The current implementation of HashTable will reserve a row for judging the end of the linked list.
+            // When performing expression calculations (such as cast string to int),
+            // it is possible that this reserved row will generate Null,
+            // so Column::has_null() cannot be used to judge whether there is Null in the right table.
+            // TODO: This reserved field will be removed in the implementation mechanism in the future.
+            // at that time, you can directly use Column::has_null() to judge
             _eos = true;
             return Status::OK();
         }
@@ -330,6 +336,15 @@ Status HashJoinNode::close(RuntimeState* state) {
     _ht.close();
 
     return ExecNode::close(state);
+}
+
+bool HashJoinNode::_has_null(const ColumnPtr& column) {
+    if (column->is_nullable()) {
+        const auto& null_column = ColumnHelper::as_raw_column<NullableColumn>(column)->null_column();
+        DCHECK_GT(null_column->size(), 0);
+        return null_column->contain_value(1, null_column->size(), 1);
+    }
+    return false;
 }
 
 Status HashJoinNode::_build(RuntimeState* state) {
