@@ -708,14 +708,23 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     for (auto& rowset : rowsets) {
         total_data_size += rowset->data_disk_size();
         total_segments += rowset->num_segments();
-        total_rows += rowset->total_row_size();
+        total_rows += rowset->num_rows();
     }
-    if (total_data_size > 4000000000 || total_rows > 20000000 || total_segments > 1000) {
+    size_t total_rows2 = 0;
+    size_t total_dels = 0;
+    auto st = tablet->updates()->get_rowsets_total_stats(rowset_ids, &total_rows2, &total_dels);
+    if (!st.ok() || total_rows2 != total_rows) {
+        LOG(WARNING) << "load primary index get_rowsets_total_stats error " << st;
+    }
+    DCHECK(total_rows2 == total_rows);
+    if (total_data_size > 4000000000 || total_rows > 10000000 || total_segments > 400) {
         LOG(INFO) << "load large primary index start tablet:" << tablet->tablet_id() << " version:" << apply_version
-                  << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " #row:" << total_rows
-                  << " size:" << total_data_size;
+                  << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " #row:" << total_rows << " -"
+                  << total_dels << "=" << total_rows - total_dels << " bytes:" << total_data_size;
     }
-    _pkey_to_rssid_rowid->reserve(total_rows);
+    if (total_rows > total_dels) {
+        _pkey_to_rssid_rowid->reserve(total_rows - total_dels);
+    }
 
     OlapReaderStatistics stats;
     std::unique_ptr<vectorized::Column> pk_column;
@@ -777,11 +786,14 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
         }
     }
     _tablet_id = tablet->tablet_id();
-    LOG(INFO) << "load primary index tablet:" << tablet->tablet_id() << " version:" << apply_version
-              << " #rowset:" << rowsets.size() << " #segment:" << total_segments
+    if (size() != total_rows - total_dels) {
+        LOG(WARNING) << Substitute("load primary index row count not match tablet:$0 index:$1 != stats:$2", _tablet_id,
+                                   size(), total_rows - total_dels);
+    }
+    LOG(INFO) << "load primary index finish tablet:" << tablet->tablet_id() << " version:" << apply_version
+              << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " data_size:" << total_data_size
               << " rowsets:" << int_list_to_string(rowset_ids) << " size:" << size() << " capacity:" << capacity()
-              << " memory:" << memory_usage() << " bytesRead:" << stats.bytes_read
-              << " duration: " << timer.elapsed_time() / 1000000 << "ms";
+              << " memory:" << memory_usage() << " duration: " << timer.elapsed_time() / 1000000 << "ms";
     return Status::OK();
 }
 
