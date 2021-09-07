@@ -2710,9 +2710,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "OUTPUT EXPRS:1: id | 2: id2"
         );
 
-        starRocksAssert.query("select count(id2) from test.bitmap_table;").explainContains("OUTPUT EXPRS:3: count(2: id2)",
-                "1:AGGREGATE (update finalize)", "output: count(2: id2)", "group by:", "0:OlapScanNode",
-                "PREAGGREGATION: OFF. Reason: Aggregate Operator not match: COUNT <--> BITMAP_UNION");
+        starRocksAssert.query("select count(id2) from test.bitmap_table;")
+                .explainContains("OUTPUT EXPRS:3: count(2: id2)",
+                        "1:AGGREGATE (update finalize)", "output: count(2: id2)", "group by:", "0:OlapScanNode",
+                        "PREAGGREGATION: OFF. Reason: Aggregate Operator not match: COUNT <--> BITMAP_UNION");
 
         starRocksAssert.query("select group_concat(id2) from test.bitmap_table;")
                 .analysisError(
@@ -2787,7 +2788,8 @@ public class PlanFragmentTest extends PlanTestBase {
         starRocksAssert.query(sql).explainContains();
 
         sql = "select count(distinct id2) from test.bitmap_table having count(distinct id2) > 0";
-        starRocksAssert.query(sql).explainContains("bitmap_union_count(2: id2)", "having: 3: count(distinct 2: id2) > 0");
+        starRocksAssert.query(sql)
+                .explainContains("bitmap_union_count(2: id2)", "having: 3: count(distinct 2: id2) > 0");
 
         sql = "select count(distinct id2) from test.bitmap_table order by count(distinct id2)";
         starRocksAssert.query(sql).explainContains("3: count(distinct 2: id2)", "3:MERGING-EXCHANGE",
@@ -4322,5 +4324,20 @@ public class PlanFragmentTest extends PlanTestBase {
                 "JOIN [shuffle] orders o2 ON l_orderkey = o2.o_orderkey";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("join op: INNER JOIN (RUNTIME_BUCKET_SHUFFLE)"));
+    }
+
+    @Test
+    public void testRuntimeBucketShuffle2() throws Exception {
+        String sql = "select count(1) from lineitem t1 join [shuffle] orders t2 on " +
+                "t1.l_orderkey = t2.o_orderkey and t2.O_ORDERDATE = t1.L_SHIPDATE join [shuffle] orders t3 " +
+                "on t1.l_orderkey = t3.o_orderkey and t3.O_ORDERDATE = t1.L_SHIPDATE join [shuffle] orders t4 on\n" +
+                "t1.l_orderkey = t4.o_orderkey and t4.O_ORDERDATE = t1.L_SHIPDATE;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("12:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (RUNTIME_BUCKET_SHUFFLE)"));
+        Assert.assertTrue(plan.contains("8:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (RUNTIME_BUCKET_SHUFFLE)"));
+        Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)"));
     }
 }

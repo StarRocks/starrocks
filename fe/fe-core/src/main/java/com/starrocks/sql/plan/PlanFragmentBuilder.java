@@ -1259,10 +1259,10 @@ public class PlanFragmentBuilder {
             }
             if (left instanceof HashJoinNode) {
                 HashJoinNode hashJoinNode = (HashJoinNode) left;
-                if (hashJoinNode.isBucketShuffle()) {
+                if (hashJoinNode.isLocalBucketShuffle()) {
                     return false;
                 }
-                if (isShuffleJoin(hashJoinNode)) {
+                if (hashJoinNode.isRuntimeBucketShuffle() || isShuffleJoin(hashJoinNode)) {
                     return true;
                 }
             }
@@ -1279,7 +1279,7 @@ public class PlanFragmentBuilder {
         public PlanFragment computeBucketShufflePlanFragment(ExecPlan context, List<Integer> columns,
                                                              PlanFragment stayFragment,
                                                              PlanFragment removeFragment, HashJoinNode hashJoinNode) {
-            hashJoinNode.setBucketShuffle(true);
+            hashJoinNode.setLocalBucketShuffle(true);
             removeFragment.getChild(0)
                     .setOutputPartition(new DataPartition(TPartitionType.BUCKET_SHFFULE_HASH_PARTITIONED,
                             removeFragment.getDataPartition().getPartitionExprs()));

@@ -101,6 +101,7 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1036,7 +1037,8 @@ public class Coordinator {
                 PlanFragmentId inputFragmentId = fragment.getChild(inputFragmentIndex).getFragmentId();
                 FragmentExecParams maxParallelismFragmentExecParams = fragmentExecParamsMap.get(inputFragmentId);
 
-                if (hasRuntimeBucketShuffleJoin(fragment.getPlanRoot())) {
+                boolean hasRuntimeBucketShuffleJoinInFragment = hasRuntimeBucketShuffleJoin(fragment.getPlanRoot());
+                if (hasRuntimeBucketShuffleJoinInFragment) {
                     FragmentExecParams execParams = getMaxParallelismScanFragmentExecParams();
                     if (execParams != null) {
                         maxParallelismFragmentExecParams = execParams;
@@ -1057,7 +1059,9 @@ public class Coordinator {
                         hostSet.add(execParams.host);
                     }
                     List<TNetworkAddress> hosts = Lists.newArrayList(hostSet);
-
+                    if (!hasRuntimeBucketShuffleJoinInFragment) {
+                        Collections.shuffle(hosts, instanceRandom);
+                    }
                     for (int index = 0; index < exchangeInstances; index++) {
                         FInstanceExecParam instanceParam =
                                 new FInstanceExecParam(null, hosts.get(index % hosts.size()), 0, params);
@@ -1068,6 +1072,13 @@ public class Coordinator {
                         FInstanceExecParam instanceParam = new FInstanceExecParam(null, execParams.host, 0, params);
                         params.instanceExecParams.add(instanceParam);
                     }
+                }
+
+                // When group by cardinality is smaller than number of backend, only some backends always
+                // process while other has no data to process.
+                // So we shuffle instances to make different backends handle different queries.
+                if (!hasRuntimeBucketShuffleJoinInFragment) {
+                    Collections.shuffle(params.instanceExecParams, instanceRandom);
                 }
 
                 // TODO: switch to unpartitioned/coord execution if our input fragment
@@ -1177,7 +1188,7 @@ public class Coordinator {
         // One fragment could only have one HashJoinNode
         if (node instanceof HashJoinNode) {
             HashJoinNode joinNode = (HashJoinNode) node;
-            if (joinNode.isBucketShuffle()) {
+            if (joinNode.isLocalBucketShuffle()) {
                 bucketShuffleFragmentIds.add(joinNode.getFragmentId().asInt());
                 return true;
             }
