@@ -1,6 +1,6 @@
 # StarRocks
 
-StarRocks is an next-gen sub-second MPP database for full analysis senarios, including multi-dimensional analytics, real-time analytics and Ad-hoc query.
+StarRocks is a next-gen sub-second MPP database for full analysis senarios, including multi-dimensional analytics, real-time analytics and ad-hoc query.
 
 ## Technology
 
@@ -14,7 +14,7 @@ StarRocks is an next-gen sub-second MPP database for full analysis senarios, inc
 
 ## User cases
 
-* StarRocks not only supports high concurrency & low latency points queries, but also high throughput ad-hoc queries.
+* StarRocks supports not only high concurrency & low latency points queries, but also high throughput ad-hoc queries.
 * StarRocks unified batch and near real-time streaming data ingestion.
 * Pre-aggregations, flat tables, star and snowflake schemas are supported and all run at enhanced speed.
 * StarRocks hybridizes serving and analytical processing(HSAP) in a easy way. The minimalist architectural design reduces the complexity and maintenance cost of StarRocks and increases its reliability and scalability. 
@@ -26,7 +26,7 @@ Please refer to [deploy](https://github.com/StarRocks/docs/blob/master/quick_sta
 ## Links
 
 * [StarRocks official site](https://www.dorisdb.com)
-* [StarRocks Documentation](https://docs.dorisdb.com)
+* [StarRocks documentation](https://docs.dorisdb.com)
 
 ## LICENSE
 
