@@ -19,33 +19,32 @@ import java.util.Map;
 
 
 /**
- * It is responsible for loading all ES external table's meta-data such as `fields`, `partitions` periodically,
- * playing the `repo` role at Doris On ES
+ * It is responsible for loading all StarRocks OLAP external table's meta-data periodically
  */
 public class StarRocksRepository extends MasterDaemon {
     private static final Logger LOG = LogManager.getLogger(StarRocksRepository.class);
 
-    private Map<Long, ExternalOlapTable> dorisTables;
+    private Map<Long, ExternalOlapTable> srTables;
 
     private TableMetaSyncer metaSyncer;
 
     public StarRocksRepository() {
         super("star rocks repository", Config.es_state_sync_interval_second * 1000);
-        dorisTables = Maps.newConcurrentMap();
+        srTables = Maps.newConcurrentMap();
         metaSyncer = new TableMetaSyncer();
     }
 
-    public void registerTable(ExternalOlapTable dorisTable) {
+    public void registerTable(ExternalOlapTable srTable) {
         if (Catalog.isCheckpointThread()) {
             return;
         }
-        dorisTables.put(dorisTable.getId(), dorisTable);
-        LOG.info("register a new olap table [{}] to sync list", dorisTable);
+        srTables.put(srTable.getId(), srTable);
+        LOG.info("register a new olap table [{}] to sync list", srTable);
     }
 
-    public void deRegisterTable(ExternalOlapTable dorisTable) {
-        dorisTables.remove(dorisTable.getId());
-        LOG.info("deregister table [{}] from sync list", dorisTable.getId());
+    public void deRegisterTable(ExternalOlapTable srTable) {
+        srTables.remove(srTable.getId());
+        LOG.info("deregister table [{}] from sync list", srTable.getId());
     }
 
     @Override
@@ -53,7 +52,7 @@ public class StarRocksRepository extends MasterDaemon {
         if (Catalog.getCurrentCatalog().getRole() != FrontendNodeType.FOLLOWER) {
             return;
         }
-        for (ExternalOlapTable table : dorisTables.values()) {
+        for (ExternalOlapTable table : srTables.values()) {
             metaSyncer.syncTable(table);
         }
     }
