@@ -49,9 +49,7 @@ static std::string to_upper(const std::string& str) {
     return out;
 }
 
-// Currently, both of two following formats are supported(see be.conf)
-//   format 1:   /home/disk1/starrocks.HDD,50
-//   format 2:   /home/disk1/starrocks,medium:ssd,capacity:50
+// format: /data,medium:ssd,capacity:50 or /data,medium:ssd,50
 OLAPStatus parse_root_path(const string& root_path, StorePath* path) {
     std::vector<string> tmp_vec = strings::Split(root_path, ",", strings::SkipWhitespace());
 

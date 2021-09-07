@@ -7,20 +7,24 @@
 
 namespace starrocks {
 namespace pipeline {
+class SourceOperator;
+using SourceOperatorPtr = std::shared_ptr<SourceOperator>;
+
 class SourceOperator : public Operator {
 public:
     SourceOperator(int32_t id, std::string name, int32_t plan_node_id) : Operator(id, name, plan_node_id) {}
     ~SourceOperator() override = default;
 
-    bool need_input() const override { return false; }
-
+    bool need_input() override { return false; }
+    virtual bool pending_finish() { return false; }
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override {
         return Status::InternalError("Shouldn't push chunk to source operator");
     }
 
-    virtual void add_morsel(Morsel* morsel) = 0;
+    virtual void add_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; };
 
 protected:
+    MorselQueue* _morsel_queue;
     ChunkSourcePtr _chunk_source;
 };
 } // namespace pipeline

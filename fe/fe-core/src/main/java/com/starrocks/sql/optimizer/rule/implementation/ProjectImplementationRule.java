@@ -8,7 +8,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProject;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -22,7 +22,7 @@ public class ProjectImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalProjectOperator projectOperator = (LogicalProjectOperator) input.getOp();
-        PhysicalProject physicalProject = new PhysicalProject(
+        PhysicalProjectOperator physicalProject = new PhysicalProjectOperator(
                 projectOperator.getColumnRefMap(),
                 projectOperator.getCommonSubOperatorMap());
         return Lists.newArrayList(OptExpression.create(physicalProject, input.getInputs()));

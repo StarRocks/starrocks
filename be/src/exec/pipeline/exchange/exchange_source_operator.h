@@ -21,15 +21,13 @@ public:
 
     Status close(RuntimeState* state) override;
 
-    bool has_output() const override;
+    bool has_output() override;
 
     bool is_finished() const override;
 
     void finish(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
-
-    void add_morsel(Morsel* morsel) override;
 
 private:
     int32_t _num_sender;

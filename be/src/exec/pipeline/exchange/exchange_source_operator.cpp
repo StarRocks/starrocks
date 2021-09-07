@@ -22,7 +22,7 @@ Status ExchangeSourceOperator::close(RuntimeState* state) {
     return Status::OK();
 }
 
-bool ExchangeSourceOperator::has_output() const {
+bool ExchangeSourceOperator::has_output() {
     return _stream_recvr->has_output();
 }
 
@@ -43,8 +43,5 @@ StatusOr<vectorized::ChunkPtr> ExchangeSourceOperator::pull_chunk(RuntimeState* 
     RETURN_IF_ERROR(_stream_recvr->get_chunk(&chunk));
     return std::move(chunk);
 }
-
-// Fixme(kks): The exchange seems don't need a abstract of morsel
-void ExchangeSourceOperator::add_morsel(Morsel* morsel) {}
 
 } // namespace starrocks::pipeline

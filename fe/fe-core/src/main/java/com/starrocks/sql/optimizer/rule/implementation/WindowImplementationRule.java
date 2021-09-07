@@ -7,7 +7,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalWindow;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -22,7 +22,7 @@ public class WindowImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalWindowOperator logical = (LogicalWindowOperator) input.getOp();
 
-        PhysicalWindow physical = new PhysicalWindow(
+        PhysicalWindowOperator physical = new PhysicalWindowOperator(
                 logical.getWindowCall(),
                 logical.getPartitionExpressions(),
                 logical.getOrderByElements(),

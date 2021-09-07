@@ -7,7 +7,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalFilter;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -22,7 +22,7 @@ public class FilterImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalFilterOperator logical = (LogicalFilterOperator) input.getOp();
 
-        PhysicalFilter filter = new PhysicalFilter(logical.getPredicate());
+        PhysicalFilterOperator filter = new PhysicalFilterOperator(logical.getPredicate());
         filter.setLimit(logical.getLimit());
         return Lists.newArrayList(OptExpression.create(filter, input.getInputs()));
     }

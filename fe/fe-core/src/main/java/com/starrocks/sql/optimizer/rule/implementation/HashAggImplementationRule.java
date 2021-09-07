@@ -8,7 +8,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregate;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -22,7 +22,7 @@ public class HashAggImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator logical = (LogicalAggregationOperator) input.getOp();
-        PhysicalHashAggregate physical = new PhysicalHashAggregate(logical.getType(),
+        PhysicalHashAggregateOperator physical = new PhysicalHashAggregateOperator(logical.getType(),
                 logical.getGroupingKeys(),
                 logical.getPartitionByColumns(),
                 logical.getAggregations(),

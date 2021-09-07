@@ -1159,7 +1159,9 @@ public class StmtExecutor {
             DdlExecutor.execute(context.getCatalog(), (DdlStmt) parsedStmt);
             context.getState().setOk();
         } catch (QueryStateException e) {
-            LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
+            if (e.getQueryState().getStateType() != MysqlStateType.OK) {
+                LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
+            }
             context.setState(e.getQueryState());
         } catch (UserException e) {
             LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);

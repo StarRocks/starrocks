@@ -23,24 +23,24 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRow;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalExcept;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalFilter;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregate;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoin;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersect;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProject;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeat;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunction;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTopN;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalUnion;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalValues;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalWindow;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
@@ -102,7 +102,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalHashJoin(PhysicalHashJoin node, ExpressionContext context) {
+    public Void visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
         String hint = node.getJoinHint();
 
         // 1 For broadcast join
@@ -305,7 +305,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
      *        s1    s2       s3     s4
      *
      * */
-    private void tryBucketShuffle(PhysicalHashJoin node, HashDistributionSpec leftShuffleDistribution,
+    private void tryBucketShuffle(PhysicalHashJoinOperator node, HashDistributionSpec leftShuffleDistribution,
                                   HashDistributionSpec rightShuffleDistribution) {
         JoinOperator nodeJoinType = node.getJoinType();
         if (nodeJoinType.isCrossJoin()) {
@@ -388,7 +388,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         return Optional.of(requireDistributionDesc);
     }
 
-    private Void visitJoinRequirements(PhysicalHashJoin node, ExpressionContext context) {
+    private Void visitJoinRequirements(PhysicalHashJoinOperator node, ExpressionContext context) {
         Optional<HashDistributionDesc> required = getRequiredLocalDesc();
 
         if (!required.isPresent()) {
@@ -457,7 +457,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalProject(PhysicalProject node, ExpressionContext context) {
+    public Void visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
         // Pass through the requirements to the child
         outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList(distributeRequirements())));
         if (getRequiredLocalDesc().isPresent()) {
@@ -468,7 +468,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalHashAggregate(PhysicalHashAggregate node, ExpressionContext context) {
+    public Void visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
         // If scan tablet sum leas than 1, do one phase local aggregate is enough
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0
                 && context.getRootProperty().isExecuteInOneInstance()
@@ -520,7 +520,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         return visitAggregateRequirements(node, context);
     }
 
-    private Void visitAggregateRequirements(PhysicalHashAggregate node, ExpressionContext context) {
+    private Void visitAggregateRequirements(PhysicalHashAggregateOperator node, ExpressionContext context) {
         Optional<HashDistributionDesc> required = getRequiredLocalDesc();
 
         if (!required.isPresent()) {
@@ -561,7 +561,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalOlapScan(PhysicalOlapScan node, ExpressionContext context) {
+    public Void visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
         HashDistributionSpec hashDistributionSpec = node.getDistributionSpec();
 
         ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
@@ -588,7 +588,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalTopN(PhysicalTopN topN, ExpressionContext context) {
+    public Void visitPhysicalTopN(PhysicalTopNOperator topN, ExpressionContext context) {
         if (getRequiredLocalDesc().isPresent()) {
             return visitOperator(topN, context);
         }
@@ -620,7 +620,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalHiveScan(PhysicalHiveScan node, ExpressionContext context) {
+    public Void visitPhysicalHiveScan(PhysicalHiveScanOperator node, ExpressionContext context) {
         if (getRequiredLocalDesc().isPresent()) {
             return visitOperator(node, context);
         }
@@ -629,7 +629,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalSchemaScan(PhysicalSchemaScan node, ExpressionContext context) {
+    public Void visitPhysicalSchemaScan(PhysicalSchemaScanOperator node, ExpressionContext context) {
         if (getRequiredLocalDesc().isPresent()) {
             return visitOperator(node, context);
         }
@@ -638,7 +638,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalMysqlScan(PhysicalMysqlScan node, ExpressionContext context) {
+    public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
         if (getRequiredLocalDesc().isPresent()) {
             return visitOperator(node, context);
         }
@@ -647,7 +647,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalEsScan(PhysicalEsScan node, ExpressionContext context) {
+    public Void visitPhysicalEsScan(PhysicalEsScanOperator node, ExpressionContext context) {
         if (getRequiredLocalDesc().isPresent()) {
             return visitOperator(node, context);
         }
@@ -656,7 +656,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalAssertOneRow(PhysicalAssertOneRow node, ExpressionContext context) {
+    public Void visitPhysicalAssertOneRow(PhysicalAssertOneRowOperator node, ExpressionContext context) {
         if (getRequiredLocalDesc().isPresent()) {
             return visitOperator(node, context);
         }
@@ -669,7 +669,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalAnalytic(PhysicalWindow node, ExpressionContext context) {
+    public Void visitPhysicalAnalytic(PhysicalWindowOperator node, ExpressionContext context) {
         List<Integer> partitionColumnRefSet = new ArrayList<>();
         List<Ordering> orderings = new ArrayList<>();
 
@@ -725,19 +725,19 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalUnion(PhysicalUnion node, ExpressionContext context) {
+    public Void visitPhysicalUnion(PhysicalUnionOperator node, ExpressionContext context) {
         processSetOperationChildProperty(context);
         return visitOperator(node, context);
     }
 
     @Override
-    public Void visitPhysicalExcept(PhysicalExcept node, ExpressionContext context) {
+    public Void visitPhysicalExcept(PhysicalExceptOperator node, ExpressionContext context) {
         processSetOperationChildProperty(context);
         return visitOperator(node, context);
     }
 
     @Override
-    public Void visitPhysicalIntersect(PhysicalIntersect node, ExpressionContext context) {
+    public Void visitPhysicalIntersect(PhysicalIntersectOperator node, ExpressionContext context) {
         processSetOperationChildProperty(context);
         return visitOperator(node, context);
     }
@@ -763,13 +763,13 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalValues(PhysicalValues node, ExpressionContext context) {
+    public Void visitPhysicalValues(PhysicalValuesOperator node, ExpressionContext context) {
         outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList()));
         return visitOperator(node, context);
     }
 
     @Override
-    public Void visitPhysicalRepeat(PhysicalRepeat node, ExpressionContext context) {
+    public Void visitPhysicalRepeat(PhysicalRepeatOperator node, ExpressionContext context) {
         // Pass through the requirements to the child
         if (getRequiredLocalDesc().isPresent()) {
             outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList(distributeRequirements())));
@@ -780,7 +780,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalFilter(PhysicalFilter node, ExpressionContext context) {
+    public Void visitPhysicalFilter(PhysicalFilterOperator node, ExpressionContext context) {
         // Pass through the requirements to the child
         if (getRequiredLocalDesc().isPresent()) {
             outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList(distributeRequirements())));
@@ -791,7 +791,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalTableFunction(PhysicalTableFunction node, ExpressionContext context) {
+    public Void visitPhysicalTableFunction(PhysicalTableFunctionOperator node, ExpressionContext context) {
         // Pass through the requirements to the child
         if (getRequiredLocalDesc().isPresent()) {
             outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList(distributeRequirements())));

@@ -11,7 +11,7 @@ import com.starrocks.sql.optimizer.operator.SortPhase;
 
 import java.util.Objects;
 
-public class PhysicalTopN extends PhysicalOperator {
+public class PhysicalTopNOperator extends PhysicalOperator {
     private final long offset;
     private final SortPhase sortPhase;
     private final boolean isSplit;
@@ -19,10 +19,10 @@ public class PhysicalTopN extends PhysicalOperator {
     private boolean isEnforced;
 
     // If limit is -1, means global sort
-    public PhysicalTopN(OrderSpec spec, long limit, long offset,
-                        SortPhase sortPhase,
-                        boolean isSplit,
-                        boolean isEnforced) {
+    public PhysicalTopNOperator(OrderSpec spec, long limit, long offset,
+                                SortPhase sortPhase,
+                                boolean isSplit,
+                                boolean isEnforced) {
         super(OperatorType.PHYSICAL_TOPN, spec);
         this.limit = limit;
         this.offset = offset;
@@ -54,11 +54,11 @@ public class PhysicalTopN extends PhysicalOperator {
 
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof PhysicalTopN)) {
+        if (!(obj instanceof PhysicalTopNOperator)) {
             return false;
         }
 
-        PhysicalTopN rhs = (PhysicalTopN) obj;
+        PhysicalTopNOperator rhs = (PhysicalTopNOperator) obj;
         if (this == rhs) {
             return true;
         }

@@ -1,4 +1,5 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks
+// Limited.
 
 #include "exec/pipeline/pipeline_driver.h"
 
@@ -10,9 +11,7 @@ namespace starrocks {
 namespace pipeline {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     if (_state == DriverState::NOT_READY) {
-        auto& source_op = source_operator();
-        auto* raw_source_op = down_cast<SourceOperator*>(source_op.get());
-        raw_source_op->add_morsel(_morsel.get());
+        source_operator()->add_morsel_queue(_morsel_queue);
         for (auto& op : _operators) {
             RETURN_IF_ERROR(op->prepare(runtime_state));
         }
@@ -56,7 +55,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                     return _fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED;
                 }
 
-                // pull chunk from current operator and push the chunk onto next operator
+                // pull chunk from current operator and push the chunk onto next
+                // operator
                 auto pulled_chunk = curr_op->pull_chunk(runtime_state);
                 auto status = pulled_chunk.status();
                 if (!status.ok() && !status.is_end_of_file()) {
@@ -71,7 +71,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
 
                 if (status.ok()) {
                     DCHECK(pulled_chunk.value());
-                    if (pulled_chunk.value()->num_rows() > 0) {
+                    if (pulled_chunk.value() && pulled_chunk.value()->num_rows() > 0) {
                         next_op->push_chunk(runtime_state, std::move(pulled_chunk.value()));
                     }
                     num_chunk_moved += 1;
@@ -89,8 +89,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                     continue;
                 }
             }
-            // yield when total chunks moved or time spent on-core for evaluation exceed the
-            // designated thresholds.
+            // yield when total chunks moved or time spent on-core for evaluation
+            // exceed the designated thresholds.
             if (total_chunks_moved >= _yield_max_chunks_moved || time_spent >= _yield_max_time_spent) {
                 should_yield = true;
                 break;
@@ -103,8 +103,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         }
         _first_unfinished = _new_first_unfinished;
 
-        if (_operators[num_operators - 1]->is_finished()) {
-            return DriverState::FINISH;
+        if (sink_operator()->is_finished()) {
+            _state = source_operator()->pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH;
+            return _state;
         }
 
         // no chunk moved in current round means that the driver is blocked.
@@ -141,17 +142,25 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     }
     _state = state;
 
-    // last root driver cancel the all drivers' execution.
+    // last root driver cancel the all drivers' execution and notify FE the
+    // fragment's completion but do not unregister the FragmentContext because
+    // some non-root drivers maybe has pending io io tasks hold the reference to
+    // object owned by FragmentContext.
     if (is_root()) {
         if (_fragment_ctx->count_down_root_drivers()) {
-            _fragment_ctx->cancel(Status::OK());
+            _fragment_ctx->finish();
+            auto status = _fragment_ctx->final_status();
+            _fragment_ctx->runtime_state()->exec_env()->driver_dispatcher()->report_exec_state(_fragment_ctx, status,
+                                                                                               true, false);
         }
     }
-    // last finished driver
+    // last finished driver notify FE the fragment's completion again and
+    // unregister the FragmentContext.
     if (_fragment_ctx->count_down_drivers()) {
         auto status = _fragment_ctx->final_status();
         VLOG_ROW << "[Driver] Last driver finished: final_status=" << status.to_string();
-        _fragment_ctx->runtime_state()->exec_env()->driver_dispatcher()->report_exec_state(_fragment_ctx, status, true);
+        _fragment_ctx->runtime_state()->exec_env()->driver_dispatcher()->report_exec_state(_fragment_ctx, status, true,
+                                                                                           true);
     }
 }
 } // namespace pipeline

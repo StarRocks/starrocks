@@ -2007,10 +2007,12 @@ private:
 
     size_t& growth_left() { return settings_.template get<0>(); }
 
-    template <size_t N, template <class, class, class, class> class RefSet, class M, class P, class H, class E, class A>
+    template <size_t N, template <class, class, class, class> class RefSet, class M, class P, class H, class E, class A,
+              bool balance>
     friend class parallel_hash_set;
 
-    template <size_t N, template <class, class, class, class> class RefSet, class M, class P, class H, class E, class A>
+    template <size_t N, template <class, class, class, class> class RefSet, class M, class P, class H, class E, class A,
+              bool balance>
     friend class parallel_hash_map;
 
     // The representation of the object has two modes:
@@ -2215,7 +2217,7 @@ inline size_t RandomSeed() {
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 template <size_t N, template <class, class, class, class> class RefSet, class Mtx_, class Policy, class Hash, class Eq,
-          class Alloc>
+          class Alloc, bool balance = true>
 class parallel_hash_set {
     using PolicyTraits = hash_policy_traits<Policy>;
     using KeyArgImpl = KeyArg<IsTransparent<Eq>::value && IsTransparent<Hash>::value>;
@@ -2935,17 +2937,32 @@ public:
     }
 
     void rehash(size_t n) {
-        size_t nn = n / num_tables;
-        for (auto& inner : sets_) {
-            typename Lockable::UniqueLock m(inner);
-            inner.set_.rehash(nn);
+        if constexpr (balance) {
+            size_t nn = n / num_tables;
+            for (auto& inner : sets_) {
+                typename Lockable::UniqueLock m(inner);
+                inner.set_.rehash(nn);
+            }
+        } else {
+            constexpr static uint8_t subratio[num_tables] = {8,  9,  10, 11, 12, 13, 14, 15,
+                                                             17, 18, 19, 20, 21, 22, 23, 24};
+            for (uint8_t i = 0; i < 16; i++) {
+                size_t nn = n * subratio[i] / 256;
+                auto& inner = sets_[i];
+                typename Lockable::UniqueLock m(inner);
+                inner.set_.rehash(nn);
+            }
         }
     }
 
     void reserve(size_t n) {
-        size_t target = GrowthToLowerboundCapacity(n);
-        size_t normalized = 16 * NormalizeCapacity(n / num_tables);
-        rehash(normalized > target ? normalized : target);
+        if constexpr (balance) {
+            size_t target = GrowthToLowerboundCapacity(n);
+            size_t normalized = 16 * NormalizeCapacity(n / num_tables);
+            rehash(normalized > target ? normalized : target);
+        } else {
+            rehash(n);
+        }
     }
 
     // Extension API: support for heterogeneous keys.
@@ -2973,6 +2990,13 @@ public:
     void prefetch(const key_arg<K>& key) const {
         (void)key;
         size_t hashval = this->hash(key);
+        const Inner& inner = sets_[subidx(hashval)];
+        const auto& set = inner.set_;
+        typename Lockable::SharedLock m(const_cast<Inner&>(inner));
+        set.prefetch_hash(hashval);
+    }
+
+    void prefetch_hash(size_t hashval) const {
         const Inner& inner = sets_[subidx(hashval)];
         const auto& set = inner.set_;
         typename Lockable::SharedLock m(const_cast<Inner&>(inner));
@@ -3187,7 +3211,26 @@ protected:
         return {inner, &sets_[0] + num_tables, it};
     }
 
-    static size_t subidx(size_t hashval) { return ((hashval >> 8) ^ (hashval >> 16) ^ (hashval >> 24)) & mask; }
+    static size_t subidx(size_t hashval) {
+        if constexpr (balance) {
+            return ((hashval >> 8) ^ (hashval >> 16) ^ (hashval >> 24)) & mask;
+        } else {
+            static_assert(num_tables == 16, "unbalanced hash_set only support 16 sub-tables");
+            constexpr static uint8_t idxmapping[256] = {
+                    0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,
+                    2,  2,  2,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+                    4,  4,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  6,  6,  6,  6,  6,  6,  6,  6,  6,
+                    6,  6,  6,  6,  6,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,
+                    8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  8,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,
+                    9,  9,  9,  9,  9,  9,  9,  10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+                    10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 12, 12,
+                    12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 13, 13, 13, 13, 13,
+                    13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 14, 14, 14, 14, 14, 14, 14,
+                    14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 15, 15, 15, 15, 15, 15, 15, 15,
+                    15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15};
+            return idxmapping[(((hashval >> 8) ^ (hashval >> 16) ^ (hashval >> 24)) & 0xff)];
+        }
+    }
 
     static size_t subcnt() { return num_tables; }
 
@@ -3214,8 +3257,8 @@ protected: // protected in case users want to derive fromm this
 // --------------------------------------------------------------------------
 // --------------------------------------------------------------------------
 template <size_t N, template <class, class, class, class> class RefSet, class Mtx_, class Policy, class Hash, class Eq,
-          class Alloc>
-class parallel_hash_map : public parallel_hash_set<N, RefSet, Mtx_, Policy, Hash, Eq, Alloc> {
+          class Alloc, bool balance = true>
+class parallel_hash_map : public parallel_hash_set<N, RefSet, Mtx_, Policy, Hash, Eq, Alloc, balance> {
     // P is Policy. It's passed as a template argument to support maps that have
     // incomplete types as values, as in unordered_map<K, IncompleteType>.
     // MappedReference<> may be a non-reference type.
@@ -4184,11 +4227,11 @@ public:
 // -----------------------------------------------------------------------------
 // phmap::parallel_flat_hash_set
 // -----------------------------------------------------------------------------
-template <class T, class Hash, class Eq, class Alloc, size_t N,
-          class Mtx_> // default values in phmap_fwd_decl.h
+template <class T, class Hash, class Eq, class Alloc, size_t N, class Mtx_,
+          bool balance> // default values in phmap_fwd_decl.h
 class parallel_flat_hash_set
         : public phmap::priv::parallel_hash_set<N, phmap::priv::raw_hash_set, Mtx_, phmap::priv::FlatHashSetPolicy<T>,
-                                                Hash, Eq, Alloc> {
+                                                Hash, Eq, Alloc, balance> {
     using Base = typename parallel_flat_hash_set::parallel_hash_set;
 
 public:
@@ -4206,7 +4249,6 @@ public:
     using Base::cend;
     using Base::end;
     using Base::capacity;
-    using Base::capacities;
     using Base::empty;
     using Base::max_size;
     using Base::size;
@@ -4237,10 +4279,10 @@ public:
 // -----------------------------------------------------------------------------
 // phmap::parallel_flat_hash_map - default values in phmap_fwd_decl.h
 // -----------------------------------------------------------------------------
-template <class K, class V, class Hash, class Eq, class Alloc, size_t N, class Mtx_>
+template <class K, class V, class Hash, class Eq, class Alloc, size_t N, class Mtx_, bool balance>
 class parallel_flat_hash_map
         : public phmap::priv::parallel_hash_map<N, phmap::priv::raw_hash_set, Mtx_,
-                                                phmap::priv::FlatHashMapPolicy<K, V>, Hash, Eq, Alloc> {
+                                                phmap::priv::FlatHashMapPolicy<K, V>, Hash, Eq, Alloc, balance> {
     using Base = typename parallel_flat_hash_map::parallel_hash_map;
 
 public:
@@ -4258,7 +4300,6 @@ public:
     using Base::cend;
     using Base::end;
     using Base::capacity;
-    using Base::capacities;
     using Base::empty;
     using Base::max_size;
     using Base::size;
@@ -4315,7 +4356,6 @@ public:
     using Base::cend;
     using Base::end;
     using Base::capacity;
-    using Base::capacities;
     using Base::empty;
     using Base::max_size;
     using Base::size;
@@ -4369,7 +4409,6 @@ public:
     using Base::cend;
     using Base::end;
     using Base::capacity;
-    using Base::capacities;
     using Base::empty;
     using Base::max_size;
     using Base::size;

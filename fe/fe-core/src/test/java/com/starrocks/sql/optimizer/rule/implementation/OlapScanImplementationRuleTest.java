@@ -9,7 +9,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScan;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import mockit.Mocked;
 import org.junit.Test;
@@ -34,7 +34,7 @@ public class OlapScanImplementationRuleTest {
 
         assertEquals(1, output.size());
 
-        PhysicalOlapScan physical = (PhysicalOlapScan) output.get(0).getOp();
+        PhysicalOlapScanOperator physical = (PhysicalOlapScanOperator) output.get(0).getOp();
         assertEquals(1, physical.getSelectedIndexId());
 
         assertEquals(3, physical.getSelectedPartitionId().size());

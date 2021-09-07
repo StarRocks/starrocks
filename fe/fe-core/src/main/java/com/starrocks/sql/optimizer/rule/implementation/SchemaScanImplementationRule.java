@@ -8,7 +8,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScan;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -21,7 +21,7 @@ public class SchemaScanImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalSchemaScanOperator logical = (LogicalSchemaScanOperator) input.getOp();
-        PhysicalSchemaScan physical = new PhysicalSchemaScan(logical.getTable(), logical.getColumnRefMap());
+        PhysicalSchemaScanOperator physical = new PhysicalSchemaScanOperator(logical.getTable(), logical.getColumnRefMap());
 
         physical.setPredicate(logical.getPredicate());
         physical.setLimit(logical.getLimit());

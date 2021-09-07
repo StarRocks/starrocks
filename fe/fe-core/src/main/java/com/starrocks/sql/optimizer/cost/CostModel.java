@@ -14,15 +14,15 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRow;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalDistribution;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregate;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoin;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProject;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTopN;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalWindow;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -59,7 +59,7 @@ public class CostModel {
         }
 
         @Override
-        public CostEstimate visitPhysicalOlapScan(PhysicalOlapScan node, ExpressionContext context) {
+        public CostEstimate visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 
@@ -67,7 +67,7 @@ public class CostModel {
         }
 
         @Override
-        public CostEstimate visitPhysicalHiveScan(PhysicalHiveScan node, ExpressionContext context) {
+        public CostEstimate visitPhysicalHiveScan(PhysicalHiveScanOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 
@@ -75,7 +75,7 @@ public class CostModel {
         }
 
         @Override
-        public CostEstimate visitPhysicalProject(PhysicalProject node, ExpressionContext context) {
+        public CostEstimate visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 
@@ -83,7 +83,7 @@ public class CostModel {
         }
 
         @Override
-        public CostEstimate visitPhysicalTopN(PhysicalTopN node, ExpressionContext context) {
+        public CostEstimate visitPhysicalTopN(PhysicalTopNOperator node, ExpressionContext context) {
             // Disable one phased sort, Currently, we always use two phase sort
             if (!node.isEnforced() && !node.isSplit()
                     && node.getSortPhase().isFinal()
@@ -111,8 +111,8 @@ public class CostModel {
             }
 
             // 2 Must do two stage aggregate is aggregate function has array type
-            if (context.getOp() instanceof PhysicalHashAggregate) {
-                PhysicalHashAggregate operator = (PhysicalHashAggregate) context.getOp();
+            if (context.getOp() instanceof PhysicalHashAggregateOperator) {
+                PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
                 if (operator.getAggregations().values().stream().anyMatch(callOperator
                         -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isArrayType()))) {
                     return false;
@@ -127,8 +127,8 @@ public class CostModel {
             }
 
             // 4. agg distinct function with multi columns can not generate one stage aggregate
-            if (context.getOp() instanceof PhysicalHashAggregate) {
-                PhysicalHashAggregate operator = (PhysicalHashAggregate) context.getOp();
+            if (context.getOp() instanceof PhysicalHashAggregateOperator) {
+                PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
                 if (operator.getAggregations().values().stream().anyMatch(callOperator -> callOperator.isDistinct() &&
                         callOperator.getChildren().size() > 1)) {
                     return false;
@@ -139,7 +139,7 @@ public class CostModel {
             return aggStage == 1 || aggStage == 0;
         }
 
-        public boolean isDistinctAggFun(CallOperator aggOperator, PhysicalHashAggregate node) {
+        public boolean isDistinctAggFun(CallOperator aggOperator, PhysicalHashAggregateOperator node) {
             if (aggOperator.getFnName().equalsIgnoreCase("MULTI_DISTINCT_COUNT") ||
                     aggOperator.getFnName().equalsIgnoreCase("MULTI_DISTINCT_SUM")) {
                 return true;
@@ -153,7 +153,7 @@ public class CostModel {
 
         // some agg function has extra cost, we need compute here
         // eg. MULTI_DISTINCT_COUNT function needs compute extra memory cost
-        public CostEstimate computeAggFunExtraCost(PhysicalHashAggregate node, Statistics statistics,
+        public CostEstimate computeAggFunExtraCost(PhysicalHashAggregateOperator node, Statistics statistics,
                                                    Statistics inputStatistics) {
             CostEstimate costEstimate = CostEstimate.zero();
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : node.getAggregations().entrySet()) {
@@ -194,7 +194,7 @@ public class CostModel {
         }
 
         @Override
-        public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregate node, ExpressionContext context) {
+        public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
             if (!canGenerateOneStageAggNode(context) && !node.isSplit() && node.getType().isGlobal()) {
                 return CostEstimate.infinite();
             }
@@ -208,7 +208,7 @@ public class CostModel {
         }
 
         @Override
-        public CostEstimate visitPhysicalDistribution(PhysicalDistribution node, ExpressionContext context) {
+        public CostEstimate visitPhysicalDistribution(PhysicalDistributionOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 
@@ -247,7 +247,7 @@ public class CostModel {
         }
 
         @Override
-        public CostEstimate visitPhysicalHashJoin(PhysicalHashJoin join, ExpressionContext context) {
+        public CostEstimate visitPhysicalHashJoin(PhysicalHashJoinOperator join, ExpressionContext context) {
             Preconditions.checkState(context.arity() == 2);
             // For broadcast join, use leftExecInstanceNum as right child real destinations num.
             int leftExecInstanceNum = context.getChildLeftMostScanTabletsNum(0);
@@ -272,13 +272,13 @@ public class CostModel {
         }
 
         @Override
-        public CostEstimate visitPhysicalAssertOneRow(PhysicalAssertOneRow node, ExpressionContext context) {
+        public CostEstimate visitPhysicalAssertOneRow(PhysicalAssertOneRowOperator node, ExpressionContext context) {
             //TODO: Add cost estimate
             return CostEstimate.zero();
         }
 
         @Override
-        public CostEstimate visitPhysicalAnalytic(PhysicalWindow node, ExpressionContext context) {
+        public CostEstimate visitPhysicalAnalytic(PhysicalWindowOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 

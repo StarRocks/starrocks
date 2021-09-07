@@ -54,25 +54,25 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRow;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalExcept;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalFilter;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregate;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoin;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersect;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScan;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProject;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeat;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScan;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunction;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalTopN;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalUnion;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalValues;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalWindow;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -165,7 +165,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalOlapScan(PhysicalOlapScan node, ExpressionContext context) {
+    public Void visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
         return computeOlapScanNode(node, context, node.getTable(), node.getSelectedPartitionId(),
                 node.getColumnToIds());
     }
@@ -201,7 +201,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalHiveScan(PhysicalHiveScan node, ExpressionContext context) {
+    public Void visitPhysicalHiveScan(PhysicalHiveScanOperator node, ExpressionContext context) {
         return computeHiveScanNode(node, context, node.getTable());
     }
 
@@ -291,7 +291,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalMysqlScan(PhysicalMysqlScan node, ExpressionContext context) {
+    public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
         return computeMysqlScanNode(node, context, node.getTable());
     }
 
@@ -307,7 +307,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalEsScan(PhysicalEsScan node, ExpressionContext context) {
+    public Void visitPhysicalEsScan(PhysicalEsScanOperator node, ExpressionContext context) {
         return computeEsScanNode(node, context, node.getTable());
     }
 
@@ -326,7 +326,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalSchemaScan(PhysicalSchemaScan node, ExpressionContext context) {
+    public Void visitPhysicalSchemaScan(PhysicalSchemaScanOperator node, ExpressionContext context) {
         Table table = node.getTable();
         Statistics.Builder builder = estimateScanColumns(table);
         builder.setOutputRowCount(1);
@@ -399,7 +399,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
                         olapTable::getPartition).collect(Collectors.toList());
             } else {
-                PhysicalOlapScan olapScanOperator = (PhysicalOlapScan) node;
+                PhysicalOlapScanOperator olapScanOperator = (PhysicalOlapScanOperator) node;
                 selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
                         olapTable::getPartition).collect(Collectors.toList());
             }
@@ -418,7 +418,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     return Math.max(computeHiveTableRowCount((HiveTable) table, scanOperator.getSelectedPartitionIds(),
                             scanOperator.getIdToPartitionKey()), 1);
                 } else {
-                    PhysicalHiveScan scanOperator = (PhysicalHiveScan) node;
+                    PhysicalHiveScanOperator scanOperator = (PhysicalHiveScanOperator) node;
                     return Math.max(computeHiveTableRowCount((HiveTable) table, scanOperator.getSelectedPartitionIds(),
                             scanOperator.getIdToPartitionKey()), 1);
                 }
@@ -485,7 +485,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalProject(PhysicalProject node, ExpressionContext context) {
+    public Void visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
         return computeProjectNode(context, node.getColumnRefMap(), node.getCommonSubOperatorMap());
     }
 
@@ -528,7 +528,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalHashAggregate(PhysicalHashAggregate node, ExpressionContext context) {
+    public Void visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
         return computeAggregateNode(node, context, node.getGroupBys(), node.getAggregations());
     }
 
@@ -587,7 +587,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalHashJoin(PhysicalHashJoin node, ExpressionContext context) {
+    public Void visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
         return computeJoinNode(context, node.getJoinPredicate(), node.getPredicate(), node.getJoinType(),
                 node.getLimit(),
                 node.getPruneOutputColumns());
@@ -718,7 +718,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalUnion(PhysicalUnion node, ExpressionContext context) {
+    public Void visitPhysicalUnion(PhysicalUnionOperator node, ExpressionContext context) {
         return computeUnionNode(node, context, node.getOutputColumnRefOp(), node.getChildOutputColumns());
     }
 
@@ -756,7 +756,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalExcept(PhysicalExcept node, ExpressionContext context) {
+    public Void visitPhysicalExcept(PhysicalExceptOperator node, ExpressionContext context) {
         return computeExceptNode(node, context, node.getOutputColumnRefOp());
     }
 
@@ -778,7 +778,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalIntersect(PhysicalIntersect node, ExpressionContext context) {
+    public Void visitPhysicalIntersect(PhysicalIntersectOperator node, ExpressionContext context) {
         return computeIntersectNode(node, context, node.getOutputColumnRefOp());
     }
 
@@ -808,7 +808,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalValues(PhysicalValues node, ExpressionContext context) {
+    public Void visitPhysicalValues(PhysicalValuesOperator node, ExpressionContext context) {
         return computeValuesNode(context, node.getColumnRefSet(), node.getRows());
     }
 
@@ -830,7 +830,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalRepeat(PhysicalRepeat node, ExpressionContext context) {
+    public Void visitPhysicalRepeat(PhysicalRepeatOperator node, ExpressionContext context) {
         return computeRepeatNode(context, node.getOutputGrouping());
     }
 
@@ -856,7 +856,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalTableFunction(PhysicalTableFunction node, ExpressionContext context) {
+    public Void visitPhysicalTableFunction(PhysicalTableFunctionOperator node, ExpressionContext context) {
         return computeTableFunctionNode(context, node.getOutputColumns());
     }
 
@@ -918,7 +918,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalTopN(PhysicalTopN node, ExpressionContext context) {
+    public Void visitPhysicalTopN(PhysicalTopNOperator node, ExpressionContext context) {
         return computeTopNNode(context, node);
     }
 
@@ -938,7 +938,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalAssertOneRow(PhysicalAssertOneRow node, ExpressionContext context) {
+    public Void visitPhysicalAssertOneRow(PhysicalAssertOneRowOperator node, ExpressionContext context) {
         return computeAssertOneRowNode(context);
     }
 
@@ -959,7 +959,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalFilter(PhysicalFilter node, ExpressionContext context) {
+    public Void visitPhysicalFilter(PhysicalFilterOperator node, ExpressionContext context) {
         return computeFilterNode(node, context);
     }
 
@@ -978,7 +978,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     @Override
-    public Void visitPhysicalAnalytic(PhysicalWindow node, ExpressionContext context) {
+    public Void visitPhysicalAnalytic(PhysicalWindowOperator node, ExpressionContext context) {
         return computeAnalyticNode(context, node.getAnalyticCall());
     }
 

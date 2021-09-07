@@ -7,7 +7,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalValues;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collections;
@@ -21,7 +21,8 @@ public class ValuesImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalValuesOperator valuesOperator = (LogicalValuesOperator) input.getOp();
-        PhysicalValues physicalValues = new PhysicalValues(valuesOperator.getColumnRefSet(), valuesOperator.getRows());
+        PhysicalValuesOperator
+                physicalValues = new PhysicalValuesOperator(valuesOperator.getColumnRefSet(), valuesOperator.getRows());
         physicalValues.setPredicate(valuesOperator.getPredicate());
         physicalValues.setLimit(valuesOperator.getLimit());
         return Lists.newArrayList(OptExpression.create(physicalValues, Collections.emptyList()));

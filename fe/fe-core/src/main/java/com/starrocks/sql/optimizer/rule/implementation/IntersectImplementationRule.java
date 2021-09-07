@@ -7,7 +7,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersect;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -22,7 +22,7 @@ public class IntersectImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalSetOperator setOperator = (LogicalSetOperator) input.getOp();
-        PhysicalIntersect physicalIntersect = new PhysicalIntersect(setOperator.getOutputColumnRefOp(),
+        PhysicalIntersectOperator physicalIntersect = new PhysicalIntersectOperator(setOperator.getOutputColumnRefOp(),
                 setOperator.getChildOutputColumns());
         physicalIntersect.setLimit(setOperator.getLimit());
         return Lists.newArrayList(OptExpression.create(physicalIntersect, input.getInputs()));

@@ -55,12 +55,11 @@ public class ShowRuntimeInfoAction extends RestBaseAction {
         feInfo.put("max_mem", String.valueOf(r.maxMemory()));
 
         // Get thread count
-        ThreadGroup parentThread;
-        for (parentThread = Thread.currentThread().getThreadGroup();
-             parentThread.getParent() != null;
-             parentThread = parentThread.getParent()) {
+        ThreadGroup parentThread = Thread.currentThread().getThreadGroup();
+        while (parentThread.getParent() != null) {
+            parentThread = parentThread.getParent();
         }
-        ;
+
         feInfo.put("thread_cnt", String.valueOf(parentThread.activeCount()));
 
         Gson gson = new Gson();

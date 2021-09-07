@@ -18,7 +18,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-public class PhysicalHiveScan extends PhysicalOperator {
+public class PhysicalHiveScanOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> outputColumns;
     private final Map<ColumnRefOperator, Column> columnRefMap;
     private Table table;
@@ -35,15 +35,15 @@ public class PhysicalHiveScan extends PhysicalOperator {
     // Map of columnRefOperator to column which column in minMaxConjuncts
     private final Map<ColumnRefOperator, Column> minMaxColumnRefMap;
 
-    public PhysicalHiveScan(Table table,
-                            List<ColumnRefOperator> outputColumns,
-                            Map<ColumnRefOperator, Column> columnRefMap,
-                            Collection<Long> selectedPartitionIds,
-                            Map<Long, PartitionKey> idToPartitionKey,
-                            List<ScalarOperator> noEvalPartitionConjuncts,
-                            List<ScalarOperator> nonPartitionConjuncts,
-                            List<ScalarOperator> minMaxConjuncts,
-                            Map<ColumnRefOperator, Column> minMaxColumnRefMap) {
+    public PhysicalHiveScanOperator(Table table,
+                                    List<ColumnRefOperator> outputColumns,
+                                    Map<ColumnRefOperator, Column> columnRefMap,
+                                    Collection<Long> selectedPartitionIds,
+                                    Map<Long, PartitionKey> idToPartitionKey,
+                                    List<ScalarOperator> noEvalPartitionConjuncts,
+                                    List<ScalarOperator> nonPartitionConjuncts,
+                                    List<ScalarOperator> minMaxConjuncts,
+                                    Map<ColumnRefOperator, Column> minMaxColumnRefMap) {
         super(OperatorType.PHYSICAL_HIVE_SCAN);
         this.table = table;
         this.outputColumns = outputColumns;
@@ -106,7 +106,7 @@ public class PhysicalHiveScan extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        PhysicalHiveScan that = (PhysicalHiveScan) o;
+        PhysicalHiveScanOperator that = (PhysicalHiveScanOperator) o;
         return Objects.equal(outputColumns, that.outputColumns) && Objects.equal(columnRefMap, that.columnRefMap) &&
                 Objects.equal(table, that.table) && Objects.equal(selectedPartitionIds, that.selectedPartitionIds) &&
                 Objects.equal(idToPartitionKey, that.idToPartitionKey) &&

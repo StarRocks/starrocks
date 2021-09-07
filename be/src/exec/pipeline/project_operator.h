@@ -26,11 +26,11 @@ public:
 
     Status close(RuntimeState* state) override;
 
-    bool has_output() const override { return _cur_chunk != nullptr; }
+    bool has_output() override { return _cur_chunk != nullptr; }
 
-    bool need_input() const override { return _cur_chunk == nullptr; }
+    bool need_input() override { return _cur_chunk == nullptr; }
 
-    bool is_finished() const override { return _is_finished; }
+    bool is_finished() const override { return _is_finished && _cur_chunk == nullptr; }
 
     void finish(RuntimeState* state) override { _is_finished = true; }
 
