@@ -113,7 +113,6 @@ Step 4: Look up the log file (`log/fe.log`) to confirm that the FE has been star
 
 * If the FE fails to start, check if the port number is occupied. If so, modify the port number (`http_port`) in the configuration file.
 * You can also use the jps command to view the java process and see if StarRocks FE exists.
-* When you use a browser to access port 8030 and open StarRocks' WebUI, you should see the username is root and password is blank.
 
 ### Use MySQL Client to Access FE
 
