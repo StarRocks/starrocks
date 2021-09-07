@@ -107,23 +107,12 @@ public class ConfigBase {
             String value = props.getProperty(key);
             Matcher m = pattern.matcher(value);
             while (m.find()) {
-                String envKey = m.group(1);
-                if (envKey != "DORIS_HOME") {
-                    String envValue = System.getProperty(envKey);
-                    envValue = (envValue != null) ? envValue : System.getenv(envKey);
-                    if (envValue != null) {
-                        value = value.replace("${" + envKey + "}", envValue);
-                    } else {
-                        throw new Exception("no such env variable: " + envKey);
-                    }
+                String envValue = System.getProperty(m.group(1));
+                envValue = (envValue != null) ? envValue : System.getenv(m.group(1));
+                if (envValue != null) {
+                    value = value.replace("${" + m.group(1) + "}", envValue);
                 } else {
-                    String envValue = System.getProperty(envKey);
-                    envValue = (envValue != null) ? envValue : System.getenv("STARROCKS_HOME");
-                    if (envValue != null) {
-                        value = value.replace("${" + envKey + "}", envValue);
-                    } else {
-                        throw new Exception("no such env variable: " + envKey);
-                    }
+                    throw new Exception("no such env variable: " + m.group(1));
                 }
             }
             props.setProperty(key, value);

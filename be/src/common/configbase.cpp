@@ -76,9 +76,6 @@ bool replaceenv(std::string& s) {
             return false;
         }
         std::string envkey = s.substr(start + 2, end - start - 2);
-        if (envkey == "DORIS_HOME") {
-            envkey = "STARROCKS_HOME";
-        }
         const char* envval = std::getenv(envkey.c_str());
         if (envval == nullptr) {
             return false;
