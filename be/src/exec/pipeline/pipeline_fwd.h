@@ -10,6 +10,8 @@ class QueryContext;
 using QueryContextPtr = std::shared_ptr<QueryContext>;
 class FragmentContext;
 using FragmentContextPtr = std::shared_ptr<FragmentContext>;
+class FragmentContextManager;
+using FragmentContextManagerPtr = std::unique_ptr<FragmentContextManager>;
 class FragmentExecutor;
 class Pipeline;
 using PipelinePtr = std::shared_ptr<Pipeline>;
