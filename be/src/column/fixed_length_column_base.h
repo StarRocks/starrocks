@@ -98,7 +98,7 @@ public:
         DCHECK_LE(start, end);
         DCHECK_LE(start, _data.size());
         DCHECK_LE(end, _data.size());
-        for (size_t i=start; i<end; i++) {
+        for (size_t i = start; i < end; i++) {
             if (_data[i] == value) {
                 return true;
             }
