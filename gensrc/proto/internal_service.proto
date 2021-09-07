@@ -208,6 +208,7 @@ message PCancelPlanFragmentRequest {
     required PUniqueId finst_id = 1;
     optional PPlanFragmentCancelReason cancel_reason = 2;
     optional bool is_pipeline = 10;
+    optional PUniqueId query_id = 11;
 };
 
 message PCancelPlanFragmentResult {
