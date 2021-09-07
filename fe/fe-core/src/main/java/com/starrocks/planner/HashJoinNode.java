@@ -68,6 +68,7 @@ public class HashJoinNode extends PlanNode {
     private DistributionMode distrMode;
     private String colocateReason = ""; // if can not do colocate join, set reason here
     private boolean isBucketShuffle = false; // the flag for bucket shuffle join
+    private boolean isRuntimeBucketShuffle = false;
 
     private List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
 
@@ -220,6 +221,10 @@ public class HashJoinNode extends PlanNode {
         return isBucketShuffle;
     }
 
+    public boolean isRuntimeBucketShuffle() {
+        return isRuntimeBucketShuffle;
+    }
+
     public void setColocate(boolean colocate, String reason) {
         isColocate = colocate;
         colocateReason = reason;
@@ -227,6 +232,10 @@ public class HashJoinNode extends PlanNode {
 
     public void setBucketShuffle(boolean bucketShuffle) {
         isBucketShuffle = bucketShuffle;
+    }
+
+    public void setRuntimeBucketShuffle(boolean runtimeBucketShuffle) {
+        isRuntimeBucketShuffle = runtimeBucketShuffle;
     }
 
     @Override

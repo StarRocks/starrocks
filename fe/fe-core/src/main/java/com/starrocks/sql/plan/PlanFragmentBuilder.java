@@ -1300,6 +1300,7 @@ public class PlanFragmentBuilder {
                                                                     PlanFragment stayFragment,
                                                                     PlanFragment removeFragment,
                                                                     HashJoinNode hashJoinNode) {
+            hashJoinNode.setRuntimeBucketShuffle(true);
             removeFragment.getChild(0)
                     .setOutputPartition(new DataPartition(TPartitionType.HASH_PARTITIONED,
                             removeFragment.getDataPartition().getPartitionExprs()));
