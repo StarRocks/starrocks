@@ -1,4 +1,4 @@
-# DorisDB System Architecture
+# StarRocks System Architecture
 
 ## System Architecture Diagram
 
@@ -6,7 +6,7 @@
 
 ## Components
 
-The DorisDB cluster is composed of FE and BE, and can be accessed via MySQL client.
+The StarRocks cluster is composed of FE and BE, and can be accessed via MySQL client.
 
 ### FE
 
@@ -31,5 +31,4 @@ The DorisDB cluster is composed of FE and BE, and can be accessed via MySQL clie
 
 ### Other Components
 
-* Management Platform
 * Hdfs Broker
