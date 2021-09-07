@@ -148,7 +148,7 @@ public class DppConfigTest {
         dis.close();
         file.delete();
 
-        Assert.assertEquals("/user/starrocks2", newDppConfig.getPaloPath());
+        Assert.assertEquals("/user/starrocks2", newDppConfig.getStarRocksPath());
         Assert.assertEquals(1234, newDppConfig.getHttpPort());
         Assert.assertEquals(4, newDppConfig.getHadoopConfigs().size());
     }
