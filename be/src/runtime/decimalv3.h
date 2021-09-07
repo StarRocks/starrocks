@@ -102,7 +102,7 @@ public:
     static inline bool from_string(DecimalType<T>* value, int precision, int scale, const char* s, size_t n) {
         StringParser::ParseResult result = StringParser::PARSE_SUCCESS;
         *value = StringParser::string_to_decimal<T>(s, n, precision, scale, &result);
-        return result == StringParser::PARSE_FAILURE;
+        return result == StringParser::PARSE_FAILURE || result == StringParser::PARSE_OVERFLOW;
     }
 
     template <typename ST>
