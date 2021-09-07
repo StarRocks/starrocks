@@ -21,7 +21,7 @@ StarRocks is a next-gen sub-second MPP database for full analysis senarios, incl
 
 ## Install
 
-Download the current release: [StarRocks-SE-1.18.2.tar.gz](http://starrocks-cn-release.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-1.18.2.tar.gz?Expires=1632228718&OSSAccessKeyId=LTAI4GFYjbX9e7QmFnAAvkt8&Signature=zrhN8oZCr3U6HqlCVw020TaXKNE%3D)   
+Download the current release: [StarRocks-1.18.2.tar.gz](http://starrocks-cn-release.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-1.18.2.tar.gz?Expires=1632228718&OSSAccessKeyId=LTAI4GFYjbX9e7QmFnAAvkt8&Signature=zrhN8oZCr3U6HqlCVw020TaXKNE%3D)   
 For detailed instructions, please refer to [deploy](https://github.com/StarRocks/docs/blob/master/quick_start/deploy.md).
 
 ## Links
