@@ -33,6 +33,8 @@ public:
     Status close(RuntimeState* state) override;
 
 private:
+    static bool _has_null(const ColumnPtr& column);
+
     void _init_hash_table_param(HashTableParam* param);
     // local join includes: broadcast join and colocate join.
     Status _create_implicit_local_join_runtime_filters(RuntimeState* state);
