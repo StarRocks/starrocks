@@ -517,6 +517,7 @@ public class HashJoinNode extends PlanNode {
         BROADCAST("BROADCAST"),
         PARTITIONED("PARTITIONED"),
         BUCKET_SHUFFLE("BUCKET_SHUFFLE"),
+        RUNTIME_BUCKET_SHUFFLE("RUNTIME_BUCKET_SHUFFLE"),
         COLOCATE("COLOCATE");
 
         private final String description;

@@ -3695,24 +3695,24 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select * from join1 left join join2 as b on join1.id = b.id\n" +
                 "left join join2 as c on join1.id = c.id \n" +
                 "where b.id > 1;";
-        starRocksAssert.query(sql).explainContains("  6:HASH JOIN\n" +
-                        "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+        starRocksAssert.query(sql).explainContains("7:HASH JOIN\n" +
+                        "  |  join op: LEFT OUTER JOIN (RUNTIME_BUCKET_SHUFFLE)\n" +
                         "  |  hash predicates:\n" +
                         "  |  colocate: false, reason: \n" +
                         "  |  equal join conjunct: 2: id = 8: id",
-                "  3:HASH JOIN\n" +
-                        "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "4:HASH JOIN\n" +
+                        "  |  join op: INNER JOIN (PARTITIONED)\n" +
                         "  |  hash predicates:\n" +
                         "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 2: id = 5: id",
-                "  0:OlapScanNode\n" +
-                        "     TABLE: join1\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 2: id > 1",
-                "  1:OlapScanNode\n" +
+                        "  |  equal join conjunct: 5: id = 2: id",
+                "0:OlapScanNode\n" +
                         "     TABLE: join2\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: id > 1");
+                        "     PREDICATES: 5: id > 1",
+                "2:OlapScanNode\n" +
+                        "     TABLE: join1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 2: id > 1");
 
         sql = "select * from join1 left join join2 as b on join1.id = b.id\n" +
                 "left join join2 as c on join1.id = c.id \n" +
@@ -4313,5 +4313,14 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  1:OlapScanNode\n" +
                 "     TABLE: t1"));
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testRuntimeBucketShuffle() throws Exception {
+        String sql = "SELECT COUNT(*)\n" +
+                "FROM lineitem JOIN [shuffle] orders o1 ON l_orderkey = o1.o_orderkey\n" +
+                "JOIN [shuffle] orders o2 ON l_orderkey = o2.o_orderkey";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (RUNTIME_BUCKET_SHUFFLE)"));
     }
 }
