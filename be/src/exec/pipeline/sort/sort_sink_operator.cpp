@@ -41,7 +41,7 @@ bool SortSinkOperator::need_input() {
 }
 
 Status SortSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    if (chunk != nullptr && chunk->num_rows() > 0) {
+    if (chunk && chunk->num_rows() > 0) {
         vectorized::ChunkPtr materialize_chunk = _materialize_chunk_before_sort(chunk.get());
         _chunks_sorter->update(state, materialize_chunk);
     }
@@ -82,9 +82,9 @@ vectorized::ChunkPtr SortSinkOperator::_materialize_chunk_before_sort(vectorized
                 new_col->append(*data_col, 0, 1);
                 new_col->assign(row_num, 0);
                 if (_order_by_types[i].is_nullable) {
-                    ColumnPtr null_col =
+                    ColumnPtr nullable_column =
                             NullableColumn::create(ColumnPtr(new_col.release()), NullColumn::create(row_num, 0));
-                    materialize_chunk->append_column(null_col, slots_in_row_descriptor[i]->id());
+                    materialize_chunk->append_column(nullable_column, slots_in_row_descriptor[i]->id());
                 } else {
                     materialize_chunk->append_column(ColumnPtr(new_col.release()), slots_in_row_descriptor[i]->id());
                 }

@@ -30,8 +30,6 @@ public:
     // Then FE will pull result from BufferControlBlock
     bool has_output() override;
 
-    bool need_input() override;
-
     bool is_finished() const override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;

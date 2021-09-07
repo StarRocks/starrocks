@@ -16,18 +16,14 @@
 #include "util/stack_util.h"
 
 namespace starrocks::pipeline {
-bool SortSourceOperator::need_input() {
-    return !is_finished();
-}
-
 StatusOr<vectorized::ChunkPtr> SortSourceOperator::pull_chunk(RuntimeState* state) {
     ChunkPtr chunk;
     if (_chunks_sorter->pull_chunk(&chunk)) {
         _is_source_complete = true;
     }
 
-    if (chunk == nullptr) {
-        return std::move(std::make_shared<vectorized::Chunk>());
+    if (!chunk) {
+        return std::make_shared<vectorized::Chunk>();
     } else {
         return std::move(chunk);
     }

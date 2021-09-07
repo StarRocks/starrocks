@@ -242,7 +242,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     operator_sink_with_sort.emplace_back(std::move(ope));
     context->add_pipeline(operator_sink_with_sort);
 
-    // step 1: costruct pipelien start with sort operator's result.
+    // step 1: costruct pipeline start with sort operator's result.
     OpFactories operator_source_with_sort;
     auto ope2 =
             std::make_shared<SortSourceOperatorFactory>(context->next_operator_id(), id(), std::move(chunks_sorter));
