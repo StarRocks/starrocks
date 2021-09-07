@@ -16,27 +16,14 @@
 #include "util/stack_util.h"
 
 namespace starrocks::pipeline {
-Status SortSourceOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
-
-    return Status::OK();
-}
-
-Status SortSourceOperator::close(RuntimeState* state) {
-    return Status::OK();
-}
-
 bool SortSourceOperator::need_input() {
-    if (is_finished()) {
-        return false;
-    }
-    return true;
+    return !is_finished();
 }
 
 StatusOr<vectorized::ChunkPtr> SortSourceOperator::pull_chunk(RuntimeState* state) {
     ChunkPtr chunk;
     if (_chunks_sorter->pull_chunk(&chunk)) {
-        is_source_complete = true;
+        _is_source_complete = true;
     }
 
     if (chunk == nullptr) {
@@ -55,7 +42,7 @@ bool SortSourceOperator::has_output() {
 }
 
 bool SortSourceOperator::is_finished() const {
-    return is_source_complete;
+    return _is_source_complete;
 }
 
 } // namespace starrocks::pipeline

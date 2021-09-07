@@ -97,6 +97,12 @@ void ChunksSorterTopn::get_next(ChunkPtr* chunk, bool* eos) {
     _next_output_row += count;
 }
 
+/*
+ * _next_output_row index the next row we need to get, 
+ * In this case, The actual data is _merged_segment.chunk, 
+ * so we use _next_output_row to get datas from _merged_segment.chunk, 
+ * and copy it in chunk as output.
+ */
 bool ChunksSorterTopn::pull_chunk(ChunkPtr* chunk) {
     if (_next_output_row >= _merged_segment.chunk->num_rows()) {
         *chunk = nullptr;

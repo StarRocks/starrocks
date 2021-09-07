@@ -21,14 +21,10 @@ class ChunksSorter;
 namespace pipeline {
 class SortSourceOperator final : public SourceOperator {
 public:
-    SortSourceOperator(int32_t id, int32_t plan_node_id, std::shared_ptr<vectorized::ChunksSorter> chunks_sorter)
+    SortSourceOperator(int32_t id, int32_t plan_node_id, std::shared_ptr<vectorized::ChunksSorter>&& chunks_sorter)
             : SourceOperator(id, "sort_source", plan_node_id), _chunks_sorter(chunks_sorter) {}
 
     ~SortSourceOperator() override = default;
-
-    Status prepare(RuntimeState* state) override;
-
-    Status close(RuntimeState* state) override;
 
     // Result sink will send result chunk to BufferControlBlock directly,
     // Then FE will pull result from BufferControlBlock
@@ -50,18 +46,19 @@ private:
     bool _is_finished = false;
     vectorized::ChunkPtr _full_chunk = nullptr;
 
-    std::atomic<bool> is_source_complete = false;
+    std::atomic<bool> _is_source_complete = false;
 };
 
 class SortSourceOperatorFactory final : public OperatorFactory {
 public:
-    SortSourceOperatorFactory(int32_t id, int32_t plan_node_id, std::shared_ptr<vectorized::ChunksSorter> chunks_sorter)
+    SortSourceOperatorFactory(int32_t id, int32_t plan_node_id,
+                              std::shared_ptr<vectorized::ChunksSorter>&& chunks_sorter)
             : OperatorFactory(id, plan_node_id), _chunks_sorter(chunks_sorter) {}
 
     ~SortSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
-        auto ope = std::make_shared<SortSourceOperator>(_id, _plan_node_id, _chunks_sorter);
+        auto ope = std::make_shared<SortSourceOperator>(_id, _plan_node_id, std::move(_chunks_sorter));
         return ope;
     }
 

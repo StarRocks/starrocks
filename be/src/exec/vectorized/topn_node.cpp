@@ -235,16 +235,17 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     }
 
     //chunks_sorter->setup_runtime(mem_tracker(), runtime_profile(), "ChunksSorter");
-
     // add sort operator to this pipeline
     auto ope = std::make_shared<SortSinkOperatorFactory>(context->next_operator_id(), id(), chunks_sorter,
-                                                         _sort_exec_exprs, _order_by_types, _materialized_tuple_desc);
+                                                         _sort_exec_exprs, _order_by_types, _materialized_tuple_desc,
+                                                         child(0)->row_desc(), _row_descriptor);
     operator_sink_with_sort.emplace_back(std::move(ope));
     context->add_pipeline(operator_sink_with_sort);
 
     // step 1: costruct pipelien start with sort operator's result.
     OpFactories operator_source_with_sort;
-    auto ope2 = std::make_shared<SortSourceOperatorFactory>(context->next_operator_id(), id(), chunks_sorter);
+    auto ope2 =
+            std::make_shared<SortSourceOperatorFactory>(context->next_operator_id(), id(), std::move(chunks_sorter));
     operator_source_with_sort.emplace_back(std::move(ope2));
 
     // return to the following pipeline

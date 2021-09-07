@@ -19,11 +19,17 @@ using namespace starrocks::vectorized;
 namespace starrocks::pipeline {
 Status SortSinkOperator::prepare(RuntimeState* state) {
     Operator::prepare(state);
+    // call prepare and open at exprs, Maintain the same procedure as topnnode.
+    RETURN_IF_ERROR(
+            _sort_exec_exprs.prepare(state, _parent_node_row_desc, _parent_node_child_row_desc, get_memtracker()));
+    RETURN_IF_ERROR(_sort_exec_exprs.open(state));
     return Status::OK();
 }
 
 Status SortSinkOperator::close(RuntimeState* state) {
-    return Status::OK();
+    // call close exprs, Maintain the same procedure as topnnode.
+    _sort_exec_exprs.close(state);
+    return Operator::close(state);
 }
 
 StatusOr<vectorized::ChunkPtr> SortSinkOperator::pull_chunk(RuntimeState* state) {
@@ -31,10 +37,7 @@ StatusOr<vectorized::ChunkPtr> SortSinkOperator::pull_chunk(RuntimeState* state)
 }
 
 bool SortSinkOperator::need_input() {
-    if (is_finished()) {
-        return false;
-    }
-    return true;
+    return !is_finished();
 }
 
 Status SortSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {

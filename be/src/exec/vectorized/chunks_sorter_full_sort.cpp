@@ -282,7 +282,17 @@ void ChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
     _next_output_row += count;
 }
 
+/*
+ * _next_output_row index the next row we need to get,  
+ * _sorted_permutation means all the result datas. In this case, 
+ * _sorted_permutation use as an index, 
+ * The actual data is _sorted_segment->chunk, 
+ * so we use _next_output_row and _sorted_permutation to get datas from _sorted_segment->chunk, 
+ * and copy it in chunk as output.
+ */
 bool ChunksSorterFullSort::pull_chunk(ChunkPtr* chunk) {
+    // _next_output_row used to record next row to get,
+    // This condition is used to determine whether all data has been retrieved.
     if (_next_output_row >= _sorted_permutation.size()) {
         *chunk = nullptr;
         return true;
