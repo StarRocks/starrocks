@@ -4072,7 +4072,7 @@ type ::=
   | KW_DECIMAL LPAREN INTEGER_LITERAL:precision COMMA INTEGER_LITERAL:scale RPAREN
   {: RESULT = ScalarType.createUnifiedDecimalType(precision.intValue(), scale.intValue()); :}
   | KW_DECIMAL
-  {: RESULT = ScalarType.createUnifiedDecimalType(); :}
+  {: RESULT = ScalarType.createUnifiedDecimalType(10, 0); :}
   | KW_DECIMALV2 LPAREN INTEGER_LITERAL:precision RPAREN
   {: RESULT = ScalarType.createDecimalV2Type(precision.intValue()); :}
   | KW_DECIMALV2 LPAREN INTEGER_LITERAL:precision COMMA INTEGER_LITERAL:scale RPAREN
