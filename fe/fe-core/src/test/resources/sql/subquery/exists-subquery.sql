@@ -272,7 +272,7 @@ LEFT OUTER JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [3: v3 = 3 O
         AGGREGATE ([GLOBAL] aggregate [{}] group by [[5: v5]] having [null]
             EXCHANGE SHUFFLE[5]
                 AGGREGATE ([LOCAL] aggregate [{}] group by [[5: v5]] having [null]
-                    SCAN (columns[5: v5] predicate[null])
+                    SCAN (columns[5: v5] predicate[5: v5 = 4])
 [end]
 
 [sql]

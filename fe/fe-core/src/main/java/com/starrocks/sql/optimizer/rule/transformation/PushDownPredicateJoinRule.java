@@ -38,15 +38,15 @@ public class PushDownPredicateJoinRule extends TransformationRule {
                         .addChildren(Pattern.create(OperatorType.PATTERN_LEAF))));
     }
 
-    private OptExpression pushDownOuterOrSemiJoin(OptExpression input, ScalarOperator predicate) {
+    private OptExpression pushDownOuterOrSemiJoin(OptExpression input, ScalarOperator predicate,
+                                                  List<ScalarOperator> leftPushDown,
+                                                  List<ScalarOperator> rightPushDown) {
         OptExpression joinOpt = input.getInputs().get(0);
         LogicalJoinOperator join = (LogicalJoinOperator) input.getInputs().get(0).getOp();
 
         ColumnRefSet leftColumns = joinOpt.getInputs().get(0).getOutputColumns();
         ColumnRefSet rightColumns = joinOpt.getInputs().get(1).getOutputColumns();
 
-        List<ScalarOperator> leftPushDown = new ArrayList<>();
-        List<ScalarOperator> rightPushDown = new ArrayList<>();
         List<ScalarOperator> remainingFilter = new ArrayList<>();
 
         if (join.getJoinType().isLeftOuterJoin()) {
@@ -177,13 +177,14 @@ public class PushDownPredicateJoinRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalFilterOperator filter = (LogicalFilterOperator) input.getOp();
-        LogicalJoinOperator join = (LogicalJoinOperator) input.getInputs().get(0).getOp();
+        OptExpression joinOpt = input.getInputs().get(0);
+        LogicalJoinOperator join = (LogicalJoinOperator) joinOpt.getOp();
 
         if (join.getJoinType().isCrossJoin() || join.getJoinType().isInnerJoin()) {
             // The effect will be better, first do the range derive, and then do the equivalence derive
             ScalarOperator predicate = JoinPredicateUtils
                     .rangePredicateDerive(Utils.compoundAnd(join.getOnPredicate(), filter.getPredicate()));
-            predicate = JoinPredicateUtils.equivalenceDerive(predicate);
+            predicate = JoinPredicateUtils.equivalenceDerive(predicate, true);
             return Lists.newArrayList(pushDownOnPredicate(input.getInputs().get(0), predicate));
         } else {
             if (join.getJoinType().isOuterJoin()) {
@@ -193,11 +194,36 @@ public class PushDownPredicateJoinRule extends TransformationRule {
             if (join.getJoinType().isCrossJoin() || join.getJoinType().isInnerJoin()) {
                 ScalarOperator predicate = JoinPredicateUtils
                         .rangePredicateDerive(Utils.compoundAnd(join.getOnPredicate(), filter.getPredicate()));
-                predicate = JoinPredicateUtils.equivalenceDerive(predicate);
+                predicate = JoinPredicateUtils.equivalenceDerive(predicate, true);
                 return Lists.newArrayList(pushDownOnPredicate(input.getInputs().get(0), predicate));
             } else {
                 ScalarOperator predicate = JoinPredicateUtils.rangePredicateDerive(filter.getPredicate());
-                return Lists.newArrayList(pushDownOuterOrSemiJoin(input, predicate));
+                List<ScalarOperator> leftPushDown = Lists.newArrayList();
+                List<ScalarOperator> rightPushDown = Lists.newArrayList();
+                // For SQl: select * from t1 left join t2 on t1.id = t2.id where t1.id > 1
+                // Infer t2.id > 1 and Push down it to right child
+                if (join.getJoinType().isLeftOuterJoin() || join.getJoinType().isRightOuterJoin()) {
+                    ColumnRefSet leftOutputColumns = joinOpt.getInputs().get(0).getOutputColumns();
+                    ColumnRefSet rightOutputColumns = joinOpt.getInputs().get(1).getOutputColumns();
+                    ScalarOperator derivedPredicate = JoinPredicateUtils.equivalenceDerive(
+                            Utils.compoundAnd(join.getOnPredicate(), filter.getPredicate()), false);
+                    List<ScalarOperator> derivedPredicates = Utils.extractConjuncts(derivedPredicate);
+
+                    if (join.getJoinType().isLeftOuterJoin()) {
+                        for (ScalarOperator p : derivedPredicates) {
+                            if (rightOutputColumns.contains(derivedPredicate.getUsedColumns())) {
+                                rightPushDown.add(p);
+                            }
+                        }
+                    } else if (join.getJoinType().isRightOuterJoin()) {
+                        for (ScalarOperator p : derivedPredicates) {
+                            if (leftOutputColumns.contains(derivedPredicate.getUsedColumns())) {
+                                leftPushDown.add(p);
+                            }
+                        }
+                    }
+                }
+                return Lists.newArrayList(pushDownOuterOrSemiJoin(input, predicate, leftPushDown, rightPushDown));
             }
         }
     }

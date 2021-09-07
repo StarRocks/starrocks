@@ -39,7 +39,7 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
 
         on = JoinPredicateUtils.rangePredicateDerive(on);
         if (join.getJoinType().isInnerJoin()) {
-            on = JoinPredicateUtils.equivalenceDerive(on);
+            on = JoinPredicateUtils.equivalenceDerive(on, true);
         }
 
         OptExpression root = pushDownOnPredicate(input, on);
