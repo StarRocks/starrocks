@@ -408,7 +408,6 @@ set(WL_START_GROUP "-Wl,--start-group")
 set(WL_END_GROUP "-Wl,--end-group")
 
 # Set starrocks libraries
-# Set Palo libraries
 set(STARROCKS_LINK_LIBS
     ${WL_START_GROUP}
     Agent
