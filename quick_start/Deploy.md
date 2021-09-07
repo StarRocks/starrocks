@@ -1,6 +1,6 @@
 # Deployment
 
-Manual deployment allows users to quickly leverage Doris DB to do operation and maintenance tasks.
+Manual deployment allows users to quickly leverage StarRocks to do operation and maintenance tasks.
 
 ## Get the Binary Package
 
@@ -78,7 +78,7 @@ cd StarRocks-XX-1.0.0/fe
 Step 1: Customize the configuration file `conf/fe.conf`.
 
 ```bash
-JAVA_OPTS = "-Xmx4096m -XX:+UseMembar -XX:SurvivorRatio=8 -XX:MaxTenuringThreshold=7 -XX:+PrintGCDateStamps -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+CMSClassUnloadingEnabled -XX:-CMSParallelRemarkEnabled -XX:CMSInitiatingOccupancyFraction=80 -XX:SoftRefLRUPolicyMSPerMB=0 -Xloggc:$DORIS_HOME/log/fe.gc.log"
+JAVA_OPTS = "-Xmx4096m -XX:+UseMembar -XX:SurvivorRatio=8 -XX:MaxTenuringThreshold=7 -XX:+PrintGCDateStamps -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+CMSClassUnloadingEnabled -XX:-CMSParallelRemarkEnabled -XX:CMSInitiatingOccupancyFraction=80 -XX:SoftRefLRUPolicyMSPerMB=0 -Xloggc:$STARROCKS_HOME/log/fe.gc.log"
 ```
 
 You can adjust `-Xmx4096m` basd on the FE memory size. Recommend to set the memory size to 16G or above to avoid GC. All StarRocks metadata is stored in the memory.
@@ -86,7 +86,7 @@ You can adjust `-Xmx4096m` basd on the FE memory size. Recommend to set the memo
 Step 2: Create a metadata directory.
 
 ```bash
-mkdir -p doris-meta
+mkdir -p meta
 ```
 
 Step 3: Start the FE.
