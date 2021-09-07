@@ -2,12 +2,12 @@
 
 ## Index
 
-+ [Introduction](/introduction/introduction.md)
++ [Introduction](/introduction/StarRocks_intro.md)
 + Quick Start
-  + [Concepts](/quick_start/concepts.md)
-  + [Architecture](/quick_start/architecture.md)
-  + [Deploy](/quick_start/deploy.md)
-  + [Data flow and control flow](/quick_start/data_flow_and_control_flow.md)
-  + [Import and query](/quick_start/import_and_query.md)
-  + [Test FAQs](/quick_start/test_faq.md)
+  + [Concepts](/quick_start/Concepts.md)
+  + [Architecture](/quick_start/Architecture.md)
+  + [Deploy](/quick_start/Deploy.md)
+  + [Data flow and control flow](/quick_start/Data_flow_and_control_flow.md)
+  + [Import and query](/quick_start/Import_and_query.md)
+  + [Test FAQs](/quick_start/Test_faq.md)
   
