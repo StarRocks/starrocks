@@ -3031,10 +3031,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "left join join2 on join1.id = join2.id\n" +
                 "where join1.id > 1;";
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
-                "     TABLE: join1\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 2: id > 1"));
+        Assert.assertTrue(explainString.contains("PREDICATES: 2: id > 1"));
+        Assert.assertTrue(explainString.contains("PREDICATES: 5: id > 1"));
 
         // test left join: left table where in predicate
         sql = "select join1.id\n" +
@@ -3042,10 +3040,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "left join join2 on join1.id = join2.id\n" +
                 "where join1.id in (2);";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
-                "     TABLE: join1\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 2: id = 2"));
+        Assert.assertTrue(explainString.contains("PREDICATES: 2: id = 2"));
+        Assert.assertTrue(explainString.contains("PREDICATES: 5: id = 2"));
 
         // test left join: left table where between predicate
         sql = "select join1.id\n" +
@@ -3053,10 +3049,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "left join join2 on join1.id = join2.id\n" +
                 "where join1.id BETWEEN 1 AND 2;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
-                "     TABLE: join1\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 2: id >= 1, 2: id <= 2"));
+        Assert.assertTrue(explainString.contains("PREDICATES: 2: id >= 1, 2: id <= 2"));
+        Assert.assertTrue(explainString.contains("PREDICATES: 5: id >= 1, 5: id <= 2"));
 
         // test left join: left table join predicate, left table couldn't push down
         sql = "select *\n from join1\n" +
@@ -3626,36 +3620,35 @@ public class PlanFragmentTest extends PlanTestBase {
         // test full outer join convert to left join
         sql = "select * from join1 full outer join join2 on join1.id = join2.id\n" +
                 "where join1.id > 1;";
-        starRocksAssert.query(sql).explainContains("  4:HASH JOIN\n" +
-                        "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+        starRocksAssert.query(sql).explainContains("  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                         "  |  hash predicates:\n" +
                         "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 5: id = 2: id",
-                "  2:OlapScanNode\n" +
+                        "  |  equal join conjunct: 2: id = 5: id",
+                "  0:OlapScanNode\n" +
                         "     TABLE: join1\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 2: id > 1",
-                "  0:OlapScanNode\n" +
+                "  1:OlapScanNode\n" +
                         "     TABLE: join2\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     partitions=0/1");
+                        "     PREDICATES: 5: id > 1");
 
         sql = "select * from join1 full outer join join2 on join1.id = join2.id and join1.dt != 2\n" +
                 "where join1.id > 1;";
-        starRocksAssert.query(sql).explainContains("  4:HASH JOIN\n" +
-                        "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+        starRocksAssert.query(sql).explainContains("  3:HASH JOIN\n" +
+                        "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                         "  |  hash predicates:\n" +
                         "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 5: id = 2: id\n" +
+                        "  |  equal join conjunct: 2: id = 5: id\n" +
                         "  |  other join predicates: 1: dt != 2",
-                "  2:OlapScanNode\n" +
+                "  0:OlapScanNode\n" +
                         "     TABLE: join1\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 2: id > 1",
-                "  0:OlapScanNode\n" +
+                "  1:OlapScanNode\n" +
                         "     TABLE: join2\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     partitions=0/1");
+                        "     PREDICATES: 5: id > 1");
 
         // test full outer join convert to right join
         sql = "select * from join1 full outer join join2 on join1.id = join2.id\n" +
@@ -3672,7 +3665,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  0:OlapScanNode\n" +
                         "     TABLE: join1\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     partitions=0/1");
+                        "     PREDICATES: 2: id > 1");
 
         // test full outer join convert to inner join
         sql = "select * from join1 full outer join join2 on join1.id = join2.id\n" +

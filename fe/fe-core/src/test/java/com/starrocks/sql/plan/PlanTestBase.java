@@ -635,12 +635,8 @@ public class PlanTestBase {
     }
 
     public String getFragmentPlan(String sql) throws Exception {
-        String ret = UtFrameUtils.getNewPlanAndFragment(connectContext, sql).second.
+        return UtFrameUtils.getNewPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);
-        System.out.println("============");
-        System.out.println(sql);
-        System.out.println(ret);
-        return ret;
     }
 
     public String getVerboseExplain(String sql) throws Exception {

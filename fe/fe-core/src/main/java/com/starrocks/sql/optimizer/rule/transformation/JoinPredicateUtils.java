@@ -180,17 +180,17 @@ public class JoinPredicateUtils {
         return pushDownPredicate(root, Utils.compoundAnd(leftPushDown), Utils.compoundAnd(rightPushDown));
     }
 
-    public static ScalarOperator equivalenceDerive(ScalarOperator predicate) {
+    public static ScalarOperator equivalenceDerive(ScalarOperator predicate, boolean returnInputPredicate) {
         ScalarEquivalenceExtractor scalarEquivalenceExtractor = new ScalarEquivalenceExtractor();
 
         Set<ColumnRefOperator> allColumnRefs = Sets.newLinkedHashSet();
         allColumnRefs.addAll(Utils.extractColumnRef(predicate));
 
         Set<ScalarOperator> allPredicate = Sets.newLinkedHashSet();
-        List<ScalarOperator> list = Utils.extractConjuncts(predicate);
-        allPredicate.addAll(list);
+        List<ScalarOperator> inputPredicates = Utils.extractConjuncts(predicate);
+        allPredicate.addAll(inputPredicates);
 
-        scalarEquivalenceExtractor.union(list);
+        scalarEquivalenceExtractor.union(inputPredicates);
 
         for (ColumnRefOperator ref : allColumnRefs) {
             for (ScalarOperator so : scalarEquivalenceExtractor.getEquivalentScalar(ref)) {
@@ -213,6 +213,9 @@ public class JoinPredicateUtils {
             }
         }
 
+        if (!returnInputPredicate) {
+            allPredicate.removeAll(inputPredicates);
+        }
         return Utils.compoundAnd(Lists.newArrayList(allPredicate));
     }
 
