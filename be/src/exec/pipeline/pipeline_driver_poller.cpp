@@ -2,6 +2,8 @@
 
 #include "pipeline_driver_poller.h"
 
+#include <emmintrin.h>
+
 #include <chrono>
 namespace starrocks {
 namespace pipeline {
@@ -26,6 +28,7 @@ void PipelineDriverPoller::run_internal() {
     this->_polling_thread = Thread::current_thread();
     this->_is_polling_thread_initialized.store(true, std::memory_order_release);
     typeof(this->_blocked_drivers) local_blocked_drivers;
+    int spin_count = 0;
     while (!_is_shutdown.load(std::memory_order_acquire)) {
         {
             std::unique_lock<std::mutex> lock(this->_mutex);
@@ -40,6 +43,7 @@ void PipelineDriverPoller::run_internal() {
                 local_blocked_drivers.splice(local_blocked_drivers.end(), _blocked_drivers);
             }
         }
+        size_t previous_num_blocked_drivers = local_blocked_drivers.size();
         auto driver_it = local_blocked_drivers.begin();
         while (driver_it != local_blocked_drivers.end()) {
             auto& driver = *driver_it;
@@ -62,11 +66,18 @@ void PipelineDriverPoller::run_internal() {
                 ++driver_it;
             }
         }
-
-        if (local_blocked_drivers.empty()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        size_t curr_num_blocked_drivers = local_blocked_drivers.size();
+        if (curr_num_blocked_drivers == previous_num_blocked_drivers) {
+            spin_count += 1;
         } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            spin_count = 0;
+        }
+        if (spin_count != 0 && spin_count % 64 == 0) {
+            _mm_pause();
+        }
+        if (spin_count != 0 && spin_count == 640) {
+            spin_count = 0;
+            sched_yield();
         }
     }
 }
