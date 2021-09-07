@@ -50,10 +50,6 @@ export PID_DIR=`cd "$curdir"; pwd`
 
 export_env_from_conf $STARROCKS_HOME/conf/be.conf
 
-if [ -e $STARROCKS_HOME/bin/palo_env.sh ]; then
-    source $STARROCKS_HOME/bin/palo_env.sh
-fi
-
 if [ -e $STARROCKS_HOME/conf/hadoop_env.sh ]; then
     source $STARROCKS_HOME/conf/hadoop_env.sh
 fi
