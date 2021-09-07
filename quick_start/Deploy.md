@@ -139,7 +139,7 @@ Name: 172.16.139.24_9010_1594200991015
 
 IP: 172.16.139.24
 
-HostName: doris-sandbox01
+HostName: starrocks-sandbox01
 
 EditLogPort: 9010
 
@@ -236,7 +236,7 @@ Name: 172.26.108.172_9010_1584965098874
 
 IP: 172.26.108.172
 
-HostName: doris-sandbox01
+HostName: starrocks-sandbox01
 
 ......
 
@@ -256,7 +256,7 @@ Name: 172.26.108.174_9010_1584965098874
 
 IP: 172.26.108.174
 
-HostName: doris-sandbox02
+HostName: starrocks-sandbox02
 
 ......
 
@@ -276,7 +276,7 @@ Name: 172.26.108.175_9010_1584965098874
 
 IP: 172.26.108.175
 
-HostName: doris-sandbox03
+HostName: starrocks-sandbox03
 
 ......
 
@@ -347,7 +347,7 @@ Cluster: default\_cluster
 
 IP: 172.16.139.24
 
-HostName: doris-sandbox01
+HostName: starrocks-sandbox01
 
 HeartbeatPort: 9050
 
