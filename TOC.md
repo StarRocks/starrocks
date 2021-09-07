@@ -10,5 +10,4 @@
   + [Data flow and control flow](/quick_start/data_flow_and_control_flow.md)
   + [Import and query](/quick_start/import_and_query.md)
   + [Test FAQs](/quick_start/test_faq.md)
-  + [Next Step](/quick_start/next_step.md)
   

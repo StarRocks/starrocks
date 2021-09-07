@@ -8,7 +8,7 @@
 
 * For BE, we recommend 16 cores with 64GB or more. For FE, we recommend 8 cores with 16GB or more.
 * HDDs or SSDs can be used.
-* CPU must support AVX2 instruction sets, use `cat /proc/cpuinfo |grep avx2` to confirm there is output. If not, we recommend replacing the machine. DorisDB's vectorization engine needs CPU instruction sets to perform a better effect.
+* CPU must support AVX2 instruction sets, use `cat /proc/cpuinfo |grep avx2` to confirm there is output. If not, we recommend replacing the machine. StarRocks' vectorization engine needs CPU instruction sets to perform a better effect.
 * The network needs 10 GB NIC and 10 GB switch.
 
 ## Modeling
