@@ -23,12 +23,15 @@ package com.starrocks.metric;
 
 import com.google.common.collect.Lists;
 
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
+import java.util.PriorityQueue;
 import java.util.stream.Collectors;
 
 public class StarRocksMetricRegistry {
 
-    private List<Metric> metrics = Lists.newArrayList();
+    private Collection<Metric> paloMetrics = new PriorityQueue<>(Comparator.comparing(Metric::getName));
 
     public StarRocksMetricRegistry() {
 
