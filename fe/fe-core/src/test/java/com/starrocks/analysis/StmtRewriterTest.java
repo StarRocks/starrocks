@@ -630,6 +630,6 @@ public class StmtRewriterTest {
 
     @AfterClass
     public static void afterClass() throws Exception {
-        UtFrameUtils.cleanStarRocksFeDir(baseDir);
+        UtFrameUtils.cleanStarRocksFEDir(baseDir);
     }
 }

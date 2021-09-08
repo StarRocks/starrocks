@@ -136,7 +136,7 @@ public class AnotherDemoTest {
 
     @AfterClass
     public static void TearDown() {
-        UtFrameUtils.cleanStarRocksFeDir(runningDirBase);
+        UtFrameUtils.cleanStarRocksFEDir(runningDirBase);
     }
 
     // generate all port from valid ports

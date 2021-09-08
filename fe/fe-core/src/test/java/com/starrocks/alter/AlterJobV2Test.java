@@ -73,7 +73,7 @@ public class AlterJobV2Test {
 
     @AfterClass
     public static void tearDown() {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
+        UtFrameUtils.cleanStarRocksFEDir(runningDir);
     }
 
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {

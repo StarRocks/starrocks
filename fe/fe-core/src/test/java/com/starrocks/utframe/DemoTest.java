@@ -73,7 +73,7 @@ public class DemoTest {
 
     @AfterClass
     public static void TearDown() {
-        UtFrameUtils.cleanStarRocksFeDir(runningDirBase);
+        UtFrameUtils.cleanStarRocksFEDir(runningDirBase);
     }
 
     @Test

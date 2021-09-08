@@ -28,7 +28,7 @@ public class CreateTableWithDecimalTypesTest {
 
     @AfterClass
     public static void tearDown() throws Exception {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
+        UtFrameUtils.cleanStarRocksFEDir(runningDir);
     }
 
     @BeforeClass

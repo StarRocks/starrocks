@@ -62,7 +62,7 @@ public class DynamicPartitionTableTest {
 
     @AfterClass
     public static void TearDown() {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
+        UtFrameUtils.cleanStarRocksFEDir(runningDir);
     }
 
     private static void createTable(String sql) throws Exception {

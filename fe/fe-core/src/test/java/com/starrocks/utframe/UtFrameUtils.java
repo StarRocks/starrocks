@@ -288,7 +288,7 @@ public class UtFrameUtils {
         Catalog.getCurrentSystemInfo().dropBackend(backendId);
     }
 
-    public static void cleanStarRocksFeDir(String baseDir) {
+    public static void cleanStarRocksFEDir(String baseDir) {
         try {
             FileUtils.deleteDirectory(new File(baseDir));
         } catch (IOException e) {

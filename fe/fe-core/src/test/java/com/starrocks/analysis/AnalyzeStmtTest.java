@@ -21,7 +21,7 @@ public class AnalyzeStmtTest {
 
     @AfterClass
     public static void tearDown() throws Exception {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
+        UtFrameUtils.cleanStarRocksFEDir(runningDir);
     }
 
     @BeforeClass

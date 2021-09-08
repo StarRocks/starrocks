@@ -29,7 +29,7 @@ public class InsertIntoValuesDecimalV3Test {
 
     @AfterClass
     public static void tearDown() throws Exception {
-        UtFrameUtils.cleanStarRocksFeDir(runningDir);
+        UtFrameUtils.cleanStarRocksFEDir(runningDir);
     }
 
     @BeforeClass
