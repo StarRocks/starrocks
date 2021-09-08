@@ -28,12 +28,10 @@ import java.util.Map;
 
 public class AnalyzeJob implements Writable {
     public static final String PROP_UPDATE_INTERVAL_SEC_KEY = "update_interval_sec";
-    public static final String PROP_EXPIRE_SEC_KEY = "expire_sec";
     public static final String PROP_SAMPLE_COLLECT_ROWS_KEY = "sample_collect_rows";
 
     public static final List<String> NUMBER_PROP_KEY_LIST = ImmutableList.<String>builder()
             .add(PROP_UPDATE_INTERVAL_SEC_KEY)
-            .add(PROP_EXPIRE_SEC_KEY)
             .add(PROP_SAMPLE_COLLECT_ROWS_KEY).build();
 
     public static final long DEFAULT_ALL_ID = -1;
@@ -139,11 +137,6 @@ public class AnalyzeJob implements Writable {
     public long getUpdateIntervalSec() {
         return Long.parseLong(properties
                 .getOrDefault(PROP_UPDATE_INTERVAL_SEC_KEY, String.valueOf(Config.statistic_update_interval_sec)));
-    }
-
-    public long getExpireSec() {
-        return Long
-                .parseLong(properties.getOrDefault(PROP_EXPIRE_SEC_KEY, String.valueOf(Config.statistic_expire_sec)));
     }
 
     public long getSampleCollectRows() {
