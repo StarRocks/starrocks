@@ -7,7 +7,7 @@ namespace starrocks {
 MultiWorkerPool::MultiWorkerPool(const TaskWorkerType worker_type, ExecEnv* env, const TMasterInfo& master_info,
                                  int worker_num)
         : TaskWorkerPool(worker_type, env, master_info, worker_num) {
-    assert(worker_num > 0);
+    DCHECK(worker_num > 0);
     for (int i = 0; i < worker_num; i++) {
         auto pool = std::make_shared<TaskWorkerPool>(worker_type, env, master_info, 1);
         _pools.push_back(pool);
