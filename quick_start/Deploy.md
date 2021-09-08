@@ -10,47 +10,26 @@
 
 ```Plain Text
 StarRocks-XX-1.0.0
-
 ├── be  # BE目录
-
 │   ├── bin
-
 │   │   ├── start_be.sh # BE启动命令
-
 │   │   └── stop_be.sh  # BE关闭命令
-
 │   ├── conf
-
 │   │   └── be.conf     # BE配置文件
-
 │   ├── lib
-
 │   │   ├── starrocks_be  # BE可执行文件
-
 │   │   └── meta_tool
-
 │   └── www
-
 ├── fe  # FE目录
-
 │   ├── bin
-
 │   │   ├── start_fe.sh # FE启动命令
-
 │   │   └── stop_fe.sh  # FE关闭命令
-
 │   ├── conf
-
 │   │   └── fe.conf     # FE配置文件
-
 │   ├── lib
-
 │   │   ├── starrocks-fe.jar  # FE jar包
-
 │   │   └── *.jar           # FE 依赖的jar包
-
 │   └── webroot
-
 └── udf
 ```
 
