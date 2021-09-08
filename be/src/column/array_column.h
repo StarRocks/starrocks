@@ -221,6 +221,10 @@ public:
 
     std::string debug_string() const override;
 
+    bool exceed_capacity_limit() const override {
+        return _elements->exceed_capacity_limit() || _offsets->exceed_capacity_limit();
+    }
+
 private:
     ColumnPtr _elements;
     // Offsets column will store the start position of every array element.

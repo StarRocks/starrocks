@@ -272,6 +272,10 @@ public:
         return ss.str();
     }
 
+    bool exceed_capacity_limit() const override {
+        return _bytes.size() >= UINT32_MAX || _offsets.size() >= UINT32_MAX || _slices.size() >= UINT32_MAX;
+    }
+
 private:
     void _build_slices() const;
 

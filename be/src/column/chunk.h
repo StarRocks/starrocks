@@ -234,6 +234,15 @@ public:
 
     std::string debug_row(uint32_t index) const;
 
+    bool exceed_capacity_limit() const {
+        for (const auto& column : _columns) {
+            if (column->exceed_capacity_limit()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 private:
     void rebuild_cid_index();
 

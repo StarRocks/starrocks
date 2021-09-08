@@ -191,6 +191,11 @@ public:
         return ss.str();
     }
 
+    bool exceed_capacity_limit() const override {
+        return _pool.size() >= UINT32_MAX || _cache->size() >= UINT32_MAX || _slices.size() >= UINT32_MAX ||
+               _buffer.size() >= UINT32_MAX;
+    }
+
 private:
     void _build_cache() const {
         if (_cache_ok) {

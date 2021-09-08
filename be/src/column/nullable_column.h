@@ -273,6 +273,10 @@ public:
         return ss.str();
     }
 
+    bool exceed_capacity_limit() const override {
+        return _data_column->size() >= UINT32_MAX || _null_column->size() >= UINT32_MAX;
+    }
+
 private:
     ColumnPtr _data_column;
     NullColumnPtr _null_column;

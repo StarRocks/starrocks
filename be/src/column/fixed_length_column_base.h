@@ -183,6 +183,10 @@ public:
         _data.clear();
     }
 
+    bool exceed_capacity_limit() const override {
+        return _data.size() >= UINT32_MAX;
+    }
+
 protected:
     Container _data;
 };

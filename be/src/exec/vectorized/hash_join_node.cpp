@@ -350,6 +350,10 @@ bool HashJoinNode::_has_null(const ColumnPtr& column) {
 Status HashJoinNode::_build(RuntimeState* state) {
     {
         SCOPED_TIMER(_build_conjunct_evaluate_timer);
+        if (_ht.get_build_chunk()->exceed_capacity_limit()) {
+            return Status::InternalError("Total size of single column exceed the limit of hash join");
+        }
+
         for (auto& _build_expr_ctx : _build_expr_ctxs) {
             const TypeDescriptor& data_type = _build_expr_ctx->root()->type();
             ColumnPtr column_ptr = _build_expr_ctx->evaluate(_ht.get_build_chunk().get());
