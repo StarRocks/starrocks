@@ -159,7 +159,7 @@ public class OlapTable extends Table {
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
                      PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-             Catalog.getCurrentCatalog().getClusterId(), indexes);
+                Catalog.getCurrentCatalog().getClusterId(), indexes);
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,

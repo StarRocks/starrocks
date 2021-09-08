@@ -679,7 +679,7 @@ struct TGetTableMetaRequest {
 }
 
 struct TBackendMeta {
-    1: required i64 backend_id
+    1: optional i64 backend_id
     2: optional string host
     3: optional i32 be_port
     4: optional i32 rpc_port
@@ -689,8 +689,8 @@ struct TBackendMeta {
 }
 
 struct TReplicaMeta {
-    1: required i64 replica_id
-    2: required i64 backend_id
+    1: optional i64 replica_id
+    2: optional i64 backend_id
     3: optional i32 schema_hash
     4: optional i64 version
     5: optional i64 version_hash
@@ -708,11 +708,11 @@ struct TReplicaMeta {
 }
 
 struct TTabletMeta {
-    1: required i64 tablet_id
-    2: required i64 db_id
-    3: required i64 table_id
-    4: required i64 partition_id
-    5: required i64 index_id
+    1: optional i64 tablet_id
+    2: optional i64 db_id
+    3: optional i64 table_id
+    4: optional i64 partition_id
+    5: optional i64 index_id
     6: optional Types.TStorageMedium storage_medium
     7: optional i32 old_schema_hash
     8: optional i32 new_schema_hash
@@ -723,23 +723,23 @@ struct TTabletMeta {
 }
 
 struct TIndexInfo {
-    1: required string index_name
-    2: required list<string> columns
-    3: required string index_type
+    1: optional string index_name
+    2: optional list<string> columns
+    3: optional string index_type
     4: optional string comment
 }
 
 struct TSchemaMeta {
-    1: required list<TColumnDef> columns
-    2: required i32 schema_version
-    3: required i32 schema_hash
+    1: optional list<TColumnDef> columns
+    2: optional i32 schema_version
+    3: optional i32 schema_hash
     4: optional i16 short_key_col_count
     5: optional Types.TStorageType storage_type
     6: optional string keys_type
 }
 
 struct TIndexMeta {
-    1: required i64 index_id
+    1: optional i64 index_id
     2: optional string index_state
     3: optional i64 row_count
     4: optional i64 rollup_index_id
@@ -749,13 +749,13 @@ struct TIndexMeta {
 }
 
 struct TPartitionInfo {
-    1: required string type
+    1: optional string type
     2: optional map<i64, i16> replica_num_map
     3: optional map<i64, bool> in_memory_map
 }
 
 struct TPartitionMeta {
-    1: required i64 partition_id
+    1: optional i64 partition_id
     2: optional string partition_name
     3: optional string state
     4: optional i64 commit_version_hash
@@ -767,24 +767,24 @@ struct TPartitionMeta {
 }
 
 struct THashDistributionInfo {
-    1: required i32 bucket_num
-    2: required list<string> distribution_columns
+    1: optional i32 bucket_num
+    2: optional list<string> distribution_columns
 }
 
 struct TRandomDistributionInfo {
-    1: required i32 bucket_num
+    1: optional i32 bucket_num
 }
 
 struct TDistributionDesc {
-    1: required string distribution_type
+    1: optional string distribution_type
     2: optional THashDistributionInfo hash_distribution
     3: optional TRandomDistributionInfo random_distribution
 }
 
 struct TTableMeta {
-    1: required i64 table_id
+    1: optional i64 table_id
     2: optional string table_name
-    3: required i64 db_id
+    3: optional i64 db_id
     4: optional string db_name
     5: optional i32 cluster_id
     6: optional string state
@@ -802,16 +802,16 @@ struct TTableMeta {
 }
 
 struct TGetTableMetaResponse {
-    1: required Status.TStatus status
+    1: optional Status.TStatus status
     2: optional TTableMeta table_meta
     3: optional list<TBackendMeta> backends
 }
 
 struct TBeginRemoteTxnRequest {
-    1: required string db_name
-    2: required list<string> table_name
-    3: required string label
-    4: required i32 source_type
+    1: optional string db_name
+    2: optional list<string> table_name
+    3: optional string label
+    4: optional i32 source_type
     5: optional i64 timeout_second
     6: optional TAuthenticateParams auth_info
 }
@@ -823,8 +823,8 @@ struct TBeginRemoteTxnResponse {
 }
 
 struct TCommitRemoteTxnRequest {
-    1: required i64 txn_id
-    2: required i64 db_id
+    1: optional i64 txn_id
+    2: optional i64 db_id
     3: optional TAuthenticateParams auth_info
     4: optional i32 commit_timeout_ms
     5: optional list<Types.TTabletCommitInfo> commit_infos
@@ -836,8 +836,8 @@ struct TCommitRemoteTxnResponse {
 }
 
 struct TAbortRemoteTxnRequest {
-    1: required i64 txn_id
-    2: required i64 db_id
+    1: optional i64 txn_id
+    2: optional i64 db_id
     3: optional string error_msg
     4: optional TAuthenticateParams auth_info
 }
