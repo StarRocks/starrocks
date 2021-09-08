@@ -81,9 +81,6 @@ static bool get_predicate_value(ObjectPool& obj_pool, const SlotDescriptor& slot
         data = down_cast<NullableColumn*>(column_ptr.get())->data_column();
     } else if (column_ptr->is_constant()) {
         data = down_cast<ConstColumn*>(column_ptr.get())->data_column();
-    } else { // defensive check.
-        DCHECK(false) << "unreachable path: unknown column type of expr evaluate result";
-        return false;
     }
 
     if (expr->op() == TExprOpcode::EQ || expr->op() == TExprOpcode::NE) {
