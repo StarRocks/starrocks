@@ -11,7 +11,8 @@ public class HashDistributionDesc {
     public enum SourceType {
         LOCAL, // hash property from scan node
         SHUFFLE_JOIN, // hash property from shuffle join
-        SHUFFLE_AGG, // hash property from shuffle agg
+        BUCKET_JOIN, // hash property from bucket join
+        SHUFFLE_AGG, // hash property from shuffle agg,
     }
 
     private final List<Integer> columns;
