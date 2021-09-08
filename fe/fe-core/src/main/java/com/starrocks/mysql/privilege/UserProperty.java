@@ -335,8 +335,8 @@ public class UserProperty implements Writable {
             String clusterPrefix = PROP_LOAD_CLUSTER + dot + cluster + dot;
 
             // starrocks path
-            if (dppConfig.getPaloPath() != null) {
-                result.add(Lists.newArrayList(clusterPrefix + DppConfig.getPaloPathKey(), dppConfig.getPaloPath()));
+            if (dppConfig.getStarRocksPath() != null) {
+                result.add(Lists.newArrayList(clusterPrefix + DppConfig.getStarRocksPathKey(), dppConfig.getStarRocksPath()));
             }
 
             // http port
