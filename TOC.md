@@ -277,7 +277,7 @@
   + 数据恢复
     + [数据删除恢复](/administration/Data_recovery.md)
     + [元数据恢复](/administration/Metadata_recovery.md)
-  + [副本管理](/administration/Rplica.md)
+  + [副本管理](/administration/Replica.md)
   + [查询分析](/administration/Query_planning.md)
   + [性能优化](/administration/Profiling.md)
   + [监控报警](/administration/Monitor_and_Alert.md)
