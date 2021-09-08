@@ -26,7 +26,7 @@ public:
 
     ~SortSourceOperator() override = default;
 
-    bool has_output() override;
+    bool has_output() const override;
 
     bool is_finished() const override;
 

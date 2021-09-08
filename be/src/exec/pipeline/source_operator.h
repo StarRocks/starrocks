@@ -15,7 +15,7 @@ public:
     SourceOperator(int32_t id, std::string name, int32_t plan_node_id) : Operator(id, name, plan_node_id) {}
     ~SourceOperator() override = default;
 
-    bool need_input() override { return false; }
+    bool need_input() const override { return false; }
     virtual bool pending_finish() { return false; }
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override {
         return Status::InternalError("Shouldn't push chunk to source operator");

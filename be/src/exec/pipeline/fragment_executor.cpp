@@ -101,6 +101,14 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         driver_instance_count = 1;
     }
 
+    // TODO(hcf): We will remove this restriction after complete aggregation
+    // Force driver_instance_count to 1 if this fragment has aggregate node.
+    std::vector<ExecNode*> aggregate_nodes;
+    plan->collect_nodes(TPlanNodeType::AGGREGATION_NODE, &aggregate_nodes);
+    if (!aggregate_nodes.empty()) {
+        driver_instance_count = 1;
+    }
+
     // pipeline scan mode
     // 0: use sync io
     // 1: use async io and exec->thread_pool()

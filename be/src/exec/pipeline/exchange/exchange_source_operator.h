@@ -21,7 +21,7 @@ public:
 
     Status close(RuntimeState* state) override;
 
-    bool has_output() override;
+    bool has_output() const override;
 
     bool is_finished() const override;
 

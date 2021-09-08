@@ -2,6 +2,10 @@
 
 #include "exec/vectorized/aggregate/aggregate_blocking_node.h"
 
+#include "exec/pipeline/aggregate_blocking_operator.h"
+#include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline_builder.h"
+
 namespace starrocks::vectorized {
 
 Status AggregateBlockingNode::open(RuntimeState* state) {
@@ -125,6 +129,16 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 
     DCHECK_CHUNK(*chunk);
     return Status::OK();
+}
+
+std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+    OpFactories operators = _children[0]->decompose_to_pipeline(context);
+
+    operators.emplace_back(
+            std::make_shared<AggregateBlockingOperatorFactory>(context->next_operator_id(), id(), _tnode));
+    return operators;
 }
 
 } // namespace starrocks::vectorized

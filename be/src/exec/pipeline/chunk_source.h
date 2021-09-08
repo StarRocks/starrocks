@@ -23,7 +23,7 @@ public:
 
     virtual Status close(RuntimeState* state) = 0;
 
-    virtual bool has_next_chunk() = 0;
+    virtual bool has_next_chunk() const = 0;
 
     virtual StatusOr<vectorized::ChunkUniquePtr> get_next_chunk() = 0;
     virtual void cache_next_chunk_blocking() = 0;

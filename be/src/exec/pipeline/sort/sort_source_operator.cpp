@@ -33,7 +33,7 @@ void SortSourceOperator::finish(RuntimeState* state) {
     _is_finished = true;
 }
 
-bool SortSourceOperator::has_output() {
+bool SortSourceOperator::has_output() const {
     return _chunks_sorter->sink_complete();
 }
 
