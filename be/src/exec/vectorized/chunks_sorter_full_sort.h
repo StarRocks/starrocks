@@ -25,6 +25,7 @@ public:
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     Status done(RuntimeState* state) override;
     void get_next(ChunkPtr* chunk, bool* eos) override;
+    bool pull_chunk(ChunkPtr* chunk) override;
 
     friend class SortHelper;
 

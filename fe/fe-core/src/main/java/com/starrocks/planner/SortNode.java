@@ -317,4 +317,9 @@ public class SortNode extends PlanNode {
 
         return true;
     }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
 }

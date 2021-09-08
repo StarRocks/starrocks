@@ -92,6 +92,15 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     if (request.query_options.__isset.query_threads) {
         driver_instance_count = request.query_options.query_threads;
     }
+
+    // TODO(zhouhui): we will remove this restriction after complete merge-sort.
+    // Force driver_instance_count to 1 if this fragment has sort node.
+    std::vector<ExecNode*> sort_nodes;
+    plan->collect_nodes(TPlanNodeType::SORT_NODE, &sort_nodes);
+    if (!sort_nodes.empty()) {
+        driver_instance_count = 1;
+    }
+
     // pipeline scan mode
     // 0: use sync io
     // 1: use async io and exec->thread_pool()

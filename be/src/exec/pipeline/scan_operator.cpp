@@ -151,7 +151,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::_pull_chunk_blocking(RuntimeState* 
         return chunk;
     }
     _pickup_morsel(state);
-    return nullptr;
+    return std::make_shared<vectorized::Chunk>();
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::_pull_chunk_nonblocking(RuntimeState* state) {
@@ -175,7 +175,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::_pull_chunk_nonblocking(RuntimeStat
     // to output and should pick up next morsel. so here return nullptr instead of
     // empty chunk.
     _pickup_morsel(state);
-    return nullptr;
+    return std::make_shared<vectorized::Chunk>();
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
