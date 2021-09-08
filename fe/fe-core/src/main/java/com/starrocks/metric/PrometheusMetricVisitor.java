@@ -158,6 +158,7 @@ public class PrometheusMetricVisitor extends MetricVisitor {
     public void visit(@SuppressWarnings("rawtypes") Metric metric) {
         // title
         final String fullName = prefix + "_" + metric.getName();
+        // SR-57 : Fix prometheus parse error : 'second HELP line for metric name ..'
         if (!metricNames.contains(fullName)) {
             sb.append(HELP).append(fullName).append(" ").append(metric.getDescription()).append("\n");
             sb.append(TYPE).append(fullName).append(" ").append(metric.getType().name().toLowerCase()).append("\n");
