@@ -213,12 +213,6 @@ public class CreateTableWithDecimalTypesTest {
     }
 
     @Test(expected = Exception.class)
-    public void createTableWithDecimalV3BothPrecisionAndScaleAbsent() throws Exception {
-        createTableFail(true, "DECIMAL");
-        Assert.fail("should throw an exception");
-    }
-
-    @Test(expected = Exception.class)
     public void createTableWithDecimalV3ScaleAbsent() throws Exception {
         createTableFail(true, "DECIMAL(9)");
         Assert.fail("should throw an exception");
@@ -245,12 +239,6 @@ public class CreateTableWithDecimalTypesTest {
     @Test(expected = Exception.class)
     public void createTableWithDecimalV2p0s1() throws Exception {
         createTableFail(false, "DECIMAL(0, 1)");
-        Assert.fail("should throw an exception");
-    }
-
-    @Test(expected = Exception.class)
-    public void createTableWithDecimalV2BothPrecisionAndScaleAbsent() throws Exception {
-        createTableFail(false, "DECIMAL");
         Assert.fail("should throw an exception");
     }
 
