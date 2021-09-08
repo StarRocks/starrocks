@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ChildPropertyDeriver;
@@ -203,8 +204,9 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         int parallelExecInstance = Math.max(1,
                 Math.min(groupExpression.getGroup().getLogicalProperty().getLeftMostScanTabletsNum(),
                         ConnectContext.get().getSessionVariable().getParallelExecInstanceNum()));
+        int beNum = Math.max(1, Catalog.getCurrentSystemInfo().getBackendIds(true).size());
         PhysicalHashJoinOperator operator = (PhysicalHashJoinOperator) groupExpression.getOp();
-        if (leftChildStats.getOutputSize() < rightChildStats.getOutputSize() * parallelExecInstance * 10
+        if (leftChildStats.getOutputSize() < rightChildStats.getOutputSize() * parallelExecInstance * beNum * 10
                 && rightChildStats.getOutputRowCount() > ConnectContext.get().getSessionVariable()
                 .getBroadcastRowCountLimit() && !operator.getJoinHint().equalsIgnoreCase("BROADCAST")) {
             return false;
