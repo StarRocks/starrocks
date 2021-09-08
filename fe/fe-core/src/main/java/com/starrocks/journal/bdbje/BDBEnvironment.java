@@ -66,7 +66,7 @@ public class BDBEnvironment {
     private static final int RETRY_TIME = 3;
     private static final int MEMORY_CACHE_PERCENT = 20;
 
-    public static final String PALO_JOURNAL_GROUP = "PALO_JOURNAL_GROUP";
+    public static final String STARROCKS_JOURNAL_GROUP = "PALO_JOURNAL_GROUP";
 
     private ReplicatedEnvironment replicatedEnvironment;
     private EnvironmentConfig environmentConfig;
@@ -100,7 +100,7 @@ public class BDBEnvironment {
                 LOG.error("Current node is not in the electable_nodes list. will exit");
                 System.exit(-1);
             }
-            DbResetRepGroup resetUtility = new DbResetRepGroup(envHome, PALO_JOURNAL_GROUP, selfNodeName,
+            DbResetRepGroup resetUtility = new DbResetRepGroup(envHome, STARROCKS_JOURNAL_GROUP, selfNodeName,
                     selfNodeHostPort);
             resetUtility.reset();
             LOG.info("group has been reset.");
@@ -111,7 +111,7 @@ public class BDBEnvironment {
         replicationConfig.setNodeName(selfNodeName);
         replicationConfig.setNodeHostPort(selfNodeHostPort);
         replicationConfig.setHelperHosts(helperHostPort);
-        replicationConfig.setGroupName(PALO_JOURNAL_GROUP);
+        replicationConfig.setGroupName(STARROCKS_JOURNAL_GROUP);
         replicationConfig.setConfigParam(ReplicationConfig.ENV_UNKNOWN_STATE_TIMEOUT, "10");
         replicationConfig.setMaxClockDelta(Config.max_bdbje_clock_delta_ms, TimeUnit.MILLISECONDS);
         replicationConfig.setConfigParam(ReplicationConfig.TXN_ROLLBACK_LIMIT,
@@ -174,7 +174,7 @@ public class BDBEnvironment {
                     LOG.info("add self[{}] as ReplicationGroupAdmin", selfNodeHostPort);
                 }
 
-                replicationGroupAdmin = new ReplicationGroupAdmin(PALO_JOURNAL_GROUP, adminNodes);
+                replicationGroupAdmin = new ReplicationGroupAdmin(STARROCKS_JOURNAL_GROUP, adminNodes);
 
                 // get a BDBHA object and pass the reference to Catalog
                 HAProtocol protocol = new BDBHA(this, selfNodeName);
@@ -216,7 +216,7 @@ public class BDBEnvironment {
     }
 
     public void setNewReplicationGroupAdmin(Set<InetSocketAddress> newHelperNodes) {
-        this.replicationGroupAdmin = new ReplicationGroupAdmin(PALO_JOURNAL_GROUP, newHelperNodes);
+        this.replicationGroupAdmin = new ReplicationGroupAdmin(STARROCKS_JOURNAL_GROUP, newHelperNodes);
     }
 
     // Return a handle to the epochDB
