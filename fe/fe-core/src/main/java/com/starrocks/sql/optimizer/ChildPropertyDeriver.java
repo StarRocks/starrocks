@@ -159,31 +159,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         PhysicalPropertySet leftInputProperty = createPropertySetByDistribution(leftDistribution);
         PhysicalPropertySet rightInputProperty = createPropertySetByDistribution(rightDistribution);
 
-        Optional<HashDistributionDesc> requiredShuffleDesc = getRequiredShuffleJoinDesc();
-        if (!requiredShuffleDesc.isPresent()) {
-            outputInputProps
-                    .add(new Pair<>(PhysicalPropertySet.EMPTY,
-                            Lists.newArrayList(leftInputProperty, rightInputProperty)));
-        } else {
-            HashDistributionDesc requiredDesc = requiredShuffleDesc.get();
-
-            ColumnRefSet requiredLocalColumns = new ColumnRefSet();
-            requiredDesc.getColumns().forEach(requiredLocalColumns::union);
-
-            boolean requiredShuffleColumnsFromLeft = leftOnPredicateColumns.stream().allMatch(requiredLocalColumns::contains);
-            boolean requiredShuffleColumnsFromRight = rightOnPredicateColumns.stream().allMatch(requiredLocalColumns::contains);
-            if (requiredShuffleColumnsFromLeft) {
-                outputInputProps.add(new Pair<>(leftInputProperty,
-                        Lists.newArrayList(leftInputProperty, rightInputProperty)));
-            } else if (requiredShuffleColumnsFromRight) {
-                outputInputProps.add(new Pair<>(rightInputProperty,
-                        Lists.newArrayList(leftInputProperty, rightInputProperty)));
-            } else {
-                outputInputProps
-                        .add(new Pair<>(PhysicalPropertySet.EMPTY,
-                                Lists.newArrayList(leftInputProperty, rightInputProperty)));
-            }
-        }
+        outputInputProps
+                .add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList(leftInputProperty, rightInputProperty)));
 
         // Respect use join hint
         if ("SHUFFLE".equalsIgnoreCase(hint)) {
@@ -405,20 +382,6 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         HashDistributionDesc requireDistributionDesc =
                 ((HashDistributionSpec) requirements.getDistributionProperty().getSpec()).getHashDistributionDesc();
         if (!HashDistributionDesc.SourceType.LOCAL.equals(requireDistributionDesc.getSourceType())) {
-            return Optional.empty();
-        }
-
-        return Optional.of(requireDistributionDesc);
-    }
-
-    private Optional<HashDistributionDesc> getRequiredShuffleJoinDesc() {
-        if (!requirements.getDistributionProperty().isShuffle()) {
-            return Optional.empty();
-        }
-
-        HashDistributionDesc requireDistributionDesc =
-                ((HashDistributionSpec) requirements.getDistributionProperty().getSpec()).getHashDistributionDesc();
-        if (!HashDistributionDesc.SourceType.SHUFFLE_JOIN.equals(requireDistributionDesc.getSourceType())) {
             return Optional.empty();
         }
 
