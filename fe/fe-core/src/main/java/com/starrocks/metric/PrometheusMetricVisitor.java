@@ -31,8 +31,10 @@ import com.starrocks.monitor.jvm.JvmStats.GarbageCollector;
 import com.starrocks.monitor.jvm.JvmStats.MemoryPool;
 import com.starrocks.monitor.jvm.JvmStats.Threads;
 
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /*
@@ -56,6 +58,7 @@ public class PrometheusMetricVisitor extends MetricVisitor {
     private static final String TYPE = "# TYPE ";
 
     private StringBuilder sb;
+    private Set<String> metricNames = new HashSet();
 
     public PrometheusMetricVisitor(String prefix) {
         super(prefix);
@@ -155,8 +158,12 @@ public class PrometheusMetricVisitor extends MetricVisitor {
     public void visit(@SuppressWarnings("rawtypes") Metric metric) {
         // title
         final String fullName = prefix + "_" + metric.getName();
-        sb.append(HELP).append(fullName).append(" ").append(metric.getDescription()).append("\n");
-        sb.append(TYPE).append(fullName).append(" ").append(metric.getType().name().toLowerCase()).append("\n");
+        // SR-57 : Fix prometheus parse error : 'second HELP line for metric name ..'
+        if (!metricNames.contains(fullName)) {
+            sb.append(HELP).append(fullName).append(" ").append(metric.getDescription()).append("\n");
+            sb.append(TYPE).append(fullName).append(" ").append(metric.getType().name().toLowerCase()).append("\n");
+            metricNames.add(fullName);
+        }
         sb.append(fullName);
 
         // name
