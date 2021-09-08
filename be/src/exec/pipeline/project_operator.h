@@ -28,7 +28,7 @@ public:
 
     bool has_output() override { return _cur_chunk != nullptr; }
 
-    bool need_input() override { return _cur_chunk == nullptr; }
+    bool need_input() override { return !_is_finished && _cur_chunk == nullptr; }
 
     bool is_finished() const override { return _is_finished && _cur_chunk == nullptr; }
 
