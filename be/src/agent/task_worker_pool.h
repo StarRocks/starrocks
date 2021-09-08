@@ -73,7 +73,7 @@ public:
 
     typedef void* (*CALLBACK_FUNCTION)(void*);
 
-    TaskWorkerPool(const TaskWorkerType task_worker_type, ExecEnv* env, const TMasterInfo& master_info);
+    TaskWorkerPool(const TaskWorkerType task_worker_type, ExecEnv* env, const TMasterInfo& master_info, int worker_num);
     virtual ~TaskWorkerPool();
 
     // Start the task worker callback thread
