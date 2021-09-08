@@ -17,7 +17,7 @@ public:
 
     Status add_chunk(vectorized::Chunk* chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
-    bool has_output() override;
+    bool has_output() const override;
 
     bool is_finished() const override;
 

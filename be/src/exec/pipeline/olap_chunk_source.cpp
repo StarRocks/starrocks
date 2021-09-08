@@ -233,7 +233,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
-bool OlapChunkSource::has_next_chunk() {
+bool OlapChunkSource::has_next_chunk() const {
     // If we need and could get next chunk from storage engine,
     // the _status must be ok.
     return _status.ok();

@@ -3,10 +3,13 @@
 
 #include "exec/pipeline/pipeline_driver.h"
 
+#include <sstream>
+
 #include "column/chunk.h"
 #include "exec/pipeline/source_operator.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+
 namespace starrocks {
 namespace pipeline {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
@@ -28,7 +31,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         bool should_yield = false;
         size_t num_operators = _operators.size();
         size_t _new_first_unfinished = _first_unfinished;
-        for (int i = _first_unfinished; i < num_operators - 1; ++i) {
+        VLOG_ROW << "[Driver] " << to_debug_string() << ", driver=" << this;
+        for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
             {
                 SCOPED_RAW_TIMER(&time_spent);
                 auto& curr_op = _operators[i];
@@ -38,8 +42,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 if (curr_op->is_finished()) {
                     if (i == 0) {
                         // For source operators
+                        VLOG_ROW << "[Driver] " << curr_op->get_name() << " finish, driver=" << this;
                         curr_op->finish(runtime_state);
                     }
+                    VLOG_ROW << "[Driver] " << next_op->get_name() << " finish, driver=" << this;
                     next_op->finish(runtime_state);
                     _new_first_unfinished = i + 1;
                     continue;
@@ -70,8 +76,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 }
 
                 if (status.ok()) {
-                    DCHECK(pulled_chunk.value());
                     if (pulled_chunk.value() && pulled_chunk.value()->num_rows() > 0) {
+                        VLOG_ROW << "[Driver] transfer chunk(" << pulled_chunk.value()->num_rows() << ") from "
+                                 << curr_op->get_name() << " to " << next_op->get_name() << ", driver=" << this;
                         next_op->push_chunk(runtime_state, std::move(pulled_chunk.value()));
                     }
                     num_chunk_moved += 1;
@@ -82,8 +89,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 if (curr_op->is_finished()) {
                     if (i == 0) {
                         // For source operators
+                        VLOG_ROW << "[Driver] " << curr_op->get_name() << " finish, driver=" << this;
                         curr_op->finish(runtime_state);
                     }
+                    VLOG_ROW << "[Driver] " << next_op->get_name() << " finish, driver=" << this;
                     next_op->finish(runtime_state);
                     _new_first_unfinished = i + 1;
                     continue;
@@ -98,6 +107,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         }
         // close finished operators and update _first_unfinished index
         for (auto i = _first_unfinished; i < _new_first_unfinished; ++i) {
+            VLOG_ROW << "[Driver] " << _operators[i]->get_name() << " finish, driver=" << this;
             _operators[i]->finish(runtime_state);
             RETURN_IF_ERROR(_operators[i]->close(runtime_state));
         }
@@ -162,6 +172,20 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         _fragment_ctx->runtime_state()->exec_env()->driver_dispatcher()->report_exec_state(_fragment_ctx, status, true,
                                                                                            true);
     }
+}
+
+std::string PipelineDriver::to_debug_string() const {
+    std::stringstream ss;
+    ss << "operator-chain: [";
+    for (size_t i = 0; i < _operators.size(); ++i) {
+        if (i == 0) {
+            ss << _operators[i]->get_name();
+        } else {
+            ss << " -> " << _operators[i]->get_name();
+        }
+    }
+    ss << "]";
+    return ss.str();
 }
 } // namespace pipeline
 } // namespace starrocks
