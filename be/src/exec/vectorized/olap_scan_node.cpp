@@ -225,7 +225,7 @@ void OlapScanNode::_scanner_thread(OlapScanner* scanner) {
 
     Status status = scanner->open(_runtime_state);
     if (!status.ok()) {
-        QUERY_LOG(ERROR) << status;
+        QUERY_LOG_IF(ERROR, !status.is_end_of_file()) << status;
         _update_status(status);
     }
     scanner->set_keep_priority(false);
@@ -253,7 +253,7 @@ void OlapScanNode::_scanner_thread(OlapScanner* scanner) {
         DCHECK_EQ(chunk->num_rows(), 0);
         status = scanner->get_chunk(_runtime_state, chunk);
         if (!status.ok()) {
-            QUERY_LOG(ERROR) << status;
+            QUERY_LOG_IF(ERROR, !status.is_end_of_file()) << status;
             std::lock_guard<std::mutex> l(_mtx);
             _chunk_pool.push(chunk);
             break;
