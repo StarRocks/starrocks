@@ -34,7 +34,7 @@ import static java.util.Collections.emptyList;
  * TYPE_INT        |    int
  * TYPE_BIGINT     |    long
  * TYPE_LARGEINT   |    BigInteger
- * TYPE_FLOAT      |    float
+ * TYPE_FLOAT      |    double
  * TYPE_DOUBLE     |    double
  * TYPE_DATE       |    LocalDateTime
  * TYPE_DATETIME   |    LocalDateTime
