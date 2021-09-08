@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 
 public class StarRocksMetricRegistry {
 
-    private Collection<Metric> paloMetrics = new PriorityQueue<>(Comparator.comparing(Metric::getName));
+    private Collection<Metric> metrics = new PriorityQueue<>(Comparator.comparing(Metric::getName));
 
     public StarRocksMetricRegistry() {
 
