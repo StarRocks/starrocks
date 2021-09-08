@@ -12,15 +12,29 @@
 
 namespace starrocks::pipeline {
 
+bool AggregateBlockingOperator::has_output() const {
+    return _is_finished && !_is_hash_table_eos;
+}
+
+bool AggregateBlockingOperator::is_finished() const {
+    if (!_is_finished) {
+        return false;
+    }
+
+    return !has_output();
+}
+
 void AggregateBlockingOperator::finish(RuntimeState* state) {
-    if (_is_pre_finished) return;
-    _is_pre_finished = true;
+    if (_is_finished) {
+        return;
+    }
+    _is_finished = true;
 
     if (!_group_by_expr_ctxs.empty()) {
         COUNTER_SET(_hash_table_size, (int64_t)_hash_map_variant.size());
         // If hash map is empty, we don't need to return value
         if (_hash_map_variant.size() == 0) {
-            _is_finished = true;
+            _is_hash_table_eos = true;
         }
 
         if (false) {
@@ -35,7 +49,7 @@ void AggregateBlockingOperator::finish(RuntimeState* state) {
         // In update phase, we directly return empty chunk.
         // In merge phase, we will handle it.
         if (_num_input_rows == 0 && !_needs_finalize) {
-            _is_finished = true;
+            _is_hash_table_eos = true;
         }
     }
     COUNTER_SET(_input_row_count, _num_input_rows);
@@ -46,11 +60,6 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingOperator::pull_chunk(RuntimeStat
     // TODO(hcf) force annotation
     // RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
     RETURN_IF_CANCELLED(state);
-
-    if (_is_finished) {
-        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-        return Status::OK();
-    }
 
     int32_t chunk_size = config::vector_chunk_size;
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
@@ -80,43 +89,36 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingOperator::pull_chunk(RuntimeStat
     _num_rows_returned -= (old_size - chunk->num_rows());
 
     _process_limit(&chunk);
-
     DCHECK_CHUNK(chunk);
 
     return chunk;
 }
 
 Status AggregateBlockingOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    if (chunk->is_empty()) {
-        return Status::OK();
-    }
-
     DCHECK_LE(chunk->num_rows(), config::vector_chunk_size);
     _evaluate_group_by_exprs(chunk.get());
     _evaluate_agg_fn_exprs(chunk.get());
 
-    {
-        SCOPED_TIMER(_agg_compute_timer);
-        if (!_group_by_expr_ctxs.empty()) {
-            if (false) {
-            }
+    SCOPED_TIMER(_agg_compute_timer);
+    if (!_group_by_expr_ctxs.empty()) {
+        if (false) {
+        }
 #define HASH_MAP_METHOD(NAME)                                                                        \
     else if (_hash_map_variant.type == vectorized::HashMapVariant::Type::NAME)                       \
             _build_hash_map<decltype(_hash_map_variant.NAME)::element_type>(*_hash_map_variant.NAME, \
                                                                             chunk->num_rows());
-            APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
+        APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
 
-            RETURN_IF_ERROR(_check_hash_map_memory_usage(state));
-            _try_convert_to_two_level_map();
-        }
-        if (_group_by_expr_ctxs.empty()) {
-            _compute_single_agg_state(chunk->num_rows());
-        } else {
-            _compute_batch_agg_states(chunk->num_rows());
-        }
-        _num_input_rows += chunk->num_rows();
+        RETURN_IF_ERROR(_check_hash_map_memory_usage(state));
+        _try_convert_to_two_level_map();
     }
+    if (_group_by_expr_ctxs.empty()) {
+        _compute_single_agg_state(chunk->num_rows());
+    } else {
+        _compute_batch_agg_states(chunk->num_rows());
+    }
+    _num_input_rows += chunk->num_rows();
 
     return Status::OK();
 }

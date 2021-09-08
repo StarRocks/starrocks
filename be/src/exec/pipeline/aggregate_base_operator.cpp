@@ -491,7 +491,7 @@ void AggregateBaseOperator::_convert_to_chunk_no_groupby(vectorized::ChunkPtr* c
     }
     ++_num_rows_returned;
     *chunk = std::move(result_chunk);
-    _is_finished = true;
+    _is_hash_table_eos = true;
 }
 
 void AggregateBaseOperator::_serialize_to_chunk(vectorized::ConstAggDataPtr state,

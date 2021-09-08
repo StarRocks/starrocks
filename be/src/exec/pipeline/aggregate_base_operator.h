@@ -19,12 +19,14 @@ public:
 
     ~AggregateBaseOperator() override = default;
 
-    bool reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
+    bool need_input() const override { return true; }
 
     Status prepare(RuntimeState* state) override;
     Status close(RuntimeState* state) override;
 
 protected:
+    bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
+
     bool _should_expand_preagg_hash_tables(size_t input_chunk_size, int64_t ht_mem, int64_t ht_rows) const;
 
     // initial const columns for i'th FunctionContext.
@@ -144,12 +146,11 @@ protected:
             }
         }
 
-        _is_finished = (it == end);
-        _hash_table_eos = _is_finished;
+        _is_hash_table_eos = (it == end);
 
         // If there is null key, output it last
         if constexpr (HashMapWithKey::has_single_null_key) {
-            if (_is_finished && hash_map_with_key.null_key_data != nullptr) {
+            if (_is_hash_table_eos && hash_map_with_key.null_key_data != nullptr) {
                 // The output chunk size couldn't larger than config::vector_chunk_size
                 if (read_index < config::vector_chunk_size) {
                     // For multi group by key, we don't need to special handle null key
@@ -166,8 +167,7 @@ protected:
                     ++read_index;
                 } else {
                     // Output null key in next round
-                    _hash_table_eos = false;
-                    _is_finished = false;
+                    _is_hash_table_eos = false;
                 }
             }
         }
@@ -221,11 +221,11 @@ protected:
             hash_set.insert_keys_to_columns(hash_set.results, group_by_columns, read_index);
         }
 
-        _is_finished = (it == end);
+        _is_hash_table_eos = (it == end);
 
         // IF there is null key, output it last
         if constexpr (HashSetWithKey::has_single_null_key) {
-            if (_is_finished && hash_set.has_null_key) {
+            if (_is_hash_table_eos && hash_set.has_null_key) {
                 // The output chunk size couldn't larger than config::vector_chunk_size
                 if (read_index < config::vector_chunk_size) {
                     // For multi group by key, we don't need to special handle null key
@@ -235,7 +235,7 @@ protected:
                     ++read_index;
                 } else {
                     // Output null key in next round
-                    _is_finished = false;
+                    _is_hash_table_eos = false;
                 }
             }
         }
@@ -258,11 +258,11 @@ protected:
     }
 
     void _process_limit(vectorized::ChunkPtr* chunk) {
-        if (reached_limit()) {
+        if (_reached_limit()) {
             int64_t num_rows_over = _num_rows_returned - _limit;
             (*chunk)->set_num_rows((*chunk)->num_rows() - num_rows_over);
             COUNTER_SET(_rows_returned_counter, _limit);
-            _is_finished = true;
+            _is_hash_table_eos = true;
             LOG(INFO) << "Aggregate Node ReachedLimit " << _limit;
         }
     }
@@ -309,12 +309,16 @@ protected:
     int64_t _prev_num_rows_returned = 0;
     int64_t _num_rows_returned = 0;
 
+    // Whether prev operator has no output
+    bool _is_finished = false;
+
     // Certain aggregates require a finalize step, which is the final step of the
     // aggregate after consuming all input rows. The finalize step converts the aggregate
     // value into its final form. This is true if this node contains aggregate that requires
     // a finalize step.
     bool _needs_finalize;
-    bool _is_finished = false;
+    // Indicate whether data of the hash table has been taken out or reach limit
+    bool _is_hash_table_eos = false;
     bool _is_only_group_by_columns = false;
     // At least one group by column is nullable
     bool _has_nullable_key = false;
@@ -324,7 +328,6 @@ protected:
     // memory used for agg function
     int64_t _last_agg_func_memory_usage = 0;
     int64_t _num_pass_through_rows = 0;
-    bool _hash_table_eos = false;
     bool _child_eos = false;
 
     TStreamingPreaggregationMode::type _streaming_preaggregation_mode;

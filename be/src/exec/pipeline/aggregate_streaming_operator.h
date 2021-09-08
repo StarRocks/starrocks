@@ -13,7 +13,6 @@ public:
     ~AggregateStreamingOperator() override = default;
 
     bool has_output() const override;
-    bool need_input() const override { return true; }
     bool is_finished() const override;
     void finish(RuntimeState* state) override;
 
@@ -26,7 +25,6 @@ private:
     Status _push_chunk_by_auto(const size_t chunk_size);
     void _output_chunk_from_hash_map(vectorized::ChunkPtr* chunk);
 
-    bool _is_pre_finished = false;
     vectorized::ChunkPtr _curr_chunk = nullptr;
 };
 

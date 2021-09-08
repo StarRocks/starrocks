@@ -37,6 +37,8 @@ public:
 
     // Notifies the operator that no more input chunk will be added.
     // The operator should finish processing.
+    // The method should be idempotent, because it may be triggered
+    // multiple times in the entire life cycle
     virtual void finish(RuntimeState* state) = 0;
 
     // Pull chunk from this operator

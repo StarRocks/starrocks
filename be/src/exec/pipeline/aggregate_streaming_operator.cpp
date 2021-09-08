@@ -29,11 +29,11 @@ bool AggregateStreamingOperator::has_output() const {
     // case1：streaming mode is 'FORCE_PREAGGREGATION'
     // case2：streaming mode is 'AUTO'
     //     case 2.1: very high aggregation
-    if (!_is_pre_finished) {
+    if (!_is_finished) {
         return false;
     }
 
-    if (_hash_table_eos || _hash_map_variant.size() == 0) {
+    if (_is_hash_table_eos || _hash_map_variant.size() == 0) {
         return false;
     }
 
@@ -41,7 +41,7 @@ bool AggregateStreamingOperator::has_output() const {
 }
 
 bool AggregateStreamingOperator::is_finished() const {
-    if (!_is_pre_finished) {
+    if (!_is_finished) {
         return false;
     }
 
@@ -49,8 +49,10 @@ bool AggregateStreamingOperator::is_finished() const {
 }
 
 void AggregateStreamingOperator::finish(RuntimeState* state) {
-    if (_is_pre_finished) return;
-    _is_pre_finished = true;
+    if (_is_finished) {
+        return;
+    }
+    _is_finished = true;
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateStreamingOperator::pull_chunk(RuntimeState* state) {
@@ -61,13 +63,6 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingOperator::pull_chunk(RuntimeSta
     }
 
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
-    // no data in hash table
-    if (_hash_table_eos || _hash_map_variant.size() == 0) {
-        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-        return chunk;
-    }
-
-    // data still exists in the hash table
     _output_chunk_from_hash_map(&chunk);
     _process_limit(&chunk);
     DCHECK_CHUNK(chunk);
@@ -75,10 +70,6 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingOperator::pull_chunk(RuntimeSta
 }
 
 Status AggregateStreamingOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    if (chunk->is_empty()) {
-        return Status::OK();
-    }
-
     size_t chunk_size = chunk->num_rows();
 
     _num_input_rows += chunk_size;

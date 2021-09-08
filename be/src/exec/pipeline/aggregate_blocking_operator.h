@@ -13,16 +13,12 @@ public:
     }
     ~AggregateBlockingOperator() override = default;
 
-    bool has_output() const override { return _is_pre_finished && !_is_finished; }
-    bool need_input() const override { return true; }
-    bool is_finished() const override { return _is_finished; }
+    bool has_output() const override;
+    bool is_finished() const override;
     void finish(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
-
-private:
-    bool _is_pre_finished = false;
 };
 
 class AggregateBlockingOperatorFactory final : public AggregateBaseOperatorFactory {

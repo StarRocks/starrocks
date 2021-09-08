@@ -187,7 +187,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParams* p
 }
 
 Status ExchangeSinkOperator::Channel::_close_internal() {
-    RETURN_IF_ERROR(send_one_chunk(nullptr, true));
+    RETURN_IF_ERROR(send_one_chunk(_chunk != nullptr ? _chunk.get() : nullptr, true));
     return Status::OK();
 }
 

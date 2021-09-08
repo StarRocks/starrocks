@@ -107,6 +107,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         }
         // close finished operators and update _first_unfinished index
         for (auto i = _first_unfinished; i < _new_first_unfinished; ++i) {
+            VLOG_ROW << "[Driver] " << _operators[i]->get_name() << " finish, driver=" << this;
             _operators[i]->finish(runtime_state);
             RETURN_IF_ERROR(_operators[i]->close(runtime_state));
         }
