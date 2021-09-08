@@ -35,7 +35,7 @@ while true; do
         --daemon) RUN_DAEMON=1 ; shift ;;
         --helper) HELPER=$2 ; shift 2 ;;
         --) shift ;  break ;;
-        *) ehco "Internal error" ; exit 1 ;;
+        *) echo "Internal error" ; exit 1 ;;
     esac
 done
 
