@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <hs.h>
 #include <re2/re2.h>
 
 #include <memory>
@@ -132,11 +133,16 @@ private:
 
     /// Convert a LIKE pattern (with embedded % and _) into the corresponding
     /// regular expression pattern. Escaped chars are copied verbatim.
+    template <bool fullMatch>
     static std::string convert_like_pattern(starrocks_udf::FunctionContext* context, const Slice& pattern);
 
     static void remove_escape_character(std::string* search_string);
 
 private:
+    class LikePredicateState;
+    static Status hs_compile_and_alloc_scratch(const std::string&, LikePredicateState*, starrocks_udf::FunctionContext*,
+                                               const Slice& slice);
+
     struct LikePredicateState {
         char escape_char;
 
@@ -163,7 +169,25 @@ private:
         /// Used for RLIKE and REGEXP predicates if the pattern is a constant argument.
         std::unique_ptr<re2::RE2> regex;
 
+        // a pointer to the generated database that responsible for parsed expression.
+        hs_database_t* database = nullptr;
+        // a type containing error details that is returned by the compile calls on failure.
+        hs_compile_error_t* compile_err = nullptr;
+        // A Hyperscan scratch space, Used to call hs_scan,
+        // one scratch space per thread, or concurrent caller, is required
+        hs_scratch_t* scratch = nullptr;
+
         LikePredicateState() : escape_char('\\') {}
+
+        ~LikePredicateState() {
+            if (scratch != nullptr) {
+                hs_free_scratch(scratch);
+            }
+
+            if (database != nullptr) {
+                hs_free_database(database);
+            }
+        }
 
         void set_search_string(const std::string& search_string_arg) {
             search_string = search_string_arg;
