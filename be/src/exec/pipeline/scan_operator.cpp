@@ -71,7 +71,9 @@ Status ScanOperator::prepare(RuntimeState* state) {
 
 Status ScanOperator::close(RuntimeState* state) {
     Expr::close(_conjunct_ctxs, state);
-    state->exec_env()->decrement_num_scan_operators(1);
+    if (_io_threads != nullptr) {
+        state->exec_env()->decrement_num_scan_operators(1);
+    }
     if (_chunk_source) {
         _chunk_source->close(state);
     }
