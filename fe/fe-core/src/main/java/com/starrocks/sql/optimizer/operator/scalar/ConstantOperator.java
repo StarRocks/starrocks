@@ -207,8 +207,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return (double) Optional.ofNullable(value).orElse((double) 0);
     }
 
-    public float getFloat() {
-        return (float) Optional.ofNullable(value).orElse((float) 0);
+    public double getFloat() {
+        return (double) Optional.ofNullable(value).orElse((double) 0);
     }
 
     public LocalDateTime getDate() {
