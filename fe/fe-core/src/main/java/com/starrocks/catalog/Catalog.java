@@ -35,7 +35,6 @@ import com.google.common.collect.Sets;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.NetworkRestore;
 import com.sleepycat.je.rep.NetworkRestoreConfig;
-import com.starrocks.StarRocksFE;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
@@ -779,7 +778,7 @@ public class Catalog {
         // 1. check and create dirs and files
         File meta = new File(metaDir);
         if (!meta.exists()) {
-            String oldMetaDir = StarRocksFE.STARROCKS_HOME_DIR + "/doris-meta";
+            String oldMetaDir = System.getenv("DORIS_HOME") + "/doris-meta";
             File oldMeta = new File(oldMetaDir);
             if (oldMeta.exists()) {
                 // For backward compatible
