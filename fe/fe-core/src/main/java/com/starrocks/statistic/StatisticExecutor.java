@@ -39,6 +39,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TStatisticData;
+import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TDeserializer;
@@ -53,7 +54,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
@@ -187,7 +187,7 @@ public class StatisticExecutor {
                 sql = buildFullInsertSQL(dbId, tableId, list);
             }
 
-            LOG.info("Collect statistic SQL: {}", sql);
+            LOG.debug("Collect statistic SQL: {}", sql);
 
             ConnectContext context = StatisticUtils.buildConnectContext();
             StatementBase parsedStmt = parseSQL(sql, context);
@@ -200,9 +200,9 @@ public class StatisticExecutor {
         }
     }
 
-    public void expireStatisticSync(String tableId) {
+    public void expireStatisticSync(List<String> tableIds) {
         StringBuilder sql = new StringBuilder(DELETE_TEMPLATE);
-        sql.append(" table_id = ").append(tableId);
+        sql.append(" table_id IN (").append(StringUtils.join(tableIds, ",")).append(")");
         LOG.debug("Expire statistic SQL: {}", sql);
 
         ConnectContext context = StatisticUtils.buildConnectContext();
@@ -216,9 +216,9 @@ public class StatisticExecutor {
         }
     }
 
-    public List<String> queryExpireTableSync(LocalDateTime expireTime) throws Exception {
+    public List<String> queryExpireTableSync(List<Long> tableIds) throws Exception {
         StringBuilder sql = new StringBuilder(SELECT_EXPIRE_TABLE_TEMPLATE);
-        sql.append(" AND update_time < '").append(expireTime.format(DEFAULT_UPDATE_TIME_FORMATTER)).append("'");
+        sql.append(" AND table_id NOT IN (").append(StringUtils.join(tableIds, ",")).append(")");
         LOG.debug("Query expire statistic SQL: {}", sql);
 
         Map<String, Database> dbs = Maps.newHashMap();
@@ -238,14 +238,14 @@ public class StatisticExecutor {
 
             CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder();
 
-            List<String> tableIds = Lists.newArrayList();
+            List<String> result = Lists.newArrayList();
             for (TResultBatch batch : sqlResult) {
                 for (ByteBuffer byteBuffer : batch.getRows()) {
-                    tableIds.add(decoder.decode(byteBuffer).toString().substring(1));
+                    result.add(decoder.decode(byteBuffer).toString().substring(1));
                 }
             }
 
-            return tableIds;
+            return result;
         } catch (Exception e) {
             LOG.warn("Execute statistic table query fail.", e);
             throw e;
