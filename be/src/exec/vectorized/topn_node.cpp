@@ -234,7 +234,6 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
                                                                            SIZE_OF_CHUNK_FOR_FULL_SORT);
     }
 
-    //chunks_sorter->setup_runtime(mem_tracker(), runtime_profile(), "ChunksSorter");
     // add sort operator to this pipeline
     auto ope = std::make_shared<SortSinkOperatorFactory>(context->next_operator_id(), id(), chunks_sorter,
                                                          _sort_exec_exprs, _order_by_types, _materialized_tuple_desc,

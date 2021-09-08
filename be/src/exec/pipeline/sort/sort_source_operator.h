@@ -26,8 +26,6 @@ public:
 
     ~SortSourceOperator() override = default;
 
-    // Result sink will send result chunk to BufferControlBlock directly,
-    // Then FE will pull result from BufferControlBlock
     bool has_output() override;
 
     bool is_finished() const override;

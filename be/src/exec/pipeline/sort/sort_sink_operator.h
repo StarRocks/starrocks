@@ -23,13 +23,13 @@ namespace pipeline {
 class SortSinkOperator final : public Operator {
 public:
     SortSinkOperator(int32_t id, int32_t plan_node_id, std::shared_ptr<vectorized::ChunksSorter> chunks_sorter,
-                     SortExecExprs sort_exec_exprs, std::vector<OrderByType> order_by_types,
+                     const SortExecExprs& sort_exec_exprs, const std::vector<OrderByType>& order_by_types,
                      TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
                      const RowDescriptor& parent_node_child_row_desc)
             : Operator(id, "sort_sink", plan_node_id),
               _chunks_sorter(std::move(chunks_sorter)),
-              _sort_exec_exprs(std::move(sort_exec_exprs)),
-              _order_by_types(std::move(order_by_types)),
+              _sort_exec_exprs(sort_exec_exprs),
+              _order_by_types(order_by_types),
               _materialized_tuple_desc(materialized_tuple_desc),
               _parent_node_row_desc(parent_node_row_desc),
               _parent_node_child_row_desc(parent_node_child_row_desc) {}
@@ -40,8 +40,6 @@ public:
 
     Status close(RuntimeState* state) override;
 
-    // Result sink will send result chunk to BufferControlBlock directly,
-    // Then FE will pull result from BufferControlBlock
     bool has_output() override { return false; }
 
     bool need_input() override;
@@ -64,7 +62,7 @@ private:
     // from topn
     // _sort_exec_exprs contains the ordering expressions
     SortExecExprs _sort_exec_exprs;
-    std::vector<OrderByType> _order_by_types;
+    const std::vector<OrderByType>& _order_by_types;
 
     // Cached descriptor for the materialized tuple. Assigned in Prepare().
     TupleDescriptor* _materialized_tuple_desc;
@@ -78,13 +76,13 @@ class SortSinkOperatorFactory final : public OperatorFactory {
 public:
     SortSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                             const std::shared_ptr<vectorized::ChunksSorter>& chunks_sorter,
-                            SortExecExprs sort_exec_exprs, std::vector<OrderByType> order_by_types,
+                            const SortExecExprs& sort_exec_exprs, const std::vector<OrderByType>& order_by_types,
                             TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
                             const RowDescriptor& parent_node_child_row_desc)
             : OperatorFactory(id, plan_node_id),
               _chunks_sorter(chunks_sorter),
-              _sort_exec_exprs(std::move(sort_exec_exprs)),
-              _order_by_types(std::move(order_by_types)),
+              _sort_exec_exprs(sort_exec_exprs),
+              _order_by_types(order_by_types),
               _materialized_tuple_desc(materialized_tuple_desc),
               _parent_node_row_desc(parent_node_row_desc),
               _parent_node_child_row_desc(parent_node_child_row_desc) {}
@@ -102,8 +100,8 @@ private:
     std::shared_ptr<vectorized::ChunksSorter> _chunks_sorter;
 
     // _sort_exec_exprs contains the ordering expressions
-    SortExecExprs _sort_exec_exprs;
-    std::vector<OrderByType> _order_by_types;
+    const SortExecExprs& _sort_exec_exprs;
+    const std::vector<OrderByType>& _order_by_types;
 
     // Cached descriptor for the materialized tuple. Assigned in Prepare().
     TupleDescriptor* _materialized_tuple_desc;
