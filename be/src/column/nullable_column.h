@@ -274,7 +274,7 @@ public:
     }
 
     bool exceed_capacity_limit() const override {
-        return _data_column->size() >= UINT32_MAX || _null_column->size() >= UINT32_MAX;
+        return _data_column->exceed_capacity_limit() || _null_column->exceed_capacity_limit();
     }
 
 private:
