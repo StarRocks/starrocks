@@ -146,11 +146,11 @@ protected:
             }
         }
 
-        _is_hash_table_eos = (it == end);
+        _is_ht_done = (it == end);
 
         // If there is null key, output it last
         if constexpr (HashMapWithKey::has_single_null_key) {
-            if (_is_hash_table_eos && hash_map_with_key.null_key_data != nullptr) {
+            if (_is_ht_done && hash_map_with_key.null_key_data != nullptr) {
                 // The output chunk size couldn't larger than config::vector_chunk_size
                 if (read_index < config::vector_chunk_size) {
                     // For multi group by key, we don't need to special handle null key
@@ -167,7 +167,7 @@ protected:
                     ++read_index;
                 } else {
                     // Output null key in next round
-                    _is_hash_table_eos = false;
+                    _is_ht_done = false;
                 }
             }
         }
@@ -221,11 +221,11 @@ protected:
             hash_set.insert_keys_to_columns(hash_set.results, group_by_columns, read_index);
         }
 
-        _is_hash_table_eos = (it == end);
+        _is_ht_done = (it == end);
 
         // IF there is null key, output it last
         if constexpr (HashSetWithKey::has_single_null_key) {
-            if (_is_hash_table_eos && hash_set.has_null_key) {
+            if (_is_ht_done && hash_set.has_null_key) {
                 // The output chunk size couldn't larger than config::vector_chunk_size
                 if (read_index < config::vector_chunk_size) {
                     // For multi group by key, we don't need to special handle null key
@@ -235,7 +235,7 @@ protected:
                     ++read_index;
                 } else {
                     // Output null key in next round
-                    _is_hash_table_eos = false;
+                    _is_ht_done = false;
                 }
             }
         }
@@ -262,7 +262,7 @@ protected:
             int64_t num_rows_over = _num_rows_returned - _limit;
             (*chunk)->set_num_rows((*chunk)->num_rows() - num_rows_over);
             COUNTER_SET(_rows_returned_counter, _limit);
-            _is_hash_table_eos = true;
+            _is_ht_done = true;
             LOG(INFO) << "Aggregate Node ReachedLimit " << _limit;
         }
     }
@@ -318,7 +318,7 @@ protected:
     // a finalize step.
     bool _needs_finalize;
     // Indicate whether data of the hash table has been taken out or reach limit
-    bool _is_hash_table_eos = false;
+    bool _is_ht_done = false;
     bool _is_only_group_by_columns = false;
     // At least one group by column is nullable
     bool _has_nullable_key = false;

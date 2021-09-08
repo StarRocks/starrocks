@@ -33,7 +33,7 @@ bool AggregateStreamingOperator::has_output() const {
         return false;
     }
 
-    if (_is_hash_table_eos || _hash_map_variant.size() == 0) {
+    if (_is_ht_done || _hash_map_variant.size() == 0) {
         return false;
     }
 

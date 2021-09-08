@@ -13,7 +13,7 @@
 namespace starrocks::pipeline {
 
 bool AggregateBlockingOperator::has_output() const {
-    return _is_finished && !_is_hash_table_eos;
+    return _is_finished && !_is_ht_done;
 }
 
 bool AggregateBlockingOperator::is_finished() const {
@@ -34,7 +34,7 @@ void AggregateBlockingOperator::finish(RuntimeState* state) {
         COUNTER_SET(_hash_table_size, (int64_t)_hash_map_variant.size());
         // If hash map is empty, we don't need to return value
         if (_hash_map_variant.size() == 0) {
-            _is_hash_table_eos = true;
+            _is_ht_done = true;
         }
 
         if (false) {
@@ -49,7 +49,7 @@ void AggregateBlockingOperator::finish(RuntimeState* state) {
         // In update phase, we directly return empty chunk.
         // In merge phase, we will handle it.
         if (_num_input_rows == 0 && !_needs_finalize) {
-            _is_hash_table_eos = true;
+            _is_ht_done = true;
         }
     }
     COUNTER_SET(_input_row_count, _num_input_rows);
