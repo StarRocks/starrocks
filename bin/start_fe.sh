@@ -78,6 +78,11 @@ if [[ "$JAVA_VERSION" -gt 8 ]]; then
     fi 
     final_java_opt=$JAVA_OPTS_FOR_JDK_9
 fi
+
+if [ ! -d $LOG_DIR ]; then
+    mkdir -p $LOG_DIR
+fi
+
 echo "using java version $JAVA_VERSION" >> $LOG_DIR/fe.out
 echo $final_java_opt >> $LOG_DIR/fe.out
 
@@ -86,10 +91,6 @@ for f in $STARROCKS_HOME/lib/*.jar; do
   CLASSPATH=$f:${CLASSPATH};
 done
 export CLASSPATH=${CLASSPATH}:${STARROCKS_HOME}/lib:${STARROCKS_HOME}/conf
-
-if [ ! -d $LOG_DIR ]; then
-    mkdir -p $LOG_DIR
-fi
 
 pidfile=$PID_DIR/fe.pid
 
