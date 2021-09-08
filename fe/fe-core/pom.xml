@@ -328,12 +328,6 @@ under the License.
             <artifactId>jackson-module-jaxb-annotations</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/io.fabric8/kubernetes-client -->
-        <dependency>
-            <groupId>io.fabric8</groupId>
-            <artifactId>kubernetes-client</artifactId>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/io.fabric8/kubernetes-model -->
         <dependency>
             <groupId>io.fabric8</groupId>
@@ -470,13 +464,6 @@ under the License.
         <dependency>
             <groupId>com.facebook.presto.hive</groupId>
             <artifactId>hive-apache</artifactId>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/com.github.wvengen/proguard-maven-plugin -->
-        <dependency>
-            <groupId>com.github.wvengen</groupId>
-            <artifactId>proguard-maven-plugin</artifactId>
-            <version>2.3.1</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.github.ben-manes.caffeine/caffeine -->

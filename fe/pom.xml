@@ -90,6 +90,10 @@ under the License.
                     <id>cloudera-public</id>
                     <url>https://repository.cloudera.com/artifactory/public/</url>
                 </repository>
+                <repository>
+                    <id>cloudera</id>
+                    <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
+                </repository>
                 <!-- for bdb je -->
                 <repository>
                     <id>oracleReleases</id>
@@ -143,7 +147,7 @@ under the License.
             <dependency>
                 <groupId>commons-codec</groupId>
                 <artifactId>commons-codec</artifactId>
-                <version>1.9</version>
+                <version>1.13</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-lang/commons-lang -->
@@ -199,7 +203,7 @@ under the License.
             <dependency>
                 <groupId>org.codehaus.jackson</groupId>
                 <artifactId>jackson-mapper-asl</artifactId>
-                <version>1.9.13</version>
+                <version>1.9.13-cloudera.2</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/net.sourceforge.czt.dev/java-cup -->
@@ -234,14 +238,14 @@ under the License.
             <dependency>
                 <groupId>org.mortbay.jetty</groupId>
                 <artifactId>jetty</artifactId>
-                <version>6.1.14</version>
+                <version>6.1.26</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.mortbay.jetty/jetty-util -->
             <dependency>
                 <groupId>org.mortbay.jetty</groupId>
                 <artifactId>jetty-util</artifactId>
-                <version>6.1.14</version>
+                <version>6.1.26</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/de.jflex/jflex -->
@@ -284,7 +288,7 @@ under the License.
             <dependency>
                 <groupId>commons-io</groupId>
                 <artifactId>commons-io</artifactId>
-                <version>2.6</version>
+                <version>2.7</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-core -->
@@ -334,14 +338,14 @@ under the License.
             <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
                 <artifactId>log4j-api</artifactId>
-                <version>2.12.1</version>
+                <version>2.13.2</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core -->
             <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
                 <artifactId>log4j-core</artifactId>
-                <version>2.12.1</version>
+                <version>2.13.2</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-slf4j-impl -->
@@ -362,14 +366,14 @@ under the License.
             <dependency>
                 <groupId>mysql</groupId>
                 <artifactId>mysql-connector-java</artifactId>
-                <version>5.1.41</version>
+                <version>5.1.49</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/io.netty/netty-all -->
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-all</artifactId>
-                <version>4.1.42.Final</version>
+                <version>4.1.61.Final</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.objenesis/objenesis -->
@@ -443,13 +447,6 @@ under the License.
                 <version>2.12.1</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/io.fabric8/kubernetes-client -->
-            <dependency>
-                <groupId>io.fabric8</groupId>
-                <artifactId>kubernetes-client</artifactId>
-                <version>1.4.27</version>
-            </dependency>
-
             <!-- https://mvnrepository.com/artifact/io.fabric8/kubernetes-model -->
             <dependency>
                 <groupId>io.fabric8</groupId>
@@ -489,7 +486,7 @@ under the License.
             <dependency>
                 <groupId>org.yaml</groupId>
                 <artifactId>snakeyaml</artifactId>
-                <version>1.15</version>
+                <version>1.26</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/javax.validation/validation-api -->
@@ -510,14 +507,14 @@ under the License.
             <dependency>
                 <groupId>log4j</groupId>
                 <artifactId>log4j</artifactId>
-                <version>1.2.17</version>
+                <version>1.2.17-cloudera1</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.slf4j/slf4j-api -->
             <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-api</artifactId>
-                <version>1.7.5</version>
+                <version>1.7.30</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.github.oshi/oshi-core -->
@@ -531,7 +528,7 @@ under the License.
             <dependency>
                 <groupId>org.jboss.xnio</groupId>
                 <artifactId>xnio-nio</artifactId>
-                <version>3.6.5.Final</version>
+                <version>3.7.9.Final</version>
             </dependency>
 
             <!-- support jdk9 -->
@@ -567,7 +564,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-core_2.12</artifactId>
-                <version>2.4.5</version>
+                <version>2.4.6</version>
                 <exclusions>
                     <exclusion>
                         <groupId>org.slf4j</groupId>
@@ -580,14 +577,14 @@ under the License.
             <dependency>
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-launcher_2.12</artifactId>
-                <version>2.4.5</version>
+                <version>2.4.6</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-sql_2.12 -->
             <dependency>
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-sql_2.12</artifactId>
-                <version>2.4.5</version>
+                <version>2.4.6</version>
                 <scope>provided</scope>
             </dependency>
 
@@ -650,7 +647,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-catalyst_2.12</artifactId>
-                <version>2.4.5</version>
+                <version>2.4.6</version>
                 <scope>provided</scope>
             </dependency>
 
