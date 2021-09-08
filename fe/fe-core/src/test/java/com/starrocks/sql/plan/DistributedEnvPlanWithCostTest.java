@@ -416,9 +416,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "     cardinality: 600000000"));
         sql = "SELECT COUNT(*)  FROM lineitem JOIN orders ON l_orderkey * 2 = o_orderkey + 1  GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
         plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("|  equal join conjunct: cast([1: L_ORDERKEY, INT, false] as BIGINT) * 2 = cast([18: O_ORDERKEY, INT, false] as BIGINT) + 1\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 0, build_expr = (CAST(18: O_ORDERKEY AS BIGINT) + 1), remote = false\n" +
+        Assert.assertTrue(plan.contains("equal join conjunct: [29: multiply, BIGINT, true] = [30: add, BIGINT, true]\n" +
                 "  |  cardinality: 600000000"));
     }
 }
