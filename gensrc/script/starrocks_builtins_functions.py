@@ -599,15 +599,15 @@ visible_functions = [
 
     [['esquery'], 'BOOLEAN', ['VARCHAR', 'VARCHAR'],
         '_ZN9starrocks11ESFunctions5matchEPN'
-        '9starrocks_udf15FunctionContextERKNS1_9StringValES6_'],
+        '13starrocks_udf15FunctionContextERKNS1_9StringValES6_'],
 
     # String builtin functions
     [['substr', 'substring'], 'VARCHAR', ['VARCHAR', 'INT'],
         '_ZN9starrocks15StringFunctions9substringEPN'
-        '9starrocks_udf15FunctionContextERKNS1_9StringValERKNS1_6IntValE'],
+        '13starrocks_udf15FunctionContextERKNS1_9StringValERKNS1_6IntValE'],
     [['substr', 'substring'], 'VARCHAR', ['VARCHAR', 'INT', 'INT'],
         '_ZN9starrocks15StringFunctions9substringEPN'
-        '9starrocks_udf15FunctionContextERKNS1_9StringValERKNS1_6IntValES9_'],
+        '13starrocks_udf15FunctionContextERKNS1_9StringValERKNS1_6IntValES9_'],
     [['strleft', 'left'], 'VARCHAR', ['VARCHAR', 'INT'],
         '_ZN9starrocks15StringFunctions4leftEPN13starrocks_udf'
         '15FunctionContextERKNS1_9StringValERKNS1_6IntValE'],
