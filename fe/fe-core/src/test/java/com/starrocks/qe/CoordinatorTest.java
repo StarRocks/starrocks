@@ -166,7 +166,7 @@ public class CoordinatorTest extends Coordinator {
 
         hashJoinNode.setFragment(new PlanFragment(new PlanFragmentId(-1), hashJoinNode,
                 new DataPartition(TPartitionType.BUCKET_SHFFULE_HASH_PARTITIONED, testJoinexprs)));
-        Deencapsulation.setField(hashJoinNode, "isLocalBucketShuffle", true);
+        Deencapsulation.setField(hashJoinNode, "isBucketShuffle", true);
         Assert.assertEquals(true,
                 Deencapsulation.invoke(coordinator, "isBucketShuffleJoin", -1, hashJoinNode));
 
