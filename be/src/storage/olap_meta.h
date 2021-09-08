@@ -42,11 +42,11 @@ namespace starrocks {
 using ColumnFamilyHandle = rocksdb::ColumnFamilyHandle;
 using WriteBatch = rocksdb::WriteBatch;
 
-class OlapMeta {
+class KVStore {
 public:
-    explicit OlapMeta(std::string root_path);
+    explicit KVStore(std::string root_path);
 
-    virtual ~OlapMeta();
+    virtual ~KVStore();
 
     Status init(bool read_only = false);
 

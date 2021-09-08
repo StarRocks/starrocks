@@ -79,7 +79,7 @@ public:
 
     OLAPStatus get_shard(uint64_t* shard);
 
-    OlapMeta* get_meta() { return _meta; }
+    KVStore* get_meta() { return _meta; }
 
     bool is_ssd_disk() const { return _storage_medium == TStorageMedium::SSD; }
 
@@ -164,7 +164,7 @@ private:
 
     static const uint32_t MAX_SHARD_NUM = 1024;
 
-    OlapMeta* _meta = nullptr;
+    KVStore* _meta = nullptr;
     RowsetIdGenerator* _id_generator = nullptr;
 
     std::mutex _check_path_mutex;

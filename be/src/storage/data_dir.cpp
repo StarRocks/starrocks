@@ -259,10 +259,10 @@ Status DataDir::_init_meta(bool read_only) {
     LOG(INFO) << "path: " << _path << ", hash: " << _path_hash;
 
     // init meta
-    _meta = new (std::nothrow) OlapMeta(_path);
+    _meta = new (std::nothrow) KVStore(_path);
     if (_meta == nullptr) {
-        RETURN_IF_ERROR_WITH_WARN(Status::MemoryAllocFailed("allocate memory for OlapMeta failed"),
-                                  "new OlapMeta failed");
+        RETURN_IF_ERROR_WITH_WARN(Status::MemoryAllocFailed("allocate memory for KVStore failed"),
+                                  "new KVStore failed");
     }
     Status res = _meta->init(read_only);
     LOG_IF(WARNING, !res.ok()) << "Fail to init meta store: " << res;

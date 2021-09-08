@@ -34,17 +34,17 @@ namespace starrocks {
 // Helper class for managing rowset meta of one root path.
 class RowsetMetaManager {
 public:
-    static bool check_rowset_meta(OlapMeta* meta, TabletUid tablet_uid, const RowsetId& rowset_id);
+    static bool check_rowset_meta(KVStore* kv_store, TabletUid tablet_uid, const RowsetId& rowset_id);
 
-    static Status save(OlapMeta* meta, TabletUid tablet_uid, const RowsetId& rowset_id,
+    static Status save(KVStore* kv_store, TabletUid tablet_uid, const RowsetId& rowset_id,
                        const RowsetMetaPB& rowset_meta_pb);
 
-    static Status remove(OlapMeta* meta, TabletUid tablet_uid, const RowsetId& rowset_id);
+    static Status remove(KVStore* kv_store, TabletUid tablet_uid, const RowsetId& rowset_id);
 
     static string get_rowset_meta_key(const TabletUid& tablet_uid, const RowsetId& rowset_id);
 
     static Status traverse_rowset_metas(
-            OlapMeta* meta, std::function<bool(const TabletUid&, const RowsetId&, const std::string&)> const& func);
+            KVStore* kv_store, std::function<bool(const TabletUid&, const RowsetId&, const std::string&)> const& func);
 };
 
 } // namespace starrocks

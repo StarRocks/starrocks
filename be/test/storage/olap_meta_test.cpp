@@ -38,14 +38,14 @@ using std::string;
 
 namespace starrocks {
 
-class OlapMetaTest : public testing::Test {
+class KVStoreTest : public testing::Test {
 public:
     virtual void SetUp() {
         _root_path = "./ut_dir/olap_meta_test";
         FileUtils::remove_all(_root_path);
         FileUtils::create_dir(_root_path);
 
-        _meta = new OlapMeta(_root_path);
+        _meta = new KVStore(_root_path);
         ASSERT_TRUE(_meta->init().ok());
         ASSERT_TRUE(std::filesystem::exists(_root_path + "/meta"));
     }
@@ -57,15 +57,15 @@ public:
 
 private:
     std::string _root_path;
-    OlapMeta* _meta;
+    KVStore* _meta;
 };
 
-TEST_F(OlapMetaTest, TestGetRootPath) {
+TEST_F(KVStoreTest, TestGetRootPath) {
     std::string root_path = _meta->get_root_path();
     ASSERT_EQ("./ut_dir/olap_meta_test", root_path);
 }
 
-TEST_F(OlapMetaTest, TestPutAndGet) {
+TEST_F(KVStoreTest, TestPutAndGet) {
     // normal cases
     std::string key = "key";
     std::string value = "value";
@@ -78,7 +78,7 @@ TEST_F(OlapMetaTest, TestPutAndGet) {
     ASSERT_TRUE(_meta->get(META_COLUMN_FAMILY_INDEX, "key_not_exist", &value_get).is_not_found());
 }
 
-TEST_F(OlapMetaTest, TestRemove) {
+TEST_F(KVStoreTest, TestRemove) {
     // normal cases
     std::string key = "key";
     std::string value = "value";
@@ -90,7 +90,7 @@ TEST_F(OlapMetaTest, TestRemove) {
     ASSERT_TRUE(_meta->remove(META_COLUMN_FAMILY_INDEX, "key_not_exist").ok());
 }
 
-TEST_F(OlapMetaTest, TestIterate) {
+TEST_F(KVStoreTest, TestIterate) {
     // normal cases
     std::string key = "hdr_key";
     std::string value = "value";

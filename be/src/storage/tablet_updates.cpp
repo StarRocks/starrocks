@@ -683,7 +683,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     // NOTE: after commit, apply must success or fatal crash
     int64_t t_start = MonotonicMillis();
     auto tablet_id = _tablet.tablet_id();
-    OlapMeta* meta = _tablet.data_dir()->get_meta();
+    KVStore* meta = _tablet.data_dir()->get_meta();
     uint32_t rowset_id = version_info.deltas[0];
     auto& version = version_info.version;
     VLOG(1) << "apply_rowset_commit start tablet:" << tablet_id << " version:" << version_info.version.to_string()

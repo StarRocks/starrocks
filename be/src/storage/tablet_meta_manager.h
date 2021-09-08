@@ -77,7 +77,7 @@ struct MetaStoreStats {
 // Helper Class for managing tablet headers of one root path.
 class TabletMetaManager {
 public:
-    static Status get_primary_meta(OlapMeta* meta, TTabletId tablet_id, TabletMetaPB& tablet_meta_pb,
+    static Status get_primary_meta(KVStore* meta, TTabletId tablet_id, TabletMetaPB& tablet_meta_pb,
                                    string* json_meta);
 
     static Status get_tablet_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
@@ -94,7 +94,7 @@ public:
 
     static Status remove(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash);
 
-    static Status traverse_headers(OlapMeta* meta, std::function<bool(long, long, const std::string&)> const& func);
+    static Status traverse_headers(KVStore* meta, std::function<bool(long, long, const std::string&)> const& func);
 
     static Status load_json_meta(DataDir* store, const std::string& meta_path);
 
@@ -143,18 +143,18 @@ public:
                                      const std::function<bool(uint64_t, const TabletMetaLogPB&)>& func);
 
     // TODO: rename parameter |segment_id|, it's different from `Segment::id()`
-    static Status set_del_vector(OlapMeta* meta, TTabletId tablet_id, uint32_t segment_id, const DelVector& delvec);
+    static Status set_del_vector(KVStore* meta, TTabletId tablet_id, uint32_t segment_id, const DelVector& delvec);
 
     // TODO: rename parameter |segment_id|, it's different from `Segment::id()`
-    static Status get_del_vector(OlapMeta* meta, TTabletId tablet_id, uint32_t segment_id, int64_t version,
+    static Status get_del_vector(KVStore* meta, TTabletId tablet_id, uint32_t segment_id, int64_t version,
                                  DelVector* delvec, int64_t* latest_version);
 
     // The first element of pair is segment id, the second element of pair is version.
     using DeleteVectorList = std::vector<std::pair<uint32_t, int64_t>>;
 
-    static StatusOr<DeleteVectorList> list_del_vector(OlapMeta* meta, TTabletId tablet_id, int64_t max_version);
+    static StatusOr<DeleteVectorList> list_del_vector(KVStore* meta, TTabletId tablet_id, int64_t max_version);
 
-    static Status delete_del_vector_range(OlapMeta* meta, TTabletId tablet_id, uint32_t segment_id,
+    static Status delete_del_vector_range(KVStore* meta, TTabletId tablet_id, uint32_t segment_id,
                                           int64_t start_version, int64_t end_version);
 
     static Status put_rowset_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
