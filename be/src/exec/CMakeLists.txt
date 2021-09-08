@@ -105,7 +105,6 @@ set(EXEC_FILES
     json_scanner.cpp
     assert_num_rows_node.cpp
     vectorized/adapter_node.cpp
-    vectorized/aggregate/aggregate_base.cpp
     vectorized/aggregate/aggregate_base_node.cpp
     vectorized/aggregate/aggregate_blocking_node.cpp
     vectorized/aggregate/distinct_blocking_node.cpp
