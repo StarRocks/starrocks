@@ -67,10 +67,7 @@ public class HashJoinNode extends PlanNode {
     private boolean isPushDown;
     private DistributionMode distrMode;
     private String colocateReason = ""; // if can not do colocate join, set reason here
-    // the flag for local bucket shuffle join
-    private boolean isLocalBucketShuffle = false;
-    // the flag for runtime bucket shuffle join
-    private boolean isRuntimeBucketShuffle = false;
+    private boolean isBucketShuffle = false; // the flag for bucket shuffle join
 
     private List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
 
@@ -219,12 +216,8 @@ public class HashJoinNode extends PlanNode {
         this.distrMode = distrMode;
     }
 
-    public boolean isLocalBucketShuffle() {
-        return isLocalBucketShuffle;
-    }
-
-    public boolean isRuntimeBucketShuffle() {
-        return isRuntimeBucketShuffle;
+    public boolean isBucketShuffle() {
+        return isBucketShuffle;
     }
 
     public void setColocate(boolean colocate, String reason) {
@@ -232,12 +225,8 @@ public class HashJoinNode extends PlanNode {
         colocateReason = reason;
     }
 
-    public void setLocalBucketShuffle(boolean localBucketShuffle) {
-        isLocalBucketShuffle = localBucketShuffle;
-    }
-
-    public void setRuntimeBucketShuffle(boolean runtimeBucketShuffle) {
-        isRuntimeBucketShuffle = runtimeBucketShuffle;
+    public void setBucketShuffle(boolean bucketShuffle) {
+        isBucketShuffle = bucketShuffle;
     }
 
     @Override
@@ -528,7 +517,6 @@ public class HashJoinNode extends PlanNode {
         BROADCAST("BROADCAST"),
         PARTITIONED("PARTITIONED"),
         BUCKET_SHUFFLE("BUCKET_SHUFFLE"),
-        RUNTIME_BUCKET_SHUFFLE("RUNTIME_BUCKET_SHUFFLE"),
         COLOCATE("COLOCATE");
 
         private final String description;
