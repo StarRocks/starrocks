@@ -131,7 +131,7 @@ mysql -h 127.0.0.1 -P9030 -uroot
 Step 3: Check the FE status.
 
 ```Plain Text
-mysql> SHOW PROC '/frontends'\\G
+mysql> SHOW PROC '/frontends'\G
 
 ***1\. row***
 
@@ -228,7 +228,7 @@ There is no need to specify the `--helper` parameter for future starts. The FE s
 Step 4: Check the cluster status and confirm that the deployment is successful:
 
 ```Plain Text
-mysql> SHOW PROC '/frontends'\\G
+mysql> SHOW PROC '/frontends'\G
 
 ***1\. row***
 
@@ -337,7 +337,7 @@ bin/start_be.sh --daemon
 Step 4: Check the BE status to confirm it is ready.
 
 ```Plain Text
-mysql> SHOW PROC '/backends'\\G
+mysql> SHOW PROC '/backends'\G
 
 ***1\. row***
 
@@ -425,7 +425,7 @@ MySQL> ALTER SYSTEM ADD BROKER broker1 "172.16.139.24:8000";
 Step 3: Check the broker status:
 
 ```plain text
-MySQL> SHOW PROC "/brokers"\G
+MySQL> SHOW PROC '/brokers'\G
 *************************** 1. row ***************************
           Name: broker1
             IP: 172.16.139.24
