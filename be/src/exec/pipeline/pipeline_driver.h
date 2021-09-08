@@ -150,6 +150,8 @@ public:
 
     bool is_root() const { return _is_root; }
 
+    std::string to_debug_string() const;
+
 private:
     Operators _operators;
     size_t _first_unfinished;

@@ -29,7 +29,7 @@ public:
 
     Status close(RuntimeState* state) override;
 
-    bool has_output() override;
+    bool has_output() const override;
 
     bool pending_finish() override;
 
@@ -43,8 +43,8 @@ public:
 private:
     void _pickup_morsel(RuntimeState* state);
     void _trigger_read_chunk();
-    bool _has_output_blocking();
-    bool _has_output_nonblocking();
+    bool _has_output_blocking() const;
+    bool _has_output_nonblocking() const;
     StatusOr<vectorized::ChunkPtr> _pull_chunk_blocking(RuntimeState* state);
     StatusOr<vectorized::ChunkPtr> _pull_chunk_nonblocking(RuntimeState* state);
 

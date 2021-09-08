@@ -22,7 +22,7 @@ Status ExchangeSourceOperator::close(RuntimeState* state) {
     return Status::OK();
 }
 
-bool ExchangeSourceOperator::has_output() {
+bool ExchangeSourceOperator::has_output() const {
     return _stream_recvr->has_output();
 }
 

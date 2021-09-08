@@ -426,4 +426,9 @@ public class AggregationNode extends PlanNode {
         }
         return false;
     }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
 }

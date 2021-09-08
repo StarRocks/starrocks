@@ -2,6 +2,9 @@
 
 #include "exec/vectorized/aggregate/aggregate_streaming_node.h"
 
+#include "exec/pipeline/aggregate_streaming_operator.h"
+#include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline_builder.h"
 #include "simd/simd.h"
 
 namespace starrocks::vectorized {
@@ -206,6 +209,16 @@ void AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
     else {
         DCHECK(false);
     }
+}
+
+std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode::decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+    OpFactories operators = _children[0]->decompose_to_pipeline(context);
+
+    operators.emplace_back(
+            std::make_shared<AggregateStreamingOperatorFactory>(context->next_operator_id(), id(), _tnode));
+    return operators;
 }
 
 } // namespace starrocks::vectorized
