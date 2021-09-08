@@ -84,6 +84,11 @@ private:
                 const std::vector<ExprContext*>& rhs_ordering_expr_ctxs);
 };
 
+struct OrderByType {
+    TypeDescriptor type_desc;
+    bool is_nullable;
+};
+
 } // namespace starrocks
 
 #endif

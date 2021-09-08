@@ -27,6 +27,9 @@ public:
 
     Status close(RuntimeState* state) override;
 
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
+
 private:
     Status _consume_chunks(RuntimeState* state, ExecNode* child);
     ChunkPtr _materialize_chunk_before_sort(Chunk* chunk);
@@ -37,11 +40,6 @@ private:
     SortExecExprs _sort_exec_exprs;
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
-
-    struct OrderByType {
-        TypeDescriptor type_desc;
-        bool is_nullable;
-    };
     std::vector<OrderByType> _order_by_types;
 
     // Cached descriptor for the materialized tuple. Assigned in Prepare().

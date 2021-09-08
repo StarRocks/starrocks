@@ -31,6 +31,8 @@ public:
     Status done(RuntimeState* state) override;
     // get_next only works after done().
     void get_next(ChunkPtr* chunk, bool* eos) override;
+    // pull_chunk for pipeline.
+    bool pull_chunk(ChunkPtr* chunk) override;
 
 private:
     inline size_t _get_number_of_rows_to_sort() const { return _offset + _limit; }
