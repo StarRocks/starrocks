@@ -36,7 +36,7 @@ StatusOr<vectorized::ChunkPtr> SortSinkOperator::pull_chunk(RuntimeState* state)
     CHECK(false) << "Shouldn't pull chunk from result sink operator";
 }
 
-bool SortSinkOperator::need_input() {
+bool SortSinkOperator::need_input() const {
     return !is_finished();
 }
 
