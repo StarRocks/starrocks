@@ -39,7 +39,7 @@ class BetaRowset;
 using BetaRowsetSharedPtr = std::shared_ptr<BetaRowset>;
 class DelVector;
 using DelVectorPtr = std::shared_ptr<DelVector>;
-class OlapMeta;
+class KVStore;
 
 class BetaRowset : public Rowset {
 public:
@@ -63,7 +63,7 @@ public:
     // if the segment is empty, put an empty pointer in list
     // caller is also responsible to call rowset's acquire/release
     StatusOr<std::vector<vectorized::ChunkIteratorPtr>> get_segment_iterators2(const vectorized::Schema& schema,
-                                                                               OlapMeta* meta, int64_t version,
+                                                                               KVStore* meta, int64_t version,
                                                                                OlapReaderStatistics* stats);
 
     static std::string segment_file_path(const std::string& segment_dir, const RowsetId& rowset_id, int segment_id);

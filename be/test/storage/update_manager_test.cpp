@@ -7,7 +7,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/del_vector.h"
 #include "storage/olap_define.h"
-#include "storage/olap_meta.h"
+#include "storage/kv_store.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -26,7 +26,7 @@ public:
         _root_path = "./ut_dir/olap_update_manager_test";
         FileUtils::remove_all(_root_path);
         FileUtils::create_dir(_root_path);
-        _meta.reset(new OlapMeta(_root_path));
+        _meta.reset(new KVStore(_root_path));
         ASSERT_TRUE(_meta->init().ok());
         ASSERT_TRUE(FileUtils::is_dir(_root_path + "/meta"));
         _root_mem_tracker.reset(new MemTracker(-1, "update"));
@@ -113,7 +113,7 @@ public:
 private:
     std::string _root_path;
     unique_ptr<MemTracker> _root_mem_tracker = nullptr;
-    unique_ptr<OlapMeta> _meta;
+    unique_ptr<KVStore> _meta;
     unique_ptr<UpdateManager> _update_manager;
     TabletSharedPtr _tablet;
 };

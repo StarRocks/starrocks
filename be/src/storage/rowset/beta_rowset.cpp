@@ -313,7 +313,7 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
 }
 
 StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iterators2(const vectorized::Schema& schema,
-                                                                                       OlapMeta* meta, int64_t version,
+                                                                                       KVStore* meta, int64_t version,
                                                                                        OlapReaderStatistics* stats) {
     RETURN_IF_ERROR(load());
 

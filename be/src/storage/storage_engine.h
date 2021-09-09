@@ -44,7 +44,7 @@
 #include "storage/fs/fs_util.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
-#include "storage/olap_meta.h"
+#include "storage/kv_store.h"
 #include "storage/options.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/tablet.h"

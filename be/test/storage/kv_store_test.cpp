@@ -1,6 +1,6 @@
 // This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/test/olap/olap_meta_test.cpp
+//   https://github.com/apache/incubator-doris/blob/master/be/test/olap/kv_store_test.cpp
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/olap_meta.h"
+#include "storage/kv_store.h"
 
 #include <gtest/gtest.h>
 
@@ -38,69 +38,69 @@ using std::string;
 
 namespace starrocks {
 
-class OlapMetaTest : public testing::Test {
+class KVStoreTest : public testing::Test {
 public:
     virtual void SetUp() {
-        _root_path = "./ut_dir/olap_meta_test";
+        _root_path = "./ut_dir/kv_store_test";
         FileUtils::remove_all(_root_path);
         FileUtils::create_dir(_root_path);
 
-        _meta = new OlapMeta(_root_path);
-        ASSERT_TRUE(_meta->init().ok());
+        _kv_store = new KVStore(_root_path);
+        ASSERT_TRUE(_kv_store->init().ok());
         ASSERT_TRUE(std::filesystem::exists(_root_path + "/meta"));
     }
 
     virtual void TearDown() {
-        delete _meta;
+        delete _kv_store;
         FileUtils::remove_all(_root_path);
     }
 
 private:
     std::string _root_path;
-    OlapMeta* _meta;
+    KVStore* _kv_store;
 };
 
-TEST_F(OlapMetaTest, TestGetRootPath) {
-    std::string root_path = _meta->get_root_path();
-    ASSERT_EQ("./ut_dir/olap_meta_test", root_path);
+TEST_F(KVStoreTest, TestGetRootPath) {
+    std::string root_path = _kv_store->get_root_path();
+    ASSERT_EQ("./ut_dir/kv_store_test", root_path);
 }
 
-TEST_F(OlapMetaTest, TestPutAndGet) {
+TEST_F(KVStoreTest, TestPutAndGet) {
     // normal cases
     std::string key = "key";
     std::string value = "value";
-    ASSERT_TRUE(_meta->put(META_COLUMN_FAMILY_INDEX, key, value).ok());
+    ASSERT_TRUE(_kv_store->put(META_COLUMN_FAMILY_INDEX, key, value).ok());
     std::string value_get;
-    ASSERT_TRUE(_meta->get(META_COLUMN_FAMILY_INDEX, key, &value_get).ok());
+    ASSERT_TRUE(_kv_store->get(META_COLUMN_FAMILY_INDEX, key, &value_get).ok());
     ASSERT_EQ(value, value_get);
 
     // abnormal cases
-    ASSERT_TRUE(_meta->get(META_COLUMN_FAMILY_INDEX, "key_not_exist", &value_get).is_not_found());
+    ASSERT_TRUE(_kv_store->get(META_COLUMN_FAMILY_INDEX, "key_not_exist", &value_get).is_not_found());
 }
 
-TEST_F(OlapMetaTest, TestRemove) {
+TEST_F(KVStoreTest, TestRemove) {
     // normal cases
     std::string key = "key";
     std::string value = "value";
-    ASSERT_TRUE(_meta->put(META_COLUMN_FAMILY_INDEX, key, value).ok());
+    ASSERT_TRUE(_kv_store->put(META_COLUMN_FAMILY_INDEX, key, value).ok());
     std::string value_get;
-    ASSERT_TRUE(_meta->get(META_COLUMN_FAMILY_INDEX, key, &value_get).ok());
+    ASSERT_TRUE(_kv_store->get(META_COLUMN_FAMILY_INDEX, key, &value_get).ok());
     ASSERT_EQ(value, value_get);
-    ASSERT_TRUE(_meta->remove(META_COLUMN_FAMILY_INDEX, key).ok());
-    ASSERT_TRUE(_meta->remove(META_COLUMN_FAMILY_INDEX, "key_not_exist").ok());
+    ASSERT_TRUE(_kv_store->remove(META_COLUMN_FAMILY_INDEX, key).ok());
+    ASSERT_TRUE(_kv_store->remove(META_COLUMN_FAMILY_INDEX, "key_not_exist").ok());
 }
 
-TEST_F(OlapMetaTest, TestIterate) {
+TEST_F(KVStoreTest, TestIterate) {
     // normal cases
     std::string key = "hdr_key";
     std::string value = "value";
     for (int i = 0; i < 10; i++) {
         std::stringstream ss;
         ss << key << "_" << i;
-        ASSERT_TRUE(_meta->put(META_COLUMN_FAMILY_INDEX, ss.str(), value).ok());
+        ASSERT_TRUE(_kv_store->put(META_COLUMN_FAMILY_INDEX, ss.str(), value).ok());
     }
     bool error_flag = false;
-    ASSERT_TRUE(_meta->iterate(META_COLUMN_FAMILY_INDEX, "hdr_",
+    ASSERT_TRUE(_kv_store->iterate(META_COLUMN_FAMILY_INDEX, "hdr_",
                                [&error_flag](const std::string_view& key, const std::string_view& value) -> bool {
                                    size_t pos = key.find_first_of("hdr_");
                                    if (pos != 0) {

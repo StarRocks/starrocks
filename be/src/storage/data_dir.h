@@ -32,7 +32,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/olap_common.h"
-#include "storage/olap_meta.h"
+#include "storage/kv_store.h"
 #include "storage/rowset/rowset_id_generator.h"
 
 namespace starrocks {
@@ -79,7 +79,7 @@ public:
 
     OLAPStatus get_shard(uint64_t* shard);
 
-    OlapMeta* get_meta() { return _meta; }
+    KVStore* get_meta() { return _kv_store; }
 
     bool is_ssd_disk() const { return _storage_medium == TStorageMedium::SSD; }
 
@@ -164,7 +164,7 @@ private:
 
     static const uint32_t MAX_SHARD_NUM = 1024;
 
-    OlapMeta* _meta = nullptr;
+    KVStore* _kv_store = nullptr;
     RowsetIdGenerator* _id_generator = nullptr;
 
     std::mutex _check_path_mutex;
