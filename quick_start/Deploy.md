@@ -12,45 +12,25 @@ For example, below is what you get after decompressing the package “starrocks-
 StarRocks-XX-1.0.0
 
 ├── be  # BE Catalog
-
 │   ├── bin
-
 │   │   ├── start_be.sh # BE start command
-
 │   │   └── stop_be.sh  # BE shutdown command
-
 │   ├── conf
-
 │   │   └── be.conf     # BE configuration file
-
 │   ├── lib
-
 │   │   ├── starrocks_be  # BE executable file
-
 │   │   └── meta_tool
-
 │   └── www
-
 ├── fe  # FE Catalog
-
 │   ├── bin
-
 │   │   ├── start_fe.sh # FE start command
-
 │   │   └── stop_fe.sh  # FE shutdown command
-
 │   ├── conf
-
 │   │   └── fe.conf     # FE configuration file
-
 │   ├── lib
-
 │   │   ├── starrocks-fe.jar  # FE jar package
-
 │   │   └── *.jar           # FE dependent jar packages
-
 │   └── webroot
-
 └── udf
 ```
 
