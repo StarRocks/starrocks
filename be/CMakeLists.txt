@@ -263,6 +263,9 @@ set_target_properties(ryu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/l
 add_library(breakpad STATIC IMPORTED)
 set_target_properties(breakpad PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbreakpad_client.a)
 
+add_library(hyperscan STATIC IMPORTED)
+set_target_properties(hyperscan PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhs.a)
+
 find_program(THRIFT_COMPILER thrift ${CMAKE_SOURCE_DIR}/bin)
 
 # Check if functions are supported in this platform. All flags will generated
@@ -476,6 +479,7 @@ set(STARROCKS_DEPENDENCIES
     fmt
     ryu
     breakpad
+    hyperscan
     ${WL_END_GROUP}
 )
 
