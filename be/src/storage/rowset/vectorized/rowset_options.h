@@ -52,7 +52,7 @@ public:
 
     bool is_primary_keys = false;
     int64_t version = 0;
-    KVStore* kv_store = nullptr;
+    KVStore* meta = nullptr;
 
     starrocks::OlapReaderStatistics* stats = nullptr;
     starrocks::RuntimeState* runtime_state = nullptr;
