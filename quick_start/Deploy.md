@@ -83,10 +83,16 @@ JAVA_OPTS = "-Xmx4096m -XX:+UseMembar -XX:SurvivorRatio=8 -XX:MaxTenuringThresho
 
 You can adjust `-Xmx4096m` basd on the FE memory size. Recommend to set the memory size to 16G or above to avoid GC. All StarRocks metadata is stored in the memory.
 
-Step 2: Create a metadata directory.
+Step 2: Create a metadata directory and add the meta_dir config to `conf/fe.conf`
 
 ```bash
 mkdir -p meta
+```
+
+Add the meta_dir config to `conf/fe.conf` :
+
+```bash
+meta_dir = the absolute path of meta dir you created before
 ```
 
 Step 3: Start the FE.
