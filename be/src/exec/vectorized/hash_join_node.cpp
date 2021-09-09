@@ -357,7 +357,7 @@ Status HashJoinNode::_build(RuntimeState* state) {
         // which will cause the output of wrong data.
         // Currently, a defense needs to be added.
         // After a better solution is available, the BigChunk mechanism can be removed.
-        if (_ht.get_build_chunk()->exceed_capacity_limit()) {
+        if (_ht.get_build_chunk()->reach_capacity_limit()) {
             return Status::InternalError("Total size of single column exceed the limit of hash join");
         }
 

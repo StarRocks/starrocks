@@ -273,8 +273,8 @@ public:
         return ss.str();
     }
 
-    bool exceed_capacity_limit() const override {
-        return _data_column->exceed_capacity_limit() || _null_column->exceed_capacity_limit();
+    bool reach_capacity_limit() const override {
+        return _data_column->reach_capacity_limit() || _null_column->reach_capacity_limit();
     }
 
 private:

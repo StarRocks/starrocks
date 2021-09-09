@@ -221,8 +221,8 @@ public:
 
     std::string debug_string() const override;
 
-    bool exceed_capacity_limit() const override {
-        return _elements->exceed_capacity_limit() || _offsets->exceed_capacity_limit();
+    bool reach_capacity_limit() const override {
+        return _elements->reach_capacity_limit() || _offsets->reach_capacity_limit();
     }
 
 private:
