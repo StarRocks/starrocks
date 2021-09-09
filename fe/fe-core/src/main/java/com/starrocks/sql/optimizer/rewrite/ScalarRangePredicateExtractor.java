@@ -58,7 +58,7 @@ public class ScalarRangePredicateExtractor {
                 .filter(d -> d.sourceCount > 1)
                 .map(ValueDescriptor::toScalarOperator).forEach(result::addAll);
         result.removeIf(conjuncts::contains);
-        result.forEach(f -> f.setExtractPredicateRangeScalar(true));
+        result.forEach(f -> f.setFromPredicateRangeDerive(true));
         result.stream().filter(predicateOperator -> !checkStatisticsEstimateValid(predicateOperator))
                 .forEach(f -> f.setNotEvalEstimate(true));
 
@@ -67,7 +67,7 @@ public class ScalarRangePredicateExtractor {
         if (extractExpr != null && !conjuncts.contains(extractExpr)) {
             // The newly extracted predicate will not be used to estimate the statistics,
             // which will cause the cardinality to be too small
-            extractExpr.setExtractPredicateRangeScalar(true);
+            extractExpr.setFromPredicateRangeDerive(true);
             if (!checkStatisticsEstimateValid(extractExpr)) {
                 extractExpr.setNotEvalEstimate(true);
             }

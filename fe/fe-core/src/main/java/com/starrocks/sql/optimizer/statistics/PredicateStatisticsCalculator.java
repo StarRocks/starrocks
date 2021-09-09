@@ -43,7 +43,7 @@ public class PredicateStatisticsCalculator {
                 return false;
             }
             // extract range predicate scalar operator with unknown column statistics will not eval
-            if (predicate.isExtractPredicateRangeScalar() &&
+            if (predicate.isFromPredicateRangeDerive() &&
                     statistics.getColumnStatistics().values().stream().anyMatch(ColumnStatistic::isUnknown)) {
                 return false;
             }
