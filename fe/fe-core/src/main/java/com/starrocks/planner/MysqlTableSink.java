@@ -37,7 +37,7 @@ public class MysqlTableSink extends DataSink {
 
     public MysqlTableSink(MysqlTable mysqlTable) {
         host = mysqlTable.getHost();
-        port = Integer.valueOf(mysqlTable.getPort());
+        port = Integer.parseInt(mysqlTable.getPort());
         user = mysqlTable.getUserName();
         passwd = mysqlTable.getPasswd();
         db = mysqlTable.getMysqlDatabaseName();

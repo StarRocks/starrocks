@@ -81,6 +81,11 @@ import java.util.stream.Collectors;
  * such as local aggregations that are important for distributed execution.
  * The single-node plan needs to be wrapped in a plan fragment for it to be executable.
  */
+
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
+@Deprecated
 public class SingleNodePlanner {
     private static final Logger LOG = LogManager.getLogger(DistributedPlanner.class);
 

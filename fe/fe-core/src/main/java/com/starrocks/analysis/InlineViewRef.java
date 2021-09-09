@@ -43,6 +43,9 @@ import java.util.Set;
  * An inline view is a query statement with an alias. Inline views can be parsed directly
  * from a query string or represent a reference to a local or catalog view.
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class InlineViewRef extends TableRef {
     private static final Logger LOG = LogManager.getLogger(InlineViewRef.class);
 
@@ -285,52 +288,6 @@ public class InlineViewRef extends TableRef {
         return result;
     }
 
-    /**
-     * Makes each rhs expr in sMap nullable if necessary by wrapping as follows:
-     * IF(TupleIsNull(), NULL, rhs expr)
-     * Should be called only if this inline view is a nullable side of an outer join.
-     * <p/>
-     * We need to make an rhs exprs nullable if it evaluates to a non-NULL value
-     * when all of its contained SlotRefs evaluate to NULL.
-     * For example, constant exprs need to be wrapped or an expr such as
-     * 'case slotref is null then 1 else 2 end'
-     */
-    //
-    // protected void makeOutputNullable(Analyzer analyzer) throws AnalysisException, InternalException {
-    //     // Gather all unique rhs SlotRefs into rhsSlotRefs
-    //     List<SlotRef> rhsSlotRefs = Lists.newArrayList();
-    //     Expr.collectList(sMap.rhs, SlotRef.class, rhsSlotRefs);
-    //     // Map for substituting SlotRefs with NullLiterals.
-    //     Expr.SubstitutionMap nullSMap = new Expr.SubstitutionMap();
-    //     for (SlotRef rhsSlotRef : rhsSlotRefs) {
-    //         nullSMap.lhs.add(rhsSlotRef.clone());
-    //         nullSMap.rhs.add(NullLiteral.create(rhsSlotRef.getType()));
-    //     }
-    //
-    //     // Make rhs exprs nullable if necessary.
-    //     for (int i = 0; i < sMap.rhs.size(); ++i) {
-    //         List<Expr> params = Lists.newArrayList();
-    //         if (!requiresNullWrapping(analyzer, sMap.rhs.get(i), nullSMap)) {
-    //             continue;
-    //         }
-    //         params.add(new TupleIsNullPredicate(materializedTupleIds));
-    //         params.add(NullLiteral.create(sMap.rhs.get(i).getType()));
-    //         params.add(sMap.rhs.get(i));
-    //         Expr ifExpr = new FunctionCallExpr("if", params);
-    //         ifExpr.analyze(analyzer);
-    //         sMap.rhs.set(i, ifExpr);
-    //     }
-    // }
-    protected void makeOutputNullable(Analyzer analyzer) throws AnalysisException, UserException {
-        try {
-            makeOutputNullableHelper(analyzer, sMap);
-            makeOutputNullableHelper(analyzer, baseTblSmap);
-        } catch (Exception e) {
-            // should never happen
-            throw new IllegalStateException(e);
-        }
-    }
-
     protected void makeOutputNullableHelper(Analyzer analyzer, ExprSubstitutionMap smap)
             throws Exception {
         // Gather all unique rhs SlotRefs into rhsSlotRefs
@@ -370,19 +327,6 @@ public class InlineViewRef extends TableRef {
             return true;
         }
         return true;
-
-        //        // Replace all SlotRefs in expr with NullLiterals, and wrap the result
-        //        // into an IS NOT NULL predicate.
-        //        Expr isNotNullLiteralPred = new IsNullPredicate(expr.clone(nullSMap), true);
-        //        Preconditions.checkState(isNotNullLiteralPred.isConstant());
-        //        // analyze to insert casts, etc.
-        //        try {
-        //            isNotNullLiteralPred.analyze(analyzer);
-        //        } catch (AnalysisException e) {
-        //            // this should never happen
-        //            throw new InternalException("couldn't analyze predicate " + isNotNullLiteralPred.toSql(), e);
-        //        }
-        //        return FeSupport.EvalPredicate(isNotNullLiteralPred, analyzer.getQueryGlobals());
     }
 
     @Override
