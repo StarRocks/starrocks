@@ -122,7 +122,12 @@ public:
 
     OLAPStatus from_string(void* buf, const std::string& scan_key) const override {
         CppType* data_ptr = reinterpret_cast<CppType*>(buf);
-        auto err = DecimalV3Cast::from_string<CppType>(data_ptr, _precision, _scale, scan_key.c_str(), scan_key.size());
+        // Decimal strings in some predicates use decimal_precision_limit as precision,
+        // when converted into decimal values, a smaller precision is used, DecimalTypeInfo::from_string
+        // fail to convert these decimal strings and report errors; so use decimal_precision_limit
+        // instead of smaller precision in DecimalTypeInfo::from_string.
+        auto err = DecimalV3Cast::from_string<CppType>(data_ptr, decimal_precision_limit<CppType>, _scale,
+                                                       scan_key.c_str(), scan_key.size());
         if (err) {
             return OLAP_ERR_INVALID_SCHEMA;
         }
