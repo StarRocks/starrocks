@@ -49,7 +49,6 @@ BrokerScanner::BrokerScanner(RuntimeState* state, RuntimeProfile* profile, const
           _ranges(ranges),
           _broker_addresses(broker_addresses),
           // _splittable(params.splittable),
-          _column_separator(static_cast<char>(params.column_separator)),
           _row_delimiter(static_cast<char>(params.row_delimiter)),
           _cur_file_reader(nullptr),
           _cur_line_reader(nullptr),
@@ -57,7 +56,13 @@ BrokerScanner::BrokerScanner(RuntimeState* state, RuntimeProfile* profile, const
           _next_range(0),
           _cur_line_reader_eof(false),
           _scanner_eof(false),
-          _skip_next_line(false) {}
+          _skip_next_line(false) {
+    if (params.__isset.multi_column_separator) {
+        _column_separator = params.multi_column_separator;
+    } else {
+        _column_separator = params.column_separator;
+    }
+}
 
 BrokerScanner::~BrokerScanner() {
     close();
@@ -283,14 +288,30 @@ void BrokerScanner::close() {
 }
 
 void BrokerScanner::split_line(const Slice& line, std::vector<Slice>* values) {
-    // line-begin char and line-end char are considered to be 'delimeter'
+    // line-begin char and line-end char are considered to be 'delimiter'
     const char* value = line.data;
     const char* ptr = line.data;
-    for (size_t i = 0; i < line.size; ++i, ++ptr) {
-        if (*ptr == _column_separator) {
-            values->emplace_back(value, ptr - value);
-            value = ptr + 1;
+
+    if (_column_separator.size() == 1) {
+        for (size_t i = 0; i < line.size; ++i, ++ptr) {
+            if (*ptr == _column_separator[0]) {
+                values->emplace_back(value, ptr - value);
+                value = ptr + 1;
+            }
         }
+    } else {
+        const auto cs_size = _column_separator.size();
+        const auto* const base = ptr;
+
+        do {
+            ptr = static_cast<char*>(memmem(value, line.size - (value - base), _column_separator.data(), cs_size));
+            if (ptr != nullptr) {
+                values->emplace_back(value, ptr - value);
+                value = ptr + cs_size;
+            }
+        } while (ptr != nullptr);
+
+        ptr = line.data + line.size;
     }
     values->emplace_back(value, ptr - value);
 }
