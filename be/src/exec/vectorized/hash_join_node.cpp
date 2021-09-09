@@ -350,7 +350,7 @@ bool HashJoinNode::_has_null(const ColumnPtr& column) {
 Status HashJoinNode::_build(RuntimeState* state) {
     {
         SCOPED_TIMER(_build_conjunct_evaluate_timer);
-        // Currently, in order to achieve simplicity, HashJoinNode uses BigChunk,
+        // Currently, in order to implement simplicity, HashJoinNode uses BigChunk,
         // Splice the Chunks from Scan on the right table into a big Chunk
         // In some scenarios, such as when the left and right tables are selected incorrectly
         // or when the large table is joined, the (BinaryColumn) in the Chunk exceeds the range of uint32_t,
