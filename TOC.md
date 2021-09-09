@@ -53,7 +53,7 @@
       + [SHOW GRANTS](/sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
       + [SHOW ROLES](/sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
     + 集群管理
-      + [ADMIN CANCEL REPAIR](./sql-reference/sql-statements/Administration/ADMIN%20CANCEL%20REPAIR.md)
+      + [ADMIN CANCEL REPAIR](/sql-reference/sql-statements/Administration/ADMIN%20CANCEL%20REPAIR.md)
       + [ADMIN CHECK TABLET](/sql-reference/sql-statements/Administration/ADMIN%20CHECK%20TABLET.md)
       + [ADMIN REPAIR](/sql-reference/sql-statements/Administration/ADMIN%20REPAIR.md)
       + [ADMIN SET CONFIG](/sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md)

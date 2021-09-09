@@ -322,7 +322,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     "dynamic_partition.start" = "${integer_value}",
     "dynamic_partitoin.end" = "${integer_value}",
     "dynamic_partition.prefix" = "${string_value}",
-    "dynamic_partition.buckets" = "${integer_value}
+    "dynamic_partition.buckets" = "${integer_value}"
     ```
 
     dynamic_partition.enable: 用于指定表级别的动态分区功能是否开启。默认为 true。
@@ -392,8 +392,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     );
     ```
 
-3. 创建一个 olap 表，使用 Range 分区，使用Hash分桶，默认使用列存，
-相同key的记录同时存在，设置初始存储介质和冷却时间
+3. 创建一个 olap 表，使用 Range 分区，使用Hash分桶，默认使用列存，相同key的记录同时存在，设置初始存储介质和冷却时间
 
     LESS THAN
 

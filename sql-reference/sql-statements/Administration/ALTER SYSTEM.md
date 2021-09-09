@@ -84,8 +84,9 @@
         table：mysql table
         ```
 
-    2. 当使用 Broker 类型时，导入时产生的错误信息会形成一个文件，通过 broker，写入到指定的远端存储系统中。须确保已经部署对应的 broker
-    Broker 类型的 Hub 需指定以下参数：
+    2. 当使用 Broker 类型时，导入时产生的错误信息会形成一个文件，通过 broker，写入到指定的远端存储系统中。须确保已经部署对应的 broker。
+
+        Broker 类型的 Hub 需指定以下参数：
 
         ```plain text
         broker: broker 的名称
