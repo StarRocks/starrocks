@@ -607,6 +607,12 @@ build_bitshuffle() {
 
 # croaring bitmap
 build_croaringbitmap() {
+    MACHINE_TYPE=$(uname -m)
+    # Becuase aarch64 don't support avx2, disable it.
+    FORCE_AVX=ON
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        FORCE_AVX=FALSE
+    fi
     check_if_source_exist $CROARINGBITMAP_SOURCE
     cd $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE
     mkdir -p $BUILD_DIR && cd $BUILD_DIR
@@ -617,7 +623,7 @@ build_croaringbitmap() {
     -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
     -DENABLE_ROARING_TESTS=OFF \
     -DROARING_DISABLE_NATIVE=ON \
-    -DFORCE_AVX=ON \
+    -DFORCE_AVX=$FORCE_AVX \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
     make -j$PARALLEL && make install
 }
