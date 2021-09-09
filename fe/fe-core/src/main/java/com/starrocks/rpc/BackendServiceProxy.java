@@ -124,7 +124,7 @@ public class BackendServiceProxy {
     }
 
     public Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(
-            TNetworkAddress address, TUniqueId finstId, PPlanFragmentCancelReason cancelReason,
+            TNetworkAddress address, TUniqueId queryId, TUniqueId finstId, PPlanFragmentCancelReason cancelReason,
             boolean isPipeline) throws RpcException {
         final PCancelPlanFragmentRequest pRequest = new PCancelPlanFragmentRequest();
         PUniqueId uid = new PUniqueId();
@@ -133,6 +133,10 @@ public class BackendServiceProxy {
         pRequest.finst_id = uid;
         pRequest.cancel_reason = cancelReason;
         pRequest.is_pipeline = isPipeline;
+        PUniqueId qid = new PUniqueId();
+        qid.hi = queryId.hi;
+        qid.lo = queryId.lo;
+        pRequest.query_id = qid;
         try {
             final PBackendService service = getProxy(address);
             return service.cancelPlanFragmentAsync(pRequest);

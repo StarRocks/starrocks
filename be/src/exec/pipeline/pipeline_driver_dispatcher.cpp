@@ -38,6 +38,7 @@ void GlobalDriverDispatcher::run() {
         size_t queue_index;
         auto driver = this->_driver_queue->take(&queue_index);
         DCHECK(driver != nullptr);
+        auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
         auto* runtime_state = fragment_ctx->runtime_state();
 
@@ -51,13 +52,19 @@ void GlobalDriverDispatcher::run() {
             }
             continue;
         }
-
+        // a blocked driver is canceled because of fragment cancellation or query expiration.
+        if (driver->is_finished()) {
+            driver->finalize(runtime_state, driver->driver_state());
+            continue;
+        }
+        // query context has ready drivers to run, so extend its lifetime.
+        query_ctx->extend_lifetime();
         auto status = driver->process(runtime_state);
         this->_driver_queue->get_sub_queue(queue_index)->update_accu_time(driver);
 
         if (!status.ok()) {
             VLOG_ROW << "[Driver] Process error: error=" << status.status().to_string();
-            fragment_ctx->cancel(status.status());
+            query_ctx->cancel(status.status());
             if (driver->source_operator()->pending_finish()) {
                 driver->set_driver_state(DriverState::PENDING_FINISH);
                 _blocked_driver_poller->add_blocked_driver(driver);
