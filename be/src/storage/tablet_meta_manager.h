@@ -26,7 +26,7 @@
 
 #include "storage/data_dir.h"
 #include "storage/olap_define.h"
-#include "storage/olap_meta.h"
+#include "storage/kv_store.h"
 #include "storage/tablet_meta.h"
 
 namespace starrocks {

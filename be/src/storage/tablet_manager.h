@@ -36,7 +36,7 @@
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
 #include "storage/olap_define.h"
-#include "storage/olap_meta.h"
+#include "storage/kv_store.h"
 #include "storage/options.h"
 #include "storage/tablet.h"
 

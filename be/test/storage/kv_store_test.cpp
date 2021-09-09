@@ -1,6 +1,6 @@
 // This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/test/olap/olap_meta_test.cpp
+//   https://github.com/apache/incubator-doris/blob/master/be/test/olap/kv_store_test.cpp
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/olap_meta.h"
+#include "storage/kv_store.h"
 
 #include <gtest/gtest.h>
 
@@ -41,7 +41,7 @@ namespace starrocks {
 class KVStoreTest : public testing::Test {
 public:
     virtual void SetUp() {
-        _root_path = "./ut_dir/olap_meta_test";
+        _root_path = "./ut_dir/kv_store_test";
         FileUtils::remove_all(_root_path);
         FileUtils::create_dir(_root_path);
 
@@ -62,7 +62,7 @@ private:
 
 TEST_F(KVStoreTest, TestGetRootPath) {
     std::string root_path = _meta->get_root_path();
-    ASSERT_EQ("./ut_dir/olap_meta_test", root_path);
+    ASSERT_EQ("./ut_dir/kv_store_test", root_path);
 }
 
 TEST_F(KVStoreTest, TestPutAndGet) {

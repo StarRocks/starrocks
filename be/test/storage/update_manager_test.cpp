@@ -7,7 +7,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/del_vector.h"
 #include "storage/olap_define.h"
-#include "storage/olap_meta.h"
+#include "storage/kv_store.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"

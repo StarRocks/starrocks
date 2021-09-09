@@ -24,7 +24,7 @@
 
 #include <string>
 
-#include "storage/olap_meta.h"
+#include "storage/kv_store.h"
 #include "storage/rowset/rowset_meta.h"
 
 using std::string;

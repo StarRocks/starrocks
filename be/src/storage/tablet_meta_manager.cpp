@@ -35,7 +35,7 @@
 #include "rocksdb/write_batch.h"
 #include "storage/del_vector.h"
 #include "storage/olap_define.h"
-#include "storage/olap_meta.h"
+#include "storage/kv_store.h"
 #include "storage/rocksdb_status_adapter.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
