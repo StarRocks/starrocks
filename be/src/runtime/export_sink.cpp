@@ -308,7 +308,7 @@ Status ExportSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
         if (!root->is_slotref()) {
             return Status::InternalError("Not slot ref column");
         }
-        auto column_ref = ((vectorized::ColumnRef*) root);
+        auto column_ref = ((vectorized::ColumnRef*)root);
         columns_raw_ptr.emplace_back(chunk->get_column_by_slot_id(column_ref->slot_id()).get());
     }
 
