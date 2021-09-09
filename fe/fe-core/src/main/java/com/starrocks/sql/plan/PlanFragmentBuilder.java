@@ -1071,10 +1071,10 @@ public class PlanFragmentBuilder {
                 } else if (!(leftFragment.getPlanRoot() instanceof ExchangeNode) &&
                         !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
                     distributionMode = HashJoinNode.DistributionMode.COLOCATE;
-                } else if (isRuntimeBucketShuffle(leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
-                    distributionMode = HashJoinNode.DistributionMode.RUNTIME_BUCKET_SHUFFLE;
+                } else if (isShuffleHashBucket(leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
+                    distributionMode = HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                 } else {
-                    distributionMode = HashJoinNode.DistributionMode.BUCKET_SHUFFLE;
+                    distributionMode = HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET;
                 }
 
                 for (BinaryPredicateOperator s : eqOnPredicates) {
@@ -1207,14 +1207,14 @@ public class PlanFragmentBuilder {
                     context.getFragments().remove(leftFragment);
                     context.getFragments().add(leftFragment);
                     return leftFragment;
-                } else if (distributionMode.equals(HashJoinNode.DistributionMode.RUNTIME_BUCKET_SHUFFLE)) {
+                } else if (distributionMode.equals(HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
                     List<Integer> leftOnPredicateColumns = new ArrayList<>();
                     List<Integer> rightOnPredicateColumns = new ArrayList<>();
                     JoinPredicateUtils.getJoinOnPredicatesColumns(eqOnPredicates, leftChildColumns, rightChildColumns,
                             leftOnPredicateColumns, rightOnPredicateColumns);
                     setJoinPushDown(hashJoinNode);
 
-                    // distributionMode is RUNTIME_BUCKET_SHUFFLE
+                    // distributionMode is SHUFFLE_HASH_BUCKET
                     if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
                             !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
                         return computeRunTimeBucketShufflePlanFragment(context, leftOnPredicateColumns, rightFragment,
@@ -1253,22 +1253,22 @@ public class PlanFragmentBuilder {
             return false;
         }
 
-        public boolean isRuntimeBucketShuffle(PlanNode left, PlanNode right) {
+        public boolean isShuffleHashBucket(PlanNode left, PlanNode right) {
             if (left instanceof ProjectNode) {
-                return isRuntimeBucketShuffle(left.getChild(0), right);
+                return isShuffleHashBucket(left.getChild(0), right);
             }
             if (left instanceof HashJoinNode) {
                 HashJoinNode hashJoinNode = (HashJoinNode) left;
-                if (hashJoinNode.isLocalBucketShuffle()) {
+                if (hashJoinNode.isLocalHashBucket()) {
                     return false;
                 }
-                if (hashJoinNode.isRuntimeBucketShuffle() || isShuffleJoin(hashJoinNode)) {
+                if (hashJoinNode.isShuffleHashBucket() || isShuffleJoin(hashJoinNode)) {
                     return true;
                 }
             }
             // left is not hashJoinNode
             if (right instanceof ProjectNode) {
-                return isRuntimeBucketShuffle(left, right.getChild(0));
+                return isShuffleHashBucket(left, right.getChild(0));
             }
             if (right instanceof HashJoinNode) {
                 return true;
@@ -1279,7 +1279,7 @@ public class PlanFragmentBuilder {
         public PlanFragment computeBucketShufflePlanFragment(ExecPlan context, List<Integer> columns,
                                                              PlanFragment stayFragment,
                                                              PlanFragment removeFragment, HashJoinNode hashJoinNode) {
-            hashJoinNode.setLocalBucketShuffle(true);
+            hashJoinNode.setLocalHashBucket(true);
             removeFragment.getChild(0)
                     .setOutputPartition(new DataPartition(TPartitionType.BUCKET_SHFFULE_HASH_PARTITIONED,
                             removeFragment.getDataPartition().getPartitionExprs()));
@@ -1300,7 +1300,7 @@ public class PlanFragmentBuilder {
                                                                     PlanFragment stayFragment,
                                                                     PlanFragment removeFragment,
                                                                     HashJoinNode hashJoinNode) {
-            hashJoinNode.setRuntimeBucketShuffle(true);
+            hashJoinNode.setShuffleHashBucket(true);
             removeFragment.getChild(0)
                     .setOutputPartition(new DataPartition(TPartitionType.HASH_PARTITIONED,
                             removeFragment.getDataPartition().getPartitionExprs()));

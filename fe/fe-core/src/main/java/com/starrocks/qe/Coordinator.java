@@ -967,10 +967,10 @@ public class Coordinator {
         return maxParallelismExecParams;
     }
 
-    private boolean hasRuntimeBucketShuffleJoin(PlanNode node) {
+    private boolean hasShuffleHashBucketJoin(PlanNode node) {
         if (node instanceof HashJoinNode) {
             HashJoinNode hashJoinNode = (HashJoinNode) node;
-            if (hashJoinNode.isRuntimeBucketShuffle()) {
+            if (hashJoinNode.isShuffleHashBucket()) {
                 return true;
             }
         }
@@ -978,7 +978,7 @@ public class Coordinator {
             return false;
         }
         for (PlanNode child : node.getChildren()) {
-            if (hasRuntimeBucketShuffleJoin(child)) {
+            if (hasShuffleHashBucketJoin(child)) {
                 return true;
             }
         }
@@ -1037,8 +1037,8 @@ public class Coordinator {
                 PlanFragmentId inputFragmentId = fragment.getChild(inputFragmentIndex).getFragmentId();
                 FragmentExecParams maxParallelismFragmentExecParams = fragmentExecParamsMap.get(inputFragmentId);
 
-                boolean hasRuntimeBucketShuffleJoinInFragment = hasRuntimeBucketShuffleJoin(fragment.getPlanRoot());
-                if (hasRuntimeBucketShuffleJoinInFragment) {
+                boolean hasShuffleHashBucketJoinInFragment = hasShuffleHashBucketJoin(fragment.getPlanRoot());
+                if (hasShuffleHashBucketJoinInFragment) {
                     FragmentExecParams execParams = getMaxParallelismScanFragmentExecParams();
                     if (execParams != null) {
                         maxParallelismFragmentExecParams = execParams;
@@ -1059,7 +1059,7 @@ public class Coordinator {
                         hostSet.add(execParams.host);
                     }
                     List<TNetworkAddress> hosts = Lists.newArrayList(hostSet);
-                    if (!hasRuntimeBucketShuffleJoinInFragment) {
+                    if (!hasShuffleHashBucketJoinInFragment) {
                         Collections.shuffle(hosts, instanceRandom);
                     }
                     for (int index = 0; index < exchangeInstances; index++) {
@@ -1077,7 +1077,7 @@ public class Coordinator {
                 // When group by cardinality is smaller than number of backend, only some backends always
                 // process while other has no data to process.
                 // So we shuffle instances to make different backends handle different queries.
-                if (!hasRuntimeBucketShuffleJoinInFragment) {
+                if (!hasShuffleHashBucketJoinInFragment) {
                     Collections.shuffle(params.instanceExecParams, instanceRandom);
                 }
 
@@ -1188,7 +1188,7 @@ public class Coordinator {
         // One fragment could only have one HashJoinNode
         if (node instanceof HashJoinNode) {
             HashJoinNode joinNode = (HashJoinNode) node;
-            if (joinNode.isLocalBucketShuffle()) {
+            if (joinNode.isLocalHashBucket()) {
                 bucketShuffleFragmentIds.add(joinNode.getFragmentId().asInt());
                 return true;
             }

@@ -160,13 +160,13 @@ public class CoordinatorTest extends Coordinator {
         // the fragment id is different from hash join node
         hashJoinNode.setFragment(new PlanFragment(new PlanFragmentId(-2), hashJoinNode,
                 new DataPartition(TPartitionType.BUCKET_SHFFULE_HASH_PARTITIONED, testJoinexprs)));
-        hashJoinNode.setDistributionMode(HashJoinNode.DistributionMode.BUCKET_SHUFFLE);
+        hashJoinNode.setDistributionMode(HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET);
         Assert.assertEquals(false,
                 Deencapsulation.invoke(coordinator, "isBucketShuffleJoin", -1, hashJoinNode));
 
         hashJoinNode.setFragment(new PlanFragment(new PlanFragmentId(-1), hashJoinNode,
                 new DataPartition(TPartitionType.BUCKET_SHFFULE_HASH_PARTITIONED, testJoinexprs)));
-        Deencapsulation.setField(hashJoinNode, "isLocalBucketShuffle", true);
+        Deencapsulation.setField(hashJoinNode, "isLocalHashBucket", true);
         Assert.assertEquals(true,
                 Deencapsulation.invoke(coordinator, "isBucketShuffleJoin", -1, hashJoinNode));
 

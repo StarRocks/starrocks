@@ -156,7 +156,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         HashDistributionSpec rightDistribution = DistributionSpec.createHashDistributionSpec(
                 new HashDistributionDesc(rightOnPredicateColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
 
-        tryHashShuffle(leftDistribution, rightDistribution);
+        doHashShuffle(leftDistribution, rightDistribution);
 
         // Respect use join hint
         if ("SHUFFLE".equalsIgnoreCase(hint)) {
@@ -180,7 +180,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         return visitJoinRequirements(node, context);
     }
 
-    private void tryHashShuffle(HashDistributionSpec leftDistribution, HashDistributionSpec rightDistribution) {
+    private void doHashShuffle(HashDistributionSpec leftDistribution, HashDistributionSpec rightDistribution) {
+        // shuffle
         PhysicalPropertySet leftInputProperty = createPropertySetByDistribution(leftDistribution);
         PhysicalPropertySet rightInputProperty = createPropertySetByDistribution(rightDistribution);
 
@@ -191,6 +192,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
             return;
         }
 
+        // try shuffle_hash_bucket
         HashDistributionDesc requiredDesc = requiredShuffleDesc.get();
 
         List<Integer> leftColumns = leftDistribution.getShuffleColumns();

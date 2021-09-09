@@ -3691,7 +3691,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "left join join2 as c on join1.id = c.id \n" +
                 "where b.id > 1;";
         starRocksAssert.query(sql).explainContains("7:HASH JOIN\n" +
-                        "  |  join op: LEFT OUTER JOIN (RUNTIME_BUCKET_SHUFFLE)\n" +
+                        "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
                         "  |  hash predicates:\n" +
                         "  |  colocate: false, reason: \n" +
                         "  |  equal join conjunct: 2: id = 8: id",
@@ -4311,25 +4311,25 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
-    public void testRuntimeBucketShuffle() throws Exception {
+    public void testShuffleHashBucket() throws Exception {
         String sql = "SELECT COUNT(*)\n" +
                 "FROM lineitem JOIN [shuffle] orders o1 ON l_orderkey = o1.o_orderkey\n" +
                 "JOIN [shuffle] orders o2 ON l_orderkey = o2.o_orderkey";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("join op: INNER JOIN (RUNTIME_BUCKET_SHUFFLE)"));
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (BUCKET_SHUFFLE(S))"));
     }
 
     @Test
-    public void testRuntimeBucketShuffle2() throws Exception {
+    public void testShuffleHashBucket2() throws Exception {
         String sql = "select count(1) from lineitem t1 join [shuffle] orders t2 on " +
                 "t1.l_orderkey = t2.o_orderkey and t2.O_ORDERDATE = t1.L_SHIPDATE join [shuffle] orders t3 " +
                 "on t1.l_orderkey = t3.o_orderkey and t3.O_ORDERDATE = t1.L_SHIPDATE join [shuffle] orders t4 on\n" +
                 "t1.l_orderkey = t4.o_orderkey and t4.O_ORDERDATE = t1.L_SHIPDATE;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("12:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (RUNTIME_BUCKET_SHUFFLE)"));
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))"));
         Assert.assertTrue(plan.contains("8:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (RUNTIME_BUCKET_SHUFFLE)"));
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))"));
         Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)"));
     }
