@@ -56,7 +56,7 @@ public class DppConfig implements Writable {
     private static final String APPLICATIONS_PATH = "applications";
     private static final String OUTPUT_PATH = "output";
 
-    public static final String STARROCKS_PATH = "hadoop_palo_path";
+    public static final String STARROCKS_PATH = "hadoop_starrocks_path";
     public static final String HTTP_PORT = "hadoop_http_port";
     public static final String HADOOP_CONFIGS = "hadoop_configs";
     public static final String PRIORITY = "priority";
