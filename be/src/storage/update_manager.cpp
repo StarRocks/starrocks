@@ -51,9 +51,9 @@ Status UpdateManager::init() {
     return st;
 }
 
-Status UpdateManager::get_del_vec_in_meta(KVStore* kv_store, const TabletSegmentId& tsid, int64_t version,
+Status UpdateManager::get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
                                           DelVector* delvec, int64_t* latest_version) {
-    return TabletMetaManager::get_del_vector(kv_store, tsid.tablet_id, tsid.segment_id, version, delvec, latest_version);
+    return TabletMetaManager::get_del_vector(meta, tsid.tablet_id, tsid.segment_id, version, delvec, latest_version);
 }
 
 Status UpdateManager::set_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, const DelVector& delvec) {
