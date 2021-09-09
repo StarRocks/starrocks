@@ -156,7 +156,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         HashDistributionSpec rightDistribution = DistributionSpec.createHashDistributionSpec(
                 new HashDistributionDesc(rightOnPredicateColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
 
-        doHashShuffle(leftDistribution, rightDistribution);
+        doHashShuffle(equalOnPredicate, leftDistribution, rightDistribution);
 
         // Respect use join hint
         if ("SHUFFLE".equalsIgnoreCase(hint)) {
@@ -180,7 +180,25 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         return visitJoinRequirements(node, context);
     }
 
-    private void doHashShuffle(HashDistributionSpec leftDistribution, HashDistributionSpec rightDistribution) {
+    private void doHashShuffle(List<BinaryPredicateOperator> equalOnPredicate, HashDistributionSpec leftDistribution,
+                               HashDistributionSpec rightDistribution) {
+
+        // Need to force shuffle if the on clause contains expression
+        // @Todo: It's a temporary solution
+        if (equalOnPredicate.stream().anyMatch(p -> !isColumnToColumnBinaryPredicate(p))) {
+            PhysicalPropertySet leftProperty = createPropertySetByDistribution(new HashDistributionSpec(
+                    new HashDistributionDesc(leftDistribution.getShuffleColumns(),
+                            HashDistributionDesc.SourceType.FORCE_SHUFFLE_JOIN)));
+
+            PhysicalPropertySet rightProperty = createPropertySetByDistribution(new HashDistributionSpec(
+                    new HashDistributionDesc(rightDistribution.getShuffleColumns(),
+                            HashDistributionDesc.SourceType.FORCE_SHUFFLE_JOIN)));
+
+            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
+                    Lists.newArrayList(leftProperty, rightProperty)));
+            return;
+        }
+
         // shuffle
         PhysicalPropertySet leftInputProperty = createPropertySetByDistribution(leftDistribution);
         PhysicalPropertySet rightInputProperty = createPropertySetByDistribution(rightDistribution);

@@ -12,6 +12,8 @@ public class HashDistributionDesc {
         LOCAL, // hash property from scan node
         SHUFFLE_JOIN, // hash property from shuffle join
         BUCKET_JOIN, // hash property from bucket join
+        // @Todo: It's a temporary solution
+        FORCE_SHUFFLE_JOIN, // hash property from shuffle join if contains expression in on clause
         SHUFFLE_AGG, // hash property from shuffle agg,
     }
 
