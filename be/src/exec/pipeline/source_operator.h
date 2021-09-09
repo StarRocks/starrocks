@@ -27,5 +27,19 @@ protected:
     MorselQueue* _morsel_queue;
     ChunkSourcePtr _chunk_source;
 };
+
+class SourceOperatorFactory : public OperatorFactory {
+public:
+    SourceOperatorFactory(int32_t id, int32_t plan_node_id) : OperatorFactory(id, plan_node_id) {}
+    bool is_source() const override { return true; }
+    virtual bool with_morsels() const { return false; }
+    virtual void set_num_driver_instances(size_t num_driver_instances) {
+        this->_num_driver_instances = num_driver_instances;
+    }
+    virtual size_t num_driver_instances() const { return _num_driver_instances; }
+
+protected:
+    size_t _num_driver_instances = 1;
+};
 } // namespace pipeline
 } // namespace starrocks

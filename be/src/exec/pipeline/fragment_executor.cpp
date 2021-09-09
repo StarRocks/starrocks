@@ -107,15 +107,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     int32_t driver_instance_count = 1;
     if (request.query_options.__isset.query_threads) {
-        driver_instance_count = request.query_options.query_threads;
-    }
-
-    // TODO(zhouhui): we will remove this restriction after complete merge-sort.
-    // Force driver_instance_count to 1 if this fragment has sort node.
-    std::vector<ExecNode*> sort_nodes;
-    plan->collect_nodes(TPlanNodeType::SORT_NODE, &sort_nodes);
-    if (!sort_nodes.empty()) {
-        driver_instance_count = 1;
+        driver_instance_count = std::max<int32_t>(request.query_options.query_threads, driver_instance_count);
     }
 
     // TODO(hcf): We will remove this restriction after complete aggregation
@@ -134,7 +126,21 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         pipeline_scan_mode = request.query_options.pipeline_scan_mode;
     }
 
-    PipelineBuilderContext context(*_fragment_ctx, driver_instance_count);
+    // set scan ranges
+    std::vector<ExecNode*> scan_nodes;
+    std::vector<TScanRangeParams> no_scan_ranges;
+    plan->collect_scan_nodes(&scan_nodes);
+
+    MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
+    for (int i = 0; i < scan_nodes.size(); ++i) {
+        ScanNode* scan_node = down_cast<ScanNode*>(scan_nodes[i]);
+        const std::vector<TScanRangeParams>& scan_ranges =
+                FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
+        Morsels morsels = convert_scan_range_to_morsel(scan_ranges, scan_node->id());
+        morsel_queues.emplace(scan_node->id(), std::make_unique<MorselQueue>(std::move(morsels)));
+    }
+
+    PipelineBuilderContext context(_fragment_ctx, driver_instance_count);
     PipelineBuilder builder(context);
     _fragment_ctx->set_pipelines(builder.build(*_fragment_ctx, plan));
     // Set up sink, if required
@@ -150,45 +156,26 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         _convert_data_sink_to_operator(params, &context, sink.get());
     }
 
-    // set scan ranges
-    std::vector<ExecNode*> scan_nodes;
-    std::vector<TScanRangeParams> no_scan_ranges;
-    plan->collect_scan_nodes(&scan_nodes);
-
-    MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
-    for (int i = 0; i < scan_nodes.size(); ++i) {
-        ScanNode* scan_node = down_cast<ScanNode*>(scan_nodes[i]);
-        const std::vector<TScanRangeParams>& scan_ranges =
-                FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
-        Morsels morsels = convert_scan_range_to_morsel(scan_ranges, scan_node->id());
-        morsel_queues.emplace(scan_node->id(), std::make_unique<MorselQueue>(std::move(morsels)));
-    }
-
     Drivers drivers;
     const auto& pipelines = _fragment_ctx->pipelines();
     const size_t num_pipelines = pipelines.size();
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
-        // the last pipeline in _fragment_ctx->pipelines is the root pipeline, the root pipeline
-        // means that it comes from the root ExecNode of the fragment instance. because pipelines
-        // are constructed from fragment instance that is organized as an ExecNode tree via
-        // post-order traversal.
+        const auto driver_instance_count = pipeline->source_operator_factory()->num_driver_instances();
         const bool is_root = (n == num_pipelines - 1);
-        const auto driver_instance_count = pipeline->get_driver_instance_count();
 
-        if (pipeline->get_op_factories()[0]->is_source()) {
+        if (pipeline->source_operator_factory()->with_morsels()) {
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
+            DCHECK(morsel_queues.count(source_id));
             auto& morsel_queue = morsel_queues[source_id];
-            const auto instance_count = std::min<size_t>(morsel_queue->num_morsels(), driver_instance_count);
+            DCHECK(driver_instance_count <= morsel_queue->num_morsels());
             if (is_root) {
-                _fragment_ctx->set_num_root_drivers(instance_count);
+                _fragment_ctx->set_num_root_drivers(driver_instance_count);
             }
-            for (auto i = 0; i < instance_count; ++i) {
-                Operators operators;
-                for (const auto& factory : pipeline->get_op_factories()) {
-                    operators.emplace_back(factory->create(instance_count, i));
-                }
-                DriverPtr driver = std::make_shared<PipelineDriver>(operators, _query_ctx, _fragment_ctx, 0, is_root);
+            for (auto i = 0; i < driver_instance_count; ++i) {
+                Operators&& operators = pipeline->create_operators(driver_instance_count, i);
+                DriverPtr driver =
+                        std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, 0, is_root);
                 driver->set_morsel_queue(morsel_queue.get());
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
                 if (pipeline_scan_mode == 1) {
@@ -203,11 +190,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 _fragment_ctx->set_num_root_drivers(driver_instance_count);
             }
             for (auto i = 0; i < driver_instance_count; ++i) {
-                Operators operators;
-                for (const auto& factory : pipeline->get_op_factories()) {
-                    operators.emplace_back(factory->create(driver_instance_count, i));
-                }
-                DriverPtr driver = std::make_shared<PipelineDriver>(operators, _query_ctx, _fragment_ctx, i, is_root);
+                auto&& operators = pipeline->create_operators(driver_instance_count, i);
+                DriverPtr driver =
+                        std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, i, is_root);
                 drivers.emplace_back(driver);
             }
         }
@@ -215,6 +200,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_drivers(std::move(drivers));
     return Status::OK();
 }
+
 Status FragmentExecutor::execute(ExecEnv* exec_env) {
     for (auto driver : _fragment_ctx->drivers()) {
         RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));

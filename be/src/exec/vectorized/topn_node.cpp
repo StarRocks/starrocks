@@ -5,6 +5,9 @@
 #include <memory>
 
 #include "column/column_helper.h"
+#include "exec/pipeline/exchange/local_exchange.h"
+#include "exec/pipeline/exchange/local_exchange_sink_operator.h"
+#include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sort/sort_sink_operator.h"
 #include "exec/pipeline/sort/sort_source_operator.h"
@@ -219,7 +222,26 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 
     // step 0: construct pipeline end with sort operator.
     // get operators before sort operator
-    OpFactories operator_sink_with_sort = _children[0]->decompose_to_pipeline(context);
+    OpFactories pred_operators = _children[0]->decompose_to_pipeline(context);
+
+    // predecessor pipeline has multiple drivers that will produce multiple output streams, but sort operator is
+    // not parallelized now and can not accept multiple streams as input, so add a LocalExchange to gather multiple
+    // streams and produce one output stream piping into the sort operator.
+    DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
+    auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
+    if (source_operator->num_driver_instances() > 1) {
+        auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size);
+        auto local_exchange_source =
+                std::make_shared<LocalExchangeSourceOperatorFactory>(context->next_operator_id(), mem_mgr);
+        auto local_exchange = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
+        auto local_exchange_sink =
+                std::make_shared<LocalExchangeSinkOperatorFactory>(context->next_operator_id(), local_exchange);
+        pred_operators.emplace_back(std::move(local_exchange_sink));
+        context->add_pipeline(std::move(pred_operators));
+        // Multiple LocalChangeSinkOperators pipe into one LocalChangeSourceOperator.
+        local_exchange_source->set_num_driver_instances(1);
+        pred_operators.emplace_back(local_exchange_source);
+    }
 
     static const uint SIZE_OF_CHUNK_FOR_TOPN = 3000;
     static const uint SIZE_OF_CHUNK_FOR_FULL_SORT = 5000;
@@ -234,21 +256,22 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
                                                                            SIZE_OF_CHUNK_FOR_FULL_SORT);
     }
 
-    // add sort operator to this pipeline
-    auto ope = std::make_shared<SortSinkOperatorFactory>(context->next_operator_id(), id(), chunks_sorter,
-                                                         _sort_exec_exprs, _order_by_types, _materialized_tuple_desc,
-                                                         child(0)->row_desc(), _row_descriptor);
-    operator_sink_with_sort.emplace_back(std::move(ope));
-    context->add_pipeline(operator_sink_with_sort);
+    // add SortSinkOperator to this pipeline
+    auto sort_sink_operator = std::make_shared<SortSinkOperatorFactory>(
+            context->next_operator_id(), id(), chunks_sorter, _sort_exec_exprs, _order_by_types,
+            _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
+    pred_operators.emplace_back(std::move(sort_sink_operator));
+    context->add_pipeline(pred_operators);
 
-    // step 1: costruct pipeline start with sort operator's result.
-    OpFactories operator_source_with_sort;
-    auto ope2 =
+    OpFactories operators;
+    auto sort_source_operator =
             std::make_shared<SortSourceOperatorFactory>(context->next_operator_id(), id(), std::move(chunks_sorter));
-    operator_source_with_sort.emplace_back(std::move(ope2));
+    // SourceSourceOperator's instance count must be 1
+    sort_source_operator->set_num_driver_instances(1);
+    operators.emplace_back(std::move(sort_source_operator));
 
     // return to the following pipeline
-    return operator_source_with_sort;
+    return operators;
 }
 
 } // namespace starrocks::vectorized

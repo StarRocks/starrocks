@@ -373,8 +373,11 @@ void ExchangeNode::debug_string(int indentation_level, std::stringstream* out) c
 pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators;
-    operators.emplace_back(std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
-                                                                           _num_senders, _input_row_desc));
+    auto exchange_operator = std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
+                                                                             _num_senders, _input_row_desc);
+    // A merging ExchangeSourceOperator should not be parallelized.
+    exchange_operator->set_num_driver_instances(_is_merging ? 1 : context->driver_instance_count());
+    operators.emplace_back(std::move(exchange_operator));
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
