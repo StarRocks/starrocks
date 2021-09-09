@@ -169,9 +169,9 @@ void ExecStateReporter::submit(FragmentContext* fragment_ctx, const Status& stat
         }
         if (clean) {
             auto query_id = fragment_ctx->query_id();
-            FragmentContextManager::instance()->unregister(fragment_ctx->fragment_instance_id());
-            auto* query_ctx = QueryContextManager::instance()->get_raw(query_id);
-            DCHECK(query_ctx != nullptr);
+            auto&& query_ctx = QueryContextManager::instance()->get(query_id);
+            DCHECK(query_ctx);
+            query_ctx->fragment_mgr()->unregister(fragment_ctx->fragment_instance_id());
             if (query_ctx->count_down_fragment()) {
                 QueryContextManager::instance()->unregister(query_id);
             }

@@ -47,19 +47,37 @@ void PipelineDriverPoller::run_internal() {
         auto driver_it = local_blocked_drivers.begin();
         while (driver_it != local_blocked_drivers.end()) {
             auto& driver = *driver_it;
-            // driver->pending_finish() return true means that when a driver's sink operator is finished,
-            // but its source operator still has pending io task that executed in io threads and has
-            // reference to object outside(such as desc_tbl) owned by FragmentContext. So an driver in
-            // PENDING_FINISH state should should wait for pending io task's completion, then turn into
-            // FINISH state, otherwise, pending tasks shall reference to destructed objects in
-            // FragmentContext since FragmentContext is unregistered prematurely.
+
             if (driver->pending_finish() && !driver->source_operator()->pending_finish()) {
+                // driver->pending_finish() return true means that when a driver's sink operator is finished,
+                // but its source operator still has pending io task that executed in io threads and has
+                // reference to object outside(such as desc_tbl) owned by FragmentContext. So an driver in
+                // PENDING_FINISH state should wait for pending io task's completion, then turn into FINISH state,
+                // otherwise, pending tasks shall reference to destructed objects in FragmentContext since
+                // FragmentContext is unregistered prematurely.
                 driver->set_driver_state(DriverState::FINISH);
                 _dispatch_queue->put_back(*driver_it);
                 local_blocked_drivers.erase(driver_it++);
             } else if (driver->is_finished()) {
                 local_blocked_drivers.erase(driver_it++);
-            } else if (driver->fragment_ctx()->is_canceled() || driver->is_not_blocked()) {
+            } else if (driver->query_ctx()->is_expired()) {
+                // there are not any drivers belonging to a query context can make progress for a expiration period
+                // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
+                // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
+                if (driver->source_operator()->pending_finish()) {
+                    driver->set_driver_state(DriverState::PENDING_FINISH);
+                    ++driver_it;
+                } else {
+                    driver->set_driver_state(DriverState::FINISH);
+                    _dispatch_queue->put_back(*driver_it);
+                    local_blocked_drivers.erase(driver_it++);
+                }
+            } else if (driver->fragment_ctx()->is_canceled()) {
+                driver->set_driver_state(DriverState::CANCELED);
+                _dispatch_queue->put_back(*driver_it);
+                local_blocked_drivers.erase(driver_it++);
+            } else if (driver->is_not_blocked()) {
+                driver->set_driver_state(DriverState::READY);
                 _dispatch_queue->put_back(*driver_it);
                 local_blocked_drivers.erase(driver_it++);
             } else {

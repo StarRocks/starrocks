@@ -25,6 +25,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/BackendService.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
@@ -279,9 +280,26 @@ void PInternalServiceImpl<T>::cancel_plan_fragment(google::protobuf::RpcControll
     LOG(INFO) << "cancel framgent, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
 
     if (request->has_is_pipeline() && request->is_pipeline()) {
-        auto fragment_ctx = starrocks::pipeline::FragmentContextManager::instance()->get(tid);
-        if (fragment_ctx == nullptr) {
-            LOG(INFO) << "Fragment context already destroyed: fragment_instance_id=" << print_id(tid);
+        TUniqueId query_id;
+        if (!request->has_query_id()) {
+            LOG(WARNING) << "cancel_plan_fragment must provide query_id in request, upgrade FE";
+            st = Status::NotSupported("cancel_plan_fragment must provide query_id in request, upgrade FE");
+            st.to_protobuf(result->mutable_status());
+            return;
+        }
+        query_id.__set_hi(request->query_id().hi());
+        query_id.__set_lo(request->query_id().lo());
+        auto&& query_ctx = starrocks::pipeline::QueryContextManager::instance()->get(query_id);
+        if (!query_ctx) {
+            LOG(INFO) << strings::Substitute("QueryContext already destroyed: query_id=$0, fragment_instance_id=$1",
+                                             print_id(query_id), print_id(tid));
+            st.to_protobuf(result->mutable_status());
+            return;
+        }
+        auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);
+        if (!fragment_ctx) {
+            LOG(INFO) << strings::Substitute("FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1",
+                                             print_id(query_id), print_id(tid));
         } else {
             fragment_ctx->cancel(Status::Cancelled(reason_string));
         }

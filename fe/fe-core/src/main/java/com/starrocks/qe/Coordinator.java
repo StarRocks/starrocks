@@ -1635,7 +1635,7 @@ public class Coordinator {
 
                 try {
                     BackendServiceProxy.getInstance().cancelPlanFragmentAsync(brpcAddress,
-                            fragmentInstanceId(), cancelReason, rpcParams.is_pipeline);
+                            queryId, fragmentInstanceId(), cancelReason, rpcParams.is_pipeline);
                 } catch (RpcException e) {
                     LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
                             brpcAddress.getPort());

@@ -152,6 +152,8 @@ struct TQueryOptions {
   54: optional i32 query_threads;
   // For pipeline query engine
   55: optional i32 pipeline_scan_mode;
+  // For query context expired period
+  56: optional i32 pipeline_query_expire_seconds
 }
 
 
