@@ -982,8 +982,7 @@ Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* 
     }
 
     if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(uncompressed_size)) {
-        return Status::InternalError("The input size for compression should be less than " +
-                                     _compress_codec->max_input_size());
+        return Status::InternalError(fmt::format("The input size for compression should be less than {}", _compress_codec->max_input_size());
     }
 
     dst->set_uncompressed_size(uncompressed_size);
