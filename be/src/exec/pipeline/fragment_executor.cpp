@@ -8,6 +8,7 @@
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/morsel.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/result_sink_operator.h"
@@ -35,13 +36,29 @@ Morsels convert_scan_range_to_morsel(const std::vector<TScanRangeParams>& scan_r
 
 Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
     const TPlanFragmentExecParams& params = request.params;
-    auto& query_id = params.query_id;
-    auto& fragment_id = params.fragment_instance_id;
+    const auto& query_id = params.query_id;
+    const auto& fragment_id = params.fragment_instance_id;
+
+    // prevent an identical fragment instance from multiple execution caused by FE's
+    // duplicate invocations of rpc exec_plan_fragment.
+    auto&& existing_query_ctx = QueryContextManager::instance()->get(query_id);
+    if (existing_query_ctx) {
+        auto&& existing_fragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_id);
+        if (existing_fragment_ctx) {
+            return Status::OK();
+        }
+    }
+
     _query_ctx = QueryContextManager::instance()->get_or_register(query_id);
     if (params.__isset.instances_number) {
-        _query_ctx->set_num_fragments(params.instances_number);
+        _query_ctx->set_total_fragments(params.instances_number);
     }
-    _fragment_ctx = FragmentContextManager::instance()->get_or_register(fragment_id);
+    if (request.query_options.__isset.pipeline_query_expire_seconds) {
+        _query_ctx->set_expire_seconds(std::max<int>(request.query_options.pipeline_query_expire_seconds, 1));
+    } else {
+        _query_ctx->set_expire_seconds(300);
+    }
+    _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_id);
     _fragment_ctx->set_fe_addr(request.coord);

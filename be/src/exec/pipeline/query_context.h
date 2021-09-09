@@ -3,9 +3,11 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <unordered_map>
 
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
@@ -17,18 +19,40 @@ namespace starrocks {
 class MemTracker;
 namespace pipeline {
 
+using std::chrono::seconds;
+using std::chrono::milliseconds;
+using std::chrono::steady_clock;
+using std::chrono::duration_cast;
 // The context for all fragment of one query in one BE
 class QueryContext {
 public:
-    QueryContext() : _num_fragments_initialized(false), _num_fragments(0) {}
+    QueryContext();
     RuntimeState* get_runtime_state() { return _runtime_state.get(); }
-    void set_num_fragments(size_t num_fragments) {
-        bool old_value = false;
-        if (_num_fragments_initialized.compare_exchange_strong(old_value, true)) {
-            _num_fragments.store(num_fragments);
-        }
+    void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
+
+    void increment_num_fragments() {
+        _num_fragments.fetch_add(1);
+        _num_active_fragments.fetch_add(1);
     }
-    bool count_down_fragment() { return _num_fragments.fetch_sub(1) == 1; }
+
+    bool count_down_fragment() { return _num_active_fragments.fetch_sub(1) == 1; }
+
+    void set_expire_seconds(int expire_seconds) { _expire_seconds = seconds(expire_seconds); }
+
+    // now time point pass by deadline point.
+    bool is_expired() {
+        auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+        return now > _deadline;
+    }
+
+    // add expired seconds to deadline
+    void extend_lifetime() {
+        _deadline = duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _expire_seconds).count();
+    }
+
+    FragmentContextManager* fragment_mgr();
+
+    void cancel(const Status& status);
 
 private:
     std::unique_ptr<RuntimeState> _runtime_state;
@@ -36,8 +60,12 @@ private:
     std::unique_ptr<MemTracker> _mem_tracker;
     TQueryOptions _query_options;
     TUniqueId _query_id;
-    std::atomic<bool> _num_fragments_initialized;
+    std::unique_ptr<FragmentContextManager> _fragment_mgr;
+    size_t _total_fragments;
     std::atomic<size_t> _num_fragments;
+    std::atomic<size_t> _num_active_fragments;
+    int64_t _deadline;
+    seconds _expire_seconds;
 };
 
 class QueryContextManager {
@@ -45,8 +73,6 @@ class QueryContextManager {
 
 public:
     QueryContext* get_or_register(const TUniqueId& query_id);
-
-    QueryContext* get_raw(const TUniqueId& query_id);
     QueryContextPtr get(const TUniqueId& query_id);
     void unregister(const TUniqueId& query_id);
 

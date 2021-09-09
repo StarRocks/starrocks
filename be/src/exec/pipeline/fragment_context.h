@@ -112,12 +112,19 @@ private:
     std::atomic<bool> _cancel_flag;
 };
 class FragmentContextManager {
-    DECLARE_SINGLETON(FragmentContextManager);
-
 public:
+    FragmentContextManager() = default;
+    ~FragmentContextManager() = default;
+
+    FragmentContextManager(const FragmentContextManager&) = delete;
+    FragmentContextManager(FragmentContextManager&&) = delete;
+    FragmentContextManager& operator=(const FragmentContextManager&) = delete;
+    FragmentContextManager& operator=(FragmentContextManager&&) = delete;
+
     FragmentContext* get_or_register(const TUniqueId& fragment_id);
-    FragmentContext* get(const TUniqueId& fragment_id);
+    FragmentContextPtr get(const TUniqueId& fragment_id);
     void unregister(const TUniqueId& fragment_id);
+    void cancel(const Status& status);
 
 private:
     std::mutex _lock;

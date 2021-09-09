@@ -4,8 +4,6 @@
 namespace starrocks {
 namespace pipeline {
 
-FragmentContextManager::FragmentContextManager() {}
-FragmentContextManager::~FragmentContextManager() {}
 FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {
     std::lock_guard<std::mutex> lock(_lock);
     auto it = _fragment_contexts.find(fragment_id);
@@ -19,11 +17,11 @@ FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragme
     }
 }
 
-FragmentContext* FragmentContextManager::get(const TUniqueId& fragment_id) {
+FragmentContextPtr FragmentContextManager::get(const TUniqueId& fragment_id) {
     std::lock_guard<std::mutex> lock(_lock);
     auto it = _fragment_contexts.find(fragment_id);
     if (it != _fragment_contexts.end()) {
-        return it->second.get();
+        return it->second;
     } else {
         return nullptr;
     }
@@ -32,6 +30,13 @@ FragmentContext* FragmentContextManager::get(const TUniqueId& fragment_id) {
 void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
     std::lock_guard<std::mutex> lock(_lock);
     _fragment_contexts.erase(fragment_id);
+}
+
+void FragmentContextManager::cancel(const Status& status) {
+    std::lock_guard<std::mutex> lock(_lock);
+    for (auto ctx_it = _fragment_contexts.begin(); ctx_it != _fragment_contexts.end(); ++ctx_it) {
+        ctx_it->second->cancel(status);
+    }
 }
 
 } // namespace pipeline
