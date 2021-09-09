@@ -1,0 +1,11 @@
+Merge:
+github: https://github.com/apache/orc
+commit: 68d88e876bccf89a7b306a9205624792bc7a04eb
+
+Merge process is following:
+1. fork repo https://github.com/StarRocks/orc
+  - The main purpose of this repository is to merge branches, there are basically no code changes on it
+  - Some helper scripts are included below, such as the sync script and clang-format
+2. Merge apache/orc under StarRocks/orc, then run clang-format
+3. Merge StarRocks/orc with StarRocks/be/src/formats/orc code with `sync-to-starrocks.sh`
+4. After the merge is complete, you can verify it with `run-test.sh`

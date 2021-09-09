@@ -1,0 +1,298 @@
+// This file is made available under Elastic License 2.0
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/gensrc/proto/internal_service.proto
+
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+syntax="proto2";
+
+package starrocks;
+option java_package = "com.starrocks.proto";
+
+import "data.proto";
+import "descriptors.proto";
+import "status.proto";
+import "types.proto";
+
+option cc_generic_services = true;
+
+// Transmit data when process SQL query
+message PTransmitDataParams {
+    // non-change member
+    required PUniqueId finst_id = 1;
+    required int32 node_id = 2;
+    // Id of this fragment in its role as a sender.
+    required int32 sender_id = 3;
+    required int32 be_number = 4;
+
+    // if set to true, indicates that no more row batches will be sent
+    // for this dest_node_id
+    required bool eos = 5;
+    optional PRowBatch row_batch = 6;
+    // different per packet
+    required int64 packet_seq = 7;
+    optional PQueryStatistics query_statistics = 8;
+};
+
+// Transmit vectorized data chunks between Backends.
+// Try to batch enough chunk in one request to reduce each RPC call overhead
+message PTransmitChunkParams {
+    // non-change member
+    optional PUniqueId finst_id = 1;
+    optional int32 node_id = 2;
+    // Id of this fragment in its role as a sender.
+    optional int32 sender_id = 3;
+    optional int32 be_number = 4;
+    // if set to true, indicates that no more row batches will be sent
+    // for this dest_node_id
+    optional bool eos = 5;
+    // RPC sequence number for the send channel.
+    // Sever will check this number to see if some packet has lost.
+    optional int64 sequence = 6;
+
+    // The protobuf data structure for column chunk
+    repeated ChunkPB chunks = 7;
+
+    // Some statistics for the runing query
+    optional PQueryStatistics query_statistics = 8;
+};
+
+message PTransmitDataResult {
+    optional PStatus status = 1;
+};
+
+message PTransmitChunkResult {
+    optional PStatus status = 1;
+};
+
+message PTransmitRuntimeFilterForwardTarget {
+    optional string host = 1;
+    optional int32 port = 2;
+    repeated PUniqueId probe_finst_ids = 3;
+};
+
+message PTransmitRuntimeFilterParams {
+    // if this runtime filter is partial
+    // if it's partial, then it's supposed to be merged.
+    // otherwise it's supported to be consumed.
+    
+    optional bool is_partial = 1;
+    optional PUniqueId query_id = 3;
+    optional int32 filter_id = 4;
+    optional PUniqueId finst_id = 5;
+    optional bytes data = 6;
+
+    // multiple probe fragment instances maybe on a single host.
+    repeated PUniqueId probe_finst_ids = 7;
+    optional int32 build_be_number = 8;
+    repeated PTransmitRuntimeFilterForwardTarget forward_targets = 9;
+    // when merge node starts to broadcast this rf(millseconds since unix epoch)
+    optional int64 broadcast_timestamp = 10;
+};
+
+message PTransmitRuntimeFilterResult {
+    optional PStatus status = 1;
+};
+
+message PTabletWithPartition {
+    required int64 partition_id = 1;
+    required int64 tablet_id = 2;
+}
+
+message PTabletInfo {
+    required int64 tablet_id = 1;
+    required int32 schema_hash = 2;
+}
+
+// open a tablet writer
+message PTabletWriterOpenRequest {
+    required PUniqueId id = 1;
+    required int64 index_id = 2;
+    required int64 txn_id = 3;
+    required POlapTableSchemaParam schema = 4;
+    repeated PTabletWithPartition tablets = 5;
+    required int32 num_senders = 6;
+    required bool need_gen_rollup = 7; // Deprecated
+    optional int64 load_mem_limit = 8;
+    optional int64 load_channel_timeout_s = 9;
+    optional bool is_vectorized = 20;
+};
+
+message PTabletWriterOpenResult {
+    required PStatus status = 1;
+};
+
+// add batch to tablet writer
+message PTabletWriterAddBatchRequest {
+    required PUniqueId id = 1;
+    required int64 index_id = 2;
+    required int32 sender_id = 3;
+
+    // If this is the last batch from this sender
+    optional bool eos = 4;
+
+    required int64 packet_seq = 5;
+    repeated int64 tablet_ids = 6;
+    // unset if and only if when eos is true
+    optional PRowBatch row_batch = 7;
+    // only valid when eos is true
+    // valid partition ids that would write in this writer
+    repeated int64 partition_ids = 8;
+};
+
+message PTabletWriterAddChunkRequest {
+    optional PUniqueId id = 1;
+    optional int64 index_id = 2;
+    optional int32 sender_id = 3;
+
+    // Whether this is the last batch from this sender
+    optional bool eos = 4;
+
+    optional int64 packet_seq = 5;
+    repeated int64 tablet_ids = 6;
+    // unset if and only if eos is true
+    optional ChunkPB chunk  = 7;
+    // only valid when eos is true
+    // valid partition ids that would write in this writer
+    repeated int64 partition_ids = 8;
+};
+
+message PTabletWriterAddBatchResult {
+    required PStatus status = 1;
+    repeated PTabletInfo tablet_vec = 2;
+    optional int64 execution_time_us = 3;
+    optional int64 wait_lock_time_us = 4;
+};
+
+// tablet writer cancel
+message PTabletWriterCancelRequest {
+    required PUniqueId id = 1;
+    required int64 index_id = 2;
+    required int32 sender_id = 3;
+};
+
+message PTabletWriterCancelResult {
+};
+
+message PExecPlanFragmentRequest {
+};
+
+message PExecPlanFragmentResult {
+    required PStatus status = 1;
+};
+
+enum PPlanFragmentCancelReason {
+    // 0 is reserved
+    LIMIT_REACH = 1;
+    USER_CANCEL = 2;
+    INTERNAL_ERROR = 3;
+    TIMEOUT = 4;
+};
+
+message PCancelPlanFragmentRequest {
+    required PUniqueId finst_id = 1;
+    optional PPlanFragmentCancelReason cancel_reason = 2;
+    optional bool is_pipeline = 10;
+    optional PUniqueId query_id = 11;
+};
+
+message PCancelPlanFragmentResult {
+    required PStatus status = 1;
+};
+
+message PFetchDataRequest {
+    required PUniqueId finst_id = 1;
+};
+
+message PFetchDataResult {
+    required PStatus status = 1;
+    // valid when status is ok
+    optional int64 packet_seq = 2;
+    optional bool eos = 3;
+    optional PQueryStatistics query_statistics = 4;
+};
+
+message PTriggerProfileReportRequest {
+    repeated PUniqueId instance_ids = 1;
+};
+
+message PTriggerProfileReportResult {
+    required PStatus status = 1;
+};
+
+message PStringPair {
+    required string key = 1;
+    required string val = 2;
+};
+
+message PKafkaLoadInfo {
+    required string brokers = 1;
+    required string topic = 2;
+    repeated PStringPair properties = 3;
+};
+
+message PKafkaMetaProxyRequest {
+    optional PKafkaLoadInfo kafka_info = 1;
+};
+
+message PKafkaOffsetProxyRequest {
+    optional PKafkaLoadInfo kafka_info = 1;
+    repeated int32 partition_ids = 2;
+}
+
+message PProxyRequest {
+    optional PKafkaMetaProxyRequest kafka_meta_request = 1;
+    optional PKafkaOffsetProxyRequest kafka_offset_request = 101;
+};
+
+message PKafkaMetaProxyResult {
+    repeated int32 partition_ids = 1;
+};
+
+message PKafkaOffsetProxyResult {
+    // offset of partition_ids[i] is beginning_offsets[i] and latest_offsets[i]
+    repeated int32 partition_ids = 1;
+    repeated int64 beginning_offsets = 2;
+    repeated int64 latest_offsets = 3;
+}
+
+message PProxyResult {
+    required PStatus status = 1;
+    optional PKafkaMetaProxyResult kafka_meta_result = 2;
+    optional PKafkaOffsetProxyResult kafka_offset_result = 101;
+};
+
+// NOTE(zc): If you want to add new method here,
+// you MUST add same method to starrocks_internal_service.proto
+service PBackendService {
+    rpc transmit_data(PTransmitDataParams) returns (PTransmitDataResult);
+    rpc exec_plan_fragment(PExecPlanFragmentRequest) returns (PExecPlanFragmentResult);
+    rpc cancel_plan_fragment(PCancelPlanFragmentRequest) returns (PCancelPlanFragmentResult);
+    rpc fetch_data(PFetchDataRequest) returns (PFetchDataResult);
+    rpc tablet_writer_open(PTabletWriterOpenRequest) returns (PTabletWriterOpenResult);
+    rpc tablet_writer_add_batch(PTabletWriterAddBatchRequest) returns (PTabletWriterAddBatchResult);
+    rpc tablet_writer_cancel(PTabletWriterCancelRequest) returns (PTabletWriterCancelResult);
+    rpc trigger_profile_report(PTriggerProfileReportRequest) returns (PTriggerProfileReportResult);
+    rpc get_info(PProxyRequest) returns (PProxyResult); 
+
+    // Transmit vectorized data between backends
+    rpc transmit_chunk(PTransmitChunkParams) returns (PTransmitChunkResult);
+    rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
+};
+
