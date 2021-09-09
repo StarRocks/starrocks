@@ -241,26 +241,19 @@ public class ExportStmt extends StatementBase {
                     throw new AnalysisException("Columns is empty.");
                 }
 
-                Map<String, Integer> tableColumnToIndex = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+                Set<String> tableColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
                 int index = 0;
                 for (Column column : table.getBaseSchema()) {
-                    tableColumnToIndex.put(column.getName(), index++);
+                    tableColumns.add(column.getName());
                 }
                 Set<String> uniqColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-                int prevIndex = -1;
-                int currentIndex = -1;
                 for (String columnName : columnNames) {
                     if (!uniqColumnNames.add(columnName)) {
                         throw new AnalysisException("Duplicated column [" + columnName + "]");
                     }
-                    if (!tableColumnToIndex.containsKey(columnName)) {
+                    if (!tableColumns.contains(columnName)) {
                         throw new AnalysisException("Column [" + columnName + "] does not exist in table.");
                     }
-                    currentIndex = tableColumnToIndex.get(columnName);
-                    if (prevIndex > currentIndex) {
-                        throw new AnalysisException("Columns order should be same with the schema.");
-                    }
-                    prevIndex = currentIndex;
                 }
             }
         } finally {

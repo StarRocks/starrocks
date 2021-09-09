@@ -304,7 +304,12 @@ Status ExportSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
     std::vector<const vectorized::Column*> columns_raw_ptr;
     columns_raw_ptr.reserve(num_cols);
     for (int i = 0; i < num_cols; i++) {
-        columns_raw_ptr.emplace_back(chunk->get_column_by_index(i).get());
+        auto root = _output_expr_ctxs[i]->root();
+        if (!root->is_slotref()) {
+            return Status::InternalError("Not slot ref column");
+        }
+        auto column_ref = ((vectorized::ColumnRef*) root);
+        columns_raw_ptr.emplace_back(chunk->get_column_by_slot_id(column_ref->slot_id()).get());
     }
 
     const std::string& row_delimiter = _t_export_sink.row_delimiter;
