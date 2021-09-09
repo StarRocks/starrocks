@@ -194,22 +194,22 @@ public class VariableMgr {
                     }
                     break;
                 case "byte":
-                    field.setByte(obj, Byte.valueOf(convertedVal));
+                    field.setByte(obj, Byte.parseByte(convertedVal));
                     break;
                 case "short":
-                    field.setShort(obj, Short.valueOf(convertedVal));
+                    field.setShort(obj, Short.parseShort(convertedVal));
                     break;
                 case "int":
-                    field.setInt(obj, Integer.valueOf(convertedVal));
+                    field.setInt(obj, Integer.parseInt(convertedVal));
                     break;
                 case "long":
-                    field.setLong(obj, Long.valueOf(convertedVal));
+                    field.setLong(obj, Long.parseLong(convertedVal));
                     break;
                 case "float":
-                    field.setFloat(obj, Float.valueOf(convertedVal));
+                    field.setFloat(obj, Float.parseFloat(convertedVal));
                     break;
                 case "double":
-                    field.setDouble(obj, Double.valueOf(convertedVal));
+                    field.setDouble(obj, Double.parseDouble(convertedVal));
                     break;
                 case "String":
                     field.set(obj, convertedVal);

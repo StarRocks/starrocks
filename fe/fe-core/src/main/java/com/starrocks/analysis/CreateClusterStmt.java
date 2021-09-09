@@ -84,7 +84,7 @@ public class CreateClusterStmt extends DdlStmt {
         }
 
         try {
-            instanceNum = Integer.valueOf(properties.get(CLUSTER_INSTANCE_NUM));
+            instanceNum = Integer.parseInt(properties.get(CLUSTER_INSTANCE_NUM));
         } catch (NumberFormatException e) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_PARAMETER);
         }

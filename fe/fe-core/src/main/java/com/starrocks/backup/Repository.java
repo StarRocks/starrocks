@@ -80,7 +80,7 @@ import java.util.List;
 public class Repository implements Writable {
     private static final Logger LOG = LogManager.getLogger(Repository.class);
 
-    public static final String PREFIX_REPO = "__palo_repository_";
+    public static final String PREFIX_REPO = "__starrocks_repository_";
     public static final String PREFIX_SNAPSHOT_DIR = "__ss_";
     public static final String PREFIX_DB = "__db_";
     public static final String PREFIX_TBL = "__tbl_";

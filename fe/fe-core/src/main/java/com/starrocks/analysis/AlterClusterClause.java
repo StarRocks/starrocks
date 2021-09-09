@@ -59,7 +59,7 @@ public class AlterClusterClause extends AlterClause {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_INSTANCE_NUM);
         }
 
-        instanceNum = Integer.valueOf(properties.get(CreateClusterStmt.CLUSTER_INSTANCE_NUM));
+        instanceNum = Integer.parseInt(properties.get(CreateClusterStmt.CLUSTER_INSTANCE_NUM));
         password = properties.get(CreateClusterStmt.CLUSTER_SUPERMAN_PASSWORD);
     }
 
