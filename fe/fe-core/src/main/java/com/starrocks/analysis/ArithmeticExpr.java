@@ -1,0 +1,554 @@
+// This file is made available under Elastic License 2.0.
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/analysis/ArithmeticExpr.java
+
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+package com.starrocks.analysis;
+
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarFunction;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.ExprVisitor;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TExprNode;
+import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.TExprOpcode;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
+
+public class ArithmeticExpr extends Expr {
+    private static final Logger LOG = LogManager.getLogger(ArithmeticExpr.class);
+    private final Operator op;
+
+    public enum OperatorPosition {
+        BINARY_INFIX,
+        UNARY_PREFIX,
+        UNARY_POSTFIX,
+    }
+
+    public ArithmeticExpr(Operator op, Expr e1, Expr e2) {
+        super();
+        this.op = op;
+        Preconditions.checkNotNull(e1);
+        children.add(e1);
+        Preconditions.checkArgument(
+                op == Operator.BITNOT && e2 == null || op != Operator.BITNOT && e2 != null);
+        if (e2 != null) {
+            children.add(e2);
+        }
+    }
+
+    /**
+     * Copy c'tor used in clone().
+     */
+    protected ArithmeticExpr(ArithmeticExpr other) {
+        super(other);
+        this.op = other.op;
+    }
+
+    public static void initBuiltins(FunctionSet functionSet) {
+        for (Type t : Type.getNumericTypes()) {
+            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                    Operator.MULTIPLY.getName(), Lists.newArrayList(t, t), t));
+            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                    Operator.ADD.getName(), Lists.newArrayList(t, t), t));
+            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                    Operator.SUBTRACT.getName(), Lists.newArrayList(t, t), t));
+        }
+        functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                Operator.DIVIDE.getName(),
+                Lists.<Type>newArrayList(Type.DOUBLE, Type.DOUBLE),
+                Type.DOUBLE));
+        functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                Operator.DIVIDE.getName(),
+                Lists.<Type>newArrayList(Type.DECIMALV2, Type.DECIMALV2),
+                Type.DECIMALV2));
+        functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                Operator.DIVIDE.getName(),
+                Lists.<Type>newArrayList(Type.DECIMAL32, Type.DECIMAL32),
+                Type.DECIMAL32));
+        functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                Operator.DIVIDE.getName(),
+                Lists.<Type>newArrayList(Type.DECIMAL64, Type.DECIMAL64),
+                Type.DECIMAL64));
+        functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                Operator.DIVIDE.getName(),
+                Lists.<Type>newArrayList(Type.DECIMAL128, Type.DECIMAL128),
+                Type.DECIMAL128));
+
+        // MOD(), FACTORIAL(), BITAND(), BITOR(), BITXOR(), and BITNOT() are registered as
+        // builtins, see starrocks_functions.py
+        for (Type t : Type.getIntegerTypes()) {
+            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                    Operator.INT_DIVIDE.getName(), Lists.newArrayList(t, t), t));
+        }
+        for (Type t : Arrays.asList(Type.DECIMAL32, Type.DECIMAL64, Type.DECIMAL128)) {
+            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                    Operator.INT_DIVIDE.getName(), Lists.newArrayList(t, t), Type.BIGINT));
+        }
+    }
+
+    // cast int128 into decimal128(38, 0).
+    // cast int64(including narrower integer types) into decimal64(18, 0).
+    // cast float32 into decimal64(18,6).
+    // cast float64 into decimal128(38,9).
+    // other types, throw an error to indicates an explicit cast is required
+    private static Type nonDecimalToDecimal(Type type) {
+        Preconditions.checkState(!type.isDecimalV3(), "Type of rhs may not be DecimalV3");
+        if (type.isLargeIntType()) {
+            return Type.DECIMAL128_INT;
+        } else if (type.isBigint()) {
+            return Type.DECIMAL64_INT;
+        } else if (type.isIntegerType() || type.isBoolean()) {
+            return Type.DECIMAL32_INT;
+        } else if (type.isDecimalV2()) {
+            return Type.DEFAULT_DECIMAL128;
+        } else if (type.isNull() || type.isFloatingPointType() || type.isStringType()) {
+            return Type.DECIMAL_ZERO;
+        } else {
+            Preconditions.checkState(false,
+                    "Implicit casting for decimal arithmetic operations only support integer/float/boolean/null");
+            return Type.INVALID;
+        }
+    }
+
+    public static TypeTriple getReturnTypeOfDecimal(Operator op, ScalarType lhsType, ScalarType rhsType)
+            throws AnalysisException {
+        Preconditions.checkState(lhsType.isDecimalV3() && rhsType.isDecimalV3(),
+                "Types of lhs and rhs must be DecimalV3");
+        final PrimitiveType lhsPtype = lhsType.getPrimitiveType();
+        final PrimitiveType rhsPtype = rhsType.getPrimitiveType();
+        final int lhsScale = lhsType.getScalarScale();
+        final int rhsScale = rhsType.getScalarScale();
+
+        // get the wider decimal type
+        PrimitiveType widerType = PrimitiveType.getWiderDecimalV3Type(lhsPtype, rhsPtype);
+        // compute arithmetic expr use decimal64 for both decimal32 and decimal64
+        widerType = PrimitiveType.getWiderDecimalV3Type(widerType, PrimitiveType.DECIMAL64);
+        int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(widerType);
+
+        TypeTriple result = new TypeTriple();
+        result.lhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, lhsScale);
+        result.rhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, rhsScale);
+        int returnScale = 0;
+        switch (op) {
+            case ADD:
+            case SUBTRACT:
+            case MOD:
+                returnScale = Math.max(lhsScale, rhsScale);
+                break;
+            case MULTIPLY:
+                returnScale = lhsScale + rhsScale;
+                // promote type result type of multiplication if it is too narrow to hold all significant bits
+                if (returnScale > maxPrecision) {
+                    final int maxPrecisionOfDecimal128 =
+                            PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
+                    // decimal128 is already the widest decimal types, so throw an error if scale of result exceeds 38
+                    Preconditions.checkState(widerType != PrimitiveType.DECIMAL128,
+                            String.format("Return scale(%d) exceeds maximum value(%d)", returnScale,
+                                    maxPrecisionOfDecimal128));
+                    widerType = PrimitiveType.DECIMAL128;
+                    maxPrecision = maxPrecisionOfDecimal128;
+                    result.lhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, lhsScale);
+                    result.rhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, rhsScale);
+                }
+                break;
+            case INT_DIVIDE:
+            case DIVIDE:
+                if (lhsScale <= 6) {
+                    returnScale = lhsScale + 6;
+                } else if (lhsScale <= 12) {
+                    returnScale = 12;
+                } else {
+                    returnScale = lhsScale;
+                }
+                widerType = PrimitiveType.DECIMAL128;
+                maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(widerType);
+                result.lhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, lhsScale);
+                result.rhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, rhsScale);
+                int adjustedScale = returnScale + rhsScale;
+                if (adjustedScale > maxPrecision) {
+                    throw new AnalysisException(
+                            String.format(
+                                    "Dividend fails to adjust scale to %d that exceeds maximum value(%d)",
+                                    adjustedScale,
+                                    maxPrecision));
+                }
+                break;
+            case BITAND:
+            case BITOR:
+            case BITXOR:
+                result.lhsTargetType = ScalarType.BIGINT;
+                result.rhsTargetType = ScalarType.BIGINT;
+                result.returnType = ScalarType.BIGINT;
+                return result;
+            default:
+                Preconditions.checkState(false, "DecimalV3 only support operators: +-*/%&|^");
+        }
+        result.returnType = op == Operator.INT_DIVIDE ? ScalarType.BIGINT :
+                ScalarType.createDecimalV3Type(widerType, maxPrecision, returnScale);
+        return result;
+    }
+
+    private void rewriteDecimalDecimalOperation() throws AnalysisException {
+        final Type lhsOriginType = getChild(0).type;
+        final Type rhsOriginType = getChild(1).type;
+        Type lhsTargetType = lhsOriginType;
+        Type rhsTargetType = rhsOriginType;
+
+        if (!lhsTargetType.isDecimalV3()) {
+            lhsTargetType = nonDecimalToDecimal(lhsTargetType);
+        }
+        if (!rhsTargetType.isDecimalV3()) {
+            rhsTargetType = nonDecimalToDecimal(rhsTargetType);
+        }
+        TypeTriple triple = getReturnTypeOfDecimal(op, (ScalarType) lhsTargetType, (ScalarType) rhsTargetType);
+        if (!triple.lhsTargetType.equals(lhsOriginType)) {
+            Preconditions.checkState(triple.lhsTargetType.isValid());
+            castChild(triple.lhsTargetType, 0);
+        }
+        if (!triple.rhsTargetType.equals(rhsOriginType)) {
+            Preconditions.checkState(triple.rhsTargetType.isValid());
+            castChild(triple.rhsTargetType, 1);
+        }
+        type = triple.returnType;
+    }
+
+    private void rewriteDecimalFloatingPointOperation() throws AnalysisException {
+        Type lhsType = getChild(0).type;
+        Type rhsType = getChild(1).type;
+        Type resultType = Type.DOUBLE;
+        if (!resultType.equals(lhsType)) {
+            castChild(resultType, 0);
+        }
+        if (!resultType.equals(rhsType)) {
+            castChild(resultType, 1);
+        }
+        this.type = resultType;
+    }
+
+    private boolean hasFloatingPointOrStringType() {
+        Type lhsType = getChild(0).type;
+        Type rhsType = getChild(1).type;
+        return lhsType.isFloatingPointType() || lhsType.isStringType() || rhsType.isFloatingPointType() ||
+                rhsType.isStringType();
+    }
+
+    private boolean resultTypeIsBigInt() {
+        switch (op) {
+            case BITAND:
+            case BITOR:
+            case BITXOR:
+            case BITNOT:
+            case INT_DIVIDE:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    public void rewriteDecimalOperation() throws AnalysisException {
+        if (hasFloatingPointOrStringType() && !resultTypeIsBigInt()) {
+            rewriteDecimalFloatingPointOperation();
+        } else {
+            rewriteDecimalDecimalOperation();
+        }
+    }
+
+    private void rewriteNonDecimalOperation() throws AnalysisException {
+        Type t1 = getChild(0).getType().getNumResultType();
+        Type t2 = getChild(1).getType().getNumResultType();
+        // Find result type of this operator
+        Type commonType = Type.INVALID;
+        switch (op) {
+            case MULTIPLY:
+            case ADD:
+            case SUBTRACT:
+            case MOD:
+                // numeric ops must be promoted to highest-resolution type
+                // (otherwise we can't guarantee that a <op> b won't overflow/underflow)
+                commonType = findCommonType(t1, t2);
+                break;
+            case DIVIDE:
+                commonType = findCommonType(t1, t2);
+                if (commonType.getPrimitiveType() == PrimitiveType.BIGINT
+                        || commonType.getPrimitiveType() == PrimitiveType.LARGEINT) {
+                    commonType = Type.DOUBLE;
+                }
+                break;
+            case INT_DIVIDE:
+            case BITAND:
+            case BITOR:
+            case BITXOR:
+                // Must be bigint
+                commonType = Type.BIGINT;
+                break;
+            default:
+                // the programmer forgot to deal with a case
+                Preconditions.checkState(false,
+                        "Unknown arithmetic operation " + op.toString() + " in: " + this.toSql());
+                break;
+        }
+        if (getChild(0).getType().isNull() && getChild(1).getType().isNull()) {
+            commonType = Type.NULL;
+        }
+        type = castBinaryOp(commonType);
+    }
+
+    @Override
+    public String toString() {
+        return toSql();
+    }
+
+    @Override
+    public Expr clone() {
+        return new ArithmeticExpr(this);
+    }
+
+    @Override
+    public String toSqlImpl() {
+        if (children.size() == 1) {
+            return op.toString() + " " + getChild(0).toSql();
+        } else {
+            return getChild(0).toSql() + " " + op.toString() + " " + getChild(1).toSql();
+        }
+    }
+
+    @Override
+    protected String explainImpl() {
+        if (children.size() == 1) {
+            return op.toString() + " " + getChild(0).explain();
+        } else {
+            return getChild(0).explain() + " " + op.toString() + " " + getChild(1).explain();
+        }
+    }
+
+    @Override
+    protected void toThrift(TExprNode msg) {
+        msg.node_type = TExprNodeType.ARITHMETIC_EXPR;
+        if (useVectorized || !type.getPrimitiveType().isDecimalOfAnyVersion()) {
+            msg.setOpcode(op.getOpcode());
+            msg.setOutput_column(outputColumn);
+        }
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!super.equals(obj)) {
+            return false;
+        }
+        return ((ArithmeticExpr) obj).opcode == opcode;
+    }
+
+    @Override
+    public void computeOutputColumn(Analyzer analyzer) {
+        super.computeOutputColumn(analyzer);
+
+        List<TupleId> tupleIds = Lists.newArrayList();
+        getIds(tupleIds, null);
+        Preconditions.checkArgument(tupleIds.size() == 1);
+    }
+
+    public static Type findCommonType(Type t1, Type t2) {
+        PrimitiveType pt1 = t1.getPrimitiveType();
+        PrimitiveType pt2 = t2.getPrimitiveType();
+
+        if (pt1 == PrimitiveType.DOUBLE || pt2 == PrimitiveType.DOUBLE) {
+            return Type.DOUBLE;
+        } else if (pt1.isDecimalV3Type() || pt2.isDecimalV3Type()) {
+            return ScalarType.getAssigmentCompatibleTypeOfDecimalV3((ScalarType) t1, (ScalarType) t2);
+        } else if (pt1 == PrimitiveType.DECIMALV2 || pt2 == PrimitiveType.DECIMALV2) {
+            return Type.DECIMALV2;
+        } else if (pt1 == PrimitiveType.LARGEINT || pt2 == PrimitiveType.LARGEINT) {
+            return Type.LARGEINT;
+        } else {
+            if (pt1 != PrimitiveType.BIGINT && pt2 != PrimitiveType.BIGINT) {
+                return Type.INVALID;
+            }
+            return Type.BIGINT;
+        }
+    }
+
+    @Override
+    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
+        // bitnot is the only unary op, deal with it here
+        if (op == Operator.BITNOT) {
+            type = Type.BIGINT;
+            if (getChild(0).getType().getPrimitiveType() != PrimitiveType.BIGINT) {
+                castChild(type, 0);
+            }
+            fn = getBuiltinFunction(
+                    analyzer, op.getName(), collectChildReturnTypes(), Function.CompareMode.IS_SUPERTYPE_OF);
+            if (fn == null) {
+                Preconditions.checkState(false, String.format("No match for op with operand types", toSql()));
+            }
+            return;
+        }
+
+        analyzeSubqueryInChildren();
+        // if children has subquery, it will be rewritten and reanalyzed in the future.
+        if (contains(Subquery.class)) {
+            return;
+        }
+
+        Type t1 = getChild(0).getType();
+        Type t2 = getChild(1).getType();
+        if (t1.isDecimalV3() || t2.isDecimalV3()) {
+            rewriteDecimalOperation();
+        } else {
+            rewriteNonDecimalOperation();
+        }
+        String fnName = op.name;
+        fn = getBuiltinFunction(analyzer, fnName, collectChildReturnTypes(),
+                Function.CompareMode.IS_INDISTINGUISHABLE);
+        if (fn == null) {
+            Preconditions.checkState(false, String.format(
+                    "No match for '%s' with operand types %s and %s", toSql(), t1, t2));
+        }
+    }
+
+    public void analyzeSubqueryInChildren() throws AnalysisException {
+        for (Expr child : children) {
+            if (child instanceof Subquery) {
+                Subquery subquery = (Subquery) child;
+                if (!subquery.returnsScalarColumn()) {
+                    String msg = "Subquery of arithmetic expr must return a single column: " + child.toSql();
+                    throw new AnalysisException(msg);
+                }
+                /**
+                 * Situation: The expr is a binary predicate and the type of subquery is not scalar type.
+                 * Add assert: The stmt of subquery is added an assert condition (return error if row count > 1).
+                 * Input params:
+                 *     expr: 0.9*(select k1 from t2)
+                 *     subquery stmt: select k1 from t2
+                 * Output params:
+                 *     new expr: 0.9 * (select k1 from t2 (assert row count: return error if row count > 1 ))
+                 *     subquery stmt: select k1 from t2 (assert row count: return error if row count > 1 )
+                 */
+                if (!subquery.getType().isScalarType()) {
+                    subquery.getStatement().setAssertNumRowsElement(1, AssertNumRowsElement.Assertion.LE);
+                }
+            }
+        }
+    }
+
+    @Override
+    public int hashCode() {
+        return 31 * super.hashCode() + Objects.hashCode(op);
+    }
+
+    @Override
+    public boolean isNullable() {
+        if (op == Operator.DIVIDE || op == Operator.INT_DIVIDE || op == Operator.MOD) {
+            return true;
+        }
+        return hasNullableChild();
+    }
+
+    @Override
+    public boolean isVectorized() {
+        for (Expr expr : children) {
+            if (!expr.isVectorized()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Below function is added by new analyzer
+     */
+    @Override
+    public <R, C> R accept(ExprVisitor<R, C> visitor, C context) throws SemanticException {
+        return visitor.visitArithmeticExpr(this, context);
+    }
+
+    public Operator getOp() {
+        return op;
+    }
+
+    public enum Operator {
+        MULTIPLY("*", "multiply", OperatorPosition.BINARY_INFIX, TExprOpcode.MULTIPLY),
+        DIVIDE("/", "divide", OperatorPosition.BINARY_INFIX, TExprOpcode.DIVIDE),
+        MOD("%", "mod", OperatorPosition.BINARY_INFIX, TExprOpcode.MOD),
+        INT_DIVIDE("DIV", "int_divide", OperatorPosition.BINARY_INFIX, TExprOpcode.INT_DIVIDE),
+        ADD("+", "add", OperatorPosition.BINARY_INFIX, TExprOpcode.ADD),
+        SUBTRACT("-", "subtract", OperatorPosition.BINARY_INFIX, TExprOpcode.SUBTRACT),
+        BITAND("&", "bitand", OperatorPosition.BINARY_INFIX, TExprOpcode.BITAND),
+        BITOR("|", "bitor", OperatorPosition.BINARY_INFIX, TExprOpcode.BITOR),
+        BITXOR("^", "bitxor", OperatorPosition.BINARY_INFIX, TExprOpcode.BITXOR),
+        BITNOT("~", "bitnot", OperatorPosition.UNARY_PREFIX, TExprOpcode.BITNOT),
+        FACTORIAL("!", "factorial", OperatorPosition.UNARY_POSTFIX, TExprOpcode.FACTORIAL);
+
+        private final String description;
+        private final String name;
+        private final OperatorPosition pos;
+        private final TExprOpcode opcode;
+
+        Operator(String description, String name, OperatorPosition pos, TExprOpcode opcode) {
+            this.description = description;
+            this.name = name;
+            this.pos = pos;
+            this.opcode = opcode;
+        }
+
+        @Override
+        public String toString() {
+            return description;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public OperatorPosition getPos() {
+            return pos;
+        }
+
+        public TExprOpcode getOpcode() {
+            return opcode;
+        }
+
+        public boolean isUnary() {
+            return pos == OperatorPosition.UNARY_PREFIX
+                    || pos == OperatorPosition.UNARY_POSTFIX;
+        }
+
+        public boolean isBinary() {
+            return pos == OperatorPosition.BINARY_INFIX;
+        }
+    }
+
+    public static class TypeTriple {
+        ScalarType returnType;
+        ScalarType lhsTargetType;
+        ScalarType rhsTargetType;
+    }
+}
