@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <hs.h>
+#include <hs/hs.h>
 #include <re2/re2.h>
 
 #include <memory>

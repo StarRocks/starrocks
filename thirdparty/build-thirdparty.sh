@@ -762,13 +762,8 @@ build_hyperscan() {
     check_if_source_exist $HYPERSCAN_SOURCE
     cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
     export PATH=$TP_INSTALL_DIR/bin:$PATH
-    $CUSTOM_CMAKE -DCMAKE_BUILD_TYPE=Release -DBOOST_ROOT=$DORIS_THIRDPARTY/installed/include -DCMAKE_CXX_COMPILER=$DORIS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$DORIS_GCC_HOME/bin/gcc
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$DORIS_THIRDPARTY/installed/include -DCMAKE_CXX_COMPILER=$DORIS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$DORIS_GCC_HOME/bin/gcc
     make -j$PARALLEL && make install
-    cp $TP_SOURCE_DIR/$HYPERSCAN_SOURCE/include/hs_common.h $TP_INSTALL_DIR/include
-    cp $TP_SOURCE_DIR/$HYPERSCAN_SOURCE/include/hs_compile.h $TP_INSTALL_DIR/include
-    cp $TP_SOURCE_DIR/$HYPERSCAN_SOURCE/include/hs.h $TP_INSTALL_DIR/include
-    cp $TP_SOURCE_DIR/$HYPERSCAN_SOURCE/include/hs_runtime.h $TP_INSTALL_DIR/include
-    cp $TP_SOURCE_DIR/$HYPERSCAN_SOURCE/lib/libhs.a $TP_INSTALL_DIR/lib
 }
 
 build_libevent
