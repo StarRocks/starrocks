@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <string>
 
+#include "agent/multi_worker_pool.h"
 #include "agent/task_worker_pool.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -34,6 +35,10 @@ using std::string;
 using std::vector;
 
 namespace starrocks {
+
+const uint32_t REPORT_TASK_WORKER_COUNT = 1;
+const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
+const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
 
 AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
         : _exec_env(exec_env), _master_info(master_info) {
@@ -53,33 +58,41 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
     // to make code to be more readable.
 
 #ifndef BE_TEST
-#define CREATE_AND_START_POOL(type, pool_name)                                                         \
-    pool_name.reset(new TaskWorkerPool(TaskWorkerPool::TaskWorkerType::type, _exec_env, master_info)); \
+#define CREATE_AND_START_POOL(type, pool_name, worker_num)                                                         \
+    pool_name.reset(new TaskWorkerPool(TaskWorkerPool::TaskWorkerType::type, _exec_env, master_info, worker_num)); \
+    pool_name->start();
+
+#define CREATE_AND_START_MULTI_POOL(type, pool_name, worker_num)                                                    \
+    pool_name.reset(new MultiWorkerPool(TaskWorkerPool::TaskWorkerType::type, _exec_env, master_info, worker_num)); \
     pool_name->start();
 #else
-#define CREATE_AND_START_POOL(type, pool_name)
+#define CREATE_AND_START_POOL(type, pool_name, worker_num)
+#define CREATE_AND_START_MULTI_POOL(type, pool_name, worker_num)
 #endif // BE_TEST
 
-    CREATE_AND_START_POOL(CREATE_TABLE, _create_tablet_workers);
-    CREATE_AND_START_POOL(DROP_TABLE, _drop_tablet_workers);
+    CREATE_AND_START_POOL(CREATE_TABLE, _create_tablet_workers, config::create_tablet_worker_count);
+    CREATE_AND_START_POOL(DROP_TABLE, _drop_tablet_workers, config::drop_tablet_worker_count);
     // Both PUSH and REALTIME_PUSH type use _push_workers
-    CREATE_AND_START_POOL(PUSH, _push_workers);
-    CREATE_AND_START_POOL(PUBLISH_VERSION, _publish_version_workers);
-    CREATE_AND_START_POOL(CLEAR_TRANSACTION_TASK, _clear_transaction_task_workers);
-    CREATE_AND_START_POOL(DELETE, _delete_workers);
-    CREATE_AND_START_POOL(ALTER_TABLE, _alter_tablet_workers);
-    CREATE_AND_START_POOL(CLONE, _clone_workers);
-    CREATE_AND_START_POOL(STORAGE_MEDIUM_MIGRATE, _storage_medium_migrate_workers);
-    CREATE_AND_START_POOL(CHECK_CONSISTENCY, _check_consistency_workers);
-    CREATE_AND_START_POOL(REPORT_TASK, _report_task_workers);
-    CREATE_AND_START_POOL(REPORT_DISK_STATE, _report_disk_state_workers);
-    CREATE_AND_START_POOL(REPORT_OLAP_TABLE, _report_tablet_workers);
-    CREATE_AND_START_POOL(UPLOAD, _upload_workers);
-    CREATE_AND_START_POOL(DOWNLOAD, _download_workers);
-    CREATE_AND_START_POOL(MAKE_SNAPSHOT, _make_snapshot_workers);
-    CREATE_AND_START_POOL(RELEASE_SNAPSHOT, _release_snapshot_workers);
-    CREATE_AND_START_POOL(MOVE, _move_dir_workers);
-    CREATE_AND_START_POOL(UPDATE_TABLET_META_INFO, _update_tablet_meta_info_workers);
+    CREATE_AND_START_POOL(PUSH, _push_workers,
+                          config::push_worker_count_normal_priority + config::push_worker_count_high_priority);
+    CREATE_AND_START_MULTI_POOL(PUBLISH_VERSION, _publish_version_workers, config::publish_version_worker_count);
+    CREATE_AND_START_POOL(CLEAR_TRANSACTION_TASK, _clear_transaction_task_workers,
+                          config::clear_transaction_task_worker_count);
+    CREATE_AND_START_POOL(DELETE, _delete_workers, config::delete_worker_count);
+    CREATE_AND_START_POOL(ALTER_TABLE, _alter_tablet_workers, config::alter_tablet_worker_count);
+    CREATE_AND_START_POOL(CLONE, _clone_workers, config::clone_worker_count);
+    CREATE_AND_START_POOL(STORAGE_MEDIUM_MIGRATE, _storage_medium_migrate_workers,
+                          config::storage_medium_migrate_count);
+    CREATE_AND_START_POOL(CHECK_CONSISTENCY, _check_consistency_workers, config::check_consistency_worker_count);
+    CREATE_AND_START_POOL(REPORT_TASK, _report_task_workers, REPORT_TASK_WORKER_COUNT);
+    CREATE_AND_START_POOL(REPORT_DISK_STATE, _report_disk_state_workers, REPORT_DISK_STATE_WORKER_COUNT);
+    CREATE_AND_START_POOL(REPORT_OLAP_TABLE, _report_tablet_workers, REPORT_OLAP_TABLE_WORKER_COUNT);
+    CREATE_AND_START_POOL(UPLOAD, _upload_workers, config::upload_worker_count);
+    CREATE_AND_START_POOL(DOWNLOAD, _download_workers, config::download_worker_count);
+    CREATE_AND_START_POOL(MAKE_SNAPSHOT, _make_snapshot_workers, config::make_snapshot_worker_count);
+    CREATE_AND_START_POOL(RELEASE_SNAPSHOT, _release_snapshot_workers, config::release_snapshot_worker_count);
+    CREATE_AND_START_POOL(MOVE, _move_dir_workers, 1);
+    CREATE_AND_START_POOL(UPDATE_TABLET_META_INFO, _update_tablet_meta_info_workers, 1);
 #undef CREATE_AND_START_POOL
 }
 
