@@ -63,21 +63,20 @@ namespace starrocks {
 
 const uint32_t TASK_FINISH_MAX_RETRY = 3;
 const uint32_t PUBLISH_VERSION_MAX_RETRY = 3;
-const uint32_t REPORT_TASK_WORKER_COUNT = 1;
-const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
-const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
 
 std::atomic_ulong TaskWorkerPool::_s_report_version(time(NULL) * 10000);
 std::mutex TaskWorkerPool::_s_task_signatures_lock;
 std::map<TTaskType::type, std::set<int64_t>> TaskWorkerPool::_s_task_signatures;
 FrontendServiceClientCache TaskWorkerPool::_master_service_client_cache;
 
-TaskWorkerPool::TaskWorkerPool(const TaskWorkerType task_worker_type, ExecEnv* env, const TMasterInfo& master_info)
+TaskWorkerPool::TaskWorkerPool(const TaskWorkerType task_worker_type, ExecEnv* env, const TMasterInfo& master_info,
+                               int worker_count)
         : _master_info(master_info),
           _agent_utils(new AgentUtils()),
           _master_client(new MasterServerClient(_master_info, &_master_service_client_cache)),
           _env(env),
           _worker_thread_condition_variable(new std::condition_variable()),
+          _worker_count(worker_count),
           _task_worker_type(task_worker_type) {
     _backend.__set_host(BackendOptions::get_localhost());
     _backend.__set_be_port(config::be_port);
@@ -100,24 +99,19 @@ void TaskWorkerPool::start() {
     // Init task pool and task workers
     switch (_task_worker_type) {
     case TaskWorkerType::CREATE_TABLE:
-        _worker_count = config::create_tablet_worker_count;
         _callback_function = _create_tablet_worker_thread_callback;
         break;
     case TaskWorkerType::DROP_TABLE:
-        _worker_count = config::drop_tablet_worker_count;
         _callback_function = _drop_tablet_worker_thread_callback;
         break;
     case TaskWorkerType::PUSH:
     case TaskWorkerType::REALTIME_PUSH:
-        _worker_count = config::push_worker_count_normal_priority + config::push_worker_count_high_priority;
         _callback_function = _push_worker_thread_callback;
         break;
     case TaskWorkerType::PUBLISH_VERSION:
-        _worker_count = config::publish_version_worker_count;
         _callback_function = _publish_version_worker_thread_callback;
         break;
     case TaskWorkerType::CLEAR_TRANSACTION_TASK:
-        _worker_count = config::clear_transaction_task_worker_count;
         _callback_function = _clear_transaction_task_worker_thread_callback;
         break;
     case TaskWorkerType::DELETE:
@@ -125,55 +119,42 @@ void TaskWorkerPool::start() {
         _callback_function = _push_worker_thread_callback;
         break;
     case TaskWorkerType::ALTER_TABLE:
-        _worker_count = config::alter_tablet_worker_count;
         _callback_function = _alter_tablet_worker_thread_callback;
         break;
     case TaskWorkerType::CLONE:
-        _worker_count = config::clone_worker_count;
         _callback_function = _clone_worker_thread_callback;
         break;
     case TaskWorkerType::STORAGE_MEDIUM_MIGRATE:
-        _worker_count = config::storage_medium_migrate_count;
         _callback_function = _storage_medium_migrate_worker_thread_callback;
         break;
     case TaskWorkerType::CHECK_CONSISTENCY:
-        _worker_count = config::check_consistency_worker_count;
         _callback_function = _check_consistency_worker_thread_callback;
         break;
     case TaskWorkerType::REPORT_TASK:
-        _worker_count = REPORT_TASK_WORKER_COUNT;
         _callback_function = _report_task_worker_thread_callback;
         break;
     case TaskWorkerType::REPORT_DISK_STATE:
-        _worker_count = REPORT_DISK_STATE_WORKER_COUNT;
         _callback_function = _report_disk_state_worker_thread_callback;
         break;
     case TaskWorkerType::REPORT_OLAP_TABLE:
-        _worker_count = REPORT_OLAP_TABLE_WORKER_COUNT;
         _callback_function = _report_tablet_worker_thread_callback;
         break;
     case TaskWorkerType::UPLOAD:
-        _worker_count = config::upload_worker_count;
         _callback_function = _upload_worker_thread_callback;
         break;
     case TaskWorkerType::DOWNLOAD:
-        _worker_count = config::download_worker_count;
         _callback_function = _download_worker_thread_callback;
         break;
     case TaskWorkerType::MAKE_SNAPSHOT:
-        _worker_count = config::make_snapshot_worker_count;
         _callback_function = _make_snapshot_thread_callback;
         break;
     case TaskWorkerType::RELEASE_SNAPSHOT:
-        _worker_count = config::release_snapshot_worker_count;
         _callback_function = _release_snapshot_thread_callback;
         break;
     case TaskWorkerType::MOVE:
-        _worker_count = 1;
         _callback_function = _move_dir_thread_callback;
         break;
     case TaskWorkerType::UPDATE_TABLET_META_INFO:
-        _worker_count = 1;
         _callback_function = _update_tablet_meta_worker_thread_callback;
         break;
     default:
