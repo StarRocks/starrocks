@@ -817,7 +817,7 @@ struct TBeginRemoteTxnRequest {
 }
 
 struct TBeginRemoteTxnResponse {
-    1: required Status.TStatus status
+    1: optional Status.TStatus status
     2: optional string txn_label
     3: optional i64 txn_id
 }
@@ -832,7 +832,7 @@ struct TCommitRemoteTxnRequest {
 }
 
 struct TCommitRemoteTxnResponse {
-    1: required Status.TStatus status
+    1: optional Status.TStatus status
 }
 
 struct TAbortRemoteTxnRequest {
@@ -843,7 +843,7 @@ struct TAbortRemoteTxnRequest {
 }
 
 struct TAbortRemoteTxnResponse {
-    1: required Status.TStatus status
+    1: optional Status.TStatus status
 }
 
 service FrontendService {
