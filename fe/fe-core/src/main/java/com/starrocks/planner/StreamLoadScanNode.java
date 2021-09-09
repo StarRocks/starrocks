@@ -59,6 +59,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -164,13 +165,20 @@ public class StreamLoadScanNode extends LoadScanNode {
 
         if (streamLoadTask.getColumnSeparator() != null) {
             String sep = streamLoadTask.getColumnSeparator().getColumnSeparator();
-            params.setColumn_separator(sep.getBytes(Charset.forName("UTF-8"))[0]);
+            byte[] setBytes = sep.getBytes(StandardCharsets.UTF_8);
+            params.setColumn_separator(setBytes[0]);
+            if (sep.length() > 50) {
+                throw new UserException("the column separator is limited to a maximum of 50 bytes");
+            }
+            if (setBytes.length > 1) {
+                params.setMulti_column_separator(sep);
+            }
         } else {
             params.setColumn_separator((byte) '\t');
         }
         if (streamLoadTask.getRowDelimiter() != null) {
             String sep = streamLoadTask.getRowDelimiter().getRowDelimiter();
-            params.setRow_delimiter(sep.getBytes(Charset.forName("UTF-8"))[0]);
+            params.setRow_delimiter(sep.getBytes(StandardCharsets.UTF_8)[0]);
         } else {
             params.setRow_delimiter((byte) '\n');
         }
