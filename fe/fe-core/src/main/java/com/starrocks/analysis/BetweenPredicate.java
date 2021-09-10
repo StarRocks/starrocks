@@ -33,6 +33,9 @@ import org.apache.logging.log4j.Logger;
  * the between predicate to a conjunctive/disjunctive compound predicate
  * to be handed to the backend.
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class BetweenPredicate extends Predicate {
     private static final Logger LOG = LogManager.getLogger(BetweenPredicate.class);
 
@@ -50,13 +53,6 @@ public class BetweenPredicate extends Predicate {
         super(other);
         isNotBetween = other.isNotBetween;
     }
-
-    //    @Override
-    //    public Expr reset() {
-    //      super.reset();
-    //      originalChildren = Expr.resetList(originalChildren);
-    //      return this;
-    //    }
 
     @Override
     public Expr clone() {

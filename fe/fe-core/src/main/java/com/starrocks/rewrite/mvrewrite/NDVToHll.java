@@ -49,6 +49,10 @@ import java.util.List;
  * or  select k1, approx_count_distinct(k2) from table group by k1
  * Rewritten query: select k1, hll_union_agg(mv_hll_union_k2) from table group by k1
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
+@Deprecated
 public class NDVToHll implements ExprRewriteRule {
     public static final ExprRewriteRule INSTANCE = new NDVToHll();
 

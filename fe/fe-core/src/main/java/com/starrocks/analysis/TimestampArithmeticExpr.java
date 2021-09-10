@@ -45,6 +45,9 @@ import java.util.Map;
  * Arithmetic expressions on timestamps are syntactic sugar.
  * They are executed as function call exprs in the BE.
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class TimestampArithmeticExpr extends Expr {
     private static final Logger LOG = LogManager.getLogger(TimestampArithmeticExpr.class);
     private static Map<String, TimeUnit> TIME_UNITS_MAP = new HashMap<String, TimeUnit>();
