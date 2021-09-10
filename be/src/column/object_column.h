@@ -192,8 +192,8 @@ public:
     }
 
     bool reach_capacity_limit() const override {
-        return _pool.size() >= UINT32_MAX || _cache.size() >= UINT32_MAX || _slices.size() >= UINT32_MAX ||
-               _buffer.size() >= UINT32_MAX;
+        return _pool.size() >= Column::MAX_CAPACITY_LIMIT || _cache.size() >= Column::MAX_CAPACITY_LIMIT ||
+               _slices.size() >= Column::MAX_CAPACITY_LIMIT || _buffer.size() >= Column::MAX_CAPACITY_LIMIT;
     }
 
 private:

@@ -273,7 +273,8 @@ public:
     }
 
     bool reach_capacity_limit() const override {
-        return _bytes.size() >= UINT32_MAX || _offsets.size() >= UINT32_MAX || _slices.size() >= UINT32_MAX;
+        return _bytes.size() >= Column::MAX_CAPACITY_LIMIT || _offsets.size() >= Column::MAX_CAPACITY_LIMIT ||
+               _slices.size() >= Column::MAX_CAPACITY_LIMIT;
     }
 
 private:
