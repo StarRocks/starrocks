@@ -60,15 +60,15 @@ public class ReplicasProcNode implements ProcNodeInterface {
         result.setNames(TITLE_NAMES);
         for (Replica replica : replicas) {
             String metaUrl = String.format("http://%s:%d/api/meta/header/%d/%d",
-                    backendMap.get(replica.getBackendId()).getHost(),
-                    backendMap.get(replica.getBackendId()).getHttpPort(),
+                    getBackendHost(backendMap, replica.getBackendId()),
+                    getBackendPort(backendMap, replica.getBackendId()),
                     tabletId,
                     replica.getSchemaHash());
 
             String compactionUrl = String.format(
                     "http://%s:%d/api/compaction/show?tablet_id=%d&schema_hash=%d",
-                    backendMap.get(replica.getBackendId()).getHost(),
-                    backendMap.get(replica.getBackendId()).getHttpPort(),
+                    getBackendHost(backendMap, replica.getBackendId()),
+                    getBackendPort(backendMap, replica.getBackendId()),
                     tabletId,
                     replica.getSchemaHash());
 
@@ -92,6 +92,20 @@ public class ReplicasProcNode implements ProcNodeInterface {
                     compactionUrl));
         }
         return result;
+    }
+
+    private String getBackendHost(ImmutableMap<Long, Backend> backendMap, long backendId) {
+        if (backendMap.containsKey(backendId)) {
+            return backendMap.get(backendId).getHost();
+        }
+        return "unknown";
+    }
+
+    private int getBackendPort(ImmutableMap<Long, Backend> backendMap, long backendId) {
+        if (backendMap.containsKey(backendId)) {
+            return backendMap.get(backendId).getBePort();
+        }
+        return -1;
     }
 }
 
