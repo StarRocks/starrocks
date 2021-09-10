@@ -2,15 +2,26 @@
 
 #include "exec/vectorized/aggregate/distinct_streaming_node.h"
 
+#include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
+#include "exec/pipeline/aggregate/aggregate_distinct_streaming_source_operator.h"
+#include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/vectorized/aggregator.h"
 #include "simd/simd.h"
 
 namespace starrocks::vectorized {
+
+Status DistinctStreamingNode::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(AggregateBaseNode::prepare(state));
+    _aggregator->set_aggr_phase(AggrPhase1);
+    return Status::OK();
+}
 
 Status DistinctStreamingNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(Expr::open(_aggregator->group_by_expr_ctxs(), state));
+    RETURN_IF_ERROR(_aggregator->open(state));
     RETURN_IF_ERROR(_children[0]->open(state));
     return Status::OK();
 }
@@ -191,6 +202,24 @@ void DistinctStreamingNode::_output_chunk_from_hash_set(ChunkPtr* chunk) {
     else {
         DCHECK(false);
     }
+}
+
+std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctStreamingNode::decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+    OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
+
+    // shared by sink operator and source operator
+    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode, child(0)->row_desc());
+
+    operators_with_sink.emplace_back(std::make_shared<AggregateDistinctStreamingSinkOperatorFactory>(
+            context->next_operator_id(), id(), aggregator));
+    context->add_pipeline(operators_with_sink);
+
+    OpFactories operators_with_source;
+    operators_with_source.emplace_back(std::make_shared<AggregateDistinctStreamingSourceOperatorFactory>(
+            context->next_operator_id(), id(), aggregator));
+    return operators_with_source;
 }
 
 } // namespace starrocks::vectorized

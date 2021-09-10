@@ -8,8 +8,9 @@ Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     // _aggregator is shared by sink operator and source operator
     // we must only prepare it at sink operator
-    return _aggregator->prepare(state, state->obj_pool(), get_memtracker(), get_memtracker(), nullptr,
-                                get_runtime_profile());
+    RETURN_IF_ERROR(
+            _aggregator->prepare(state, state->obj_pool(), get_memtracker(), get_memtracker(), get_runtime_profile()));
+    return _aggregator->open(state);
 }
 
 bool AggregateBlockingSinkOperator::is_finished() const {
@@ -22,7 +23,7 @@ void AggregateBlockingSinkOperator::finish(RuntimeState* state) {
     }
     _is_finished = true;
 
-    if (!_aggregator->group_by_expr_ctxs().empty()) {
+    if (!_aggregator->is_none_group_by_exprs()) {
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
         // If hash map is empty, we don't need to return value
         if (_aggregator->hash_map_variant().size() == 0) {
@@ -36,7 +37,7 @@ void AggregateBlockingSinkOperator::finish(RuntimeState* state) {
             _aggregator->hash_map_variant().NAME->hash_map.begin();
         APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
-    } else if (_aggregator->group_by_expr_ctxs().empty()) {
+    } else if (_aggregator->is_none_group_by_exprs()) {
         // for aggregate no group by, if _num_input_rows is 0,
         // In update phase, we directly return empty chunk.
         // In merge phase, we will handle it.
@@ -58,7 +59,7 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vect
     _aggregator->evaluate_exprs(chunk.get());
 
     SCOPED_TIMER(_aggregator->agg_compute_timer());
-    if (!_aggregator->group_by_expr_ctxs().empty()) {
+    if (!_aggregator->is_none_group_by_exprs()) {
         if (false) {
         }
 #define HASH_MAP_METHOD(NAME)                                                                          \
@@ -71,7 +72,7 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vect
         RETURN_IF_ERROR(_aggregator->check_hash_map_memory_usage(state));
         _aggregator->try_convert_to_two_level_map();
     }
-    if (_aggregator->group_by_expr_ctxs().empty()) {
+    if (_aggregator->is_none_group_by_exprs()) {
         _aggregator->compute_single_agg_state(chunk->num_rows());
     } else {
         _aggregator->compute_batch_agg_states(chunk->num_rows());

@@ -52,14 +52,19 @@ static const int STREAMING_HT_MIN_REDUCTION_SIZE =
 class Aggregator;
 using AggregatorPtr = std::shared_ptr<Aggregator>;
 
+// Component used to process aggregation including bloking aggregate and streaming aggregate
+// it contains common data struct and algorithm of aggregation
+// TODO(hcf) this component is shared by multiply sink/source operators in pipeline engine
+// TODO(hcf) all the data should be protected by lightweight lock
 class Aggregator {
 public:
-    Aggregator(const TPlanNode& tnode);
+    Aggregator(const TPlanNode& tnode, const RowDescriptor& child_row_desc);
 
     ~Aggregator() = default;
 
+    Status open(RuntimeState* state);
     Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, MemTracker* expr_mem_tracker,
-                   const RowDescriptor* child_row_desc, RuntimeProfile* runtime_profile);
+                   RuntimeProfile* runtime_profile);
 
     Status close(RuntimeState* state);
 
@@ -68,6 +73,7 @@ public:
     const std::vector<ExprContext*>& group_by_expr_ctxs() { return _group_by_expr_ctxs; }
     const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
+    int64_t limit() { return _limit; }
     bool needs_finalize() { return _needs_finalize; }
     bool is_ht_eos() { return _is_ht_eos; }
     void set_ht_eos() { _is_ht_eos = true; }
@@ -152,6 +158,7 @@ public:
 private:
     // used to init
     const TPlanNode _tnode;
+    const RowDescriptor _child_row_desc;
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
@@ -222,12 +229,12 @@ private:
 
     // Tuple into which Update()/Merge()/Serialize() results are stored.
     TupleId _intermediate_tuple_id;
-    TupleDescriptor* _intermediate_tuple_desc;
+    TupleDescriptor* _intermediate_tuple_desc = nullptr;
 
     // Tuple into which Finalize() results are stored. Possibly the same as
     // the intermediate tuple.
     TupleId _output_tuple_id;
-    TupleDescriptor* _output_tuple_desc;
+    TupleDescriptor* _output_tuple_desc = nullptr;
 
     // used for blocking aggregate
     AggrPhase _aggr_phase = AggrPhase1;

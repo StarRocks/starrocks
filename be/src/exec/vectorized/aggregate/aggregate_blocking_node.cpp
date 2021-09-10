@@ -10,14 +10,17 @@
 
 namespace starrocks::vectorized {
 
+Status AggregateBlockingNode::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(AggregateBaseNode::prepare(state));
+    _aggregator->set_aggr_phase(AggrPhase2);
+    return Status::OK();
+}
+
 Status AggregateBlockingNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(Expr::open(_aggregator->group_by_expr_ctxs(), state));
-    for (int i = 0; i < _aggregator->agg_fn_ctxs().size(); ++i) {
-        RETURN_IF_ERROR(Expr::open(_aggregator->agg_expr_ctxs()[i], state));
-    }
+    RETURN_IF_ERROR(_aggregator->open(state));
 
     // Initial for FunctionContext of every aggregate functions
     for (int i = 0; i < _aggregator->agg_fn_ctxs().size(); ++i) {
@@ -112,11 +115,7 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
     }
     int32_t chunk_size = config::vector_chunk_size;
 
-<<<<<<< HEAD
     if (_aggregator->is_none_group_by_exprs()) {
-=======
-    if (_aggregator->group_by_expr_ctxs().empty()) {
->>>>>>> 5541db1e1 ([SR-4475] AggregateNode reuse Aggregator)
         SCOPED_TIMER(_aggregator->get_results_timer());
         _aggregator->convert_to_chunk_no_groupby(chunk);
     } else {
@@ -150,7 +149,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
 
     context->maybe_interpolate_local_exchange(operators_with_sink);
     // shared by sink operator and source operator
-    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode);
+    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode, child(0)->row_desc());
 
     operators_with_sink.emplace_back(
             std::make_shared<AggregateBlockingSinkOperatorFactory>(context->next_operator_id(), id(), aggregator));

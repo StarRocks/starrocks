@@ -6,20 +6,28 @@
 
 namespace starrocks {
 
-Aggregator::Aggregator(const TPlanNode& tnode)
-        : _tnode(tnode),
-          _needs_finalize(tnode.agg_node.need_finalize),
-          _streaming_preaggregation_mode(tnode.agg_node.streaming_preaggregation_mode),
-          _intermediate_tuple_id(tnode.agg_node.intermediate_tuple_id),
-          _intermediate_tuple_desc(nullptr),
-          _output_tuple_id(tnode.agg_node.output_tuple_id),
-          _output_tuple_desc(nullptr) {}
+Aggregator::Aggregator(const TPlanNode& tnode, const RowDescriptor& child_row_desc)
+        : _tnode(tnode), _child_row_desc(child_row_desc) {}
+
+Status Aggregator::open(RuntimeState* state) {
+    RETURN_IF_ERROR(Expr::open(_group_by_expr_ctxs, state));
+    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+        RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
+    }
+    return Status::OK();
+}
 
 Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, MemTracker* expr_mem_tracker,
-                           const RowDescriptor* child_row_desc, RuntimeProfile* runtime_profile) {
+                           RuntimeProfile* runtime_profile) {
     _pool = pool;
     _mem_tracker = mem_tracker;
     _runtime_profile = runtime_profile;
+
+    _limit = _tnode.limit;
+    _needs_finalize = _tnode.agg_node.need_finalize;
+    _streaming_preaggregation_mode = _tnode.agg_node.streaming_preaggregation_mode;
+    _intermediate_tuple_id = _tnode.agg_node.intermediate_tuple_id;
+    _output_tuple_id = _tnode.agg_node.output_tuple_id;
 
     _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
 
@@ -162,12 +170,10 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* me
     _output_tuple_desc = state->desc_tbl().get_tuple_descriptor(_output_tuple_id);
     DCHECK_EQ(_intermediate_tuple_desc->slots().size(), _output_tuple_desc->slots().size());
 
-    if (child_row_desc != nullptr) {
-        RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state, *child_row_desc, expr_mem_tracker));
+    RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state, _child_row_desc, expr_mem_tracker));
 
-        for (const auto& ctx : _agg_expr_ctxs) {
-            RETURN_IF_ERROR(Expr::prepare(ctx, state, *child_row_desc, expr_mem_tracker));
-        }
+    for (const auto& ctx : _agg_expr_ctxs) {
+        RETURN_IF_ERROR(Expr::prepare(ctx, state, _child_row_desc, expr_mem_tracker));
     }
 
     _mem_pool = std::make_unique<MemPool>(_mem_tracker);
