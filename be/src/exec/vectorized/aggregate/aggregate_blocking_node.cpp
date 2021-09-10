@@ -2,9 +2,11 @@
 
 #include "exec/vectorized/aggregate/aggregate_blocking_node.h"
 
-#include "exec/pipeline/aggregate_blocking_operator.h"
+#include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
+#include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/vectorized/aggregator.h"
 
 namespace starrocks::vectorized {
 
@@ -134,11 +136,19 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-    OpFactories operators = _children[0]->decompose_to_pipeline(context);
+    OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
 
-    operators.emplace_back(
-            std::make_shared<AggregateBlockingOperatorFactory>(context->next_operator_id(), id(), _tnode));
-    return operators;
+    // shared by sink operator and source operator
+    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode);
+
+    operators_with_sink.emplace_back(
+            std::make_shared<AggregateBlockingSinkOperatorFactory>(context->next_operator_id(), id(), aggregator));
+    context->add_pipeline(operators_with_sink);
+
+    OpFactories operators_with_source;
+    operators_with_source.emplace_back(
+            std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(), id(), aggregator));
+    return operators_with_source;
 }
 
 } // namespace starrocks::vectorized
