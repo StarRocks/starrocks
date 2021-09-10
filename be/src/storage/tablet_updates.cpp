@@ -1441,14 +1441,6 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
             break;
         }
     }
-    if (total_score <= 0) {
-        // should not happen
-        string msg = Substitute("compaction got negative score: tablet=$0 score=$1", _tablet.tablet_id(), total_score);
-        DCHECK(false) << msg;
-        LOG(WARNING) << msg;
-        _compaction_running = false;
-        return Status::OK();
-    }
     if (total_valid_rowsets - info->inputs.size() <= 3) {
         // give 10s time gitter, so same table's compaction don't start at same time
         _last_compaction_time_ms = UnixMillis() + rand() % 10000;
