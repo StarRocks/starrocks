@@ -49,6 +49,10 @@ import static com.starrocks.planner.AdapterNode.insertAdapterNodeToFragment;
  * The planner is responsible for turning parse trees into plan fragments that can be shipped off to backends for
  * execution.
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
+@Deprecated
 public class Planner {
     private static final Logger LOG = LogManager.getLogger(Planner.class);
 

@@ -51,25 +51,10 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * The analytic planner adds plan nodes to an existing plan tree in order to
- * implement the AnalyticInfo of a given query stmt. The resulting plan reflects
- * similarities among analytic exprs with respect to partitioning, ordering and
- * windowing to reduce data exchanges and sorts (the exchanges and sorts are currently
- * not minimal). The generated plan has the following structure:
- * ...
- * (
- * (
- * (
- * analytic node  <-- group of analytic exprs with compatible window
- * )+               <-- group of analytic exprs with compatible ordering
- * sort node?
- * )+                 <-- group of analytic exprs with compatible partitioning
- * hash exchange?
- * )*                  <-- group of analytic exprs that have different partitioning
- * input plan node
- * ...
- */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
+@Deprecated
 public class AnalyticPlanner {
     private static final Logger LOG = LoggerFactory.getLogger(AnalyticPlanner.class);
 

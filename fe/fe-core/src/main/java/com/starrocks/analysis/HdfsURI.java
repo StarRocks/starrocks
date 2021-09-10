@@ -50,28 +50,6 @@ public class HdfsURI {
             throw new AnalysisException("URI path cannot be empty.");
         }
         uriPath = new String(location);
-        //dhc to do
-    /*
-    uriPath = new Path(location);
-    if (!uriPath.isUriPathAbsolute()) {
-      throw new AnalysisException("URI path must be absolute: " + uriPath);
-    }
-    try {
-      FileSystem fs = uriPath.getFileSystem(FileSystemUtil.getConfiguration());
-      if (!(fs instanceof DistributedFileSystem)) {
-        throw new AnalysisException(String.format("URI location '%s' " +
-            "must point to an HDFS file system.", uriPath));
-      }
-    } catch (IOException e) {
-      throw new AnalysisException(e.getMessage(), e);
-    }
-
-    // Fully-qualify the path
-    uriPath = FileSystemUtil.createFullyQualifiedPath(uriPath);
-    PrivilegeRequest req = new PrivilegeRequest(
-        new AuthorizeableURI(uriPath.toString()), privilege);
-    analyzer.getCatalog().checkAccess(analyzer.getUser(), req);
-    */
     }
 
     @Override

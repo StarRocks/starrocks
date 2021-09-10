@@ -44,6 +44,10 @@ import org.apache.logging.log4j.Logger;
  * toupper('abc') --> 'ABC'
  * cast('2016-11-09' as timestamp) --> TIMESTAMP '2016-11-09 00:00:00'
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
+@Deprecated
 public class FoldConstantsRule implements ExprRewriteRule {
     private static final Logger LOG = LogManager.getLogger(FoldConstantsRule.class);
 

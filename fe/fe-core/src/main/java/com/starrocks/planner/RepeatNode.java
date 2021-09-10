@@ -53,6 +53,9 @@ import java.util.stream.Collectors;
  * Used for grouping sets.
  * It will add some new rows and a column of groupingId according to grouping sets info.
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class RepeatNode extends PlanNode {
     private List<Set<Integer>> repeatSlotIdList;
     private Set<Integer> allSlotId;

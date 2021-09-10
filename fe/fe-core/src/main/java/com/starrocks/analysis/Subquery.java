@@ -43,6 +43,9 @@ import java.util.List;
  * Class representing a subquery. A Subquery consists of a QueryStmt and has
  * its own Analyzer context.
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class Subquery extends Expr {
     private static final Logger LOG = LoggerFactory.getLogger(Subquery.class);
 
