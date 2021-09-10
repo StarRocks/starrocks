@@ -68,7 +68,7 @@ public class BootstrapFinishAction extends RestBaseAction {
                 // cluster id or token is provided, return more info
                 int clusterId = 0;
                 try {
-                    clusterId = Integer.valueOf(clusterIdStr);
+                    clusterId = Integer.parseInt(clusterIdStr);
                 } catch (NumberFormatException e) {
                     result.status = ActionStatus.FAILED;
                     result.msg = "invalid cluster id format: " + clusterIdStr;

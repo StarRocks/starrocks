@@ -97,7 +97,7 @@ public abstract class Predicate extends Expr {
             slotRefRef.setRef(slotRef);
         }
         if (idxRef != null) {
-            idxRef.setRef(Integer.valueOf(i));
+            idxRef.setRef(i);
         }
         return true;
     }

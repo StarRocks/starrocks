@@ -86,19 +86,19 @@ public class ShowResultSet {
     }
 
     public byte getByte(int col) {
-        return Byte.valueOf(getString(col));
+        return Byte.parseByte(getString(col));
     }
 
     public int getInt(int col) {
-        return Integer.valueOf(getString(col));
+        return Integer.parseInt(getString(col));
     }
 
     public long getLong(int col) {
-        return Long.valueOf(getString(col));
+        return Long.parseLong(getString(col));
     }
 
     public short getShort(int col) {
-        return Short.valueOf(getString(col));
+        return Short.parseShort(getString(col));
     }
 
     public TShowResultSet tothrift() {
@@ -114,9 +114,7 @@ public class ShowResultSet {
         set.resultRows = Lists.newArrayList();
         for (int i = 0; i < resultRows.size(); i++) {
             ArrayList<String> list = Lists.newArrayList();
-            for (int j = 0; j < resultRows.get(i).size(); j++) {
-                list.add(resultRows.get(i).get(j));
-            }
+            list.addAll(resultRows.get(i));
             set.resultRows.add(list);
         }
         return set;
