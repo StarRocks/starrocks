@@ -58,7 +58,7 @@ public class DppConfigTest {
         };
 
         Map<String, String> configMap = Maps.newHashMap();
-        configMap.put("hadoop_palo_path", "/user/starrocks2");
+        configMap.put("hadoop_starrocks_path", "/user/starrocks2");
         configMap.put("hadoop_http_port", "1234");
         configMap.put("hadoop_configs", "mapred.job.tracker=127.0.0.1:111;fs.default.name=hdfs://127.0.0.1:112;"
                 + "hadoop.job.ugi=user,password;mapred.job.priority=NORMAL");
@@ -104,7 +104,7 @@ public class DppConfigTest {
     @Test(expected = LoadException.class)
     public void testHadoopConfigsNotEnough() throws LoadException {
         Map<String, String> configMap = Maps.newHashMap();
-        configMap.put("hadoop_palo_path", "/user/starrocks2");
+        configMap.put("hadoop_starrocks_path", "/user/starrocks2");
         configMap.put("hadoop_http_port", "1234");
         configMap.put("hadoop_configs", "mapred.job.tracker=127.0.0.1:111;fs.default.name=hdfs://127.0.0.1:112;");
         DppConfig dppConfig = DppConfig.create(configMap);
@@ -129,7 +129,7 @@ public class DppConfigTest {
         FakeCatalog.setMetaVersion(FeMetaVersion.VERSION_12);
 
         Map<String, String> configMap = Maps.newHashMap();
-        configMap.put("hadoop_palo_path", "/user/starrocks2");
+        configMap.put("hadoop_starrocks_path", "/user/starrocks2");
         configMap.put("hadoop_http_port", "1234");
         configMap.put("hadoop_configs", "mapred.job.tracker=127.0.0.1:111;fs.default.name=hdfs://127.0.0.1:112;"
                 + "hadoop.job.ugi=user,password;mapred.job.priority=NORMAL");

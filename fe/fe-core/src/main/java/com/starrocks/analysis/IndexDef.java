@@ -139,14 +139,6 @@ public class IndexDef {
         }
     }
 
-    public void checkColumns(List<Column> columns, KeysType keysType) throws AnalysisException {
-        if (indexType == IndexType.BITMAP) {
-            for (Column col : columns) {
-                checkColumn(col, keysType);
-            }
-        }
-    }
-
     public enum IndexType {
         BITMAP,
     }

@@ -748,6 +748,24 @@ build_jdk() {
     cp -r $TP_SOURCE_DIR/$JDK_SOURCE $TP_INSTALL_DIR/
 }
 
+# ragel
+# ragel-6.9+ is used by hypercan, so we build it first. 
+build_ragel() {
+    check_if_source_exist $RAGEL_SOURCE
+    cd $TP_SOURCE_DIR/$RAGEL_SOURCE
+    ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static
+    make -j$PARALLEL && make install    
+}
+
+#hyperscan
+build_hyperscan() {
+    check_if_source_exist $HYPERSCAN_SOURCE
+    cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
+    export PATH=$TP_INSTALL_DIR/bin:$PATH
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$DORIS_THIRDPARTY/installed/include -DCMAKE_CXX_COMPILER=$DORIS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$DORIS_GCC_HOME/bin/gcc
+    make -j$PARALLEL && make install
+}
+
 build_libevent
 build_zlib
 build_lz4
@@ -782,5 +800,7 @@ build_ryu
 build_breakpad
 build_hadoop
 build_jdk
-
+build_ragel
+build_hyperscan
 echo "Finihsed to build all thirdparties"
+

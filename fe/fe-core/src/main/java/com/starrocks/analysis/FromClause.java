@@ -27,8 +27,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 
@@ -62,23 +60,6 @@ public class FromClause implements ParseNode, Iterable<TableRef> {
 
     public void setNeedToSql(boolean needToSql) {
         this.needToSql = needToSql;
-    }
-
-    private void sortTableRefForSubquery(Analyzer analyzer) {
-        Collections.sort(this.tableRefs_, new Comparator<TableRef>() {
-            @Override
-            public int compare(TableRef tableref1, TableRef tableref2) {
-                int i1 = 0;
-                int i2 = 0;
-                if (tableref1.getOnClause() != null) {
-                    i1 = 1;
-                }
-                if (tableref2.getOnClause() != null) {
-                    i2 = 1;
-                }
-                return i1 - i2;
-            }
-        });
     }
 
     @Override
@@ -121,19 +102,6 @@ public class FromClause implements ParseNode, Iterable<TableRef> {
     public void reset() {
         for (int i = 0; i < size(); ++i) {
             TableRef origTblRef = get(i);
-            // TODO(zc):
-            // if (origTblRef.isResolved() && !(origTblRef instanceof InlineViewRef)) {
-            //     // Replace resolved table refs with unresolved ones.
-            //     TableRef newTblRef = new TableRef(origTblRef);
-            //     // Use the fully qualified raw path to preserve the original resolution.
-            //     // Otherwise, non-fully qualified paths might incorrectly match a local view.
-            //     // TODO for 2.3: This full qualification preserves analysis state which is
-            //     // contrary to the intended semantics of reset(). We could address this issue by
-            //     // changing the WITH-clause analysis to register local views that have
-            //     // fully-qualified table refs, and then remove the full qualification here.
-            //     newTblRef.rawPath_ = origTblRef.getResolvedPath().getFullyQualifiedRawPath();
-            //     set(i, newTblRef);
-            // }
             get(i).reset();
         }
         this.analyzed_ = false;

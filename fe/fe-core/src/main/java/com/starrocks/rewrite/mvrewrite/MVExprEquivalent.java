@@ -29,6 +29,10 @@ import com.starrocks.analysis.Expr;
  * TODO: one query expr could be calculate by a group by mv columns
  * TODO: mvExprEqual(queryexpr, mvColumnExprList)
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
+@Deprecated
 public class MVExprEquivalent {
 
     private static final ImmutableList<MVExprEqualRule> exprRewriteRuleList = ImmutableList

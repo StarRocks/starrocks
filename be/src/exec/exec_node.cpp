@@ -60,6 +60,7 @@
 #include "exec/vectorized/analytic_node.h"
 #include "exec/vectorized/assert_num_rows_node.h"
 #include "exec/vectorized/cross_join_node.h"
+#include "exec/vectorized/es_http_scan_node.h"
 #include "exec/vectorized/except_node.h"
 #include "exec/vectorized/file_scan_node.h"
 #include "exec/vectorized/hash_join_node.h"
@@ -549,7 +550,7 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
                 "Don't support MySQL table, you should rebuild StarRocks with WITH_MYSQL option ON");
 #endif
     case TPlanNodeType::ES_HTTP_SCAN_NODE:
-        *node = pool->add(new EsHttpScanNode(pool, tnode, descs));
+        *node = pool->add(new vectorized::EsHttpScanNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::SCHEMA_SCAN_NODE:
         *node = pool->add(new SchemaScanNode(pool, tnode, descs));

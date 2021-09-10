@@ -27,6 +27,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
 
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public abstract class Predicate extends Expr {
     protected boolean isEqJoinConjunct;
 
@@ -38,10 +41,6 @@ public abstract class Predicate extends Expr {
     protected Predicate(Predicate other) {
         super(other);
         isEqJoinConjunct = other.isEqJoinConjunct;
-    }
-
-    public boolean isEqJoinConjunct() {
-        return isEqJoinConjunct;
     }
 
     public void setIsEqJoinConjunct(boolean v) {
@@ -97,7 +96,7 @@ public abstract class Predicate extends Expr {
             slotRefRef.setRef(slotRef);
         }
         if (idxRef != null) {
-            idxRef.setRef(Integer.valueOf(i));
+            idxRef.setRef(i);
         }
         return true;
     }

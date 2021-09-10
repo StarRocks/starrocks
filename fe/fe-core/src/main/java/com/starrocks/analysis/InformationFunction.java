@@ -30,6 +30,9 @@ import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TInfoFunc;
 
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class InformationFunction extends Expr {
     private final String funcType;
     private long intValue;
