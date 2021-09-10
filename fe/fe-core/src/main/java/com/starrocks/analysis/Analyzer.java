@@ -81,6 +81,10 @@ import java.util.Set;
  * other than the one holding the referenced conjuncts), to make substitute()
  * simple.
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
+@Deprecated
 public class Analyzer {
     private static final Logger LOG = LogManager.getLogger(Analyzer.class);
     // used for contains inlineview analytic function's tuple changed

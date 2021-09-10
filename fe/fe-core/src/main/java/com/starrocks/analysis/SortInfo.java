@@ -39,6 +39,9 @@ import java.util.Set;
  * should move into planner/ and encapsulate the implementation of the sort of a
  * particular input row (materialize all row slots)
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class SortInfo {
     private static final Logger LOG = LogManager.getLogger(SortInfo.class);
     // All ordering exprs with cost greater than this will be materialized. Since we don't

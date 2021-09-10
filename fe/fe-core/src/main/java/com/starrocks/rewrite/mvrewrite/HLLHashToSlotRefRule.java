@@ -44,6 +44,10 @@ Rewrite hll_union(hll_hash(c1)) to hll_union(mv_hll_union_c1)
 Rewrite hll_raw_agg(hll_hash(c1)) to hll_raw_agg(mv_hll_union_c1)
 Rewrite hll_union_agg(hll_hash(c1)) to hll_union_agg(mv_hll_union_c1)
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
+@Deprecated
 public class HLLHashToSlotRefRule implements ExprRewriteRule {
 
     public static final ExprRewriteRule INSTANCE = new HLLHashToSlotRefRule();
