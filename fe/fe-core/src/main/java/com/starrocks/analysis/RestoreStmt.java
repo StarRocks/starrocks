@@ -111,7 +111,7 @@ public class RestoreStmt extends AbstractBackupStmt {
         // replication num
         if (copiedProperties.containsKey(PROP_REPLICATION_NUM)) {
             try {
-                replicationNum = Integer.valueOf(copiedProperties.get(PROP_REPLICATION_NUM));
+                replicationNum = Integer.parseInt(copiedProperties.get(PROP_REPLICATION_NUM));
             } catch (NumberFormatException e) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_COMMON_ERROR,
                         "Invalid replication num format: "
@@ -132,7 +132,7 @@ public class RestoreStmt extends AbstractBackupStmt {
         // meta version
         if (copiedProperties.containsKey(PROP_META_VERSION)) {
             try {
-                metaVersion = Integer.valueOf(copiedProperties.get(PROP_META_VERSION));
+                metaVersion = Integer.parseInt(copiedProperties.get(PROP_META_VERSION));
             } catch (NumberFormatException e) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_COMMON_ERROR,
                         "Invalid meta version format: "
@@ -142,7 +142,7 @@ public class RestoreStmt extends AbstractBackupStmt {
         }
         if (copiedProperties.containsKey(PROP_STARROCKS_META_VERSION)) {
             try {
-                starrocksMetaVersion = Integer.valueOf(copiedProperties.get(PROP_STARROCKS_META_VERSION));
+                starrocksMetaVersion = Integer.parseInt(copiedProperties.get(PROP_STARROCKS_META_VERSION));
             } catch (NumberFormatException e) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_COMMON_ERROR,
                         "Invalid meta version format: "

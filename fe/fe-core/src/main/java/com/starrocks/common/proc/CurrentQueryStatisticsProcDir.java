@@ -94,8 +94,8 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
         sortedRowData.sort(new Comparator<List<String>>() {
             @Override
             public int compare(List<String> l1, List<String> l2) {
-                final int execTime1 = Integer.valueOf(l1.get(EXEC_TIME_INDEX));
-                final int execTime2 = Integer.valueOf(l2.get(EXEC_TIME_INDEX));
+                final int execTime1 = Integer.parseInt(l1.get(EXEC_TIME_INDEX));
+                final int execTime2 = Integer.parseInt(l2.get(EXEC_TIME_INDEX));
                 return execTime1 <= execTime2 ? 1 : -1;
             }
         });

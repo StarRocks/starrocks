@@ -748,7 +748,7 @@ public class Load {
 
             int port = -1;
             try {
-                port = Integer.valueOf(properties.get("port"));
+                port = Integer.parseInt(properties.get("port"));
             } catch (NumberFormatException e) {
                 throw new DdlException("invalid mysql port: " + properties.get("port"));
             }
