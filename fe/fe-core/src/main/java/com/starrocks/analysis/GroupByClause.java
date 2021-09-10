@@ -47,6 +47,9 @@ import java.util.stream.Collectors;
  * GROUPING SETS produce a single result set that is equivalent to a UNION ALL of differently grouped rows.
  * In this class we produce the rule of generating rows base on the group by clause.
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class GroupByClause implements ParseNode {
     private static final Logger LOG = LogManager.getLogger(GroupByClause.class);
 

@@ -47,6 +47,10 @@ import java.util.List;
  * Query: select k1, count(k2) from table group by k1
  * Rewritten query: select k1, sum(mv_count_k2) from table group by k1
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
+@Deprecated
 public class CountFieldToSum implements ExprRewriteRule {
     public static final ExprRewriteRule INSTANCE = new CountFieldToSum();
 

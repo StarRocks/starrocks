@@ -86,7 +86,7 @@ public class EsNodeInfo {
             String thriftPortStr = (String) attributesMap.get("thrift_port");
             if (thriftPortStr != null) {
                 try {
-                    int thriftPort = Integer.valueOf(thriftPortStr);
+                    int thriftPort = Integer.parseInt(thriftPortStr);
                     hasThrift = true;
                     thriftAddress = new TNetworkAddress(this.ip, thriftPort);
                 } catch (Exception e) {

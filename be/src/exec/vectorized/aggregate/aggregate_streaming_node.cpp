@@ -2,7 +2,8 @@
 
 #include "exec/vectorized/aggregate/aggregate_streaming_node.h"
 
-#include "exec/pipeline/aggregate_streaming_operator.h"
+#include "exec/pipeline/aggregate/aggregate_streaming_sink_operator.h"
+#include "exec/pipeline/aggregate/aggregate_streaming_source_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "simd/simd.h"
@@ -214,11 +215,19 @@ void AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode::decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-    OpFactories operators = _children[0]->decompose_to_pipeline(context);
+    OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
 
-    operators.emplace_back(
-            std::make_shared<AggregateStreamingOperatorFactory>(context->next_operator_id(), id(), _tnode));
-    return operators;
+    // shared by sink operator and source operator
+    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode);
+
+    operators_with_sink.emplace_back(
+            std::make_shared<AggregateStreamingSinkOperatorFactory>(context->next_operator_id(), id(), aggregator));
+    context->add_pipeline(operators_with_sink);
+
+    OpFactories operators_with_source;
+    operators_with_source.emplace_back(
+            std::make_shared<AggregateStreamingSourceOperatorFactory>(context->next_operator_id(), id(), aggregator));
+    return operators_with_source;
 }
 
 } // namespace starrocks::vectorized

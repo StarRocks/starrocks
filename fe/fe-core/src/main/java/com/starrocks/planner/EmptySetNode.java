@@ -35,6 +35,9 @@ import java.util.ArrayList;
  * the row descriptor must still include a materialized tuple so that the backend can
  * construct a valid row empty batch.
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class EmptySetNode extends PlanNode {
     public EmptySetNode(PlanNodeId id, ArrayList<TupleId> tupleIds) {
         super(id, tupleIds, "EMPTYSET");
