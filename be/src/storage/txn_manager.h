@@ -41,10 +41,10 @@
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
+#include "storage/kv_store.h"
 #include "storage/lru_cache.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
-#include "storage/kv_store.h"
 #include "storage/options.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
@@ -104,8 +104,8 @@ public:
                           const RowsetSharedPtr& rowset_ptr, bool is_recovery);
 
     // remove a txn from txn manager & persist rowset meta
-    OLAPStatus publish_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
-                           TTabletId tablet_id, SchemaHash schema_hash, TabletUid tablet_uid, const Version& version,
+    OLAPStatus publish_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
+                           SchemaHash schema_hash, TabletUid tablet_uid, const Version& version,
                            VersionHash version_hash);
 
     // delete the txn from manager if it is not committed(not have a valid rowset)

@@ -597,8 +597,9 @@ constexpr bool do_less_than_comparison(const Compare& compare, const K& x, const
 // SFINAE prevents implicit conversions to int (such as from bool).
 template <typename Int, phmap::enable_if_t<std::is_same<int, Int>::value, int> = 0>
 constexpr phmap::weak_ordering compare_result_as_ordering(const Int c) {
-    return c < 0 ? phmap::weak_ordering::less
-                 : c == 0 ? phmap::weak_ordering::equivalent : phmap::weak_ordering::greater;
+    return c < 0    ? phmap::weak_ordering::less
+           : c == 0 ? phmap::weak_ordering::equivalent
+                    : phmap::weak_ordering::greater;
 }
 constexpr phmap::weak_ordering compare_result_as_ordering(const phmap::weak_ordering c) {
     return c;
@@ -612,8 +613,9 @@ constexpr phmap::weak_ordering do_three_way_comparison(const Compare& compare, c
 template <typename Compare, typename K, typename LK,
           phmap::enable_if_t<std::is_same<bool, phmap::invoke_result_t<Compare, const K&, const LK&>>::value, int> = 0>
 constexpr phmap::weak_ordering do_three_way_comparison(const Compare& compare, const K& x, const LK& y) {
-    return compare(x, y) ? phmap::weak_ordering::less
-                         : compare(y, x) ? phmap::weak_ordering::greater : phmap::weak_ordering::equivalent;
+    return compare(x, y)   ? phmap::weak_ordering::less
+           : compare(y, x) ? phmap::weak_ordering::greater
+                           : phmap::weak_ordering::equivalent;
 }
 
 } // namespace compare_internal
@@ -973,9 +975,9 @@ private:
     // padding.
     constexpr static size_type NodeTargetValues(const int begin, const int end) {
         return begin == end ? begin
-                            : SizeWithNValues((begin + end) / 2 + 1) > params_type::kTargetNodeSize
-                                      ? NodeTargetValues(begin, (begin + end) / 2)
-                                      : NodeTargetValues((begin + end) / 2 + 1, end);
+               : SizeWithNValues((begin + end) / 2 + 1) > params_type::kTargetNodeSize
+                       ? NodeTargetValues(begin, (begin + end) / 2)
+                       : NodeTargetValues((begin + end) / 2 + 1, end);
     }
 
     enum {

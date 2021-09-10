@@ -25,8 +25,8 @@
 #include <string>
 
 #include "storage/data_dir.h"
-#include "storage/olap_define.h"
 #include "storage/kv_store.h"
+#include "storage/olap_define.h"
 #include "storage/tablet_meta.h"
 
 namespace starrocks {
@@ -77,8 +77,7 @@ struct MetaStoreStats {
 // Helper Class for managing tablet headers of one root path.
 class TabletMetaManager {
 public:
-    static Status get_primary_meta(KVStore* meta, TTabletId tablet_id, TabletMetaPB& tablet_meta_pb,
-                                   string* json_meta);
+    static Status get_primary_meta(KVStore* meta, TTabletId tablet_id, TabletMetaPB& tablet_meta_pb, string* json_meta);
 
     static Status get_tablet_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
                                   TabletMetaSharedPtr tablet_meta);

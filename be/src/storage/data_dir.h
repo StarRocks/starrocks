@@ -31,8 +31,8 @@
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/olap_file.pb.h"
-#include "storage/olap_common.h"
 #include "storage/kv_store.h"
+#include "storage/olap_common.h"
 #include "storage/rowset/rowset_id_generator.h"
 
 namespace starrocks {

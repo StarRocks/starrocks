@@ -183,7 +183,7 @@ Status KVStore::remove(ColumnFamilyIndex column_family_index, const std::string&
 }
 
 Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,
-                         std::function<bool(std::string_view, std::string_view)> const& func) {
+                        std::function<bool(std::string_view, std::string_view)> const& func) {
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     std::unique_ptr<Iterator> it(_db->NewIterator(ReadOptions(), handle));
     if (prefix.empty()) {
@@ -209,8 +209,8 @@ Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string
 }
 
 Status KVStore::iterate_range(ColumnFamilyIndex column_family_index, const std::string& lower_bound,
-                               const std::string& upper_bound,
-                               std::function<bool(std::string_view, std::string_view)> const& func) {
+                              const std::string& upper_bound,
+                              std::function<bool(std::string_view, std::string_view)> const& func) {
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     rocksdb::Slice iter_upper(upper_bound);
     ReadOptions options;

@@ -34,8 +34,8 @@
 #include "json2pb/pb_to_json.h"
 #include "rocksdb/write_batch.h"
 #include "storage/del_vector.h"
-#include "storage/olap_define.h"
 #include "storage/kv_store.h"
+#include "storage/olap_define.h"
 #include "storage/rocksdb_status_adapter.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
@@ -848,8 +848,7 @@ Status TabletMetaManager::get_del_vector(KVStore* meta, TTabletId tablet_id, uin
 }
 
 using DeleteVectorList = TabletMetaManager::DeleteVectorList;
-StatusOr<DeleteVectorList> TabletMetaManager::list_del_vector(KVStore* meta, TTabletId tablet_id,
-                                                              int64_t max_version) {
+StatusOr<DeleteVectorList> TabletMetaManager::list_del_vector(KVStore* meta, TTabletId tablet_id, int64_t max_version) {
     DeleteVectorList ret;
     std::string lower = encode_del_vector_key(tablet_id, 0, INT64_MAX);
     std::string upper = encode_del_vector_key(tablet_id, UINT32_MAX, 0);
