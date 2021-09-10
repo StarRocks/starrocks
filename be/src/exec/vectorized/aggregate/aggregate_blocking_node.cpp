@@ -112,7 +112,11 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
     }
     int32_t chunk_size = config::vector_chunk_size;
 
+<<<<<<< HEAD
     if (_aggregator->is_none_group_by_exprs()) {
+=======
+    if (_aggregator->group_by_expr_ctxs().empty()) {
+>>>>>>> 5541db1e1 ([SR-4475] AggregateNode reuse Aggregator)
         SCOPED_TIMER(_aggregator->get_results_timer());
         _aggregator->convert_to_chunk_no_groupby(chunk);
     } else {
