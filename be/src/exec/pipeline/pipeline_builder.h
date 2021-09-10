@@ -2,6 +2,9 @@
 
 #pragma once
 
+#include "exec/pipeline/exchange/local_exchange.h"
+#include "exec/pipeline/exchange/local_exchange_sink_operator.h"
+#include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline.h"
 
@@ -18,6 +21,8 @@ public:
     void add_pipeline(const OpFactories& operators) {
         _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipe_id(), operators));
     }
+
+    void maybe_interpolate_local_exchange(OpFactories& pred_operators);
 
     uint32_t next_pipe_id() { return _next_pipeline_id++; }
 

@@ -32,7 +32,10 @@ class SourceOperatorFactory : public OperatorFactory {
 public:
     SourceOperatorFactory(int32_t id, int32_t plan_node_id) : OperatorFactory(id, plan_node_id) {}
     bool is_source() const override { return true; }
+    // with_morsels returning true means that the SourceOperator needs attach to MorselQueue, only
+    // ScanOperator needs to do so.
     virtual bool with_morsels() const { return false; }
+    // Set the DOP(degree of parallelism) of the SourceOperator, SourceOperator's DOP determine the Pipeline's DOP.
     virtual void set_num_driver_instances(size_t num_driver_instances) {
         this->_num_driver_instances = num_driver_instances;
     }

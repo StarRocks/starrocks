@@ -110,14 +110,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         driver_instance_count = std::max<int32_t>(request.query_options.query_threads, driver_instance_count);
     }
 
-    // TODO(hcf): We will remove this restriction after complete aggregation
-    // Force driver_instance_count to 1 if this fragment has aggregate node.
-    std::vector<ExecNode*> aggregate_nodes;
-    plan->collect_nodes(TPlanNodeType::AGGREGATION_NODE, &aggregate_nodes);
-    if (!aggregate_nodes.empty()) {
-        driver_instance_count = 1;
-    }
-
     // pipeline scan mode
     // 0: use sync io
     // 1: use async io and exec->thread_pool()
@@ -161,9 +153,11 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     const size_t num_pipelines = pipelines.size();
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
+        // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
         const auto driver_instance_count = pipeline->source_operator_factory()->num_driver_instances();
         const bool is_root = (n == num_pipelines - 1);
-
+        // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
+        // at present, only ScanOperator need a MorselQueue attached.
         if (pipeline->source_operator_factory()->with_morsels()) {
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
             DCHECK(morsel_queues.count(source_id));
