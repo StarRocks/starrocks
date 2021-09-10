@@ -758,11 +758,15 @@ build_croaringbitmap
 build_cctz
 build_fmt
 build_ryu
-build_breakpad
 build_hadoop
 build_jdk
 build_ragel
 build_hyperscan
 build_mariadb
+
+if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
+    build_breakpad
+fi
+
 echo "Finihsed to build all thirdparties"
 

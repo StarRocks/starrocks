@@ -255,8 +255,11 @@ set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/l
 add_library(ryu STATIC IMPORTED)
 set_target_properties(ryu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libryu.a)
 
-add_library(breakpad STATIC IMPORTED)
-set_target_properties(breakpad PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbreakpad_client.a)
+# Disable minidump on aarch64, hence breakpad is not needed.
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+    add_library(breakpad STATIC IMPORTED)
+    set_target_properties(breakpad PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbreakpad_client.a)
+endif()
 
 add_library(hyperscan STATIC IMPORTED)
 set_target_properties(hyperscan PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhs.a)
@@ -395,8 +398,12 @@ include_directories(
     ${GPERFTOOLS_HOME}/include
     ${THIRDPARTY_DIR}/include/thrift/
     ${THIRDPARTY_DIR}/include/event/
-    ${THIRDPARTY_DIR}/include/breakpad/
 )
+
+
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+    include_directories(${THIRDPARTY_DIR}/include/breakpad/)
+endif()
 
 set(WL_START_GROUP "-Wl,--start-group")
 set(WL_END_GROUP "-Wl,--end-group")
@@ -479,10 +486,29 @@ set(STARROCKS_DEPENDENCIES
     cctz
     fmt
     ryu
-    breakpad
     hyperscan
     ${WL_END_GROUP}
 )
+
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+    set(STARROCKS_DEPENDENCIES
+        ${STARROCKS_DEPENDENCIES}
+        breakpad
+    )
+endif()
+
+if (WITH_MYSQL)
+    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
+        mysql
+        )
+endif()
+
+if (WITH_HDFS)
+    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
+        hdfs
+        jvm
+        )
+endif()
 
 # Add all external dependencies. They should come after the starrocks libs.
 # static link gcc's lib
