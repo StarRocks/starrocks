@@ -275,9 +275,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "group by supp_nation, cust_nation, l_year order by supp_nation, cust_nation, l_year;";
         String plan = getCostExplain(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains("probe runtime filters:\n" +
-                "     - filter_id = 2, probe_expr = (9: L_ORDERKEY)\n" +
-                "     - filter_id = 3, probe_expr = (11: L_SUPPKEY)"));
+        Assert.assertTrue(plan.contains("     probe runtime filters:\n"
+                + "     - filter_id = 2, probe_expr = (11: L_SUPPKEY)\n"));
     }
 
     @Test
