@@ -30,6 +30,10 @@ using namespace starrocks_udf;
 
 namespace starrocks {
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 AggFn::AggFn(const TExprNode& tnode, const SlotDescriptor& intermediate_slot_desc,
              const SlotDescriptor& output_slot_desc)
         : Expr(tnode),

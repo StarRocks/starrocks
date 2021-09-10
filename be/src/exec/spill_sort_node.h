@@ -38,6 +38,11 @@ namespace starrocks {
 // in open() to fill it with sorted rows.
 // If a merge phase was performed in the sort, sorted rows are deep copied into
 // the output batch. Otherwise, the sorter instance owns the sorted data.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class SpillSortNode : public ExecNode {
 public:
     SpillSortNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);

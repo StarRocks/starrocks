@@ -36,6 +36,11 @@ class TupleRow;
 
 // Abstract base class for join nodes that block while consuming all rows from their
 // right child in open().
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class BlockingJoinNode : public ExecNode {
 public:
     BlockingJoinNode(const std::string& node_name, const TJoinOp::type join_op, ObjectPool* pool,

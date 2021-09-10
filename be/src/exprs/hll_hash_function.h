@@ -31,8 +31,10 @@ namespace starrocks {
 class Expr;
 class TupleRow;
 
-// todo(kks): for backward compatibility, we should remove this class
-//            when starrocks 0.12 release
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class HllHashFunctions {
 public:
     static void init();

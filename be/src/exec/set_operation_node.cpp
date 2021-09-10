@@ -28,6 +28,11 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 SetOperationNode::SetOperationNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs, int tuple_id)
         : ExecNode(pool, tnode, descs), _tuple_id(tuple_id), _tuple_desc(nullptr) {}
 

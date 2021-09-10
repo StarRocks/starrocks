@@ -25,6 +25,10 @@
 
 namespace starrocks {
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 void IR_ALWAYS_INLINE UnionNode::materialize_exprs(const std::vector<ExprContext*>& exprs, TupleRow* row,
                                                    uint8_t* tuple_buf, RowBatch* dst_batch) {
     DCHECK(!dst_batch->at_capacity());

@@ -37,6 +37,10 @@ class Expr;
 class OpcodeRegistry;
 class TupleRow;
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 // The context used for timestamp function prepare phase,
 // to save the converted date formatter, so that it doesn't
 // need to be converted for each rows.

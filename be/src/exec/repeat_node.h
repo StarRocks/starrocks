@@ -31,6 +31,11 @@ class RowBatch;
 
 // repeat tuple of children and set given slots to null, this class generates tuple rows according to the given
 // _repeat_id_list, and sets the value of the slot corresponding to the grouping function according to _grouping_list
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class RepeatNode : public ExecNode {
 public:
     RepeatNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);

@@ -33,6 +33,10 @@
 // NOTE: be careful not to use string::append.  It is not performant.
 namespace starrocks {
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 void StringFunctions::init() {}
 
 size_t get_utf8_byte_length(unsigned char byte) {

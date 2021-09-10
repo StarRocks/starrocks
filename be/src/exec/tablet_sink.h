@@ -53,6 +53,10 @@ class TExpr;
 
 namespace stream_load {
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class OlapTableSink;
 
 // The counter of add_batch rpc of a single node

@@ -78,6 +78,10 @@ using vectorized::DoubleColumn;
 using vectorized::FloatColumn;
 using vectorized::BooleanColumn;
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 const char* Expr::_s_get_constant_symbol_prefix = "_ZN4starrocks4Expr12get_constant";
 
 template <class T>
