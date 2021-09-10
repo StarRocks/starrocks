@@ -25,7 +25,7 @@ void AggregateBlockingSinkOperator::finish(RuntimeState* state) {
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
         // If hash map is empty, we don't need to return value
         if (_aggregator->hash_map_variant().size() == 0) {
-            _aggregator->set_ht_done();
+            _aggregator->set_ht_eos();
         }
 
         if (false) {
@@ -40,7 +40,7 @@ void AggregateBlockingSinkOperator::finish(RuntimeState* state) {
         // In update phase, we directly return empty chunk.
         // In merge phase, we will handle it.
         if (_aggregator->num_input_rows() == 0 && !_aggregator->is_needs_finalize()) {
-            _aggregator->set_ht_done();
+            _aggregator->set_ht_eos();
         }
     }
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());

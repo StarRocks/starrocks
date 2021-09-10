@@ -5,11 +5,11 @@
 namespace starrocks::pipeline {
 
 bool AggregateBlockingSourceOperator::has_output() const {
-    return _aggregator->is_sink_complete() && !_aggregator->is_ht_done();
+    return _aggregator->is_sink_complete() && !_aggregator->is_ht_eos();
 }
 
 bool AggregateBlockingSourceOperator::is_finished() const {
-    return _aggregator->is_sink_complete() && _aggregator->is_ht_done();
+    return _aggregator->is_sink_complete() && _aggregator->is_ht_eos();
 }
 
 void AggregateBlockingSourceOperator::finish(RuntimeState* state) {
@@ -59,6 +59,6 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(Runti
     _aggregator->process_limit(&chunk);
     DCHECK_CHUNK(chunk);
 
-    return chunk;
+    return std::move(chunk);
 }
 } // namespace starrocks::pipeline

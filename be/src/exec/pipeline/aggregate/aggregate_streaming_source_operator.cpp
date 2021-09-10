@@ -19,14 +19,14 @@ bool AggregateStreamingSourceOperator::has_output() const {
     // case1：streaming mode is 'FORCE_PREAGGREGATION'
     // case2：streaming mode is 'AUTO'
     //     case 2.1: very high aggregation
-    return _aggregator->is_sink_complete() && !_aggregator->is_ht_done();
+    return _aggregator->is_sink_complete() && !_aggregator->is_ht_eos();
 }
 
 bool AggregateStreamingSourceOperator::is_finished() const {
     // since there are two behavior of streaming operator
     // case 1: chunk-at-a-time, so we check whether the chunk buffer is empty
-    // case 2: local aggregate, so we check whether hash table is done
-    return _aggregator->is_sink_complete() && _aggregator->is_chunk_buffer_empty() && _aggregator->is_ht_done();
+    // case 2: local aggregate, so we check whether hash table is eos
+    return _aggregator->is_sink_complete() && _aggregator->is_chunk_buffer_empty() && _aggregator->is_ht_eos();
 }
 
 void AggregateStreamingSourceOperator::finish(RuntimeState* state) {
@@ -49,7 +49,7 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(Runt
     _output_chunk_from_hash_map(&chunk);
     _aggregator->process_limit(&chunk);
     DCHECK_CHUNK(chunk);
-    return chunk;
+    return std::move(chunk);
 }
 
 void AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::ChunkPtr* chunk) {

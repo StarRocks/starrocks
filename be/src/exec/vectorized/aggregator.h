@@ -65,9 +65,9 @@ public:
     std::unique_ptr<MemPool>& mem_pool() { return _mem_pool; };
     bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
     bool is_needs_finalize() { return _needs_finalize; }
-    bool is_ht_done() { return _is_ht_done; }
-    void set_ht_done() { _is_ht_done = true; }
-    bool is_sink_complete() { return _is_sink_complete; }
+    bool is_ht_eos() { return _is_ht_eos; }
+    void set_ht_eos() { _is_ht_eos = true; }
+    bool is_sink_complete() { return _is_sink_complete.load(std::memory_order_acquire); }
     int64_t num_input_rows() { return _num_input_rows; }
     // TODO(hcf) not concurrent-safe
     void update_num_rows_returned(int64_t increment) { _num_rows_returned += increment; };
@@ -83,7 +83,7 @@ public:
     RuntimeProfile::Counter* input_row_count() { return _input_row_count; }
     RuntimeProfile::Counter* hash_table_size() { return _hash_table_size; }
 
-    void sink_complete() { _is_sink_complete.store(true, std::memory_order_relaxed); }
+    void sink_complete() { _is_sink_complete.store(true, std::memory_order_release); }
 
     bool is_chunk_buffer_empty();
     vectorized::ChunkPtr poll_chunk_buffer();
@@ -164,7 +164,7 @@ private:
     // a finalize step.
     bool _needs_finalize;
     // Indicate whether data of the hash table has been taken out or reach limit
-    bool _is_ht_done = false;
+    bool _is_ht_eos = false;
     bool _is_only_group_by_columns = false;
     // At least one group by column is nullable
     bool _has_nullable_key = false;
@@ -321,11 +321,11 @@ public:
             }
         }
 
-        _is_ht_done = (it == end);
+        _is_ht_eos = (it == end);
 
         // If there is null key, output it last
         if constexpr (HashMapWithKey::has_single_null_key) {
-            if (_is_ht_done && hash_map_with_key.null_key_data != nullptr) {
+            if (_is_ht_eos && hash_map_with_key.null_key_data != nullptr) {
                 // The output chunk size couldn't larger than config::vector_chunk_size
                 if (read_index < config::vector_chunk_size) {
                     // For multi group by key, we don't need to special handle null key
@@ -342,7 +342,7 @@ public:
                     ++read_index;
                 } else {
                     // Output null key in next round
-                    _is_ht_done = false;
+                    _is_ht_eos = false;
                 }
             }
         }
@@ -396,11 +396,11 @@ public:
             hash_set.insert_keys_to_columns(hash_set.results, group_by_columns, read_index);
         }
 
-        _is_ht_done = (it == end);
+        _is_ht_eos = (it == end);
 
         // IF there is null key, output it last
         if constexpr (HashSetWithKey::has_single_null_key) {
-            if (_is_ht_done && hash_set.has_null_key) {
+            if (_is_ht_eos && hash_set.has_null_key) {
                 // The output chunk size couldn't larger than config::vector_chunk_size
                 if (read_index < config::vector_chunk_size) {
                     // For multi group by key, we don't need to special handle null key
@@ -410,7 +410,7 @@ public:
                     ++read_index;
                 } else {
                     // Output null key in next round
-                    _is_ht_done = false;
+                    _is_ht_eos = false;
                 }
             }
         }
