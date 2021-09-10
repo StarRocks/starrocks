@@ -23,6 +23,8 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
+    // It is used to perform aggregation algorithms
+    // shared by AggregateBlockingSourceOperator
     AggregatorPtr _aggregator;
     // Whether prev operator has no output
     bool _is_finished = false;

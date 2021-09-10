@@ -23,10 +23,17 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
+    // Invoked by push_chunk if current mode is TStreamingPreaggregationMode::FORCE_STREAMING
     Status _push_chunk_by_force_streaming();
+
+    // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::FORCE_PREAGGREGATION
     Status _push_chunk_by_force_preaggregation(const size_t chunk_size);
+
+    // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::AUTO
     Status _push_chunk_by_auto(const size_t chunk_size);
 
+    // It is used to perform aggregation algorithms
+    // shared by AggregateStreamingSourceOperator
     AggregatorPtr _aggregator;
     // Whether prev operator has no output
     bool _is_finished = false;

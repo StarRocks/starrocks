@@ -21,6 +21,8 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
+    // It is used to perform aggregation algorithms
+    // shared by AggregateBlockingSinkOperator
     AggregatorPtr _aggregator;
     // Whether prev operator has no output
     bool _is_finished = false;
