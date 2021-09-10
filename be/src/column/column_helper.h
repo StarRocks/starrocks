@@ -2,7 +2,10 @@
 
 #pragma once
 
+#ifdef __AVX2__
 #include <immintrin.h>
+#endif
+
 #include <runtime/types.h>
 
 #include "column/const_column.h"

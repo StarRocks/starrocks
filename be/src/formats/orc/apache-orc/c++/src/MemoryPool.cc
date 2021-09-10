@@ -22,7 +22,11 @@
 
 #include "orc/MemoryPool.hh"
 
+
+#ifdef __AVX2__
 #include <immintrin.h>
+#endif
+
 #include <string.h>
 
 #include <cstdlib>

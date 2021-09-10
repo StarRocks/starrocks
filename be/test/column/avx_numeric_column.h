@@ -20,7 +20,10 @@
 // under the License.
 
 #include <glog/logging.h>
+
+#ifdef __AVX2__
 #include <immintrin.h>
+#endif
 
 #include "column/fixed_length_column.h"
 

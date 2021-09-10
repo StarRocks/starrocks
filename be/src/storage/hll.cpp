@@ -21,7 +21,9 @@
 
 #include "storage/hll.h"
 
+#ifdef __AVX2__
 #include <immintrin.h>
+#endif
 
 #include <algorithm>
 #include <cmath>

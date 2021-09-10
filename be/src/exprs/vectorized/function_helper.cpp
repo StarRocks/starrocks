@@ -2,7 +2,10 @@
 
 #include "function_helper.h"
 
+#ifdef __AVX2__
 #include <immintrin.h>
+#endif
+
 #include <util/raw_container.h>
 
 namespace starrocks {
