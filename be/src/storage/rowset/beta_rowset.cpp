@@ -42,8 +42,11 @@
 #include "storage/vectorized/merge_iterator.h"
 #include "storage/vectorized/projection_iterator.h"
 #include "storage/vectorized/union_iterator.h"
+#include "util/raw_container.h"
 
 namespace starrocks {
+
+constexpr size_t kDefaultFooterReadBytes = 8192;
 
 std::string BetaRowset::segment_file_path(const std::string& dir, const RowsetId& rowset_id, int segment_id) {
     return strings::Substitute("$0/$1_$2.dat", dir, rowset_id.to_string(), segment_id);
@@ -72,19 +75,19 @@ OLAPStatus BetaRowset::init() {
 }
 
 Status BetaRowset::do_load() {
-    // Open all segments under the current rowset
+    // TODO: `BlockManager` should be passed in as an argument.
+    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+    MemTracker* mem_tracker = _mem_tracker.get();
+
+    size_t footer_size_hint = 4096;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        std::shared_ptr<segment_v2::Segment> segment;
-        // TODO: `BlockManager` should be passed in as an argument.
-        fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-        auto s = segment_v2::Segment::open(_mem_tracker.get(), block_mgr, seg_path, seg_id, _schema, &segment);
-        if (!s.ok()) {
-            LOG(WARNING) << "Fail to open segment=" << seg_path << " of rowset=" << unique_id() << ", "
-                         << s.to_string();
-            return s;
+        auto res = segment_v2::Segment::open(mem_tracker, block_mgr, seg_path, seg_id, _schema, &footer_size_hint);
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to open segment=" << seg_path << " of rowset=" << unique_id() << ", " << res.status();
+            return res.status();
         }
-        _segments.push_back(std::move(segment));
+        _segments.push_back(std::move(res).value());
     }
     return Status::OK();
 }

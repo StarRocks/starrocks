@@ -21,6 +21,10 @@
 
 #include "storage/rowset/segment_v2/segment.h"
 
+#include <butil/iobuf.h>
+#include <google/protobuf/io/zero_copy_stream_impl.h>
+
+#include <boost/container/small_vector.hpp>
 #include <memory>
 
 #include "column/schema.h"
@@ -45,16 +49,17 @@ namespace starrocks::segment_v2 {
 
 using strings::Substitute;
 
-Status Segment::open(MemTracker* mem_tracker, fs::BlockManager* blk_mgr, std::string filename, uint32_t segment_id,
-                     const TabletSchema* tablet_schema, std::shared_ptr<Segment>* output) {
-    std::shared_ptr<Segment> segment(new Segment(mem_tracker, blk_mgr, std::move(filename), segment_id, tablet_schema));
-    RETURN_IF_ERROR(segment->_open());
-    output->swap(segment);
-    return Status::OK();
+StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, fs::BlockManager* blk_mgr,
+                                                 const std::string& filename, uint32_t segment_id,
+                                                 const TabletSchema* tablet_schema, size_t* footer_length_hint) {
+    auto segment =
+            std::make_shared<Segment>(private_type(0), mem_tracker, blk_mgr, filename, segment_id, tablet_schema);
+    RETURN_IF_ERROR(segment->_open(footer_length_hint));
+    return std::move(segment);
 }
 
-Segment::Segment(MemTracker* mem_tracker, fs::BlockManager* blk_mgr, std::string fname, uint32_t segment_id,
-                 const TabletSchema* tablet_schema)
+Segment::Segment(const private_type&, MemTracker* mem_tracker, fs::BlockManager* blk_mgr, std::string fname,
+                 uint32_t segment_id, const TabletSchema* tablet_schema)
         : _mem_tracker(mem_tracker),
           _block_mgr(blk_mgr),
           _fname(std::move(fname)),
@@ -65,8 +70,8 @@ Segment::Segment(MemTracker* mem_tracker, fs::BlockManager* blk_mgr, std::string
 
 Segment::~Segment() = default;
 
-Status Segment::_open() {
-    RETURN_IF_ERROR(_parse_footer());
+Status Segment::_open(size_t* footer_length_hint) {
+    RETURN_IF_ERROR(_parse_footer(footer_length_hint));
     RETURN_IF_ERROR(_create_column_readers());
     _prepare_adapter_info();
     return Status::OK();
@@ -156,7 +161,7 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const vectorized::Schema& schem
     }
 }
 
-Status Segment::_parse_footer() {
+Status Segment::_parse_footer(size_t* footer_length_hint) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
     std::unique_ptr<fs::ReadableBlock> rblock;
     RETURN_IF_ERROR(_block_mgr->open_block(_fname, &rblock));
@@ -168,37 +173,65 @@ Status Segment::_parse_footer() {
         return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < 12", _fname, file_size));
     }
 
-    uint8_t fixed_buf[12];
-    RETURN_IF_ERROR(rblock->read(file_size - 12, Slice(fixed_buf, 12)));
+    size_t hint_size = footer_length_hint ? *footer_length_hint : 4096;
+    size_t footer_read_size = std::min<size_t>(hint_size, file_size);
+
+    std::string buff;
+    raw::stl_string_resize_uninitialized(&buff, footer_read_size);
+
+    RETURN_IF_ERROR(rblock->read(file_size - buff.size(), buff));
+
+    const uint32_t footer_length = UNALIGNED_LOAD32(buff.data() + buff.size() - 12);
+    const uint32_t checksum = UNALIGNED_LOAD32(buff.data() + buff.size() - 8);
+    const uint32_t magic_number = UNALIGNED_LOAD32(buff.data() + buff.size() - 4);
 
     // validate magic number
-    if (memcmp(fixed_buf + 8, k_segment_magic, k_segment_magic_length) != 0) {
+    if (magic_number != UNALIGNED_LOAD32(k_segment_magic)) {
         return Status::Corruption(strings::Substitute("Bad segment file $0: magic number not match", _fname));
     }
 
-    // read footer PB
-    uint32_t footer_length = decode_fixed32_le(fixed_buf);
     if (file_size < 12 + footer_length) {
         return Status::Corruption(
                 strings::Substitute("Bad segment file $0: file size $1 < $2", _fname, file_size, 12 + footer_length));
     }
-    std::string footer_buf;
-    footer_buf.resize(footer_length);
-    RETURN_IF_ERROR(rblock->read(file_size - 12 - footer_length, footer_buf));
+
+    if (footer_length_hint != nullptr && footer_length > *footer_length_hint) {
+        *footer_length_hint = footer_length + 128 /* allocate slightly more bytes next time*/;
+    }
+
+    buff.resize(buff.size() - 12); // Remove the last 12 bytes.
+
+    uint32_t actual_checksum = 0;
+    if (footer_length <= buff.size()) {
+        std::string_view footer(buff.data() + buff.size() - footer_length, footer_length);
+        actual_checksum = crc32c::Value(footer.data(), footer.size());
+        if (!_footer.ParseFromArray(footer.data(), footer.size())) {
+            return Status::Corruption(strings::Substitute("Bad segment file $0: failed to parse footer", _fname));
+        }
+    } else { // Need read file again.
+        int left_size = (int)footer_length - buff.size();
+        std::string buff_2;
+        raw::stl_string_resize_uninitialized(&buff_2, left_size);
+        RETURN_IF_ERROR(rblock->read(file_size - footer_length - 12, buff_2));
+        actual_checksum = crc32c::Extend(actual_checksum, buff_2.data(), buff_2.size());
+        actual_checksum = crc32c::Extend(actual_checksum, buff.data(), buff.size());
+
+        ::google::protobuf::io::ArrayInputStream stream1(buff_2.data(), buff_2.size());
+        ::google::protobuf::io::ArrayInputStream stream2(buff.data(), buff.size());
+        ::google::protobuf::io::ZeroCopyInputStream* streams[2] = {&stream1, &stream2};
+        ::google::protobuf::io::ConcatenatingInputStream concatenating_stream(streams, 2);
+        if (!_footer.ParseFromZeroCopyStream(&concatenating_stream)) {
+            return Status::Corruption(strings::Substitute("Bad segment file $0: failed to parse footer", _fname));
+        }
+    }
 
     // validate footer PB's checksum
-    uint32_t expect_checksum = decode_fixed32_le(fixed_buf + 4);
-    uint32_t actual_checksum = crc32c::Value(footer_buf.data(), footer_buf.size());
-    if (actual_checksum != expect_checksum) {
+    if (actual_checksum != checksum) {
         return Status::Corruption(
                 strings::Substitute("Bad segment file $0: footer checksum not match, actual=$1 vs expect=$2", _fname,
-                                    actual_checksum, expect_checksum));
+                                    actual_checksum, checksum));
     }
 
-    // deserialize footer PB
-    if (!_footer.ParseFromString(footer_buf)) {
-        return Status::Corruption(strings::Substitute("Bad segment file $0: failed to parse SegmentFooterPB", _fname));
-    }
     // The memory usage obtained through SpaceUsedLong() is an estimate
     _mem_tracker->consume(static_cast<int64_t>(_footer.SpaceUsedLong()) -
                           static_cast<int64_t>(sizeof(SegmentFooterPB)));
