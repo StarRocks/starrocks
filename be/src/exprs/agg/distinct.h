@@ -50,6 +50,8 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
         return pair.second * phmap::item_serialize_size<HashSet<T>>::value;
     }
 
+    void prefetch(T key) { set.prefetch(key); }
+
     int64_t disctint_count() const { return set.size(); }
 
     size_t serialize_size() const { return set.dump_bound(); }
@@ -154,6 +156,7 @@ struct DistinctAggregateState<PT, BinaryPTGuard<PT>> {
     SliceHashSet set;
 };
 
+// use a different way to do serialization to gain performance.
 template <PrimitiveType PT, typename = guard::Guard>
 struct DistinctAggregateStateV2 {};
 
@@ -168,6 +171,8 @@ struct DistinctAggregateStateV2<PT, FixedLengthPTGuard<PT>> {
         auto pair = set.insert(key);
         return pair.second * item_size;
     }
+
+    void prefetch(T key) { set.prefetch(key); }
 
     int64_t disctint_count() const { return set.size(); }
 
@@ -235,6 +240,33 @@ public:
             mem_usage = this->data(state).update(ctx->impl()->mem_pool(), column->get_slice(row_num));
         } else {
             mem_usage = this->data(state).update(column->get_data()[row_num]);
+        }
+        ctx->impl()->add_mem_usage(mem_usage);
+    }
+
+    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+                                   AggDataPtr state) const override {
+        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
+        size_t mem_usage = 0;
+        auto& agg_state = this->data(state);
+
+        if constexpr (IsSlice<T>) {
+            MemPool* mem_pool = ctx->impl()->mem_pool();
+            for (size_t i = 0; i < batch_size; ++i) {
+                mem_usage += agg_state.update(mem_pool, column->get_slice(i));
+            }
+        } else {
+            auto* data = column->get_data().data();
+            // after doing some benchmark, we see a lot of perf gain by prefetching when doing count(distinct)
+            // but only when there is no group by clause or group by number is low.
+            // prefetching has down side if group by number is high.
+            static const size_t prefetch_dist = 4;
+            for (size_t i = 0; i < batch_size; ++i) {
+                if ((i + prefetch_dist) < batch_size) {
+                    agg_state.prefetch(data[i + prefetch_dist]);
+                }
+                mem_usage += agg_state.update(data[i]);
+            }
         }
         ctx->impl()->add_mem_usage(mem_usage);
     }
