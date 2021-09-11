@@ -1,0 +1,32 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+
+#pragma once
+
+#include <map>
+#include <string>
+
+#include "exec/vectorized/schema_scanner.h"
+#include "gen_cpp/FrontendService_types.h"
+
+namespace starrocks::vectorized {
+
+class SchemaVariablesScanner : public SchemaScanner {
+public:
+    SchemaVariablesScanner(TVarType::type type);
+    virtual ~SchemaVariablesScanner();
+
+    virtual Status start(RuntimeState* state);
+    virtual Status get_next(ChunkPtr* chunk, bool* eos);
+
+private:
+    Status fill_chunk(ChunkPtr* chunk);
+
+    int _index = 0;
+    static SchemaScanner::ColumnDesc _s_vars_columns[];
+
+    TShowVariableResult _var_result;
+    TVarType::type _type;
+    std::map<std::string, std::string>::iterator _begin;
+};
+
+} // namespace starrocks::vectorized
