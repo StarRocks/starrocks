@@ -45,7 +45,8 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
         BitmapColumn* col = down_cast<BitmapColumn*>(to);
-        col->append(&(this->data(state)));
+        BitmapValue& bitmap = const_cast<BitmapValue&>(this->data(state));
+        col->append(std::move(bitmap));
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
@@ -54,7 +55,8 @@ public:
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
         BitmapColumn* col = down_cast<BitmapColumn*>(to);
-        col->append(&this->data(state));
+        BitmapValue& bitmap = const_cast<BitmapValue&>(this->data(state));
+        col->append(std::move(bitmap));
     }
 
     std::string get_name() const override { return "bitmap_union"; }

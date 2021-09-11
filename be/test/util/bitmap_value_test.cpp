@@ -165,7 +165,7 @@ TEST(BitmapValueTest, bitmap_serde) {
         Roaring roaring;
         roaring.add(0);
         roaring.add(UINT32_MAX);
-        std::string expect_buffer(1, BitmapTypeCode::BITMAP32);
+        std::string expect_buffer(1, BitmapTypeCode::BITMAP32_SERIV2);
         expect_buffer.resize(1 + roaring.getSizeInBytes());
         roaring.write(&expect_buffer[1]);
         ASSERT_EQ(expect_buffer, buffer);
@@ -193,7 +193,7 @@ TEST(BitmapValueTest, bitmap_serde) {
 
         Roaring roaring;
         roaring.add(0);
-        std::string expect_buffer(1, BitmapTypeCode::BITMAP64);
+        std::string expect_buffer(1, BitmapTypeCode::BITMAP64_SERIV2);
         put_varint64(&expect_buffer, 2); // map size
         for (uint32_t i = 0; i < 2; ++i) {
             std::string map_entry;
