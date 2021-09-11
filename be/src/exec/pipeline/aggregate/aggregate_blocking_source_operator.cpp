@@ -32,7 +32,7 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(Runti
     int32_t chunk_size = config::vector_chunk_size;
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
 
-    if (_aggregator->group_by_expr_ctxs().empty()) {
+    if (_aggregator->is_none_group_by_exprs()) {
         SCOPED_TIMER(_aggregator->get_results_timer());
         _aggregator->convert_to_chunk_no_groupby(&chunk);
     } else {

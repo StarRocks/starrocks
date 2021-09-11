@@ -77,7 +77,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                     DCHECK(false);
                 }
 
-                if (_aggregator->group_by_expr_ctxs().empty()) {
+                if (_aggregator->is_none_group_by_exprs()) {
                     _aggregator->compute_single_agg_state(input_chunk_size);
                 } else {
                     _aggregator->compute_batch_agg_states(input_chunk_size);
@@ -111,7 +111,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                         DCHECK(false);
                     }
 
-                    if (_aggregator->group_by_expr_ctxs().empty()) {
+                    if (_aggregator->is_none_group_by_exprs()) {
                         _aggregator->compute_single_agg_state(input_chunk_size);
                     } else {
                         _aggregator->compute_batch_agg_states(input_chunk_size);

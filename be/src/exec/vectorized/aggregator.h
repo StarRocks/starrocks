@@ -64,6 +64,7 @@ public:
     Status close(RuntimeState* state);
 
     std::unique_ptr<MemPool>& mem_pool() { return _mem_pool; };
+    bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
     const std::vector<ExprContext*>& group_by_expr_ctxs() { return _group_by_expr_ctxs; }
     const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }

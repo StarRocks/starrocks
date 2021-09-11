@@ -67,7 +67,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const
         DCHECK(false);
     }
 
-    if (_aggregator->group_by_expr_ctxs().empty()) {
+    if (_aggregator->is_none_group_by_exprs()) {
         _aggregator->compute_single_agg_state(chunk_size);
     } else {
         _aggregator->compute_batch_agg_states(chunk_size);
@@ -100,7 +100,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
             DCHECK(false);
         }
 
-        if (_aggregator->group_by_expr_ctxs().empty()) {
+        if (_aggregator->is_none_group_by_exprs()) {
             _aggregator->compute_single_agg_state(chunk_size);
         } else {
             _aggregator->compute_batch_agg_states(chunk_size);
