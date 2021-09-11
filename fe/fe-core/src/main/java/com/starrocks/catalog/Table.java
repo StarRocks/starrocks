@@ -51,6 +51,7 @@ public class Table extends MetaObject implements Writable {
     public enum TableType {
         MYSQL,
         OLAP,
+        OLAP_EXTERNAL,
         SCHEMA,
         INLINE_VIEW,
         VIEW,
@@ -138,6 +139,10 @@ public class Table extends MetaObject implements Writable {
         return name;
     }
 
+    public void setType(TableType type) {
+        this.type = type;
+    }
+
     public TableType getType() {
         return type;
     }
@@ -188,6 +193,8 @@ public class Table extends MetaObject implements Writable {
             table = new HiveTable();
         } else if (type == TableType.ODBC) {
             table = new OdbcTable();
+        } else if (type == TableType.OLAP_EXTERNAL) {
+            table = new ExternalOlapTable();
         } else {
             throw new IOException("Unknown table type: " + type.name());
         }

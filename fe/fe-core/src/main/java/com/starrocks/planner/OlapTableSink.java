@@ -77,6 +77,7 @@ import java.util.stream.Collectors;
 public class OlapTableSink extends DataSink {
     private static final Logger LOG = LogManager.getLogger(OlapTableSink.class);
 
+    private int clusterId;
     // input variables
     private OlapTable dstTable;
     private TupleDescriptor tupleDescriptor;
@@ -91,6 +92,7 @@ public class OlapTableSink extends DataSink {
         this.tupleDescriptor = tupleDescriptor;
         Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
         this.partitionIds = partitionIds;
+        this.clusterId = dstTable.getClusterId();
     }
 
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS) throws AnalysisException {
@@ -302,10 +304,11 @@ public class OlapTableSink extends DataSink {
                 // we should ensure the replica backend is alive
                 // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
                 for (Tablet tablet : index.getTablets()) {
-                    Multimap<Long, Long> bePathsMap = tablet.getNormalReplicaBackendPathMap();
+                    Multimap<Long, Long> bePathsMap = tablet.getNormalReplicaBackendPathMap(table.getClusterId());
                     if (bePathsMap.keySet().size() < quorum) {
                         throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
-                                "tablet " + tablet.getId() + " has few replicas: " + bePathsMap.keySet().size());
+                                "tablet " + tablet.getId() + " has few replicas: " + bePathsMap.keySet().size()
+                                + ", quorum: " + quorum + ", cluster: " + table.getClusterId());
                     }
                     locationParam
                             .addToTablets(new TTabletLocation(tablet.getId(), Lists.newArrayList(bePathsMap.keySet())));
@@ -325,7 +328,7 @@ public class OlapTableSink extends DataSink {
 
     private TNodesInfo createStarrocksNodesInfo() {
         TNodesInfo nodesInfo = new TNodesInfo();
-        SystemInfoService systemInfoService = Catalog.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = Catalog.getCurrentCatalog().getOrCreateSystemInfo(clusterId);;
         for (Long id : systemInfoService.getBackendIds(false)) {
             Backend backend = systemInfoService.getBackend(id);
             nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
