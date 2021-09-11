@@ -8,7 +8,8 @@ Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     // _aggregator is shared by sink operator and source operator
     // we must only prepare it at sink operator
-    return _aggregator->prepare(state, state->obj_pool(), get_memtracker(), get_runtime_profile());
+    return _aggregator->prepare(state, state->obj_pool(), get_memtracker(), get_memtracker(), nullptr,
+                                get_runtime_profile());
 }
 
 bool AggregateBlockingSinkOperator::is_finished() const {
@@ -39,7 +40,7 @@ void AggregateBlockingSinkOperator::finish(RuntimeState* state) {
         // for aggregate no group by, if _num_input_rows is 0,
         // In update phase, we directly return empty chunk.
         // In merge phase, we will handle it.
-        if (_aggregator->num_input_rows() == 0 && !_aggregator->is_needs_finalize()) {
+        if (_aggregator->num_input_rows() == 0 && !_aggregator->needs_finalize()) {
             _aggregator->set_ht_eos();
         }
     }

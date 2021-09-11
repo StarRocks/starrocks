@@ -11,7 +11,7 @@ class DistinctBlockingNode final : public AggregateBaseNode {
 public:
     DistinctBlockingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
             : AggregateBaseNode(pool, tnode, descs) {
-        _aggr_phase = AggrPhase2;
+        _aggregator->set_aggr_phase(AggrPhase2);
     };
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
