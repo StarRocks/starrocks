@@ -104,7 +104,7 @@ void ObjectColumn<T>::append_value_multiple_times(const void* value, size_t coun
     _pool.reserve(_pool.size() + count);
 
     for (int i = 0; i < count; ++i) {
-        _pool.emplace_back(*slice);
+        _pool.emplace_back(*reinterpret_cast<T*>(slice->data));
     }
 
     _cache_ok = false;
