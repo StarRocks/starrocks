@@ -85,6 +85,11 @@ AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunction() {
 }
 
 template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunctionV2() {
+    return std::make_shared<DistinctAggregateFunctionV2<PT, AggDistinctType::COUNT>>();
+}
+
+template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeGroupConcatAggregateFunction() {
     return std::make_shared<GroupConcatAggregateFunction<PT>>();
 }
@@ -133,6 +138,11 @@ AggregateFunctionPtr AggregateFactory::MakeStddevAggregateFunction() {
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeSumDistinctAggregateFunction() {
     return std::make_shared<DistinctAggregateFunction<PT, AggDistinctType::SUM>>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeSumDistinctAggregateFunctionV2() {
+    return std::make_shared<DistinctAggregateFunctionV2<PT, AggDistinctType::SUM>>();
 }
 
 AggregateFunctionPtr AggregateFactory::MakeHllUnionAggregateFunction() {
@@ -332,9 +342,15 @@ public:
             } else if (name == "multi_distinct_count") {
                 auto distinct = AggregateFactory::MakeCountDistinctAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgPT>>(distinct);
+            } else if (name == "multi_distinct_count2") {
+                auto distinct = AggregateFactory::MakeCountDistinctAggregateFunctionV2<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateStateV2<ArgPT>>(distinct);
             } else if (name == "multi_distinct_sum") {
                 auto distinct = AggregateFactory::MakeSumDistinctAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgPT>>(distinct);
+            } else if (name == "multi_distinct_sum2") {
+                auto distinct = AggregateFactory::MakeSumDistinctAggregateFunctionV2<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateStateV2<ArgPT>>(distinct);
             } else if (name == "group_concat") {
                 auto group_count = AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionVariadic<GroupConcatAggregateState>(group_count);
@@ -362,8 +378,12 @@ public:
                 return AggregateFactory::MakeAvgAggregateFunction<ArgPT>();
             } else if (name == "multi_distinct_count") {
                 return AggregateFactory::MakeCountDistinctAggregateFunction<ArgPT>();
+            } else if (name == "multi_distinct_count2") {
+                return AggregateFactory::MakeCountDistinctAggregateFunctionV2<ArgPT>();
             } else if (name == "multi_distinct_sum") {
                 return AggregateFactory::MakeSumDistinctAggregateFunction<ArgPT>();
+            } else if (name == "multi_distinct_sum2") {
+                return AggregateFactory::MakeSumDistinctAggregateFunctionV2<ArgPT>();
             } else if (name == "group_concat") {
                 return AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
             }
@@ -402,6 +422,9 @@ public:
             } else if (name == "multi_distinct_count") {
                 auto distinct = AggregateFactory::MakeCountDistinctAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateState<ArgPT>>(distinct);
+            } else if (name == "multi_distinct_count2") {
+                auto distinct = AggregateFactory::MakeCountDistinctAggregateFunctionV2<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<DistinctAggregateStateV2<ArgPT>>(distinct);
             } else if (name == "group_concat") {
                 auto group_count = AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
                 return AggregateFactory::MakeNullableAggregateFunctionVariadic<GroupConcatAggregateState>(group_count);
@@ -415,6 +438,8 @@ public:
                 return AggregateFactory::MakeMinAggregateFunction<ArgPT>();
             } else if (name == "multi_distinct_count") {
                 return AggregateFactory::MakeCountDistinctAggregateFunction<ArgPT>();
+            } else if (name == "multi_distinct_count2") {
+                return AggregateFactory::MakeCountDistinctAggregateFunctionV2<ArgPT>();
             } else if (name == "group_concat") {
                 return AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
             }
@@ -510,6 +535,36 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_aggregate_mapping<TYPE_DECIMAL32, TYPE_DECIMAL64>("multi_distinct_sum");
     add_aggregate_mapping<TYPE_DECIMAL64, TYPE_DECIMAL64>("multi_distinct_sum");
     add_aggregate_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("multi_distinct_sum");
+
+    add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_SMALLINT, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_INT, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_LARGEINT, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_FLOAT, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_DOUBLE, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_CHAR, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_VARCHAR, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_DECIMALV2, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_DATETIME, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_DATE, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_DECIMAL32, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_DECIMAL64, TYPE_BIGINT>("multi_distinct_count2");
+    add_aggregate_mapping<TYPE_DECIMAL128, TYPE_BIGINT>("multi_distinct_count2");
+
+    add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BIGINT>("multi_distinct_sum2");
+    add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT>("multi_distinct_sum2");
+    add_aggregate_mapping<TYPE_SMALLINT, TYPE_BIGINT>("multi_distinct_sum2");
+    add_aggregate_mapping<TYPE_INT, TYPE_BIGINT>("multi_distinct_sum2");
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("multi_distinct_sum2");
+    add_aggregate_mapping<TYPE_LARGEINT, TYPE_LARGEINT>("multi_distinct_sum2");
+    add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("multi_distinct_sum2");
+    add_aggregate_mapping<TYPE_FLOAT, TYPE_DOUBLE>("multi_distinct_sum2");
+    add_aggregate_mapping<TYPE_DECIMALV2, TYPE_DECIMALV2>("multi_distinct_sum2");
+    add_aggregate_mapping<TYPE_DECIMAL32, TYPE_DECIMAL64>("multi_distinct_sum2");
+    add_aggregate_mapping<TYPE_DECIMAL64, TYPE_DECIMAL64>("multi_distinct_sum2");
+    add_aggregate_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("multi_distinct_sum2");
 
     add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BIGINT>("sum");
     add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT>("sum");

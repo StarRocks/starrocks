@@ -49,6 +49,8 @@ public:
 
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeCountDistinctAggregateFunction();
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeCountDistinctAggregateFunctionV2();
 
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeGroupConcatAggregateFunction();
@@ -78,6 +80,8 @@ public:
 
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeSumDistinctAggregateFunction();
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeSumDistinctAggregateFunctionV2();
 
     // Hyperloglog functions:
     static AggregateFunctionPtr MakeHllUnionAggregateFunction();

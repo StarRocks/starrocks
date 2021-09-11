@@ -3,6 +3,7 @@
 #pragma once
 
 #include "column/column_hash.h"
+#include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
