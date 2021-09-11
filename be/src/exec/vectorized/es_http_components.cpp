@@ -222,7 +222,8 @@ Status ScrollParser::fill_chunk(ChunkPtr* chunk, bool* line_eos) {
                 bool is_null = (pure_doc_value && col.IsArray() && col[0].IsNull()) || col.IsNull();
                 if (!is_null) {
                     // append value from ES to column
-                    _append_value_from_json_val(column.get(), slot_desc->type().type, col, pure_doc_value);
+                    RETURN_IF_ERROR(
+                            _append_value_from_json_val(column.get(), slot_desc->type().type, col, pure_doc_value));
                     continue;
                 }
                 // handle null col
