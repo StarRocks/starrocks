@@ -12,7 +12,7 @@
 
 namespace starrocks {
 class Conditions;
-class OlapMeta;
+class KVStore;
 class OlapReaderStatistics;
 class RuntimeProfile;
 class RowCursor;
@@ -52,7 +52,7 @@ public:
 
     bool is_primary_keys = false;
     int64_t version = 0;
-    OlapMeta* meta = nullptr;
+    KVStore* meta = nullptr;
 
     starrocks::OlapReaderStatistics* stats = nullptr;
     starrocks::RuntimeState* runtime_state = nullptr;

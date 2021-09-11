@@ -6,7 +6,7 @@
 
 #include "gutil/endian.h"
 #include "storage/del_vector.h"
-#include "storage/olap_meta.h"
+#include "storage/kv_store.h"
 #include "storage/rowset_update_state.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
@@ -51,17 +51,17 @@ Status UpdateManager::init() {
     return st;
 }
 
-Status UpdateManager::get_del_vec_in_meta(OlapMeta* meta, const TabletSegmentId& tsid, int64_t version,
+Status UpdateManager::get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
                                           DelVector* delvec, int64_t* latest_version) {
     return TabletMetaManager::get_del_vector(meta, tsid.tablet_id, tsid.segment_id, version, delvec, latest_version);
 }
 
-Status UpdateManager::set_del_vec_in_meta(OlapMeta* meta, const TabletSegmentId& tsid, const DelVector& delvec) {
+Status UpdateManager::set_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, const DelVector& delvec) {
     // TODO: support batch transaction with tablet/rowset meta save
     return TabletMetaManager::set_del_vector(meta, tsid.tablet_id, tsid.segment_id, delvec);
 }
 
-Status UpdateManager::get_del_vec(OlapMeta* meta, const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
+Status UpdateManager::get_del_vec(KVStore* meta, const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
     {
         std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
         auto itr = _del_vec_cache.find(tsid);
@@ -164,7 +164,7 @@ string UpdateManager::memory_stats() {
                       PrettyPrinter::print_bytes(_update_mem_tracker->limit()));
 }
 
-Status UpdateManager::get_latest_del_vec(OlapMeta* meta, const TabletSegmentId& tsid, DelVectorPtr* pdelvec) {
+Status UpdateManager::get_latest_del_vec(KVStore* meta, const TabletSegmentId& tsid, DelVectorPtr* pdelvec) {
     std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
     auto itr = _del_vec_cache.find(tsid);
     if (itr != _del_vec_cache.end()) {
