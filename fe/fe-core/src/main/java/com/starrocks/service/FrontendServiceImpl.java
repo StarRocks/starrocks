@@ -72,8 +72,15 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
+import com.starrocks.thrift.TAbortRemoteTxnRequest;
+import com.starrocks.thrift.TAbortRemoteTxnResponse;
+import com.starrocks.thrift.TAuthenticateParams;
+import com.starrocks.thrift.TBeginRemoteTxnRequest;
+import com.starrocks.thrift.TBeginRemoteTxnResponse;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TColumnDesc;
+import com.starrocks.thrift.TCommitRemoteTxnRequest;
+import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TDBPrivDesc;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
@@ -85,6 +92,8 @@ import com.starrocks.thrift.TGetDBPrivsParams;
 import com.starrocks.thrift.TGetDBPrivsResult;
 import com.starrocks.thrift.TGetDbsParams;
 import com.starrocks.thrift.TGetDbsResult;
+import com.starrocks.thrift.TGetTableMetaRequest;
+import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.thrift.TGetTablePrivsParams;
 import com.starrocks.thrift.TGetTablePrivsResult;
 import com.starrocks.thrift.TGetTablesParams;
@@ -931,6 +940,55 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private String getClientAddrAsString() {
         TNetworkAddress addr = getClientAddr();
         return addr == null ? "unknown" : addr.hostname;
+    }
+
+    private boolean authorizeRequest(TAuthenticateParams authInfo) {
+        // TODO
+        return true;
+    }
+
+    @Override
+    public TGetTableMetaResponse getTableMeta(TGetTableMetaRequest request) throws TException {
+        if (!authorizeRequest(request.getAuth_info())) {
+            TGetTableMetaResponse response = new TGetTableMetaResponse();
+            TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
+            status.setError_msgs(Lists.newArrayList("not authorized to call getTableMeta"));
+            response.setStatus(status);
+        }
+        return masterImpl.getTableMeta(request);
+    }
+
+    @Override
+    public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {
+        if (!authorizeRequest(request.getAuth_info())) {
+            TBeginRemoteTxnResponse response = new TBeginRemoteTxnResponse();
+            TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
+            status.setError_msgs(Lists.newArrayList("not authorized to call beginReomteTxn"));
+            response.setStatus(status);
+        }
+        return masterImpl.beginRemoteTxn(request);
+    }
+
+    @Override
+    public TCommitRemoteTxnResponse commitRemoteTxn(TCommitRemoteTxnRequest request) throws TException {
+        if (!authorizeRequest(request.getAuth_info())) {
+            TCommitRemoteTxnResponse response = new TCommitRemoteTxnResponse();
+            TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
+            status.setError_msgs(Lists.newArrayList("not authorized to call commitReomteTxn"));
+            response.setStatus(status);
+        }
+        return masterImpl.commitRemoteTxn(request);
+    }
+
+    @Override
+    public TAbortRemoteTxnResponse abortRemoteTxn(TAbortRemoteTxnRequest request) throws TException {
+        if (!authorizeRequest(request.getAuth_info())) {
+            TAbortRemoteTxnResponse response = new TAbortRemoteTxnResponse();
+            TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
+            status.setError_msgs(Lists.newArrayList("not authorized to call abortReomteTxn"));
+            response.setStatus(status);
+        }
+        return masterImpl.abortRemoteTxn(request);
     }
 }
 
