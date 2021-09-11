@@ -432,9 +432,8 @@ build_boost() {
     check_if_source_exist $BOOST_SOURCE
     cd $TP_SOURCE_DIR/$BOOST_SOURCE
 
-    echo "using gcc : starrocks : ${CXX} ; " > tools/build/src/user-config.jam
     ./bootstrap.sh --prefix=$TP_INSTALL_DIR
-    ./b2 --toolset=gcc-starrocks link=static -d0 -j$PARALLEL --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR" install
+    ./b2 link=static runtime-link=static -j $PARALLEL --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR" install
 }
 
 # mysql
@@ -762,7 +761,8 @@ build_hyperscan() {
     check_if_source_exist $HYPERSCAN_SOURCE
     cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
     export PATH=$TP_INSTALL_DIR/bin:$PATH
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
+          -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc  -DCMAKE_INSTALL_LIBDIR=lib
     make -j$PARALLEL && make install
 }
 
