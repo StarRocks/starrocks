@@ -45,11 +45,11 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 24:MERGING-EXCHANGE
-cardinality: 374644
+cardinality: 374645
 column statistics:
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-* year-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0]
+* year-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
 * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 
 PLAN FRAGMENT 1(F11)
@@ -61,21 +61,21 @@ OutPut Exchange Id: 24
 23:SORT
 |  order by: [46, VARCHAR, false] ASC, [51, VARCHAR, false] ASC, [55, INT, true] ASC
 |  offset: 0
-|  cardinality: 374644
+|  cardinality: 374645
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * year-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0]
+|  * year-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
 |  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 |
 22:AGGREGATE (update finalize)
 |  aggregate: sum[([56: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, INT, true]
-|  cardinality: 374644
+|  cardinality: 374645
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * year-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0]
+|  * year-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
 |  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 |
 21:EXCHANGE
@@ -97,7 +97,7 @@ OutPut Exchange Id: 21
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * year-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0]
+|  * year-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 |
 19:HASH JOIN
@@ -110,7 +110,7 @@ OutPut Exchange Id: 21
 |  column statistics:
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
-|  * L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0]
+|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |
@@ -124,11 +124,11 @@ OutPut Exchange Id: 21
 |  14 <-> [14: L_EXTENDEDPRICE, DOUBLE, false]
 |  46 <-> [46: N_NAME, VARCHAR, false]
 |  15 <-> [15: L_DISCOUNT, DOUBLE, false]
-|  cardinality: 173465346
+|  cardinality: 173465347
 |  column statistics:
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
-|  * L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0]
+|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |
@@ -137,11 +137,11 @@ OutPut Exchange Id: 21
 |  equal join conjunct: [11: L_SUPPKEY, INT, false] = [1: S_SUPPKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 2, build_expr = (1: S_SUPPKEY), remote = false
-|  cardinality: 173465346
+|  cardinality: 173465347
 |  column statistics:
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
-|  * L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0]
+|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |
@@ -155,23 +155,23 @@ OutPut Exchange Id: 21
 |  11 <-> [11: L_SUPPKEY, INT, false]
 |  14 <-> [14: L_EXTENDEDPRICE, DOUBLE, false]
 |  15 <-> [15: L_DISCOUNT, DOUBLE, false]
-|  cardinality: 173465346
+|  cardinality: 173465347
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
-|  * L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0]
+|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |
 7:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  equal join conjunct: [9: L_ORDERKEY, INT, false] = [26: O_ORDERKEY, INT, false]
-|  cardinality: 173465346
+|  cardinality: 173465347
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
-|  * L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0]
+|  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |
 |----6:EXCHANGE
@@ -186,7 +186,7 @@ Predicates: [19: L_SHIPDATE, DATE, false] >= '1995-01-01', [19: L_SHIPDATE, DATE
 partitionsRatio=1/1, tabletsRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 actualRows=0, avgRowSize=32.0
-cardinality: 173465346
+cardinality: 173465347
 probe runtime filters:
 - filter_id = 2, probe_expr = (11: L_SUPPKEY)
 column statistics:
@@ -194,7 +194,7 @@ column statistics:
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
 * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
-* L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0]
+* L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
 
 PLAN FRAGMENT 3(F09)
 

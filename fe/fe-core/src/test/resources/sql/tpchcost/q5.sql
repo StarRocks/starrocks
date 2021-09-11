@@ -126,7 +126,7 @@ OutPut Exchange Id: 25
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
 |
 |----8:EXCHANGE
-|       cardinality: 22765072
+|       cardinality: 22765073
 |       probe runtime filters:
 |       - filter_id = 4, probe_expr = (4: C_NATIONKEY)
 |
@@ -267,7 +267,7 @@ OutPut Exchange Id: 08
 |  output columns:
 |  4 <-> [4: C_NATIONKEY, INT, false]
 |  10 <-> [10: O_ORDERKEY, INT, false]
-|  cardinality: 22765072
+|  cardinality: 22765073
 |  column statistics:
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
@@ -275,7 +275,7 @@ OutPut Exchange Id: 08
 6:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
 |  equal join conjunct: [11: O_CUSTKEY, INT, false] = [1: C_CUSTKEY, INT, false]
-|  cardinality: 22765072
+|  cardinality: 22765073
 |  column statistics:
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
@@ -284,7 +284,7 @@ OutPut Exchange Id: 08
 |       cardinality: 15000000
 |
 3:EXCHANGE
-cardinality: 22765072
+cardinality: 22765073
 
 PLAN FRAGMENT 7(F03)
 
@@ -315,7 +315,7 @@ OutPut Exchange Id: 03
 |  output columns:
 |  10 <-> [10: O_ORDERKEY, INT, false]
 |  11 <-> [11: O_CUSTKEY, INT, false]
-|  cardinality: 22765072
+|  cardinality: 22765073
 |  column statistics:
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
 |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0]
@@ -327,11 +327,11 @@ Predicates: [14: O_ORDERDATE, DATE, false] >= '1995-01-01', [14: O_ORDERDATE, DA
 partitionsRatio=1/1, tabletsRatio=10/10
 tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 actualRows=0, avgRowSize=20.0
-cardinality: 22765072
+cardinality: 22765073
 column statistics:
 * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
 * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0]
-* O_ORDERDATE-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2406.0]
+* O_ORDERDATE-->[7.888896E8, 8.204256E8, 0.0, 4.0, 2406.0]
 [dump]
 {
   "statement": "select\n    n_name,\n    sum(l_extendedprice * (1 - l_discount)) as revenue\nfrom\n    customer,\n    orders,\n    lineitem,\n    supplier,\n    nation,\n    region\nwhere\n        c_custkey \u003d o_custkey\n  and l_orderkey \u003d o_orderkey\n  and l_suppkey \u003d s_suppkey\n  and c_nationkey \u003d s_nationkey\n  and s_nationkey \u003d n_nationkey\n  and n_regionkey \u003d r_regionkey\n  and r_name \u003d \u0027AFRICA\u0027\n  and o_orderdate \u003e\u003d date \u00271995-01-01\u0027\n  and o_orderdate \u003c date \u00271996-01-01\u0027\ngroup by\n    n_name\norder by\n    revenue desc ;\n",
