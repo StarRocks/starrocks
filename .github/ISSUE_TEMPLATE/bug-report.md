@@ -6,9 +6,9 @@ labels: 'type/bug'
 ---
 
 ### Steps to reproduce the behavior (Required)
-1. Create table '...'
-2. Insert into '....'
-3. Select  '....'
+1. CREATE TABLE '...'
+2. INSERT INTO '....'
+3. SELECT  '....'
 
 
 ### Expected behavior (Required)
