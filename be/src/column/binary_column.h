@@ -272,6 +272,11 @@ public:
         return ss.str();
     }
 
+    bool reach_capacity_limit() const override {
+        return _bytes.size() >= Column::MAX_CAPACITY_LIMIT || _offsets.size() >= Column::MAX_CAPACITY_LIMIT ||
+               _slices.size() >= Column::MAX_CAPACITY_LIMIT;
+    }
+
 private:
     void _build_slices() const;
 
