@@ -51,7 +51,7 @@ be/tags
 
 #ignore vscode project file
 .vscode
-.*
 !.gitignore
 !.clang-format
+!.github
 build/
