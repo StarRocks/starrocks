@@ -59,18 +59,25 @@ public class ReplicasProcNode implements ProcNodeInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         for (Replica replica : replicas) {
-            String metaUrl = String.format("http://%s:%d/api/meta/header/%d/%d",
-                    backendMap.get(replica.getBackendId()).getHost(),
-                    backendMap.get(replica.getBackendId()).getHttpPort(),
-                    tabletId,
-                    replica.getSchemaHash());
-
-            String compactionUrl = String.format(
-                    "http://%s:%d/api/compaction/show?tablet_id=%d&schema_hash=%d",
-                    backendMap.get(replica.getBackendId()).getHost(),
-                    backendMap.get(replica.getBackendId()).getHttpPort(),
-                    tabletId,
-                    replica.getSchemaHash());
+            String metaUrl;
+            String compactionUrl;
+            Backend backend = backendMap.get(replica.getBackendId());
+            if (backend != null) {
+                metaUrl = String.format("http://%s:%d/api/meta/header/%d/%d",
+                                        backend.getHost(),
+                                        backend.getHttpPort(),
+                                        tabletId,
+                                        replica.getSchemaHash());
+                compactionUrl = String.format(
+                        "http://%s:%d/api/compaction/show?tablet_id=%d&schema_hash=%d",
+                        backend.getHost(),
+                        backend.getHttpPort(),
+                        tabletId,
+                        replica.getSchemaHash());
+            } else {
+                metaUrl = "N/A";
+                compactionUrl = "N/A";
+            }
 
             result.addRow(Arrays.asList(String.valueOf(replica.getId()),
                     String.valueOf(replica.getBackendId()),
