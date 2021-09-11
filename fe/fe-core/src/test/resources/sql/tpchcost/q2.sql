@@ -678,7 +678,7 @@ column statistics:
 * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
 * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
 * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0]
-* P_SIZE-->[1.0, 50.0, 0.0, 4.0, 50.0]
+* P_SIZE-->[12.0, 12.0, 0.0, 4.0, 50.0]
 
 PLAN FRAGMENT 5(F07)
 

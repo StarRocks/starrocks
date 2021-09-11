@@ -11,9 +11,7 @@ public class Constants {
 
     public static final String INFORMATION_SCHEMA = SystemInfoService.DEFAULT_CLUSTER + ":information_schema";
 
-    public static final int CrossJoinCostPenalty = 100;
-
-    public static final int CrossJoinCostGreedyPenalty = 100000000;
+    public static final int CrossJoinCostPenalty = 100000000;
 
     public enum AnalyzeType {
         SAMPLE,
