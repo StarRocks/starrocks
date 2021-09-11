@@ -40,7 +40,6 @@ static int64_t calc_job_max_load_memory(int64_t mem_limit_in_req, int64_t total_
     // total_mem_limit according to load_process_max_memory_limit_percent calculation
     if (mem_limit_in_req == -1) {
         return std::max<int64_t>(total_mem_limit, config::write_buffer_size);
-        ;
     }
 
     int64_t load_mem_limit = std::max<int64_t>(mem_limit_in_req, config::write_buffer_size);

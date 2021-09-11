@@ -356,7 +356,6 @@ TEST_F(TestDeleteConditionHandler, StoreCondInvalidParameters) {
     DeletePredicatePB del_pred;
     OLAPStatus failed_res =
             _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred);
-    ;
     ASSERT_EQ(OLAP_ERR_DELETE_INVALID_PARAMETERS, failed_res);
 }
 
@@ -372,7 +371,6 @@ TEST_F(TestDeleteConditionHandler, StoreCondNonexistentColumn) {
     DeletePredicatePB del_pred;
     OLAPStatus failed_res =
             _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred);
-    ;
     ASSERT_EQ(OLAP_ERR_DELETE_INVALID_CONDITION, failed_res);
 
     // 'v' is a value column
@@ -396,7 +394,6 @@ TEST_F(TestDeleteConditionHandler, StoreCondNonexistentColumn) {
 
     OLAPStatus success_res =
             _delete_condition_handler.generate_delete_predicate(dup_tablet->tablet_schema(), conditions, &del_pred);
-    ;
     ASSERT_EQ(OLAP_SUCCESS, success_res);
 }
 

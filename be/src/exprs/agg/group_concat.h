@@ -245,7 +245,6 @@ public:
                     uint32_t size_value = value.get_size();
 
                     old_size = serialize_sep_and_value(bytes, old_size, size_value, size_sep, sep, value.get_data());
-                    ;
                     dst_column->get_offset()[i + 1] = old_size;
                 }
             }
