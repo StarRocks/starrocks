@@ -295,7 +295,7 @@ under the License.
             <dependency>
                 <groupId>com.baidu</groupId>
                 <artifactId>jprotobuf-rpc-core</artifactId>
-                <version>3.5.21</version>
+                <version>4.1.6</version>
                 <exclusions>
                     <exclusion>
                         <groupId>com.baidu</groupId>
