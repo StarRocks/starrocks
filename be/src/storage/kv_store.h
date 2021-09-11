@@ -19,8 +19,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifndef STARROCKS_BE_SRC_OLAP_OLAP_OLAP_META_H
-#define STARROCKS_BE_SRC_OLAP_OLAP_OLAP_META_H
+#ifndef STARROCKS_BE_SRC_OLAP_OLAP_KV_STORE_H
+#define STARROCKS_BE_SRC_OLAP_OLAP_KV_STORE_H
 
 #include <rocksdb/write_batch.h>
 
@@ -42,11 +42,11 @@ namespace starrocks {
 using ColumnFamilyHandle = rocksdb::ColumnFamilyHandle;
 using WriteBatch = rocksdb::WriteBatch;
 
-class OlapMeta {
+class KVStore {
 public:
-    explicit OlapMeta(std::string root_path);
+    explicit KVStore(std::string root_path);
 
-    virtual ~OlapMeta();
+    virtual ~KVStore();
 
     Status init(bool read_only = false);
 
@@ -77,4 +77,4 @@ private:
 
 } // namespace starrocks
 
-#endif // STARROCKS_BE_SRC_OLAP_OLAP_OLAP_META_H
+#endif // STARROCKS_BE_SRC_OLAP_OLAP_KV_STORE_H

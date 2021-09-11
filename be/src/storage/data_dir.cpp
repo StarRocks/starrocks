@@ -74,11 +74,11 @@ DataDir::DataDir(const std::string& path, int64_t capacity_bytes, TStorageMedium
           _cluster_id(-1),
           _to_be_deleted(false),
           _current_shard(0),
-          _meta(nullptr) {}
+          _kv_store(nullptr) {}
 
 DataDir::~DataDir() {
     delete _id_generator;
-    delete _meta;
+    delete _kv_store;
 }
 
 Status DataDir::init(bool read_only) {
@@ -259,12 +259,12 @@ Status DataDir::_init_meta(bool read_only) {
     LOG(INFO) << "path: " << _path << ", hash: " << _path_hash;
 
     // init meta
-    _meta = new (std::nothrow) OlapMeta(_path);
-    if (_meta == nullptr) {
-        RETURN_IF_ERROR_WITH_WARN(Status::MemoryAllocFailed("allocate memory for OlapMeta failed"),
-                                  "new OlapMeta failed");
+    _kv_store = new (std::nothrow) KVStore(_path);
+    if (_kv_store == nullptr) {
+        RETURN_IF_ERROR_WITH_WARN(Status::MemoryAllocFailed("allocate memory for KVStore failed"),
+                                  "new KVStore failed");
     }
-    Status res = _meta->init(read_only);
+    Status res = _kv_store->init(read_only);
     LOG_IF(WARNING, !res.ok()) << "Fail to init meta store: " << res;
     return res;
 }
@@ -441,7 +441,7 @@ OLAPStatus DataDir::load() {
         dir_rowset_metas.push_back(rowset_meta);
         return true;
     };
-    Status load_rowset_status = RowsetMetaManager::traverse_rowset_metas(_meta, load_rowset_func);
+    Status load_rowset_status = RowsetMetaManager::traverse_rowset_metas(_kv_store, load_rowset_func);
 
     if (!load_rowset_status.ok()) {
         LOG(WARNING) << "errors when load rowset meta from meta env, skip this data dir:" << _path;
@@ -473,7 +473,7 @@ OLAPStatus DataDir::load() {
         }
         return true;
     };
-    Status load_tablet_status = TabletMetaManager::traverse_headers(_meta, load_tablet_func);
+    Status load_tablet_status = TabletMetaManager::traverse_headers(_kv_store, load_tablet_func);
     if (failed_tablet_ids.size() != 0) {
         LOG(ERROR) << "load tablets from header failed"
                    << ", loaded tablet: " << tablet_ids.size() << ", error tablet: " << failed_tablet_ids.size()
@@ -519,7 +519,7 @@ OLAPStatus DataDir::load() {
         if (rowset_meta->rowset_state() == RowsetStatePB::COMMITTED &&
             rowset_meta->tablet_uid() == tablet->tablet_uid()) {
             OLAPStatus commit_txn_status = _txn_manager->commit_txn(
-                    _meta, rowset_meta->partition_id(), rowset_meta->txn_id(), rowset_meta->tablet_id(),
+                    _kv_store, rowset_meta->partition_id(), rowset_meta->txn_id(), rowset_meta->tablet_id(),
                     rowset_meta->tablet_schema_hash(), rowset_meta->tablet_uid(), rowset_meta->load_id(), rowset, true);
             if (commit_txn_status != OLAP_SUCCESS && commit_txn_status != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
                 LOG(WARNING) << "Fail to add committed rowset=" << rowset_meta->rowset_id()
