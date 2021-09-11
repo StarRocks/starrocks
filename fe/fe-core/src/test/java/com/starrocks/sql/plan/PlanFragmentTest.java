@@ -3234,12 +3234,13 @@ public class PlanFragmentTest extends PlanTestBase {
                 "left semi join join2 on join1.id = join2.id\n" +
                 "where join1.id > 1;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  4:HASH JOIN\n" +
-                "  |  join op: RIGHT SEMI JOIN (PARTITIONED)\n" +
+        System.out.println(explainString);
+        Assert.assertTrue(explainString.contains("  3:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 5: id = 2: id"));
-        Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
+                "  |  equal join conjunct: 2: id = 5: id"));
+        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 2: id > 1"));
@@ -4332,5 +4333,16 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))"));
         Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)"));
+    }
+
+    @Test
+    public void testSemiJoinPredicateDerive() throws Exception {
+        String sql = "select * from t0 left semi join t1 on v1 = v4 where v1 = 2";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 2"));
     }
 }
