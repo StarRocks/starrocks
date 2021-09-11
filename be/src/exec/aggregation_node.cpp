@@ -45,9 +45,9 @@
 
 namespace starrocks {
 
-// TODO: pass in maximum size; enforce by setting limit in mempool
-// TODO: have a Status ExecNode::init(const TPlanNode&) member function
-// that does initialization outside of c'tor, so we can indicate errors
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
 AggregationNode::AggregationNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
           _intermediate_tuple_id(tnode.agg_node.intermediate_tuple_id),

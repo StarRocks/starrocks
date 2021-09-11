@@ -29,6 +29,10 @@
 
 using namespace starrocks;
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 Status PartitionedAggregationNode::ProcessBatchNoGrouping(RowBatch* batch) {
     Tuple* output_tuple = singleton_output_tuple_;
     FOREACH_ROW(batch, 0, batch_iter) { UpdateTuple(agg_fn_evals_.data(), output_tuple, batch_iter.get()); }

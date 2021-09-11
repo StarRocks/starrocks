@@ -23,6 +23,10 @@
 
 #include "exec/exec_node.h"
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 namespace starrocks {
 
 /// Node that returns an empty result set, i.e., just sets eos_ in GetNext().

@@ -32,6 +32,10 @@
 
 namespace starrocks {
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 TextConverter::TextConverter(char escape_char) : _escape_char(escape_char) {}
 
 void TextConverter::unescape_string(StringValue* value, MemPool* pool) {

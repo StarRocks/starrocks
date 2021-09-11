@@ -52,6 +52,10 @@
 
 using namespace strings;
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 namespace starrocks {
 
 /// The minimum reduction factor (input rows divided by output rows) to grow hash tables

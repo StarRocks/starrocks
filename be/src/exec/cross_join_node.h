@@ -33,6 +33,10 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 namespace starrocks {
 
 class RowBatch;

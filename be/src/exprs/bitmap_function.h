@@ -26,19 +26,10 @@
 
 namespace starrocks {
 
-/*
- * How to add a bitmap related function:
- * 1. Implement the function in BitmapFunctions
- *    Note: we have done a improve for bitmap query, So the BitmapValue input
- *    of bitmap functions maybe char array or pointer, you should handle it.
- *    You could refer to bitmap_union or bitmap_count function.
- * 2. Add a UT in BitmapFunctionsTest
- * 3. Add the function signature in gensrc/script/starrocks_builtins_functions.py
- *    Note: if the result is bitmap serialize data, the function return type should be BITMAP
- *    you could use `nm $STARROCKS_HOME/output/be/lib/starrocks_be | grep bitmap` to get the function signature
- * 4. Update the doc  docs/documentation/cn/sql-reference/sql-functions/aggregate-functions/bitmap.md
- *    and docs/documentation/en/sql-reference/sql-functions/aggregate-functions/bitmap_EN.md
- */
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class BitmapFunctions {
 public:
     static void init();

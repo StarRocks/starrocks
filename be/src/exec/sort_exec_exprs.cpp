@@ -23,6 +23,10 @@
 
 namespace starrocks {
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 Status SortExecExprs::init(const TSortInfo& sort_info, ObjectPool* pool) {
     return init(sort_info.ordering_exprs,
                 sort_info.__isset.sort_tuple_slot_exprs ? &sort_info.sort_tuple_slot_exprs : NULL, pool);
