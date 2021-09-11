@@ -31,6 +31,11 @@ namespace starrocks {
 // We inline this here in order for Expr::get_value() to be able
 // to reference SlotRef::compute_fn() directly.
 // Splitting it up into separate .h files would require circular #includes.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class SlotRef final : public Expr {
 public:
     SlotRef(const TExprNode& node);

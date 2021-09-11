@@ -64,6 +64,10 @@ class AggFnEvaluator;
 // multiple rows have the same values for the order by exprs. The number of buffered
 // rows may be an entire partition or even the entire input. Therefore, the output
 // rows are buffered and may spill to disk via the BufferedTupleStream.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
 class AnalyticEvalNode : public ExecNode {
 public:
     ~AnalyticEvalNode() {}

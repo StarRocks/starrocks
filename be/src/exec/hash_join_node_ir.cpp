@@ -25,15 +25,10 @@
 
 namespace starrocks {
 
-// Functions in this file are cross compiled to IR with clang.
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
 
-// Wrapper around ExecNode's eval conjuncts with a different function name.
-// This lets us distinguish between the join conjuncts vs. non-join conjuncts
-// for codegen.
-// Note: don't declare this static.  LLVM will pick the fastcc calling convention and
-// we will not be able to replace the funcitons with codegen'd versions.
-// TODO: explicitly set the calling convention?
-// TODO: investigate using fastcc for all codegen internal functions?
 bool IR_NO_INLINE eval_other_join_conjuncts(ExprContext* const* ctxs, int num_ctxs, TupleRow* row) {
     return ExecNode::eval_conjuncts(ctxs, num_ctxs, row);
 }

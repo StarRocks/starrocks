@@ -56,6 +56,10 @@ struct EsScanCounter {
     int64_t num_rows_filtered;
 };
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class EsHttpScanner {
 public:
     EsHttpScanner(RuntimeState* state, RuntimeProfile* profile, TupleId tuple_id,

@@ -8,6 +8,9 @@
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
 namespace starrocks {
 Status ConvertScanNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::prepare(state));
