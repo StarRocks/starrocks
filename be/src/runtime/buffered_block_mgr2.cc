@@ -835,7 +835,6 @@ void BufferedBlockMgr2::delete_block(Block* block) {
 void BufferedBlockMgr2::return_unused_block(Block* block) {
     DCHECK(block->_is_deleted) << block->debug_string();
     DCHECK(!block->_is_pinned) << block->debug_string();
-    ;
     DCHECK(block->_buffer_desc == NULL);
     block->init();
     _unused_blocks.enqueue(block);
