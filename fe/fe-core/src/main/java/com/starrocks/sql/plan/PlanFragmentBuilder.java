@@ -375,7 +375,6 @@ public class PlanFragmentBuilder {
                 hdfsScanNode.setSelectedPartitionIds(node.getSelectedPartitionIds());
                 hdfsScanNode.setIdToPartitionKey(node.getIdToPartitionKey());
                 hdfsScanNode.getScanRangeLocations(context.getDescTbl());
-                hdfsScanNode.computeCardinality();
                 // set predicate
                 List<ScalarOperator> noEvalPartitionConjuncts = node.getNoEvalPartitionConjuncts();
                 List<ScalarOperator> nonPartitionConjuncts = node.getNonPartitionConjuncts();
