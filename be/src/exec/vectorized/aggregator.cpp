@@ -15,8 +15,8 @@ Aggregator::Aggregator(const TPlanNode& tnode)
           _output_tuple_id(tnode.agg_node.output_tuple_id),
           _output_tuple_desc(nullptr) {}
 
-Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker,
-                           RuntimeProfile* runtime_profile) {
+Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, MemTracker* expr_mem_tracker,
+                           const RowDescriptor* child_row_desc, RuntimeProfile* runtime_profile) {
     _pool = pool;
     _mem_tracker = mem_tracker;
     _runtime_profile = runtime_profile;
@@ -159,12 +159,13 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* me
     _output_tuple_desc = state->desc_tbl().get_tuple_descriptor(_output_tuple_id);
     DCHECK_EQ(_intermediate_tuple_desc->slots().size(), _output_tuple_desc->slots().size());
 
-    // TODO(hcf) force annotation
-    // RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state, child(0)->row_desc(), expr_mem_tracker()));
+    if (child_row_desc != nullptr) {
+        RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state, *child_row_desc, expr_mem_tracker));
 
-    // for (const auto& ctx : _agg_expr_ctxs) {
-    //     RETURN_IF_ERROR(Expr::prepare(ctx, state, child(0)->row_desc(), expr_mem_tracker()));
-    // }
+        for (const auto& ctx : _agg_expr_ctxs) {
+            RETURN_IF_ERROR(Expr::prepare(ctx, state, *child_row_desc, expr_mem_tracker));
+        }
+    }
 
     _mem_pool = std::make_unique<MemPool>(_mem_tracker);
 
@@ -255,7 +256,8 @@ void Aggregator::offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk) {
     _buffer.push(std::move(chunk));
 }
 
-bool Aggregator::should_expand_preagg_hash_tables(size_t input_chunk_size, int64_t ht_mem, int64_t ht_rows) const {
+bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
+                                                  int64_t ht_rows) const {
     // Need some rows in tables to have valid statistics.
     if (ht_rows == 0) {
         return true;
@@ -271,8 +273,7 @@ bool Aggregator::should_expand_preagg_hash_tables(size_t input_chunk_size, int64
     // Compare the number of rows in the hash table with the number of input rows that
     // were aggregated into it. Exclude passed through rows from this calculation since
     // they were not in hash tables.
-    // TODO(hcf) remove this logic of _prev_num_rows_returned
-    const int64_t input_rows = _prev_num_rows_returned - input_chunk_size;
+    const int64_t input_rows = prev_row_returned - input_chunk_size;
     const int64_t aggregated_input_rows = input_rows - _num_rows_returned;
     double current_reduction = static_cast<double>(aggregated_input_rows) / ht_rows;
 
@@ -406,7 +407,7 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
     COUNTER_SET(_pass_through_row_count, _num_pass_through_rows);
 }
 
-void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk, const std::vector<uint8_t>& filter) {
+void Aggregator::output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* chunk) {
     // Streaming aggregate at least has one group by column
     size_t chunk_size = _group_by_columns[0]->size();
     for (auto& _group_by_column : _group_by_columns) {
@@ -418,7 +419,7 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk, const st
         // At present, the type of problem cannot be completely solved,
         // and a new solution needs to be designed to solve it completely
         if (_group_by_column->size() == chunk_size) {
-            _group_by_column->filter(filter);
+            _group_by_column->filter(_streaming_selection);
         }
     }
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -431,7 +432,7 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk, const st
             // At present, the type of problem cannot be completely solved,
             // and a new solution needs to be designed to solve it completely
             if (agg_input_column->size() == chunk_size) {
-                agg_input_column->filter(filter);
+                agg_input_column->filter(_streaming_selection);
             }
         }
     }

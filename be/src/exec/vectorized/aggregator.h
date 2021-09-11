@@ -58,20 +58,28 @@ public:
 
     ~Aggregator() = default;
 
-    Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, MemTracker* expr_mem_tracker,
+                   const RowDescriptor* child_row_desc, RuntimeProfile* runtime_profile);
 
     Status close(RuntimeState* state);
 
     std::unique_ptr<MemPool>& mem_pool() { return _mem_pool; };
     bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
-    bool is_needs_finalize() { return _needs_finalize; }
+    const std::vector<ExprContext*>& group_by_expr_ctxs() { return _group_by_expr_ctxs; }
+    const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
+    const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
+    bool needs_finalize() { return _needs_finalize; }
     bool is_ht_eos() { return _is_ht_eos; }
     void set_ht_eos() { _is_ht_eos = true; }
     bool is_sink_complete() { return _is_sink_complete.load(std::memory_order_acquire); }
     int64_t num_input_rows() { return _num_input_rows; }
     // TODO(hcf) not concurrent-safe
+    int64_t num_rows_returned() { return _num_rows_returned; }
     void update_num_rows_returned(int64_t increment) { _num_rows_returned += increment; };
     void update_num_input_rows(int64_t increment) { _num_input_rows += increment; }
+    int64_t num_pass_through_rows() { return _num_pass_through_rows; }
+    void set_aggr_phase(AggrPhase aggr_phase) { _aggr_phase = aggr_phase; }
+
     TStreamingPreaggregationMode::type streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
     const vectorized::HashMapVariant& hash_map_variant() { return _hash_map_variant; }
     const vectorized::HashSetVariant& hash_set_variant() { return _hash_set_variant; }
@@ -81,7 +89,9 @@ public:
     RuntimeProfile::Counter* agg_compute_timer() { return _agg_compute_timer; }
     RuntimeProfile::Counter* streaming_timer() { return _streaming_timer; }
     RuntimeProfile::Counter* input_row_count() { return _input_row_count; }
+    RuntimeProfile::Counter* rows_returned_counter() { return _rows_returned_counter; }
     RuntimeProfile::Counter* hash_table_size() { return _hash_table_size; }
+    RuntimeProfile::Counter* pass_through_row_count() { return _pass_through_row_count; }
 
     void sink_complete() { _is_sink_complete.store(true, std::memory_order_release); }
 
@@ -89,7 +99,8 @@ public:
     vectorized::ChunkPtr poll_chunk_buffer();
     void offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk);
 
-    bool should_expand_preagg_hash_tables(size_t input_chunk_size, int64_t ht_mem, int64_t ht_rows) const;
+    bool should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
+                                          int64_t ht_rows) const;
 
     // initial const columns for i'th FunctionContext.
     // TODO(hcf) aggregate blocking/stream operator missing calling this method
@@ -115,7 +126,7 @@ public:
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     // selection[i] = 0: found in hash table
     // selection[1] = 1: not found in hash table
-    void output_chunk_by_streaming(vectorized::ChunkPtr* chunk, const std::vector<uint8_t>& filter);
+    void output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* chunk);
 
     Status check_hash_map_memory_usage(RuntimeState* state);
     Status check_hash_set_memory_usage(RuntimeState* state);
@@ -149,7 +160,6 @@ private:
 
     int64_t _limit = -1;
     int64_t _num_rows_returned = 0;
-    int64_t _prev_num_rows_returned = 0;
 
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
@@ -174,7 +184,6 @@ private:
     // memory used for agg function
     int64_t _last_agg_func_memory_usage = 0;
     int64_t _num_pass_through_rows = 0;
-    bool _child_eos = false;
 
     TStreamingPreaggregationMode::type _streaming_preaggregation_mode;
 
@@ -275,8 +284,8 @@ public:
     }
 
     template <typename HashSetWithKey>
-    void build_hash_set(HashSetWithKey& hash_set, size_t chunk_size, std::vector<uint8_t>* selection) {
-        hash_set.build_set(chunk_size, _group_by_columns, selection);
+    void build_hash_set_with_selection(HashSetWithKey& hash_set, size_t chunk_size) {
+        hash_set.build_set(chunk_size, _group_by_columns, &_streaming_selection);
     }
 
     template <typename HashMapWithKey>
