@@ -42,7 +42,6 @@
 #include "storage/vectorized/merge_iterator.h"
 #include "storage/vectorized/projection_iterator.h"
 #include "storage/vectorized/union_iterator.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
