@@ -339,7 +339,6 @@ void DataDir::health_check() {
 OLAPStatus DataDir::_read_and_write_test_file() {
     std::string test_file = _path + kTestFilePath;
     return read_write_test_file(test_file);
-    ;
 }
 
 OLAPStatus DataDir::get_shard(uint64_t* shard) {
