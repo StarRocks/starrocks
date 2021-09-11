@@ -709,7 +709,9 @@ build_fmt() {
     mkdir -p build && cd build
     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../
     make -j$PARALLEL && make install
-    cp -f ${TP_INSTALL_DIR}/lib/libfmt.a ${TP_INSTALL_DIR}/lib64/libfmt.a
+    if [ -f ${TP_INSTALL_DIR}/lib/libfmt.a ]; then
+        cp -f ${TP_INSTALL_DIR}/lib/libfmt.a ${TP_INSTALL_DIR}/lib64/libfmt.a
+    fi
 }
 
 #ryu
