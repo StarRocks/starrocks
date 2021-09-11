@@ -15,7 +15,7 @@ class Condition;
 struct OlapReaderStatistics;
 class RuntimeProfile;
 class TabletSchema;
-class OlapMeta;
+class KVStore;
 } // namespace starrocks
 
 namespace starrocks::vectorized {
@@ -39,7 +39,7 @@ public:
     uint64_t tablet_id = 0;
     uint32_t rowset_id = 0;
     int64_t version = 0;
-    OlapMeta* meta = nullptr;
+    KVStore* meta = nullptr;
 
     // REQUIRED (null is not allowed)
     OlapReaderStatistics* stats = nullptr;

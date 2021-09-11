@@ -22,7 +22,7 @@
 #include <string>
 
 #include "gtest/gtest.h"
-#include "storage/olap_meta.h"
+#include "storage/kv_store.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/txn_manager.h"
