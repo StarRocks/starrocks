@@ -36,10 +36,6 @@
 #include "util/faststring.h"
 #include "util/once.h"
 
-namespace butil {
-class IOBuf;
-}
-
 namespace starrocks {
 
 class TabletSchema;

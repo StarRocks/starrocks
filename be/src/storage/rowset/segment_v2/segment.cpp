@@ -21,10 +21,8 @@
 
 #include "storage/rowset/segment_v2/segment.h"
 
-#include <butil/iobuf.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 
-#include <boost/container/small_vector.hpp>
 #include <memory>
 
 #include "column/schema.h"
