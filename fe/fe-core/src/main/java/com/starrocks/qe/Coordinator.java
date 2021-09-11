@@ -116,6 +116,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 public class Coordinator {
     private static final Logger LOG = LogManager.getLogger(Coordinator.class);
@@ -949,6 +950,41 @@ public class Coordinator {
         return new TNetworkAddress(backend.getHost(), backend.getBrpcPort());
     }
 
+    private FragmentExecParams getMaxParallelismScanFragmentExecParams() {
+        List<FragmentExecParams> scanNodePlanFragmentParams =
+                this.scanNodes.stream().map(node -> fragmentExecParamsMap.get(node.getFragment().getFragmentId()))
+                        .collect(Collectors.toList());
+        int maxParallelism = 0;
+        FragmentExecParams maxParallelismExecParams = null;
+
+        for (FragmentExecParams params : scanNodePlanFragmentParams) {
+            int currentChildFragmentParallelism = params.instanceExecParams.size();
+            if (currentChildFragmentParallelism > maxParallelism) {
+                maxParallelism = currentChildFragmentParallelism;
+                maxParallelismExecParams = params;
+            }
+        }
+        return maxParallelismExecParams;
+    }
+
+    private boolean hasShuffleHashBucketJoin(PlanNode node) {
+        if (node instanceof HashJoinNode) {
+            HashJoinNode hashJoinNode = (HashJoinNode) node;
+            if (hashJoinNode.isShuffleHashBucket()) {
+                return true;
+            }
+        }
+        if (node instanceof ExchangeNode) {
+            return false;
+        }
+        for (PlanNode child : node.getChildren()) {
+            if (hasShuffleHashBucketJoin(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // For each fragment in fragments, computes hosts on which to run the instances
     // and stores result in fragmentExecParams.hosts.
     private void computeFragmentHosts() throws Exception {
@@ -987,7 +1023,6 @@ public class Coordinator {
                 // (Case B)
                 // there is no leftmost scan; we assign the same hosts as those of our
                 //  input fragment which has a higher instance_number
-
                 int inputFragmentIndex = 0;
                 int maxParallelism = 0;
                 for (int j = 0; j < fragment.getChildren().size(); j++) {
@@ -1000,30 +1035,40 @@ public class Coordinator {
                 }
 
                 PlanFragmentId inputFragmentId = fragment.getChild(inputFragmentIndex).getFragmentId();
+                FragmentExecParams maxParallelismFragmentExecParams = fragmentExecParamsMap.get(inputFragmentId);
+
+                boolean hasShuffleHashBucketJoinInFragment = hasShuffleHashBucketJoin(fragment.getPlanRoot());
+                if (hasShuffleHashBucketJoinInFragment) {
+                    FragmentExecParams execParams = getMaxParallelismScanFragmentExecParams();
+                    if (execParams != null) {
+                        maxParallelismFragmentExecParams = execParams;
+                    }
+                }
+
                 // AddAll() soft copy()
                 int exchangeInstances = -1;
                 if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable() != null) {
                     exchangeInstances = ConnectContext.get().getSessionVariable().getExchangeInstanceParallel();
                 }
                 if (exchangeInstances > 0 &&
-                        fragmentExecParamsMap.get(inputFragmentId).instanceExecParams.size() > exchangeInstances) {
+                        maxParallelismFragmentExecParams.instanceExecParams.size() > exchangeInstances) {
                     // random select some instance
                     // get distinct host,  when parallel_fragment_exec_instance_num > 1, single host may execute severval instances
                     Set<TNetworkAddress> hostSet = Sets.newHashSet();
-                    for (FInstanceExecParam execParams : fragmentExecParamsMap
-                            .get(inputFragmentId).instanceExecParams) {
+                    for (FInstanceExecParam execParams : maxParallelismFragmentExecParams.instanceExecParams) {
                         hostSet.add(execParams.host);
                     }
                     List<TNetworkAddress> hosts = Lists.newArrayList(hostSet);
-                    Collections.shuffle(hosts, instanceRandom);
+                    if (!hasShuffleHashBucketJoinInFragment) {
+                        Collections.shuffle(hosts, instanceRandom);
+                    }
                     for (int index = 0; index < exchangeInstances; index++) {
                         FInstanceExecParam instanceParam =
                                 new FInstanceExecParam(null, hosts.get(index % hosts.size()), 0, params);
                         params.instanceExecParams.add(instanceParam);
                     }
                 } else {
-                    for (FInstanceExecParam execParams : fragmentExecParamsMap
-                            .get(inputFragmentId).instanceExecParams) {
+                    for (FInstanceExecParam execParams : maxParallelismFragmentExecParams.instanceExecParams) {
                         FInstanceExecParam instanceParam = new FInstanceExecParam(null, execParams.host, 0, params);
                         params.instanceExecParams.add(instanceParam);
                     }
@@ -1032,7 +1077,9 @@ public class Coordinator {
                 // When group by cardinality is smaller than number of backend, only some backends always
                 // process while other has no data to process.
                 // So we shuffle instances to make different backends handle different queries.
-                Collections.shuffle(params.instanceExecParams, instanceRandom);
+                if (!hasShuffleHashBucketJoinInFragment) {
+                    Collections.shuffle(params.instanceExecParams, instanceRandom);
+                }
 
                 // TODO: switch to unpartitioned/coord execution if our input fragment
                 // is executed that way (could have been downgraded from distributed)
@@ -1141,7 +1188,7 @@ public class Coordinator {
         // One fragment could only have one HashJoinNode
         if (node instanceof HashJoinNode) {
             HashJoinNode joinNode = (HashJoinNode) node;
-            if (joinNode.isBucketShuffle()) {
+            if (joinNode.isLocalHashBucket()) {
                 bucketShuffleFragmentIds.add(joinNode.getFragmentId().asInt());
                 return true;
             }
