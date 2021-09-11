@@ -59,18 +59,25 @@ public class ReplicasProcNode implements ProcNodeInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         for (Replica replica : replicas) {
-            String metaUrl = String.format("http://%s:%d/api/meta/header/%d/%d",
-                    getBackendHost(backendMap, replica.getBackendId()),
-                    getBackendPort(backendMap, replica.getBackendId()),
-                    tabletId,
-                    replica.getSchemaHash());
-
-            String compactionUrl = String.format(
-                    "http://%s:%d/api/compaction/show?tablet_id=%d&schema_hash=%d",
-                    getBackendHost(backendMap, replica.getBackendId()),
-                    getBackendPort(backendMap, replica.getBackendId()),
-                    tabletId,
-                    replica.getSchemaHash());
+            String metaUrl;
+            String compactionUrl;
+            Backend backend = backendMap.get(replica.getBackendId());
+            if (backend != null) {
+                metaUrl = String.format("http://%s:%d/api/meta/header/%d/%d",
+                                        backend.getHost(),
+                                        backend.getHttpPort(),
+                                        tabletId,
+                                        replica.getSchemaHash());
+                compactionUrl = String.format(
+                        "http://%s:%d/api/compaction/show?tablet_id=%d&schema_hash=%d",
+                        backend.getHost(),
+                        backend.getHttpPort(),
+                        tabletId,
+                        replica.getSchemaHash());
+            } else {
+                metaUrl = "N/A";
+                compactionUrl = "N/A";
+            }
 
             result.addRow(Arrays.asList(String.valueOf(replica.getId()),
                     String.valueOf(replica.getBackendId()),
@@ -92,20 +99,6 @@ public class ReplicasProcNode implements ProcNodeInterface {
                     compactionUrl));
         }
         return result;
-    }
-
-    private String getBackendHost(ImmutableMap<Long, Backend> backendMap, long backendId) {
-        if (backendMap.containsKey(backendId)) {
-            return backendMap.get(backendId).getHost();
-        }
-        return "unknown";
-    }
-
-    private int getBackendPort(ImmutableMap<Long, Backend> backendMap, long backendId) {
-        if (backendMap.containsKey(backendId)) {
-            return backendMap.get(backendId).getBePort();
-        }
-        return -1;
     }
 }
 
