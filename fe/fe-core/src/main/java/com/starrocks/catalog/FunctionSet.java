@@ -73,8 +73,8 @@ public class FunctionSet {
     public static final String BITMAP_COUNT = "bitmap_count";
     public static final String INTERSECT_COUNT = "intersect_count";
     public static final String BITMAP_INTERSECT = "bitmap_intersect";
-    public static final String MULTI_DISTINCT_COUNT = "multi_distinct_count";
-    public static final String MULTI_DISTINCT_SUM = "multi_distinct_sum";
+    public static final String MULTI_DISTINCT_COUNT = "multi_distinct_count2";
+    public static final String MULTI_DISTINCT_SUM = "multi_distinct_sum2";
 
     // Window functions:
     public static final String LEAD = "LEAD";
