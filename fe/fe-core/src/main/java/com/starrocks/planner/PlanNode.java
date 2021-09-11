@@ -561,7 +561,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     }
 
     public void computeStatistics(Statistics statistics) {
-        cardinality = (long) statistics.getOutputRowCount();
+        cardinality = Math.round(statistics.getOutputRowCount());
         avgRowSize = (float) statistics.getColumnStatistics().values().stream().
                 mapToDouble(columnStatistic -> columnStatistic.getAverageRowSize()).sum();
         columnStatistics = statistics.getColumnStatistics();

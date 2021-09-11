@@ -36,238 +36,6 @@ where
   and n_name = 'ARGENTINA'
 order by
     s_name ;
-[fragment]
-PLAN FRAGMENT 0
-OUTPUT EXPRS:2: S_NAME | 3: S_ADDRESS
-PARTITION: UNPARTITIONED
-
-RESULT SINK
-
-25:MERGING-EXCHANGE
-use vectorized: true
-
-PLAN FRAGMENT 1
-OUTPUT EXPRS:
-PARTITION: HASH_PARTITIONED: 15: PS_SUPPKEY
-
-STREAM DATA SINK
-EXCHANGE ID: 25
-UNPARTITIONED
-
-24:SORT
-|  order by: <slot 2> 2: S_NAME ASC
-|  offset: 0
-|  use vectorized: true
-|
-23:Project
-|  <slot 2> : 2: S_NAME
-|  <slot 3> : 3: S_ADDRESS
-|  use vectorized: true
-|
-22:HASH JOIN
-|  join op: RIGHT SEMI JOIN (PARTITIONED)
-|  hash predicates:
-|  colocate: false, reason:
-|  equal join conjunct: 15: PS_SUPPKEY = 1: S_SUPPKEY
-|  use vectorized: true
-|
-|----21:EXCHANGE
-|       use vectorized: true
-|
-14:EXCHANGE
-use vectorized: true
-
-PLAN FRAGMENT 2
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 21
-HASH_PARTITIONED: 1: S_SUPPKEY
-
-20:Project
-|  <slot 1> : 1: S_SUPPKEY
-|  <slot 2> : 2: S_NAME
-|  <slot 3> : 3: S_ADDRESS
-|  use vectorized: true
-|
-19:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
-|  hash predicates:
-|  colocate: false, reason:
-|  equal join conjunct: 4: S_NATIONKEY = 9: N_NATIONKEY
-|  use vectorized: true
-|
-|----18:EXCHANGE
-|       use vectorized: true
-|
-15:OlapScanNode
-TABLE: supplier
-PREAGGREGATION: ON
-partitions=1/1
-rollup: supplier
-tabletRatio=1/1
-tabletList=10111
-cardinality=1000000
-avgRowSize=73.0
-numNodes=0
-use vectorized: true
-
-PLAN FRAGMENT 3
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 18
-UNPARTITIONED
-
-17:Project
-|  <slot 9> : 9: N_NATIONKEY
-|  use vectorized: true
-|
-16:OlapScanNode
-TABLE: nation
-PREAGGREGATION: ON
-PREDICATES: 10: N_NAME = 'ARGENTINA'
-partitions=1/1
-rollup: nation
-tabletRatio=1/1
-tabletList=10185
-cardinality=1
-avgRowSize=29.0
-numNodes=0
-use vectorized: true
-
-PLAN FRAGMENT 4
-OUTPUT EXPRS:
-PARTITION: HASH_PARTITIONED: 32: L_PARTKEY, 33: L_SUPPKEY
-
-STREAM DATA SINK
-EXCHANGE ID: 14
-HASH_PARTITIONED: 15: PS_SUPPKEY
-
-13:Project
-|  <slot 15> : 15: PS_SUPPKEY
-|  use vectorized: true
-|
-12:HASH JOIN
-|  join op: INNER JOIN (PARTITIONED)
-|  hash predicates:
-|  colocate: false, reason:
-|  equal join conjunct: 32: L_PARTKEY = 14: PS_PARTKEY
-|  equal join conjunct: 33: L_SUPPKEY = 15: PS_SUPPKEY
-|  other join predicates: CAST(16: PS_AVAILQTY AS DOUBLE) > 0.5 * 48: sum(35: L_QUANTITY)
-|  use vectorized: true
-|
-|----11:EXCHANGE
-|       use vectorized: true
-|
-4:EXCHANGE
-use vectorized: true
-
-PLAN FRAGMENT 5
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 11
-HASH_PARTITIONED: 14: PS_PARTKEY, 15: PS_SUPPKEY
-
-10:Project
-|  <slot 16> : 16: PS_AVAILQTY
-|  <slot 14> : 14: PS_PARTKEY
-|  <slot 15> : 15: PS_SUPPKEY
-|  use vectorized: true
-|
-9:HASH JOIN
-|  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE)
-|  hash predicates:
-|  colocate: false, reason:
-|  equal join conjunct: 14: PS_PARTKEY = 20: P_PARTKEY
-|  use vectorized: true
-|
-|----8:EXCHANGE
-|       use vectorized: true
-|
-5:OlapScanNode
-TABLE: partsupp
-PREAGGREGATION: ON
-partitions=1/1
-rollup: partsupp
-tabletRatio=10/10
-tabletList=10116,10118,10120,10122,10124,10126,10128,10130,10132,10134
-cardinality=80000000
-avgRowSize=20.0
-numNodes=0
-use vectorized: true
-
-PLAN FRAGMENT 6
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 08
-BUCKET_SHFFULE_HASH_PARTITIONED: 20: P_PARTKEY
-
-7:Project
-|  <slot 20> : 20: P_PARTKEY
-|  use vectorized: true
-|
-6:OlapScanNode
-TABLE: part
-PREAGGREGATION: ON
-PREDICATES: 21: P_NAME LIKE 'sienna%'
-partitions=1/1
-rollup: part
-tabletRatio=10/10
-tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
-cardinality=5000000
-avgRowSize=63.0
-numNodes=0
-use vectorized: true
-
-PLAN FRAGMENT 7
-OUTPUT EXPRS:
-PARTITION: HASH_PARTITIONED: 33: L_SUPPKEY, 32: L_PARTKEY
-
-STREAM DATA SINK
-EXCHANGE ID: 04
-HASH_PARTITIONED: 32: L_PARTKEY, 33: L_SUPPKEY
-
-3:AGGREGATE (update finalize)
-|  output: sum(35: L_QUANTITY)
-|  group by: 33: L_SUPPKEY, 32: L_PARTKEY
-|  use vectorized: true
-|
-2:EXCHANGE
-use vectorized: true
-
-PLAN FRAGMENT 8
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 02
-HASH_PARTITIONED: 33: L_SUPPKEY, 32: L_PARTKEY
-
-1:Project
-|  <slot 32> : 32: L_PARTKEY
-|  <slot 33> : 33: L_SUPPKEY
-|  <slot 35> : 35: L_QUANTITY
-|  use vectorized: true
-|
-0:OlapScanNode
-TABLE: lineitem
-PREAGGREGATION: ON
-PREDICATES: 41: L_SHIPDATE >= '1993-01-01', 41: L_SHIPDATE < '1994-01-01'
-partitions=1/1
-rollup: lineitem
-tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-cardinality=86732673
-avgRowSize=24.0
-numNodes=0
-use vectorized: true
 [fragment statistics]
 PLAN FRAGMENT 0(F14)
 Output Exprs:2: S_NAME | 3: S_ADDRESS
@@ -315,7 +83,7 @@ OutPut Exchange Id: 25
 |       cardinality: 40000
 |
 14:EXCHANGE
-cardinality: 39029702
+cardinality: 39029703
 
 PLAN FRAGMENT 2(F09)
 
@@ -397,7 +165,7 @@ OutPut Exchange Id: 14
 13:Project
 |  output columns:
 |  15 <-> [15: PS_SUPPKEY, INT, false]
-|  cardinality: 39029702
+|  cardinality: 39029703
 |  column statistics:
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
 |
@@ -406,7 +174,7 @@ OutPut Exchange Id: 14
 |  equal join conjunct: [32: L_PARTKEY, INT, false] = [14: PS_PARTKEY, INT, false]
 |  equal join conjunct: [33: L_SUPPKEY, INT, false] = [15: PS_SUPPKEY, INT, false]
 |  other join predicates: cast([16: PS_AVAILQTY, INT, false] as DOUBLE) > 0.5 * [48: sum(35: L_QUANTITY), DOUBLE, true]
-|  cardinality: 39029702
+|  cardinality: 39029703
 |  column statistics:
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
 |
@@ -533,7 +301,7 @@ column statistics:
 * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0]
-* L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0]
+* L_SHIPDATE-->[7.258176E8, 7.573536E8, 0.0, 4.0, 2526.0]
 [dump]
 {
   "statement": "select\n    s_name,\n    s_address\nfrom\n    supplier,\n    nation\nwhere\n        s_suppkey in (\n        select\n            ps_suppkey\n        from\n            partsupp\n        where\n                ps_partkey in (\n                select\n                    p_partkey\n                from\n                    part\n                where\n                        p_name like \u0027sienna%\u0027\n            )\n          and ps_availqty \u003e (\n            select\n                    0.5 * sum(l_quantity)\n            from\n                lineitem\n            where\n                    l_partkey \u003d ps_partkey\n              and l_suppkey \u003d ps_suppkey\n              and l_shipdate \u003e\u003d date \u00271993-01-01\u0027\n              and l_shipdate \u003c date \u00271994-01-01\u0027\n        )\n    )\n  and s_nationkey \u003d n_nationkey\n  and n_name \u003d \u0027ARGENTINA\u0027\norder by\n    s_name ;\n",

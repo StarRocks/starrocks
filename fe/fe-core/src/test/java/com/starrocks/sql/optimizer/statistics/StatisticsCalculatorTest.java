@@ -244,7 +244,7 @@ public class StatisticsCalculatorTest {
         Collection<Partition> partitions = table.getPartitions();
         // select partition p1
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p1")).
-                mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
+                mapToLong(Partition::getId).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
             partition.getBaseIndex().setRowCount(1000);
         }
@@ -267,13 +267,13 @@ public class StatisticsCalculatorTest {
         // the column statistic distinct values is 10, so the estimate row count is 1000 * (1/10)
         Assert.assertEquals(100, expressionContext.getStatistics().getOutputRowCount(), 0.001);
         ColumnStatistic columnStatistic = expressionContext.getStatistics().getColumnStatistic(id_date);
-        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2014, 1, 1, 0, 0, 0)),
+        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2013, 12, 30, 0, 0, 0)),
                 columnStatistic.getMaxValue(), 0.001);
 
         // select partition p2, p3
         partitionIds.clear();
         partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
-                mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
+                mapToLong(Partition::getId).boxed().collect(Collectors.toList());
         olapScanOperator = new LogicalOlapScanOperator(table,
                 Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of(new Column("id_date", Type.DATE, true),
                 id_date.getId()));
@@ -290,7 +290,7 @@ public class StatisticsCalculatorTest {
         columnStatistic = expressionContext.getStatistics().getColumnStatistic(id_date);
 
         Assert.assertEquals(1281.4371, expressionContext.getStatistics().getOutputRowCount(), 0.001);
-        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2014, 1, 1, 0, 0, 0)),
+        Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2014, 5, 1, 0, 0, 0)),
                 columnStatistic.getMinValue(), 0.001);
         Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 1, 0, 0, 0)),
                 columnStatistic.getMaxValue(), 0.001);
