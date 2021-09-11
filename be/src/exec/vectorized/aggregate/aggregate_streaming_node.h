@@ -12,7 +12,7 @@ class AggregateStreamingNode final : public AggregateBaseNode {
 public:
     AggregateStreamingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
             : AggregateBaseNode(pool, tnode, descs) {
-        _aggr_phase = AggrPhase1;
+        _aggregator->set_aggr_phase(AggrPhase1);
     };
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
