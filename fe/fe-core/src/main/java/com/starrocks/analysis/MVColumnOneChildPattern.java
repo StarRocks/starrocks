@@ -42,9 +42,6 @@ public class MVColumnOneChildPattern implements MVColumnPattern {
         if (functionCallExpr.getChildren().size() != 1) {
             return false;
         }
-        if (functionCallExpr.getChild(0) instanceof CastExpr) {
-            return false;
-        }
         if (functionCallExpr.getChild(0).unwrapSlotRef() == null) {
             return false;
         } else {
