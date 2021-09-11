@@ -175,7 +175,6 @@ public:
     void set_field_context(const std::map<std::string, std::string>& field_context) { _field_context = field_context; }
 
 private:
-    Status _build_disjuncts_list(const Expr* conjunct);
     Status _vec_build_disjuncts_list(const Expr* conjunct);
     // used in vectorized mode
     Status _build_binary_predicate(const Expr* conjunct, bool* handled);
