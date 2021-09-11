@@ -37,6 +37,8 @@ public:
     // From the result, we can see when fixed length is 128, we can get speed up for column read.
     enum { APPEND_OVERFLOW_MAX_SIZE = 128 };
 
+    static const uint32_t MAX_CAPACITY_LIMIT = UINT32_MAX;
+
     // mutable operations cannot be applied to shared data when concurrent
     using Ptr = std::shared_ptr<Column>;
     // mutable means you could modify the data safely
@@ -304,6 +306,8 @@ public:
     virtual void swap_column(Column& rhs) = 0;
 
     virtual void reset_column() { _delete_state = DEL_NOT_SATISFIED; }
+
+    virtual bool reach_capacity_limit() const = 0;
 
 protected:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
