@@ -261,9 +261,7 @@ Status BetaRowsetWriter::_final_merge() {
         auto segment_ptr = segment_v2::Segment::open(&tracker, fs::fs_util::block_manager(), tmp_segment_file, seg_id,
                                                      _context.tablet_schema);
         if (!segment_ptr.ok()) {
-            LOG(WARNING) << "Fail to open segment=" << tmp_segment_file
-                         << " of rowset=" << _context.rowset_path_prefix + "/" + _context.rowset_id.to_string() << ", "
-                         << segment_ptr.status();
+            LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
             return segment_ptr.status();
         }
         if ((*segment_ptr)->num_rows() == 0) {

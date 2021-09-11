@@ -82,7 +82,7 @@ Status BetaRowset::do_load() {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
         auto res = segment_v2::Segment::open(mem_tracker, block_mgr, seg_path, seg_id, _schema, &footer_size_hint);
         if (!res.ok()) {
-            LOG(WARNING) << "Fail to open segment=" << seg_path << " of rowset=" << unique_id() << ", " << res.status();
+            LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             return res.status();
         }
         _segments.push_back(std::move(res).value());
