@@ -57,12 +57,12 @@ private:
     OptionalChunkSourceFuture _pending_chunk_source_future;
 };
 
-class ScanOperatorFactory final : public OperatorFactory {
+class ScanOperatorFactory final : public SourceOperatorFactory {
 public:
     ScanOperatorFactory(int32_t id, int32_t plan_node_id, const TOlapScanNode& olap_scan_node,
                         std::vector<ExprContext*>&& conjunct_ctxs,
                         vectorized::RuntimeFilterProbeCollector&& runtime_filters)
-            : OperatorFactory(id, plan_node_id),
+            : SourceOperatorFactory(id, plan_node_id),
               _olap_scan_node(olap_scan_node),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
               _runtime_filters(std::move(runtime_filters)) {}
@@ -73,7 +73,8 @@ public:
         return std::make_shared<ScanOperator>(_id, _plan_node_id, _olap_scan_node, _conjunct_ctxs, _runtime_filters);
     }
 
-    bool is_source() const override { return true; }
+    // ScanOperator needs to attach MorselQueue.
+    bool with_morsels() const override { return true; }
 
 private:
     TOlapScanNode _olap_scan_node;

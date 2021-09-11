@@ -34,10 +34,10 @@ private:
     const std::shared_ptr<LocalExchangeMemoryManager>& _memory_manager;
 };
 
-class LocalExchangeSourceOperatorFactory final : public OperatorFactory {
+class LocalExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     LocalExchangeSourceOperatorFactory(int32_t id, const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager)
-            : OperatorFactory(id, -1), _memory_manager(memory_manager) {}
+            : SourceOperatorFactory(id, -1), _memory_manager(memory_manager) {}
 
     ~LocalExchangeSourceOperatorFactory() override = default;
 
