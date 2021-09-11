@@ -44,81 +44,10 @@ class Tuple;
 class TupleDescriptor;
 class SlotDescriptor;
 
-/// Node for doing partitioned hash aggregation.
-/// This node consumes the input (which can be from the child(0) or a spilled partition).
-///  1. Each row is hashed and we pick a dst partition (hash_partitions_).
-///  2. If the dst partition is not spilled, we probe into the partitions hash table
-///  to aggregate/insert the row.
-///  3. If the partition is already spilled, the input row is spilled.
-///  4. When all the input is consumed, we walk hash_partitions_, put the spilled ones
-///  into spilled_partitions_ and the non-spilled ones into aggregated_partitions_.
-///  aggregated_partitions_ contain partitions that are fully processed and the result
-///  can just be returned. Partitions in spilled_partitions_ need to be repartitioned
-///  and we just repeat these steps.
-//
-/// Each partition contains these structures:
-/// 1) Hash Table for aggregated rows. This contains just the hash table directory
-///    structure but not the rows themselves. This is NULL for spilled partitions when
-///    we stop maintaining the hash table.
-/// 2) MemPool for var-len result data for rows in the hash table. If the aggregate
-///    function returns a string, we cannot append it to the tuple stream as that
-///    structure is immutable. Instead, when we need to spill, we sweep and copy the
-///    rows into a tuple stream.
-/// 3) Aggregated tuple stream for rows that are/were in the hash table. This stream
-///    contains rows that are aggregated. When the partition is not spilled, this stream
-///    is pinned and contains the memory referenced by the hash table.
-///    In the case where the aggregate function does not return a string (meaning the
-///    size of all the slots is known when the row is constructed), this stream contains
-///    all the memory for the result rows and the MemPool (2) is not used.
-/// 4) Unaggregated tuple stream. Stream to spill unaggregated rows.
-///    Rows in this stream always have child(0)'s layout.
-///
-/// Buffering: Each stream and hash table needs to maintain at least one buffer for
-/// some duration of the processing. To minimize the memory requirements of small queries
-/// (i.e. memory usage is less than one IO-buffer per partition), the streams and hash
-/// tables of each partition start using small (less than IO-sized) buffers, regardless
-/// of the level.
-///
-/// Two-phase aggregation: we support two-phase distributed aggregations, where
-/// pre-aggregrations attempt to reduce the size of data before shuffling data across the
-/// network to be merged by the merge aggregation node. This exec node supports a
-/// streaming mode for pre-aggregations where it maintains a hash table of aggregated
-/// rows, but can pass through unaggregated rows (after transforming them into the
-/// same tuple format as aggregated rows) when a heuristic determines that it is better
-/// to send rows across the network instead of consuming additional memory and CPU
-/// resources to expand its hash table. The planner decides whether a given
-/// pre-aggregation should use the streaming preaggregation algorithm or the same
-/// blocking aggregation algorithm as used in merge aggregations.
-/// TODO: make this less of a heuristic by factoring in the cost of the exchange vs the
-/// cost of the pre-aggregation.
-///
-/// If there are no grouping expressions, there is only a single output row for both
-/// preaggregations and merge aggregations. This case is handled separately to avoid
-/// building hash tables. There is also no need to do streaming preaggregations.
-///
-/// Handling memory pressure: the node uses two different strategies for responding to
-/// memory pressure, depending on whether it is a streaming pre-aggregation or not. If
-/// the node is a streaming preaggregation, it stops growing its hash table further by
-/// converting unaggregated rows into the aggregated tuple format and passing them
-/// through. If the node is not a streaming pre-aggregation, it responds to memory
-/// pressure by spilling partitions to disk.
-///
-/// TODO: Buffer rows before probing into the hash table?
-/// TODO: After spilling, we can still maintain a very small hash table just to remove
-/// some number of rows (from likely going to disk).
-/// TODO: Consider allowing to spill the hash table structure in addition to the rows.
-/// TODO: Do we want to insert a buffer before probing into the partition's hash table?
-/// TODO: Use a prefetch/batched probe interface.
-/// TODO: Return rows from the aggregated_row_stream rather than the HT.
-/// TODO: Think about spilling heuristic.
-/// TODO: When processing a spilled partition, we have a lot more information and can
-/// size the partitions/hash tables better.
-/// TODO: Start with unpartitioned (single partition) and switch to partitioning and
-/// spilling only if the size gets large, say larger than the LLC.
-/// TODO: Simplify or cleanup the various uses of agg_fn_ctx, agg_fn_ctx_, and ctx.
-/// There are so many contexts in use that a plain "ctx" variable should never be used.
-/// Likewise, it's easy to mixup the agg fn ctxs, there should be a way to simplify this.
-/// TODO: support an Init() method with an initial value in the UDAF interface.
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class PartitionedAggregationNode : public ExecNode {
 public:
     PartitionedAggregationNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);

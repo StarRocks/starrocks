@@ -41,6 +41,11 @@ class TPlanNode;
 /// such that all passthrough children come before the children that need
 /// materialization. The union node pulls from its children sequentially, i.e.
 /// it exhausts one child completely before moving on to the next one.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class UnionNode : public ExecNode {
 public:
     UnionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);

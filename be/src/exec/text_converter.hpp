@@ -41,6 +41,10 @@
 
 namespace starrocks {
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 // Note: this function has a codegen'd version.  Changing this function requires
 // corresponding changes to CodegenWriteSlot.
 inline bool TextConverter::write_slot(const SlotDescriptor* slot_desc,
@@ -166,7 +170,7 @@ inline bool TextConverter::write_slot(const SlotDescriptor* slot_desc,
             parse_result = StringParser::PARSE_FAILURE;
         }
 
-        *reinterpret_cast<PackedInt128*>(slot) = 
+        *reinterpret_cast<PackedInt128*>(slot) =
             *reinterpret_cast<const PackedInt128*>(&decimal_slot);
 
         break;

@@ -34,6 +34,11 @@
 // orc include file didn't expose orc::TimezoneError
 // we have to declare it by hand, following is the source code in orc link
 // https://github.com/apache/orc/blob/84353fbfc447b06e0924024a8e03c1aaebd3e7a5/c%2B%2B/src/Timezone.hh#L104-L109
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 namespace orc {
 
 class TimezoneError : public std::runtime_error {

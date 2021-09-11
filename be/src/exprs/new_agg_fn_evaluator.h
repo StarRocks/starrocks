@@ -61,7 +61,11 @@ class ExprContext;
 ///
 /// This class is not threadsafe. An evaluator can be cloned to isolate resource
 /// consumption per partition in an aggregation node.
-///
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class NewAggFnEvaluator {
 public:
     /// Creates an NewAggFnEvaluator object from the aggregate expression 'agg_fn'.
