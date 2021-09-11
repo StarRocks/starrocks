@@ -30,7 +30,6 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/sum.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "udf/udf_internal.h"
 #include "util/phmap/phmap_dump.h"
 
@@ -155,10 +154,77 @@ struct DistinctAggregateState<PT, BinaryPTGuard<PT>> {
     SliceHashSet set;
 };
 
-template <PrimitiveType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
-class DistinctAggregateFunction final
-        : public AggregateFunctionBatchHelper<DistinctAggregateState<PT>,
-                                              DistinctAggregateFunction<PT, DistinctType, T>> {
+template <PrimitiveType PT, typename = guard::Guard>
+struct DistinctAggregateStateV2 {};
+
+template <PrimitiveType PT>
+struct DistinctAggregateStateV2<PT, FixedLengthPTGuard<PT>> {
+    using T = RunTimeCppType<PT>;
+    using SumType = RunTimeCppType<SumResultPT<PT>>;
+    static constexpr size_t item_size = sizeof(T);
+    using MyHashSet = HashSet<T>;
+
+    size_t update(T key) {
+        auto pair = set.insert(key);
+        return pair.second * item_size;
+    }
+
+    int64_t disctint_count() const { return set.size(); }
+
+    size_t serialize_size() const { return set.size() * item_size + sizeof(size_t); }
+
+    void serialize(uint8_t* dst) const {
+        size_t size = set.size();
+        memcpy(dst, &size, sizeof(size));
+        dst += sizeof(size);
+        for (auto& key : set) {
+            memcpy(dst, &key, sizeof(key));
+            dst += sizeof(T);
+        }
+    }
+
+    size_t deserialize_and_merge(const uint8_t* src, size_t len) {
+        size_t size = 0;
+        memcpy(&size, src, sizeof(size));
+        set.rehash(set.size() + size);
+
+        src += sizeof(size);
+        const T* data = reinterpret_cast<const T*>(src);
+        static const size_t prefetch_dist = 4;
+        for (size_t i = 0; i < size; i++) {
+            if ((i + prefetch_dist) < size) {
+                set.prefetch(data[i + prefetch_dist]);
+            }
+            set.insert(data[i]);
+        }
+        return size * item_size;
+    }
+
+    SumType sum_distinct() const {
+        SumType sum{};
+        // Sum distinct doesn't support timestamp and date type
+        if constexpr (IsDateTime<SumType>) {
+            return sum;
+        }
+
+        for (auto& key : set) {
+            sum += key;
+        }
+        return sum;
+    }
+
+    MyHashSet set;
+};
+
+template <PrimitiveType PT>
+struct DistinctAggregateStateV2<PT, BinaryPTGuard<PT>> : public DistinctAggregateState<PT> {};
+
+// Dear god this template class as template parameter kills me!
+template <PrimitiveType PT, template <PrimitiveType X> class TDistinctAggState, AggDistinctType DistinctType,
+          typename T = RunTimeCppType<PT>>
+class TDistinctAggregateFunction
+        : public AggregateFunctionBatchHelper<TDistinctAggState<PT>,
+                                              TDistinctAggregateFunction<PT, TDistinctAggState, DistinctType, T>> {
 public:
     using ColumnType = RunTimeColumnType<PT>;
 
@@ -258,5 +324,11 @@ public:
         }
     }
 };
+
+template <PrimitiveType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
+class DistinctAggregateFunction : public TDistinctAggregateFunction<PT, DistinctAggregateState, DistinctType, T> {};
+
+template <PrimitiveType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
+class DistinctAggregateFunctionV2 : public TDistinctAggregateFunction<PT, DistinctAggregateStateV2, DistinctType, T> {};
 
 } // namespace starrocks::vectorized

@@ -35,9 +35,36 @@ public:
     bool operator()(const SliceWithHash& x, const SliceWithHash& y) const {
         // by comparing hash value first, we can avoid comparing real data
         // which may touch another memory area and has bad cache locality.
+        if (x.size != y.size) return false;
         return x.hash == y.hash && memequal(x.data, x.size, y.data, y.size);
     }
 };
+
+template <PhmapSeed seed>
+class TSliceWithHash : public Slice {
+public:
+    size_t hash;
+    TSliceWithHash(const Slice& src) : Slice(src.data, src.size) { hash = SliceHashWithSeed<seed>()(src); }
+    TSliceWithHash(const uint8_t* p, size_t s, size_t h) : Slice(p, s), hash(h) {}
+};
+
+template <PhmapSeed seed>
+class THashOnSliceWithHash {
+public:
+    std::size_t operator()(const TSliceWithHash<seed>& slice) const { return slice.hash; }
+};
+
+template <PhmapSeed seed>
+class TEqualOnSliceWithHash {
+public:
+    bool operator()(const TSliceWithHash<seed>& x, const TSliceWithHash<seed>& y) const {
+        // by comparing hash value first, we can avoid comparing real data
+        // which may touch another memory area and has bad cache locality.
+        if (x.size != y.size) return false;
+        return x.hash == y.hash && memequal(x.data, x.size, y.data, y.size);
+    }
+};
+
 
 using SliceHashSet = phmap::flat_hash_set<SliceWithHash, HashOnSliceWithHash, EqualOnSliceWithHash>;
 
