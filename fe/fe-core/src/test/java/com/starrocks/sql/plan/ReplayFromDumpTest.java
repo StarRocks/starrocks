@@ -152,10 +152,6 @@ public class ReplayFromDumpTest {
         SessionVariable replaySessionVariable = replayPair.first.getSessionVariable();
         Assert.assertEquals(replaySessionVariable.getParallelExecInstanceNum(), 4);
         System.out.println(replayPair.second);
-        Assert.assertTrue(replayPair.second.contains("26:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  equal join conjunct: [175: ws_sold_date_sk, INT, true] = [211: d_date_sk, INT, false]"));
-
         Assert.assertTrue(replayPair.second.contains("|----25:EXCHANGE\n" +
                 "  |       cardinality: 73049\n" +
                 "  |    \n" +
