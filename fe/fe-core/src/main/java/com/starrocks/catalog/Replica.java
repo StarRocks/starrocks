@@ -169,6 +169,10 @@ public class Replica implements Writable {
         }
     }
 
+    public void setLastFailedTime(long lastFailedTime) {
+        this.lastFailedTimestamp = lastFailedTime;
+    }
+
     public long getVersion() {
         return this.version;
     }
