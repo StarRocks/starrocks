@@ -427,7 +427,7 @@ mysql> ALTER SYSTEM DROP BACKEND "172.16.139.24:9050";
 
 配置文件为apache\_hdfs\_broker/conf/apache\_hdfs\_broker.conf
 
-> 注意：如果机器有多个IP，需要配置priority\_networks，方式同FE。
+> 注意：Broker没有也不需要priority\_networks参数，Broker的服务默认绑定在0.0.0.0上，只需要在ADD BROKER时，填写正确可访问的Broker IP即可。
 
 如果有特殊的hdfs配置，复制线上的hdfs-site.xml到conf目录下
 
