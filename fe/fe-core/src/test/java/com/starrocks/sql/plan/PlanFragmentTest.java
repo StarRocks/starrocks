@@ -3288,18 +3288,13 @@ public class PlanFragmentTest extends PlanTestBase {
     @Test
     public void testDistinctPushDown() throws Exception {
         String sql = "select distinct k1 from (select distinct k1 from test.pushdown_test) t where k1 > 1";
-        starRocksAssert.query(sql).explainContains("  2:AGGREGATE (update finalize)\n" +
-                "  |  group by: 1: k1\n" +
-                "  |  use vectorized: true\n" +
-                "  |  \n" +
+        starRocksAssert.query(sql).explainContains("  RESULT SINK\n" +
+                "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  group by: 1: k1\n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: pushdown_test\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 1: k1 > 1");
+                "  0:OlapScanNode");
     }
 
     @Test
@@ -3771,5 +3766,69 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 = 2"));
+    }
+
+    @Test
+    public void testMergeAggregateNormal() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "select distinct x1 from (select distinct v1 as x1 from t0) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  use vectorized: true"));
+
+        sql = "select sum(x1) from (select sum(v1) as x1 from t0) as q";
+        plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true"));
+
+        sql = "select SUM(x1) from (select v2, sum(v1) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true"));
+
+        sql = "select v2, SUM(x1) from (select v2, v3, sum(v1) as x1 from t0 group by v2, v3) as q group by v2";
+        plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
+
+    @Test
+    public void testMergeAggregateFailed() throws Exception {
+        String sql;
+        String plan;
+        sql = "select avg(x1) from (select avg(v1) as x1 from t0) as q";
+        plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: avg(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode"));
+
+        sql = "select SUM(v2) from (select v2, sum(v1) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: v2)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  use vectorized: true\n"));
     }
 }
