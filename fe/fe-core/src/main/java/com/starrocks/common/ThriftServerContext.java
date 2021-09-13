@@ -26,7 +26,7 @@ import org.apache.thrift.server.ServerContext;
 
 public class ThriftServerContext implements ServerContext {
 
-    private TNetworkAddress client;
+    private final TNetworkAddress client;
 
     public ThriftServerContext(TNetworkAddress clientAddress) {
         this.client = clientAddress;
@@ -40,7 +40,7 @@ public class ThriftServerContext implements ServerContext {
     public <T> T unwrap(Class<T> iface) {
         try {
             if (isWrapperFor(iface)) {
-                return iface.cast(this);
+                return iface.cast(client);
             } else {
                 throw new RuntimeException("The context is not a wrapper for " + iface.getName());
             }
