@@ -137,7 +137,7 @@ protected:
         uint64_t file_size, index_size;
         ASSERT_OK(writer.finalize(&file_size, &index_size));
 
-        ASSERT_OK(Segment::open(_mem_tracker.get(), _block_mgr, filename, 0, &query_schema, res));
+        *res = *Segment::open(_mem_tracker.get(), _block_mgr, filename, 0, &query_schema);
         ASSERT_EQ(nrows, (*res)->num_rows());
     }
 
@@ -823,8 +823,7 @@ TEST_F(SegmentReaderWriterTest, TestStringDict) {
     ASSERT_OK(writer.finalize(&file_size, &index_size));
 
     {
-        std::shared_ptr<Segment> segment;
-        ASSERT_OK(Segment::open(_mem_tracker.get(), _block_mgr, fname, 0, tablet_schema.get(), &segment));
+        auto segment = *Segment::open(_mem_tracker.get(), _block_mgr, fname, 0, tablet_schema.get());
         ASSERT_EQ(4096, segment->num_rows());
         Schema schema(*tablet_schema);
         OlapReaderStatistics stats;
