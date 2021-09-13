@@ -759,8 +759,16 @@ AggregateFuncResolver::AggregateFuncResolver() {
 AggregateFuncResolver::~AggregateFuncResolver() = default;
 
 const AggregateFunction* get_aggregate_function(const std::string& name, PrimitiveType arg_type,
-                                                PrimitiveType return_type, bool is_null) {
-    return AggregateFuncResolver::instance()->get_aggregate_info(name, arg_type, return_type, is_null);
+                                                PrimitiveType return_type, bool is_null, int agg_func_set_version) {
+    std::string func_name = name;
+    if (agg_func_set_version > 1) {
+        if (name == "multi_distinct_sum") {
+            func_name = "multi_distinct_sum2";
+        } else if (name == "multi_distinct_count") {
+            func_name = "multi_distinct_count2";
+        }
+    }
+    return AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type, is_null);
 }
 
 } // namespace starrocks::vectorized

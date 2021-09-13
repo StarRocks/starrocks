@@ -164,8 +164,8 @@ template <PrimitiveType PT>
 struct DistinctAggregateStateV2<PT, FixedLengthPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     using SumType = RunTimeCppType<SumResultPT<PT>>;
-    static constexpr size_t item_size = sizeof(T);
     using MyHashSet = HashSet<T>;
+    static constexpr size_t item_size = phmap::item_serialize_size<MyHashSet>::value;
 
     size_t update(T key) {
         auto pair = set.insert(key);
@@ -176,7 +176,7 @@ struct DistinctAggregateStateV2<PT, FixedLengthPTGuard<PT>> {
 
     int64_t disctint_count() const { return set.size(); }
 
-    size_t serialize_size() const { return set.size() * item_size + sizeof(size_t); }
+    size_t serialize_size() const { return set.size() * sizeof(T) + sizeof(size_t); }
 
     void serialize(uint8_t* dst) const {
         size_t size = set.size();
@@ -193,6 +193,7 @@ struct DistinctAggregateStateV2<PT, FixedLengthPTGuard<PT>> {
         memcpy(&size, src, sizeof(size));
         set.rehash(set.size() + size);
 
+        size_t old_size = set.size();
         src += sizeof(size);
         const T* data = reinterpret_cast<const T*>(src);
         static const size_t prefetch_dist = 4;
@@ -202,7 +203,8 @@ struct DistinctAggregateStateV2<PT, FixedLengthPTGuard<PT>> {
             }
             set.insert(data[i]);
         }
-        return size * item_size;
+        size_t new_size = set.size();
+        return (new_size - old_size) * item_size;
     }
 
     SumType sum_distinct() const {
