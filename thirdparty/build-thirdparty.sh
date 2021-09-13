@@ -439,17 +439,17 @@ build_boost() {
 # mysql
 build_mysql() {
     check_if_source_exist $MYSQL_SOURCE
-    check_if_source_exist $BOOST_FOR_MYSQL_SOURCE
+    check_if_source_exist $BOOST_SOURCE
 
     cd $TP_SOURCE_DIR/$MYSQL_SOURCE
 
     mkdir -p $BUILD_DIR && cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    if [ ! -d $BOOST_FOR_MYSQL_SOURCE ]; then
-        cp -rf $TP_SOURCE_DIR/$BOOST_FOR_MYSQL_SOURCE ./
+    if [ ! -d $BOOST_SOURCE ]; then
+        cp -rf $TP_SOURCE_DIR/$BOOST_SOURCE ./
     fi
 
-    $CMAKE_CMD ../ -DWITH_BOOST=`pwd`/$BOOST_FOR_MYSQL_SOURCE -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/mysql/ \
+    $CMAKE_CMD ../ -DWITH_BOOST=`pwd`/$BOOST_SOURCE -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/mysql/ \
     -DCMAKE_INCLUDE_PATH=$TP_INCLUDE_DIR -DCMAKE_LIBRARY_PATH=$TP_LIB_DIR -DWITHOUT_SERVER=1 \
     -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O3 -g -fabi-version=2 -fno-omit-frame-pointer -fno-strict-aliasing -std=gnu++11" \
     -DDISABLE_SHARED=1 -DBUILD_SHARED_LIBS=0
@@ -707,11 +707,9 @@ build_fmt() {
     check_if_source_exist $FMT_SOURCE
     cd $TP_SOURCE_DIR/$FMT_SOURCE
     mkdir -p build && cd build
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
+			-DCMAKE_INSTALL_LIBDIR=lib64
     make -j$PARALLEL && make install
-    if [ -f ${TP_INSTALL_DIR}/lib/libfmt.a ]; then
-        cp -f ${TP_INSTALL_DIR}/lib/libfmt.a ${TP_INSTALL_DIR}/lib64/libfmt.a
-    fi
 }
 
 #ryu
