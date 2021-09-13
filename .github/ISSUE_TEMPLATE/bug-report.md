@@ -5,11 +5,12 @@ labels: 'type/bug'
 
 ---
 
+<!-- (At least include the following, feel free to add if you have more content) -->
+
 ### Steps to reproduce the behavior (Required)
 1. CREATE TABLE '...'
 2. INSERT INTO '....'
 3. SELECT  '....'
-
 
 ### Expected behavior (Required)
 
