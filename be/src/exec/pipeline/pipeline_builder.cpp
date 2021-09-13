@@ -5,9 +5,35 @@
 #include "exec/exec_node.h"
 
 namespace starrocks::pipeline {
+
+void PipelineBuilderContext::maybe_interpolate_local_exchange(OpFactories& pred_operators) {
+    // predecessor pipeline has multiple drivers that will produce multiple output streams, but sort operator is
+    // not parallelized now and can not accept multiple streams as input, so add a LocalExchange to gather multiple
+    // streams and produce one output stream piping into the sort operator.
+    DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
+    auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
+    if (source_operator->num_driver_instances() > 1) {
+        auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size);
+        auto local_exchange_source = std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), mem_mgr);
+        auto local_exchange = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
+        auto local_exchange_sink =
+                std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(), local_exchange);
+        // Add LocalExchangeSinkOperator to predecessor pipeline.
+        pred_operators.emplace_back(std::move(local_exchange_sink));
+        // predecessor pipeline comes to end.
+        add_pipeline(std::move(pred_operators));
+        // Multiple LocalChangeSinkOperators pipe into one LocalChangeSourceOperator.
+        local_exchange_source->set_num_driver_instances(1);
+        // pred_operators is re-used, and a new pipeline is created, LocalExchangeSourceOperator is added as the
+        // head of the pipeline.
+        pred_operators.emplace_back(local_exchange_source);
+    }
+}
+
 Pipelines PipelineBuilder::build(const FragmentContext& fragment, ExecNode* exec_node) {
     pipeline::OpFactories operators = exec_node->decompose_to_pipeline(&_context);
-    _context.add_pipeline(operators);
+    _context.add_pipeline(std::move(operators));
     return _context.get_pipelines();
 }
+
 } // namespace starrocks::pipeline

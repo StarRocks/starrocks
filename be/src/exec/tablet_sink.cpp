@@ -49,6 +49,10 @@ static const uint8_t VALID_SEL_OK = 0x1;
 // make sure the least bit is 1.
 static const uint8_t VALID_SEL_OK_AND_NULL = 0x3;
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 namespace starrocks::stream_load {
 
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t index_id, int64_t node_id, int32_t schema_hash)

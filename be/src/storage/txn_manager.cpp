@@ -151,7 +151,7 @@ OLAPStatus TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId tra
     return OLAP_SUCCESS;
 }
 
-OLAPStatus TxnManager::commit_txn(OlapMeta* meta, TPartitionId partition_id, TTransactionId transaction_id,
+OLAPStatus TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
                                   TTabletId tablet_id, SchemaHash schema_hash, TabletUid tablet_uid,
                                   const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
     if (partition_id < 1 || transaction_id < 1 || tablet_id < 1) {
@@ -233,7 +233,7 @@ OLAPStatus TxnManager::commit_txn(OlapMeta* meta, TPartitionId partition_id, TTr
 }
 
 // remove a txn from txn manager
-OLAPStatus TxnManager::publish_txn(OlapMeta* meta, TPartitionId partition_id, TTransactionId transaction_id,
+OLAPStatus TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
                                    TTabletId tablet_id, SchemaHash schema_hash, TabletUid tablet_uid,
                                    const Version& version, VersionHash version_hash) {
     pair<int64_t, int64_t> key(partition_id, transaction_id);
@@ -378,7 +378,7 @@ OLAPStatus TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId tr
 
 // fe call this api to clear unused rowsets in be
 // could not delete the rowset if it already has a valid version
-OLAPStatus TxnManager::delete_txn(OlapMeta* meta, TPartitionId partition_id, TTransactionId transaction_id,
+OLAPStatus TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
                                   TTabletId tablet_id, SchemaHash schema_hash, TabletUid tablet_uid) {
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
@@ -448,7 +448,7 @@ void TxnManager::get_tablet_related_txns(TTabletId tablet_id, SchemaHash schema_
 
 // force drop all txns related with the tablet
 // maybe lock error, because not get txn lock before remove from meta
-void TxnManager::force_rollback_tablet_related_txns(OlapMeta* meta, TTabletId tablet_id, SchemaHash schema_hash,
+void TxnManager::force_rollback_tablet_related_txns(KVStore* meta, TTabletId tablet_id, SchemaHash schema_hash,
                                                     TabletUid tablet_uid) {
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     for (int32_t i = 0; i < _txn_map_shard_size; i++) {

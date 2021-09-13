@@ -46,6 +46,7 @@ import com.starrocks.planner.IntersectNode;
 import com.starrocks.planner.MysqlScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlannerContext;
 import com.starrocks.planner.ProjectNode;
 import com.starrocks.planner.RepeatNode;
@@ -314,7 +315,8 @@ public class PlanFragmentBuilder {
                 }
                 scanNode.setTotalTabletsNum(totalTabletsNum);
             } catch (UserException e) {
-                throw new StarRocksPlannerException("Build Exec OlapScanNode fail, scan info is invalid," + e.getMessage(),
+                throw new StarRocksPlannerException(
+                        "Build Exec OlapScanNode fail, scan info is invalid," + e.getMessage(),
                         INTERNAL_ERROR);
             }
 
@@ -375,7 +377,6 @@ public class PlanFragmentBuilder {
                 hdfsScanNode.setSelectedPartitionIds(node.getSelectedPartitionIds());
                 hdfsScanNode.setIdToPartitionKey(node.getIdToPartitionKey());
                 hdfsScanNode.getScanRangeLocations(context.getDescTbl());
-                hdfsScanNode.computeCardinality();
                 // set predicate
                 List<ScalarOperator> noEvalPartitionConjuncts = node.getNoEvalPartitionConjuncts();
                 List<ScalarOperator> nonPartitionConjuncts = node.getNonPartitionConjuncts();
@@ -1069,8 +1070,10 @@ public class PlanFragmentBuilder {
                 } else if (!(leftFragment.getPlanRoot() instanceof ExchangeNode) &&
                         !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
                     distributionMode = HashJoinNode.DistributionMode.COLOCATE;
+                } else if (isShuffleHashBucket(leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
+                    distributionMode = HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                 } else {
-                    distributionMode = HashJoinNode.DistributionMode.BUCKET_SHUFFLE;
+                    distributionMode = HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET;
                 }
 
                 for (BinaryPredicateOperator s : eqOnPredicates) {
@@ -1203,6 +1206,22 @@ public class PlanFragmentBuilder {
                     context.getFragments().remove(leftFragment);
                     context.getFragments().add(leftFragment);
                     return leftFragment;
+                } else if (distributionMode.equals(HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
+                    List<Integer> leftOnPredicateColumns = new ArrayList<>();
+                    List<Integer> rightOnPredicateColumns = new ArrayList<>();
+                    JoinPredicateUtils.getJoinOnPredicatesColumns(eqOnPredicates, leftChildColumns, rightChildColumns,
+                            leftOnPredicateColumns, rightOnPredicateColumns);
+                    setJoinPushDown(hashJoinNode);
+
+                    // distributionMode is SHUFFLE_HASH_BUCKET
+                    if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
+                            !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
+                        return computeRunTimeBucketShufflePlanFragment(context, leftOnPredicateColumns, rightFragment,
+                                leftFragment, hashJoinNode);
+                    } else {
+                        return computeRunTimeBucketShufflePlanFragment(context, rightOnPredicateColumns, leftFragment,
+                                rightFragment, hashJoinNode);
+                    }
                 } else {
                     List<Integer> leftOnPredicateColumns = new ArrayList<>();
                     List<Integer> rightOnPredicateColumns = new ArrayList<>();
@@ -1223,12 +1242,66 @@ public class PlanFragmentBuilder {
             }
         }
 
+        public boolean isShuffleJoin(HashJoinNode node) {
+            if (node.getChild(0) instanceof ExchangeNode && ((ExchangeNode) node.getChild(0)).getDistributionType()
+                    .equals(DistributionSpec.DistributionType.SHUFFLE) &&
+                    node.getChild(1) instanceof ExchangeNode && ((ExchangeNode) node.getChild(1)).getDistributionType()
+                    .equals(DistributionSpec.DistributionType.SHUFFLE)) {
+                return true;
+            }
+            return false;
+        }
+
+        public boolean isShuffleHashBucket(PlanNode left, PlanNode right) {
+            if (left instanceof ProjectNode) {
+                return isShuffleHashBucket(left.getChild(0), right);
+            }
+            if (left instanceof HashJoinNode) {
+                HashJoinNode hashJoinNode = (HashJoinNode) left;
+                if (hashJoinNode.isLocalHashBucket()) {
+                    return false;
+                }
+                if (hashJoinNode.isShuffleHashBucket() || isShuffleJoin(hashJoinNode)) {
+                    return true;
+                }
+            }
+            // left is not hashJoinNode
+            if (right instanceof ProjectNode) {
+                return isShuffleHashBucket(left, right.getChild(0));
+            }
+            if (right instanceof HashJoinNode) {
+                return true;
+            }
+            return false;
+        }
+
         public PlanFragment computeBucketShufflePlanFragment(ExecPlan context, List<Integer> columns,
                                                              PlanFragment stayFragment,
                                                              PlanFragment removeFragment, HashJoinNode hashJoinNode) {
-            hashJoinNode.setBucketShuffle(true);
+            hashJoinNode.setLocalHashBucket(true);
             removeFragment.getChild(0)
                     .setOutputPartition(new DataPartition(TPartitionType.BUCKET_SHFFULE_HASH_PARTITIONED,
+                            removeFragment.getDataPartition().getPartitionExprs()));
+
+            // Currently, we always generate new fragment for PhysicalDistribution.
+            // So we need to remove exchange node only fragment for Join.
+            context.getFragments().remove(removeFragment);
+
+            context.getFragments().remove(stayFragment);
+            context.getFragments().add(stayFragment);
+
+            stayFragment.setPlanRoot(hashJoinNode);
+            stayFragment.addChild(removeFragment.getChild(0));
+            return stayFragment;
+        }
+
+        public PlanFragment computeRunTimeBucketShufflePlanFragment(ExecPlan context, List<Integer> columns,
+                                                                    PlanFragment stayFragment,
+                                                                    PlanFragment removeFragment,
+                                                                    HashJoinNode hashJoinNode) {
+            hashJoinNode.setShuffleHashBucket(true);
+            removeFragment.getChild(0)
+                    .setOutputPartition(new DataPartition(TPartitionType.HASH_PARTITIONED,
                             removeFragment.getDataPartition().getPartitionExprs()));
 
             // Currently, we always generate new fragment for PhysicalDistribution.

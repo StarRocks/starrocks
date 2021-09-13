@@ -49,6 +49,11 @@ using std::move;
 // AnyVal* type. Due to this, there are lots of casts when we use these typedefs.
 // TODO: these typedefs exists as wrappers to go from (TupleRow, Tuple) to the
 // types the aggregation functions need. This needs to be done with codegen instead.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 typedef void (*InitFn)(FunctionContext*, AnyVal*);
 typedef void (*UpdateFn0)(FunctionContext*, AnyVal*);
 typedef void (*UpdateFn1)(FunctionContext*, const AnyVal&, AnyVal*);

@@ -47,6 +47,11 @@ class TExprNode;
 // as glue code between the TupleRow/Tuple signature used by the AggregationNode
 // and the AnyVal signature of the UDA interface. It handles evaluating input
 // slots from TupleRows and aggregating the result to the result tuple.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class AggFnEvaluator {
 public:
     /// TODO: The aggregation node has custom codegen paths for a few of the builtins.

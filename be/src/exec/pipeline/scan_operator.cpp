@@ -81,12 +81,12 @@ Status ScanOperator::close(RuntimeState* state) {
     return Status::OK();
 }
 
-bool ScanOperator::_has_output_blocking() {
+bool ScanOperator::_has_output_blocking() const {
     DCHECK(_io_threads == nullptr);
     return _chunk_source->has_next_chunk();
 }
 
-bool ScanOperator::_has_output_nonblocking() {
+bool ScanOperator::_has_output_nonblocking() const {
     DCHECK(_io_threads != nullptr);
     // EOS has arrived
     if (_is_finished) {
@@ -101,7 +101,7 @@ bool ScanOperator::_has_output_nonblocking() {
     return true;
 }
 
-bool ScanOperator::has_output() {
+bool ScanOperator::has_output() const {
     if (_io_threads != nullptr) {
         return _has_output_nonblocking();
     } else {
@@ -151,7 +151,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::_pull_chunk_blocking(RuntimeState* 
         return chunk;
     }
     _pickup_morsel(state);
-    return nullptr;
+    return std::make_shared<vectorized::Chunk>();
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::_pull_chunk_nonblocking(RuntimeState* state) {
@@ -175,7 +175,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::_pull_chunk_nonblocking(RuntimeStat
     // to output and should pick up next morsel. so here return nullptr instead of
     // empty chunk.
     _pickup_morsel(state);
-    return nullptr;
+    return std::make_shared<vectorized::Chunk>();
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {

@@ -80,11 +80,27 @@ void CSVScanner::CSVReader::split_record(const Record& record, Fields* fields) c
     const char* value = record.data;
     const char* ptr = record.data;
     const size_t size = record.size;
-    for (size_t i = 0; i < size; ++i, ++ptr) {
-        if (*ptr == _field_delimiter) {
-            fields->emplace_back(value, ptr - value);
-            value = ptr + 1;
+
+    if (_field_delimiter.size() == 1) {
+        for (size_t i = 0; i < size; ++i, ++ptr) {
+            if (*ptr == _field_delimiter[0]) {
+                fields->emplace_back(value, ptr - value);
+                value = ptr + 1;
+            }
         }
+    } else {
+        const auto fd_size = _field_delimiter.size();
+        const auto* const base = ptr;
+
+        do {
+            ptr = static_cast<char*>(memmem(value, size - (value - base), _field_delimiter.data(), fd_size));
+            if (ptr != nullptr) {
+                fields->emplace_back(value, ptr - value);
+                value = ptr + fd_size;
+            }
+        } while (ptr != nullptr);
+
+        ptr = record.data + size;
     }
     fields->emplace_back(value, ptr - value);
 }
@@ -93,8 +109,13 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
                        ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
-          _record_delimiter(scan_range.params.row_delimiter),
-          _field_delimiter(scan_range.params.column_separator) {}
+          _record_delimiter(scan_range.params.row_delimiter) {
+    if (scan_range.params.__isset.multi_column_separator) {
+        _field_delimiter = scan_range.params.multi_column_separator;
+    } else {
+        _field_delimiter = scan_range.params.column_separator;
+    }
+}
 
 Status CSVScanner::open() {
     RETURN_IF_ERROR(FileScanner::open());

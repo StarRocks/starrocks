@@ -465,20 +465,6 @@ public class CreateTableStmt extends DdlStmt {
         if (!engineNames.contains(engineName)) {
             throw new AnalysisException("Unknown engine name: " + engineName);
         }
-
-        if (engineName.equals("mysql") || engineName.equals("broker")
-                || engineName.equals("elasticsearch") || engineName.equals("hive")) {
-            if (!isExternal) {
-                // this is for compatibility
-                isExternal = true;
-                LOG.warn("create " + engineName + " table without keyword external");
-                // throw new AnalysisException("Only support external table with engine name = mysql or broker");
-            }
-        } else {
-            if (isExternal) {
-                throw new AnalysisException("Do not support external table with engine name = olap");
-            }
-        }
     }
 
     public static CreateTableStmt read(DataInput in) throws IOException {

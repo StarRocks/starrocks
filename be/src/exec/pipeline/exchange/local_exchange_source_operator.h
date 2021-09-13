@@ -17,7 +17,7 @@ public:
 
     Status add_chunk(vectorized::Chunk* chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
-    bool has_output() override;
+    bool has_output() const override;
 
     bool is_finished() const override;
 
@@ -34,10 +34,10 @@ private:
     const std::shared_ptr<LocalExchangeMemoryManager>& _memory_manager;
 };
 
-class LocalExchangeSourceOperatorFactory final : public OperatorFactory {
+class LocalExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     LocalExchangeSourceOperatorFactory(int32_t id, const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager)
-            : OperatorFactory(id, -1), _memory_manager(memory_manager) {}
+            : SourceOperatorFactory(id, -1), _memory_manager(memory_manager) {}
 
     ~LocalExchangeSourceOperatorFactory() override = default;
 

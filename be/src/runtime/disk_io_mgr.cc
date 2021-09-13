@@ -969,7 +969,6 @@ void DiskIoMgr::work_loop(DiskQueue* disk_queue) {
     // Cancellation checking needs to happen in both steps 1 and 3.
     while (true) {
         RequestContext* worker_context = NULL;
-        ;
         RequestRange* range = NULL;
 
         if (!get_next_request_range(disk_queue, &range, &worker_context)) {

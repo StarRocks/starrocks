@@ -37,19 +37,14 @@ template <PrimitiveType Type>
 class VectorizedInConstPredicate final : public Predicate {
 public:
     VectorizedInConstPredicate(const TExprNode& node)
-            : Predicate(node),
-              _is_not_in(node.in_predicate.is_not_in),
-              _is_prepare(false),
-              _null_in_set(false) {}
+            : Predicate(node), _is_not_in(node.in_predicate.is_not_in), _is_prepare(false), _null_in_set(false) {}
 
     VectorizedInConstPredicate(const VectorizedInConstPredicate& other)
             : Predicate(other), _is_not_in(other._is_not_in), _null_in_set(false) {}
 
     ~VectorizedInConstPredicate() {}
 
-    virtual Expr* clone(ObjectPool* pool) const override {
-        return pool->add(new VectorizedInConstPredicate(*this));
-    }
+    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedInConstPredicate(*this)); }
 
     Status prepare([[maybe_unused]] RuntimeState* state) {
         if (_is_prepare) {
@@ -60,8 +55,7 @@ public:
         return Status::OK();
     }
 
-    Status prepare(RuntimeState* state, const RowDescriptor& row_desc,
-                   ExprContext* context) override {
+    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* context) override {
         Expr::prepare(state, row_desc, context);
 
         if (_is_prepare) {
@@ -81,8 +75,7 @@ public:
         return Status::OK();
     }
 
-    Status open(RuntimeState* state, ExprContext* context,
-                FunctionContext::FunctionStateScope scope) override {
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
         RETURN_IF_ERROR(Expr::open(state, context, scope));
 
         if (Type != _children[0]->type().type) {
@@ -131,9 +124,7 @@ public:
         const bool no_value = _is_not_in;
         auto size = lhs->size();
 
-        auto lhs_data = lhs->is_constant()
-                                ? ColumnHelper::as_raw_column<ConstColumn>(lhs)->data_column()
-                                : lhs;
+        auto lhs_data = lhs->is_constant() ? ColumnHelper::as_raw_column<ConstColumn>(lhs)->data_column() : lhs;
 
         // input data
         auto data = ColumnHelper::cast_to_raw<Type>(lhs_data)->get_data().data();
@@ -161,6 +152,9 @@ public:
             }
         }
 
+        if (lhs->is_constant()) {
+            return ConstColumn::create(result, 1);
+        }
         return result;
     }
 
@@ -172,7 +166,7 @@ public:
         ColumnViewer<Type> viewer(lhs);
 
         const bool yes_value = !_is_not_in;
-        const bool no_value = _is_not_in;
+        [[maybe_unused]] const bool no_value = _is_not_in;
         for (int row = 0; row < viewer.size(); ++row) {
             if (viewer.is_null(row)) {
                 if constexpr (equal_null) {

@@ -469,19 +469,51 @@ TEST_F(TestDecimalV3, testParseHighScaleDecimalString) {
 }
 
 TEST_F(TestDecimalV3, testParseDecimalStringWithLeadingZeros) {
-    std::vector<std::tuple<std::string, std::string>> test_cases = {
-            {"0.0000000000000000000123456", "0"},
-            {"0.0000000000000000000123456e+19", "0.123456000"},
-            {"0.0000000000000000000123456e+18", "0.012345600"},
-            {"0.0000000000000000000123456e+256", "0"},
+    std::vector<std::tuple<std::string, std::string, bool>> test_cases = {
+            {"0.0000000000000000000123456", "0", false},
+            {"0.0000000000000000000123456e+19", "0.123456000", false},
+            {"0.0000000000000000000123456e+18", "0.012345600", false},
+            {"0.0000000000000000000123456e+256", "0", true},
     };
     for (auto& tc : test_cases) {
         int32_t value;
         auto& s = std::get<0>(tc);
         auto& expect = std::get<1>(tc);
-        auto ok = DecimalV3Cast::from_string<int32_t>(&value, 9, 9, s.c_str(), s.size());
-        ASSERT_EQ(ok, false);
-        ASSERT_EQ(DecimalV3Cast::to_string<int128_t>(value, 9, 9), expect);
+        auto& expect_fail = std::get<2>(tc);
+        auto fail = DecimalV3Cast::from_string<int32_t>(&value, 9, 9, s.c_str(), s.size());
+        ASSERT_EQ(fail, expect_fail);
+        if (!fail) {
+            ASSERT_EQ(DecimalV3Cast::to_string<int128_t>(value, 9, 9), expect);
+        }
+    }
+}
+TEST_F(TestDecimalV3, testFromStringWithOverflowAllowed) {
+    std::vector<std::tuple<std::string, std::string, bool>> test_cases = {
+            {"1.2", "1.2000000000000000000000000000000000000", false},
+            {"9.9999999999999999999999999999999999999", "9.9999999999999999999999999999999999999", false},
+            {"-9.9999999999999999999999999999999999999", "-9.9999999999999999999999999999999999999", false},
+            {"11.2", "10", false},
+            {"-1.2", "-1.2000000000000000000000000000000000000", false},
+            {"-11.2", "-10", false},
+            {"1E307", "10", false},
+            {"-1E307", "-10", false},
+            {"1.79769e+308", "10", false},
+            {"-1.79769e+308", "-10", false},
+            {"-inf", "", true},
+            {"+inf", "", true},
+            {"abc", "", true}
+
+    };
+    for (auto& tc : test_cases) {
+        int128_t value;
+        auto& s = std::get<0>(tc);
+        auto& expect = std::get<1>(tc);
+        auto& expect_fail = std::get<2>(tc);
+        auto fail = DecimalV3Cast::from_string_with_overflow_allowed<int128_t>(&value, 37, s.c_str(), s.size());
+        ASSERT_EQ(fail, expect_fail);
+        if (!fail) {
+            ASSERT_EQ(DecimalV3Cast::to_string<int128_t>(value, 38, 37), expect);
+        }
     }
 }
 

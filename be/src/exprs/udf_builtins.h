@@ -30,6 +30,11 @@ namespace starrocks {
 // should be replaced to the UDF interface as well.
 // This is just to illustrate how builtins against the UDF interface will be
 // implemented.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class UdfBuiltins {
 public:
     static starrocks_udf::DoubleVal abs(starrocks_udf::FunctionContext* context, const starrocks_udf::DoubleVal& v);

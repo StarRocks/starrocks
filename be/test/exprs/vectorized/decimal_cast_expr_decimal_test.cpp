@@ -280,9 +280,9 @@ PARALLEL_TEST(VectorizedDecimalCastExprDecimalTest, testCastFromDecimal32p9s0ToD
 PARALLEL_TEST(VectorizedDecimalCastExprDecimalTest, testCastFromDecimal32p9s0ToDecimal128p35s30Normal) {
     CastTestCaseArray test_cases = {{9, 0, "5", 35, 30, "5", "false"},
                                     {9, 0, "-78030840", 35, 30, "-78030840", "false"},
-                                    {9, 0, "151442242", 35, 30, "151442242", "false"},
+                                    {9, 0, "15144224", 35, 30, "15144224", "false"},
                                     {9, 0, "80834757", 35, 30, "80834757", "false"},
-                                    {9, 0, "118016175", 35, 30, "118016175", "false"}};
+                                    {9, 0, "11801617", 35, 30, "11801617", "false"}};
     test_cast_all<TYPE_DECIMAL32, TYPE_DECIMAL128>(test_cases);
 }
 
@@ -2201,8 +2201,8 @@ PARALLEL_TEST(VectorizedDecimalCastExprDecimalTest, testCastFromDecimal64p18s9To
     CastTestCaseArray test_cases = {
             {18, 9, "0.061034691", 35, 30, "0.061034691000000000000000000000", "false"},
             {18, 9, "6192670.071539429", 35, 30, "6192670.071539429000000000000000000000", "false"},
-            {18, 9, "130777624.561851149", 35, 30, "130777624.561851149000000000000000000000", "false"},
-            {18, 9, "-140044970.110981618", 35, 30, "-140044970.110981618000000000000000000000", "false"},
+            {18, 9, "13077762.561851149", 35, 30, "13077762.561851149000000000000000000000", "false"},
+            {18, 9, "-14004497.110981618", 35, 30, "-14004497.110981618000000000000000000000", "false"},
             {18, 9, "28291.605276774", 35, 30, "28291.605276774000000000000000000000", "false"},
             {18, 9, "33.135842607", 35, 30, "33.135842607000000000000000000000", "false"}};
     test_cast_all<TYPE_DECIMAL64, TYPE_DECIMAL128>(test_cases);

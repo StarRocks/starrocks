@@ -12,10 +12,13 @@ class AggregateStreamingNode final : public AggregateBaseNode {
 public:
     AggregateStreamingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
             : AggregateBaseNode(pool, tnode, descs) {
-        _aggr_phase = AggrPhase1;
+        _aggregator->set_aggr_phase(AggrPhase1);
     };
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
+
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
 
 private:
     void _output_chunk_from_hash_map(ChunkPtr* chunk);

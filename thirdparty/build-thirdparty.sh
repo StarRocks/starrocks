@@ -432,25 +432,24 @@ build_boost() {
     check_if_source_exist $BOOST_SOURCE
     cd $TP_SOURCE_DIR/$BOOST_SOURCE
 
-    echo "using gcc : starrocks : ${CXX} ; " > tools/build/src/user-config.jam
     ./bootstrap.sh --prefix=$TP_INSTALL_DIR
-    ./b2 --toolset=gcc-starrocks link=static -d0 -j$PARALLEL --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR" install
+    ./b2 link=static runtime-link=static -j $PARALLEL --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR" install
 }
 
 # mysql
 build_mysql() {
     check_if_source_exist $MYSQL_SOURCE
-    check_if_source_exist $BOOST_FOR_MYSQL_SOURCE
+    check_if_source_exist $BOOST_SOURCE
 
     cd $TP_SOURCE_DIR/$MYSQL_SOURCE
 
     mkdir -p $BUILD_DIR && cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    if [ ! -d $BOOST_FOR_MYSQL_SOURCE ]; then
-        cp -rf $TP_SOURCE_DIR/$BOOST_FOR_MYSQL_SOURCE ./
+    if [ ! -d $BOOST_SOURCE ]; then
+        cp -rf $TP_SOURCE_DIR/$BOOST_SOURCE ./
     fi
 
-    $CMAKE_CMD ../ -DWITH_BOOST=`pwd`/$BOOST_FOR_MYSQL_SOURCE -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/mysql/ \
+    $CMAKE_CMD ../ -DWITH_BOOST=`pwd`/$BOOST_SOURCE -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/mysql/ \
     -DCMAKE_INCLUDE_PATH=$TP_INCLUDE_DIR -DCMAKE_LIBRARY_PATH=$TP_LIB_DIR -DWITHOUT_SERVER=1 \
     -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O3 -g -fabi-version=2 -fno-omit-frame-pointer -fno-strict-aliasing -std=gnu++11" \
     -DDISABLE_SHARED=1 -DBUILD_SHARED_LIBS=0
@@ -708,7 +707,8 @@ build_fmt() {
     check_if_source_exist $FMT_SOURCE
     cd $TP_SOURCE_DIR/$FMT_SOURCE
     mkdir -p build && cd build
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
+			-DCMAKE_INSTALL_LIBDIR=lib64
     make -j$PARALLEL && make install
 }
 
@@ -748,6 +748,25 @@ build_jdk() {
     cp -r $TP_SOURCE_DIR/$JDK_SOURCE $TP_INSTALL_DIR/
 }
 
+# ragel
+# ragel-6.9+ is used by hypercan, so we build it first. 
+build_ragel() {
+    check_if_source_exist $RAGEL_SOURCE
+    cd $TP_SOURCE_DIR/$RAGEL_SOURCE
+    ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static
+    make -j$PARALLEL && make install    
+}
+
+#hyperscan
+build_hyperscan() {
+    check_if_source_exist $HYPERSCAN_SOURCE
+    cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
+    export PATH=$TP_INSTALL_DIR/bin:$PATH
+    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
+          -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc  -DCMAKE_INSTALL_LIBDIR=lib
+    make -j$PARALLEL && make install
+}
+
 build_libevent
 build_zlib
 build_lz4
@@ -782,5 +801,7 @@ build_ryu
 build_breakpad
 build_hadoop
 build_jdk
-
+build_ragel
+build_hyperscan
 echo "Finihsed to build all thirdparties"
+

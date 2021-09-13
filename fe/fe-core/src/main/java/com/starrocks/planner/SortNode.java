@@ -44,9 +44,9 @@ import org.apache.logging.log4j.Logger;
 import java.util.Iterator;
 import java.util.List;
 
-/**
- * Sorting.
- */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class SortNode extends PlanNode {
     private static final Logger LOG = LogManager.getLogger(SortNode.class);
     private final SortInfo info;
@@ -316,5 +316,10 @@ public class SortNode extends PlanNode {
         }
 
         return true;
+    }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 }

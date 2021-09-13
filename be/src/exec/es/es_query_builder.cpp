@@ -33,7 +33,7 @@ namespace starrocks {
 ESQueryBuilder::ESQueryBuilder(const std::string& es_query_str) : _es_query_str(es_query_str) {}
 ESQueryBuilder::ESQueryBuilder(const ExtFunction& es_query) {
     auto first = es_query.values.front();
-    _es_query_str = first.to_string();
+    _es_query_str = first->to_string();
 }
 
 // note: call this function must invoke BooleanQueryBuilder::check_es_query to check validation
@@ -56,7 +56,7 @@ void ESQueryBuilder::to_json(rapidjson::Document* document, rapidjson::Value* qu
 TermQueryBuilder::TermQueryBuilder(const std::string& field, const std::string& term) : _field(field), _term(term) {}
 
 TermQueryBuilder::TermQueryBuilder(const ExtBinaryPredicate& binary_predicate)
-        : _field(binary_predicate.col.name), _term(binary_predicate.value.to_string()) {}
+        : _field(binary_predicate.col.name), _term(binary_predicate.value->to_string()) {}
 
 void TermQueryBuilder::to_json(rapidjson::Document* document, rapidjson::Value* query) {
     rapidjson::Document::AllocatorType& allocator = document->GetAllocator();
@@ -69,7 +69,7 @@ void TermQueryBuilder::to_json(rapidjson::Document* document, rapidjson::Value* 
 }
 
 RangeQueryBuilder::RangeQueryBuilder(const ExtBinaryPredicate& range_predicate)
-        : _field(range_predicate.col.name), _value(range_predicate.value.to_string()), _op(range_predicate.op) {}
+        : _field(range_predicate.col.name), _value(range_predicate.value->to_string()), _op(range_predicate.op) {}
 
 void RangeQueryBuilder::to_json(rapidjson::Document* document, rapidjson::Value* query) {
     rapidjson::Document::AllocatorType& allocator = document->GetAllocator();
@@ -109,7 +109,7 @@ void WildCardQueryBuilder::to_json(rapidjson::Document* document, rapidjson::Val
     query->AddMember("wildcard", term_node, allocator);
 }
 WildCardQueryBuilder::WildCardQueryBuilder(const ExtLikePredicate& like_predicate) : _field(like_predicate.col.name) {
-    _like_value = like_predicate.value.to_string();
+    _like_value = like_predicate.value->to_string();
     // example of translation :
     //      abc_123  ===> abc?123
     //      abc%ykz  ===> abc*123
@@ -145,7 +145,7 @@ void TermsInSetQueryBuilder::to_json(rapidjson::Document* document, rapidjson::V
 
 TermsInSetQueryBuilder::TermsInSetQueryBuilder(const ExtInPredicate& in_predicate) : _field(in_predicate.col.name) {
     for (auto& value : in_predicate.values) {
-        _values.push_back(value.to_string());
+        _values.push_back(value->to_string());
     }
 }
 
@@ -331,7 +331,7 @@ void BooleanQueryBuilder::must_not(QueryBuilder* filter) {
 }
 
 Status BooleanQueryBuilder::check_es_query(const ExtFunction& extFunction) {
-    const std::string& esquery_str = extFunction.values.front().to_string();
+    const std::string& esquery_str = extFunction.values.front()->to_string();
     rapidjson::Document scratch_document;
     scratch_document.Parse(esquery_str.c_str());
     rapidjson::Document::AllocatorType& allocator = scratch_document.GetAllocator();

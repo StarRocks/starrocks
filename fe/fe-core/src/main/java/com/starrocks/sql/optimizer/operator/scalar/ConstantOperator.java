@@ -34,7 +34,7 @@ import static java.util.Collections.emptyList;
  * TYPE_INT        |    int
  * TYPE_BIGINT     |    long
  * TYPE_LARGEINT   |    BigInteger
- * TYPE_FLOAT      |    float
+ * TYPE_FLOAT      |    double
  * TYPE_DOUBLE     |    double
  * TYPE_DATE       |    LocalDateTime
  * TYPE_DATETIME   |    LocalDateTime
@@ -58,21 +58,18 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     }
 
     private final Object value;
-    private final Type type;
     private final boolean isNull;
 
     private ConstantOperator(Type type) {
         super(OperatorType.CONSTANT, type);
         this.value = null;
         this.isNull = true;
-        this.type = type;
     }
 
     private ConstantOperator(Object value, Type type) {
         super(OperatorType.CONSTANT, type);
         Objects.requireNonNull(value, "constant value is null");
         this.value = value;
-        this.type = type;
         this.isNull = false;
     }
 
@@ -207,8 +204,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return (double) Optional.ofNullable(value).orElse((double) 0);
     }
 
-    public float getFloat() {
-        return (float) Optional.ofNullable(value).orElse((float) 0);
+    public double getFloat() {
+        return (double) Optional.ofNullable(value).orElse((double) 0);
     }
 
     public LocalDateTime getDate() {

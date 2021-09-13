@@ -231,8 +231,10 @@ public class FileScanNode extends LoadScanNode {
         byte[] column_separator = fileGroup.getColumnSeparator().getBytes(StandardCharsets.UTF_8);
         byte[] row_delimiter = fileGroup.getRowDelimiter().getBytes(StandardCharsets.UTF_8);
         if (column_separator.length != 1) {
-            throw new UserException(
-                    "invalid column separator '" + fileGroup.getColumnSeparator() + "': must be a single character");
+            if (column_separator.length > 50) {
+                throw new UserException("the column separator is limited to a maximum of 50 bytes");
+            }
+            params.setMulti_column_separator(fileGroup.getColumnSeparator());
         }
         if (row_delimiter.length != 1) {
             throw new UserException(

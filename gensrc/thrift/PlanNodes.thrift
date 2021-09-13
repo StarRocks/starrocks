@@ -172,6 +172,8 @@ struct TBrokerScanRangeParams {
     // strictMode is a boolean
     // if strict mode is true, the incorrect data (the result of cast is null) will not be loaded
     10: optional bool strict_mode
+    // If multi_column_separator is set, column_separator becomes ignore.
+    11: optional string multi_column_separator;
 }
 
 // Broker scan range

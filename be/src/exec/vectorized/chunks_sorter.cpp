@@ -63,4 +63,14 @@ Status ChunksSorter::_consume_and_check_memory_limit(RuntimeState* state, int64_
     return Status::OK();
 }
 
+Status ChunksSorter::finish(RuntimeState* state) {
+    RETURN_IF_ERROR(done(state));
+    _is_sink_complete = true;
+    return Status::OK();
+}
+
+bool ChunksSorter::sink_complete() {
+    return _is_sink_complete;
+}
+
 } // namespace starrocks::vectorized

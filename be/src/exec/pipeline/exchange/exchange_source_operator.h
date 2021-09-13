@@ -21,7 +21,7 @@ public:
 
     Status close(RuntimeState* state) override;
 
-    bool has_output() override;
+    bool has_output() const override;
 
     bool is_finished() const override;
 
@@ -36,10 +36,10 @@ private:
     std::atomic<bool> _is_finishing{false};
 };
 
-class ExchangeSourceOperatorFactory final : public OperatorFactory {
+class ExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     ExchangeSourceOperatorFactory(int32_t id, int32_t plan_node_id, int32_t num_sender, const RowDescriptor& row_desc)
-            : OperatorFactory(id, plan_node_id), _num_sender(num_sender), _row_desc(row_desc) {}
+            : SourceOperatorFactory(id, plan_node_id), _num_sender(num_sender), _row_desc(row_desc) {}
 
     ~ExchangeSourceOperatorFactory() override = default;
 

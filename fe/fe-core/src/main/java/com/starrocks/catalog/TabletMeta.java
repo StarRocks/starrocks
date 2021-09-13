@@ -82,6 +82,15 @@ public class TabletMeta {
         this.storageMedium = storageMedium;
     }
 
+    public int getNewSchemaHash() {
+        lock.readLock().lock();
+        try {
+            return this.newSchemaHash;
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
     public void setNewSchemaHash(int newSchemaHash) {
         lock.writeLock().lock();
         try {

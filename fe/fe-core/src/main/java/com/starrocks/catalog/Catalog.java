@@ -35,7 +35,6 @@ import com.google.common.collect.Sets;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.sleepycat.je.rep.NetworkRestore;
 import com.sleepycat.je.rep.NetworkRestoreConfig;
-import com.starrocks.StarRocksFE;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJob.JobType;
@@ -150,6 +149,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.hive.HiveRepository;
+import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
@@ -323,6 +323,7 @@ public class Catalog {
     private Daemon timePrinter;
     private Daemon listener;
     private EsRepository esRepository;  // it is a daemon, so add it here
+    private StarRocksRepository starRocksRepository;
     private HiveRepository hiveRepository;
 
     private boolean isFirstTimeStartUp = false;
@@ -373,6 +374,7 @@ public class Catalog {
     private JournalObservable journalObservable;
 
     private SystemInfoService systemInfo;
+    private Map<Integer, SystemInfoService> systemInfoMap;
     private HeartbeatMgr heartbeatMgr;
     private TabletInvertedIndex tabletInvertedIndex;
     private ColocateTableIndex colocateTableIndex;
@@ -453,6 +455,15 @@ public class Catalog {
         return journalObservable;
     }
 
+    public SystemInfoService getOrCreateSystemInfo(Integer clusterId) {
+        SystemInfoService systemInfoService = systemInfoMap.get(clusterId);
+        if (systemInfoService == null) {
+            systemInfoService = new SystemInfoService();
+            systemInfoMap.put(clusterId, systemInfoService);
+        }
+        return systemInfoService;
+    }
+
     private SystemInfoService getClusterInfo() {
         return this.systemInfo;
     }
@@ -528,6 +539,7 @@ public class Catalog {
         this.masterIp = "";
 
         this.systemInfo = new SystemInfoService();
+        this.systemInfoMap = new ConcurrentHashMap<Integer, SystemInfoService>();
         this.heartbeatMgr = new HeartbeatMgr(systemInfo, !isCheckpointCatalog);
         this.tabletInvertedIndex = new TabletInvertedIndex();
         this.colocateTableIndex = new ColocateTableIndex();
@@ -552,6 +564,7 @@ public class Catalog {
         this.domainResolver = new DomainResolver(auth);
 
         this.esRepository = new EsRepository();
+        this.starRocksRepository = new StarRocksRepository();
         this.hiveRepository = new HiveRepository();
 
         this.metaContext = new MetaContext();
@@ -779,7 +792,7 @@ public class Catalog {
         // 1. check and create dirs and files
         File meta = new File(metaDir);
         if (!meta.exists()) {
-            String oldMetaDir = StarRocksFE.STARROCKS_HOME_DIR + "/doris-meta";
+            String oldMetaDir = System.getenv("DORIS_HOME") + "/doris-meta";
             File oldMeta = new File(oldMetaDir);
             if (oldMeta.exists()) {
                 // For backward compatible
@@ -1035,6 +1048,8 @@ public class Catalog {
         } else {
             isElectable = false;
         }
+
+        systemInfoMap.put(clusterId, systemInfo);
 
         Preconditions.checkState(helperNodes.size() == 1);
         LOG.info("finished to get cluster id: {}, role: {} and node name: {}",
@@ -1299,6 +1314,7 @@ public class Catalog {
         labelCleaner.start();
         // ES state store
         esRepository.start();
+        starRocksRepository.start();
         // domain resolver
         domainResolver.start();
     }
@@ -1459,6 +1475,7 @@ public class Catalog {
             recreateTabletInvertIndex();
             // rebuild es state state
             esRepository.loadTableFromCatalog();
+            starRocksRepository.loadTableFromCatalog();
 
             checksum = loadLoadJob(dis, checksum);
             checksum = loadAlterJob(dis, checksum);
@@ -3659,8 +3676,14 @@ public class Catalog {
 
         // create table
         long tableId = Catalog.getCurrentCatalog().getNextId();
-        OlapTable olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
-                distributionInfo, indexes);
+        OlapTable olapTable = null;
+        if (stmt.isExternal()) {
+            olapTable = new ExternalOlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
+                                              distributionInfo, indexes, stmt.getProperties());
+        } else {
+            olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
+                                      distributionInfo, indexes);
+        }
         olapTable.setComment(stmt.getComment());
 
         // set base index id
@@ -3826,55 +3849,58 @@ public class Catalog {
 
         // create partition
         try {
-            if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                // this is a 1-level partitioned table
-                // use table name as partition name
-                String partitionName = tableName;
-                long partitionId = partitionNameToId.get(partitionName);
-                // create partition
-                Partition partition = createPartitionWithIndices(db.getClusterName(), db.getId(),
-                        olapTable.getId(), olapTable.getBaseIndexId(),
-                        partitionId, partitionName,
-                        olapTable.getIndexIdToMeta(),
-                        distributionInfo,
-                        partitionInfo.getDataProperty(partitionId).getStorageMedium(),
-                        partitionInfo.getReplicationNum(partitionId),
-                        versionInfo, bfColumns, bfFpp,
-                        tabletIdSet, olapTable.getCopiedIndexes(),
-                        isInMemory, storageFormat, tabletType);
-                olapTable.addPartition(partition);
-            } else if (partitionInfo.getType() == PartitionType.RANGE) {
-                try {
-                    // just for remove entries in stmt.getProperties(),
-                    // and then check if there still has unknown properties
-                    PropertyAnalyzer.analyzeDataProperty(stmt.getProperties(), DataProperty.DEFAULT_DATA_PROPERTY);
-                    DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
-
-                    if (properties != null && !properties.isEmpty()) {
-                        // here, all properties should be checked
-                        throw new DdlException("Unknown properties: " + properties);
-                    }
-                } catch (AnalysisException e) {
-                    throw new DdlException(e.getMessage());
-                }
-
-                // this is a 2-level partitioned tables
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
-                    DataProperty dataProperty = rangePartitionInfo.getDataProperty(entry.getValue());
-                    Partition partition = createPartitionWithIndices(db.getClusterName(), db.getId(), olapTable.getId(),
-                            olapTable.getBaseIndexId(), entry.getValue(), entry.getKey(),
-                            olapTable.getIndexIdToMeta(), distributionInfo,
-                            dataProperty.getStorageMedium(),
-                            partitionInfo.getReplicationNum(entry.getValue()),
+            // do not create partition for external table
+            if (olapTable.getType() == TableType.OLAP) {
+                if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                    // this is a 1-level partitioned table
+                    // use table name as partition name
+                    String partitionName = tableName;
+                    long partitionId = partitionNameToId.get(partitionName);
+                    // create partition
+                    Partition partition = createPartitionWithIndices(db.getClusterName(), db.getId(),
+                            olapTable.getId(), olapTable.getBaseIndexId(),
+                            partitionId, partitionName,
+                            olapTable.getIndexIdToMeta(),
+                            distributionInfo,
+                            partitionInfo.getDataProperty(partitionId).getStorageMedium(),
+                            partitionInfo.getReplicationNum(partitionId),
                             versionInfo, bfColumns, bfFpp,
                             tabletIdSet, olapTable.getCopiedIndexes(),
-                            isInMemory, storageFormat,
-                            rangePartitionInfo.getTabletType(entry.getValue()));
+                            isInMemory, storageFormat, tabletType);
                     olapTable.addPartition(partition);
+                } else if (partitionInfo.getType() == PartitionType.RANGE) {
+                    try {
+                        // just for remove entries in stmt.getProperties(),
+                        // and then check if there still has unknown properties
+                        PropertyAnalyzer.analyzeDataProperty(stmt.getProperties(), DataProperty.DEFAULT_DATA_PROPERTY);
+                        DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
+
+                        if (properties != null && !properties.isEmpty()) {
+                            // here, all properties should be checked
+                            throw new DdlException("Unknown properties: " + properties);
+                        }
+                    } catch (AnalysisException e) {
+                        throw new DdlException(e.getMessage());
+                    }
+
+                    // this is a 2-level partitioned tables
+                    RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                    for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
+                        DataProperty dataProperty = rangePartitionInfo.getDataProperty(entry.getValue());
+                        Partition partition = createPartitionWithIndices(db.getClusterName(), db.getId(), olapTable.getId(),
+                                olapTable.getBaseIndexId(), entry.getValue(), entry.getKey(),
+                                olapTable.getIndexIdToMeta(), distributionInfo,
+                                dataProperty.getStorageMedium(),
+                                partitionInfo.getReplicationNum(entry.getValue()),
+                                versionInfo, bfColumns, bfFpp,
+                                tabletIdSet, olapTable.getCopiedIndexes(),
+                                isInMemory, storageFormat,
+                                rangePartitionInfo.getTabletType(entry.getValue()));
+                        olapTable.addPartition(partition);
+                    }
+                } else {
+                    throw new DdlException("Unsupport partition method: " + partitionInfo.getType().name());
                 }
-            } else {
-                throw new DdlException("Unsupport partition method: " + partitionInfo.getType().name());
             }
 
             // check database exists again, because database can be dropped when creating table
@@ -5043,6 +5069,10 @@ public class Catalog {
 
     public EsRepository getEsRepository() {
         return this.esRepository;
+    }
+
+    public StarRocksRepository getStarRocksRepository() {
+        return this.starRocksRepository;
     }
 
     public HiveRepository getHiveRepository() {

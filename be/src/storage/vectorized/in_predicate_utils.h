@@ -103,13 +103,13 @@ inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_set(con
 
 template <FieldType field_type>
 inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_decimal_set(
-        int precision, int scale, const std::vector<std::string>& strings) {
+        int scale, const std::vector<std::string>& strings) {
     using CppType = typename CppTypeTraits<field_type>::CppType;
     Converter<CppType> result;
     for (const auto& s : strings) {
         CppType v;
-        auto st = DecimalV3Cast::from_string<CppType>(&v, precision, scale, s.data(), s.size());
-        CHECK_EQ(OLAP_SUCCESS, st);
+        auto st = DecimalV3Cast::from_string_with_overflow_allowed<CppType>(&v, scale, s.data(), s.size());
+        CHECK_EQ(false, st);
         result.push_back(v);
     }
     return result;

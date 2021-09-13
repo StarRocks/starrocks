@@ -656,7 +656,7 @@ OLAPStatus StorageEngine::_start_trash_sweep(double* usage) {
     // clean rubbish transactions
     _clean_unused_txns();
 
-    // clean unused rowset metas in OlapMeta
+    // clean unused rowset metas in KVStore
     _clean_unused_rowset_metas();
 
     return res;

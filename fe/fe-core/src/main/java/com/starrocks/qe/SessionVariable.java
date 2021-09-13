@@ -122,6 +122,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_SCAN_MODE = "pipeline_scan_mode";
 
+    public static final String PIPELINE_QUERY_EXPIRE_SECONDS = "pipeline_query_expire_seconds";
+
     // vectorized insert flag
     public static final String ENABLE_VECTORIZED_INSERT = "enable_vectorized_insert";
 
@@ -319,6 +321,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // 1 means that ScanOperators use async io, otherwise, use sync io instead.
     @VariableMgr.VarAttr(name = PIPELINE_SCAN_MODE)
     private int pipelineScanMode = 1;
+
+    // a query that can not make any progress for more than pipelineQueryExpireSeconds
+    // (300s in default) will be canceled.
+    @VariableMgr.VarAttr(name = PIPELINE_QUERY_EXPIRE_SECONDS)
+    private int pipelineQueryExpireSeconds = 300;
 
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
@@ -779,6 +786,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
         tResult.setQuery_threads(pipelineQueryThreads);
         tResult.setPipeline_scan_mode(pipelineScanMode);
+        tResult.setPipeline_query_expire_seconds(pipelineQueryExpireSeconds);
         return tResult;
     }
 

@@ -65,7 +65,7 @@ public class Analyzer {
         if (StatisticUtils.statisticDatabaseBlackListCheck(node.getTableName().getDb())) {
             throw new SemanticException("Forbidden collect database: %s", node.getTableName().getDb());
         }
-        if (!(analyzeTable instanceof OlapTable)) {
+        if (analyzeTable.getType() != Table.TableType.OLAP) {
             throw new SemanticException("Table '%s' is not a OLAP table", analyzeTable.getName());
         }
 
