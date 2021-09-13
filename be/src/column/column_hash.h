@@ -8,6 +8,10 @@
 #include "util/slice.h"
 #include "util/unaligned_access.h"
 
+#if defined __aarch64__
+#include "arm_neon.h"
+#endif
+
 namespace starrocks::vectorized {
 
 typedef unsigned __int128 uint128_t;
@@ -101,12 +105,20 @@ static uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
     auto* p = reinterpret_cast<const uint8_t*>(data);
 
     while (words--) {
+#if defined __x86_64__
         hash = _mm_crc32_u32(hash, unaligned_load<uint32_t>(p));
+#else
+        hash = __crc32h(hash, unaligned_load<uint32_t>(p));
+#endif
         p += sizeof(uint32_t);
     }
 
     while (bytes--) {
+#if defined __x86_64__
         hash = _mm_crc32_u8(hash, *p);
+#else
+        hash = __crc32b(hash, unaligned_load<uint32_t>(p));
+#endif
         ++p;
     }
 
@@ -125,7 +137,11 @@ static uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
     auto* p = reinterpret_cast<const uint8_t*>(data);
     auto* end = reinterpret_cast<const uint8_t*>(data) + length;
     while (words--) {
+#if defined __x86_64__
         hash = _mm_crc32_u64(hash, unaligned_load<uint64_t>(p));
+#else
+        hash = __crc32h(hash, unaligned_load<uint32_t>(p));
+#endif
         p += sizeof(uint64_t);
     }
     // Reduce the branch condition
