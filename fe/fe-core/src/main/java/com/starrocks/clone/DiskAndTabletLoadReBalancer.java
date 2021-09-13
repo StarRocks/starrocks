@@ -68,21 +68,28 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             String clusterName, ClusterLoadStatistic clusterStat, TStorageMedium medium) {
         List<TabletSchedCtx> alternativeTablets;
         String balanceType = "";
-        if (!isClusterDiskBalanced(clusterStat, medium)) {
-            alternativeTablets = balanceClusterDisk(clusterName, clusterStat, medium);
-            balanceType = "cluster disk";
-        } else if (!isBackendDiskBalanced(clusterStat, medium)) {
-            alternativeTablets = balanceBackendDisk(clusterName, clusterStat, medium);
-            balanceType = "backend disk";
-        } else {
-            alternativeTablets = balanceClusterTablet(clusterName, clusterStat, medium);
-            balanceType = "cluster tablet distribution";
+        do {
+            // balance cluster
+            if (!isClusterDiskBalanced(clusterStat, medium)) {
+                alternativeTablets = balanceClusterDisk(clusterName, clusterStat, medium);
+                balanceType = "cluster disk";
+            } else {
+                alternativeTablets = balanceClusterTablet(clusterName, clusterStat, medium);
+                balanceType = "cluster tablet distribution";
+            }
+            if (!alternativeTablets.isEmpty()) {
+                break;
+            }
 
-            if (alternativeTablets.isEmpty()) {
+            // balance backend
+            if (!isBackendDiskBalanced(clusterStat, medium)) {
+                alternativeTablets = balanceBackendDisk(clusterName, clusterStat, medium);
+                balanceType = "backend disk";
+            } else {
                 alternativeTablets = balanceBackendTablet(clusterName, clusterStat, medium);
                 balanceType = "backend tablet distribution";
             }
-        }
+        } while (false);
 
         if (alternativeTablets.size() > 0) {
             LOG.info("select tablets to balance {}: total {}, medium {}, tablets[show up to 100]: {}",
