@@ -319,11 +319,14 @@ inline void* memrchr(const void* bytes, int find_char, size_t len) {
 // TODO(user) This is the L1 D-cache line size of our Power7 machines.
 // Need to check if this is appropriate for other PowerPC64 systems.
 #define CACHELINE_SIZE 128
-#elif defined(__arm__)
+#elif defined(__arm__) || defined(__aarch64__)
 // Cache line sizes for ARM: These values are not strictly correct since
 // cache line sizes depend on implementations, not architectures.  There
 // are even implementations with cache line sizes configurable at boot
 // time.
+// Cache line sizes for aarch64(huawei kunpeng):
+// https://support.huaweicloud.com/tuningtip-kunpenggrf/kunpengtuning_12_0052.html
+#define CACHELINE_SIZE 128
 #if defined(__ARM_ARCH_5T__)
 #define CACHELINE_SIZE 32
 #elif defined(__ARM_ARCH_7A__)

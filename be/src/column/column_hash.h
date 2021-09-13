@@ -8,8 +8,8 @@
 #include "util/slice.h"
 #include "util/unaligned_access.h"
 
-#if defined __aarch64__
-#include "arm_neon.h"
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#include "arm_acle.h"
 #endif
 
 namespace starrocks::vectorized {
@@ -146,7 +146,12 @@ static uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
     }
     // Reduce the branch condition
     p = end - 8;
+#if defined __x86_64__
     hash = _mm_crc32_u64(hash, unaligned_load<uint64_t>(p));
+#else
+    hash = __crc32h(hash, unaligned_load<uint32_t>(p));
+#endif
+        p += sizeof(uint64_t);
     return hash;
 }
 
