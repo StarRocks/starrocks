@@ -467,6 +467,8 @@ struct TAggregationNode {
   // For profile attributes' printing: `Grouping Keys` `Aggregate Functions`
   22: optional string sql_grouping_keys
   23: optional string sql_aggregate_functions
+
+  24: optional i32 agg_func_set_version = 1
 }
 
 struct TRepeatNode {
