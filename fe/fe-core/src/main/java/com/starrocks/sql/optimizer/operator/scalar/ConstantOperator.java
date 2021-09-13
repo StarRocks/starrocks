@@ -58,21 +58,18 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     }
 
     private final Object value;
-    private final Type type;
     private final boolean isNull;
 
     private ConstantOperator(Type type) {
         super(OperatorType.CONSTANT, type);
         this.value = null;
         this.isNull = true;
-        this.type = type;
     }
 
     private ConstantOperator(Object value, Type type) {
         super(OperatorType.CONSTANT, type);
         Objects.requireNonNull(value, "constant value is null");
         this.value = value;
-        this.type = type;
         this.isNull = false;
     }
 
