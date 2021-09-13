@@ -365,7 +365,6 @@ template <template <typename, size_t...> typename Set, size_t... Args>
 ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, ColumnId id,
                                                  const std::vector<std::string>& strs) {
     auto type = type_info->type();
-    auto precision = type_info->precision();
     auto scale = type_info->scale();
     switch (type) {
     case OLAP_FIELD_TYPE_BOOL: {
@@ -410,17 +409,17 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
     }
     case OLAP_FIELD_TYPE_DECIMAL32: {
         using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL32>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL32>(precision, scale, strs);
+        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL32>(scale, strs);
         return new ColumnInPredicate<OLAP_FIELD_TYPE_DECIMAL32, SetType>(type_info, id, std::move(values));
     }
     case OLAP_FIELD_TYPE_DECIMAL64: {
         using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL64>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL64>(precision, scale, strs);
+        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL64>(scale, strs);
         return new ColumnInPredicate<OLAP_FIELD_TYPE_DECIMAL64, SetType>(type_info, id, std::move(values));
     }
     case OLAP_FIELD_TYPE_DECIMAL128: {
         using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL128>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL128>(precision, scale, strs);
+        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL128>(scale, strs);
         return new ColumnInPredicate<OLAP_FIELD_TYPE_DECIMAL128, SetType>(type_info, id, std::move(values));
     }
     case OLAP_FIELD_TYPE_CHAR:
