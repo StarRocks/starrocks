@@ -203,6 +203,12 @@ under the License.
         <dependency>
             <groupId>com.baidu</groupId>
             <artifactId>jprotobuf-rpc-core</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.baidu</groupId>
+                    <artifactId>jprotobuf</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.json/json -->
