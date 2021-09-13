@@ -65,7 +65,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
 
-        thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
     }
 
@@ -80,7 +80,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
 
-        thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
     }
 
@@ -92,7 +92,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         Assert.assertTrue(thrift.contains(
                 "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
 
-        thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         Assert.assertTrue(thrift.contains(
                 "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
     }
@@ -113,11 +113,11 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
 
         expectString =
                 "fn:TFunction(name:TFunctionName(function_name:money_format), binary_type:BUILTIN, arg_types:[TTypeDesc(types:" +
-                        "[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:-1, scale:-1))])], ret_type:TTypeDesc" +
+                        "[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:20, scale:3))])], ret_type:TTypeDesc" +
                         "(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))]), has_var_args:false, " +
-                        "signature:money_format(DECIMAL), scalar_fn:TScalarFunction(symbol:" +
+                        "signature:money_format(DECIMAL(20,3)), scalar_fn:TScalarFunction(symbol:" +
                         "_ZN9starrocks15StringFunctions12money_formatEPN13starrocks_udf15FunctionContextERKNS1_9BigIntValE), id:0, fid:304022)";
-        thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         System.out.println(thrift);
         Assert.assertTrue(thrift.contains(expectString));
     }
