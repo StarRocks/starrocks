@@ -21,13 +21,15 @@ StarRocks is a next-gen sub-second MPP database for full analysis scenarios, inc
 
 ## Upstream
 
-[Apache Doris](https://github.com/apache/incubator-doris) is the upstream of StarRocks. We are very grateful to Apache Doris community for contributing such an excellent OLAP database.
+[Apache Doris(incubating)](https://github.com/apache/incubator-doris) is the upstream of StarRocks. We are very grateful to Apache Doris(incubating) community for contributing such an excellent OLAP database.
 
-StarRocks is developed based on Apache Doris (version 0.13 in early 2020). We have adopted the framework and columnar storage engine from Apache Doris, while added a full vectorized execution engine, CBO optimizer, real-time update engine, and other important features. 
+StarRocks was developed based on version 0.13 of Apache Doris (incubating) released in early 2020. We have adopted the framework and columnar storage engine from Apache Doris(incubating), while added a full vectorized execution engine, CBO optimizer, real-time update engine, and other important features. 
 
-Of the approximately 700K lines of code currently in StarRocks, about 40% is identical to Apache Doris (which is still under the Apache 2.0 license), leaving 60%  as additions or modification (Statistics from GitHub, September 2021）.
+Of the approximately 700K lines of code currently in StarRocks, about 40% is identical to Apache Doris(incubating), which is still under the Apache 2.0 license, leaving 60% as additions or modification.*
 
-We will continue to contribute to Apache Doris and help to build the open source ecosystem in the future. 
+We will continue to contribute to Apache Doris(incubating) and help to build the open source ecosystem in the future. 
+
+\* Statistics from GitHub, September 2021
 
 ## Install
 
