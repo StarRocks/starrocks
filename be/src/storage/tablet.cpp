@@ -340,6 +340,14 @@ OLAPStatus Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
     _timestamped_version_tracker.add_version(rowset->version());
 
     RETURN_NOT_OK(_tablet_meta->add_inc_rs_meta(rowset->rowset_meta()));
+
+    // warm-up this rowset
+    auto st = rowset->load();
+    if (!st.ok()) {
+        // only log load failure
+        LOG(WARNING) << "ignore load rowset error tablet:" << tablet_id() << " rowset:" << rowset->rowset_id() << " "
+                     << st;
+    }
     ++_newly_created_rowset_num;
     return OLAP_SUCCESS;
 }
