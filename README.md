@@ -1,6 +1,6 @@
 # StarRocks
 
-StarRocks is a next-gen sub-second MPP database for full analysis scenarios, including multi-dimensional analytics, real-time analytics and ad-hoc query, formerly known as DorisDB.
+StarRocks is a next-gen sub-second MPP database for full analysis scenarios, including multi-dimensional analytics, real-time analytics and ad-hoc query.
 
 ## Technology
 
@@ -19,19 +19,29 @@ StarRocks is a next-gen sub-second MPP database for full analysis scenarios, inc
 * Pre-aggregations, flat tables, star and snowflake schemas are supported and all run at enhanced speed.
 * StarRocks hybridizes serving and analytical processing(HSAP) in an easy way. The minimalist architectural design reduces the complexity and maintenance cost of StarRocks and increases its reliability and scalability. 
 
+## Upstream
+
+[Apache Doris](https://github.com/apache/incubator-doris) is the upstream of StarRocks. We are very grateful to Apache Doris community for contributing such an excellent OLAP database.
+
+StarRocks is developed based on Apache Doris (version 0.13 in early 2020). We have adopted the framework and columnar storage engine from Apache Doris, while added a full vectorized execution engine, CBO optimizer, real-time update engine, and other important features. 
+
+Of the approximately 700K lines of code currently in StarRocks, about 40% is identical to Apache Doris (which is still under the Apache 2.0 license), leaving 60%  as additions or modification (Statistics from GitHub, September 2021）.
+
+We will continue to contribute to Apache Doris and help to build the open source ecosystem in the future. 
+
 ## Install
 
-Download the current release [here](https://www.dorisdb.com/en-US/download/community).  
+Download the current release [here](https://www.starrocks.com/en-US/download/community).  
 For detailed instructions, please refer to [deploy](https://github.com/StarRocks/docs/blob/master/quick_start/Deploy.md).
 
 ## Links
 
-* [StarRocks official website](https://www.dorisdb.com)
-* [StarRocks documentation](https://docs.dorisdb.com)
+* [StarRocks official website](https://www.starrocks.com)
+* [StarRocks documentation](https://docs.starrocks.com)
 
 ## LICENSE
 
-Code in this repository is provided under the [Elastic License 2.0](https://www.elastic.co/cn/licensing/elastic-license). Some portions are available under open source licenses. Please see our [FAQ](https://www.dorisdb.com/en-US/product/license-FAQ).
+Code in this repository is provided under the [Elastic License 2.0](https://www.elastic.co/cn/licensing/elastic-license). Some portions are available under open source licenses. Please see our [FAQ](https://www.starrocks.com/en-US/product/license-FAQ).
 
 ## Contributing to StarRocks
 
