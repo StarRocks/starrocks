@@ -906,16 +906,22 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
             EngineCloneTask engine_task(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), clone_req,
                                         worker_pool_this->_master_info, agent_task_req.signature, &error_msgs,
                                         &tablet_infos, &status);
-            worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
-            if (status != STARROCKS_SUCCESS && status != STARROCKS_CREATE_TABLE_EXIST) {
-                StarRocksMetrics::instance()->clone_requests_failed.increment(1);
+            OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
+            if (res != OLAP_SUCCESS) {
                 status_code = TStatusCode::RUNTIME_ERROR;
-                LOG(WARNING) << "clone failed. signature: " << agent_task_req.signature;
+                LOG(WARNING) << "clone failed. status:" << res << ", signature:" << agent_task_req.signature;
                 error_msgs.push_back("clone failed.");
             } else {
-                LOG(INFO) << "clone success, set tablet infos. status:" << status
-                          << ", signature:" << agent_task_req.signature;
-                finish_task_request.__set_finish_tablet_infos(tablet_infos);
+                if (status != STARROCKS_SUCCESS && status != STARROCKS_CREATE_TABLE_EXIST) {
+                    StarRocksMetrics::instance()->clone_requests_failed.increment(1);
+                    status_code = TStatusCode::RUNTIME_ERROR;
+                    LOG(WARNING) << "clone failed. signature: " << agent_task_req.signature;
+                    error_msgs.push_back("clone failed.");
+                } else {
+                    LOG(INFO) << "clone success, set tablet infos. status:" << status
+                              << ", signature:" << agent_task_req.signature;
+                    finish_task_request.__set_finish_tablet_infos(tablet_infos);
+                }
             }
         }
 
