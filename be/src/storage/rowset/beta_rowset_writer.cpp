@@ -257,20 +257,17 @@ Status BetaRowsetWriter::_final_merge() {
     for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
         std::string tmp_segment_file =
                 BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-        std::shared_ptr<segment_v2::Segment> segment;
 
-        auto s = segment_v2::Segment::open(&tracker, fs::fs_util::block_manager(), tmp_segment_file, seg_id,
-                                           _context.tablet_schema, &segment);
-        if (!s.ok()) {
-            LOG(WARNING) << "Fail to open segment=" << tmp_segment_file
-                         << " of rowset=" << _context.rowset_path_prefix + "/" + _context.rowset_id.to_string() << ", "
-                         << s.to_string();
-            return s;
+        auto segment_ptr = segment_v2::Segment::open(&tracker, fs::fs_util::block_manager(), tmp_segment_file, seg_id,
+                                                     _context.tablet_schema);
+        if (!segment_ptr.ok()) {
+            LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
+            return segment_ptr.status();
         }
-        if (segment->num_rows() == 0) {
+        if ((*segment_ptr)->num_rows() == 0) {
             continue;
         }
-        auto res = segment->new_iterator(schema, seg_options);
+        auto res = (*segment_ptr)->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;
         } else if (!res.ok()) {
