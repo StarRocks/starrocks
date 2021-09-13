@@ -60,6 +60,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* me
     _agg_states_offsets.resize(agg_size);
     _is_merge_funcs.resize(agg_size);
 
+    int agg_func_set_version = _tnode.agg_node.agg_func_set_version;
+
     for (int i = 0; i < agg_size; ++i) {
         const TExpr& desc = _tnode.agg_node.aggregate_functions[i];
         const TFunction& fn = desc.nodes[0].fn;
@@ -70,7 +72,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* me
             {
                 bool is_input_nullable =
                         !fn.arg_types.empty() && (has_outer_join_child || desc.nodes[0].has_nullable_child);
-                auto* func = vectorized::get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_input_nullable);
+                auto* func = vectorized::get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_input_nullable,
+                                                                agg_func_set_version);
                 _agg_functions[i] = func;
             }
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
@@ -98,7 +101,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* me
 
             bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
             auto* func = vectorized::get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
-                                                            is_input_nullable);
+                                                            is_input_nullable, agg_func_set_version);
             if (func == nullptr) {
                 return Status::InternalError(
                         strings::Substitute("Invalid agg function plan: $0", fn.name.function_name));
