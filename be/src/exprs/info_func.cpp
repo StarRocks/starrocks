@@ -27,6 +27,10 @@
 
 namespace starrocks {
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 InfoFunc::InfoFunc(const TExprNode& node)
         : Expr(node), _int_value(node.info_func.int_value), _str_value(node.info_func.str_value) {}
 

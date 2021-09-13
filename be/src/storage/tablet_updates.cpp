@@ -683,7 +683,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     // NOTE: after commit, apply must success or fatal crash
     int64_t t_start = MonotonicMillis();
     auto tablet_id = _tablet.tablet_id();
-    OlapMeta* meta = _tablet.data_dir()->get_meta();
+    KVStore* meta = _tablet.data_dir()->get_meta();
     uint32_t rowset_id = version_info.deltas[0];
     auto& version = version_info.version;
     VLOG(1) << "apply_rowset_commit start tablet:" << tablet_id << " version:" << version_info.version.to_string()
@@ -1441,14 +1441,6 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
             break;
         }
     }
-    if (total_score <= 0) {
-        // should not happen
-        string msg = Substitute("compaction got negative score: tablet=$0 score=$1", _tablet.tablet_id(), total_score);
-        DCHECK(false) << msg;
-        LOG(WARNING) << msg;
-        _compaction_running = false;
-        return Status::OK();
-    }
     if (total_valid_rowsets - info->inputs.size() <= 3) {
         // give 10s time gitter, so same table's compaction don't start at same time
         _last_compaction_time_ms = UnixMillis() + rand() % 10000;
@@ -1723,7 +1715,7 @@ Status TabletUpdates::load_from_base_tablet(int64_t request_version, Tablet* bas
     _last_compaction_time_ms = UnixMillis();
 
     // 1. construct new rowsets
-    auto olap_meta = _tablet.data_dir()->get_meta();
+    auto kv_store = _tablet.data_dir()->get_meta();
     auto update_manager = StorageEngine::instance()->update_manager();
     auto tablet_id = _tablet.tablet_id();
     uint32_t next_rowset_id = 0;
@@ -1752,7 +1744,7 @@ Status TabletUpdates::load_from_base_tablet(int64_t request_version, Tablet* bas
             TabletSegmentId tsid;
             tsid.tablet_id = src_rowset.rowset_meta()->tablet_id();
             tsid.segment_id = src_rowset.rowset_meta()->get_rowset_seg_id() + j;
-            Status st = update_manager->get_del_vec(olap_meta, tsid, version.major(), &new_rowset_info.delvecs[j]);
+            Status st = update_manager->get_del_vec(kv_store, tsid, version.major(), &new_rowset_info.delvecs[j]);
             if (!st.ok()) {
                 return st;
             }
@@ -1798,7 +1790,7 @@ Status TabletUpdates::load_from_base_tablet(int64_t request_version, Tablet* bas
     }
 
     std::unique_lock wrlock(_tablet.get_header_lock());
-    st = olap_meta->write_batch(&wb);
+    st = kv_store->write_batch(&wb);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to delete old meta and write new meta" << tablet_id << ": " << st;
         return Status::InternalError("Fail to delete old meta and write new meta");

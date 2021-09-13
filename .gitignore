@@ -31,9 +31,10 @@ fe/mocked
 fe/ut_ports
 fe/*/target
 dependency-reduced-pom.xml
+tags
 
 
-#ignore eclipse project file & idea  project file
+#ignore eclipse project file & idea project file
 .cproject
 .project
 .settings/
@@ -50,6 +51,7 @@ be/tags
 
 #ignore vscode project file
 .vscode
-.*
 !.gitignore
 !.clang-format
+!.github
+build/

@@ -33,6 +33,9 @@ import java.util.List;
  * mapping the real slot to virtual slots, grouping(_id) function will use a virtual slot of BIGINT to substitute
  * real slots, and then set real slot to realChildren
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class GroupingFunctionCallExpr extends FunctionCallExpr {
     private boolean childrenReseted = false;
     private List<Expr> realChildren;

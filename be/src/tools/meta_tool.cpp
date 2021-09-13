@@ -50,7 +50,7 @@
 
 using starrocks::DataDir;
 using starrocks::OLAP_SUCCESS;
-using starrocks::OlapMeta;
+using starrocks::KVStore;
 using starrocks::OLAPStatus;
 using starrocks::Status;
 using starrocks::TabletMeta;

@@ -64,6 +64,9 @@ import java.util.TreeMap;
  * <p>
  * TODO: Dictionary pruning
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class HdfsScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(HdfsScanNode.class);
 
@@ -462,6 +465,37 @@ public class HdfsScanNode extends ScanNode {
         output.append("\n");
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));
+        output.append("\n");
+
+        output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
+        output.append("\n");
+
+        output.append(prefix).append(String.format("numNodes=%s", numNodes));
+        output.append("\n");
+
+        return output.toString();
+    }
+
+    @Override
+    protected String getNodeVerboseExplain(String prefix) {
+        StringBuilder output = new StringBuilder();
+
+        output.append(prefix).append("TABLE: ").append(hiveTable.getName()).append("\n");
+
+        if (null != sortColumn) {
+            output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
+        }
+        if (!partitionConjuncts.isEmpty()) {
+            output.append(prefix).append("PARTITION PREDICATES: ").append(
+                    getExplainString(partitionConjuncts)).append("\n");
+        }
+        if (!nonPartitionConjuncts.isEmpty()) {
+            output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
+                    getExplainString(nonPartitionConjuncts)).append("\n");
+        }
+
+        output.append(prefix).append(
+                String.format("partitions=%s/%s", selectedPartitionIds.size(), idToPartitionKey.size()));
         output.append("\n");
 
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));

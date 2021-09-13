@@ -37,6 +37,10 @@ namespace starrocks {
 class StarRocksServer;
 class RuntimeState;
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 // scanner parameter from frontend
 struct SchemaScannerParam {
     const std::string* db;

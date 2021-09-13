@@ -35,7 +35,19 @@ public class PredicateStatisticsCalculator {
         }
 
         private boolean checkNeedEvalEstimate(ScalarOperator predicate) {
-            return predicate != null && !predicate.isNotEvalEstimate();
+            if (predicate == null) {
+                return false;
+            }
+            // check predicate need to eval
+            if (predicate.isNotEvalEstimate()) {
+                return false;
+            }
+            // extract range predicate scalar operator with unknown column statistics will not eval
+            if (predicate.isFromPredicateRangeDerive() &&
+                    statistics.getColumnStatistics().values().stream().anyMatch(ColumnStatistic::isUnknown)) {
+                return false;
+            }
+            return true;
         }
 
         @Override
@@ -74,12 +86,10 @@ public class PredicateStatisticsCalculator {
             }
             double rowCount = Math.min(statistics.getOutputRowCount() * selectivity, statistics.getOutputRowCount());
             return Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
-                    addColumnStatistics(ImmutableMap.of((ColumnRefOperator) child,
-                            ColumnStatistic.buildFrom(inColumnStatistic).
-                                    setDistinctValuesCount(
-                                            predicate.isNotIn() ? inColumnStatistic.getDistinctValuesCount() :
-                                                    inValueSize).
-                                    build())).build();
+                    addColumnStatistic((ColumnRefOperator) child,
+                            ColumnStatistic.buildFrom(inColumnStatistic).setDistinctValuesCount(
+                                    predicate.isNotIn() ? inColumnStatistic.getDistinctValuesCount() : inValueSize).
+                                    build()).build();
         }
 
         @Override

@@ -28,6 +28,9 @@
 #include "runtime/runtime_state.h"
 #include "udf/udf_internal.h"
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
 namespace starrocks {
 
 using starrocks_udf::BigIntVal;

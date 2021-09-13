@@ -20,6 +20,9 @@
 // under the License.
 
 #pragma once
+#include <cctz/civil_time.h>
+#include <cctz/time_zone.h>
+
 #include <string>
 
 #include "runtime/vectorized/time_types.h"
@@ -100,6 +103,9 @@ public:
     bool from_string(const char* date_str, size_t len);
 
     int64_t to_unix_second() const;
+
+    bool from_unixtime(int64_t second, const std::string& timezone);
+    bool from_unixtime(int64_t second, const cctz::time_zone& ctz);
 
     void from_unix_second(int64_t second);
 

@@ -225,7 +225,7 @@ void OlapScanNode::_scanner_thread(OlapScanner* scanner) {
 
     Status status = scanner->open(_runtime_state);
     if (!status.ok()) {
-        QUERY_LOG(ERROR) << status;
+        QUERY_LOG_IF(ERROR, !status.is_end_of_file()) << status;
         _update_status(status);
     }
     scanner->set_keep_priority(false);
@@ -253,7 +253,7 @@ void OlapScanNode::_scanner_thread(OlapScanner* scanner) {
         DCHECK_EQ(chunk->num_rows(), 0);
         status = scanner->get_chunk(_runtime_state, chunk);
         if (!status.ok()) {
-            QUERY_LOG(ERROR) << status;
+            QUERY_LOG_IF(ERROR, !status.is_end_of_file()) << status;
             std::lock_guard<std::mutex> l(_mtx);
             _chunk_pool.push(chunk);
             break;
@@ -551,9 +551,17 @@ void OlapScanNode::_close_pending_scanners() {
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators;
-    operators.emplace_back(std::make_shared<ScanOperatorFactory>(context->next_operator_id(), id(), _olap_scan_node,
-                                                                 std::move(_conjunct_ctxs),
-                                                                 std::move(_runtime_filter_collector)));
+    auto scan_operator =
+            std::make_shared<ScanOperatorFactory>(context->next_operator_id(), id(), _olap_scan_node,
+                                                  std::move(_conjunct_ctxs), std::move(_runtime_filter_collector));
+    auto& morsel_queues = context->fragment_context()->morsel_queues();
+    auto source_id = scan_operator->plan_node_id();
+    DCHECK(morsel_queues.count(source_id));
+    auto& morsel_queue = morsel_queues[source_id];
+    // ScanOperator's instance_count is not more than the number of morsels
+    const auto instance_count = std::min<size_t>(morsel_queue->num_morsels(), context->driver_instance_count());
+    scan_operator->set_num_driver_instances(instance_count);
+    operators.emplace_back(std::move(scan_operator));
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }

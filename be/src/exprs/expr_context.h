@@ -57,6 +57,11 @@ using vectorized::ColumnPtr;
 /// the FunctionContexts necessary for the expr tree. This allows for multi-threaded
 /// expression evaluation, as a given tree can be evaluated using multiple ExprContexts
 /// concurrently. A single ExprContext is not thread-safe.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class ExprContext {
 public:
     ExprContext(Expr* root);

@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 
+#include "column/column.h"
 #include "exprs/slot_ref.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
@@ -41,8 +42,15 @@ class EsPredicate;
 
 class ExtLiteral {
 public:
-    ExtLiteral(PrimitiveType type, void* value) : _type(type), _value(value) { _str = value_to_string(); }
-    ~ExtLiteral();
+    virtual const std::string& to_string() const = 0;
+    virtual ~ExtLiteral() = default;
+};
+
+// for scalar call
+class SExtLiteral : public ExtLiteral {
+public:
+    SExtLiteral(PrimitiveType type, void* value) : _type(type), _value(value) { _str = value_to_string(); }
+    ~SExtLiteral();
     const std::string& to_string() const { return _str; }
 
 private:
@@ -64,6 +72,21 @@ private:
     PrimitiveType _type;
     void* _value;
     std::string _str;
+};
+
+// for vectorized call
+class VExtLiteral : public ExtLiteral {
+public:
+    VExtLiteral(PrimitiveType type, ColumnPtr column) {
+        DCHECK(!column->empty());
+        _value = _value_to_string(column);
+    }
+    VExtLiteral() = default;
+    const std::string& to_string() const { return _value; }
+
+private:
+    static std::string _value_to_string(ColumnPtr& column);
+    std::string _value;
 };
 
 struct ExtColumnDesc {
@@ -92,31 +115,31 @@ struct ExtCompPredicates : public ExtPredicate {
 
 struct ExtBinaryPredicate : public ExtPredicate {
     ExtBinaryPredicate(TExprNodeType::type node_type, const std::string& name, const TypeDescriptor& type,
-                       TExprOpcode::type op, const ExtLiteral& value)
+                       TExprOpcode::type op, const ExtLiteral* value)
             : ExtPredicate(node_type), col(name, type), op(op), value(value) {}
 
     ExtColumnDesc col;
     TExprOpcode::type op;
-    ExtLiteral value;
+    const ExtLiteral* value;
 };
 
 struct ExtInPredicate : public ExtPredicate {
     ExtInPredicate(TExprNodeType::type node_type, bool is_not_in, const std::string& name, const TypeDescriptor& type,
-                   const std::vector<ExtLiteral>& values)
-            : ExtPredicate(node_type), is_not_in(is_not_in), col(name, type), values(values) {}
+                   std::vector<ExtLiteral*> values)
+            : ExtPredicate(node_type), is_not_in(is_not_in), col(name, type), values(std::move(values)) {}
 
     bool is_not_in;
     ExtColumnDesc col;
-    std::vector<ExtLiteral> values;
+    std::vector<ExtLiteral*> values;
 };
 
 struct ExtLikePredicate : public ExtPredicate {
     ExtLikePredicate(TExprNodeType::type node_type, const std::string& name, const TypeDescriptor& type,
-                     ExtLiteral value)
+                     const ExtLiteral* value)
             : ExtPredicate(node_type), col(name, type), value(value) {}
 
     ExtColumnDesc col;
-    ExtLiteral value;
+    const ExtLiteral* value;
 };
 
 struct ExtIsNullPredicate : public ExtPredicate {
@@ -130,12 +153,12 @@ struct ExtIsNullPredicate : public ExtPredicate {
 
 struct ExtFunction : public ExtPredicate {
     ExtFunction(TExprNodeType::type node_type, const std::string& func_name, std::vector<ExtColumnDesc> cols,
-                std::vector<ExtLiteral> values)
-            : ExtPredicate(node_type), func_name(func_name), cols(cols), values(values) {}
+                std::vector<ExtLiteral*> values)
+            : ExtPredicate(node_type), func_name(func_name), cols(cols), values(std::move(values)) {}
 
     const std::string func_name;
     std::vector<ExtColumnDesc> cols;
-    const std::vector<ExtLiteral> values;
+    std::vector<ExtLiteral*> values;
 };
 
 class EsPredicate {
@@ -143,7 +166,7 @@ public:
     EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, ObjectPool* pool);
     ~EsPredicate();
     const std::vector<ExtPredicate*>& get_predicate_list();
-    Status build_disjuncts_list();
+    Status build_disjuncts_list(bool use_vectorized = false);
     // public for tests
     EsPredicate(const std::vector<ExtPredicate*>& all_predicates) { _disjuncts = all_predicates; };
 
@@ -152,15 +175,23 @@ public:
     void set_field_context(const std::map<std::string, std::string>& field_context) { _field_context = field_context; }
 
 private:
-    Status build_disjuncts_list(const Expr* conjunct);
-    const SlotDescriptor* get_slot_desc(const SlotRef* slotRef);
+    Status _build_disjuncts_list(const Expr* conjunct);
+    Status _vec_build_disjuncts_list(const Expr* conjunct);
+    // used in vectorized mode
+    Status _build_binary_predicate(const Expr* conjunct, bool* handled);
+    Status _build_functioncall_predicate(const Expr* conjunct, bool* handled);
+    Status _build_in_predicate(const Expr* conjunct, bool* handled);
+    Status _build_compound_predicate(const Expr* conjunct, bool* handled);
 
-    ExprContext* _context = nullptr;
+    const SlotDescriptor* get_slot_desc(const SlotRef* slotRef);
+    const SlotDescriptor* get_slot_desc(SlotId slot_id);
+
+    ExprContext* _context;
     int _disjuncts_num = 0;
-    const TupleDescriptor* _tuple_desc = nullptr;
+    const TupleDescriptor* _tuple_desc;
     std::vector<ExtPredicate*> _disjuncts;
     Status _es_query_status;
-    ObjectPool* _pool = nullptr;
+    ObjectPool* _pool;
     std::map<std::string, std::string> _field_context;
 };
 

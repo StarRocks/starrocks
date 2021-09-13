@@ -13,7 +13,7 @@ class AggregateBlockingNode final : public AggregateBaseNode {
 public:
     AggregateBlockingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
             : AggregateBaseNode(pool, tnode, descs) {
-        _aggr_phase = AggrPhase2;
+        _aggregator->set_aggr_phase(AggrPhase2);
     };
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;

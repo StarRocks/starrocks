@@ -34,8 +34,8 @@
 #include "json2pb/pb_to_json.h"
 #include "rocksdb/write_batch.h"
 #include "storage/del_vector.h"
+#include "storage/kv_store.h"
 #include "storage/olap_define.h"
-#include "storage/olap_meta.h"
 #include "storage/rocksdb_status_adapter.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
@@ -84,7 +84,7 @@ static bool decode_tablet_meta_key(std::string_view key, TTabletId* tablet_id, T
     return safe_strto32(str, end - str, schema_hash);
 }
 
-Status TabletMetaManager::get_primary_meta(OlapMeta* meta, TTabletId tablet_id, TabletMetaPB& tablet_meta_pb,
+Status TabletMetaManager::get_primary_meta(KVStore* meta, TTabletId tablet_id, TabletMetaPB& tablet_meta_pb,
                                            string* json_meta) {
     json2pb::Pb2JsonOptions json_options;
     json_options.pretty_json = true;
@@ -318,13 +318,13 @@ Status TabletMetaManager::get_json_meta(DataDir* store, TTabletId tablet_id, TSc
 
     TabletMetaPB tablet_meta_pb;
     tablet_meta->to_meta_pb(&tablet_meta_pb);
-    OlapMeta* meta = store->get_meta();
+    KVStore* meta = store->get_meta();
     return get_primary_meta(meta, tablet_id, tablet_meta_pb, json_meta);
 }
 
 Status TabletMetaManager::get_json_meta(DataDir* store, TTabletId tablet_id, std::string* json_meta) {
     string pbdata;
-    OlapMeta* meta = store->get_meta();
+    KVStore* meta = store->get_meta();
     Status st;
     auto traverse_tabletmeta_func = [&](std::string_view key, std::string_view value) -> bool {
         TTabletId tid;
@@ -410,7 +410,7 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id, TSchemaHas
     return store->get_meta()->write_batch(&wb);
 }
 
-Status TabletMetaManager::traverse_headers(OlapMeta* meta,
+Status TabletMetaManager::traverse_headers(KVStore* meta,
                                            std::function<bool(long, long, const std::string&)> const& func) {
     auto traverse_header_func = [&func](std::string_view key, std::string_view value) -> bool {
         // TODO: avoid converting to std::string
@@ -707,7 +707,7 @@ Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int
 
 Status TabletMetaManager::rowset_delete(DataDir* store, TTabletId tablet_id, uint32_t rowset_id, uint32_t segments) {
     WriteBatch batch;
-    OlapMeta* meta = store->get_meta();
+    KVStore* meta = store->get_meta();
     auto cf_meta = meta->handle(META_COLUMN_FAMILY_INDEX);
 
     auto st = batch.Delete(cf_meta, encode_meta_rowset_key(tablet_id, rowset_id));
@@ -803,14 +803,14 @@ Status TabletMetaManager::traverse_meta_logs(DataDir* store, TTabletId tablet_id
     return ret;
 }
 
-Status TabletMetaManager::set_del_vector(OlapMeta* meta, TTabletId tablet_id, uint32_t segment_id,
+Status TabletMetaManager::set_del_vector(KVStore* meta, TTabletId tablet_id, uint32_t segment_id,
                                          const DelVector& delvec) {
     std::string key = encode_del_vector_key(tablet_id, segment_id, delvec.version());
     std::string val = delvec.save();
     return meta->put(META_COLUMN_FAMILY_INDEX, key, val);
 }
 
-Status TabletMetaManager::get_del_vector(OlapMeta* meta, TTabletId tablet_id, uint32_t segment_id, int64_t version,
+Status TabletMetaManager::get_del_vector(KVStore* meta, TTabletId tablet_id, uint32_t segment_id, int64_t version,
                                          DelVector* delvec, int64_t* latest_version) {
     std::string lower = encode_del_vector_key(tablet_id, segment_id, INT64_MAX);
     std::string upper = encode_del_vector_key(tablet_id, segment_id, 0);
@@ -848,8 +848,7 @@ Status TabletMetaManager::get_del_vector(OlapMeta* meta, TTabletId tablet_id, ui
 }
 
 using DeleteVectorList = TabletMetaManager::DeleteVectorList;
-StatusOr<DeleteVectorList> TabletMetaManager::list_del_vector(OlapMeta* meta, TTabletId tablet_id,
-                                                              int64_t max_version) {
+StatusOr<DeleteVectorList> TabletMetaManager::list_del_vector(KVStore* meta, TTabletId tablet_id, int64_t max_version) {
     DeleteVectorList ret;
     std::string lower = encode_del_vector_key(tablet_id, 0, INT64_MAX);
     std::string upper = encode_del_vector_key(tablet_id, UINT32_MAX, 0);
@@ -874,7 +873,7 @@ StatusOr<DeleteVectorList> TabletMetaManager::list_del_vector(OlapMeta* meta, TT
     return std::move(ret);
 }
 
-Status TabletMetaManager::delete_del_vector_range(OlapMeta* meta, TTabletId tablet_id, uint32_t segment_id,
+Status TabletMetaManager::delete_del_vector_range(KVStore* meta, TTabletId tablet_id, uint32_t segment_id,
                                                   int64_t start_version, int64_t end_version) {
     if (start_version == end_version) {
         return Status::OK();
@@ -947,7 +946,7 @@ Status TabletMetaManager::remove_tablet_meta(DataDir* store, WriteBatch* batch, 
 
 Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool detail) {
     // TODO(cbl): implement detail
-    OlapMeta* meta = store->get_meta();
+    KVStore* meta = store->get_meta();
 
     auto traverse_tabletmeta_func = [&](std::string_view key, std::string_view value) -> bool {
         TTabletId tid;
@@ -1100,7 +1099,7 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
 }
 
 Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id) {
-    OlapMeta* meta = store->get_meta();
+    KVStore* meta = store->get_meta();
     WriteBatch batch;
     bool is_primary = false;
     rocksdb::ColumnFamilyHandle* cf = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);

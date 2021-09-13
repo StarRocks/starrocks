@@ -55,6 +55,9 @@ import java.util.stream.Collectors;
  * The right child must be a leaf node, ie, can only materialize
  * a single input tuple.
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class HashJoinNode extends PlanNode {
     private static final Logger LOG = LogManager.getLogger(HashJoinNode.class);
 
@@ -67,7 +70,10 @@ public class HashJoinNode extends PlanNode {
     private boolean isPushDown;
     private DistributionMode distrMode;
     private String colocateReason = ""; // if can not do colocate join, set reason here
-    private boolean isBucketShuffle = false; // the flag for bucket shuffle join
+    // the flag for local bucket shuffle join
+    private boolean isLocalHashBucket = false;
+    // the flag for runtime bucket shuffle join
+    private boolean isShuffleHashBucket = false;
 
     private List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
 
@@ -157,7 +163,7 @@ public class HashJoinNode extends PlanNode {
             return;
         }
 
-        if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.BUCKET_SHUFFLE)) {
+        if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.LOCAL_HASH_BUCKET)) {
             // if it's partitioned join and we can not get correct ndv
             // then it's hard to estimate right bloom filter size or it's too big
             // so we'd better to skip this global runtime filter.
@@ -216,8 +222,12 @@ public class HashJoinNode extends PlanNode {
         this.distrMode = distrMode;
     }
 
-    public boolean isBucketShuffle() {
-        return isBucketShuffle;
+    public boolean isLocalHashBucket() {
+        return isLocalHashBucket;
+    }
+
+    public boolean isShuffleHashBucket() {
+        return isShuffleHashBucket;
     }
 
     public void setColocate(boolean colocate, String reason) {
@@ -225,8 +235,12 @@ public class HashJoinNode extends PlanNode {
         colocateReason = reason;
     }
 
-    public void setBucketShuffle(boolean bucketShuffle) {
-        isBucketShuffle = bucketShuffle;
+    public void setLocalHashBucket(boolean localHashBucket) {
+        isLocalHashBucket = localHashBucket;
+    }
+
+    public void setShuffleHashBucket(boolean runtimeBucketShuffle) {
+        isShuffleHashBucket = runtimeBucketShuffle;
     }
 
     @Override
@@ -516,13 +530,15 @@ public class HashJoinNode extends PlanNode {
         NONE("NONE"),
         BROADCAST("BROADCAST"),
         PARTITIONED("PARTITIONED"),
-        BUCKET_SHUFFLE("BUCKET_SHUFFLE"),
+        // The hash algorithms of the two bucket shuffle ways are different
+        LOCAL_HASH_BUCKET("BUCKET_SHUFFLE"),
+        SHUFFLE_HASH_BUCKET("BUCKET_SHUFFLE(S)"),
         COLOCATE("COLOCATE");
 
         private final String description;
 
-        private DistributionMode(String descr) {
-            this.description = descr;
+        DistributionMode(String desc) {
+            this.description = desc;
         }
 
         @Override

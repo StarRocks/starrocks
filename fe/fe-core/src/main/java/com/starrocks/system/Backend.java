@@ -205,6 +205,14 @@ public class Backend implements Writable {
         return false;
     }
 
+    public void setId(long id) {
+        this.id = id;
+    }
+
+    public void setHost(String host) {
+        this.host = host;
+    }
+
     public void setBackendState(BackendState state) {
         this.backendState = state.ordinal();
     }

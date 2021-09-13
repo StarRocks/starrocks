@@ -37,6 +37,11 @@ class MemPool;
 
 // A simple list structure for RowBatches that provides an interface for
 // iterating over the TupleRows.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class RowBatchList {
 public:
     RowBatchList() : _total_num_rows(0) {}

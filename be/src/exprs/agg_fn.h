@@ -77,6 +77,11 @@ class TExprNode;
 /// remove_fn_   : Used by AnalyticEval node to undo the update to the intermediate value
 ///                by an input row as it falls out of a sliding window.
 ///
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class AggFn : public Expr {
 public:
     /// Override the base class' implementation.

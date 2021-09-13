@@ -98,30 +98,32 @@ public class OlapTable extends Table {
         WAITING_STABLE
     }
 
-    private OlapTableState state;
+    protected int clusterId;
+
+    protected OlapTableState state;
 
     // index id -> index meta
-    private Map<Long, MaterializedIndexMeta> indexIdToMeta = Maps.newHashMap();
+    protected Map<Long, MaterializedIndexMeta> indexIdToMeta = Maps.newHashMap();
     // index name -> index id
-    private Map<String, Long> indexNameToId = Maps.newHashMap();
+    protected Map<String, Long> indexNameToId = Maps.newHashMap();
 
-    private KeysType keysType;
-    private PartitionInfo partitionInfo;
-    private Map<Long, Partition> idToPartition = new HashMap<>();
-    private Map<String, Partition> nameToPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+    protected KeysType keysType;
+    protected PartitionInfo partitionInfo;
+    protected Map<Long, Partition> idToPartition = new HashMap<>();
+    protected Map<String, Partition> nameToPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
-    private DistributionInfo defaultDistributionInfo;
+    protected DistributionInfo defaultDistributionInfo;
 
     // all info about temporary partitions are save in "tempPartitions"
-    private TempPartitions tempPartitions = new TempPartitions();
+    protected TempPartitions tempPartitions = new TempPartitions();
 
     // bloom filter columns
-    private Set<String> bfColumns;
-    private double bfFpp;
+    protected Set<String> bfColumns;
+    protected double bfFpp;
 
-    private String colocateGroup;
+    protected String colocateGroup;
 
-    private TableIndexes indexes;
+    protected TableIndexes indexes;
 
     // In former implementation, base index id is same as table id.
     // But when refactoring the process of alter table job, we find that
@@ -129,13 +131,15 @@ public class OlapTable extends Table {
     // So we add this 'baseIndexId' to explicitly specify the base index id,
     // which should be different with table id.
     // The init value is -1, which means there is not partition and index at all.
-    private long baseIndexId = -1;
+    protected long baseIndexId = -1;
 
-    private TableProperty tableProperty;
+    protected TableProperty tableProperty;
 
     public OlapTable() {
         // for persist
         super(TableType.OLAP);
+
+        this.clusterId = Catalog.getCurrentCatalog().getClusterId();
 
         this.bfColumns = null;
         this.bfFpp = 0;
@@ -154,8 +158,16 @@ public class OlapTable extends Table {
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
                      PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
+        this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
+                Catalog.getCurrentCatalog().getClusterId(), indexes);
+    }
+
+    public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
+                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
+                     int clusterId, TableIndexes indexes) {
         super(id, tableName, TableType.OLAP, baseSchema);
 
+        this.clusterId = clusterId;
         this.state = OlapTableState.NORMAL;
 
         this.keysType = keysType;
@@ -193,6 +205,14 @@ public class OlapTable extends Table {
 
     public long getBaseIndexId() {
         return baseIndexId;
+    }
+
+    public void setClusterId(int clusterId) {
+        this.clusterId = clusterId;
+    }
+
+    public int getClusterId() {
+        return clusterId;
     }
 
     public void setState(OlapTableState state) {
@@ -1579,6 +1599,9 @@ public class OlapTable extends Table {
         return tableProperty.getStorageFormat();
     }
 
+    @Override
+    public void onCreate() { }
+    
     @Override
     public void onDrop() {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,

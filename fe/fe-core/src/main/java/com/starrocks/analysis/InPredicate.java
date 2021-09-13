@@ -47,6 +47,10 @@ import java.util.List;
  * (first child) matches any value in a subquery (second child) or a list
  * of values (remaining children).
  */
+
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class InPredicate extends Predicate {
     private static final Logger LOG = LogManager.getLogger(InPredicate.class);
 
@@ -157,13 +161,6 @@ public class InPredicate extends Predicate {
         super.vectorizedAnalyze(analyzer);
 
         PrimitiveType type = getChild(0).getType().getPrimitiveType();
-
-        //       OpcodeRegistry.BuiltinFunction match = OpcodeRegistry.instance().getFunctionInfo(
-        //               FunctionOperator.FILTER_IN, true, true, type);
-        //       Preconditions.checkState(match != null);
-        //       Preconditions.checkState(match.getReturnType().isBoolean());
-        //       this.vectorOpcode = match.opcode;
-        //       LOG.info(debugString() + " opcode: " + vectorOpcode);
     }
 
     @Override

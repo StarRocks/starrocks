@@ -47,6 +47,10 @@ class ExprContext;
 class FileWriter;
 class RowBatch;
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class ParquetOutputStream : public arrow::io::OutputStream {
 public:
     ParquetOutputStream(FileWriter* file_writer);

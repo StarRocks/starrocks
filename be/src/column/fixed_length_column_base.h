@@ -183,6 +183,8 @@ public:
         _data.clear();
     }
 
+    bool reach_capacity_limit() const override { return _data.size() >= Column::MAX_CAPACITY_LIMIT; }
+
 protected:
     Container _data;
 };

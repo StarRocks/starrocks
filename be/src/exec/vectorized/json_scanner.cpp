@@ -153,7 +153,7 @@ Status JsonScanner::_construct_cast_exprs() {
 
 Status JsonScanner::_parse_json_paths(const std::string& jsonpath, std::vector<std::vector<JsonPath>>* path_vecs) {
     rapidjson::Document doc;
-    doc.Parse(jsonpath.c_str());
+    doc.Parse(jsonpath.c_str(), jsonpath.length());
     if (doc.HasParseError() || !doc.IsArray()) {
         return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", jsonpath));
     }

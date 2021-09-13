@@ -196,7 +196,7 @@ public class LoadStmt extends DdlStmt {
         final String timeoutLimitProperty = properties.get(TIMEOUT_PROPERTY);
         if (timeoutLimitProperty != null) {
             try {
-                final int timeoutLimit = Integer.valueOf(timeoutLimitProperty);
+                final int timeoutLimit = Integer.parseInt(timeoutLimitProperty);
                 if (timeoutLimit < 0) {
                     throw new DdlException(TIMEOUT_PROPERTY + " must be greater than 0");
                 }

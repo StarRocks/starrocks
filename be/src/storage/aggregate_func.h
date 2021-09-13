@@ -209,7 +209,7 @@ struct AggregateFuncTraits<OLAP_FIELD_AGGREGATION_MIN, field_type>
         CppType* dst_val = reinterpret_cast<CppType*>(dst->mutable_cell_ptr());
         const CppType* src_val = reinterpret_cast<const CppType*>(src.cell_ptr());
         if (dst_null || *src_val < *dst_val) {
-            dst->set_is_null(false);
+            dst->set_not_null();
             *dst_val = *src_val;
         }
     }
@@ -227,7 +227,7 @@ struct AggregateFuncTraits<OLAP_FIELD_AGGREGATION_MIN, OLAP_FIELD_TYPE_LARGEINT>
 
         bool dst_null = dst->is_null();
         if (dst_null) {
-            dst->set_is_null(false);
+            dst->set_not_null();
             memcpy(dst->mutable_cell_ptr(), src.cell_ptr(), sizeof(CppType));
             return;
         }
@@ -236,7 +236,6 @@ struct AggregateFuncTraits<OLAP_FIELD_AGGREGATION_MIN, OLAP_FIELD_TYPE_LARGEINT>
         memcpy(&dst_val, dst->cell_ptr(), sizeof(CppType));
         memcpy(&src_val, src.cell_ptr(), sizeof(CppType));
         if (src_val < dst_val) {
-            dst->set_is_null(false);
             memcpy(dst->mutable_cell_ptr(), src.cell_ptr(), sizeof(CppType));
         }
     }
@@ -267,6 +266,7 @@ struct AggregateFuncTraits<OLAP_FIELD_AGGREGATION_MIN, OLAP_FIELD_TYPE_VARCHAR>
                 memory_copy(dst_slice->data, src_slice->data, src_slice->size);
                 dst_slice->size = src_slice->size;
             }
+            dst->set_not_null();
         }
     }
 };
@@ -289,7 +289,7 @@ struct AggregateFuncTraits<OLAP_FIELD_AGGREGATION_MAX, field_type>
         CppType* dst_val = reinterpret_cast<CppType*>(dst->mutable_cell_ptr());
         const CppType* src_val = reinterpret_cast<const CppType*>(src.cell_ptr());
         if (dst_null || *src_val > *dst_val) {
-            dst->set_is_null(false);
+            dst->set_not_null();
             *dst_val = *src_val;
         }
     }
@@ -310,7 +310,7 @@ struct AggregateFuncTraits<OLAP_FIELD_AGGREGATION_MAX, OLAP_FIELD_TYPE_LARGEINT>
         memcpy(&dst_val, dst->cell_ptr(), sizeof(CppType));
         memcpy(&src_val, src.cell_ptr(), sizeof(CppType));
         if (dst_null || src_val > dst_val) {
-            dst->set_is_null(false);
+            dst->set_not_null();
             memcpy(dst->mutable_cell_ptr(), src.cell_ptr(), sizeof(CppType));
         }
     }
@@ -329,7 +329,6 @@ struct AggregateFuncTraits<OLAP_FIELD_AGGREGATION_MAX, OLAP_FIELD_TYPE_VARCHAR>
         if (src_null) return;
 
         bool dst_null = dst->is_null();
-
         Slice* dst_slice = reinterpret_cast<Slice*>(dst->mutable_cell_ptr());
         const Slice* src_slice = reinterpret_cast<const Slice*>(src.cell_ptr());
         if (dst_null || src_slice->compare(*dst_slice) > 0) {
@@ -341,6 +340,7 @@ struct AggregateFuncTraits<OLAP_FIELD_AGGREGATION_MAX, OLAP_FIELD_TYPE_VARCHAR>
                 memory_copy(dst_slice->data, src_slice->data, src_slice->size);
                 dst_slice->size = src_slice->size;
             }
+            dst->set_not_null();
         }
     }
 };
@@ -363,7 +363,7 @@ struct AggregateFuncTraits<OLAP_FIELD_AGGREGATION_SUM, field_type>
         CppType* dst_val = reinterpret_cast<CppType*>(dst->mutable_cell_ptr());
         bool dst_null = dst->is_null();
         if (dst_null) {
-            dst->set_is_null(false);
+            dst->set_not_null();
             *dst_val = *reinterpret_cast<const CppType*>(src.cell_ptr());
         } else {
             *dst_val += *reinterpret_cast<const CppType*>(src.cell_ptr());
@@ -384,7 +384,7 @@ struct AggregateFuncTraits<OLAP_FIELD_AGGREGATION_SUM, OLAP_FIELD_TYPE_LARGEINT>
 
         bool dst_null = dst->is_null();
         if (dst_null) {
-            dst->set_is_null(false);
+            dst->set_not_null();
             memcpy(dst->mutable_cell_ptr(), src.cell_ptr(), sizeof(CppType));
         } else {
             CppType dst_val, src_val;
@@ -456,7 +456,7 @@ struct AggregateFuncTraits<OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL, field_typ
             return;
         }
 
-        dst->set_is_null(false);
+        dst->set_not_null();
         memcpy(dst->mutable_cell_ptr(), src.cell_ptr(), sizeof(CppType));
     }
 };
@@ -472,7 +472,6 @@ struct AggregateFuncTraits<OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL, OLAP_FIEL
         }
 
         bool dst_null = dst->is_null();
-        dst->set_is_null(false);
         Slice* dst_slice = reinterpret_cast<Slice*>(dst->mutable_cell_ptr());
         const Slice* src_slice = reinterpret_cast<const Slice*>(src.cell_ptr());
         if (mem_pool == nullptr || (!dst_null && dst_slice->size >= src_slice->size)) {
@@ -483,6 +482,7 @@ struct AggregateFuncTraits<OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL, OLAP_FIEL
             memory_copy(dst_slice->data, src_slice->data, src_slice->size);
             dst_slice->size = src_slice->size;
         }
+        dst->set_not_null();
     }
 };
 

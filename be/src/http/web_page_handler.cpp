@@ -130,7 +130,7 @@ static const std::string kMainTemplate = R"(
     <meta charset='utf-8'/>
     <link href='/bootstrap/css/bootstrap.min.css' rel='stylesheet' media='screen' />
     <link href='/bootstrap/css/bootstrap-table.min.css' rel='stylesheet' media='screen' />
-    <script src='/jquery-3.2.1.min.js' defer></script>
+    <script src='/jquery-3.5.0.min.js' defer></script>
     <script src='/bootstrap/js/bootstrap.min.js' defer></script>
     <script src='/bootstrap/js/bootstrap-table.min.js' defer></script>
     <script src='/starrocks.js' defer></script>

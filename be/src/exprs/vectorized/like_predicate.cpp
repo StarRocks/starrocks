@@ -34,6 +34,33 @@ static const re2::RE2 LIKE_ENDS_WITH_RE(R"((?:%+)(((\\%)|(\\_)|([^%_]))+))");
 static const re2::RE2 LIKE_STARTS_WITH_RE(R"((((\\%)|(\\_)|([^%_]))+)(?:%+))");
 static const re2::RE2 LIKE_EQUALS_RE(R"((((\\%)|(\\_)|([^%_]))+))");
 
+Status LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, LikePredicateState* state,
+                                                   starrocks_udf::FunctionContext* context, const Slice& slice) {
+    if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SINGLEMATCH,
+                   HS_MODE_BLOCK, NULL, &state->database, &state->compile_err) != HS_SUCCESS) {
+        std::stringstream error;
+        error << "Invalid regex expression: " << slice.data << ": " << state->compile_err->message;
+        context->set_error(error.str().c_str());
+        hs_free_compile_error(state->compile_err);
+        return Status::InvalidArgument(error.str());
+    }
+
+    if (hs_alloc_scratch(state->database, &state->scratch) != HS_SUCCESS) {
+        std::stringstream error;
+        error << "ERROR: Unable to allocate scratch space.";
+        context->set_error(error.str().c_str());
+        hs_free_database(state->database);
+        return Status::InvalidArgument(error.str());
+    }
+
+    return Status::OK();
+}
+
+// when pattern is one of (EQUALS | SUBSTRING | STARTS_WITH | ENDS_WITH) or variable value
+// we use Re2.
+// when pattern is a constant value except ((EQUALS | SUBSTRING | STARTS_WITH | ENDS_WITH) variable value)
+// we use hyperscan.
+
 // like predicate
 Status LikePredicate::like_prepare(starrocks_udf::FunctionContext* context,
                                    starrocks_udf::FunctionContext::FunctionStateScope scope) {
@@ -78,17 +105,8 @@ Status LikePredicate::like_prepare(starrocks_udf::FunctionContext* context,
         state->set_search_string(search_string);
         state->function = &constant_substring_fn;
     } else {
-        auto re_pattern = convert_like_pattern(context, pattern);
-
-        RE2::Options opts;
-        opts.set_never_nl(false);
-        opts.set_dot_nl(true);
-
-        state->regex = std::make_unique<RE2>(re_pattern, opts);
-        if (!state->regex->ok()) {
-            context->set_error(strings::Substitute("Invalid regex: $0", re_pattern).c_str());
-            return Status::InvalidArgument("Invalid regex: " + pattern.to_string());
-        }
+        auto re_pattern = LikePredicate::template convert_like_pattern<true>(context, pattern);
+        RETURN_IF_ERROR(hs_compile_and_alloc_scratch(re_pattern, state, context, pattern));
     }
     return Status::OK();
 }
@@ -153,20 +171,8 @@ Status LikePredicate::regex_prepare(starrocks_udf::FunctionContext* context,
         state->set_search_string(search_string);
         state->function = &constant_substring_fn;
     } else {
-        RE2::Options opts;
-        opts.set_never_nl(false);
-        opts.set_dot_nl(true);
-        state->regex.reset(new RE2(pattern_str, opts));
-
-        state->function = &regex_match_partial;
-
-        if (!state->regex->ok()) {
-            std::stringstream error;
-            error << "Invalid regex expression: " << pattern.data;
-            context->set_error(error.str().c_str());
-
-            return Status::InvalidArgument(error.str());
-        }
+        std::string re_pattern(pattern.data, pattern.size);
+        RETURN_IF_ERROR(hs_compile_and_alloc_scratch(re_pattern, state, context, pattern));
     }
 
     return Status::OK();
@@ -343,8 +349,17 @@ ColumnPtr LikePredicate::regex_match_full(FunctionContext* context, const starro
         auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
         for (int row = 0; row < value_viewer.size(); ++row) {
-            auto v = RE2::FullMatch(re2::StringPiece(value_viewer.value(row).data, value_viewer.value(row).size),
-                                    *(state->regex));
+            bool v = false;
+            auto status = hs_scan(
+                    state->database, value_viewer.value(row).data, value_viewer.value(row).size, 0, state->scratch,
+                    [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
+                       void* ctx) -> int {
+                        *((bool*)ctx) = true;
+                        return 1;
+                    },
+                    &v);
+
+            DCHECK(status == HS_SUCCESS || status == HS_SCAN_TERMINATED);
             result.append(v, value_viewer.is_null(row));
         }
         return result.build(value_column->is_constant());
@@ -364,7 +379,7 @@ ColumnPtr LikePredicate::regex_match_full(FunctionContext* context, const starro
             continue;
         }
 
-        auto re_pattern = convert_like_pattern(context, pattern_viewer.value(row));
+        auto re_pattern = LikePredicate::template convert_like_pattern<false>(context, pattern_viewer.value(row));
 
         re2::RE2 re(re_pattern, opts);
 
@@ -392,8 +407,17 @@ ColumnPtr LikePredicate::regex_match_partial(FunctionContext* context, const sta
         auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
         for (int row = 0; row < value_viewer.size(); ++row) {
-            auto v = RE2::PartialMatch(re2::StringPiece(value_viewer.value(row).data, value_viewer.value(row).size),
-                                       *(state->regex));
+            bool v = false;
+            auto status = hs_scan(
+                    state->database, value_viewer.value(row).data, value_viewer.value(row).size, 0, state->scratch,
+                    [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
+                       void* ctx) -> int {
+                        *((bool*)ctx) = true;
+                        return 1;
+                    },
+                    &v);
+
+            DCHECK(status == HS_SUCCESS || status == HS_SCAN_TERMINATED);
             result.append(v, value_viewer.is_null(row));
         }
         return result.build(value_column->is_constant());
@@ -430,12 +454,17 @@ ColumnPtr LikePredicate::regex_match_partial(FunctionContext* context, const sta
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+template <bool fullMatch>
 std::string LikePredicate::convert_like_pattern(FunctionContext* context, const Slice& pattern) {
     std::string re_pattern;
     re_pattern.clear();
 
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
     bool is_escaped = false;
+
+    if constexpr (fullMatch) {
+        re_pattern.append("^");
+    }
 
     for (int i = 0; i < pattern.size; ++i) {
         if (!is_escaped && pattern.data[i] == '%') {
@@ -459,6 +488,10 @@ std::string LikePredicate::convert_like_pattern(FunctionContext* context, const 
             re_pattern.append(1, pattern.data[i]);
             is_escaped = false;
         }
+    }
+
+    if constexpr (fullMatch) {
+        re_pattern.append("$");
     }
 
     return re_pattern;

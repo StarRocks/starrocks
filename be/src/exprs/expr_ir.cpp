@@ -41,6 +41,10 @@ void dummy(starrocks_udf::FunctionContext*, starrocks_udf::BooleanVal*, starrock
 // code. In the codegen'd path, we load the IR functions and replace the Get*Val() calls
 // with the appropriate child's codegen'd compute function.
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 namespace starrocks {
 // Static wrappers around Get*Val() functions. We'd like to be able to call these from
 // directly from native code as well as from generated IR functions.

@@ -1101,7 +1101,17 @@ Status DefaultValueColumnIterator::next_batch(size_t* n, vectorized::Column* dst
         _current_rowid += *n;
         DCHECK(ok) << "cannot append null to non-nullable column";
     } else {
-        dst->append_value_multiple_times(_mem_value, *n);
+        if (_type_info->type() == OLAP_FIELD_TYPE_OBJECT || _type_info->type() == OLAP_FIELD_TYPE_HLL ||
+            _type_info->type() == OLAP_FIELD_TYPE_PERCENTILE) {
+            std::vector<Slice> slices;
+            slices.reserve(*n);
+            for (size_t i = 0; i < *n; i++) {
+                slices.emplace_back(*reinterpret_cast<const Slice*>(_mem_value));
+            }
+            dst->append_strings(slices);
+        } else {
+            dst->append_value_multiple_times(_mem_value, *n);
+        }
         _current_rowid += *n;
     }
     return Status::OK();

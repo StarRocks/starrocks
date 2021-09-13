@@ -59,6 +59,10 @@ import java.util.Set;
 /**
  * Root of the expr node hierarchy.
  */
+
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneable, Writable {
     private static final Logger LOG = LogManager.getLogger(Expr.class);
 

@@ -48,7 +48,7 @@ add_library(Olap STATIC
     merger.cpp
     null_predicate.cpp
     olap_cond.cpp
-    olap_meta.cpp
+    kv_store.cpp
     olap_server.cpp
     options.cpp
     page_cache.cpp
