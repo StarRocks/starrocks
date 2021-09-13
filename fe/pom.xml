@@ -296,12 +296,6 @@ under the License.
                 <groupId>com.baidu</groupId>
                 <artifactId>jprotobuf-rpc-core</artifactId>
                 <version>4.1.6</version>
-                <exclusions>
-                    <exclusion>
-                        <groupId>com.baidu</groupId>
-                        <artifactId>jprotobuf</artifactId>
-                    </exclusion>
-                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.json/json -->
@@ -360,13 +354,6 @@ under the License.
                 <groupId>io.dropwizard.metrics</groupId>
                 <artifactId>metrics-core</artifactId>
                 <version>4.0.2</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/mysql/mysql-connector-java -->
-            <dependency>
-                <groupId>mysql</groupId>
-                <artifactId>mysql-connector-java</artifactId>
-                <version>5.1.49</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/io.netty/netty-all -->
