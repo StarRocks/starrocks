@@ -11,7 +11,6 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/sum.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "udf/udf_internal.h"
 #include "util/phmap/phmap_dump.h"
 
@@ -31,6 +30,8 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
         auto pair = set.insert(key);
         return pair.second * phmap::item_serialize_size<HashSet<T>>::value;
     }
+
+    void prefetch(T key) { set.prefetch(key); }
 
     int64_t disctint_count() const { return set.size(); }
 
@@ -136,10 +137,82 @@ struct DistinctAggregateState<PT, BinaryPTGuard<PT>> {
     SliceHashSet set;
 };
 
-template <PrimitiveType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
-class DistinctAggregateFunction final
-        : public AggregateFunctionBatchHelper<DistinctAggregateState<PT>,
-                                              DistinctAggregateFunction<PT, DistinctType, T>> {
+// use a different way to do serialization to gain performance.
+template <PrimitiveType PT, typename = guard::Guard>
+struct DistinctAggregateStateV2 {};
+
+template <PrimitiveType PT>
+struct DistinctAggregateStateV2<PT, FixedLengthPTGuard<PT>> {
+    using T = RunTimeCppType<PT>;
+    using SumType = RunTimeCppType<SumResultPT<PT>>;
+    using MyHashSet = HashSet<T>;
+    static constexpr size_t item_size = phmap::item_serialize_size<MyHashSet>::value;
+
+    size_t update(T key) {
+        auto pair = set.insert(key);
+        return pair.second * item_size;
+    }
+
+    void prefetch(T key) { set.prefetch(key); }
+
+    int64_t disctint_count() const { return set.size(); }
+
+    size_t serialize_size() const { return set.size() * sizeof(T) + sizeof(size_t); }
+
+    void serialize(uint8_t* dst) const {
+        size_t size = set.size();
+        memcpy(dst, &size, sizeof(size));
+        dst += sizeof(size);
+        for (auto& key : set) {
+            memcpy(dst, &key, sizeof(key));
+            dst += sizeof(T);
+        }
+    }
+
+    size_t deserialize_and_merge(const uint8_t* src, size_t len) {
+        size_t size = 0;
+        memcpy(&size, src, sizeof(size));
+        set.rehash(set.size() + size);
+
+        size_t old_size = set.size();
+        src += sizeof(size);
+        const T* data = reinterpret_cast<const T*>(src);
+        static const size_t prefetch_dist = 4;
+        for (size_t i = 0; i < size; i++) {
+            if ((i + prefetch_dist) < size) {
+                set.prefetch(data[i + prefetch_dist]);
+            }
+            set.insert(data[i]);
+        }
+        size_t new_size = set.size();
+        return (new_size - old_size) * item_size;
+    }
+
+    SumType sum_distinct() const {
+        SumType sum{};
+        // Sum distinct doesn't support timestamp and date type
+        if constexpr (IsDateTime<SumType>) {
+            return sum;
+        }
+
+        for (auto& key : set) {
+            sum += key;
+        }
+        return sum;
+    }
+
+    MyHashSet set;
+};
+
+template <PrimitiveType PT>
+struct DistinctAggregateStateV2<PT, BinaryPTGuard<PT>> : public DistinctAggregateState<PT> {};
+
+// Dear god this template class as template parameter kills me!
+template <PrimitiveType PT, template <PrimitiveType X> class TDistinctAggState, AggDistinctType DistinctType,
+          typename T = RunTimeCppType<PT>>
+class TDistinctAggregateFunction
+        : public AggregateFunctionBatchHelper<TDistinctAggState<PT>,
+                                              TDistinctAggregateFunction<PT, TDistinctAggState, DistinctType, T>> {
 public:
     using ColumnType = RunTimeColumnType<PT>;
 
@@ -150,6 +223,33 @@ public:
             mem_usage = this->data(state).update(ctx->impl()->mem_pool(), column->get_slice(row_num));
         } else {
             mem_usage = this->data(state).update(column->get_data()[row_num]);
+        }
+        ctx->impl()->add_mem_usage(mem_usage);
+    }
+
+    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+                                   AggDataPtr state) const override {
+        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
+        size_t mem_usage = 0;
+        auto& agg_state = this->data(state);
+
+        if constexpr (IsSlice<T>) {
+            MemPool* mem_pool = ctx->impl()->mem_pool();
+            for (size_t i = 0; i < batch_size; ++i) {
+                mem_usage += agg_state.update(mem_pool, column->get_slice(i));
+            }
+        } else {
+            auto* data = column->get_data().data();
+            // after doing some benchmark, we see a lot of perf gain by prefetching when doing count(distinct)
+            // but only when there is no group by clause or group by number is low.
+            // prefetching has down side if group by number is high.
+            static const size_t prefetch_dist = 4;
+            for (size_t i = 0; i < batch_size; ++i) {
+                if ((i + prefetch_dist) < batch_size) {
+                    agg_state.prefetch(data[i + prefetch_dist]);
+                }
+                mem_usage += agg_state.update(data[i]);
+            }
         }
         ctx->impl()->add_mem_usage(mem_usage);
     }
@@ -239,5 +339,11 @@ public:
         }
     }
 };
+
+template <PrimitiveType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
+class DistinctAggregateFunction : public TDistinctAggregateFunction<PT, DistinctAggregateState, DistinctType, T> {};
+
+template <PrimitiveType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
+class DistinctAggregateFunctionV2 : public TDistinctAggregateFunction<PT, DistinctAggregateStateV2, DistinctType, T> {};
 
 } // namespace starrocks::vectorized
