@@ -13,14 +13,17 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
@@ -454,6 +457,17 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         return Optional.of(requireDistributionDesc);
     }
 
+    private Optional<GatherDistributionSpec> getRequiredGatherDesc() {
+        if (!requirements.getDistributionProperty().isGather()) {
+            return Optional.empty();
+        }
+
+        GatherDistributionSpec requireDistributionDesc =
+                ((GatherDistributionSpec) requirements.getDistributionProperty().getSpec());
+
+        return Optional.of(requireDistributionDesc);
+    }
+
     private Optional<HashDistributionDesc> getRequiredShuffleJoinDesc() {
         if (!requirements.getDistributionProperty().isShuffle()) {
             return Optional.empty();
@@ -468,13 +482,39 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         return Optional.of(requireDistributionDesc);
     }
 
-    private Void visitJoinRequirements(PhysicalHashJoinOperator node, ExpressionContext context) {
-        Optional<HashDistributionDesc> required = getRequiredLocalDesc();
+    private Void tryGatherForBroadcastJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
+        List<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>> result = Lists.newArrayList();
+        if ((context.getChildOperator(0) instanceof LogicalAggregationOperator)) {
+            LogicalAggregationOperator childOperator = (LogicalAggregationOperator) context.getChildOperator(0);
+            if (childOperator.getType().equals(AggType.GLOBAL) && childOperator.getGroupingKeys().isEmpty()) {
+                for (Pair<PhysicalPropertySet, List<PhysicalPropertySet>> outputInputProp : outputInputProps) {
+                    PhysicalPropertySet left = outputInputProp.second.get(0);
+                    PhysicalPropertySet right = outputInputProp.second.get(1);
+                    if (left.getDistributionProperty().isAny() && right.getDistributionProperty().isBroadcast()) {
+                        result.add(
+                                new Pair<>(distributeRequirements(),
+                                        Lists.newArrayList(distributeRequirements(), right)));
+                    }
+                }
+                outputInputProps = result;
+                return visitOperator(node, context);
+            }
+        }
+        return visitOperator(node, context);
+    }
 
+    private Void visitJoinRequirements(PhysicalHashJoinOperator node, ExpressionContext context) {
+        //require property is gather
+        Optional<GatherDistributionSpec> requiredGatherDistribution = getRequiredGatherDesc();
+        if (requiredGatherDistribution.isPresent()) {
+            return tryGatherForBroadcastJoin(node, context);
+        }
+
+        Optional<HashDistributionDesc> required = getRequiredLocalDesc();
         if (!required.isPresent()) {
             return visitOperator(node, context);
         }
-
+        //require property is local
         HashDistributionDesc requireDistributionDesc = required.get();
         ColumnRefSet requiredLocalColumns = new ColumnRefSet();
         requireDistributionDesc.getColumns().forEach(requiredLocalColumns::union);
@@ -653,7 +693,6 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         }
 
         Optional<HashDistributionDesc> required = getRequiredLocalDesc();
-
         if (!required.isPresent()) {
             return visitOperator(node, context);
         }
