@@ -94,40 +94,40 @@ tuple ids: 0
 
 ### **物化视图函数支持**
 
-具体化视图必须是对单个表的聚合。目前仅支持以下[聚合函数](https://cloud.google.com/bigquery/docs/reference/standard-sql/aggregate_functions)：
+当前的物化视图只支持对单个表的聚合。目前支持以下[聚合函数](https://cloud.google.com/bigquery/docs/reference/standard-sql/aggregate_functions)：
 
 * COUNT
 * MAX
 * MIN
 * SUM
-* PERCENTILE\_APPROX
-* HLL\_UNION
+* PERCENTILE_APPROX
+* HLL_UNION
+    
+    对明细数据进行 HLL 聚合并且在查询时，使用 HLL 函数分析数据。主要适用于快速进行非精确去重计算。对明细数据使用HLL\_UNION聚合，需要先调用hll\_hash函数，对原数据进行转换。
 
-* 对明细数据进行 HLL 聚合并且在查询时，使用 HLL 函数分析数据。主要适用于快速进行非精确去重计算。对明细数据使用HLL\_UNION聚合，需要先调用hll\_hash函数，对原数据进行转换
+    ~~~SQL
+    create materialized view dt_uv as 
+        select dt, page_id, HLL_UNION(hll_hash(user_id)) 
+        from user_view
+        group by dt, page_id;
+    select ndv(user_id) from user_view; 查询可命中该物化视图
+    ~~~
 
-~~~SQL
-create materialized view dt_uv as 
-    select dt, page_id, HLL_UNION(hll_hash(user_id)) 
-    from user_view
-    group by dt, page_id;
-select ndv(user_id) from user_view; 查询可命中该物化视图
-~~~
+    目前不支持对 DECIMAL/BITMAP/HLL/PERCENTILE 类型的列使用HLL\_UNION聚合算子。
 
-* 目前不支持对 DECIMAL/BITMAP/HLL/PERCENTILE 类型的列使用HLL\_UNION聚合算子
+* BITMAP_UNION
 
-* BITMAP\_UNION
+    对明细数据进行BITMAP聚合并且在查询时，使用BITMAP函数分析数据，主要适用于快速计算count(distinct)的精确去重。对明细数据使用BITMAP\_UNION聚合，需要先调用to\_bitmap函数，对原数据进行转换。
 
-* 对明细数据进行BITMAP聚合并且在查询时，使用BITMAP函数分析数据，主要适用于快速计算count(distinct)的精确去重。对明细数据使用BITMAP\_UNION聚合，需要先调用to\_bitmap函数，对原数据进行转换。
+    ~~~SQL
+    create materialized view dt_uv  as
+        select dt, page_id, bitmap_union(to_bitmap(user_id))
+        from user_view
+        group by dt, page_id;
+    select count(distinct user_id) from user_view; 查询可命中该物化视图
+    ~~~
 
-~~~SQL
-create materialized view dt_uv  as
-    select dt, page_id, bitmap_union(to_bitmap(user_id))
-    from user_view
-    group by dt, page_id;
-select count(distinct user_id) from user_view; 查询可命中该物化视图
-~~~
-
-* 目前仅支持TINYINT/SMALLINT/INT/BITINT类型，且存储内容需为正整数（包括0）。
+    目前仅支持TINYINT/SMALLINT/INT/BITINT类型，且存储内容需为正整数（包括0）。
 
 ### **物化视图的智能路由**
 
