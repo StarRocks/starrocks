@@ -21,15 +21,7 @@ Status AggregateStreamingNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
     RETURN_IF_ERROR(_aggregator->open(state));
-
-    // Initial for FunctionContext of every aggregate functions
-    for (int i = 0; i < _aggregator->agg_fn_ctxs().size(); ++i) {
-        // initial const columns for i'th FunctionContext.
-        _aggregator->evaluate_const_columns(i);
-    }
-
-    RETURN_IF_ERROR(_children[0]->open(state));
-    return Status::OK();
+    return _children[0]->open(state);
 }
 
 Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {

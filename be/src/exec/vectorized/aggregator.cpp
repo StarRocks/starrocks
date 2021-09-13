@@ -13,6 +13,7 @@ Status Aggregator::open(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::open(_group_by_expr_ctxs, state));
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
+        _evaluate_const_columns(i);
     }
     return Status::OK();
 }
@@ -299,16 +300,6 @@ bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size
     return current_reduction > min_reduction;
 }
 
-void Aggregator::evaluate_const_columns(int i) {
-    // used for const columns.
-    std::vector<ColumnPtr> const_columns;
-    const_columns.reserve(_agg_expr_ctxs[i].size());
-    for (int j = 0; j < _agg_expr_ctxs[i].size(); ++j) {
-        const_columns.emplace_back(_agg_expr_ctxs[i][j]->root()->evaluate_const(_agg_expr_ctxs[i][j]));
-    }
-    _agg_fn_ctxs[i]->impl()->set_constant_columns(const_columns);
-}
-
 void Aggregator::compute_single_agg_state(size_t chunk_size) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         if (!_is_merge_funcs[i]) {
@@ -341,6 +332,16 @@ void Aggregator::compute_batch_agg_states_with_selection(size_t chunk_size) {
                                                     _agg_input_raw_columns[i].data(), _tmp_agg_states.data(),
                                                     _streaming_selection);
     }
+}
+
+void Aggregator::_evaluate_const_columns(int i) {
+    // used for const columns.
+    std::vector<ColumnPtr> const_columns;
+    const_columns.reserve(_agg_expr_ctxs[i].size());
+    for (int j = 0; j < _agg_expr_ctxs[i].size(); ++j) {
+        const_columns.emplace_back(_agg_expr_ctxs[i][j]->root()->evaluate_const(_agg_expr_ctxs[i][j]));
+    }
+    _agg_fn_ctxs[i]->impl()->set_constant_columns(const_columns);
 }
 
 void Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {

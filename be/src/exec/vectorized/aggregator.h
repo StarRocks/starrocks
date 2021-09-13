@@ -79,7 +79,6 @@ public:
     void set_ht_eos() { _is_ht_eos = true; }
     bool is_sink_complete() { return _is_sink_complete.load(std::memory_order_acquire); }
     int64_t num_input_rows() { return _num_input_rows; }
-    // TODO(hcf) not concurrent-safe
     int64_t num_rows_returned() { return _num_rows_returned; }
     void update_num_rows_returned(int64_t increment) { _num_rows_returned += increment; };
     void update_num_input_rows(int64_t increment) { _num_input_rows += increment; }
@@ -107,10 +106,6 @@ public:
 
     bool should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
                                           int64_t ht_rows) const;
-
-    // initial const columns for i'th FunctionContext.
-    // TODO(hcf) aggregate blocking/stream operator missing calling this method
-    void evaluate_const_columns(int i);
 
     // For aggregate without group by
     void compute_single_agg_state(size_t chunk_size);
@@ -152,9 +147,6 @@ public:
     static constexpr size_t memory_check_batch_size = 1;
 #endif
 
-    // TODO(hcf) the following fields were introduced due to compatibility
-    // can it be removed?
-
 private:
     // used to init
     const TPlanNode _tnode;
@@ -171,7 +163,6 @@ private:
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
-    // TODO(hcf) replace it with lock-free queue
     std::queue<vectorized::ChunkPtr> _buffer;
     std::mutex _buffer_mutex;
 
@@ -450,6 +441,9 @@ public:
 
 private:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
+
+    // initial const columns for i'th FunctionContext.
+    void _evaluate_const_columns(int i);
 
     // Create new aggregate function result column by type
     vectorized::Columns _create_agg_result_columns();
