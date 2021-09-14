@@ -260,12 +260,16 @@ void init_signals() {
 }
 
 void init_minidump() {
+#ifdef __x86_64__
     if (config::sys_minidump_enable) {
-        LOG(INFO) << "Minidump is enable";
+        LOG(INFO) << "Minidump is enabled";
         Minidump::init();
     } else {
-        LOG(INFO) << "Minidump is disable";
+        LOG(INFO) << "Minidump is disabled";
     }
+#else
+    LOG(INFO) << "Minidump is disabled on non-x86_64 arch";
+#endif
 }
 
 void init_daemon(int argc, char** argv, const std::vector<StorePath>& paths) {
