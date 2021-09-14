@@ -119,19 +119,19 @@ public class CoordinatorTest extends Coordinator {
         Deencapsulation.setField(coordinator, "fragmentIdBucketSeqToScanRangeMap", fragmentIdBucketSeqToScanRangeMap);
 
         FragmentExecParams params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeColocateJoinInstanceParam", planFragmentId, 1, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 1, params);
         Assert.assertEquals(1, params.instanceExecParams.size());
 
         params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeColocateJoinInstanceParam", planFragmentId, 2, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 2, params);
         Assert.assertEquals(2, params.instanceExecParams.size());
 
         params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeColocateJoinInstanceParam", planFragmentId, 3, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 3, params);
         Assert.assertEquals(3, params.instanceExecParams.size());
 
         params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeColocateJoinInstanceParam", planFragmentId, 5, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 5, params);
         Assert.assertEquals(3, params.instanceExecParams.size());
     }
 
@@ -203,19 +203,19 @@ public class CoordinatorTest extends Coordinator {
         Deencapsulation.setField(coordinator, "fragmentIdBucketSeqToScanRangeMap", fragmentIdBucketSeqToScanRangeMap);
 
         FragmentExecParams params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeBucketShuffleJoinInstanceParam", planFragmentId, 1, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 1, params);
         Assert.assertEquals(1, params.instanceExecParams.size());
 
         params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeBucketShuffleJoinInstanceParam", planFragmentId, 2, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 2, params);
         Assert.assertEquals(2, params.instanceExecParams.size());
 
         params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeBucketShuffleJoinInstanceParam", planFragmentId, 3, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 3, params);
         Assert.assertEquals(3, params.instanceExecParams.size());
 
         params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeBucketShuffleJoinInstanceParam", planFragmentId, 5, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 5, params);
         Assert.assertEquals(3, params.instanceExecParams.size());
     }
 
