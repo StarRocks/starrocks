@@ -423,7 +423,7 @@ public final class MetricRepo {
                     if (!Catalog.getCurrentCatalog().isMaster()) {
                         return 0L;
                     }
-                    return (long) invertedIndex.getTabletNumByBackendId(beId);
+                    return invertedIndex.getTabletNumByBackendId(beId);
                 }
             };
             tabletNum.addLabel(new MetricLabel("backend", be.getHost() + ":" + be.getHeartbeatPort()));

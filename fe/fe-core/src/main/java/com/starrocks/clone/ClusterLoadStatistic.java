@@ -28,7 +28,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.clone.BackendLoadStatistic.Classification;
 import com.starrocks.clone.BackendLoadStatistic.LoadScore;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -241,34 +240,19 @@ public class ClusterLoadStatistic {
         return statistics;
     }
 
-    public List<List<String>> getBackendStatistic(long beId) {
-        List<List<String>> statistics = Lists.newArrayList();
-
-        for (BackendLoadStatistic beStatistic : beLoadStatistics) {
-            if (beStatistic.getBeId() != beId) {
-                continue;
-            }
-
-            for (RootPathLoadStatistic pathStatistic : beStatistic.getPathStatistics()) {
-                List<String> pathStat = Lists.newArrayList();
-                pathStat.add(pathStatistic.getPath());
-                pathStat.add(String.valueOf(pathStatistic.getPathHash()));
-                pathStat.add(String.valueOf(pathStatistic.getUsedCapacityB()));
-                pathStat.add(String.valueOf(pathStatistic.getCapacityB()));
-                pathStat.add(
-                        String.valueOf(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(pathStatistic.getUsedCapacityB() * 100
-                                / (double) pathStatistic.getCapacityB())));
-                statistics.add(pathStat);
-            }
-            break;
-        }
-        return statistics;
-    }
-
     public BackendLoadStatistic getBackendLoadStatistic(long beId) {
         for (BackendLoadStatistic backendLoadStatistic : beLoadStatistics) {
             if (backendLoadStatistic.getBeId() == beId) {
                 return backendLoadStatistic;
+            }
+        }
+        return null;
+    }
+
+    public RootPathLoadStatistic getRootPathLoadStatistic(long beId, long pathHash) {
+        for (BackendLoadStatistic backendLoadStatistic : beLoadStatistics) {
+            if (backendLoadStatistic.getBeId() == beId) {
+                return backendLoadStatistic.getPathStatistic(pathHash);
             }
         }
         return null;
@@ -343,7 +327,7 @@ public class ClusterLoadStatistic {
     public String getBrief() {
         StringBuilder sb = new StringBuilder();
         for (BackendLoadStatistic backendLoadStatistic : beLoadStatistics) {
-            sb.append("    ").append(backendLoadStatistic.getBrief()).append("\n");
+            sb.append("    ").append(backendLoadStatistic).append("\n");
         }
         return sb.toString();
     }
