@@ -28,13 +28,12 @@ import org.junit.Test;
 public class ColumnSeparatorTest {
     @Test
     public void testNormal() throws AnalysisException {
-        // \t
+
         ColumnSeparator separator = new ColumnSeparator("\t");
         separator.analyze();
         Assert.assertEquals("'\t'", separator.toSql());
         Assert.assertEquals("\t", separator.getColumnSeparator());
 
-        // \x01
         separator = new ColumnSeparator("\\x01");
         separator.analyze();
         Assert.assertEquals("'\\x01'", separator.toSql());
