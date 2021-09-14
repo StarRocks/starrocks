@@ -105,11 +105,9 @@ set(UTIL_FILES
   hdfs_util.cpp
 )
 
-if (WITH_MYSQL)
-    set(UTIL_FILES ${UTIL_FILES}
-        mysql_load_error_hub.cpp
-        )
-endif()
+set(UTIL_FILES ${UTIL_FILES}
+    mysql_load_error_hub.cpp
+)
 
 add_library(Util STATIC
     ${UTIL_FILES}

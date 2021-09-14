@@ -436,38 +436,6 @@ build_boost() {
     ./b2 link=static runtime-link=static -j $PARALLEL --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR" install
 }
 
-# mysql
-build_mysql() {
-    check_if_source_exist $MYSQL_SOURCE
-    check_if_source_exist $BOOST_SOURCE
-
-    cd $TP_SOURCE_DIR/$MYSQL_SOURCE
-
-    mkdir -p $BUILD_DIR && cd $BUILD_DIR
-    rm -rf CMakeCache.txt CMakeFiles/
-    if [ ! -d $BOOST_SOURCE ]; then
-        cp -rf $TP_SOURCE_DIR/$BOOST_SOURCE ./
-    fi
-
-    $CMAKE_CMD ../ -DWITH_BOOST=`pwd`/$BOOST_SOURCE -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/mysql/ \
-    -DCMAKE_INCLUDE_PATH=$TP_INCLUDE_DIR -DCMAKE_LIBRARY_PATH=$TP_LIB_DIR -DWITHOUT_SERVER=1 \
-    -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O3 -g -fabi-version=2 -fno-omit-frame-pointer -fno-strict-aliasing -std=gnu++11" \
-    -DDISABLE_SHARED=1 -DBUILD_SHARED_LIBS=0
-    make -j$PARALLEL mysqlclient
-
-    # copy headers manually
-    rm -rf ../../../installed/include/mysql/
-    mkdir ../../../installed/include/mysql/ -p
-    cp -R ./include/* ../../../installed/include/mysql/
-    cp -R ../include/* ../../../installed/include/mysql/
-    cp ../libbinlogevents/export/binary_log_types.h ../../../installed/include/mysql/
-    echo "mysql headers are installed."
-
-    # copy libmysqlclient.a
-    cp libmysql/libmysqlclient.a ../../../installed/lib/
-    echo "mysql client lib is installed."
-}
-
 #leveldb
 build_leveldb() {
     check_if_source_exist $LEVELDB_SOURCE
@@ -767,6 +735,15 @@ build_hyperscan() {
     make -j$PARALLEL && make install
 }
 
+#mariadb-connector-c
+build_mariadb() {
+    check_if_source_exist $MARIADB_SOURCE
+    cd $TP_SOURCE_DIR/$MARIADB_SOURCE
+    mkdir -p build && cd build
+    cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
+    make -j$PARALLEL && make install
+}
+
 build_libevent
 build_zlib
 build_lz4
@@ -783,7 +760,6 @@ build_snappy
 build_gperftools
 build_curl
 build_re2
-build_mysql
 build_thrift
 build_leveldb
 build_brpc
@@ -803,5 +779,6 @@ build_hadoop
 build_jdk
 build_ragel
 build_hyperscan
+build_mariadb
 echo "Finihsed to build all thirdparties"
 

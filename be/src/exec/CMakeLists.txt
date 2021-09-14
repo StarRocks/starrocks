@@ -187,13 +187,11 @@ set(EXEC_FILES
     pipeline/aggregate/aggregate_distinct_streaming_source_operator.cpp
 )
 
-if (WITH_MYSQL)
-    set(EXEC_FILES
-        ${EXEC_FILES}
-        mysql_scan_node.cpp
-        mysql_scanner.cpp
-        )
-endif()
+set(EXEC_FILES
+    ${EXEC_FILES}
+    mysql_scan_node.cpp
+    mysql_scanner.cpp
+)
 
 IF (WITH_HDFS)
     set(EXEC_FILES ${EXEC_FILES}
