@@ -18,7 +18,7 @@ namespace starrocks::vectorized {
 
 enum AggDistinctType { COUNT = 0, SUM = 1 };
 
-static const size_t MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA = 17;
+static const size_t MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA = 24;
 
 template <PrimitiveType PT, typename = guard::Guard>
 struct DistinctAggregateState {};
@@ -174,7 +174,6 @@ struct DistinctAggregateStateV2<PT, FixedLengthPTGuard<PT>> {
         memcpy(dst, &size, sizeof(size));
         dst += sizeof(size);
         for (auto& key : set) {
-            static_assert(sizeof(key) == sizeof(key));
             memcpy(dst, &key, sizeof(key));
             dst += sizeof(T);
         }
