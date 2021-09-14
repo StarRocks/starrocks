@@ -22,6 +22,7 @@
 #include "exec/exchange_node.h"
 
 #include "column/chunk.h"
+#include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -373,10 +374,20 @@ void ExchangeNode::debug_string(int indentation_level, std::stringstream* out) c
 pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators;
-    operators.emplace_back(std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
-                                                                           _num_senders, _input_row_desc));
-    if (limit() != -1) {
-        operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    if (!_is_merging) {
+        operators.emplace_back(std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
+                                                                               _num_senders, _input_row_desc));
+        if (limit() != -1) {
+            operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+        }
+    } else {
+        operators.emplace_back(std::make_shared<ExchangeMergeSortSourceOperatorFactory>(
+                context->next_operator_id(), id(), _num_senders, _input_row_desc, &_sort_exec_exprs, _is_asc_order,
+                _nulls_first, _offset, _limit, _is_merging));
+
+        //if (limit() != -1) {
+        //    operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+        //}
     }
     return operators;
 }

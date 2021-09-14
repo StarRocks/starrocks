@@ -151,6 +151,7 @@ set(EXEC_FILES
     parquet/metadata.cpp
     parquet/group_reader.cpp
     parquet/file_reader.cpp
+    pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp
     pipeline/exchange/local_exchange.cpp

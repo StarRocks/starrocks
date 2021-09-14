@@ -97,11 +97,14 @@ public:
     Status create_merger(const TupleRowComparator& less_than);
     Status create_merger(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                          const std::vector<bool>* is_null_first);
+    Status create_merger_for_pipeline(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
+                                      const std::vector<bool>* is_null_first);
 
     // Fill output_batch with the next batch of rows obtained by merging the per-sender
     // input streams. Must only be called if _is_merging is true.
     Status get_next(RowBatch* output_batch, bool* eos);
     Status get_next(vectorized::ChunkPtr* chunk, bool* eos);
+    Status get_next_for_pipeline(vectorized::ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit);
 
     // Transfer all resources from the current batches being processed from each sender
     // queue to the specified batch.
@@ -120,6 +123,8 @@ public:
 
     bool is_finished() const;
 
+    bool is_data_ready();
+
 private:
     friend class DataStreamMgr;
     class SenderQueue;
@@ -127,7 +132,7 @@ private:
     DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_tracker, const RowDescriptor& row_desc,
                     const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders, bool is_merging,
                     int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
-                    std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr);
+                    std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline);
 
     // If receive queue is full, done is enqueue pending, and return with *done is nullptr
     void add_batch(const PRowBatch& batch, int sender_id, int be_number, int64_t packet_seq,
@@ -218,6 +223,8 @@ private:
 
     // Total time spent waiting for data to arrive in the recv buffer
     RuntimeProfile::Counter* _data_arrival_timer;
+
+    bool _is_pipeline;
 };
 
 } // end namespace starrocks
