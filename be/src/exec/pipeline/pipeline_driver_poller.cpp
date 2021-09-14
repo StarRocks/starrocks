@@ -89,7 +89,12 @@ void PipelineDriverPoller::run_internal() {
             spin_count = 0;
         }
         if (spin_count != 0 && spin_count % 64 == 0) {
+#if defined(__x86_64__)
             _mm_pause();
+#else
+// TODO: Maybe there's a better intrinsic like _mm_pause on non-x86_64 architecture.
+            sched_yield();
+#endif
         }
         if (spin_count != 0 && spin_count == 640) {
             spin_count = 0;
