@@ -47,7 +47,6 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(Runt
 
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
     _output_chunk_from_hash_map(&chunk);
-    _aggregator->process_limit(&chunk);
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }

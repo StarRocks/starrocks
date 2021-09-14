@@ -49,8 +49,6 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSourceOperator::pull_chu
     // ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
     _aggregator->update_num_rows_returned(-(old_size - chunk->num_rows()));
 
-    _aggregator->process_limit(&chunk);
-
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }
