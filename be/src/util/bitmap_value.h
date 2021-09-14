@@ -130,14 +130,7 @@ public:
     /**
      * Construct a 64-bit map from a 32-bit one
      */
-    Roaring64Map(const Roaring& r) { emplaceOrInsert(0, r); }
-
-    /**
-     * Construct a roaring object from the C struct.
-     *
-     * Passing a NULL point is unsafe.
-     */
-    Roaring64Map(roaring_bitmap_t* s) { emplaceOrInsert(0, s); }
+    Roaring64Map(const Roaring& r) { emplace(0, r); }
 
     /**
      * Construct a bitmap from a list of integer values.
@@ -573,29 +566,38 @@ public:
      * write a bitmap to a char buffer.
      * Returns how many bytes were written which should be getSizeInBytes().
      */
-    size_t write(char* buf) const {
+    size_t write(char* buf, int serialize_version) const {
+        bool use_v1 = serialize_version == 1;
+        BitmapTypeCode::type type_bitmap32 = BitmapTypeCode::EMPTY;
+        BitmapTypeCode::type type_bitmap64 = BitmapTypeCode::EMPTY;
+        if (use_v1) {
+            type_bitmap32 = BitmapTypeCode::type::BITMAP32;
+            type_bitmap64 = BitmapTypeCode::type::BITMAP64;
+        } else {
+            type_bitmap32 = BitmapTypeCode::type::BITMAP32_SERIV2;
+            type_bitmap64 = BitmapTypeCode::type::BITMAP64_SERIV2;
+        }
+
         if (is32BitsEnough()) {
-            *(buf++) = BitmapTypeCode::type::BITMAP32_SERIV2;
+            *(buf++) = type_bitmap32;
             auto it = roarings.find(0);
             if (it == roarings.end()) { // empty bitmap
                 Roaring r;
-                return r.write(buf, false) + 1;
+                return r.write(buf, use_v1) + 1;
             }
-            return it->second.write(buf, false) + 1;
+            return it->second.write(buf, use_v1) + 1;
         }
 
         const char* orig = buf;
         // put type code
-        *(buf++) = BitmapTypeCode::type::BITMAP64_SERIV2;
+        *(buf++) = type_bitmap64;
         // push map size
         buf = (char*)encode_varint64((uint8_t*)buf, roarings.size());
-        std::for_each(roarings.cbegin(), roarings.cend(), [&buf](const std::pair<const uint32_t, Roaring>& map_entry) {
-            // push map key
-            encode_fixed32_le((uint8_t*)buf, map_entry.first);
+        for (const auto& [high, v] : roarings) {
+            encode_fixed32_le((uint8_t*)buf, high);
             buf += sizeof(uint32_t);
-            // push map value Roaring
-            buf += map_entry.second.write(buf, false);
-        });
+            buf += v.write(buf, use_v1);
+        }
         return buf - orig;
     }
 
@@ -639,23 +641,24 @@ public:
     /**
      * How many bytes are required to serialize this bitmap
      */
-    size_t getSizeInBytes() const {
+    size_t getSizeInBytes(int serialize_version) const {
+        bool usev1 = serialize_version == 1;
         // we will use unportable deserialize interface
         // This will reduce the serialized size of a bitmap
         if (is32BitsEnough()) {
             auto it = roarings.find(0);
             if (it == roarings.end()) { // empty bitmap
                 Roaring r;
-                return r.getSizeInBytes(false) + 1;
+                return r.getSizeInBytes(usev1) + 1;
             }
-            return it->second.getSizeInBytes(false) + 1;
+            return it->second.getSizeInBytes(usev1) + 1;
         }
         // start with type code, map size and size of keys for each map entry
         size_t init = 1 + varint_length(roarings.size()) + roarings.size() * sizeof(uint32_t);
         return std::accumulate(roarings.cbegin(), roarings.cend(), init,
                                [=](size_t previous, const std::pair<const uint32_t, Roaring>& map_entry) {
                                    // add in bytes used by each Roaring
-                                   return previous + map_entry.second.getSizeInBytes(false);
+                                   return previous + map_entry.second.getSizeInBytes(usev1);
                                });
     }
 
@@ -828,13 +831,7 @@ private:
     }
     // this is needed to tolerate gcc's C++11 libstdc++ lacking emplace
     // prior to version 4.8
-    void emplaceOrInsert(const uint32_t key, const Roaring& value) {
-#if defined(__GLIBCXX__) && __GLIBCXX__ < 20130322
-        roarings.insert(std::make_pair(key, value));
-#else
-        roarings.emplace(std::make_pair(key, value));
-#endif
-    }
+    void emplace(const uint32_t key, const Roaring& value) { roarings.emplace(std::make_pair(key, value)); }
 
     void emplace(const uint32_t key, Roaring&& value) { roarings.emplace(key, std::move(value)); }
 };
@@ -1025,17 +1022,9 @@ public:
             if (_sv == value) {
                 break;
             }
-            // For rolling upgrade, remove this if branch in StarRocks 0.18
-            if (config::enable_bitmap_union_disk_format_with_set) {
-                _set.insert(_sv);
-                _set.insert(value);
-                _type = SET;
-            } else {
-                _bitmap = std::make_shared<detail::Roaring64Map>();
-                _bitmap->add(_sv);
-                _bitmap->add(value);
-                _type = BITMAP;
-            }
+            _set.insert(_sv);
+            _set.insert(value);
+            _type = SET;
             break;
         case BITMAP:
             _bitmap->add(value);
@@ -1532,7 +1521,7 @@ public:
             break;
         case BITMAP:
             DCHECK(_bitmap->cardinality() > 1);
-            res = _bitmap->getSizeInBytes();
+            res = _bitmap->getSizeInBytes(config::bitmap_serialize_version);
             break;
         case SET:
             res = 1 + sizeof(uint32_t) + sizeof(uint64_t) * _set.size();
@@ -1557,7 +1546,7 @@ public:
             }
             break;
         case BITMAP:
-            _bitmap->write(dst);
+            _bitmap->write(dst, config::bitmap_serialize_version);
             break;
         case SET:
 
