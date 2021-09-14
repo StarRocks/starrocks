@@ -28,10 +28,10 @@ private:
     bool _is_finished = false;
 };
 
-class AggregateDistinctBlockingSourceOperatorFactory final : public OperatorFactory {
+class AggregateDistinctBlockingSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     AggregateDistinctBlockingSourceOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : OperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
+            : SourceOperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
 
     ~AggregateDistinctBlockingSourceOperatorFactory() override = default;
 

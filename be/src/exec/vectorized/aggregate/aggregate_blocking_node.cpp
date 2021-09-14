@@ -149,8 +149,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     context->add_pipeline(operators_with_sink);
 
     OpFactories operators_with_source;
-    operators_with_source.emplace_back(
-            std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(), id(), aggregator));
+    auto source_operator =
+            std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(), id(), aggregator);
+    source_operator->set_num_driver_instances(1);
+    operators_with_source.push_back(std::move(source_operator));
     return operators_with_source;
 }
 

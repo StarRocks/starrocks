@@ -30,10 +30,10 @@ private:
     bool _is_finished = false;
 };
 
-class AggregateStreamingSourceOperatorFactory final : public OperatorFactory {
+class AggregateStreamingSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     AggregateStreamingSourceOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : OperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
+            : SourceOperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
 
     ~AggregateStreamingSourceOperatorFactory() override = default;
 
