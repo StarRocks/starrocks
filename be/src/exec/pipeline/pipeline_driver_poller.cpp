@@ -2,8 +2,6 @@
 
 #include "pipeline_driver_poller.h"
 
-#include <emmintrin.h>
-
 #include <chrono>
 namespace starrocks {
 namespace pipeline {
