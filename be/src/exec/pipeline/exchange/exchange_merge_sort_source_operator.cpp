@@ -96,7 +96,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
             }
             _num_rows_skipped = _offset;
             _num_rows_returned += size;
-            
+
             // the first Chunk will have a size less than config::vector_chunk_size.
             return Status::OK();
         }
