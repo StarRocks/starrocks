@@ -577,8 +577,8 @@ arrow::Result<int64_t> ParquetFile::ReadAt(int64_t position, int64_t nbytes, voi
         if (reads == 0) {
             break;
         }
-        bytes_read += reads;  // total read bytes
-        nbytes -= reads;      // remained bytes
+        bytes_read += reads; // total read bytes
+        nbytes -= reads;     // remained bytes
         _pos += reads;
         out = (char*)out + reads;
     }
