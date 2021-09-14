@@ -58,7 +58,7 @@ public:
 
     arrow::Status Write(const void* data, int64_t nbytes) override;
     // return the current write position of the stream
-    arrow::Status Tell(int64_t* position) const override;
+    arrow::Result<int64_t> Tell() const override;
     arrow::Status Close() override;
 
     bool closed() const override { return _is_closed; }

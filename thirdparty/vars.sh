@@ -97,10 +97,10 @@ GTEST_SOURCE=googletest-release-1.8.0
 GTEST_MD5SUM="16877098823401d1bf2ed7891d7dce36"
 
 # snappy
-SNAPPY_DOWNLOAD="https://github.com/google/snappy/archive/1.1.7.tar.gz"
-SNAPPY_NAME=snappy-1.1.7.tar.gz
-SNAPPY_SOURCE=snappy-1.1.7
-SNAPPY_MD5SUM="ee9086291c9ae8deb4dac5e0b85bf54a"
+SNAPPY_DOWNLOAD="https://github.com/google/snappy/archive/1.1.8.tar.gz"
+SNAPPY_NAME=snappy-1.1.8.tar.gz
+SNAPPY_SOURCE=snappy-1.1.8
+SNAPPY_MD5SUM="70e48cba7fecf289153d009791c9977f"
 
 # gperftools
 GPERFTOOLS_DOWNLOAD="https://github.com/gperftools/gperftools/archive/gperftools-2.7.tar.gz"
@@ -115,10 +115,10 @@ ZLIB_SOURCE=zlib-1.2.11
 ZLIB_MD5SUM="1c9f62f0778697a09d36121ead88e08e"
 
 # lz4
-LZ4_DOWNLOAD="https://github.com/lz4/lz4/archive/v1.7.5.tar.gz"
-LZ4_NAME=lz4-1.7.5.tar.gz
-LZ4_SOURCE=lz4-1.7.5
-LZ4_MD5SUM="c9610c5ce97eb431dddddf0073d919b9"
+LZ4_DOWNLOAD="https://github.com/lz4/lz4/archive/v1.9.3.tar.gz"
+LZ4_NAME=lz4-1.9.3.tar.gz
+LZ4_SOURCE=lz4-1.9.3
+LZ4_MD5SUM="3a1ab1684e14fc1afc66228ce61b2db3"
 
 # bzip
 BZIP_DOWNLOAD="https://fossies.org/linux/misc/bzip2-1.0.8.tar.gz"
@@ -176,10 +176,10 @@ LIBRDKAFKA_SOURCE=librdkafka-1.7.0
 LIBRDKAFKA_MD5SUM="fe3c45deb182bd9c644b6bc6375bffc3"
 
 # zstd
-ZSTD_DOWNLOAD="https://github.com/facebook/zstd/archive/v1.3.7.tar.gz"
-ZSTD_NAME=zstd-1.3.7.tar.gz
-ZSTD_SOURCE=zstd-1.3.7
-ZSTD_MD5SUM="9b89923a360ac85a3b8076fdf495318d"
+ZSTD_DOWNLOAD="https://github.com/facebook/zstd/archive/v1.5.0.tar.gz"
+ZSTD_NAME=zstd-1.5.0.tar.gz
+ZSTD_SOURCE=zstd-1.5.0
+ZSTD_MD5SUM="d5ac89d5df9e81243ce40d0c6a66691d"
 
 # double-conversion
 DOUBLE_CONVERSION_DOWNLOAD="https://github.com/google/double-conversion/archive/v3.1.1.tar.gz"
@@ -188,10 +188,10 @@ DOUBLE_CONVERSION_SOURCE=double-conversion-3.1.1
 DOUBLE_CONVERSION_MD5SUM="befd431c3de3f3ed7926ba2845ee609d"
 
 # brotli
-BROTLI_DOWNLOAD="https://github.com/google/brotli/archive/v1.0.7.tar.gz"
-BROTLI_NAME="brotli-1.0.7.tar.gz"
-BROTLI_SOURCE="brotli-1.0.7"
-BROTLI_MD5SUM="7b6edd4f2128f22794d0ca28c53898a5"
+BROTLI_DOWNLOAD="https://github.com/google/brotli/archive/v1.0.9.tar.gz"
+BROTLI_NAME="brotli-1.0.9.tar.gz"
+BROTLI_SOURCE="brotli-1.0.9"
+BROTLI_MD5SUM="c2274f0c7af8470ad514637c35bcee7d"
 
 # flatbuffers
 FLATBUFFERS_DOWNLOAD="https://github.com/google/flatbuffers/archive/v1.10.0.tar.gz"
@@ -200,10 +200,10 @@ FLATBUFFERS_SOURCE=flatbuffers-1.10.0
 FLATBUFFERS_MD5SUM="f7d19a3f021d93422b0bc287d7148cd2"
 
 # arrow
-ARROW_DOWNLOAD="https://github.com/apache/arrow/archive/apache-arrow-0.15.1.tar.gz"
-ARROW_NAME="arrow-apache-arrow-0.15.1.tar.gz"
-ARROW_SOURCE="arrow-apache-arrow-0.15.1"
-ARROW_MD5SUM="7d822863bbbe409794c6cdec3dcb8e6c"
+ARROW_DOWNLOAD="https://github.com/apache/arrow/archive/apache-arrow-5.0.0.tar.gz"
+ARROW_NAME="arrow-apache-arrow-5.0.0.tar.gz"
+ARROW_SOURCE="arrow-apache-arrow-5.0.0"
+ARROW_MD5SUM="9caf5dbd36ef4972c3a591bcfeaf59c8"
 
 # S2
 S2_DOWNLOAD="https://github.com/google/s2geometry/archive/v0.9.0.tar.gz"
