@@ -82,6 +82,9 @@ public:
     // If the total size of the chunks in this queue would exceed the allowed buffer size,
     // the queue is considered full and the call blocks until a chunk is dequeued.
     Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
+
+    // add_chunks_for_pipeline is almost the same like add_chunks except that it didn't
+    // notify compute thread to grab chunks, compute thread is notified by pipeline's dispatch thread.
     Status add_chunks_for_pipeline(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
 
     // Decrement the number of remaining senders for this queue and signal eos ("new data")
@@ -104,6 +107,10 @@ public:
     bool is_finished() const;
 
 private:
+    // add_chunks_internal is called by add_chunks and add_chunks_for_pipeline
+    Status add_chunks_internal(const PTransmitChunkParams& request, ::google::protobuf::Closure** done,
+                               const std::function<void()>& cb);
+
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk, faststring* uncompressed_buffer);
 
@@ -211,20 +218,12 @@ bool DataStreamRecvr::SenderQueue::is_finished() const {
 
 bool DataStreamRecvr::SenderQueue::has_chunk() {
     std::unique_lock<std::mutex> l(_lock);
-    // wait until something shows up or we know we're done
-    if (!_is_cancelled && _chunk_queue.empty() && _num_remaining_senders > 0) {
-        VLOG_ROW << "wait arrival fragment_instance_id=" << _recvr->fragment_instance_id()
-                 << " node=" << _recvr->dest_node_id();
-        return false;
-    }
-
     if (_is_cancelled) {
         return true;
     }
 
-    if (_chunk_queue.empty()) {
-        DCHECK_EQ(_num_remaining_senders, 0);
-        return true;
+    if (_chunk_queue.empty() && _num_remaining_senders > 0) {
+        return false;
     }
 
     return true;
@@ -232,34 +231,25 @@ bool DataStreamRecvr::SenderQueue::has_chunk() {
 
 bool DataStreamRecvr::SenderQueue::try_get_chunk(vectorized::Chunk** chunk) {
     std::unique_lock<std::mutex> l(_lock);
-    // wait until something shows up or we know we're done
-    if (!_is_cancelled && _chunk_queue.empty() && _num_remaining_senders > 0) {
-        VLOG_ROW << "wait arrival fragment_instance_id=" << _recvr->fragment_instance_id()
-                 << " node=" << _recvr->dest_node_id();
-        return false;
-    }
-
     if (_is_cancelled) {
         return true;
     }
 
     if (_chunk_queue.empty()) {
         DCHECK_EQ(_num_remaining_senders, 0);
-        return true;
+        return _num_remaining_senders == 0;
+    } else {
+        *chunk = _chunk_queue.front().second.release();
+        _recvr->_num_buffered_bytes -= _chunk_queue.front().first;
+        VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
+        _chunk_queue.pop_front();
+        if (!_pending_closures.empty()) {
+            auto closure_pair = _pending_closures.front();
+            closure_pair.first->Run();
+            _pending_closures.pop_front();
+        }
+        return false;
     }
-
-    *chunk = _chunk_queue.front().second.release();
-    _recvr->_num_buffered_bytes -= _chunk_queue.front().first;
-    VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
-    _chunk_queue.pop_front();
-
-    if (!_pending_closures.empty()) {
-        auto closure_pair = _pending_closures.front();
-        closure_pair.first->Run();
-        _pending_closures.pop_front();
-    }
-
-    return false;
 }
 
 Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
@@ -417,8 +407,9 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
     return Status::OK();
 }
 
-Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& request,
-                                                ::google::protobuf::Closure** done) {
+Status DataStreamRecvr::SenderQueue::add_chunks_internal(const PTransmitChunkParams& request,
+                                                         ::google::protobuf::Closure** done,
+                                                         const std::function<void()>& cb) {
     DCHECK(request.chunks_size() > 0);
 
     int32_t be_number = request.be_number();
@@ -492,87 +483,19 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
         }
         _recvr->_num_buffered_bytes += total_chunk_bytes;
     }
-    _data_arrival_cv.notify_one();
+    cb();
     return Status::OK();
+}
+
+Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& request,
+                                                ::google::protobuf::Closure** done) {
+    auto& condition = _data_arrival_cv;
+    return add_chunks_internal(request, done, [&condition]() -> void { condition.notify_one(); });
 }
 
 Status DataStreamRecvr::SenderQueue::add_chunks_for_pipeline(const PTransmitChunkParams& request,
                                                              ::google::protobuf::Closure** done) {
-    DCHECK(request.chunks_size() > 0);
-
-    int32_t be_number = request.be_number();
-    int64_t sequence = request.sequence();
-    ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
-    {
-        std::unique_lock<std::mutex> l(_lock);
-        wait_timer.stop();
-        if (_is_cancelled) {
-            return Status::OK();
-        }
-        // TODO(zc): Do we really need this check?
-        auto iter = _packet_seq_map.find(be_number);
-        if (iter != _packet_seq_map.end()) {
-            if (iter->second >= sequence) {
-                LOG(WARNING) << "packet already exist [cur_packet_id= " << iter->second
-                             << " receive_packet_id=" << sequence << "]";
-                return Status::OK();
-            }
-            iter->second = sequence;
-        } else {
-            _packet_seq_map.emplace(be_number, sequence);
-        }
-
-        // Following situation will match the following condition.
-        // Sender send a packet failed, then close the channel.
-        // but closed packet reach first, then the failed packet.
-        // Then meet the assert
-        // we remove the assert
-        // DCHECK_GT(_num_remaining_senders, 0);
-        if (_num_remaining_senders <= 0) {
-            DCHECK(_sender_eos_set.end() != _sender_eos_set.find(be_number));
-            return Status::OK();
-        }
-        if (_chunk_meta.types.empty()) {
-            SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
-            auto& pchunk = request.chunks(0);
-            RETURN_IF_ERROR(_build_chunk_meta(pchunk));
-        }
-    }
-
-    ChunkQueue chunks;
-    size_t total_chunk_bytes = 0;
-    faststring uncompressed_buffer;
-    for (auto& pchunk : request.chunks()) {
-        size_t chunk_bytes = pchunk.data().size();
-        ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
-        RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
-
-        // TODO(zc): review this chunk_bytes
-        chunks.emplace_back(chunk_bytes, std::move(chunk));
-
-        total_chunk_bytes += chunk_bytes;
-    }
-    COUNTER_UPDATE(_recvr->_bytes_received_counter, total_chunk_bytes);
-
-    wait_timer.start();
-    {
-        std::unique_lock<std::mutex> l(_lock);
-        wait_timer.stop();
-
-        for (auto& pair : chunks) {
-            _chunk_queue.emplace_back(std::move(pair));
-        }
-        // if done is nullptr, this function can't delay this response
-        if (done != nullptr && _recvr->exceeds_limit(total_chunk_bytes)) {
-            MonotonicStopWatch monotonicStopWatch;
-            DCHECK(*done != nullptr);
-            _pending_closures.emplace_back(*done, monotonicStopWatch);
-            *done = nullptr;
-        }
-        _recvr->_num_buffered_bytes += total_chunk_bytes;
-    }
-
-    return Status::OK();
+    return add_chunks_internal(request, done, []() -> void {});
 }
 
 Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk,
