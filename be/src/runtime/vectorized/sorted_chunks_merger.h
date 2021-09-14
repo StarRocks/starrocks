@@ -76,6 +76,11 @@ private:
     ChunkPtr _current_chunk;
     ChunkPtr _result_chunk;
     std::vector<uint32_t> _selective_values;
+
+    // Because chunks is transfer from network in default, so we should wait for it,
+    // and compute thread will not blocking for chunks.
+    // Actually _wait_for_data is used to distinguish whether to exit
+    // because the result is sufficient or the data is insufficient.
     bool _wait_for_data = false;
 };
 

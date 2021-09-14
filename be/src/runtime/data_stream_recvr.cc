@@ -66,10 +66,13 @@ public:
     // their channels. The returned batch is owned by the sender queue. The caller
     // must acquire data from the returned batch before the next call to get_batch().
     Status get_batch(RowBatch** next_batch);
-
-    bool has_chunk();
-    bool try_get_chunk(vectorized::Chunk** chunk);
     Status get_chunk(vectorized::Chunk** chunk);
+
+    // check if data has come, work with try_get_chunk.
+    bool has_chunk();
+    // Probe for chunks, because _chunk_queue maybe empty when data hasn't come yet.
+    // So compute thread should do other works.
+    bool try_get_chunk(vectorized::Chunk** chunk);
 
     // Adds a row batch to this sender queue if this stream has not been cancelled;
     // blocks if this will make the stream exceed its buffer limit.
@@ -107,9 +110,9 @@ public:
     bool is_finished() const;
 
 private:
-    // add_chunks_internal is called by add_chunks and add_chunks_for_pipeline
-    Status add_chunks_internal(const PTransmitChunkParams& request, ::google::protobuf::Closure** done,
-                               const std::function<void()>& cb);
+    // _add_chunks_internal is called by add_chunks and add_chunks_for_pipeline
+    Status _add_chunks_internal(const PTransmitChunkParams& request, ::google::protobuf::Closure** done,
+                                const std::function<void()>& cb);
 
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk, faststring* uncompressed_buffer);
@@ -407,9 +410,9 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
     return Status::OK();
 }
 
-Status DataStreamRecvr::SenderQueue::add_chunks_internal(const PTransmitChunkParams& request,
-                                                         ::google::protobuf::Closure** done,
-                                                         const std::function<void()>& cb) {
+Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkParams& request,
+                                                          ::google::protobuf::Closure** done,
+                                                          const std::function<void()>& cb) {
     DCHECK(request.chunks_size() > 0);
 
     int32_t be_number = request.be_number();
@@ -490,12 +493,12 @@ Status DataStreamRecvr::SenderQueue::add_chunks_internal(const PTransmitChunkPar
 Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& request,
                                                 ::google::protobuf::Closure** done) {
     auto& condition = _data_arrival_cv;
-    return add_chunks_internal(request, done, [&condition]() -> void { condition.notify_one(); });
+    return _add_chunks_internal(request, done, [&condition]() -> void { condition.notify_one(); });
 }
 
 Status DataStreamRecvr::SenderQueue::add_chunks_for_pipeline(const PTransmitChunkParams& request,
                                                              ::google::protobuf::Closure** done) {
-    return add_chunks_internal(request, done, []() -> void {});
+    return _add_chunks_internal(request, done, []() -> void {});
 }
 
 Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk,

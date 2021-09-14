@@ -14,8 +14,8 @@ namespace pipeline {
 class ExchangeMergeSortSourceOperator : public SourceOperator {
 public:
     ExchangeMergeSortSourceOperator(int32_t id, int32_t plan_node_id, int32_t num_sender, const RowDescriptor& row_desc,
-                                    SortExecExprs* sort_exec_exprs, std::vector<bool> is_asc_order,
-                                    std::vector<bool> nulls_first, int64_t offset, int64_t limit)
+                                    SortExecExprs* sort_exec_exprs, const std::vector<bool>& is_asc_order,
+                                    const std::vector<bool>& nulls_first, int64_t offset, int64_t limit)
             : SourceOperator(id, "exchange_merge_sort_source", plan_node_id),
               _num_sender(num_sender),
               _row_desc(row_desc),
@@ -46,14 +46,14 @@ private:
     const RowDescriptor& _row_desc;
 
     SortExecExprs* _sort_exec_exprs;
-    std::vector<bool> _is_asc_order;
-    std::vector<bool> _nulls_first;
+    const std::vector<bool>& _is_asc_order;
+    const std::vector<bool>& _nulls_first;
 
     std::shared_ptr<DataStreamRecvr> _stream_recvr;
     std::atomic<bool> _is_finished{false};
 
     int64_t _num_rows_returned = 0;
-    int64_t _num_rows_skipped = 0;
+    int64_t _num_rows_input = 0;
     int64_t _offset;
     int64_t _limit;
 };
@@ -62,7 +62,7 @@ class ExchangeMergeSortSourceOperatorFactory final : public SourceOperatorFactor
 public:
     ExchangeMergeSortSourceOperatorFactory(int32_t id, int32_t plan_node_id, int32_t num_sender,
                                            const RowDescriptor& row_desc, SortExecExprs* sort_exec_exprs,
-                                           std::vector<bool> is_asc_order, std::vector<bool> nulls_first,
+                                           const std::vector<bool>& is_asc_order, const std::vector<bool>& nulls_first,
                                            int64_t offset, int64_t limit)
             : SourceOperatorFactory(id, plan_node_id),
               _num_sender(num_sender),
@@ -85,8 +85,8 @@ private:
     int32_t _num_sender;
     const RowDescriptor& _row_desc;
     SortExecExprs* _sort_exec_exprs;
-    std::vector<bool> _is_asc_order;
-    std::vector<bool> _nulls_first;
+    const std::vector<bool>& _is_asc_order;
+    const std::vector<bool>& _nulls_first;
     int64_t _offset;
     int64_t _limit;
 };

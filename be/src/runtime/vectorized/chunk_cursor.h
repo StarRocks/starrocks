@@ -39,7 +39,7 @@ public:
 
     // Move to next row.
     void next();
-    // Move to next row for pipeline.
+    // Return if there is new chunk.
     bool has_next();
     // Move to next row for pipeline.
     void next_for_pipeline();
@@ -63,7 +63,10 @@ private:
 
 private:
     ChunkSupplier _chunk_supplier;
+    // Probe for chunks, because _chunk_queue maybe empty when data hasn't come yet.
+    // So compute thread should do other works.
     ChunkProbeSupplier _chunk_probe_supplier;
+    // check if data has come, work with _chunk_probe_supplier.
     ChunkHasSupplier _chunk_has_supplier;
 
     ChunkPtr _current_chunk;

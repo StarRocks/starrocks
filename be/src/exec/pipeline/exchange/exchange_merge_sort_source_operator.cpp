@@ -55,13 +55,13 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
     /* The following code first filters out _offset rows of data, 
      * and then get _limit rows from the subsequent data. 
      * Because of the streaming implementation, 
-     * _num_rows_skipped ensures that this filtering process is not repeated, 
+     * _num_rows_input ensures that this filtering process is not repeated, 
      * then we try to get _limit rows.
      * should_exit is used to cooperate with pipeline, 
      * When there is no data, we should not continue.
      */
     bool should_exit = false;
-    if (_num_rows_skipped < _offset) {
+    if (_num_rows_input < _offset) {
         ChunkPtr tmp_chunk;
         do {
             if (!should_exit) {
@@ -69,15 +69,15 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
             }
 
             if (tmp_chunk) {
-                _num_rows_skipped += tmp_chunk->num_rows();
+                _num_rows_input += tmp_chunk->num_rows();
             } else {
                 break;
             }
-        } while (!should_exit && _num_rows_skipped < _offset);
+        } while (!should_exit && _num_rows_input < _offset);
 
         // tmp_chunk is the last chunk, no extra chunks needs to be read
-        if (_num_rows_skipped > _offset) {
-            int64_t rewind_size = _num_rows_skipped - _offset;
+        if (_num_rows_input > _offset) {
+            int64_t rewind_size = _num_rows_input - _offset;
             int64_t offset_in_chunk = tmp_chunk->num_rows() - rewind_size;
             if (_limit > 0 && rewind_size > _limit) {
                 rewind_size = _limit;
@@ -93,7 +93,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
                     dest->resize(rewind_size);
                 }
             }
-            _num_rows_skipped = _offset;
+            _num_rows_input = _offset;
             _num_rows_returned += rewind_size;
 
             // the first Chunk will have a size less than config::vector_chunk_size.
@@ -101,7 +101,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
         }
 
         if (!tmp_chunk) {
-            // check EOS after (_num_rows_skipped < _offset), so the only one chunk can be returned.
+            // check EOS after (_num_rows_input < _offset), so the only one chunk can be returned.
             return Status::OK();
         }
     }
