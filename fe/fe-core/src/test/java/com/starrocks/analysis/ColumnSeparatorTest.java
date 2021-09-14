@@ -40,16 +40,45 @@ public class ColumnSeparatorTest {
         Assert.assertEquals("'\\x01'", separator.toSql());
         Assert.assertEquals("\1", separator.getColumnSeparator());
 
-        // \x00 \x01
+        separator = new ColumnSeparator("0");
+        separator.analyze();
+        Assert.assertEquals("'0'", separator.toSql());
+        Assert.assertEquals("0", separator.getColumnSeparator());
+
+        separator = new ColumnSeparator("0x");
+        separator.analyze();
+        Assert.assertEquals("'0x'", separator.toSql());
+        Assert.assertEquals("0x", separator.getColumnSeparator());
+
+        separator = new ColumnSeparator("0x1");
+        separator.analyze();
+        Assert.assertEquals("'0x1'", separator.toSql());
+        Assert.assertEquals("0x1", separator.getColumnSeparator());
+
+        separator = new ColumnSeparator("0x1");
+        separator.analyze();
+        Assert.assertEquals("'0x1'", separator.toSql());
+        Assert.assertEquals("0x1", separator.getColumnSeparator());
+
+        separator = new ColumnSeparator("\\x");
+        separator.analyze();
+        Assert.assertEquals("'\\x'", separator.toSql());
+        Assert.assertEquals("\\x", separator.getColumnSeparator());
+
+        separator = new ColumnSeparator("\\x1");
+        separator.analyze();
+        Assert.assertEquals("'\\x1'", separator.toSql());
+        Assert.assertEquals("\\x1", separator.getColumnSeparator());
+
         separator = new ColumnSeparator("\\x0001");
         separator.analyze();
         Assert.assertEquals("'\\x0001'", separator.toSql());
-        Assert.assertEquals("\0\1", separator.getColumnSeparator());
+        Assert.assertEquals("\u000001", separator.getColumnSeparator());
 
-        separator = new ColumnSeparator("|");
+        separator = new ColumnSeparator("\\x011");
         separator.analyze();
-        Assert.assertEquals("'|'", separator.toSql());
-        Assert.assertEquals("|", separator.getColumnSeparator());
+        Assert.assertEquals("'\\x011'", separator.toSql());
+        Assert.assertEquals("\u00011", separator.getColumnSeparator());
 
         separator = new ColumnSeparator("\\|");
         separator.analyze();
@@ -63,9 +92,4 @@ public class ColumnSeparatorTest {
         separator.analyze();
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testHexLengthError() throws AnalysisException {
-        ColumnSeparator separator = new ColumnSeparator("\\x011");
-        separator.analyze();
-    }
 }
