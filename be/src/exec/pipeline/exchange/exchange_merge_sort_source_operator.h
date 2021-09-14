@@ -51,7 +51,7 @@ private:
     std::vector<bool> _nulls_first;
 
     std::shared_ptr<DataStreamRecvr> _stream_recvr;
-    std::atomic<bool> _is_finishing{false};
+    std::atomic<bool> _is_finished{false};
 
     int64_t _num_rows_returned = 0;
     int64_t _num_rows_skipped = 0;

@@ -21,9 +21,8 @@ Status SortedChunksMerger::init(const ChunkSuppliers& chunk_suppliers, const Chu
     } else {
         _cursors.reserve(chunk_suppliers.size());
         _min_heap.reserve(chunk_suppliers.size());
-        int i = 0;
-        for (auto& chunk_supplier : chunk_suppliers) {
-            _cursors.emplace_back(std::make_unique<ChunkCursor>(chunk_supplier, chunk_probe_suppliers[i],
+        for (int i = 0; i < chunk_suppliers.size(); ++i) {
+            _cursors.emplace_back(std::make_unique<ChunkCursor>(chunk_suppliers[i], chunk_probe_suppliers[i],
                                                                 chunk_has_suppliers[i], sort_exprs, is_asc,
                                                                 is_null_first, _is_pipeline));
             ChunkCursor* cursor = _cursors.rbegin()->get();
@@ -31,7 +30,6 @@ Status SortedChunksMerger::init(const ChunkSuppliers& chunk_suppliers, const Chu
             if (cursor->is_valid()) {
                 _min_heap.push_back(cursor);
             }
-            ++i;
         }
         std::make_heap(_min_heap.begin(), _min_heap.end(), _cursor_cmp_greater);
     }

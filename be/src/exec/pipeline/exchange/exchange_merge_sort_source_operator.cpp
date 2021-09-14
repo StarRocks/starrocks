@@ -29,14 +29,14 @@ bool ExchangeMergeSortSourceOperator::has_output() const {
 }
 
 bool ExchangeMergeSortSourceOperator::is_finished() const {
-    return _num_rows_returned >= _limit || _is_finishing;
+    return _num_rows_returned >= _limit || _is_finished;
 }
 
 void ExchangeMergeSortSourceOperator::finish(RuntimeState* state) {
-    if (_is_finishing) {
+    if (_is_finished) {
         return;
     }
-    _is_finishing = true;
+    _is_finished = true;
     return _stream_recvr->close();
 }
 
@@ -75,7 +75,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
         ChunkPtr tmp_chunk;
         do {
             if (!should_exit) {
-                RETURN_IF_ERROR(_stream_recvr->get_next_for_pipeline(&tmp_chunk, &_is_finishing, &should_exit));
+                RETURN_IF_ERROR(_stream_recvr->get_next_for_pipeline(&tmp_chunk, &_is_finished, &should_exit));
             }
 
             if (tmp_chunk) {
@@ -117,7 +117,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
     }
 
     if (!should_exit) {
-        RETURN_IF_ERROR(_stream_recvr->get_next_for_pipeline(chunk, &_is_finishing, &should_exit));
+        RETURN_IF_ERROR(_stream_recvr->get_next_for_pipeline(chunk, &_is_finished, &should_exit));
     }
 
     if ((*chunk) != nullptr) {
