@@ -9,7 +9,7 @@ namespace starrocks::pipeline {
 class AggregateDistinctStreamingSinkOperator : public Operator {
 public:
     AggregateDistinctStreamingSinkOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : Operator(id, "aggregate_distinct_streaming_sink_operator", plan_node_id), _aggregator(aggregator) {
+            : Operator(id, "aggregate_distinct_streaming_sink", plan_node_id), _aggregator(aggregator) {
         _aggregator->set_aggr_phase(AggrPhase1);
     }
     ~AggregateDistinctStreamingSinkOperator() = default;

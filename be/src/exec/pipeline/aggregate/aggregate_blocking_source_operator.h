@@ -9,7 +9,7 @@ namespace starrocks::pipeline {
 class AggregateBlockingSourceOperator : public SourceOperator {
 public:
     AggregateBlockingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : SourceOperator(id, "aggregate_blocking_source_operator", plan_node_id), _aggregator(aggregator) {}
+            : SourceOperator(id, "aggregate_blocking_source", plan_node_id), _aggregator(aggregator) {}
     ~AggregateBlockingSourceOperator() = default;
 
     bool has_output() const override;
