@@ -46,9 +46,9 @@ public class MergeTwoAggRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        LogicalAggregationOperator aggregate1 = (LogicalAggregationOperator) input.getOp();
+        LogicalAggregationOperator aggregateAbove = (LogicalAggregationOperator) input.getOp();
         LogicalProjectOperator project = (LogicalProjectOperator) input.getInputs().get(0).getOp();
-        LogicalAggregationOperator aggregate2 =
+        LogicalAggregationOperator aggregateBelow =
                 (LogicalAggregationOperator) input.getInputs().get(0).getInputs().get(0).getOp();
 
         // Only handle column prune, forbidden expression
@@ -56,35 +56,36 @@ public class MergeTwoAggRule extends TransformationRule {
             return false;
         }
 
-        if (aggregate2.getPredicate() != null || aggregate2.hasLimit()) {
+        if (aggregateBelow.getPredicate() != null || aggregateBelow.hasLimit()) {
             return false;
         }
 
         // The data distribution of the aggregate nodes keeps same
-        if (!aggregate2.getGroupingKeys().containsAll(aggregate1.getGroupingKeys())) {
+        if (!aggregateBelow.getGroupingKeys().containsAll(aggregateAbove.getGroupingKeys())) {
             return false;
         }
 
-        Map<ColumnRefOperator, CallOperator> aggCallMap1 = aggregate1.getAggregations();
-        Map<ColumnRefOperator, CallOperator> aggCallMap2 = aggregate2.getAggregations();
+        Map<ColumnRefOperator, CallOperator> aggCallMapAbove = aggregateAbove.getAggregations();
+        Map<ColumnRefOperator, CallOperator> aggCallMapBelow = aggregateBelow.getAggregations();
 
-        if (!aggCallMap1.values().stream().allMatch(
+        if (!aggCallMapAbove.values().stream().allMatch(
                 c -> c.isAggregate() && c.getUsedColumns().cardinality() == 1 && c.getChild(0).isColumnRef())) {
             return false;
         }
 
-        for (CallOperator call : aggCallMap1.values()) {
+        for (CallOperator call : aggCallMapAbove.values()) {
             ColumnRefOperator ref = (ColumnRefOperator) call.getChild(0);
             if (!ALLOW_MERGE_AGGREGATE_FUNCTIONS.contains(call.getFnName().toLowerCase())) {
                 return false;
             }
 
-            if (!aggCallMap2.containsKey(ref) && !FunctionSet.MAX.equalsIgnoreCase(call.getFnName()) &&
+            // max/min on grouping column is equals with direct aggregate on column
+            if (!aggCallMapBelow.containsKey(ref) && !FunctionSet.MAX.equalsIgnoreCase(call.getFnName()) &&
                     !FunctionSet.MIN.equalsIgnoreCase(call.getFnName())) {
                 return false;
             }
 
-            if (!aggCallMap2.get(ref).getFnName().equalsIgnoreCase(call.getFnName())) {
+            if (!aggCallMapBelow.get(ref).getFnName().equalsIgnoreCase(call.getFnName())) {
                 return false;
             }
         }
@@ -94,22 +95,22 @@ public class MergeTwoAggRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalAggregationOperator aggregate1 = (LogicalAggregationOperator) input.getOp();
-        LogicalAggregationOperator aggregate2 =
+        LogicalAggregationOperator aggregateAbove = (LogicalAggregationOperator) input.getOp();
+        LogicalAggregationOperator aggregateBelow =
                 (LogicalAggregationOperator) input.getInputs().get(0).getInputs().get(0).getOp();
 
-        Map<ColumnRefOperator, CallOperator> aggCallMap1 = aggregate1.getAggregations();
-        Map<ColumnRefOperator, CallOperator> aggCallMap2 = aggregate2.getAggregations();
+        Map<ColumnRefOperator, CallOperator> aggCallMapAbove = aggregateAbove.getAggregations();
+        Map<ColumnRefOperator, CallOperator> aggCallMapBelow = aggregateBelow.getAggregations();
 
         Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
 
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggCallMap1.entrySet()) {
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggCallMapAbove.entrySet()) {
             CallOperator fn = entry.getValue();
             ColumnRefOperator ref = (ColumnRefOperator) fn.getChild(0);
 
             CallOperator newFn;
-            if (aggCallMap2.containsKey(ref)) {
-                newFn = new CallOperator(fn.getFnName(), fn.getType(), aggCallMap2.get(ref).getChildren(),
+            if (aggCallMapBelow.containsKey(ref)) {
+                newFn = new CallOperator(fn.getFnName(), fn.getType(), aggCallMapBelow.get(ref).getChildren(),
                         fn.getFunction(), fn.isDistinct());
             } else {
                 newFn = new CallOperator(fn.getFnName(), fn.getType(), Lists.newArrayList(ref), fn.getFunction(),
@@ -122,9 +123,9 @@ public class MergeTwoAggRule extends TransformationRule {
         }
 
         LogicalAggregationOperator result =
-                new LogicalAggregationOperator(aggregate1.getGroupingKeys(), newAggregations);
-        result.setLimit(aggregate1.getLimit());
-        result.setPredicate(aggregate1.getPredicate());
+                new LogicalAggregationOperator(aggregateAbove.getGroupingKeys(), newAggregations);
+        result.setLimit(aggregateAbove.getLimit());
+        result.setPredicate(aggregateAbove.getPredicate());
 
         return Lists
                 .newArrayList(OptExpression.create(result, input.getInputs().get(0).getInputs().get(0).getInputs()));
