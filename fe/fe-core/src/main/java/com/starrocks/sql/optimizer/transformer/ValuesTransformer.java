@@ -72,7 +72,6 @@ public class ValuesTransformer {
             valuesOutputColumns.add(columnRefFactory.create("1", Type.INT, false));
         }
 
-        List<Expr> outputExpressions = node.getOutputExpr();
         List<List<ScalarOperator>> values = new ArrayList<>();
         for (List<Expr> row : node.getRows()) {
             List<ScalarOperator> valuesRow = new ArrayList<>();

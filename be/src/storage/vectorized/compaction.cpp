@@ -110,6 +110,14 @@ Status Compaction::do_compaction_impl() {
               << ", output_version=" << _output_version.first << "-" << _output_version.second
               << ", segments=" << segments_num << ". elapsed time=" << watch.get_elapse_second() << "s.";
 
+    // warm-up this rowset
+    auto st = _output_rowset->load();
+    if (!st.ok()) {
+        // only log load failure
+        LOG(WARNING) << "ignore load rowset error tablet:" << _tablet->tablet_id()
+                     << " rowset:" << _output_rowset->rowset_id() << " " << st;
+    }
+
     return Status::OK();
 }
 

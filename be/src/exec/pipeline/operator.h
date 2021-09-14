@@ -76,7 +76,6 @@ public:
     // For some operators, when share some status, need to know the the driver_instance_count
     virtual OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) = 0;
     virtual bool is_source() const { return false; }
-
     int32_t plan_node_id() const { return _plan_node_id; }
 
 protected:

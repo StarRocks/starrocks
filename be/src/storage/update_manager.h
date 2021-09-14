@@ -18,7 +18,7 @@ class DelVector;
 using DelVectorPtr = std::shared_ptr<DelVector>;
 class EditVersion;
 class MemTracker;
-class OlapMeta;
+class KVStore;
 class Rowset;
 using RowsetSharedPtr = std::shared_ptr<Rowset>;
 class RowsetUpdateState;
@@ -40,14 +40,14 @@ public:
 
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
 
-    Status get_del_vec_in_meta(OlapMeta* meta, const TabletSegmentId& tsid, int64_t version, DelVector* delvec,
+    Status get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, int64_t version, DelVector* delvec,
                                int64_t* latest_version);
 
-    Status set_del_vec_in_meta(OlapMeta* meta, const TabletSegmentId& tsid, const DelVector& delvec);
+    Status set_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, const DelVector& delvec);
 
-    Status get_del_vec(OlapMeta* meta, const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
+    Status get_del_vec(KVStore* meta, const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
 
-    Status get_latest_del_vec(OlapMeta* meta, const TabletSegmentId& tsid, DelVectorPtr* pdelvec);
+    Status get_latest_del_vec(KVStore* meta, const TabletSegmentId& tsid, DelVectorPtr* pdelvec);
 
     Status set_cached_del_vec(const TabletSegmentId& tsid, DelVectorPtr delvec);
 

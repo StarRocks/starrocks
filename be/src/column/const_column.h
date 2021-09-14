@@ -217,6 +217,8 @@ public:
         return ss.str();
     }
 
+    bool reach_capacity_limit() const override { return _data->reach_capacity_limit(); }
+
 private:
     ColumnPtr _data;
     size_t _size;

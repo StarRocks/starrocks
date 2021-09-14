@@ -29,6 +29,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/es/es_scroll_query.h"
+#include "exec/vectorized/es_http_components.h"
 
 namespace starrocks {
 
@@ -116,7 +117,8 @@ Status ESScanReader::open() {
     return Status::OK();
 }
 
-Status ESScanReader::get_next(bool* scan_eos, std::unique_ptr<ScrollParser>& scroll_parser) {
+template <class T>
+Status ESScanReader::get_next(bool* scan_eos, std::unique_ptr<T>& scroll_parser) {
     std::string response;
     // if is first scroll request, should return the cached response
     *scan_eos = true;
@@ -152,7 +154,7 @@ Status ESScanReader::get_next(bool* scan_eos, std::unique_ptr<ScrollParser>& scr
         }
     }
 
-    scroll_parser.reset(new ScrollParser(_doc_value_mode));
+    scroll_parser.reset(new T(_doc_value_mode));
     VLOG(1) << "get_next request ES, returned response: " << response;
     Status status = scroll_parser->parse(response, _exactly_once);
     if (!status.ok()) {
@@ -176,6 +178,11 @@ Status ESScanReader::get_next(bool* scan_eos, std::unique_ptr<ScrollParser>& scr
     *scan_eos = false;
     return Status::OK();
 }
+
+template Status ESScanReader::get_next<ScrollParser>(bool* scan_eos, std::unique_ptr<ScrollParser>& scroll_parser);
+
+template Status ESScanReader::get_next<vectorized::ScrollParser>(
+        bool* scan_eos, std::unique_ptr<vectorized::ScrollParser>& scroll_parser);
 
 Status ESScanReader::close() {
     if (_scroll_id.empty()) {

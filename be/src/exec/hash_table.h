@@ -77,6 +77,11 @@ using std::vector;
 // all the rows and then calls scan to find them.  Aggregation interleaves find() and
 // inserts().  We can want to optimize joins more heavily for inserts() (in particular
 // growing).
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class HashTable {
 private:
     struct Node;

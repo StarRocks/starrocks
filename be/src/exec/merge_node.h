@@ -34,6 +34,11 @@ class TupleRow;
 // evaluated expressions into row batches. The MergeNode pulls row batches sequentially
 // from its children sequentially, i.e., it exhausts one child completely before moving
 // on to the next one.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class MergeNode : public ExecNode {
 public:
     MergeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);

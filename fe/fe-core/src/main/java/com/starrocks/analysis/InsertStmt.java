@@ -32,6 +32,7 @@ import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -287,7 +288,16 @@ public class InsertStmt extends DdlStmt {
                 label = "insert_" + DebugUtil.printId(analyzer.getContext().getExecutionId());
             }
 
-            if (targetTable instanceof OlapTable) {
+            if (targetTable instanceof ExternalOlapTable) {
+                LoadJobSourceType sourceType = LoadJobSourceType.INSERT_STREAMING;
+                ExternalOlapTable externalTable = (ExternalOlapTable)targetTable;
+                transactionId = Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(tblName.getDb(),
+                        Lists.newArrayList(targetTable.getName()), label,
+                        externalTable.getExternalInfo().getHost(),
+                        externalTable.getExternalInfo().getPort(),
+                        new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                        sourceType, timeoutSecond);
+            } else if (targetTable instanceof OlapTable) {
                 LoadJobSourceType sourceType = LoadJobSourceType.INSERT_STREAMING;
                 MetricRepo.COUNTER_LOAD_ADD.increase(1L);
                 transactionId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
@@ -299,7 +309,7 @@ public class InsertStmt extends DdlStmt {
         }
 
         // init data sink
-        if (!isExplain() && targetTable instanceof OlapTable) {
+        if (!isExplain() && (targetTable instanceof OlapTable || targetTable instanceof ExternalOlapTable)) {
             OlapTableSink sink = (OlapTableSink) dataSink;
             TUniqueId loadId = analyzer.getContext().getExecutionId();
             sink.init(loadId, transactionId, db.getId(), timeoutSecond);
@@ -315,7 +325,7 @@ public class InsertStmt extends DdlStmt {
             }
         }
 
-        if (targetTable instanceof OlapTable) {
+        if ((targetTable instanceof OlapTable) || (targetTable instanceof ExternalOlapTable)) {
             OlapTable olapTable = (OlapTable) targetTable;
 
             // partition
@@ -748,7 +758,7 @@ public class InsertStmt extends DdlStmt {
         if (dataSink != null) {
             return dataSink;
         }
-        if (targetTable instanceof OlapTable) {
+        if ((targetTable instanceof OlapTable) || (targetTable instanceof ExternalOlapTable)) {
             dataSink = new OlapTableSink((OlapTable) targetTable, olapTuple, targetPartitionIds);
             dataPartition = dataSink.getOutputPartition();
         } else if (targetTable instanceof BrokerTable) {
@@ -773,13 +783,15 @@ public class InsertStmt extends DdlStmt {
     public void complete() throws UserException {
         if (!isExplain() && targetTable instanceof OlapTable) {
             ((OlapTableSink) dataSink).complete();
-            // add table indexes to transaction state
-            TransactionState txnState =
-                    Catalog.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), transactionId);
-            if (txnState == null) {
-                throw new DdlException("txn does not exist: " + transactionId);
+            if (!(targetTable instanceof ExternalOlapTable)) {
+                // add table indexes to transaction state
+                TransactionState txnState =
+                        Catalog.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), transactionId);
+                if (txnState == null) {
+                    throw new DdlException("txn does not exist: " + transactionId);
+                }
+                txnState.addTableIndexes((OlapTable) targetTable);
             }
-            txnState.addTableIndexes((OlapTable) targetTable);
         }
     }
 

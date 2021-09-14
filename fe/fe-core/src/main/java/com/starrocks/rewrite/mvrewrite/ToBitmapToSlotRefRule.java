@@ -44,6 +44,10 @@ import java.util.List;
  * Rewrite bitmap_union(to_bitmap(c1)) to bitmap_union(mv_bitmap_c1)
  * Rewrite bitmap_union_count(to_bitmap(c1)) to bitmap_union_count(mv_bitmap_c1)
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
+@Deprecated
 public class ToBitmapToSlotRefRule implements ExprRewriteRule {
 
     public static final ExprRewriteRule INSTANCE = new ToBitmapToSlotRefRule();

@@ -105,6 +105,7 @@ set(EXEC_FILES
     json_scanner.cpp
     assert_num_rows_node.cpp
     vectorized/adapter_node.cpp
+    vectorized/aggregator.cpp
     vectorized/aggregate/aggregate_base_node.cpp
     vectorized/aggregate/aggregate_blocking_node.cpp
     vectorized/aggregate/distinct_blocking_node.cpp
@@ -140,6 +141,9 @@ set(EXEC_FILES
     vectorized/repeat_node.cpp
     vectorized/table_function_node.cpp
     vectorized/mysql_scan_node.cpp
+    vectorized/es_http_scan_node.cpp
+    vectorized/es_http_scanner.cpp
+    vectorized/es_http_components.cpp
     parquet/column_chunk_reader.cpp
     parquet/column_reader.cpp
     parquet/encoding.cpp
@@ -174,9 +178,10 @@ set(EXEC_FILES
     pipeline/exec_state_reporter.cpp
     pipeline/fragment_context.cpp
     pipeline/query_context.cpp
-    pipeline/aggregate_base_operator.cpp
-    pipeline/aggregate_blocking_operator.cpp
-    pipeline/aggregate_streaming_operator.cpp
+    pipeline/aggregate/aggregate_blocking_sink_operator.cpp
+    pipeline/aggregate/aggregate_blocking_source_operator.cpp
+    pipeline/aggregate/aggregate_streaming_sink_operator.cpp
+    pipeline/aggregate/aggregate_streaming_source_operator.cpp
 )
 
 if (WITH_MYSQL)

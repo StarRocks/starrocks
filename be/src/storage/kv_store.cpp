@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/olap_meta.h"
+#include "storage/kv_store.h"
 
 #include <sstream>
 #include <utility>
@@ -51,9 +51,9 @@ const std::string META_POSTFIX = "/meta"; // NOLINT
 const std::string SECOND_POSTFIX = "_secondary";
 const size_t PREFIX_LENGTH = 4;
 
-OlapMeta::OlapMeta(std::string root_path) : _root_path(std::move(root_path)), _db(nullptr) {}
+KVStore::KVStore(std::string root_path) : _root_path(std::move(root_path)), _db(nullptr) {}
 
-OlapMeta::~OlapMeta() {
+KVStore::~KVStore() {
     for (auto& handle : _handles) {
         delete handle;
     }
@@ -64,7 +64,7 @@ OlapMeta::~OlapMeta() {
     }
 }
 
-Status OlapMeta::init(bool read_only) {
+Status KVStore::init(bool read_only) {
     DBOptions options;
     options.IncreaseParallelism();
     options.create_if_missing = true;
@@ -122,7 +122,7 @@ Status OlapMeta::init(bool read_only) {
     return to_status(s);
 }
 
-Status OlapMeta::get(ColumnFamilyIndex column_family_index, const std::string& key, std::string* value) {
+Status KVStore::get(ColumnFamilyIndex column_family_index, const std::string& key, std::string* value) {
     StarRocksMetrics::instance()->meta_read_request_total.increment(1);
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     int64_t duration_ns = 0;
@@ -135,7 +135,7 @@ Status OlapMeta::get(ColumnFamilyIndex column_family_index, const std::string& k
     return to_status(s);
 }
 
-Status OlapMeta::put(ColumnFamilyIndex column_family_index, const std::string& key, const std::string& value) {
+Status KVStore::put(ColumnFamilyIndex column_family_index, const std::string& key, const std::string& value) {
     StarRocksMetrics::instance()->meta_write_request_total.increment(1);
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     int64_t duration_ns = 0;
@@ -151,7 +151,7 @@ Status OlapMeta::put(ColumnFamilyIndex column_family_index, const std::string& k
     return to_status(s);
 }
 
-Status OlapMeta::write_batch(rocksdb::WriteBatch* batch) {
+Status KVStore::write_batch(rocksdb::WriteBatch* batch) {
     StarRocksMetrics::instance()->meta_write_request_total.increment(1);
     int64_t duration_ns = 0;
     rocksdb::Status s;
@@ -166,7 +166,7 @@ Status OlapMeta::write_batch(rocksdb::WriteBatch* batch) {
     return to_status(s);
 }
 
-Status OlapMeta::remove(ColumnFamilyIndex column_family_index, const std::string& key) {
+Status KVStore::remove(ColumnFamilyIndex column_family_index, const std::string& key) {
     StarRocksMetrics::instance()->meta_write_request_total.increment(1);
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     rocksdb::Status s;
@@ -182,8 +182,8 @@ Status OlapMeta::remove(ColumnFamilyIndex column_family_index, const std::string
     return to_status(s);
 }
 
-Status OlapMeta::iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,
-                         std::function<bool(std::string_view, std::string_view)> const& func) {
+Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,
+                        std::function<bool(std::string_view, std::string_view)> const& func) {
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     std::unique_ptr<Iterator> it(_db->NewIterator(ReadOptions(), handle));
     if (prefix.empty()) {
@@ -208,9 +208,9 @@ Status OlapMeta::iterate(ColumnFamilyIndex column_family_index, const std::strin
     return to_status(it->status());
 }
 
-Status OlapMeta::iterate_range(ColumnFamilyIndex column_family_index, const std::string& lower_bound,
-                               const std::string& upper_bound,
-                               std::function<bool(std::string_view, std::string_view)> const& func) {
+Status KVStore::iterate_range(ColumnFamilyIndex column_family_index, const std::string& lower_bound,
+                              const std::string& upper_bound,
+                              std::function<bool(std::string_view, std::string_view)> const& func) {
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     rocksdb::Slice iter_upper(upper_bound);
     ReadOptions options;
@@ -228,7 +228,7 @@ Status OlapMeta::iterate_range(ColumnFamilyIndex column_family_index, const std:
     return to_status(it->status());
 }
 
-std::string OlapMeta::get_root_path() {
+std::string KVStore::get_root_path() {
     return _root_path;
 }
 

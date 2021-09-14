@@ -191,6 +191,11 @@ public:
         return ss.str();
     }
 
+    bool reach_capacity_limit() const override {
+        return _pool.size() >= Column::MAX_CAPACITY_LIMIT || _cache.size() >= Column::MAX_CAPACITY_LIMIT ||
+               _slices.size() >= Column::MAX_CAPACITY_LIMIT || _buffer.size() >= Column::MAX_CAPACITY_LIMIT;
+    }
+
 private:
     void _build_cache() const {
         if (_cache_ok) {

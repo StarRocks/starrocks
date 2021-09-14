@@ -78,14 +78,14 @@ public class DynamicPartitionProperty {
 
     private void createStartOfs(Map<String, String> properties) {
         if (properties.containsKey(START_DAY_OF_WEEK)) {
-            startOfWeek = new StartOfDate(-1, -1, Integer.valueOf(properties.get(START_DAY_OF_WEEK)));
+            startOfWeek = new StartOfDate(-1, -1, Integer.parseInt(properties.get(START_DAY_OF_WEEK)));
         } else {
             // default:
             startOfWeek = new StartOfDate(-1, -1, 1 /* start from MONDAY */);
         }
 
         if (properties.containsKey(START_DAY_OF_MONTH)) {
-            startOfMonth = new StartOfDate(-1, Integer.valueOf(properties.get(START_DAY_OF_MONTH)), -1);
+            startOfMonth = new StartOfDate(-1, Integer.parseInt(properties.get(START_DAY_OF_MONTH)), -1);
         } else {
             // default:
             startOfMonth = new StartOfDate(-1, 1 /* 1st of month */, -1);

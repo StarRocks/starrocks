@@ -35,6 +35,9 @@ import com.starrocks.thrift.TExprNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class IsNullPredicate extends Predicate {
     private static final Logger LOG = LogManager.getLogger(IsNullPredicate.class);
     private static final String IS_NULL = "is_null_pred";

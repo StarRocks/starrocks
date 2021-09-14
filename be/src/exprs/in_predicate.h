@@ -34,6 +34,11 @@ namespace starrocks {
 // has two method:
 // 1. construct from TExprNode
 // 2. construct by new one, and push child.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class InPredicate : public Predicate {
 public:
     virtual ~InPredicate();

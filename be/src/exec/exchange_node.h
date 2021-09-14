@@ -42,6 +42,11 @@ class RuntimeProfile;
 // its SortExecExprs member that are used to compare rows.
 // If _is_merging is false, the exchange node directly retrieves batches from the row
 // batch queue of the DataStreamRecvr via calls to DataStreamRecvr::GetBatch().
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class ExchangeNode final : public ExecNode {
 public:
     ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);

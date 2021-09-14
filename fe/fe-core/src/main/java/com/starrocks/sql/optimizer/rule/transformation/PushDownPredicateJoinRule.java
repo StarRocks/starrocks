@@ -200,30 +200,38 @@ public class PushDownPredicateJoinRule extends TransformationRule {
                 ScalarOperator predicate = JoinPredicateUtils.rangePredicateDerive(filter.getPredicate());
                 List<ScalarOperator> leftPushDown = Lists.newArrayList();
                 List<ScalarOperator> rightPushDown = Lists.newArrayList();
-                // For SQl: select * from t1 left join t2 on t1.id = t2.id where t1.id > 1
-                // Infer t2.id > 1 and Push down it to right child
-                if (join.getJoinType().isLeftOuterJoin() || join.getJoinType().isRightOuterJoin()) {
-                    ColumnRefSet leftOutputColumns = joinOpt.getInputs().get(0).getOutputColumns();
-                    ColumnRefSet rightOutputColumns = joinOpt.getInputs().get(1).getOutputColumns();
-                    ScalarOperator derivedPredicate = JoinPredicateUtils.equivalenceDerive(
-                            Utils.compoundAnd(join.getOnPredicate(), filter.getPredicate()), false);
-                    List<ScalarOperator> derivedPredicates = Utils.extractConjuncts(derivedPredicate);
-
-                    if (join.getJoinType().isLeftOuterJoin()) {
-                        for (ScalarOperator p : derivedPredicates) {
-                            if (rightOutputColumns.contains(derivedPredicate.getUsedColumns())) {
-                                rightPushDown.add(p);
-                            }
-                        }
-                    } else if (join.getJoinType().isRightOuterJoin()) {
-                        for (ScalarOperator p : derivedPredicates) {
-                            if (leftOutputColumns.contains(derivedPredicate.getUsedColumns())) {
-                                leftPushDown.add(p);
-                            }
-                        }
-                    }
-                }
+                equivalenceDeriveOnOuterOrSemi(Utils.compoundAnd(join.getOnPredicate(), predicate), joinOpt, join,
+                        leftPushDown, rightPushDown);
                 return Lists.newArrayList(pushDownOuterOrSemiJoin(input, predicate, leftPushDown, rightPushDown));
+            }
+        }
+    }
+
+    void equivalenceDeriveOnOuterOrSemi(ScalarOperator predicate, OptExpression joinOpt, LogicalJoinOperator join,
+                                        List<ScalarOperator> leftPushDown, List<ScalarOperator> rightPushDown) {
+        // For SQl: select * from t1 left join t2 on t1.id = t2.id where t1.id > 1
+        // Infer t2.id > 1 and Push down it to right child
+        if (!join.getJoinType().isSemiJoin() && !join.getJoinType().isOuterJoin()) {
+            return;
+        }
+
+        ColumnRefSet leftOutputColumns = joinOpt.getInputs().get(0).getOutputColumns();
+        ColumnRefSet rightOutputColumns = joinOpt.getInputs().get(1).getOutputColumns();
+
+        ScalarOperator derivedPredicate = JoinPredicateUtils.equivalenceDerive(predicate, false);
+        List<ScalarOperator> derivedPredicates = Utils.extractConjuncts(derivedPredicate);
+
+        if (join.getJoinType().isLeftOuterJoin() || join.getJoinType().isLeftSemiJoin()) {
+            for (ScalarOperator p : derivedPredicates) {
+                if (rightOutputColumns.contains(derivedPredicate.getUsedColumns())) {
+                    rightPushDown.add(p);
+                }
+            }
+        } else if (join.getJoinType().isRightOuterJoin() || join.getJoinType().isRightSemiJoin()) {
+            for (ScalarOperator p : derivedPredicates) {
+                if (leftOutputColumns.contains(derivedPredicate.getUsedColumns())) {
+                    leftPushDown.add(p);
+                }
             }
         }
     }

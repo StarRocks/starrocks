@@ -48,6 +48,11 @@ class TupleRow;
 //   multiple rows per left input row
 // - TODO: fix this, so in the case of 1x1/nx1 joins (for instance, fact to dimension tbl)
 //   we don't do these extra copies
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class HashJoinNode : public ExecNode {
 public:
     HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);

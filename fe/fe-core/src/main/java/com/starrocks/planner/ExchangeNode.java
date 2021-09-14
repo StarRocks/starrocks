@@ -51,6 +51,9 @@ import org.apache.logging.log4j.Logger;
  * inputs on the parameters specified in the SortInfo object. It is assumed that the
  * inputs are also sorted individually on the same SortInfo parameter.
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class ExchangeNode extends PlanNode {
     private static final Logger LOG = LogManager.getLogger(ExchangeNode.class);
 

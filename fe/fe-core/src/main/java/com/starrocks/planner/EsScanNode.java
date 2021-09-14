@@ -28,6 +28,7 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Catalog;
@@ -61,6 +62,9 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class EsScanNode extends ScanNode {
 
     private static final Logger LOG = LogManager.getLogger(EsScanNode.class);
@@ -349,6 +353,9 @@ public class EsScanNode extends ScanNode {
     @Override
     public void setUseVectorized(boolean flag) {
         this.useVectorized = flag;
+        for (Expr expr : conjuncts) {
+            expr.setUseVectorized(flag);
+        }
     }
 
 }

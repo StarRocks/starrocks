@@ -27,6 +27,10 @@
 #include "exprs/predicate.h"
 #include "udf/udf.h"
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 /* added by lide */
 #define IN_FUNCTIONS_STMT(AnyValType, SetType, type_name)                                                  \
     static starrocks_udf::BooleanVal in_set_lookup(starrocks_udf::FunctionContext* context,                \

@@ -115,6 +115,11 @@ public:
 
     void set_null() { _value = std::monostate(); }
 
+    template <class Vistor>
+    void visit(Vistor&& vistor) {
+        vistor(_value);
+    }
+
 private:
     using Variant = std::variant<std::monostate, int8_t, int16_t, uint24_t, int32_t, int64_t, int96_t, int128_t, Slice,
                                  decimal12_t, DecimalV2Value, float, double, DatumArray, HyperLogLog*, BitmapValue*,
