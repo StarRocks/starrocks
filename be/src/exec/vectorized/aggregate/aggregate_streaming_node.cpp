@@ -234,6 +234,9 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode:
     OpFactories operators_with_source;
     auto source_operator =
             std::make_shared<AggregateStreamingSourceOperatorFactory>(context->next_operator_id(), id(), aggregator);
+
+    // TODO(hcf) Currently, the shared data structure aggregator does not support concurrency.
+    // So the degree of parallism must set to 1, we'll fix it later
     source_operator->set_num_driver_instances(1);
     operators_with_source.push_back(std::move(source_operator));
     return operators_with_source;
