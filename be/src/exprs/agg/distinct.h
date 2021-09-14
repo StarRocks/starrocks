@@ -176,13 +176,11 @@ struct DistinctAggregateStateV2<PT, FixedLengthPTGuard<PT>> {
 
         size_t old_size = set.size();
         src += sizeof(size);
-        const T* data = reinterpret_cast<const T*>(src);
-        static const size_t prefetch_dist = 4;
         for (size_t i = 0; i < size; i++) {
-            if ((i + prefetch_dist) < size) {
-                set.prefetch(data[i + prefetch_dist]);
-            }
-            set.insert(data[i]);
+            T key;
+            memcpy(&key, src, sizeof(T));
+            set.insert(key);
+            src += sizeof(T);
         }
         size_t new_size = set.size();
         return (new_size - old_size) * item_size;
@@ -267,7 +265,8 @@ public:
             if (slice.size > 16) {
                 mem_usage += this->data(state).deserialize_and_merge((const uint8_t*)slice.data, slice.size);
             } else {
-                T key = *reinterpret_cast<T*>(slice.data);
+                T key;
+                memcpy(&key, slice.data, sizeof(T));
                 mem_usage += this->data(state).update(key);
             }
         }
