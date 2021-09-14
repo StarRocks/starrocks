@@ -73,16 +73,16 @@ THRIFT_SOURCE=thrift-0.13.0
 THRIFT_MD5SUM="38a27d391a2b03214b444cb13d5664f1"
 
 # protobuf
-PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.5.1.tar.gz"
-PROTOBUF_NAME=protobuf-3.5.1.tar.gz
-PROTOBUF_SOURCE=protobuf-3.5.1
-PROTOBUF_MD5SUM="710f1a75983092c9b45ecef207236104"
+PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.14.0.tar.gz"
+PROTOBUF_NAME=protobuf-3.14.0.tar.gz
+PROTOBUF_SOURCE=protobuf-3.14.0
+PROTOBUF_MD5SUM="0c9d2a96f3656ba7ef3b23b533fb6170"
 
 # gflags
-GFLAGS_DOWNLOAD="https://github.com/gflags/gflags/archive/v2.2.0.tar.gz"
-GFLAGS_NAME=gflags-2.2.0.tar.gz
-GFLAGS_SOURCE=gflags-2.2.0
-GFLAGS_MD5SUM="b99048d9ab82d8c56e876fb1456c285e"
+GFLAGS_DOWNLOAD="https://github.com/gflags/gflags/archive/v2.2.2.tar.gz"
+GFLAGS_NAME=gflags-2.2.2.tar.gz
+GFLAGS_SOURCE=gflags-2.2.2
+GFLAGS_MD5SUM="1a865b93bacfa963201af3f75b7bd64c"
 
 # glog
 GLOG_DOWNLOAD="https://github.com/google/glog/archive/v0.3.3.tar.gz"
@@ -91,10 +91,10 @@ GLOG_SOURCE=glog-0.3.3
 GLOG_MD5SUM="c1f86af27bd9c73186730aa957607ed0"
 
 # gtest
-GTEST_DOWNLOAD="https://github.com/google/googletest/archive/release-1.8.0.tar.gz"
-GTEST_NAME=googletest-release-1.8.0.tar.gz
-GTEST_SOURCE=googletest-release-1.8.0
-GTEST_MD5SUM="16877098823401d1bf2ed7891d7dce36"
+GTEST_DOWNLOAD="https://github.com/google/googletest/archive/release-1.10.0.tar.gz"
+GTEST_NAME=googletest-release-1.10.0.tar.gz
+GTEST_SOURCE=googletest-release-1.10.0
+GTEST_MD5SUM="ecd1fa65e7de707cd5c00bdac56022cd"
 
 # snappy
 SNAPPY_DOWNLOAD="https://github.com/google/snappy/archive/1.1.8.tar.gz"
@@ -181,12 +181,6 @@ ZSTD_NAME=zstd-1.5.0.tar.gz
 ZSTD_SOURCE=zstd-1.5.0
 ZSTD_MD5SUM="d5ac89d5df9e81243ce40d0c6a66691d"
 
-# double-conversion
-DOUBLE_CONVERSION_DOWNLOAD="https://github.com/google/double-conversion/archive/v3.1.1.tar.gz"
-DOUBLE_CONVERSION_NAME=double-conversion-3.1.1.tar.gz
-DOUBLE_CONVERSION_SOURCE=double-conversion-3.1.1
-DOUBLE_CONVERSION_MD5SUM="befd431c3de3f3ed7926ba2845ee609d"
-
 # brotli
 BROTLI_DOWNLOAD="https://github.com/google/brotli/archive/v1.0.9.tar.gz"
 BROTLI_NAME="brotli-1.0.9.tar.gz"
@@ -266,7 +260,7 @@ JDK_SOURCE="java-se-8u41-ri"
 JDK_MD5SUM="7295b5a3fb90e7aaf80df23d5eac222d"
 
 # RAGEL
-# ragel-6.9+ is used by hypercan, so we build it first
+# ragel-6.9+ is used by hyperscan, so we build it first
 RAGEL_DOWNLOAD="https://www.colm.net/files/ragel/ragel-6.10.tar.gz"
 RAGEL_NAME="ragel-6.10.tar.gz"
 RAGEL_SOURCE="ragel-6.10"
@@ -285,4 +279,4 @@ MARIADB_SOURCE="mariadb-connector-c-3.1.14"
 MARIADB_MD5SUM="86c4052adeb8447900bf33b4e2ddd1f9"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
-TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA FLATBUFFERS ARROW BROTLI DOUBLE_CONVERSION ZSTD S2 BITSHUFFLE CROARINGBITMAP JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB"
+TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB"
