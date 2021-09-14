@@ -125,7 +125,7 @@ public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> 
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("path: ").append(path).append(", be: ").append(beId);
+        sb.append("path: ").append(path).append(", path hash: ").append(pathHash).append(", be: ").append(beId);
         sb.append(", used: ").append(usedCapacityB).append(", total: ").append(capacityB);
         return sb.toString();
     }

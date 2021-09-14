@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.system.Backend;
@@ -44,6 +45,8 @@ public class BackendProcNodeTest {
     private Catalog catalog;
     @Mocked
     private EditLog editLog;
+    @Mocked
+    private TabletInvertedIndex tabletInvertedIndex;
 
     @Before
     public void setUp() {
@@ -65,6 +68,14 @@ public class BackendProcNodeTest {
                 catalog.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                Catalog.getCurrentInvertedIndex();
+                minTimes = 0;
+                result = tabletInvertedIndex;
+
+                tabletInvertedIndex.getTabletNumByBackendIdAndPathHash(anyLong, anyLong);
+                minTimes = 0;
+                result = 1;
             }
         };
 
@@ -99,8 +110,10 @@ public class BackendProcNodeTest {
         Assert.assertTrue(result instanceof BaseProcResult);
 
         Assert.assertTrue(result.getRows().size() >= 1);
-        Assert.assertEquals(Lists.newArrayList("RootPath", "DataUsedCapacity", "OtherUsedCapacity", "AvailCapacity",
-                "TotalCapacity", "TotalUsedPct", "State", "PathHash"), result.getColumnNames());
+        Assert.assertEquals(
+                Lists.newArrayList("RootPath", "DataUsedCapacity", "OtherUsedCapacity", "AvailCapacity",
+                        "TotalCapacity", "TotalUsedPct", "State", "PathHash", "StorageMedium", "TabletNum"),
+                result.getColumnNames());
     }
 
 }

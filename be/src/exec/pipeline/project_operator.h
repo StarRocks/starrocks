@@ -65,7 +65,7 @@ public:
 
     ~ProjectOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<ProjectOperator>(_id, _plan_node_id, _column_ids, _expr_ctxs, _type_is_nullable,
                                                  _common_sub_column_ids, _common_sub_expr_ctxs);
     }

@@ -558,9 +558,9 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto source_id = scan_operator->plan_node_id();
     DCHECK(morsel_queues.count(source_id));
     auto& morsel_queue = morsel_queues[source_id];
-    // ScanOperator's instance_count is not more than the number of morsels
-    const auto instance_count = std::min<size_t>(morsel_queue->num_morsels(), context->driver_instance_count());
-    scan_operator->set_num_driver_instances(instance_count);
+    // ScanOperator's degree_of_parallelism is not more than the number of morsels
+    const auto degree_of_parallelism = std::min<size_t>(morsel_queue->num_morsels(), context->degree_of_parallelism());
+    scan_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators.emplace_back(std::move(scan_operator));
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));

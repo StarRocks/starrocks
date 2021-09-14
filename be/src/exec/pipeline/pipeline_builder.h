@@ -15,8 +15,8 @@ namespace pipeline {
 
 class PipelineBuilderContext {
 public:
-    PipelineBuilderContext(FragmentContext* fragment_context, size_t driver_instance_count)
-            : _fragment_context(fragment_context), _driver_instance_count(driver_instance_count) {}
+    PipelineBuilderContext(FragmentContext* fragment_context, size_t degree_of_parallelism)
+            : _fragment_context(fragment_context), _degree_of_parallelism(degree_of_parallelism) {}
 
     void add_pipeline(const OpFactories& operators) {
         _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipe_id(), operators));
@@ -28,7 +28,7 @@ public:
 
     uint32_t next_operator_id() { return _next_operator_id++; }
 
-    size_t driver_instance_count() const { return _driver_instance_count; }
+    size_t degree_of_parallelism() const { return _degree_of_parallelism; }
 
     Pipelines get_pipelines() const { return _pipelines; }
 
@@ -39,7 +39,7 @@ private:
     Pipelines _pipelines;
     uint32_t _next_pipeline_id = 0;
     uint32_t _next_operator_id = 0;
-    size_t _driver_instance_count = 1;
+    size_t _degree_of_parallelism = 1;
 };
 
 class PipelineBuilder {

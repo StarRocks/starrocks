@@ -74,6 +74,9 @@ OLAPStatus EngineCloneTask::execute() {
         if (!rlock.owns_lock()) {
             return OLAP_ERR_RWLOCK_ERROR;
         }
+        if (Tablet::check_migrate(tablet)) {
+            return OLAP_ERR_OTHER_ERROR;
+        }
         auto st = _do_clone(tablet.get());
         _set_tablet_info(st, false);
     } else {

@@ -705,6 +705,20 @@ OLAPStatus Tablet::set_alter_state(AlterTabletState state) {
     return _tablet_meta->set_alter_state(state);
 }
 
+bool Tablet::check_migrate(const TabletSharedPtr& tablet) {
+    if (tablet->is_migrating()) {
+        LOG(WARNING) << "tablet is migrating. tablet_id=" << tablet->tablet_id();
+        return true;
+    } else {
+        if (tablet !=
+            StorageEngine::instance()->tablet_manager()->get_tablet(tablet->tablet_id(), tablet->schema_hash())) {
+            LOG(WARNING) << "tablet has been migrated. tablet_id=" << tablet->tablet_id();
+            return true;
+        }
+    }
+    return false;
+}
+
 bool Tablet::can_do_compaction() {
     std::shared_lock rdlock(_meta_lock);
     const RowsetSharedPtr lastest_delta = rowset_with_max_version();
