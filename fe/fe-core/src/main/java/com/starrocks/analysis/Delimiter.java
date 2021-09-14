@@ -69,9 +69,13 @@ public class Delimiter {
                    case '\'':
                        ch = '\'';
                        break;
+                   default:
+                       i--;
+                       break;
                }
                if (outputOneChar) {
                    writer.append(ch);
+                   i++;
                }
                // compatible previous 0x / 0X prefix
             } else if (ch == '0' && i != originStr.length() - 1

@@ -84,6 +84,11 @@ public class ColumnSeparatorTest {
         separator.analyze();
         Assert.assertEquals("'\\|'", separator.toSql());
         Assert.assertEquals("\\|", separator.getColumnSeparator());
+
+        separator = new ColumnSeparator("\t\b");
+        separator.analyze();
+        Assert.assertEquals("'\t\b'", separator.toSql());
+        Assert.assertEquals("\t\b", separator.getColumnSeparator());
     }
 
     @Test(expected = AnalysisException.class)
