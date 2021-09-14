@@ -24,10 +24,10 @@ public:
 
     void add_op_factory(const OpFactoryPtr& op) { _op_factories.emplace_back(op); }
 
-    Operators create_operators(int32_t instance_count, int32_t i) {
+    Operators create_operators(int32_t degree_of_parallelism, int32_t i) {
         Operators operators;
         for (const auto& factory : _op_factories) {
-            operators.emplace_back(factory->create(instance_count, i));
+            operators.emplace_back(factory->create(degree_of_parallelism, i));
         }
         return operators;
     }
