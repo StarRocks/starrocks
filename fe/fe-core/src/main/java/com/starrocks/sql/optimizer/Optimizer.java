@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -130,6 +131,10 @@ public class Optimizer {
         if (!connectContext.getSessionVariable().isDisableJoinReorder()) {
             if (Utils.countInnerJoinNodeSize(tree) >
                     connectContext.getSessionVariable().getCboMaxReorderNodeUseExhaustive()) {
+                if (Utils.hasUnknownColumnsStats(tree) && !FeConstants.runningUnitTest) {
+                    connectContext.getSessionVariable().disableDPJoinReorder();
+                    connectContext.getSessionVariable().disableGreedyJoinReorder();
+                }
                 new ReorderJoinRule().transform(tree, context);
                 context.getRuleSet().addJoinCommutativityWithOutInnerRule();
             } else {
