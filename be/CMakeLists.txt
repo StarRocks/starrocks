@@ -256,7 +256,7 @@ add_library(ryu STATIC IMPORTED)
 set_target_properties(ryu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libryu.a)
 
 # Disable minidump on aarch64, hence breakpad is not needed.
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     add_library(breakpad STATIC IMPORTED)
     set_target_properties(breakpad PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbreakpad_client.a)
 endif()
@@ -403,7 +403,7 @@ include_directories(
 )
 
 
-if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     include_directories(${THIRDPARTY_DIR}/include/breakpad/)
 endif()
 
