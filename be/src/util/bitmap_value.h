@@ -1643,16 +1643,21 @@ public:
             break;
         }
         case SET:
+            int pos = 0;
+            int64_t values[_set.size()];
+            for (const auto value : _set) {
+                values[pos++] = value;
+            }
             bool first = true;
-            for (const auto& value : _set) {
+            std::sort(values, values + pos);
+            for (int i = 0; i < pos; ++i) {
                 if (!first) {
                     ss << ",";
                 } else {
                     first = false;
                 }
-                ss << value;
+                ss << values[i];
             }
-
             break;
         }
         return ss.str();
