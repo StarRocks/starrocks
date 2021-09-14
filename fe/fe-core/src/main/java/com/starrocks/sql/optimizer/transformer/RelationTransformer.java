@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.optimizer.transformer;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -67,6 +66,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -214,10 +214,8 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
 
     @Override
     public OptExprBuilder visitTable(TableRelation node, ExpressionMapping context) {
-        ImmutableMap.Builder<ColumnRefOperator, Column> columns = ImmutableMap.builder();
-        ImmutableList.Builder<ColumnRefOperator> outputVariablesBuilder = ImmutableList.builder();
+        ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMap = ImmutableMap.builder();
 
-        ImmutableMap.Builder<Column, Integer> columnToIds = ImmutableMap.builder();
         int relationId = columnRefFactory.getNextRelationId();
         for (Map.Entry<Field, Column> column : node.getColumns().entrySet()) {
             ColumnRefOperator columnRef = columnRefFactory.create(column.getKey().getName(),
@@ -225,29 +223,24 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
                     column.getValue().isAllowNull());
             columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
             columnRefFactory.updateColumnRefToColumns(columnRef, column.getValue(), node.getTable());
-            outputVariablesBuilder.add(columnRef);
-            columns.put(columnRef, column.getValue());
-            columnToIds.put(column.getValue(), columnRef.getId());
+            colRefToColumnMetaMap.put(columnRef, column.getValue());
         }
 
-        List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
         LogicalScanOperator scanOperator;
         if (node.getTable().getType().equals(Table.TableType.OLAP)) {
-            LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator((OlapTable) node.getTable(),
-                    outputVariables, columns.build(), columnToIds.build());
+            LogicalOlapScanOperator olapScanOperator =
+                    new LogicalOlapScanOperator((OlapTable) node.getTable(), colRefToColumnMetaMap.build());
             olapScanOperator.setPartitionNames(node.getPartitionNames());
             olapScanOperator.setHintsTabletIds(node.getTabletIds());
             scanOperator = olapScanOperator;
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
-            scanOperator = new LogicalHiveScanOperator(node.getTable(), node.getTable().getType(),
-                    outputVariables, columns.build(), columnToIds.build());
+            scanOperator = new LogicalHiveScanOperator(node.getTable(), node.getTable().getType(), colRefToColumnMetaMap.build());
         } else if (Table.TableType.SCHEMA.equals(node.getTable().getType())) {
-            scanOperator = new LogicalSchemaScanOperator(node.getTable(), outputVariables,
-                    columns.build());
+            scanOperator = new LogicalSchemaScanOperator(node.getTable(), colRefToColumnMetaMap.build());
         } else if (Table.TableType.MYSQL.equals(node.getTable().getType())) {
-            scanOperator = new LogicalMysqlScanOperator(node.getTable(), outputVariables, columns.build());
+            scanOperator = new LogicalMysqlScanOperator(node.getTable(), colRefToColumnMetaMap.build());
         } else if (Table.TableType.ELASTICSEARCH.equals(node.getTable().getType())) {
-            scanOperator = new LogicalEsScanOperator(node.getTable(), outputVariables, columns.build());
+            scanOperator = new LogicalEsScanOperator(node.getTable(), colRefToColumnMetaMap.build());
             EsTablePartitions esTablePartitions = ((LogicalEsScanOperator) scanOperator).getEsTablePartitions();
             EsTable table = (EsTable) scanOperator.getTable();
             if (esTablePartitions == null) {
@@ -263,7 +256,8 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
                     ErrorType.UNSUPPORTED);
         }
         return new OptExprBuilder(scanOperator, Collections.emptyList(),
-                new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputVariables));
+                new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()),
+                        new ArrayList<>(colRefToColumnMetaMap.build().keySet())));
     }
 
     @Override
@@ -299,8 +293,12 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
                         .collect(Collectors.toList()));
 
         if (node.getOnPredicate() == null) {
-            return new OptExprBuilder(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null, node.getJoinHint()),
+            OptExprBuilder optExprBuilder = new OptExprBuilder(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null, node.getJoinHint()),
                     Lists.newArrayList(leftPlan, rightPlan), expressionMapping);
+            optExprBuilder = optExprBuilder.withNewRoot(new LogicalProjectOperator(
+                    optExprBuilder.getFieldMappings().stream().collect(Collectors.toMap(
+                            Function.identity(), Function.identity()))));
+            return optExprBuilder;
         }
 
         ScalarOperator onPredicateWithoutRewrite = SqlToScalarOperatorTranslator
@@ -344,6 +342,11 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
         } else {
             optExprBuilder = new OptExprBuilder(root, Lists.newArrayList(leftPlan, rightPlan), expressionMapping);
         }
+
+        optExprBuilder = optExprBuilder.withNewRoot(new LogicalProjectOperator(
+                optExprBuilder.getFieldMappings().stream().collect(Collectors.toMap(
+                        Function.identity(), Function.identity()))
+        ));
 
         return optExprBuilder;
     }

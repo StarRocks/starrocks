@@ -2,63 +2,20 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.base.DistributionSpec;
-import com.starrocks.sql.optimizer.base.Ordering;
-import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
-import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
-import mockit.Mocked;
 import org.junit.Before;
-import org.junit.Test;
-import org.spark_project.guava.collect.Maps;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 
 public class OptimizerTaskTest {
     private ColumnRefFactory columnRefFactory;
@@ -98,7 +55,7 @@ public class OptimizerTaskTest {
         column5 = columnRefFactory.create("t5", ScalarType.INT, true);
         column6 = columnRefFactory.create("t6", ScalarType.INT, true);
     }
-
+    /*
     @Test
     public void testTaskScheduler(@Mocked OlapTable olapTable1,
                                   @Mocked OlapTable olapTable2) {
@@ -2072,4 +2029,6 @@ public class OptimizerTaskTest {
         rightScan = (PhysicalOlapScanOperator) physicalTree.getInputs().get(1).getInputs().get(0).getOp();
         assertEquals(olapTable1.getId(), rightScan.getTable().getId());
     }
+
+     */
 }

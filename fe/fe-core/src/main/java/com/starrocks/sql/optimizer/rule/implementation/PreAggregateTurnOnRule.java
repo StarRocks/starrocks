@@ -8,6 +8,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
@@ -96,7 +97,7 @@ public class PreAggregateTurnOnRule {
             scan.setPreAggregation(false);
 
             // Duplicate table
-            if (!scan.getTable().getKeysType().isAggregationFamily()) {
+            if (!((OlapTable) scan.getTable()).getKeysType().isAggregationFamily()) {
                 scan.setPreAggregation(true);
                 scan.setTurnOffReason("");
                 return null;
@@ -114,7 +115,7 @@ public class PreAggregateTurnOnRule {
 
             // check has value conjunct
             boolean allKeyConjunct =
-                    Utils.extractColumnRef(scan.getPredicate()).stream().map(ref -> scan.getColumnRefMap().get(ref))
+                    Utils.extractColumnRef(scan.getPredicate()).stream().map(ref -> scan.getColRefToColumnMetaMap().get(ref))
                             .allMatch(Column::isKey);
             if (!allKeyConjunct) {
                 scan.setTurnOffReason("Predicates include the value column");
@@ -137,7 +138,7 @@ public class PreAggregateTurnOnRule {
         }
 
         private boolean checkGroupings(PreAggregationContext context, PhysicalOlapScanOperator scan) {
-            Map<ColumnRefOperator, Column> refColumnMap = scan.getColumnRefMap();
+            Map<ColumnRefOperator, Column> refColumnMap = scan.getColRefToColumnMetaMap();
 
             List<ColumnRefOperator> groups = Lists.newArrayList();
             context.groupings.stream().map(Utils::extractColumnRef).forEach(groups::addAll);
@@ -155,7 +156,7 @@ public class PreAggregateTurnOnRule {
         }
 
         private boolean checkAggregations(PreAggregationContext context, PhysicalOlapScanOperator scan) {
-            Map<ColumnRefOperator, Column> refColumnMap = scan.getColumnRefMap();
+            Map<ColumnRefOperator, Column> refColumnMap = scan.getColRefToColumnMetaMap();
 
             for (final ScalarOperator so : context.aggregations) {
                 Preconditions.checkState(OperatorType.CALL.equals(so.getOpType()));

@@ -25,6 +25,7 @@ public class AssertOneRowImplementationRule extends ImplementationRule {
 
         PhysicalAssertOneRowOperator physical =
                 new PhysicalAssertOneRowOperator(logical.getAssertion(), logical.getCheckRows(), logical.getTips());
+        physical.setProjection(logical.getProjection());
 
         return Lists.newArrayList(OptExpression.create(physical, input.getInputs()));
     }

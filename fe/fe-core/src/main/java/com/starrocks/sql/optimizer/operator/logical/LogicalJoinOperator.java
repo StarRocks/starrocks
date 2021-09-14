@@ -10,10 +10,9 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.List;
+import java.util.ArrayList;
 import java.util.Objects;
 
 public class LogicalJoinOperator extends LogicalOperator {
@@ -22,11 +21,6 @@ public class LogicalJoinOperator extends LogicalOperator {
     private final String joinHint;
     // For mark the node has been push  down join on clause, avoid dead-loop
     private boolean hasPushDownJoinOnClause = false;
-    // Output columns after PruneJoinColumnsRule apply.
-    // PruneOutputColumns will not contains onPredicate/predicate used columns if parent node don't require these columns.
-    // PruneOutputColumns need to be calculated because project nodes will be added on top of join nodes after choose best plan (AddProjectForJoinPruneRule),
-    // so column statistics need to be pruned before calculating cost.
-    private List<ColumnRefOperator> pruneOutputColumns;
 
     public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate) {
         this(joinType, onPredicate, "");
@@ -88,7 +82,22 @@ public class LogicalJoinOperator extends LogicalOperator {
         return joinHint;
     }
 
-    public ColumnRefSet getRequiredChildInputColumns() {
+
+
+    @Override
+    public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
+        if (projection != null) {
+            return new ColumnRefSet(new ArrayList<>(projection.getColumnRefMap().keySet()));
+        } else {
+            ColumnRefSet columns = new ColumnRefSet();
+            for (int i = 0; i < expressionContext.arity(); ++i) {
+                columns.union(expressionContext.getChildLogicalProperty(i).getOutputColumns());
+            }
+            return columns;
+        }
+    }
+
+    public ColumnRefSet getUsedColumns() {
         ColumnRefSet result = new ColumnRefSet();
         if (onPredicate != null) {
             result.union(onPredicate.getUsedColumns());
@@ -96,24 +105,14 @@ public class LogicalJoinOperator extends LogicalOperator {
         if (predicate != null) {
             result.union(predicate.getUsedColumns());
         }
-        return result;
-    }
 
-    public void setPruneOutputColumns(List<ColumnRefOperator> pruneOutputColumns) {
-        this.pruneOutputColumns = pruneOutputColumns;
-    }
-
-    public List<ColumnRefOperator> getPruneOutputColumns() {
-        return this.pruneOutputColumns;
-    }
-
-    @Override
-    public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        ColumnRefSet columns = new ColumnRefSet();
-        for (int i = 0; i < expressionContext.arity(); ++i) {
-            columns.union(expressionContext.getChildLogicalProperty(i).getOutputColumns());
+        if (projection != null) {
+            for (ScalarOperator value : projection.getColumnRefMap().values()) {
+                result.union(value.getUsedColumns());
+            }
         }
-        return columns;
+
+        return result;
     }
 
     @Override
@@ -137,13 +136,12 @@ public class LogicalJoinOperator extends LogicalOperator {
             return true;
         }
         return joinType == rhs.joinType && Objects.equals(onPredicate, rhs.onPredicate)
-                && Objects.equals(predicate, rhs.predicate) &&
-                Objects.equals(pruneOutputColumns, rhs.pruneOutputColumns);
+                && Objects.equals(predicate, rhs.predicate) && Objects.equals(projection, rhs.projection);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(opType, joinType, onPredicate, predicate);
+        return Objects.hash(opType, joinType, onPredicate, predicate, projection);
     }
 
     @Override

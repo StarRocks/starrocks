@@ -25,11 +25,11 @@ public class HashJoinImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
         PhysicalHashJoinOperator physicalHashJoin =
-                new PhysicalHashJoinOperator(joinOperator.getJoinType(), joinOperator.getOnPredicate(),
-                        joinOperator.getPruneOutputColumns());
+                new PhysicalHashJoinOperator(joinOperator.getJoinType(), joinOperator.getOnPredicate());
         physicalHashJoin.setPredicate(joinOperator.getPredicate());
         physicalHashJoin.setLimit(joinOperator.getLimit());
         physicalHashJoin.setJoinHint(joinOperator.getJoinHint());
+        physicalHashJoin.setProjection(joinOperator.getProjection());
         OptExpression result = OptExpression.create(physicalHashJoin, input.getInputs());
         return Lists.newArrayList(result);
     }

@@ -11,6 +11,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Objects;
 
@@ -60,9 +61,13 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        ColumnRefSet outputColumns = (ColumnRefSet) outerColumnRefSet.clone();
-        outputColumns.union(fnResultColumnRefSet);
-        return outputColumns;
+        if (projection != null) {
+            return new ColumnRefSet(new ArrayList<>(projection.getColumnRefMap().keySet()));
+        } else {
+            ColumnRefSet outputColumns = (ColumnRefSet) outerColumnRefSet.clone();
+            outputColumns.union(fnResultColumnRefSet);
+            return outputColumns;
+        }
     }
 
     @Override

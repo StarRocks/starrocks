@@ -77,8 +77,7 @@ public class HiveScanPartitionPruneRule extends TransformationRule {
         List<Column> partitionColumns = hiveTable.getPartitionColumns();
         List<ColumnRefOperator> partitionColumnRefOperators = new ArrayList<>();
         for (Column column : partitionColumns) {
-            ColumnRefOperator partitionColumnRefOperator =
-                    context.getColumnRefFactory().getColumnRef(operator.getColumnToIds().get(column));
+            ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
             columnToPartitionValuesMap.put(partitionColumnRefOperator, new TreeMap<>());
             columnToNullPartitions.put(partitionColumnRefOperator, Sets.newHashSet());
             partitionColumnRefOperators.add(partitionColumnRefOperator);
@@ -219,7 +218,7 @@ public class HiveScanPartitionPruneRule extends TransformationRule {
                                                         LogicalHiveScanOperator operator,
                                                         OptimizerContext context) {
         ColumnRefOperator newColumnRef = context.getColumnRefFactory().create(left, left.getType(), left.isNullable());
-        operator.getMinMaxColumnRefMap().put(newColumnRef, operator.getColumnRefMap().get(left));
+        operator.getMinMaxColumnRefMap().put(newColumnRef, operator.getColRefToColumnMetaMap().get(left));
         return new BinaryPredicateOperator(type, newColumnRef, right);
     }
 }

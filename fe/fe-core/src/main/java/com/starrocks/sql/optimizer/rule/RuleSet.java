@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithSortRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergePredicateScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
@@ -46,6 +47,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule
 import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneExceptColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneFilterColumnsRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneHiveScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneIntersectColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneJoinColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneProjectColumnsRule;
@@ -64,6 +66,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAssertOneRowProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnClauseRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitUnionRule;
@@ -150,9 +153,9 @@ public class RuleSet {
                 new MergeTwoProjectRule(),
                 PruneScanColumnRule.OLAP_SCAN,
                 PruneScanColumnRule.SCHEMA_SCAN,
-                PruneScanColumnRule.HIVE_SCAN,
                 PruneScanColumnRule.MYSQL_SCAN,
                 PruneScanColumnRule.ES_SCAN,
+                new PruneHiveScanColumnRule(),
                 new PruneProjectColumnsRule(),
                 new PruneFilterColumnsRule(),
                 new PruneAggregateColumnsRule(),
@@ -168,7 +171,9 @@ public class RuleSet {
         ));
 
         rewriteRules.put(RuleSetType.SCALAR_OPERATOR_REUSE, ImmutableList.of(
-                new ScalarOperatorsReuseRule()
+                new ScalarOperatorsReuseRule(),
+                new PushDownJoinOnExpressionToChildProject(),
+                new MergeProjectWithChildRule()
         ));
 
         rewriteRules.put(RuleSetType.PUSH_DOWN_PREDICATE, ImmutableList.of(

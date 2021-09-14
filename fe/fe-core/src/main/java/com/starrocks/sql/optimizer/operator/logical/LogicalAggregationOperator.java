@@ -102,10 +102,14 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        ColumnRefSet columns = new ColumnRefSet();
-        columns.union(groupingKeys);
-        columns.union(new ArrayList<>(aggregations.keySet()));
-        return columns;
+        if (projection != null) {
+            return new ColumnRefSet(new ArrayList<>(projection.getColumnRefMap().keySet()));
+        } else {
+            ColumnRefSet columns = new ColumnRefSet();
+            columns.union(groupingKeys);
+            columns.union(new ArrayList<>(aggregations.keySet()));
+            return columns;
+        }
     }
 
     @Override

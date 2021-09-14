@@ -5,30 +5,10 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
-import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.NodeOperator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-public abstract class PhysicalOperator extends Operator {
-    protected long limit = -1;
-    protected ScalarOperator predicate;
-
-    public long getLimit() {
-        return limit;
-    }
-
-    public void setLimit(long limit) {
-        this.limit = limit;
-    }
-
-    public ScalarOperator getPredicate() {
-        return predicate;
-    }
-
-    public void setPredicate(ScalarOperator predicate) {
-        this.predicate = predicate;
-    }
-
+public abstract class PhysicalOperator extends NodeOperator {
     protected OrderSpec orderSpec;
     protected DistributionSpec distributionSpec;
 
@@ -51,17 +31,17 @@ public abstract class PhysicalOperator extends Operator {
         this.orderSpec = orderSpec;
     }
 
+    @Override
+    public boolean isPhysical() {
+        return true;
+    }
+
     public OrderSpec getOrderSpec() {
         return orderSpec;
     }
 
     public DistributionSpec getDistributionSpec() {
         return distributionSpec;
-    }
-
-    @Override
-    public boolean isPhysical() {
-        return true;
     }
 
     public ColumnRefSet getUsedColumns() {

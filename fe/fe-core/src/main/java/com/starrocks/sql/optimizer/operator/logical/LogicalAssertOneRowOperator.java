@@ -10,6 +10,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
+import java.util.ArrayList;
 import java.util.Objects;
 
 public class LogicalAssertOneRowOperator extends LogicalOperator {
@@ -63,7 +64,11 @@ public class LogicalAssertOneRowOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        return expressionContext.getChildLogicalProperty(0).getOutputColumns();
+        if (projection != null) {
+            return new ColumnRefSet(new ArrayList<>(projection.getColumnRefMap().keySet()));
+        } else {
+            return expressionContext.getChildLogicalProperty(0).getOutputColumns();
+        }
     }
 
     @Override

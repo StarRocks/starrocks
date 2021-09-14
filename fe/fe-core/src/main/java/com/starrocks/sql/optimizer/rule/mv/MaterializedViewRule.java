@@ -325,11 +325,11 @@ public class MaterializedViewRule extends Rule {
                 columnNameToIds.put(tableId, nameToIDs);
             }
 
-            for (Map.Entry<Column, Integer> kv : scanOperator.getColumnToIds().entrySet()) {
-                nameToIDs.put(kv.getKey().getName(), kv.getValue());
+            for (Map.Entry<ColumnRefOperator, Column> kv : scanOperator.getColRefToColumnMetaMap().entrySet()) {
+                nameToIDs.put(kv.getValue().getName(), kv.getKey().getId());
             }
 
-            for (ColumnRefOperator column : scanOperator.getColumnRefMap().keySet()) {
+            for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {
                 updateTableToColumns(column, columnIdsInQueryOutput);
             }
         }

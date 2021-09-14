@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
@@ -18,7 +17,6 @@ import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -94,7 +92,7 @@ public class StatisticsCalculatorTest {
         GroupExpression groupExpression = new GroupExpression(aggNode, Lists.newArrayList(childGroup));
         groupExpression.setGroup(new Group(1));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
         Assert.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
@@ -104,7 +102,7 @@ public class StatisticsCalculatorTest {
         groupExpression = new GroupExpression(aggNode, Lists.newArrayList(childGroup));
         groupExpression.setGroup(new Group(1));
         expressionContext = new ExpressionContext(groupExpression);
-        statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
         Assert.assertEquals(
@@ -144,7 +142,7 @@ public class StatisticsCalculatorTest {
                 new GroupExpression(unionOperator, Lists.newArrayList(childGroup1, childGroup2));
         groupExpression.setGroup(new Group(2));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
 
@@ -192,7 +190,7 @@ public class StatisticsCalculatorTest {
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
         Assert.assertEquals(1000 * partitions.size(), expressionContext.getStatistics().getOutputRowCount(), 0.001);
@@ -249,9 +247,8 @@ public class StatisticsCalculatorTest {
             partition.getBaseIndex().setRowCount(1000);
         }
 
-        LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
-                Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of(new Column("id_date", Type.DATE, true),
-                id_date.getId()));
+        LogicalOlapScanOperator olapScanOperator =
+                new LogicalOlapScanOperator(table, ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)));
         olapScanOperator.getSelectedPartitionId().addAll(partitionIds);
 
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
@@ -260,7 +257,7 @@ public class StatisticsCalculatorTest {
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
         // partition column count distinct values is 30 in table level, after partition prune,
@@ -274,9 +271,8 @@ public class StatisticsCalculatorTest {
         partitionIds.clear();
         partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                 mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
-        olapScanOperator = new LogicalOlapScanOperator(table,
-                Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of(new Column("id_date", Type.DATE, true),
-                id_date.getId()));
+        olapScanOperator =
+                new LogicalOlapScanOperator(table, ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)));
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
                 id_date, ConstantOperator.createDate(LocalDateTime.of(2014, 5, 1, 0, 0, 0))));
         olapScanOperator.getSelectedPartitionId().addAll(partitionIds);
@@ -284,7 +280,7 @@ public class StatisticsCalculatorTest {
         groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
         expressionContext = new ExpressionContext(groupExpression);
-        statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
         columnStatistic = expressionContext.getStatistics().getColumnStatistic(id_date);
@@ -349,14 +345,13 @@ public class StatisticsCalculatorTest {
         }
 
         LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
-                Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of(new Column("id_date", Type.DATE, true),
-                id_date.getId()));
+                ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)));
         olapScanOperator.getSelectedPartitionId().addAll(partitionIds);
 
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
 
@@ -372,9 +367,8 @@ public class StatisticsCalculatorTest {
         partitionIds.clear();
         partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                 mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
-        olapScanOperator = new LogicalOlapScanOperator(table,
-                Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of(new Column("id_date", Type.DATE, true),
-                id_date.getId()));
+        olapScanOperator =
+                new LogicalOlapScanOperator(table, ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)));
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
                 id_date, ConstantOperator.createDate(LocalDateTime.of(2020, 04, 24, 0, 0, 0))));
         olapScanOperator.getSelectedPartitionId().addAll(partitionIds);
@@ -382,7 +376,7 @@ public class StatisticsCalculatorTest {
         groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
         expressionContext = new ExpressionContext(groupExpression);
-        statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
         columnStatistic = expressionContext.getStatistics().getColumnStatistic(id_date);

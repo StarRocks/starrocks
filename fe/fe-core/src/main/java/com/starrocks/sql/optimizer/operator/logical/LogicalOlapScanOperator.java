@@ -3,7 +3,6 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.PartitionNames;
@@ -31,24 +30,16 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private PartitionNames partitionNames;
     private List<Long> hintsTabletIds;
 
-    private final ImmutableMap<Column, Integer> columnToIds;
-
     // Only for UT
     public LogicalOlapScanOperator(OlapTable table) {
-        super(OperatorType.LOGICAL_OLAP_SCAN, table, Lists.newArrayList(), Maps.newHashMap());
-        this.columnToIds = ImmutableMap.of();
+        super(OperatorType.LOGICAL_OLAP_SCAN, table, Maps.newHashMap());
         selectedPartitionId = Lists.newArrayList();
         selectedIndexId = table.getBaseIndexId();
         selectedTabletId = Lists.newArrayList();
     }
 
-    public LogicalOlapScanOperator(
-            OlapTable table,
-            List<ColumnRefOperator> outputColumns,
-            Map<ColumnRefOperator, Column> columnRefMap,
-            ImmutableMap<Column, Integer> columnToIds) {
-        super(OperatorType.LOGICAL_OLAP_SCAN, table, outputColumns, columnRefMap);
-        this.columnToIds = columnToIds;
+    public LogicalOlapScanOperator(OlapTable table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        super(OperatorType.LOGICAL_OLAP_SCAN, table, colRefToColumnMetaMap);
         selectedPartitionId = Lists.newArrayList();
         selectedIndexId = table.getBaseIndexId();
         selectedTabletId = Lists.newArrayList();
@@ -98,10 +89,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.selectedTabletId = selectedTabletId;
     }
 
-    public ImmutableMap<Column, Integer> getColumnToIds() {
-        return columnToIds;
-    }
-
     // TODO(kks): combine this method with PhysicalOlapScan::getDistributionSpec
     public HashDistributionSpec getDistributionSpec() {
         DistributionInfo distributionInfo = ((OlapTable) table).getDefaultDistributionInfo();
@@ -110,7 +97,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
         List<Integer> columnList = new ArrayList<>();
         for (Column distributedColumn : distributedColumns) {
-            columnList.add(columnToIds.get(distributedColumn));
+            columnList.add(getColumnReference(distributedColumn).getId());
         }
 
         HashDistributionDesc leftHashDesc =

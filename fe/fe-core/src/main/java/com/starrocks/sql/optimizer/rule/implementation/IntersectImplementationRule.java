@@ -25,6 +25,7 @@ public class IntersectImplementationRule extends ImplementationRule {
         PhysicalIntersectOperator physicalIntersect = new PhysicalIntersectOperator(setOperator.getOutputColumnRefOp(),
                 setOperator.getChildOutputColumns());
         physicalIntersect.setLimit(setOperator.getLimit());
+        physicalIntersect.setProjection(setOperator.getProjection());
         return Lists.newArrayList(OptExpression.create(physicalIntersect, input.getInputs()));
     }
 }

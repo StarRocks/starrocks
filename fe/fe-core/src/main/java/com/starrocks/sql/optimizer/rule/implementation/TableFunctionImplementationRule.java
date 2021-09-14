@@ -30,6 +30,7 @@ public class TableFunctionImplementationRule extends ImplementationRule {
                 logicalTableFunctionOperator.getOuterColumnRefSet());
         physicalLateral.setLimit(logicalTableFunctionOperator.getLimit());
         physicalLateral.setPredicate(logicalTableFunctionOperator.getPredicate());
+        physicalLateral.setProjection(logicalTableFunctionOperator.getProjection());
         return Lists.newArrayList(OptExpression.create(physicalLateral, input.getInputs()));
     }
 }

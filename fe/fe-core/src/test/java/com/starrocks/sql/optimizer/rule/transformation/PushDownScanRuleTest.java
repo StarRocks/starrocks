@@ -2,8 +2,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
@@ -38,8 +36,7 @@ public class PushDownScanRuleTest {
         ));
 
         OptExpression scan =
-                new OptExpression(new LogicalOlapScanOperator(
-                        table, Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of()));
+                new OptExpression(new LogicalOlapScanOperator(table, Maps.newHashMap()));
         optExpression.getInputs().add(scan);
 
         assertNull(((LogicalOlapScanOperator) scan.getOp()).getPredicate());

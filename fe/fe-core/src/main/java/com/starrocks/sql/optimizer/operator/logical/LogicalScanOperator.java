@@ -2,72 +2,81 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
-import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 public abstract class LogicalScanOperator extends LogicalOperator {
     protected final Table table;
-
-    protected List<ColumnRefOperator> outputColumns;
     /**
-     * ColumnRefMap is the map from column reference to starrocks column in meta
+     * colRefToColumnMetaMap is the map from column reference to starrocks column in meta
      * The ColumnRefMap contains Scan output columns and predicate used columns
      */
-    protected Map<ColumnRefOperator, Column> columnRefMap;
+    protected Map<ColumnRefOperator, Column> colRefToColumnMetaMap;
+    protected Map<Column, ColumnRefOperator> columnMetaToColRefMap;
 
     protected Map<String, PartitionColumnFilter> columnFilters;
 
-    public LogicalScanOperator(
-            OperatorType type,
-            Table table,
-            List<ColumnRefOperator> outputColumns,
-            Map<ColumnRefOperator, Column> columnRefMap) {
+    public LogicalScanOperator(OperatorType type, Table table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         super(type);
         this.table = Objects.requireNonNull(table, "table is null");
-        this.outputColumns = outputColumns;
-        this.columnRefMap = columnRefMap;
         this.columnFilters = Maps.newHashMap();
+
+        this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
+        this.columnMetaToColRefMap = new HashMap<>();
+        for (Map.Entry<ColumnRefOperator, Column> entry : colRefToColumnMetaMap.entrySet()) {
+            columnMetaToColRefMap.put(entry.getValue(), entry.getKey());
+        }
     }
 
     public Table getTable() {
         return table;
     }
 
-    public Map<ColumnRefOperator, Column> getColumnRefMap() {
-        return columnRefMap;
-    }
-
     public List<ColumnRefOperator> getOutputColumns() {
-        return this.outputColumns;
+        if (projection != null) {
+            return new ArrayList<>(projection.getColumnRefMap().keySet());
+        } else {
+            return new ArrayList<>(colRefToColumnMetaMap.keySet());
+        }
     }
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        return new ColumnRefSet(this.outputColumns);
+        if (projection != null) {
+            return new ColumnRefSet(new ArrayList<>(projection.getColumnRefMap().keySet()));
+        } else {
+            return new ColumnRefSet(new ArrayList<>(colRefToColumnMetaMap.keySet()));
+        }
     }
 
-    public void setOutputColumns(List<ColumnRefOperator> outputColumns) {
-        this.outputColumns = outputColumns;
+    public Map<ColumnRefOperator, Column> getColRefToColumnMetaMap() {
+        return colRefToColumnMetaMap;
     }
 
-    public void setColumnRefMap(Map<ColumnRefOperator, Column> columnRefMap) {
-        this.columnRefMap = columnRefMap;
+    public void setColRefToColumnMetaMap(Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
+        for (Map.Entry<ColumnRefOperator, Column> entry : colRefToColumnMetaMap.entrySet()) {
+            columnMetaToColRefMap.put(entry.getValue(), entry.getKey());
+        }
+    }
+
+    public ColumnRefOperator getColumnReference(Column column) {
+        return columnMetaToColRefMap.get(column);
     }
 
     public Map<String, PartitionColumnFilter> getColumnFilters() {
@@ -79,34 +88,10 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     }
 
     @Override
-    public int hashCode() {
-        int hash = 17;
-        hash = Utils.combineHash(hash, opType.hashCode());
-        hash = Utils.combineHash(hash, (int) table.getId());
-        return hash;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof LogicalScanOperator)) {
-            return false;
-        }
-
-        LogicalScanOperator rhs = (LogicalScanOperator) obj;
-        if (this == rhs) {
-            return true;
-        }
-
-        return table.getId() == rhs.getTable().getId() &&
-                outputColumns.equals(rhs.outputColumns);
-
-    }
-
-    @Override
     public String toString() {
         return "LogicalScanOperator" + " {" +
                 "table='" + table.getId() + '\'' +
-                ", outputColumns='" + outputColumns + '\'' +
+                ", outputColumns='" + projection + '\'' +
                 '}';
     }
 
@@ -114,27 +99,24 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         return visitor.visitLogicalTableScan(optExpression, context);
     }
 
-    public void tryExtendOutputColumns(Set<ColumnRefOperator> newOutputColumns) {
-        if (outputColumns.size() == 0 || newOutputColumns.size() != 0) {
-            return;
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
         }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        LogicalScanOperator that = (LogicalScanOperator) o;
+        return Objects.equals(table, that.table) && Objects.equals(colRefToColumnMetaMap, that.colRefToColumnMetaMap) &&
+                Objects.equals(columnFilters, that.columnFilters);
+    }
 
-        int smallestIndex = -1;
-        int smallestColumnLength = Integer.MAX_VALUE;
-        for (int index = 0; index < outputColumns.size(); ++index) {
-            Type columnType = outputColumns.get(index).getType();
-            if (smallestIndex == -1) {
-                smallestIndex = index;
-            }
-            if (columnType.isScalarType()) {
-                int columnLength = columnType.getSlotSize();
-                if (columnLength < smallestColumnLength) {
-                    smallestIndex = index;
-                    smallestColumnLength = columnLength;
-                }
-            }
-        }
-        Preconditions.checkArgument(smallestIndex != -1);
-        newOutputColumns.add(outputColumns.get(smallestIndex));
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), table, colRefToColumnMetaMap, columnFilters);
     }
 }

@@ -1,5 +1,4 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import avro.shaded.com.google.common.base.Preconditions;
@@ -11,7 +10,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -23,34 +22,33 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static java.util.function.Function.identity;
+import static java.util.function.UnaryOperator.identity;
 
-public class PruneScanColumnRule extends TransformationRule {
-    public static final PruneScanColumnRule OLAP_SCAN = new PruneScanColumnRule(OperatorType.LOGICAL_OLAP_SCAN);
-    public static final PruneScanColumnRule SCHEMA_SCAN = new PruneScanColumnRule(OperatorType.LOGICAL_SCHEMA_SCAN);
-    public static final PruneScanColumnRule MYSQL_SCAN = new PruneScanColumnRule(OperatorType.LOGICAL_MYSQL_SCAN);
-    public static final PruneScanColumnRule ES_SCAN = new PruneScanColumnRule(OperatorType.LOGICAL_ES_SCAN);
-
-    public PruneScanColumnRule(OperatorType logicalOperatorType) {
-        super(RuleType.TF_PRUNE_OLAP_SCAN_COLUMNS, Pattern.create(logicalOperatorType));
+public class PruneHiveScanColumnRule extends TransformationRule {
+    public PruneHiveScanColumnRule() {
+        super(RuleType.TF_PRUNE_OLAP_SCAN_COLUMNS, Pattern.create(OperatorType.LOGICAL_HIVE_SCAN));
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalScanOperator scanOperator = (LogicalScanOperator) input.getOp();
+        LogicalHiveScanOperator scanOperator = (LogicalHiveScanOperator) input.getOp();
         ColumnRefSet requiredOutputColumns = context.getTaskContext().get(0).getRequiredColumns();
 
         Set<ColumnRefOperator> scanColumns =
-                scanOperator.getOutputColumns().stream().filter(requiredOutputColumns::contains)
+                scanOperator.getColRefToColumnMetaMap().keySet().stream().filter(requiredOutputColumns::contains)
                         .collect(Collectors.toSet());
         scanColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
 
-        if (scanColumns.size() == 0) {
+        if (scanColumns.size() == 0 || scanOperator.getPartitionColumns().containsAll(scanColumns)) {
             List<ColumnRefOperator> outputColumns = new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet());
 
             int smallestIndex = -1;
             int smallestColumnLength = Integer.MAX_VALUE;
             for (int index = 0; index < outputColumns.size(); ++index) {
+                if (scanOperator.getPartitionColumns().contains(outputColumns.get(index).getName())) {
+                    continue;
+                }
+
                 if (smallestIndex == -1) {
                     smallestIndex = index;
                 }

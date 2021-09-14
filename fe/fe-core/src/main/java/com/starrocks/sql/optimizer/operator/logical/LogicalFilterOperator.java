@@ -9,6 +9,8 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
+
 public class LogicalFilterOperator extends LogicalOperator {
     public LogicalFilterOperator(ScalarOperator predicate) {
         super(OperatorType.LOGICAL_FILTER);
@@ -43,7 +45,11 @@ public class LogicalFilterOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        return expressionContext.getChildLogicalProperty(0).getOutputColumns();
+        if (projection != null) {
+            return new ColumnRefSet(new ArrayList<>(projection.getColumnRefMap().keySet()));
+        } else {
+            return expressionContext.getChildLogicalProperty(0).getOutputColumns();
+        }
     }
 
     @Override
