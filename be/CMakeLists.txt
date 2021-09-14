@@ -68,7 +68,6 @@ else()
 endif()
 message(STATUS "make test: ${MAKE_TEST}")
 
-option(WITH_MYSQL "Support access MySQL" ON)
 option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
 # Check gcc
@@ -178,10 +177,8 @@ set_target_properties(thrift PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 add_library(thriftnb STATIC IMPORTED)
 set_target_properties(thriftnb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libthriftnb.a)
 
-if (WITH_MYSQL)
-    add_library(mysql STATIC IMPORTED)
-    set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libmysqlclient.a)
-endif()
+add_library(mysql STATIC IMPORTED)
+set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/mariadb/libmariadbclient.a)
 
 if (WITH_HDFS)
     add_library(hdfs STATIC IMPORTED)
@@ -317,10 +314,6 @@ if (WITH_HDFS)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_WITH_HDFS")
 endif()
 
-if (WITH_MYSQL)
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_WITH_MYSQL")
-endif()
-
 if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -faligned-new")
 endif()
@@ -438,6 +431,17 @@ set(STARROCKS_LINK_LIBS
     ${WL_END_GROUP}
 )
 
+set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
+    mysql
+)
+
+if (WITH_HDFS)
+    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
+        hdfs
+        jvm
+        )
+endif()
+
 # Set thirdparty libraries
 set(STARROCKS_DEPENDENCIES
     ${STARROCKS_DEPENDENCIES}
@@ -483,19 +487,6 @@ set(STARROCKS_DEPENDENCIES
     ${WL_END_GROUP}
 )
 
-if (WITH_MYSQL)
-    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-        mysql
-        )
-endif()
-
-if (WITH_HDFS)
-    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-        hdfs
-        jvm
-        )
-endif()
-
 # Add all external dependencies. They should come after the starrocks libs.
 # static link gcc's lib
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
@@ -504,14 +495,8 @@ set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     -static-libgcc
 )
 
-if ("${CMAKE_BUILD_TYPE}" STREQUAL "BCC")
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-        -Wl,--dynamic-linker=/lib64/ld-linux-x86-64.so.2
-    )
-endif()
-
 # Add sanitize static link flags or tcmalloc
-if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE" OR "${CMAKE_BUILD_TYPE}" STREQUAL "BCC")
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} tcmalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)

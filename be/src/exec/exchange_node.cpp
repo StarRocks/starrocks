@@ -380,7 +380,7 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto exchange_operator = std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
                                                                              _num_senders, _input_row_desc);
     // A merging ExchangeSourceOperator should not be parallelized.
-    exchange_operator->set_num_driver_instances(_is_merging ? 1 : context->driver_instance_count());
+    exchange_operator->set_degree_of_parallelism(_is_merging ? 1 : context->degree_of_parallelism());
     operators.emplace_back(std::move(exchange_operator));
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));

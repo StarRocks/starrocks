@@ -468,8 +468,8 @@ void ExchangeSinkOperator::construct_brpc_attachment(PTransmitChunkParams* param
     }
 }
 
-OperatorPtr ExchangeSinkOperatorFactory::create(int32_t driver_instance_count, int32_t driver_sequence) {
-    _buffer->set_sinker_number(driver_instance_count);
+OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    _buffer->set_sinker_number(degree_of_parallelism);
     if (_part_type == TPartitionType::UNPARTITIONED || _destinations.size() == 1) {
         return std::make_shared<ExchangeSinkOperator>(_id, _plan_node_id, _buffer, _part_type, _destinations,
                                                       _sender_id, _dest_node_id, _partition_expr_ctxs);

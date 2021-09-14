@@ -20,6 +20,7 @@ namespace starrocks::pipeline {
 using namespace vectorized;
 Status OlapChunkSource::prepare(RuntimeState* state) {
     _runtime_state = state;
+    _scan_profile = state->runtime_profile();
 
     for (const auto& ctx_iter : _conjunct_ctxs) {
         // if conjunct is constant, compute direct and set eos = true

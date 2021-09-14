@@ -12,9 +12,9 @@ namespace starrocks::vectorized {
 class AggregateBlockingNode final : public AggregateBaseNode {
 public:
     AggregateBlockingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-            : AggregateBaseNode(pool, tnode, descs) {
-        _aggregator->set_aggr_phase(AggrPhase2);
-    };
+            : AggregateBaseNode(pool, tnode, descs) {}
+
+    Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 

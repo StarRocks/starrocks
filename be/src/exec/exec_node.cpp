@@ -546,13 +546,8 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         return Status::InternalError("Don't support HDFS table, you should rebuild StarRocks with WITH_HDFS option ON");
 #endif
     case TPlanNodeType::MYSQL_SCAN_NODE:
-#ifdef STARROCKS_WITH_MYSQL
         *node = pool->add(new vectorized::MysqlScanNode(pool, tnode, descs));
         return Status::OK();
-#else
-        return Status::InternalError(
-                "Don't support MySQL table, you should rebuild StarRocks with WITH_MYSQL option ON");
-#endif
     case TPlanNodeType::ES_HTTP_SCAN_NODE:
         *node = pool->add(new vectorized::EsHttpScanNode(pool, tnode, descs));
         return Status::OK();
@@ -576,14 +571,8 @@ Status ExecNode::create_node(RuntimeState* state, ObjectPool* pool, const TPlanN
 
     switch (tnode.node_type) {
     case TPlanNodeType::MYSQL_SCAN_NODE:
-#ifdef STARROCKS_WITH_MYSQL
         *node = pool->add(new MysqlScanNode(pool, tnode, descs));
         return Status::OK();
-#else
-        return Status::InternalError(
-                "Don't support MySQL table, you should rebuild StarRocks with WITH_MYSQL option ON");
-#endif
-
     case TPlanNodeType::ES_HTTP_SCAN_NODE:
         *node = pool->add(new EsHttpScanNode(pool, tnode, descs));
         return Status::OK();

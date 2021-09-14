@@ -10,21 +10,17 @@
 
 namespace starrocks::vectorized {
 
+Status AggregateBlockingNode::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(AggregateBaseNode::prepare(state));
+    _aggregator->set_aggr_phase(AggrPhase2);
+    return Status::OK();
+}
+
 Status AggregateBlockingNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(Expr::open(_aggregator->group_by_expr_ctxs(), state));
-    for (int i = 0; i < _aggregator->agg_fn_ctxs().size(); ++i) {
-        RETURN_IF_ERROR(Expr::open(_aggregator->agg_expr_ctxs()[i], state));
-    }
-
-    // Initial for FunctionContext of every aggregate functions
-    for (int i = 0; i < _aggregator->agg_fn_ctxs().size(); ++i) {
-        // initial const columns for i'th FunctionContext.
-        _aggregator->evaluate_const_columns(i);
-    }
-
+    RETURN_IF_ERROR(_aggregator->open(state));
     RETURN_IF_ERROR(_children[0]->open(state));
 
     ChunkPtr chunk;
@@ -143,18 +139,22 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
-
     context->maybe_interpolate_local_exchange(operators_with_sink);
+
     // shared by sink operator and source operator
-    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode);
+    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode, child(0)->row_desc());
 
     operators_with_sink.emplace_back(
             std::make_shared<AggregateBlockingSinkOperatorFactory>(context->next_operator_id(), id(), aggregator));
     context->add_pipeline(operators_with_sink);
 
     OpFactories operators_with_source;
-    operators_with_source.emplace_back(
-            std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(), id(), aggregator));
+    auto source_operator =
+            std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(), id(), aggregator);
+
+    // The merge-aggregation phase cannot be parallel, so we set the degree of parallism to 1
+    source_operator->set_degree_of_parallelism(1);
+    operators_with_source.push_back(std::move(source_operator));
     return operators_with_source;
 }
 

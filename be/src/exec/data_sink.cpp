@@ -77,7 +77,6 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
         sink->reset(tmp_sink);
         break;
     case TDataSinkType::MYSQL_TABLE_SINK: {
-#ifdef STARROCKS_WITH_MYSQL
         if (!thrift_sink.__isset.mysql_table_sink) {
             return Status::InternalError("Missing data buffer sink.");
         }
@@ -86,10 +85,6 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
         MysqlTableSink* mysql_tbl_sink = new MysqlTableSink(pool, row_desc, output_exprs);
         sink->reset(mysql_tbl_sink);
         break;
-#else
-        return Status::InternalError(
-                "Don't support MySQL table, you should rebuild StarRocks with WITH_MYSQL option ON");
-#endif
     }
 
     case TDataSinkType::EXPORT_SINK: {

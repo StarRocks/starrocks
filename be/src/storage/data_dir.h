@@ -55,7 +55,7 @@ public:
     void stop_bg_worker();
 
     const std::string& path() const { return _path; }
-    size_t path_hash() const { return _path_hash; }
+    int64_t path_hash() const { return _path_hash; }
     bool is_used() const { return _is_used; }
     void set_is_used(bool is_used) { _is_used = is_used; }
     int32_t cluster_id() const { return _cluster_id; }
@@ -138,7 +138,7 @@ private:
     bool _stop_bg_worker = false;
 
     std::string _path;
-    size_t _path_hash;
+    int64_t _path_hash;
     // user specified capacity
     int64_t _capacity_bytes;
     // the actual available capacity of the disk of this data dir
