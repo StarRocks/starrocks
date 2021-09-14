@@ -58,7 +58,7 @@ public:
 
     ~ResultSinkOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<ResultSinkOperator>(_id, _plan_node_id, _sink_type, _t_output_expr);
     }
 

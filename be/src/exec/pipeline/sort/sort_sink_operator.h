@@ -89,7 +89,7 @@ public:
 
     ~SortSinkOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         auto ope = std::make_shared<SortSinkOperator>(_id, _plan_node_id, _chunks_sorter, _sort_exec_exprs,
                                                       _order_by_types, _materialized_tuple_desc, _parent_node_row_desc,
                                                       _parent_node_child_row_desc);

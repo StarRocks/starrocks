@@ -53,7 +53,7 @@ public:
 
     ~SortSourceOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         auto ope = std::make_shared<SortSourceOperator>(_id, _plan_node_id, std::move(_chunks_sorter));
         return ope;
     }

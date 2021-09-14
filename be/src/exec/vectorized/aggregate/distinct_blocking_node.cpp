@@ -138,7 +138,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
                                                                                             id(), aggregator);
 
     // The merge-aggregation phase cannot be parallel, so we set the degree of parallism to 1
-    source_operator->set_num_driver_instances(1);
+    source_operator->set_degree_of_parallelism(1);
     operators_with_source.push_back(std::move(source_operator));
     return operators_with_source;
 }
