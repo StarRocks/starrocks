@@ -275,6 +275,9 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
     if (!base_migration_rlock.owns_lock()) {
         return Status::InternalError("Rwlock error");
     }
+    if (Tablet::check_migrate(tablet)) {
+        return Status::InternalError("tablet is migrating or has been migrated");
+    }
 
     OLAPStatus res = OLAP_SUCCESS;
     PUniqueId load_id;
@@ -325,6 +328,10 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                     if (!new_migration_rlock.owns_lock()) {
                         return Status::InternalError("Rwlock error");
                     }
+                    if (Tablet::check_migrate(related_tablet)) {
+                        return Status::InternalError("tablet is migrating or has been migrated");
+                    }
+
                     PUniqueId load_id;
                     load_id.set_hi(0);
                     load_id.set_lo(0);

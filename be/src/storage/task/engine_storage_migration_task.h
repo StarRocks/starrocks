@@ -35,12 +35,11 @@ public:
     OLAPStatus execute() override;
 
 public:
-    EngineStorageMigrationTask(TStorageMediumMigrateReq& storage_medium_migrate_req);
+    EngineStorageMigrationTask(TTabletId tablet_id, TSchemaHash schema_hash, DataDir* dest_store);
     ~EngineStorageMigrationTask() override {}
 
 private:
-    OLAPStatus _storage_medium_migrate(TTabletId tablet_id, TSchemaHash schema_hash,
-                                       TStorageMedium::type storage_medium);
+    OLAPStatus _storage_migrate(TabletSharedPtr tablet);
 
     void _generate_new_header(DataDir* store, const uint64_t new_shard, const TabletSharedPtr& tablet,
                               const std::vector<RowsetSharedPtr>& consistent_rowsets,
@@ -52,8 +51,9 @@ private:
                                           const std::vector<RowsetSharedPtr>& consistent_rowsets) const;
 
 private:
-    const TStorageMediumMigrateReq& _storage_medium_migrate_req;
+    TTabletId _tablet_id;
+    TSchemaHash _schema_hash;
+    DataDir* _dest_store;
 }; // EngineTask
-
 } // namespace starrocks
 #endif //STARROCKS_BE_SRC_OLAP_TASK_ENGINE_STORAGE_MIGRATION_TASK_H

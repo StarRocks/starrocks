@@ -92,6 +92,10 @@ OLAPStatus PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TP
     if (!base_migration_rlock.owns_lock()) {
         return OLAP_ERR_RWLOCK_ERROR;
     }
+    if (Tablet::check_migrate(tablet)) {
+        return OLAP_ERR_OTHER_ERROR;
+    }
+
     tablet->obtain_push_lock();
     PUniqueId load_id;
     load_id.set_hi(0);
@@ -141,6 +145,11 @@ OLAPStatus PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TP
                     tablet->release_push_lock();
                     return OLAP_ERR_RWLOCK_ERROR;
                 }
+                if (Tablet::check_migrate(related_tablet)) {
+                    tablet->release_push_lock();
+                    return OLAP_ERR_OTHER_ERROR;
+                }
+
                 PUniqueId load_id;
                 load_id.set_hi(0);
                 load_id.set_lo(0);

@@ -94,6 +94,7 @@ public:
     // for avoiding that all the tablet would be deployed one disk.
     std::vector<DataDir*> get_stores_for_create_tablet(TStorageMedium::type storage_medium);
     DataDir* get_store(const std::string& path);
+    DataDir* get_store(int64_t path_hash);
 
     uint32_t available_storage_medium_type_count() { return _available_storage_medium_type_count; }
 
