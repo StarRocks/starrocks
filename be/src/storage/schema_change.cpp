@@ -1285,7 +1285,7 @@ bool SchemaChangeWithSorting::process(RowsetReaderSharedPtr rowset_reader, Rowse
             goto SORTING_PROCESS_ERR;
         } else {
             // check allocator has enougth memory to do row-block sort
-            // in case of insufficient memory, row-block sort will fail which cause scheam change fail
+            // in case of insufficient memory, row-block sort will fail which cause schema change fail
             // if memory is not enough to do block sort, do internal-sorting frist to free memory
             if (!_row_block_allocator->is_memory_enough_to_sort(ref_row_block->row_block_info().row_num,
                                                                 row_block_sorter.allocated_rows())) {
