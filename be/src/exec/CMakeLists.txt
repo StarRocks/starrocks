@@ -181,6 +181,10 @@ set(EXEC_FILES
     pipeline/aggregate/aggregate_blocking_source_operator.cpp
     pipeline/aggregate/aggregate_streaming_sink_operator.cpp
     pipeline/aggregate/aggregate_streaming_source_operator.cpp
+    pipeline/aggregate/aggregate_distinct_blocking_sink_operator.cpp
+    pipeline/aggregate/aggregate_distinct_blocking_source_operator.cpp
+    pipeline/aggregate/aggregate_distinct_streaming_sink_operator.cpp
+    pipeline/aggregate/aggregate_distinct_streaming_source_operator.cpp
 )
 
 if (WITH_MYSQL)

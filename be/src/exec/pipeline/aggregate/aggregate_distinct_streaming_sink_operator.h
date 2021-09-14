@@ -6,13 +6,13 @@
 #include "exec/vectorized/aggregator.h"
 
 namespace starrocks::pipeline {
-class AggregateStreamingSinkOperator : public Operator {
+class AggregateDistinctStreamingSinkOperator : public Operator {
 public:
-    AggregateStreamingSinkOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : Operator(id, "aggregate_streaming_sink", plan_node_id), _aggregator(aggregator) {
+    AggregateDistinctStreamingSinkOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
+            : Operator(id, "aggregate_distinct_streaming_sink", plan_node_id), _aggregator(aggregator) {
         _aggregator->set_aggr_phase(AggrPhase1);
     }
-    ~AggregateStreamingSinkOperator() = default;
+    ~AggregateDistinctStreamingSinkOperator() = default;
 
     bool has_output() const override { return false; }
     bool need_input() const override { return true; }
@@ -41,15 +41,15 @@ private:
     bool _is_finished = false;
 };
 
-class AggregateStreamingSinkOperatorFactory final : public OperatorFactory {
+class AggregateDistinctStreamingSinkOperatorFactory final : public OperatorFactory {
 public:
-    AggregateStreamingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
+    AggregateDistinctStreamingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
             : OperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
 
-    ~AggregateStreamingSinkOperatorFactory() override = default;
+    ~AggregateDistinctStreamingSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
-        return std::make_shared<AggregateStreamingSinkOperator>(_id, _plan_node_id, _aggregator);
+        return std::make_shared<AggregateDistinctStreamingSinkOperator>(_id, _plan_node_id, _aggregator);
     }
 
 private:

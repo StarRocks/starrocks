@@ -2,13 +2,25 @@
 
 #include "exec/vectorized/aggregate/distinct_blocking_node.h"
 
+#include "exec/pipeline/aggregate/aggregate_distinct_blocking_sink_operator.h"
+#include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
+#include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/vectorized/aggregator.h"
+
 namespace starrocks::vectorized {
+
+Status DistinctBlockingNode::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(AggregateBaseNode::prepare(state));
+    _aggregator->set_aggr_phase(AggrPhase2);
+    return Status::OK();
+}
 
 Status DistinctBlockingNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_ERROR(Expr::open(_aggregator->group_by_expr_ctxs(), state));
+    RETURN_IF_ERROR(_aggregator->open(state));
     RETURN_IF_ERROR(_children[0]->open(state));
 
     ChunkPtr chunk;
@@ -106,6 +118,29 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
 
     DCHECK_CHUNK(*chunk);
     return Status::OK();
+}
+
+std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+    OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
+    context->maybe_interpolate_local_exchange(operators_with_sink);
+
+    // shared by sink operator and source operator
+    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode, child(0)->row_desc());
+
+    operators_with_sink.emplace_back(std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(
+            context->next_operator_id(), id(), aggregator));
+    context->add_pipeline(operators_with_sink);
+
+    OpFactories operators_with_source;
+    auto source_operator = std::make_shared<AggregateDistinctBlockingSourceOperatorFactory>(context->next_operator_id(),
+                                                                                            id(), aggregator);
+
+    // The merge-aggregation phase cannot be parallel, so we set the degree of parallism to 1
+    source_operator->set_num_driver_instances(1);
+    operators_with_source.push_back(std::move(source_operator));
+    return operators_with_source;
 }
 
 } // namespace starrocks::vectorized

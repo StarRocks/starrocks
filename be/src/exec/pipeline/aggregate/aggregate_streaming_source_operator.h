@@ -9,7 +9,7 @@ namespace starrocks::pipeline {
 class AggregateStreamingSourceOperator : public SourceOperator {
 public:
     AggregateStreamingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : SourceOperator(id, "aggregate_streaming_source_operator", plan_node_id), _aggregator(aggregator) {}
+            : SourceOperator(id, "aggregate_streaming_source", plan_node_id), _aggregator(aggregator) {}
     ~AggregateStreamingSourceOperator() = default;
 
     bool has_output() const override;
@@ -25,15 +25,15 @@ private:
 
     // It is used to perform aggregation algorithms
     // shared by AggregateStreamingSinkOperator
-    AggregatorPtr _aggregator;
+    AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
     bool _is_finished = false;
 };
 
-class AggregateStreamingSourceOperatorFactory final : public OperatorFactory {
+class AggregateStreamingSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     AggregateStreamingSourceOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : OperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
+            : SourceOperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
 
     ~AggregateStreamingSourceOperatorFactory() override = default;
 
@@ -42,6 +42,6 @@ public:
     }
 
 private:
-    AggregatorPtr _aggregator;
+    AggregatorPtr _aggregator = nullptr;
 };
 } // namespace starrocks::pipeline

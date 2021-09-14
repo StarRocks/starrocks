@@ -6,11 +6,11 @@
 #include "exec/vectorized/aggregator.h"
 
 namespace starrocks::pipeline {
-class AggregateBlockingSourceOperator : public SourceOperator {
+class AggregateDistinctStreamingSourceOperator : public SourceOperator {
 public:
-    AggregateBlockingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : SourceOperator(id, "aggregate_blocking_source", plan_node_id), _aggregator(aggregator) {}
-    ~AggregateBlockingSourceOperator() = default;
+    AggregateDistinctStreamingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
+            : SourceOperator(id, "aggregate_distinct_streaming_source", plan_node_id), _aggregator(aggregator) {}
+    ~AggregateDistinctStreamingSourceOperator() = default;
 
     bool has_output() const override;
     bool is_finished() const override;
@@ -21,22 +21,24 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
+    void _output_chunk_from_hash_set(vectorized::ChunkPtr* chunk);
+
     // It is used to perform aggregation algorithms
-    // shared by AggregateBlockingSinkOperator
+    // shared by AggregateStreamingSinkOperator
     AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
     bool _is_finished = false;
 };
 
-class AggregateBlockingSourceOperatorFactory final : public SourceOperatorFactory {
+class AggregateDistinctStreamingSourceOperatorFactory final : public SourceOperatorFactory {
 public:
-    AggregateBlockingSourceOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
+    AggregateDistinctStreamingSourceOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
             : SourceOperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
 
-    ~AggregateBlockingSourceOperatorFactory() override = default;
+    ~AggregateDistinctStreamingSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
-        return std::make_shared<AggregateBlockingSourceOperator>(_id, _plan_node_id, _aggregator);
+        return std::make_shared<AggregateDistinctStreamingSourceOperator>(_id, _plan_node_id, _aggregator);
     }
 
 private:
