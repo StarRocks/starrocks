@@ -113,12 +113,10 @@ set(RUNTIME_FILES
     runtime_filter_worker.cpp
 )
 
-if (WITH_MYSQL)
-    set(RUNTIME_FILES ${RUNTIME_FILES}
-        mysql_table_writer.cpp
-        mysql_table_sink.cpp
-        )
-endif()
+set(RUNTIME_FILES ${RUNTIME_FILES}
+    mysql_table_writer.cpp
+    mysql_table_sink.cpp
+)
 
 add_library(Runtime STATIC
     ${RUNTIME_FILES}
