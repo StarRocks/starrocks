@@ -20,10 +20,8 @@ import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
-import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
@@ -484,21 +482,19 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
     private Void tryGatherForBroadcastJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
         List<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>> result = Lists.newArrayList();
-        if ((context.getChildOperator(0) instanceof LogicalAggregationOperator)) {
-            LogicalAggregationOperator childOperator = (LogicalAggregationOperator) context.getChildOperator(0);
-            if (childOperator.getType().equals(AggType.GLOBAL) && childOperator.getGroupingKeys().isEmpty()) {
-                for (Pair<PhysicalPropertySet, List<PhysicalPropertySet>> outputInputProp : outputInputProps) {
-                    PhysicalPropertySet left = outputInputProp.second.get(0);
-                    PhysicalPropertySet right = outputInputProp.second.get(1);
-                    if (left.getDistributionProperty().isAny() && right.getDistributionProperty().isBroadcast()) {
-                        result.add(
-                                new Pair<>(distributeRequirements(),
-                                        Lists.newArrayList(distributeRequirements(), right)));
-                    }
+        if (context.getChildLogicalProperty(0).isGatherToOneInstance()) {
+            for (Pair<PhysicalPropertySet, List<PhysicalPropertySet>> outputInputProp : outputInputProps) {
+                PhysicalPropertySet left = outputInputProp.second.get(0);
+                PhysicalPropertySet right = outputInputProp.second.get(1);
+                if (left.getDistributionProperty().isAny() && right.getDistributionProperty().isBroadcast()) {
+                    result.add(new Pair<>(distributeRequirements(),
+                            Lists.newArrayList(distributeRequirements(), right)));
+                } else {
+                    result.add(outputInputProp);
                 }
-                outputInputProps = result;
-                return visitOperator(node, context);
             }
+            outputInputProps = result;
+            return visitOperator(node, context);
         }
         return visitOperator(node, context);
     }
@@ -591,7 +587,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
         // If scan tablet sum leas than 1, do one phase local aggregate is enough
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0
-                && context.getRootProperty().isExecuteInOneInstance()
+                && context.getRootProperty().isExecuteInOneTablet()
                 && node.getType().isGlobal() && !node.isSplit()) {
             outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList(PhysicalPropertySet.EMPTY)));
             return visitAggregateRequirements(node, context);
