@@ -40,7 +40,6 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    Status get_chunk(RuntimeState* state, vectorized::ChunkPtr* chunk);
     Status get_next_merging(RuntimeState* state, vectorized::ChunkPtr* chunk);
 
     int32_t _num_sender;

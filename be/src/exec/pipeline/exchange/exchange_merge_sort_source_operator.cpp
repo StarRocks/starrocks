@@ -42,22 +42,12 @@ void ExchangeMergeSortSourceOperator::finish(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> ExchangeMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
     auto chunk = std::make_shared<vectorized::Chunk>();
-    get_chunk(state, &chunk);
+    get_next_merging(state, &chunk);
     return std::move(chunk);
-}
-
-Status ExchangeMergeSortSourceOperator::get_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    if (is_finished()) {
-        *chunk = std::make_shared<vectorized::Chunk>();
-        return Status::OK();
-    }
-
-    return get_next_merging(state, chunk);
 }
 
 Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, ChunkPtr* chunk) {
     RETURN_IF_ERROR(state->check_query_state("Exchange, while merging next."));
-    *chunk = std::make_shared<vectorized::Chunk>();
     if (is_finished()) {
         return Status::OK();
     }
