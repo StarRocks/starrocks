@@ -151,6 +151,8 @@ public class LogicalProperty implements Property {
         }
     }
 
+    // At present, only the case of second phase aggregation is handled.
+    // Satisfying nodes can be added according to the situation in the future
     static class GatherInstanceVisitor extends OperatorVisitor<Boolean, ExpressionContext> {
         @Override
         public Boolean visitOperator(Operator node, ExpressionContext context) {
