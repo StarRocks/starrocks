@@ -24,11 +24,13 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.system.Backend;
+import com.starrocks.thrift.TStorageMedium;
 
 import java.util.List;
 import java.util.Map;
@@ -36,8 +38,8 @@ import java.util.Map;
 public class BackendProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("RootPath").add("DataUsedCapacity").add("OtherUsedCapacity").add("AvailCapacity")
-            .add("TotalCapacity").add("TotalUsedPct").add("State").add("PathHash")
-            .build();
+            .add("TotalCapacity").add("TotalUsedPct").add("State").add("PathHash").add("StorageMedium")
+            .add("TabletNum").build();
 
     private Backend backend;
 
@@ -53,20 +55,22 @@ public class BackendProcNode implements ProcNodeInterface {
         result.setNames(TITLE_NAMES);
 
         for (Map.Entry<String, DiskInfo> entry : backend.getDisks().entrySet()) {
+            DiskInfo diskInfo = entry.getValue();
+
             List<String> info = Lists.newArrayList();
             info.add(entry.getKey());
 
             // data used
-            long dataUsedB = entry.getValue().getDataUsedCapacityB();
+            long dataUsedB = diskInfo.getDataUsedCapacityB();
             Pair<Double, String> dataUsedUnitPair = DebugUtil.getByteUint(dataUsedB);
             info.add(DebugUtil.DECIMAL_FORMAT_SCALE_3.format(dataUsedUnitPair.first) + " "
                     + dataUsedUnitPair.second);
 
             // avail
-            long availB = entry.getValue().getAvailableCapacityB();
+            long availB = diskInfo.getAvailableCapacityB();
             Pair<Double, String> availUnitPair = DebugUtil.getByteUint(availB);
             // total
-            long totalB = entry.getValue().getTotalCapacityB();
+            long totalB = diskInfo.getTotalCapacityB();
             Pair<Double, String> totalUnitPair = DebugUtil.getByteUint(totalB);
             // other
             long otherB = totalB - availB;
@@ -85,8 +89,20 @@ public class BackendProcNode implements ProcNodeInterface {
             }
             info.add(String.format("%.2f", used) + " %");
 
-            info.add(entry.getValue().getState().name());
-            info.add(String.valueOf(entry.getValue().getPathHash()));
+            info.add(diskInfo.getState().name());
+            info.add(String.valueOf(diskInfo.getPathHash()));
+
+            // medium
+            TStorageMedium medium = diskInfo.getStorageMedium();
+            if (medium == null) {
+                info.add("N/A");
+            } else {
+                info.add(medium.name());
+            }
+
+            // tablet num
+            info.add(String.valueOf(Catalog.getCurrentInvertedIndex().getTabletNumByBackendIdAndPathHash(
+                    backend.getId(), diskInfo.getPathHash())));
 
             result.addRow(info);
         }

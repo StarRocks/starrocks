@@ -212,7 +212,7 @@ public class TabletChecker extends MasterDaemon {
             try {
                 List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(db.getClusterName(), true);
                 for (Table table : catalog.getTablesIncludeRecycleBin(db)) {
-                    if (!table.needSchedule()) {
+                    if (!table.needSchedule(false)) {
                         continue;
                     }
 
