@@ -18,10 +18,25 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.List;
 import java.util.Map;
 
+// For optimize sql like: select sum(x) from (select k1, sum(v1) as x from test group by k1);
+//
+// Before:
+//      Aggregate
+//          |
+//       Project
+//          |
+//      Aggregate
+//          |
+//         Node
+//
+// After:
+//      Aggregate
+//          |
+//         Node
 public class MergeTwoAggRule extends TransformationRule {
     private static final List<String> ALLOW_MERGE_AGGREGATE_FUNCTIONS = Lists.newArrayList(FunctionSet.SUM,
-            FunctionSet.MAX, FunctionSet.MIN, FunctionSet.MAX, FunctionSet.MIN, FunctionSet.BITMAP_UNION,
-            FunctionSet.HLL_UNION, FunctionSet.PERCENTILE_UNION);
+            FunctionSet.MAX, FunctionSet.MIN, FunctionSet.BITMAP_UNION, FunctionSet.HLL_UNION,
+            FunctionSet.PERCENTILE_UNION);
 
     public MergeTwoAggRule() {
         super(RuleType.TF_MERGE_TWO_AGG_RULE, Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(
@@ -41,7 +56,7 @@ public class MergeTwoAggRule extends TransformationRule {
             return false;
         }
 
-        if (aggregate2.getPredicate() != null && aggregate2.hasLimit()) {
+        if (aggregate2.getPredicate() != null || aggregate2.hasLimit()) {
             return false;
         }
 
