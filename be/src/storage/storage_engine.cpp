@@ -406,6 +406,16 @@ DataDir* StorageEngine::get_store(const std::string& path) {
     return it->second;
 }
 
+DataDir* StorageEngine::get_store(int64_t path_hash) {
+    std::lock_guard<std::mutex> l(_store_lock);
+    for (auto& it : _store_map) {
+        if (it.second->path_hash() == path_hash) {
+            return it.second;
+        }
+    }
+    return nullptr;
+}
+
 static bool too_many_disks_are_failed(uint32_t unused_num, uint32_t total_num) {
     return ((total_num == 0) || (unused_num * 100 / total_num > config::max_percentage_of_error_disk));
 }
