@@ -61,6 +61,7 @@ public:
     virtual ~RowBlockSorter();
 
     bool sort(RowBlock** row_block);
+    size_t allocated_rows() { return _swap_row_block->capacity(); }
 
 private:
     static bool _row_cursor_comparator(const RowCursor* a, const RowCursor* b) { return compare_row(*a, *b) < 0; }
@@ -853,6 +854,11 @@ RowBlockAllocator::~RowBlockAllocator() {
     }
 }
 
+bool RowBlockAllocator::can_sort(size_t num_rows, size_t allocated_rows) {
+    size_t row_block_size = _row_len * (num_rows - allocated_rows);
+    return _memory_allocated + row_block_size < _memory_limitation;
+}
+
 OLAPStatus RowBlockAllocator::allocate(RowBlock** row_block, size_t num_rows, bool null_supported) {
     size_t row_block_size = _row_len * num_rows;
 
@@ -1277,6 +1283,15 @@ bool SchemaChangeWithSorting::process(RowsetReaderSharedPtr rowset_reader, Rowse
             LOG(WARNING) << "failed to allocate RowBlock.";
             result = false;
             goto SORTING_PROCESS_ERR;
+        } else {
+            // check allocator has enougth memory to do row-block sort
+            if (!_row_block_allocator->can_sort(ref_row_block->row_block_info().row_num,
+                                                row_block_sorter.allocated_rows())) {
+                if (new_row_block != nullptr) {
+                    _row_block_allocator->release(new_row_block);
+                    new_row_block = nullptr;
+                }
+            }
         }
 
         if (new_row_block == nullptr) {
