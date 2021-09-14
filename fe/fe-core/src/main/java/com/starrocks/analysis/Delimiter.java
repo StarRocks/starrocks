@@ -70,8 +70,8 @@ public class Delimiter {
                        ch = '\'';
                        break;
                    default:
-                       i--;
-                       break;
+                       writer.append(ch);
+                       continue;
                }
                if (outputOneChar) {
                    writer.append(ch);
