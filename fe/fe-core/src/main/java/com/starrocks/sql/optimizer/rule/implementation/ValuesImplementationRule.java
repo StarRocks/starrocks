@@ -25,6 +25,7 @@ public class ValuesImplementationRule extends ImplementationRule {
                 physicalValues = new PhysicalValuesOperator(valuesOperator.getColumnRefSet(), valuesOperator.getRows());
         physicalValues.setPredicate(valuesOperator.getPredicate());
         physicalValues.setLimit(valuesOperator.getLimit());
+        physicalValues.setProjection(valuesOperator.getProjection());
         return Lists.newArrayList(OptExpression.create(physicalValues, Collections.emptyList()));
     }
 }

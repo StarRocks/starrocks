@@ -19,9 +19,8 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
     private EsTablePartitions esTablePartitions;
     private List<EsShardPartitions> selectedIndex = Lists.newArrayList();
 
-    public LogicalEsScanOperator(Table table, List<ColumnRefOperator> outputColumns,
-                                 Map<ColumnRefOperator, Column> columnRefMap) {
-        super(OperatorType.LOGICAL_ES_SCAN, table, outputColumns, columnRefMap);
+    public LogicalEsScanOperator(Table table, Map<ColumnRefOperator, Column> columnRefMap) {
+        super(OperatorType.LOGICAL_ES_SCAN, table, columnRefMap);
         this.esTablePartitions = ((EsTable) table).getEsTablePartitions();
     }
 

@@ -31,8 +31,8 @@ public abstract class MVAggRewrite {
         scanOperator.getOutputColumns().remove(baseColumnRef);
         scanOperator.getOutputColumns().add(mvColumnRef);
 
-        scanOperator.getColumnRefMap().remove(baseColumnRef);
-        scanOperator.getColumnRefMap().put(mvColumnRef, mvColumn);
+        scanOperator.getColRefToColumnMetaMap().remove(baseColumnRef);
+        scanOperator.getColRefToColumnMetaMap().put(mvColumnRef, mvColumn);
     }
 
     // Use mv column instead of query column

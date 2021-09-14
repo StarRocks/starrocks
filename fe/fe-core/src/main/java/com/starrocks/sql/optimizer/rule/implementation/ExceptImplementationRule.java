@@ -14,9 +14,8 @@ import java.util.List;
 
 public class ExceptImplementationRule extends ImplementationRule {
     public ExceptImplementationRule() {
-        super(RuleType.IMP_EXCEPT,
-                Pattern.create(OperatorType.LOGICAL_EXCEPT)
-                        .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF)));
+        super(RuleType.IMP_EXCEPT, Pattern.create(OperatorType.LOGICAL_EXCEPT)
+                .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF)));
     }
 
     @Override
@@ -25,6 +24,7 @@ public class ExceptImplementationRule extends ImplementationRule {
         PhysicalExceptOperator physicalExcept =
                 new PhysicalExceptOperator(setOperator.getOutputColumnRefOp(), setOperator.getChildOutputColumns());
         physicalExcept.setLimit(setOperator.getLimit());
+        physicalExcept.setProjection(setOperator.getProjection());
         return Lists.newArrayList(OptExpression.create(physicalExcept, input.getInputs()));
     }
 }

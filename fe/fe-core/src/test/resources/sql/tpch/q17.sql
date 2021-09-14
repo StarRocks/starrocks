@@ -20,7 +20,7 @@ where
 AGGREGATE ([GLOBAL] aggregate [{48: sum(6: L_EXTENDEDPRICE)=sum(48: sum(6: L_EXTENDEDPRICE))}] group by [[]] having [null]
     EXCHANGE GATHER
         AGGREGATE ([LOCAL] aggregate [{48: sum(6: L_EXTENDEDPRICE)=sum(6: L_EXTENDEDPRICE)}] group by [[]] having [null]
-            INNER JOIN (join-predicate [2: L_PARTKEY = 18: P_PARTKEY AND 5: L_QUANTITY < multiply(0.2, 45: avg(32: L_QUANTITY))] post-join-predicate [null])
+            INNER JOIN (join-predicate [5: L_QUANTITY < multiply(0.2, 45: avg(32: L_QUANTITY)) AND 2: L_PARTKEY = 18: P_PARTKEY] post-join-predicate [null])
                 SCAN (columns[2: L_PARTKEY, 5: L_QUANTITY, 6: L_EXTENDEDPRICE] predicate[null])
                 EXCHANGE BROADCAST
                     INNER JOIN (join-predicate [29: L_PARTKEY = 18: P_PARTKEY] post-join-predicate [null])

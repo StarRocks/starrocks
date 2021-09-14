@@ -117,7 +117,7 @@ public class Utils {
         if (OperatorType.LOGICAL_OLAP_SCAN.equals(groupExpression.getOp().getOpType())) {
             LogicalOlapScanOperator loso = (LogicalOlapScanOperator) groupExpression.getOp();
 
-            return ImmutableList.<ColumnRefOperator>builder().addAll(loso.getColumnRefMap().keySet()).build();
+            return ImmutableList.<ColumnRefOperator>builder().addAll(loso.getColRefToColumnMetaMap().keySet()).build();
         }
 
         List<Group> groups = groupExpression.getInputs();

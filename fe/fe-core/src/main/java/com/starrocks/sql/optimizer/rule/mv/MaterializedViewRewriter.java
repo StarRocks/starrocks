@@ -12,7 +12,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
@@ -22,9 +21,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
@@ -70,11 +67,11 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<Void, Materia
     public Void visitLogicalTableScan(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
         LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) optExpression.getOp();
 
-        if (scanOperator.getColumnRefMap().containsKey(context.queryColumnRef)) {
+        if (scanOperator.getColRefToColumnMetaMap().containsKey(context.queryColumnRef)) {
             scanOperator.getOutputColumns().remove(context.queryColumnRef);
             scanOperator.getOutputColumns().add(context.mvColumnRef);
-            scanOperator.getColumnRefMap().remove(context.queryColumnRef);
-            scanOperator.getColumnRefMap().put(context.mvColumnRef, context.mvColumn);
+            scanOperator.getColRefToColumnMetaMap().remove(context.queryColumnRef);
+            scanOperator.getColRefToColumnMetaMap().put(context.mvColumnRef, context.mvColumn);
         }
         return null;
     }
@@ -160,19 +157,6 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<Void, Materia
     @Override
     public Void visitLogicalJoin(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
         optExpression.getInputs().forEach(e -> rewrite(e, context));
-
-        LogicalJoinOperator joinOperator = (LogicalJoinOperator) optExpression.getOp();
-        List<ColumnRefOperator> pruneOutputColumns = joinOperator.getPruneOutputColumns();
-
-        List<ColumnRefOperator> newPruneOutputColumns = new ArrayList<>();
-        for (ColumnRefOperator c : pruneOutputColumns) {
-            if (c.equals(context.queryColumnRef)) {
-                newPruneOutputColumns.add(context.mvColumnRef);
-            } else {
-                newPruneOutputColumns.add(c);
-            }
-        }
-        joinOperator.setPruneOutputColumns(newPruneOutputColumns);
         return null;
     }
 }

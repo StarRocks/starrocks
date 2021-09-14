@@ -11,7 +11,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -103,13 +102,6 @@ public class PushDownJoinAggRule extends TransformationRule {
         List<ColumnRefOperator> leftOutput =
                 Arrays.stream(leftExpression.getOutputColumns().getColumnIds()).mapToObj(factory::getColumnRef).collect(
                         Collectors.toList());
-        // For LogicalJoinOperator, use pruneOutputColumns instead of output columns
-        if (leftExpression.getOp() instanceof LogicalJoinOperator) {
-            LogicalJoinOperator leftJoinOperator = (LogicalJoinOperator) leftExpression.getOp();
-            if (leftJoinOperator.getPruneOutputColumns() != null) {
-                leftOutput = Lists.newArrayList(leftJoinOperator.getPruneOutputColumns());
-            }
-        }
 
         if (!checkIsUnique(leftOutput, leftExpression)) {
             return Collections.emptyList();
@@ -163,12 +155,6 @@ public class PushDownJoinAggRule extends TransformationRule {
             }
         }
 
-        // calculate the prune output columns for newJoin
-        ColumnRefSet newJoinPruneOutPutColumns = new ColumnRefSet(leftOutput);
-        newJoinPruneOutPutColumns.union(rightAggExpression.inputAt(0).getOutputColumns());
-        newJoin.setPruneOutputColumns(
-                newJoinPruneOutPutColumns.getStream().mapToObj(factory::getColumnRef).collect(Collectors.toList()));
-
         LogicalAggregationOperator newAgg = new LogicalAggregationOperator(rightAggOperator.getType(), leftOutput,
                 rightAggOperator.getAggregations());
         newAggFilterPredicate.add(rightAggOperator.getPredicate());
@@ -190,7 +176,7 @@ public class PushDownJoinAggRule extends TransformationRule {
                                                GroupExpression groupExpression) {
         if (OperatorType.LOGICAL_OLAP_SCAN.equals(groupExpression.getOp().getOpType())) {
             LogicalOlapScanOperator loso = (LogicalOlapScanOperator) groupExpression.getOp();
-            Map<ColumnRefOperator, Column> askColumnsMap = loso.getColumnRefMap();
+            Map<ColumnRefOperator, Column> askColumnsMap = loso.getColRefToColumnMetaMap();
 
             List<String> keyColumns = getTpchMockPrimaryKeys(loso.getOlapTable().getName());
 

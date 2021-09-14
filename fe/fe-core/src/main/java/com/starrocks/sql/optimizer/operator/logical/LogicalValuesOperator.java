@@ -10,6 +10,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -33,7 +34,11 @@ public class LogicalValuesOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        return new ColumnRefSet(columnRefSet);
+        if (projection != null) {
+            return new ColumnRefSet(new ArrayList<>(projection.getColumnRefMap().keySet()));
+        } else {
+            return new ColumnRefSet(columnRefSet);
+        }
     }
 
     @Override

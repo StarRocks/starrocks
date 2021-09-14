@@ -30,6 +30,7 @@ public class HashAggImplementationRule extends ImplementationRule {
                 logical.isSplit());
         physical.setPredicate(logical.getPredicate());
         physical.setLimit(logical.getLimit());
+        physical.setProjection(logical.getProjection());
         OptExpression result = OptExpression.create(physical, input.getInputs());
         return Lists.newArrayList(result);
     }

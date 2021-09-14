@@ -22,10 +22,11 @@ public class EsScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalEsScanOperator logical = (LogicalEsScanOperator) input.getOp();
         PhysicalEsScanOperator physical =
-                new PhysicalEsScanOperator(logical.getTable(), logical.getColumnRefMap(), logical.getSelectedIndex());
+                new PhysicalEsScanOperator(logical.getTable(), logical.getColRefToColumnMetaMap(), logical.getSelectedIndex());
 
         physical.setPredicate(logical.getPredicate());
         physical.setLimit(logical.getLimit());
+        physical.setProjection(logical.getProjection());
 
         OptExpression result = new OptExpression(physical);
         return Lists.newArrayList(result);

@@ -160,6 +160,7 @@ public class JoinPredicateUtils {
                 LogicalJoinOperator crossJoin =
                         new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null, join.getJoinHint());
                 crossJoin.setPredicate(postJoinPredicate);
+                crossJoin.setProjection(join.getProjection());
                 root = OptExpression.create(crossJoin, input.getInputs());
             } else {
                 throw new SemanticException("No equal on predicate in " + join.getJoinType() + " is not supported");
@@ -169,11 +170,13 @@ public class JoinPredicateUtils {
             if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {
                 newJoin = new LogicalJoinOperator(JoinOperator.INNER_JOIN,
                         Utils.compoundAnd(joinPredicate, postJoinPredicate), join.getJoinHint());
+                newJoin.setProjection(join.getProjection());
             } else {
                 newJoin =
                         new LogicalJoinOperator(join.getJoinType(), Utils.compoundAnd(joinPredicate, postJoinPredicate),
                                 join.getJoinHint());
                 newJoin.setPredicate(join.getPredicate());
+                newJoin.setProjection(join.getProjection());
             }
             root = OptExpression.create(newJoin, input.getInputs());
         }

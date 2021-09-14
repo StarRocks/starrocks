@@ -52,10 +52,14 @@ public class LogicalWindowOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        ColumnRefSet columns = new ColumnRefSet();
-        columns.union(new ArrayList<>(windowCall.keySet()));
-        columns.union(expressionContext.getChildLogicalProperty(0).getOutputColumns());
-        return columns;
+        if (projection != null) {
+            return new ColumnRefSet(new ArrayList<>(projection.getColumnRefMap().keySet()));
+        } else {
+            ColumnRefSet columns = new ColumnRefSet();
+            columns.union(new ArrayList<>(windowCall.keySet()));
+            columns.union(expressionContext.getChildLogicalProperty(0).getOutputColumns());
+            return columns;
+        }
     }
 
     @Override

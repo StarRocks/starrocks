@@ -14,9 +14,8 @@ import java.util.List;
 
 public class RepeatImplementationRule extends ImplementationRule {
     public RepeatImplementationRule() {
-        super(RuleType.IMP_REPEAT,
-                Pattern.create(OperatorType.LOGICAL_REPEAT)
-                        .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF)));
+        super(RuleType.IMP_REPEAT, Pattern.create(OperatorType.LOGICAL_REPEAT)
+                .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF)));
     }
 
     @Override

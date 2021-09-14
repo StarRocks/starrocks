@@ -86,7 +86,7 @@ public class UtilsTest {
             minTimes = 0;
             result = OperatorType.LOGICAL_OLAP_SCAN;
 
-            so1.getColumnRefMap();
+            so1.getColRefToColumnMetaMap();
             minTimes = 0;
             result = col1;
 
@@ -94,7 +94,7 @@ public class UtilsTest {
             minTimes = 0;
             result = OperatorType.LOGICAL_OLAP_SCAN;
 
-            so2.getColumnRefMap();
+            so2.getColRefToColumnMetaMap();
             minTimes = 0;
             result = col2;
         }};

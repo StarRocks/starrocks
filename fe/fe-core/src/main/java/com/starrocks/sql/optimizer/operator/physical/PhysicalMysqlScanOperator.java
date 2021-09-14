@@ -13,23 +13,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.Map;
 
-public class PhysicalMysqlScanOperator extends PhysicalOperator {
-    private final Table table;
-
-    private final Map<ColumnRefOperator, Column> columnRefMap;
+public class PhysicalMysqlScanOperator extends PhysicalScanOperator {
 
     public PhysicalMysqlScanOperator(Table table, Map<ColumnRefOperator, Column> columnRefMap) {
-        super(OperatorType.PHYSICAL_MYSQL_SCAN);
-        this.table = table;
-        this.columnRefMap = columnRefMap;
-    }
-
-    public Table getTable() {
-        return table;
-    }
-
-    public Map<ColumnRefOperator, Column> getColumnRefMap() {
-        return columnRefMap;
+        super(OperatorType.PHYSICAL_MYSQL_SCAN, table, columnRefMap);
     }
 
     @Override
@@ -51,11 +38,11 @@ public class PhysicalMysqlScanOperator extends PhysicalOperator {
             return false;
         }
         PhysicalMysqlScanOperator that = (PhysicalMysqlScanOperator) o;
-        return Objects.equal(table, that.table) && Objects.equal(columnRefMap, that.columnRefMap);
+        return Objects.equal(table, that.table) && Objects.equal(colRefToColumnMetaMap, that.colRefToColumnMetaMap);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(table, columnRefMap);
+        return Objects.hashCode(table, colRefToColumnMetaMap);
     }
 }

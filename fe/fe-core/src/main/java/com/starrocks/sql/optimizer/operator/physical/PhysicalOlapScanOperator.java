@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -22,13 +21,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
-public class PhysicalOlapScanOperator extends PhysicalOperator {
-    private final List<ColumnRefOperator> outputColumns;
-    private final Map<ColumnRefOperator, Column> columnRefMap;
-    private final ImmutableMap<Column, Integer> columnToIds;
-    private OlapTable table;
-
+public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private long selectedIndexId;
     private List<Long> selectedPartitionId;
     private List<Long> selectedTabletId;
@@ -36,31 +31,12 @@ public class PhysicalOlapScanOperator extends PhysicalOperator {
     private boolean isPreAggregation;
     private String turnOffReason;
 
-    public PhysicalOlapScanOperator(OlapTable table,
-                                    List<ColumnRefOperator> outputColumns,
-                                    Map<ColumnRefOperator, Column> columnRefMap,
-                                    ImmutableMap<Column, Integer> columnToIds) {
-        super(OperatorType.PHYSICAL_OLAP_SCAN);
-        this.table = table;
-        this.outputColumns = outputColumns;
-        this.columnRefMap = columnRefMap;
-        this.columnToIds = columnToIds;
-    }
+    private HashDistributionSpec hashDistributionSpec;
 
-    public List<ColumnRefOperator> getOutputColumns() {
-        return outputColumns;
-    }
-
-    public Map<ColumnRefOperator, Column> getColumnRefMap() {
-        return columnRefMap;
-    }
-
-    public ImmutableMap<Column, Integer> getColumnToIds() {
-        return columnToIds;
-    }
-
-    public void setTable(OlapTable table) {
-        this.table = table;
+    public PhysicalOlapScanOperator(OlapTable table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                    HashDistributionSpec hashDistributionDesc) {
+        super(OperatorType.PHYSICAL_OLAP_SCAN, table, colRefToColumnMetaMap);
+        this.hashDistributionSpec = hashDistributionDesc;
     }
 
     public long getSelectedIndexId() {
@@ -85,10 +61,6 @@ public class PhysicalOlapScanOperator extends PhysicalOperator {
 
     public void setSelectedTabletId(List<Long> selectedTabletId) {
         this.selectedTabletId = selectedTabletId;
-    }
-
-    public OlapTable getTable() {
-        return table;
     }
 
     public boolean isPreAggregation() {
@@ -126,16 +98,16 @@ public class PhysicalOlapScanOperator extends PhysicalOperator {
             return true;
         }
 
-        return table.getId() == rhs.getTable().getId() &&
-                outputColumns.equals(rhs.outputColumns);
-
+        return table.getId() == rhs.getTable().getId()
+                && Objects.equals(colRefToColumnMetaMap, rhs.getColRefToColumnMetaMap())
+                && Objects.equals(projection, rhs.getProjection());
     }
 
     @Override
     public String toString() {
         return "PhysicalOlapScan" + " {" +
                 "table='" + table.getId() + '\'' +
-                ", outputColumns='" + outputColumns + '\'' +
+                ", outputColumns='" + new ArrayList<>(projection.getColumnRefMap().keySet()) + '\'' +
                 '}';
     }
 
@@ -151,19 +123,9 @@ public class PhysicalOlapScanOperator extends PhysicalOperator {
 
     // TODO(kks): combine this method with LogicalOlapScanOperator::getDistributionSpec
     public HashDistributionSpec getDistributionSpec() {
-        DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
         // In UT, the distributionInfo may be null
-        if (distributionInfo instanceof HashDistributionInfo) {
-            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-            List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
-            List<Integer> columnList = new ArrayList<>();
-            for (Column distributedColumn : distributedColumns) {
-                columnList.add(columnToIds.get(distributedColumn));
-            }
-
-            HashDistributionDesc leftHashDesc = new HashDistributionDesc(columnList,
-                    HashDistributionDesc.SourceType.LOCAL);
-            return DistributionSpec.createHashDistributionSpec(leftHashDesc);
+        if (hashDistributionSpec != null) {
+            return hashDistributionSpec;
         } else {
             // 1023 is a placeholder column id, only in order to pass UT
             HashDistributionDesc leftHashDesc = new HashDistributionDesc(Collections.singletonList(1023),
@@ -175,8 +137,7 @@ public class PhysicalOlapScanOperator extends PhysicalOperator {
     @Override
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet set = super.getUsedColumns();
-        outputColumns.forEach(set::union);
-        columnRefMap.keySet().forEach(set::union);
+        colRefToColumnMetaMap.keySet().forEach(set::union);
         return set;
     }
 }

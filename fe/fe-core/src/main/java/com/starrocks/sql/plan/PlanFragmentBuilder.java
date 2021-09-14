@@ -69,7 +69,9 @@ import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.NodeOperator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
@@ -201,6 +203,17 @@ public class PlanFragmentBuilder {
             this.columnRefFactory = columnRefFactory;
         }
 
+        public PlanFragment visit(OptExpression optExpression, ExecPlan context) {
+            PlanFragment fragment = optExpression.getOp().accept(this, optExpression, context);
+            Projection projection = ((NodeOperator) optExpression.getOp()).getProjection();
+
+            if (projection == null) {
+                return fragment;
+            } else {
+                return buildProjectNode(projection, fragment, context);
+            }
+        }
+
         @Override
         public PlanFragment visitPhysicalProject(OptExpression optExpr, ExecPlan context) {
             PhysicalProjectOperator node = (PhysicalProjectOperator) optExpr.getOp();
@@ -262,11 +275,71 @@ public class PlanFragmentBuilder {
             return inputFragment;
         }
 
+        public PlanFragment buildProjectNode(Projection node, PlanFragment inputFragment, ExecPlan context) {
+            if (node == null) {
+                return inputFragment;
+            }
+            Preconditions.checkState(!node.getColumnRefMap().isEmpty());
+
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+
+            Map<SlotId, Expr> commonSubOperatorMap = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : node.getCommonSubOperatorMap().entrySet()) {
+                Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
+                                node.getCommonSubOperatorMap()));
+
+                commonSubOperatorMap.put(new SlotId(entry.getKey().getId()), expr);
+
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setIsNullable(expr.isNullable());
+                slotDescriptor.setIsMaterialized(false);
+                slotDescriptor.setType(expr.getType());
+                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+            }
+
+            Map<SlotId, Expr> projectMap = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : node.getColumnRefMap().entrySet()) {
+                Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(), node.getColumnRefMap()));
+
+                projectMap.put(new SlotId(entry.getKey().getId()), expr);
+
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setIsNullable(expr.isNullable());
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(expr.getType());
+
+                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+            }
+
+            ProjectNode projectNode =
+                    new ProjectNode(context.getPlanCtx().getNextNodeId(),
+                            tupleDescriptor,
+                            inputFragment.getPlanRoot(),
+                            projectMap,
+                            commonSubOperatorMap);
+
+            projectNode.setHasNullableGenerateChild();
+            //projectNode.computeStatistics(optExpr.getStatistics());
+            for (SlotId sid : projectMap.keySet()) {
+                SlotDescriptor slotDescriptor = tupleDescriptor.getSlot(sid.asInt());
+                slotDescriptor.setIsNullable(slotDescriptor.getIsNullable() | projectNode.isHasNullableGenerateChild());
+            }
+            tupleDescriptor.computeMemLayout();
+
+            projectNode.setLimit(inputFragment.getPlanRoot().getLimit());
+            inputFragment.setPlanRoot(projectNode);
+            return inputFragment;
+        }
+
         @Override
         public PlanFragment visitPhysicalOlapScan(OptExpression optExpr, ExecPlan context) {
             PhysicalOlapScanOperator node = (PhysicalOlapScanOperator) optExpr.getOp();
 
-            OlapTable referenceTable = node.getTable();
+            OlapTable referenceTable = (OlapTable) node.getTable();
             context.getDescTbl().addReferencedTable(referenceTable);
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(referenceTable);
@@ -319,7 +392,7 @@ public class PlanFragmentBuilder {
             }
 
             // set slot
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());
@@ -485,7 +558,7 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(node.getTable());
 
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());

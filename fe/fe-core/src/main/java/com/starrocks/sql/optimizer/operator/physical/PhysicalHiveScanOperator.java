@@ -21,7 +21,7 @@ import java.util.Map;
 public class PhysicalHiveScanOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> outputColumns;
     private final Map<ColumnRefOperator, Column> columnRefMap;
-    private Table table;
+    private final Table table;
     private final Collection<Long> selectedPartitionIds;
     // id -> partition key
     private final Map<Long, PartitionKey> idToPartitionKey;

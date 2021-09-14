@@ -247,6 +247,7 @@ public class SplitAggregateRule extends TransformationRule {
         global.setSplit();
         global.setPredicate(oldAgg.getPredicate());
         global.setLimit(oldAgg.getLimit());
+        global.setProjection(oldAgg.getProjection());
         OptExpression globalOptExpression = OptExpression.create(global, localOptExpression);
 
         return Lists.newArrayList(globalOptExpression);
@@ -278,6 +279,7 @@ public class SplitAggregateRule extends TransformationRule {
         global.setSingleDistinctFunctionPos(singleDistinctFunctionPos);
         global.setPredicate(oldAgg.getPredicate());
         global.setLimit(oldAgg.getLimit());
+        global.setProjection(oldAgg.getProjection());
         OptExpression globalOptExpression = OptExpression.create(global, distinctGlobalOptExpression);
 
         return Lists.newArrayList(globalOptExpression);
@@ -326,6 +328,7 @@ public class SplitAggregateRule extends TransformationRule {
         global.setSplit();
         global.setPredicate(oldAgg.getPredicate());
         global.setLimit(oldAgg.getLimit());
+        global.setProjection(oldAgg.getProjection());
         OptExpression globalOptExpression = OptExpression.create(global, distinctLocalExpression);
 
         return Lists.newArrayList(globalOptExpression);

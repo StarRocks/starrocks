@@ -9,23 +9,17 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-
-import java.util.List;
 
 public class PhysicalHashJoinOperator extends PhysicalOperator {
     private final JoinOperator joinType;
     private final ScalarOperator joinPredicate;
     private String joinHint;
-    private final List<ColumnRefOperator> pruneOutputColumns;
 
-    public PhysicalHashJoinOperator(JoinOperator joinType, ScalarOperator joinPredicate,
-                                    List<ColumnRefOperator> pruneOutputColumns) {
+    public PhysicalHashJoinOperator(JoinOperator joinType, ScalarOperator joinPredicate) {
         super(OperatorType.PHYSICAL_HASH_JOIN);
         this.joinType = joinType;
         this.joinPredicate = joinPredicate;
-        this.pruneOutputColumns = pruneOutputColumns;
     }
 
     public JoinOperator getJoinType() {
@@ -42,10 +36,6 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
 
     public String getJoinHint() {
         return joinHint;
-    }
-
-    public List<ColumnRefOperator> getPruneOutputColumns() {
-        return pruneOutputColumns;
     }
 
     @Override
@@ -84,11 +74,11 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
         }
         PhysicalHashJoinOperator that = (PhysicalHashJoinOperator) o;
         return joinType == that.joinType && Objects.equal(joinPredicate, that.joinPredicate) &&
-                Objects.equal(joinHint, that.joinHint) && Objects.equal(pruneOutputColumns, that.pruneOutputColumns);
+                Objects.equal(joinHint, that.joinHint) && Objects.equal(projection, that.projection);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(joinType, joinPredicate, joinHint);
+        return Objects.hashCode(joinType, joinPredicate, joinHint, projection);
     }
 }

@@ -9,8 +9,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.rewrite.AddProjectForJoinOnBinaryPredicatesRule;
-import com.starrocks.sql.optimizer.rewrite.AddProjectForJoinPruneRule;
 import com.starrocks.sql.optimizer.rewrite.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
@@ -124,8 +122,7 @@ public class Optimizer {
         // So we need to explicitly derive all group logic property again
         memo.deriveAllGroupLogicalProperty();
 
-        // Phase 3: optimize based on memo and group
-        tree = memo.getRootGroup().extractLogicalTree();
+        // Phase 3: optimize based on memo and grouptree = memo.getRootGroup().extractLogicalTree();
 
         if (!connectContext.getSessionVariable().isDisableJoinReorder()) {
             if (Utils.countInnerJoinNodeSize(tree) >
@@ -145,16 +142,14 @@ public class Optimizer {
                 rootTaskContext, memo.getRootGroup()));
 
         context.getTaskScheduler().pushTask(new DeriveStatsTask(
-                rootTaskContext, memo.getRootGroup().getFirstLogicalExpression(),
-                memo.getRootGroup().getLogicalProperty().getOutputColumns()));
+                rootTaskContext, memo.getRootGroup().getFirstLogicalExpression()));
 
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
 
         OptExpression result = extractBestPlan(requiredProperty, memo.getRootGroup());
         tryOpenPreAggregate(result);
-        result = new AddProjectForJoinOnBinaryPredicatesRule().rewrite(result, columnRefFactory);
-        result = new AddProjectForJoinPruneRule((ColumnRefSet) requiredColumns.clone())
-                .rewrite(result, columnRefFactory);
+        //result = new AddProjectForJoinOnBinaryPredicatesRule().rewrite(result, columnRefFactory);
+        //result = new AddProjectForJoinPruneRule((ColumnRefSet) requiredColumns.clone()).rewrite(result, columnRefFactory);
         // Rewrite Exchange on top of Sort to Final Sort
         result = new ExchangeSortToMergeRule().rewrite(result);
 
