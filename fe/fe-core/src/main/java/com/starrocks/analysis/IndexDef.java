@@ -129,7 +129,7 @@ public class IndexDef {
                     colType.isFixedPointType() || colType.isStringType() || colType == PrimitiveType.BOOLEAN)) {
                 throw new AnalysisException(colType + " is not supported in bitmap index. "
                         + "invalid column: " + indexColName);
-            } else if (((keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) && !column.isKey())) {
+            } else if ((keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) && !column.isKey()) {
                 throw new AnalysisException(
                         "BITMAP index only used in columns of DUP_KEYS/PRIMARY_KEYS table or key columns of"
                                 + " UNIQUE_KEYS/AGG_KEYS table. invalid column: " + indexColName);
