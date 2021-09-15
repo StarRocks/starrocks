@@ -73,10 +73,10 @@ THRIFT_SOURCE=thrift-0.13.0
 THRIFT_MD5SUM="38a27d391a2b03214b444cb13d5664f1"
 
 # protobuf
-PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.5.1.tar.gz"
-PROTOBUF_NAME=protobuf-3.5.1.tar.gz
-PROTOBUF_SOURCE=protobuf-3.5.1
-PROTOBUF_MD5SUM="710f1a75983092c9b45ecef207236104"
+PROTOBUF_DOWNLOAD="https://github.com/google/protobuf/archive/v3.14.0.tar.gz"
+PROTOBUF_NAME=protobuf-3.14.0.tar.gz
+PROTOBUF_SOURCE=protobuf-3.14.0
+PROTOBUF_MD5SUM="0c9d2a96f3656ba7ef3b23b533fb6170"
 
 # gflags
 GFLAGS_DOWNLOAD="https://github.com/gflags/gflags/archive/v2.2.2.tar.gz"
@@ -158,10 +158,10 @@ LEVELDB_SOURCE=leveldb-1.20
 LEVELDB_MD5SUM="298b5bddf12c675d6345784261302252"
 
 # brpc
-BRPC_DOWNLOAD="https://github.com/apache/incubator-brpc/archive/0.9.5.tar.gz"
-BRPC_NAME=incubator-brpc-0.9.5.tar.gz
-BRPC_SOURCE=incubator-brpc-0.9.5
-BRPC_MD5SUM="c9f46e4c97a9cd5f836ba2c6c56978dd"
+BRPC_DOWNLOAD="https://github.com/apache/incubator-brpc/archive/0.9.7.tar.gz"
+BRPC_NAME=incubator-brpc-0.9.7.tar.gz
+BRPC_SOURCE=incubator-brpc-0.9.7
+BRPC_MD5SUM="a5b79339d139d1c55d39689c0a69bcef"
 
 # rocksdb
 ROCKSDB_DOWNLOAD="https://github.com/facebook/rocksdb/archive/refs/tags/v6.22.1.zip"

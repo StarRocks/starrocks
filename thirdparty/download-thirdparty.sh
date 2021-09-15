@@ -143,7 +143,7 @@ do
         URL="${REPOSITORY_URL}/${!NAME}"
         download_func ${!NAME} ${URL} $TP_SOURCE_DIR ${!MD5SUM}
         if [ "$?x" == "0x" ]; then
-            #try to download from home 
+            #try to download from home
             URL=$TP_ARCH"_DOWNLOAD"
             download_func ${!NAME} ${!URL} $TP_SOURCE_DIR ${!MD5SUM}
             if [ "$?x" == "0x" ]; then
@@ -235,7 +235,7 @@ echo "Finished patching $GLOG_SOURCE"
 # re2 patch
 cd $TP_SOURCE_DIR/$RE2_SOURCE
 if [ ! -f $PATCHED_MARK ]; then
-    patch -p0 < $TP_PATCH_DIR/re2-2017-05-01.patch 
+    patch -p0 < $TP_PATCH_DIR/re2-2017-05-01.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -272,6 +272,10 @@ echo "Finished patching $LZ4_SOURCE"
 cd $TP_SOURCE_DIR/$BRPC_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "incubator-brpc-0.9.5" ]; then
     patch -p1 < $TP_PATCH_DIR/incubator-brpc-0.9.5.patch
+    touch $PATCHED_MARK
+fi
+if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "incubator-brpc-0.9.7" ]; then
+    patch -p1 < $TP_PATCH_DIR/incubator-brpc-0.9.7.patch
     touch $PATCHED_MARK
 fi
 cd -
