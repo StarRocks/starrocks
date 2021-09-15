@@ -6,8 +6,8 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
-import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -78,7 +78,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     private static final String V3 = "v3";
 
     @Test
-    public void testAggWithLowCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+    public void testAggWithLowCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V2));
@@ -98,7 +98,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testAggWithHighCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+    public void testAggWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V2));
@@ -118,7 +118,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testSortWithLowCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+    public void testSortWithLowCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V1, V2));
@@ -135,7 +135,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testSortWithHighCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+    public void testSortWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V1, V2));
@@ -152,7 +152,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testTopNWithLowCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+    public void testTopNWithLowCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V1, V2));
@@ -169,7 +169,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testTopNWithHighCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+    public void testTopNWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V1, V2));
@@ -187,7 +187,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testDistinctWithoutGroupByWithLowCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage)
+    public void testDistinctWithoutGroupByWithLowCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage)
             throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(4);
         new Expectations() {
@@ -215,7 +215,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testDistinctWithoutGroupByWithHighCardinalityForceOneStage(
-            @Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+            @Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(1);
         new Expectations() {
             {
@@ -234,7 +234,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testDistinctWithGroupByWithLowCardinalityForceThreeStage(
-            @Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+            @Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(3);
         new Expectations() {
             {
@@ -254,7 +254,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testDistinctWithGroupByWithHighCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage)
+    public void testDistinctWithGroupByWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage)
             throws Exception {
         new Expectations() {
             {
@@ -271,7 +271,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testPredicateRewrittenByProjectWithLowCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage)
+    public void testPredicateRewrittenByProjectWithLowCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage)
             throws Exception {
         new Expectations() {
             {
@@ -289,7 +289,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testPredicateRewrittenByProjectWithHighCardinality(
-            @Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+            @Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V2, V3));
