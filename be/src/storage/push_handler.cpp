@@ -198,14 +198,11 @@ OLAPStatus PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TP
         }
     }
 
-    // write
     if (push_type == PUSH_NORMAL_V2) {
-        res = _convert_v2(tablet_vars->at(0).tablet, tablet_vars->at(1).tablet, &(tablet_vars->at(0).rowset_to_add),
-                          &(tablet_vars->at(1).rowset_to_add));
+        res = _convert_v2(tablet_vars->at(0).tablet, &tablet_vars->at(0).rowset_to_add);
     } else {
         DCHECK_EQ(push_type, PUSH_FOR_DELETE);
-        res = _convert(tablet_vars->at(0).tablet, tablet_vars->at(1).tablet, &(tablet_vars->at(0).rowset_to_add),
-                       &(tablet_vars->at(1).rowset_to_add));
+        res = _convert(tablet_vars->at(0).tablet, &tablet_vars->at(0).rowset_to_add);
     }
     if (res != OLAP_SUCCESS) {
         LOG(WARNING) << "fail to convert tmp file when realtime push. res=" << res
@@ -247,8 +244,7 @@ OLAPStatus PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TP
     return res;
 }
 
-OLAPStatus PushHandler::_convert(TabletSharedPtr cur_tablet, TabletSharedPtr new_tablet, RowsetSharedPtr* cur_rowset,
-                                 RowsetSharedPtr* new_rowset) {
+OLAPStatus PushHandler::_convert(TabletSharedPtr cur_tablet, RowsetSharedPtr* cur_rowset) {
     OLAPStatus res = OLAP_SUCCESS;
     uint32_t num_rows = 0;
     PUniqueId load_id;
@@ -273,7 +269,7 @@ OLAPStatus PushHandler::_convert(TabletSharedPtr cur_tablet, TabletSharedPtr new
         context.tablet_schema_hash = cur_tablet->schema_hash();
         context.rowset_type = BETA_ROWSET;
         context.rowset_path_prefix = cur_tablet->tablet_path();
-        context.tablet_schema = &(cur_tablet->tablet_schema());
+        context.tablet_schema = &cur_tablet->tablet_schema();
         context.rowset_state = PREPARED;
         context.txn_id = _request.transaction_id;
         context.load_id = load_id;
@@ -315,23 +311,7 @@ OLAPStatus PushHandler::_convert(TabletSharedPtr cur_tablet, TabletSharedPtr new
     return res;
 }
 
-void PushHandler::_get_tablet_infos(const std::vector<TabletVars>& tablet_vars,
-                                    std::vector<TTabletInfo>* tablet_info_vec) {
-    for (const TabletVars& tablet_var : tablet_vars) {
-        if (tablet_var.tablet.get() == nullptr) {
-            continue;
-        }
-
-        TTabletInfo tablet_info;
-        tablet_info.tablet_id = tablet_var.tablet->tablet_id();
-        tablet_info.schema_hash = tablet_var.tablet->schema_hash();
-        (void)StorageEngine::instance()->tablet_manager()->report_tablet_info(&tablet_info);
-        tablet_info_vec->push_back(tablet_info);
-    }
-}
-
-OLAPStatus PushHandler::_convert_v2(TabletSharedPtr cur_tablet, TabletSharedPtr new_tablet, RowsetSharedPtr* cur_rowset,
-                                    RowsetSharedPtr* new_rowset) {
+OLAPStatus PushHandler::_convert_v2(TabletSharedPtr cur_tablet, RowsetSharedPtr* cur_rowset) {
     OLAPStatus res = OLAP_SUCCESS;
     uint32_t num_rows = 0;
     PUniqueId load_id;
@@ -353,7 +333,7 @@ OLAPStatus PushHandler::_convert_v2(TabletSharedPtr cur_tablet, TabletSharedPtr 
         context.tablet_schema_hash = cur_tablet->schema_hash();
         context.rowset_type = BETA_ROWSET;
         context.rowset_path_prefix = cur_tablet->tablet_path();
-        context.tablet_schema = &(cur_tablet->tablet_schema());
+        context.tablet_schema = &cur_tablet->tablet_schema();
         context.rowset_state = PREPARED;
         context.txn_id = _request.transaction_id;
         context.load_id = load_id;
@@ -456,6 +436,20 @@ OLAPStatus PushHandler::_convert_v2(TabletSharedPtr cur_tablet, TabletSharedPtr 
     VLOG(10) << "convert delta file end. res=" << res << ", tablet=" << cur_tablet->full_name() << ", processed_rows"
              << num_rows;
     return res;
+}
+
+void PushHandler::_get_tablet_infos(const std::vector<TabletVars>& tablet_vars,
+                                    std::vector<TTabletInfo>* tablet_info_vec) {
+    for (const TabletVars& tablet_var : tablet_vars) {
+        if (tablet_var.tablet.get() == nullptr) {
+            continue;
+        }
+        TTabletInfo tablet_info;
+        tablet_info.tablet_id = tablet_var.tablet->tablet_id();
+        tablet_info.schema_hash = tablet_var.tablet->schema_hash();
+        (void)StorageEngine::instance()->tablet_manager()->report_tablet_info(&tablet_info);
+        tablet_info_vec->push_back(tablet_info);
+    }
 }
 
 OLAPStatus PushBrokerReader::init(const Schema* schema, const TBrokerScanRange& t_scan_range,
