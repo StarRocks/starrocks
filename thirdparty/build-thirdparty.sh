@@ -393,18 +393,6 @@ build_bzip() {
     make -j$PARALLEL install PREFIX=$TP_INSTALL_DIR
 }
 
-# lzo2
-build_lzo2() {
-    check_if_source_exist $LZO2_SOURCE
-    cd $TP_SOURCE_DIR/$LZO2_SOURCE
-
-    CPPFLAGS="-I${TP_INCLUDE_DIR} -fPIC" \
-    LDFLAGS="-L${TP_LIB_DIR}" \
-    CFLAGS="-fPIC" \
-    ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static
-    make -j$PARALLEL && make install
-}
-
 # curl
 build_curl() {
     check_if_source_exist $CURL_SOURCE
@@ -605,7 +593,7 @@ build_bitshuffle() {
             objcopy --redefine-syms=renames.txt $tmp_obj $dst_obj
         else
             mv $tmp_obj $dst_obj
-        fi  
+        fi
         to_link="$to_link $dst_obj"
     done
     rm -f libbitshuffle.a
@@ -648,7 +636,7 @@ build_orc() {
     -DZLIB_HOME=$TP_INSTALL_DIR\
     -DBUILD_LIBHDFSPP=OFF \
     -DBUILD_CPP_TESTS=OFF \
-    -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR 
+    -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR
 
     make -j$PARALLEL && make install
 }
@@ -661,22 +649,13 @@ build_cctz() {
     make -j$PARALLEL && PREFIX=${TP_INSTALL_DIR} make install
 }
 
-#benchmark
-build_benchmark() {
-    check_if_source_exist $BENCHMARK_SOURCE
-    cd $TP_SOURCE_DIR/$BENCHMARK_SOURCE
-    mkdir -p build && cd build
-    cmake -DCMAKE_BUILD_TYPE=Release -DBENCHMARK_DOWNLOAD_DEPENDENCIES=OFF -DBENCHMARK_ENABLE_GTEST_TESTS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../
-    make -j$PARALLEL && make install
-}
-
 #fmt
 build_fmt() {
     check_if_source_exist $FMT_SOURCE
     cd $TP_SOURCE_DIR/$FMT_SOURCE
     mkdir -p build && cd build
     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
-			-DCMAKE_INSTALL_LIBDIR=lib64
+            -DCMAKE_INSTALL_LIBDIR=lib64
     make -j$PARALLEL && make install
 }
 
@@ -717,12 +696,12 @@ build_jdk() {
 }
 
 # ragel
-# ragel-6.9+ is used by hypercan, so we build it first. 
+# ragel-6.9+ is used by hypercan, so we build it first.
 build_ragel() {
     check_if_source_exist $RAGEL_SOURCE
     cd $TP_SOURCE_DIR/$RAGEL_SOURCE
     ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static
-    make -j$PARALLEL && make install    
+    make -j$PARALLEL && make install
 }
 
 #hyperscan
@@ -748,7 +727,6 @@ build_libevent
 build_zlib
 build_lz4
 build_bzip
-build_lzo2
 build_openssl
 build_boost # must before thrift
 build_protobuf
@@ -771,7 +749,6 @@ build_s2
 build_bitshuffle
 build_croaringbitmap
 build_cctz
-build_benchmark
 build_fmt
 build_ryu
 build_breakpad
