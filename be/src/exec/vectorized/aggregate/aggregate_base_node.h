@@ -23,7 +23,7 @@ public:
 
 protected:
     const TPlanNode _tnode;
-    AggregatorPtr _aggregator;
+    AggregatorPtr _aggregator = nullptr;
     bool _child_eos = false;
 };
 

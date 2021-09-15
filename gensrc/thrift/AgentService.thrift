@@ -143,10 +143,12 @@ struct TCloneReq {
     // these are visible version(hash) actually
     5: optional Types.TVersion committed_version
     6: optional Types.TVersionHash committed_version_hash // Deprecated
-    7: optional i32 task_version;
-    8: optional i64 src_path_hash;
-    9: optional i64 dest_path_hash;
-    10: optional i32 timeout_s;
+    7: optional i32 task_version
+    8: optional i64 src_path_hash
+    9: optional i64 dest_path_hash
+    10: optional i32 timeout_s
+
+    30: optional bool is_local
 }
 
 struct TStorageMediumMigrateReq {

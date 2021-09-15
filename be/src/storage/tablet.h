@@ -170,6 +170,15 @@ public:
     inline std::mutex& get_cumulative_lock() { return _cumulative_lock; }
 
     inline std::shared_mutex& get_migration_lock() { return _migration_lock; }
+    // should use with migration lock.
+    bool is_migrating() const { return _is_migrating; }
+    // should use with migration lock.
+    void set_is_migrating(bool is_migrating) { _is_migrating = is_migrating; }
+
+    // check tablet is migrating or has been migrated.
+    // if tablet is migrating or has been migrated, return true.
+    // should use with migration lock.
+    static bool check_migrate(const TabletSharedPtr& tablet);
 
     // operation for compaction
     bool can_do_compaction();
@@ -270,7 +279,10 @@ private:
     std::mutex _ingest_lock;
     std::mutex _base_lock;
     std::mutex _cumulative_lock;
+
     std::shared_mutex _migration_lock;
+    // should use with migration lock.
+    std::atomic<bool> _is_migrating{false};
 
     // TODO(lingbin): There is a _meta_lock TabletMeta too, there should be a comment to
     // explain how these two locks work together.

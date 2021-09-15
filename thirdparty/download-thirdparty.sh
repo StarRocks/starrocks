@@ -241,16 +241,6 @@ fi
 cd -
 echo "Finished patching $RE2_SOURCE"
 
-# mysql patch
-cd $TP_SOURCE_DIR/$MYSQL_SOURCE
-if [ ! -f $PATCHED_MARK ]; then
-    patch -p0 < $TP_PATCH_DIR/mysql-5.7.18.patch
-	patch -p0 < $TP_PATCH_DIR/mysql-5.7.18-boost.patch
-    touch $PATCHED_MARK
-fi
-cd -
-echo "Finished patching $MYSQL_SOURCE"
-
 # libevent patch
 cd $TP_SOURCE_DIR/$LIBEVENT_SOURCE
 if [ ! -f $PATCHED_MARK ]; then

@@ -89,18 +89,35 @@ OLAPStatus DeltaWriter::init() {
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
     _tablet = tablet_mgr->get_tablet(_req.tablet_id, _req.schema_hash);
     if (_tablet == nullptr) {
-        LOG(WARNING) << "fail to find tablet . tablet_id=" << _req.tablet_id << ", schema_hash=" << _req.schema_hash;
+        LOG(WARNING) << "fail to find tablet. tablet_id=" << _req.tablet_id << ", schema_hash=" << _req.schema_hash;
         return OLAP_ERR_TABLE_NOT_FOUND;
     }
 
-    {
-        std::shared_lock base_migration_rlock(_tablet->get_migration_lock(), std::try_to_lock);
-        if (!base_migration_rlock.owns_lock()) {
-            return OLAP_ERR_RWLOCK_ERROR;
+    // The tablet may have been migrated during delta writer init,
+    // and the latest tablet needs to be obtained when loading.
+    // Here, the while loop checks whether the obtained tablet has changed
+    // to get the latest tablet.
+    while (true) {
+        std::shared_lock base_migration_rlock(_tablet->get_migration_lock());
+        TabletSharedPtr new_tablet;
+        if (!_tablet->is_migrating()) {
+            // maybe migration just finish, get the tablet again
+            new_tablet = tablet_mgr->get_tablet(_req.tablet_id, _req.schema_hash);
+            if (new_tablet == nullptr) {
+                LOG(WARNING) << "fail to find tablet. tablet_id=" << _req.tablet_id
+                             << ", schema_hash=" << _req.schema_hash;
+                return OLAP_ERR_TABLE_NOT_FOUND;
+            }
+            if (_tablet != new_tablet) {
+                _tablet = new_tablet;
+                continue;
+            }
         }
+
         std::lock_guard push_lock(_tablet->get_push_lock());
         RETURN_NOT_OK(
                 _storage_engine->txn_manager()->prepare_txn(_req.partition_id, _tablet, _req.txn_id, _req.load_id));
+        break;
     }
 
     RowsetWriterContext writer_context(kDataFormatUnknown, config::storage_format_version);

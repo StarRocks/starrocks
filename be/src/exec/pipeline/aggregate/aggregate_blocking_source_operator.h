@@ -9,7 +9,7 @@ namespace starrocks::pipeline {
 class AggregateBlockingSourceOperator : public SourceOperator {
 public:
     AggregateBlockingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : SourceOperator(id, "aggregate_blocking_source_operator", plan_node_id), _aggregator(aggregator) {}
+            : SourceOperator(id, "aggregate_blocking_source", plan_node_id), _aggregator(aggregator) {}
     ~AggregateBlockingSourceOperator() = default;
 
     bool has_output() const override;
@@ -23,23 +23,23 @@ public:
 private:
     // It is used to perform aggregation algorithms
     // shared by AggregateBlockingSinkOperator
-    AggregatorPtr _aggregator;
+    AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
     bool _is_finished = false;
 };
 
-class AggregateBlockingSourceOperatorFactory final : public OperatorFactory {
+class AggregateBlockingSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     AggregateBlockingSourceOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : OperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
+            : SourceOperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
 
     ~AggregateBlockingSourceOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateBlockingSourceOperator>(_id, _plan_node_id, _aggregator);
     }
 
 private:
-    AggregatorPtr _aggregator;
+    AggregatorPtr _aggregator = nullptr;
 };
 } // namespace starrocks::pipeline

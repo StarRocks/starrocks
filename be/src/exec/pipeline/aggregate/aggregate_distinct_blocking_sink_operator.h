@@ -6,13 +6,13 @@
 #include "exec/vectorized/aggregator.h"
 
 namespace starrocks::pipeline {
-class AggregateBlockingSinkOperator : public Operator {
+class AggregateDistinctBlockingSinkOperator : public Operator {
 public:
-    AggregateBlockingSinkOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : Operator(id, "aggregate_blocking_sink", plan_node_id), _aggregator(aggregator) {
+    AggregateDistinctBlockingSinkOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
+            : Operator(id, "aggregate_distinct_blocking_sink", plan_node_id), _aggregator(aggregator) {
         _aggregator->set_aggr_phase(AggrPhase2);
     }
-    ~AggregateBlockingSinkOperator() = default;
+    ~AggregateDistinctBlockingSinkOperator() = default;
 
     bool has_output() const override { return false; }
     bool need_input() const override { return true; }
@@ -32,15 +32,15 @@ private:
     bool _is_finished = false;
 };
 
-class AggregateBlockingSinkOperatorFactory final : public OperatorFactory {
+class AggregateDistinctBlockingSinkOperatorFactory final : public OperatorFactory {
 public:
-    AggregateBlockingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
+    AggregateDistinctBlockingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
             : OperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
 
-    ~AggregateBlockingSinkOperatorFactory() override = default;
+    ~AggregateDistinctBlockingSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<AggregateBlockingSinkOperator>(_id, _plan_node_id, _aggregator);
+        return std::make_shared<AggregateDistinctBlockingSinkOperator>(_id, _plan_node_id, _aggregator);
     }
 
 private:
