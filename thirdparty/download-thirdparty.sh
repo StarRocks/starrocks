@@ -261,7 +261,7 @@ echo "Finished patching $LIBEVENT_SOURCE"
 
 # lz4 patch to disable shared library
 cd $TP_SOURCE_DIR/$LZ4_SOURCE
-if [ ! -f $PATCHED_MARK ]; then
+if [ ! -f $PATCHED_MARK ] && [ $LZ4_SOURCE == "lz4-1.7.5" ]; then
     patch -p0 < $TP_PATCH_DIR/lz4-1.7.5.patch
     touch $PATCHED_MARK
 fi
@@ -312,7 +312,7 @@ echo "Finished patching $BOOST_SOURCE"
 
 # patch protobuf-3.5.1
 cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE
-if [ ! -f $PATCHED_MARK ]; then
+if [ ! -f $PATCHED_MARK ] && [ $PROTOBUF_SOURCE == "protobuf-3.5.1" ]; then
     patch -p1 < $TP_PATCH_DIR/protobuf-3.5.1.patch
     touch $PATCHED_MARK
 fi

@@ -380,7 +380,7 @@ build_lz4() {
     cd $TP_SOURCE_DIR/$LZ4_SOURCE
 
     make -j$PARALLEL install PREFIX=$TP_INSTALL_DIR \
-    INCLUDEDIR=$TP_INCLUDE_DIR/lz4/
+    INCLUDEDIR=$TP_INCLUDE_DIR/lz4/ BUILD_SHARED=no
 }
 
 # bzip
