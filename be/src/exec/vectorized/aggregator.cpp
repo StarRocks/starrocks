@@ -471,33 +471,21 @@ Status Aggregator::check_hash_set_memory_usage(RuntimeState* state) {
     return Status::OK();
 }
 
+#define CONVERT(DST, SRC)                                                                          \
+    if (_hash_map_variant.type == vectorized::HashMapVariant::Type::SRC) {                         \
+        _hash_map_variant.DST = std::make_unique<decltype(_hash_map_variant.DST)::element_type>(); \
+        _hash_map_variant.DST->hash_map.reserve(_hash_map_variant.SRC->hash_map.capacity());       \
+        _hash_map_variant.DST->hash_map.insert(_hash_map_variant.SRC->hash_map.begin(),            \
+                                               _hash_map_variant.SRC->hash_map.end());             \
+        _hash_map_variant.type = vectorized::HashMapVariant::Type::DST;                            \
+        _hash_map_variant.SRC.reset();                                                             \
+        return;                                                                                    \
+    }
+
 void Aggregator::try_convert_to_two_level_map() {
     if (_last_ht_memory_usage > two_level_memory_threshold) {
-        if (_hash_map_variant.type == vectorized::HashMapVariant::Type::phase1_slice) {
-            _hash_map_variant.phase1_slice_two_level =
-                    std::make_unique<vectorized::SerializedKeyTwoLevelAggHashMap<vectorized::PhmapSeed1>>();
-
-            _hash_map_variant.phase1_slice_two_level->hash_map.reserve(
-                    _hash_map_variant.phase1_slice->hash_map.capacity());
-
-            _hash_map_variant.phase1_slice_two_level->hash_map.insert(_hash_map_variant.phase1_slice->hash_map.begin(),
-                                                                      _hash_map_variant.phase1_slice->hash_map.end());
-
-            _hash_map_variant.type = vectorized::HashMapVariant::Type::phase1_slice_two_level;
-            _hash_map_variant.phase1_slice.reset();
-        } else if (_hash_map_variant.type == vectorized::HashMapVariant::Type::phase2_slice) {
-            _hash_map_variant.phase2_slice_two_level =
-                    std::make_unique<vectorized::SerializedKeyTwoLevelAggHashMap<vectorized::PhmapSeed2>>();
-
-            _hash_map_variant.phase2_slice_two_level->hash_map.reserve(
-                    _hash_map_variant.phase2_slice->hash_map.capacity());
-
-            _hash_map_variant.phase2_slice_two_level->hash_map.insert(_hash_map_variant.phase2_slice->hash_map.begin(),
-                                                                      _hash_map_variant.phase2_slice->hash_map.end());
-
-            _hash_map_variant.type = vectorized::HashMapVariant::Type::phase2_slice_two_level;
-            _hash_map_variant.phase2_slice.reset();
-        }
+        CONVERT(phase1_slice_two_level, phase1_slice);
+        CONVERT(phase2_slice_two_level, phase2_slice);
     }
 }
 
@@ -603,6 +591,41 @@ void Aggregator::_evaluate_agg_fn_exprs(vectorized::Chunk* chunk) {
             _agg_input_raw_columns[i][j] = _agg_intput_columns[i][j].get();
         }
     }
+}
+
+bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs,
+                                 std::vector<GroupByColumnTypes>& group_by_types, size_t* max_size, bool* has_null) {
+    size_t size = 0;
+    *has_null = false;
+
+    for (size_t i = 0; i < group_by_expr_ctxs.size(); i++) {
+        ExprContext* ctx = group_by_expr_ctxs[i];
+        if (group_by_types[i].is_nullable) {
+            *has_null = true;
+            size += 1; // 1 bytes for  null flag.
+        }
+        PrimitiveType ptype = ctx->root()->type().type;
+        switch (ptype) {
+#define ADD_SIZE(NAME)                                                \
+    case NAME:                                                        \
+        size += sizeof(vectorized::RunTimeTypeTraits<NAME>::CppType); \
+        break
+            ADD_SIZE(TYPE_TINYINT);
+            ADD_SIZE(TYPE_SMALLINT);
+            ADD_SIZE(TYPE_INT);
+            ADD_SIZE(TYPE_BIGINT);
+            ADD_SIZE(TYPE_DATE);
+            ADD_SIZE(TYPE_DATETIME);
+            ADD_SIZE(TYPE_FLOAT);
+            ADD_SIZE(TYPE_DOUBLE);
+            // todo(yan): decimal or largeint
+        default:
+            return false;
+        }
+#undef ADD_SIZE
+    }
+    *max_size = size;
+    return true;
 }
 
 template <typename HashVariantType>
@@ -723,8 +746,37 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
         }
         }
     }
+
+    int real_fixed_size = 0;
+    if (_group_by_expr_ctxs.size() > 1) {
+        size_t max_size = 0;
+        bool has_null = false;
+        if (is_group_columns_fixed_size(_group_by_expr_ctxs, _group_by_types, &max_size, &has_null)) {
+            if (max_size < 8 || (!has_null && max_size == 8)) {
+                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_fx8
+                                                 : HashVariantType::Type::phase2_slice_fx8;
+            } else if (max_size < 16 || (!has_null && max_size == 16)) {
+                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_fx16
+                                                 : HashVariantType::Type::phase2_slice_fx16;
+            }
+            if (!has_null) {
+                real_fixed_size = max_size;
+            }
+        }
+    }
     VLOG_ROW << "hash type is "
              << static_cast<typename std::underlying_type<typename HashVariantType::Type>::type>(type);
     hash_variant.init(type);
-}
+
+#define SET_FIXED_SLICE_HASH_MAP_FIELD(TYPE)                  \
+    if (type == HashVariantType::Type::TYPE) {                \
+        hash_variant.TYPE->real_fixed_size = real_fixed_size; \
+    }
+    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx8);
+    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx16);
+    SET_FIXED_SLICE_HASH_MAP_FIELD(phase2_slice_fx8);
+    SET_FIXED_SLICE_HASH_MAP_FIELD(phase2_slice_fx16);
+#undef SET_FIXED_SLICE_HASH_MAP_FIELD
+
+} // namespace starrocks
 } // namespace starrocks

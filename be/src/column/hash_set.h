@@ -80,4 +80,42 @@ struct PhSetTraits<Slice> {
 template <typename T>
 using PhSet = typename PhSetTraits<T>::SetType;
 
+struct SliceKey8 {
+    union U {
+        struct {
+            char data[7];
+            uint8_t size;
+        };
+        int64_t value;
+    } u;
+
+    bool operator==(const SliceKey8& k) const { return u.value == k.u.value; }
+};
+
+struct SliceKey16 {
+    union U {
+        struct {
+            char data[15];
+            uint8_t size;
+        };
+        int128_t value;
+    } u;
+
+    bool operator==(const SliceKey16& k) const { return u.value == k.u.value; }
+};
+
+template <typename SliceKey, PhmapSeed seed>
+class FixedSizeSliceKeyHash {
+public:
+    std::size_t operator()(const SliceKey& s) const {
+        if constexpr (sizeof(SliceKey) == 8) {
+            return phmap_mix_with_seed<sizeof(size_t), seed>()(s.u.value);
+        } else {
+            // todo(yan): better hash func?
+            Slice s2(s.u.data, 16);
+            return SliceHashWithSeed<seed>()(s2);
+        }
+    }
+};
+
 } // namespace starrocks::vectorized

@@ -30,7 +30,11 @@ namespace starrocks::vectorized {
     M(phase2_string)                  \
     M(phase2_slice)                   \
     M(phase2_slice_two_level)         \
-    M(phase2_int32_two_level)
+    M(phase2_int32_two_level)         \
+    M(phase1_slice_fx8)               \
+    M(phase1_slice_fx16)              \
+    M(phase2_slice_fx8)               \
+    M(phase2_slice_fx16)
 
 #define APPLY_FOR_VARIANT_NULL(M) \
     M(phase1_null_int8)           \
@@ -82,7 +86,11 @@ namespace starrocks::vectorized {
     M(phase2_null_timestamp)     \
     M(phase2_null_string)        \
     M(phase2_slice_two_level)    \
-    M(phase2_int32_two_level)
+    M(phase2_int32_two_level)    \
+    M(phase1_slice_fx8)          \
+    M(phase1_slice_fx16)         \
+    M(phase2_slice_fx8)          \
+    M(phase2_slice_fx16)
 
 // Hash maps for phase1
 template <PhmapSeed seed>
@@ -122,6 +130,12 @@ using SerializedKeyTwoLevelAggHashMap = AggHashMapWithSerializedKey<SliceAggTwoL
 template <PhmapSeed seed>
 using Int32TwoLevelAggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<int32_t, Int32AggTwoLevelHashMap<seed>>;
 
+template <PhmapSeed seed>
+using SerializedKeyFixedSize8AggHashMap = AggHashMapWithSerializedKeyFixedSize<FixedSize8SliceAggHashMap<seed>>;
+
+template <PhmapSeed seed>
+using SerializedKeyFixedSize16AggHashMap = AggHashMapWithSerializedKeyFixedSize<FixedSize16SliceAggHashMap<seed>>;
+
 // 1) For different group by columns type, size, cardinality, volume, we should choose different
 // hash functions and different hashmaps.
 // When runtime, we will only have one hashmap.
@@ -153,6 +167,10 @@ struct HashMapVariant {
         phase1_slice,
         phase1_slice_two_level,
         phase1_int32_two_level,
+
+        phase1_slice_fx8,
+        phase1_slice_fx16,
+
         phase2_int8,
         phase2_int16,
         phase2_int32,
@@ -169,7 +187,10 @@ struct HashMapVariant {
         phase2_null_string,
         phase2_slice,
         phase2_slice_two_level,
-        phase2_int32_two_level
+        phase2_int32_two_level,
+
+        phase2_slice_fx8,
+        phase2_slice_fx16,
     };
     Type type = Type::phase1_slice;
 
@@ -191,6 +212,9 @@ struct HashMapVariant {
     std::unique_ptr<SerializedKeyTwoLevelAggHashMap<PhmapSeed1>> phase1_slice_two_level;
     std::unique_ptr<Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>> phase1_int32_two_level;
 
+    std::unique_ptr<SerializedKeyFixedSize8AggHashMap<PhmapSeed1>> phase1_slice_fx8;
+    std::unique_ptr<SerializedKeyFixedSize16AggHashMap<PhmapSeed1>> phase1_slice_fx16;
+
     std::unique_ptr<Int8AggHashMapWithOneNumberKey<PhmapSeed2>> phase2_int8;
     std::unique_ptr<Int16AggHashMapWithOneNumberKey<PhmapSeed2>> phase2_int16;
     std::unique_ptr<Int32AggHashMapWithOneNumberKey<PhmapSeed2>> phase2_int32;
@@ -208,6 +232,9 @@ struct HashMapVariant {
     std::unique_ptr<SerializedKeyAggHashMap<PhmapSeed2>> phase2_slice;
     std::unique_ptr<SerializedKeyTwoLevelAggHashMap<PhmapSeed2>> phase2_slice_two_level;
     std::unique_ptr<Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed2>> phase2_int32_two_level;
+
+    std::unique_ptr<SerializedKeyFixedSize8AggHashMap<PhmapSeed2>> phase2_slice_fx8;
+    std::unique_ptr<SerializedKeyFixedSize16AggHashMap<PhmapSeed2>> phase2_slice_fx16;
 
     void init(Type type_) {
         type = type_;
@@ -299,6 +326,12 @@ using SerializedTwoLevelKeyAggHashSet = AggHashSetOfSerializedKey<SliceAggTwoLev
 template <PhmapSeed seed>
 using Int32TwoLevelAggHashSetOfOneNumberKey = AggHashSetOfOneNumberKey<int32_t, Int32AggTwoLevelHashSet<seed>>;
 
+template <PhmapSeed seed>
+using SerializedKeyAggHashSetFixedSize8 = AggHashSetOfSerializedKeyFixedSize<FixedSize8SliceAggHashSet<seed>>;
+
+template <PhmapSeed seed>
+using SerializedKeyAggHashSetFixedSize16 = AggHashSetOfSerializedKeyFixedSize<FixedSize16SliceAggHashSet<seed>>;
+
 // 1) HashSetVariant is alike HashMapVariant, while a set only holds keys, no associated value.
 //
 // 2) Distributed aggregation is divided into two stages.
@@ -342,7 +375,12 @@ struct HashSetVariant {
         phase2_null_string,
         phase2_slice,
         phase2_slice_two_level,
-        phase2_int32_two_level
+        phase2_int32_two_level,
+
+        phase1_slice_fx8,
+        phase1_slice_fx16,
+        phase2_slice_fx8,
+        phase2_slice_fx16,
     };
     Type type = Type::phase1_slice;
 
@@ -381,6 +419,11 @@ struct HashSetVariant {
     std::unique_ptr<SerializedKeyAggHashSet<PhmapSeed2>> phase2_slice;
     std::unique_ptr<SerializedTwoLevelKeyAggHashSet<PhmapSeed2>> phase2_slice_two_level;
     std::unique_ptr<Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed2>> phase2_int32_two_level;
+
+    std::unique_ptr<SerializedKeyAggHashSetFixedSize8<PhmapSeed1>> phase1_slice_fx8;
+    std::unique_ptr<SerializedKeyAggHashSetFixedSize16<PhmapSeed1>> phase1_slice_fx16;
+    std::unique_ptr<SerializedKeyAggHashSetFixedSize8<PhmapSeed2>> phase2_slice_fx8;
+    std::unique_ptr<SerializedKeyAggHashSetFixedSize16<PhmapSeed2>> phase2_slice_fx16;
 
     void init(Type type_) {
         type = type_;
