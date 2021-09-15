@@ -471,7 +471,7 @@ Status Aggregator::check_hash_set_memory_usage(RuntimeState* state) {
     return Status::OK();
 }
 
-#define CONVERT(DST, SRC)                                                                          \
+#define CONVERT_TO_TWO_LEVEL(DST, SRC)                                                             \
     if (_hash_map_variant.type == vectorized::HashMapVariant::Type::SRC) {                         \
         _hash_map_variant.DST = std::make_unique<decltype(_hash_map_variant.DST)::element_type>(); \
         _hash_map_variant.DST->hash_map.reserve(_hash_map_variant.SRC->hash_map.capacity());       \
@@ -484,10 +484,12 @@ Status Aggregator::check_hash_set_memory_usage(RuntimeState* state) {
 
 void Aggregator::try_convert_to_two_level_map() {
     if (_last_ht_memory_usage > two_level_memory_threshold) {
-        CONVERT(phase1_slice_two_level, phase1_slice);
-        CONVERT(phase2_slice_two_level, phase2_slice);
+        CONVERT_TO_TWO_LEVEL(phase1_slice_two_level, phase1_slice);
+        CONVERT_TO_TWO_LEVEL(phase2_slice_two_level, phase2_slice);
     }
 }
+
+#undef CONVERT_TO_TWO_LEVEL
 
 // When need finalize, create column by result type
 // otherwise, create column by serde type
@@ -606,23 +608,23 @@ bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs,
         }
         PrimitiveType ptype = ctx->root()->type().type;
         switch (ptype) {
-#define ADD_SIZE(NAME)                                                \
+#define ACC_FIELD_SIZE(NAME)                                          \
     case NAME:                                                        \
         size += sizeof(vectorized::RunTimeTypeTraits<NAME>::CppType); \
         break
-            ADD_SIZE(TYPE_TINYINT);
-            ADD_SIZE(TYPE_SMALLINT);
-            ADD_SIZE(TYPE_INT);
-            ADD_SIZE(TYPE_BIGINT);
-            ADD_SIZE(TYPE_DATE);
-            ADD_SIZE(TYPE_DATETIME);
-            ADD_SIZE(TYPE_FLOAT);
-            ADD_SIZE(TYPE_DOUBLE);
+            ACC_FIELD_SIZE(TYPE_TINYINT);
+            ACC_FIELD_SIZE(TYPE_SMALLINT);
+            ACC_FIELD_SIZE(TYPE_INT);
+            ACC_FIELD_SIZE(TYPE_BIGINT);
+            ACC_FIELD_SIZE(TYPE_DATE);
+            ACC_FIELD_SIZE(TYPE_DATETIME);
+            ACC_FIELD_SIZE(TYPE_FLOAT);
+            ACC_FIELD_SIZE(TYPE_DOUBLE);
             // todo(yan): decimal or largeint
         default:
             return false;
         }
-#undef ADD_SIZE
+#undef ACC_FIELD_SIZE
     }
     *max_size = size;
     return true;

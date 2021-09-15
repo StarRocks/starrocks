@@ -85,10 +85,10 @@ struct SliceKey8 {
         struct {
             char data[7];
             uint8_t size;
-        };
+        } __attribute__((packed));
         int64_t value;
     } u;
-
+    static_assert(sizeof(u) == sizeof(u.value));
     bool operator==(const SliceKey8& k) const { return u.value == k.u.value; }
 };
 
@@ -97,10 +97,10 @@ struct SliceKey16 {
         struct {
             char data[15];
             uint8_t size;
-        };
+        } __attribute__((packed));
         int128_t value;
     } u;
-
+    static_assert(sizeof(u) == sizeof(u.value));
     bool operator==(const SliceKey16& k) const { return u.value == k.u.value; }
 };
 
