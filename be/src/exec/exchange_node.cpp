@@ -388,7 +388,7 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
         auto exchange_merge_sort_source_operator = std::make_shared<ExchangeMergeSortSourceOperatorFactory>(
                 context->next_operator_id(), id(), _num_senders, _input_row_desc, &_sort_exec_exprs, _is_asc_order,
                 _nulls_first, _offset, _limit);
-        exchange_merge_sort_source_operator->set_num_driver_instances(1);
+        exchange_merge_sort_source_operator->set_degree_of_parallelism(1);
         operators.emplace_back(std::move(exchange_merge_sort_source_operator));
     }
     return operators;
