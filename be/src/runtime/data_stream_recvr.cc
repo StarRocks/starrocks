@@ -235,12 +235,12 @@ bool DataStreamRecvr::SenderQueue::has_chunk() {
 bool DataStreamRecvr::SenderQueue::try_get_chunk(vectorized::Chunk** chunk) {
     std::unique_lock<std::mutex> l(_lock);
     if (_is_cancelled) {
-        return true;
+        return false;
     }
 
     if (_chunk_queue.empty()) {
         DCHECK_EQ(_num_remaining_senders, 0);
-        return _num_remaining_senders == 0;
+        return false;
     } else {
         *chunk = _chunk_queue.front().second.release();
         _recvr->_num_buffered_bytes -= _chunk_queue.front().first;
@@ -251,7 +251,7 @@ bool DataStreamRecvr::SenderQueue::try_get_chunk(vectorized::Chunk** chunk) {
             closure_pair.first->Run();
             _pending_closures.pop_front();
         }
-        return false;
+        return true;
     }
 }
 

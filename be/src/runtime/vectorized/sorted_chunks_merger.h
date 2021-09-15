@@ -36,7 +36,7 @@ public:
 
 private:
     void collect_merged_chunks(ChunkPtr* chunk);
-    void move_cursor_and_adjust_min_heap();
+    void move_cursor_and_adjust_min_heap(std::atomic<bool>* eos);
 
     ChunkSupplier _single_supplier;
     ChunkProbeSupplier _single_probe_supplier;

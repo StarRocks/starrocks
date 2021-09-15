@@ -180,7 +180,7 @@ Status SortedChunksMerger::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bo
     // single source
     if (_single_probe_supplier) {
         Chunk* tmp_chunk = nullptr;
-        *eos = _single_probe_supplier(&tmp_chunk);
+        *eos = !_single_probe_supplier(&tmp_chunk);
         (*chunk).reset(tmp_chunk);
         return Status::OK();
     }
@@ -196,13 +196,10 @@ Status SortedChunksMerger::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bo
      */
     for (;;) {
         // STEP 2:
-        // If cursor hasn't next row in last call,
-        // we should get the next row and move cursor.
+        // move to next row
         if (_wait_for_data) {
-            // this just do someting like STEP 1 that we didn't do it because there was no data.
             _wait_for_data = false;
-            move_cursor_and_adjust_min_heap();
-            // collect part merged data.
+            move_cursor_and_adjust_min_heap(eos);
             if (_row_number >= config::vector_chunk_size || _min_heap.empty()) {
                 collect_merged_chunks(chunk);
                 break;
@@ -211,7 +208,6 @@ Status SortedChunksMerger::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bo
 
         // STEP 0:
         // Guarantee: min_heap is keep min heap property, and it isn't empty.
-        // get one row into merged data.
         _cursor = _min_heap[0];
         if (!_row_number) {
             _result_chunk = _cursor->clone_empty_chunk(config::vector_chunk_size);
@@ -244,8 +240,9 @@ Status SortedChunksMerger::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bo
             break;
         } else {
             // STEP 1:
+            // move to next row
             _wait_for_data = false;
-            move_cursor_and_adjust_min_heap();
+            move_cursor_and_adjust_min_heap(eos);
             if (_row_number >= config::vector_chunk_size || _min_heap.empty()) {
                 collect_merged_chunks(chunk);
                 break;
@@ -256,7 +253,7 @@ Status SortedChunksMerger::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bo
     return Status::OK();
 }
 
-void SortedChunksMerger::move_cursor_and_adjust_min_heap() {
+void SortedChunksMerger::move_cursor_and_adjust_min_heap(std::atomic<bool>* eos) {
     // It has next row, so we move cursor.
     _cursor->next_for_pipeline();
     if (_cursor->is_valid()) {
@@ -265,6 +262,7 @@ void SortedChunksMerger::move_cursor_and_adjust_min_heap() {
     } else {
         // just remove one source.
         _min_heap.pop_back();
+        *eos = _min_heap.empty();
     }
 }
 void SortedChunksMerger::collect_merged_chunks(ChunkPtr* chunk) {
