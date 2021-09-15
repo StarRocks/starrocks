@@ -681,13 +681,13 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
             need_switch_context = true;
         }
     } else if (_context->_next != nullptr && _context_switch_count < 3 &&
-               (chunk_start * 1000) <= total_read * _late_materialization_ratio) {
+               chunk_start * 1000 <= total_read * _late_materialization_ratio) {
         need_switch_context = true;
         _context_switch_count++;
     }
 
     // remove (logical) deleted rows.
-    if ((chunk->num_rows() > 0) && (chunk->delete_state() != DEL_NOT_SATISFIED) && !_opts.delete_predicates.empty()) {
+    if (chunk->num_rows() > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty()) {
         SCOPED_RAW_TIMER(&_opts.stats->del_filter_ns);
         size_t old_sz = chunk->num_rows();
         _opts.delete_predicates.evaluate(chunk, _selection.data());
