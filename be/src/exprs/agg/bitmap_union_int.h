@@ -31,7 +31,8 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
         BitmapColumn* col = down_cast<BitmapColumn*>(to);
-        col->append(&(this->data(state)));
+        auto& value = const_cast<BitmapValue&>(this->data(state));
+        col->append(std::move(value));
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
@@ -40,7 +41,7 @@ public:
             const auto* src_column = static_cast<const InputColumnType*>(src[0].get());
             for (size_t i = 0; i < chunk_size; ++i) {
                 BitmapValue bitmap(src_column->get_data()[i]);
-                dst_column->append(&bitmap);
+                dst_column->append(std::move(bitmap));
             }
         }
     }
