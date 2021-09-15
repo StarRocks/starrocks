@@ -221,12 +221,16 @@ PATCHED_MARK="patched_mark"
 
 # glog patch
 cd $TP_SOURCE_DIR/$GLOG_SOURCE
-if [ ! -f $PATCHED_MARK ]; then
+if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.3.3" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.3.3-vlog-double-lock-bug.patch
     patch -p1 < $TP_PATCH_DIR/glog-0.3.3-for-starrocks2.patch
     patch -p1 < $TP_PATCH_DIR/glog-0.3.3-remove-unwind-dependency.patch
     # patch Makefile.am to make autoreconf work
     patch -p0 < $TP_PATCH_DIR/glog-0.3.3-makefile.patch
+    touch $PATCHED_MARK
+fi
+if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.4.0" ]; then
+    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-for-starrocks2.patch
     touch $PATCHED_MARK
 fi
 cd -
