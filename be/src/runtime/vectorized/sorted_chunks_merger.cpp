@@ -180,7 +180,11 @@ Status SortedChunksMerger::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bo
     // single source
     if (_single_probe_supplier) {
         Chunk* tmp_chunk = nullptr;
-        *eos = !_single_probe_supplier(&tmp_chunk);
+        if (_single_has_supplier()) {
+            *eos = !_single_probe_supplier(&tmp_chunk);
+        } else {
+            *should_exit = true;
+        }
         (*chunk).reset(tmp_chunk);
         return Status::OK();
     }
