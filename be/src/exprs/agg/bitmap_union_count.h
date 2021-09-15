@@ -25,7 +25,8 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
         BitmapColumn* col = down_cast<BitmapColumn*>(to);
-        col->append(&(this->data(state)));
+        auto& value = const_cast<BitmapValue&>(this->data(state));
+        col->append(std::move(value));
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {

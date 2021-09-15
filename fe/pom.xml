@@ -85,6 +85,11 @@ under the License.
                     <name>central maven repo https</name>
                     <url>https://repo.maven.apache.org/maven2</url>
                 </repository>
+                <repository>
+                    <id>Hortonworks</id>
+                    <name>Hortonworks Repository</name>
+                    <url>https://repo.hortonworks.com/content/repositories/releases/</url>
+                </repository>
                 <!-- for java-cup -->
                 <repository>
                     <id>cloudera-public</id>
@@ -176,6 +181,12 @@ under the License.
                 <groupId>commons-validator</groupId>
                 <artifactId>commons-validator</artifactId>
                 <version>1.7</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>commons-collections</groupId>
+                        <artifactId>commons-collections</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.google.code.gson/gson -->

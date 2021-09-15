@@ -150,8 +150,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // --------  New planner session variables start --------
     public static final String ENABLE_CBO = "enable_cbo";
     public static final String ENABLE_CBO_META = "enable_cbo_meta";
-    public static final String NEW_PLANNER_TPCH_SCALE = "new_planner_tpch_scale";
-    public static final String ENABLE_MOCK_TPCH = "enable_new_planner_mock_tpch_statistic";
     public static final String ENABLE_NEW_PLANNER_PUSH_DOWN_JOIN_TO_AGG =
             "enable_new_planner_push_down_join_to_agg";
     public static final String NEW_PLANER_AGG_STAGE = "new_planner_agg_stage";
@@ -393,12 +391,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_NEW_PLANNER_PUSH_DOWN_JOIN_TO_AGG)
     private boolean enableNewPlannerPushDownJoinToAgg = false;
-
-    @VariableMgr.VarAttr(name = ENABLE_MOCK_TPCH)
-    private boolean enableNewPlannerMockTpch = false;
-
-    @VariableMgr.VarAttr(name = NEW_PLANNER_TPCH_SCALE)
-    private int tpchScale = 1;
 
     @VariableMgr.VarAttr(name = BROADCAST_ROW_LIMIT)
     private long broadcastRowCountLimit = 15000000;
@@ -680,22 +672,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableNewPlannerPushDownJoinToAgg(boolean enableNewPlannerPushDownJoinToAgg) {
         this.enableNewPlannerPushDownJoinToAgg = enableNewPlannerPushDownJoinToAgg;
-    }
-
-    public int getTpchScale() {
-        return tpchScale;
-    }
-
-    public void setTpchScale(int tpchScale) {
-        this.tpchScale = tpchScale;
-    }
-
-    public boolean getEnableMockTpch() {
-        return enableNewPlannerMockTpch;
-    }
-
-    public void setEnableMockTpch(boolean enableNewPlannerMockTpch) {
-        this.enableNewPlannerMockTpch = enableNewPlannerMockTpch;
     }
 
     public int getCboMaxReorderNodeUseExhaustive() {

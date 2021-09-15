@@ -18,9 +18,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TStatisticData;
@@ -194,57 +191,9 @@ public class CachedStatisticStorage implements StatisticStorage {
                 setNullsFraction(statisticData.nullCount * 1.0 / Math.max(statisticData.rowCount, 1)).build();
     }
 
-    public ColumnStatistic getMockedColumnStatistic(Table table, String column) {
-        String columnLowerCase = column.toLowerCase();
-        String tableLowerCase = table.getName().toLowerCase();
-        SessionVariable sessionVariable = getConnectSessionVariable();
-        ColumnStatistic mockedColumnStatistic =
-                MockTpchStatisticStorage.INSTANCE.getColumnStatistic(table, columnLowerCase);
-        if (mockedColumnStatistic != null) {
-            if (tableLowerCase.equals("region") ||
-                    tableLowerCase.equals("nation") ||
-                    columnLowerCase.contains("nationkey") ||
-                    columnLowerCase.contains("regionkey")) {
-                return mockedColumnStatistic;
-            } else if (columnLowerCase.contains("key") || columnLowerCase.contains("name")) {
-                return new ColumnStatistic(mockedColumnStatistic.getMinValue(),
-                        mockedColumnStatistic.getMaxValue() * sessionVariable.getTpchScale(),
-                        mockedColumnStatistic.getNullsFraction(),
-                        mockedColumnStatistic.getAverageRowSize(),
-                        mockedColumnStatistic.getDistinctValuesCount() * sessionVariable.getTpchScale());
-            } else {
-                return mockedColumnStatistic;
-            }
-        }
-        return ColumnStatistic.unknown();
-    }
-
-    private SessionVariable getConnectSessionVariable() {
-        if (null == ConnectContext.get()) {
-            return VariableMgr.getDefaultSessionVariable();
-        }
-
-        return ConnectContext.get().getSessionVariable();
-    }
-
-    public List<ColumnStatistic> getMockedColumnStatistics(Table table, List<String> columnList) {
-        List<ColumnStatistic> result = new ArrayList<>();
-        for (String columnName : columnList) {
-            result.add(getMockedColumnStatistic(table, columnName));
-        }
-        return result;
-    }
-
     @Override
     public ColumnStatistic getColumnStatistic(Table table, String column) {
         Preconditions.checkState(table != null);
-        // get mock statistics
-        if (getConnectSessionVariable().getEnableMockTpch()) {
-            ColumnStatistic columnStatistic = getMockedColumnStatistic(table, column);
-            if (!columnStatistic.isUnknown()) {
-                return columnStatistic;
-            }
-        }
 
         // get Statistics Table column info, just return default column statistics
         if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
@@ -282,13 +231,6 @@ public class CachedStatisticStorage implements StatisticStorage {
     // ColumnStatistic List sequence is guaranteed to be consistent with Columns
     public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
         Preconditions.checkState(table != null);
-        // get mock statistics
-        if (getConnectSessionVariable().getEnableMockTpch()) {
-            List<ColumnStatistic> columnStatisticList = getMockedColumnStatistics(table, columns);
-            if (columnStatisticList.stream().noneMatch(ColumnStatistic::isUnknown)) {
-                return columnStatisticList;
-            }
-        }
 
         // get Statistics Table column info, just return default column statistics
         if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {

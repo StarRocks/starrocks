@@ -683,7 +683,7 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
         }
 
         std::vector<ExtLiteral*> in_pred_values;
-        const Predicate* pred = static_cast<const InPredicate*>(conjunct);
+        const Predicate* pred = static_cast<const Predicate*>(conjunct);
 
         const Expr* expr = Expr::expr_without_cast(pred->get_child(0));
         if (expr->node_type() != TExprNodeType::SLOT_REF) {
