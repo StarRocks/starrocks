@@ -440,7 +440,7 @@ public class FileScanNode extends LoadScanNode {
         numInstances = Math.min(numInstances, Config.max_broker_concurrency);
         numInstances = Math.max(1, numInstances);
 
-        bytesPerInstance = totalBytes / numInstances + ((totalBytes % numInstances == 0) ? 0 : 1);
+        bytesPerInstance = (totalBytes + numInstances - 1) / numInstances;
     }
 
     private void assignBackends() throws UserException {
@@ -562,7 +562,7 @@ public class FileScanNode extends LoadScanNode {
         for (TBrokerFileStatus fileStatus : fileStatuses) {
             totalBytes += fileStatus.size;
         }
-        long numInstances = totalBytes / bytesPerInstance + ((totalBytes % bytesPerInstance == 0) ? 0 : 1);
+        long numInstances = (totalBytes + bytesPerInstance - 1) / bytesPerInstance;
 
         for (int i = 0; i < numInstances; ++i) {
             locationsHeap.add(Pair.create(newLocations(context.params, brokerDesc.getName()), 0L));
