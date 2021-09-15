@@ -18,6 +18,12 @@ DROP RESOURCE 'resource_name'
     DROP RESOURCE 'spark0';
     ```
 
+2. 删除名为 hive0 的 Hive 资源：
+
+    ```SQL
+    DROP RESOURCE 'hive0';
+    ```
+
 ## keyword
 
 DROP RESOURCE

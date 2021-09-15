@@ -160,8 +160,8 @@ NULL值：\N
     WITH RESOURCE 'my_spark'
     PROPERTIES
     (
-    "timeout" = "3600",
-    "max_filter_ratio" = "0.1"
+        "timeout" = "3600",
+        "max_filter_ratio" = "0.1"
     );
     ```
 
@@ -179,9 +179,9 @@ NULL值：\N
     )
     WITH RESOURCE 'my_spark'
     (
-    "spark.executor.memory" = "3g",
-    "broker.username" = "hdfs_user",
-    "broker.password" = "hdfs_passwd"
+        "spark.executor.memory" = "3g",
+        "broker.username" = "hdfs_user",
+        "broker.password" = "hdfs_passwd"
     );
     ```
 

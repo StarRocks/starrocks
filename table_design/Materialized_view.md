@@ -102,7 +102,7 @@ tuple ids: 0
 * SUM
 * PERCENTILE_APPROX
 * HLL_UNION
-    
+
     对明细数据进行 HLL 聚合并且在查询时，使用 HLL 函数分析数据。主要适用于快速进行非精确去重计算。对明细数据使用HLL\_UNION聚合，需要先调用hll\_hash函数，对原数据进行转换。
 
     ~~~SQL

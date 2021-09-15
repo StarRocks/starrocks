@@ -204,10 +204,10 @@ DUPLICATE KEY(`lo_orderkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 96
 PROPERTIES (
-"replication_num" = "1",
-"colocate_with" = "group1",
-"in_memory" = "false",
-"storage_format" = "DEFAULT"
+    "replication_num" = "1",
+    "colocate_with" = "group1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT"
 );
 
 
@@ -225,10 +225,10 @@ DUPLICATE KEY(`c_custkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 12
 PROPERTIES (
-"replication_num" = "1",
-"colocate_with" = "groupa2",
-"in_memory" = "false",
-"storage_format" = "DEFAULT"
+    "replication_num" = "1",
+    "colocate_with" = "groupa2",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT"
 );
 
 
@@ -255,10 +255,10 @@ DUPLICATE KEY(`d_datekey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`d_datekey`) BUCKETS 1
 PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"colocate_with" = "groupa3",
-"storage_format" = "DEFAULT"
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "colocate_with" = "groupa3",
+    "storage_format" = "DEFAULT"
 );
 
  CREATE TABLE IF NOT EXISTS `supplier` (
@@ -274,10 +274,10 @@ DUPLICATE KEY(`s_suppkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 12
 PROPERTIES (
-"replication_num" = "1",
-"colocate_with" = "groupa4",
-"in_memory" = "false",
-"storage_format" = "DEFAULT"
+    "replication_num" = "1",
+    "colocate_with" = "groupa4",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT"
 );
 
 CREATE TABLE IF NOT EXISTS `part` (
@@ -295,10 +295,10 @@ DUPLICATE KEY(`p_partkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 12
 PROPERTIES (
-"replication_num" = "1",
-"colocate_with" = "groupa5",
-"in_memory" = "false",
-"storage_format" = "DEFAULT"
+    "replication_num" = "1",
+    "colocate_with" = "groupa5",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT"
 );
 
 CREATE TABLE IF NOT EXISTS `lineorder_flat` (
@@ -345,10 +345,10 @@ DUPLICATE KEY(`LO_ORDERKEY`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`LO_ORDERKEY`) BUCKETS 192
 PROPERTIES (
-"replication_num" = "1",
-"colocate_with" = "groupxx1",
-"in_memory" = "false",
-"storage_format" = "DEFAULT"
+    "replication_num" = "1",
+    "colocate_with" = "groupxx1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT"
 );
 ~~~
 

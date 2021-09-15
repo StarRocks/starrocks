@@ -47,7 +47,7 @@ data_desc1[, data_desc2, ...]
     ```sql
     DATA INFILE
     (
-    "file_path1"[, file_path2, ...]
+        "file_path1"[, file_path2, ...]
     )
     [NEGATIVE]
     INTO TABLE `table_name`
@@ -178,9 +178,9 @@ data_desc1[, data_desc2, ...]
     )
     PROPERTIES
     (
-    "cluster" = "my_cluster",
-    "timeout" = "3600",
-    "max_filter_ratio" = "0.1"
+        "cluster" = "my_cluster",
+        "timeout" = "3600",
+        "max_filter_ratio" = "0.1"
     );
     ```
 

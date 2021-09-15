@@ -45,7 +45,7 @@ WITH BROKER broker_name
     ```sql
     DATA INFILE
     (
-    "file_path1"[, file_path2, ...]
+        "file_path1"[, file_path2, ...]
     )
     [NEGATIVE]
     INTO TABLE `table_name`
@@ -229,13 +229,13 @@ WITH BROKER broker_name
     )
     WITH BROKER my_hdfs_broker
     (
-    "username" = "hdfs_user",
-    "password" = "hdfs_passwd"
+        "username" = "hdfs_user",
+        "password" = "hdfs_passwd"
     )
     PROPERTIES
     (
-    "timeout" = "3600",
-    "max_filter_ratio" = "0.1"
+        "timeout" = "3600",
+        "max_filter_ratio" = "0.1"
     );
     ```
 
@@ -257,13 +257,13 @@ WITH BROKER broker_name
     )
     WITH BROKER my_afs_broker
     (
-    "username" = "afs_user",
-    "password" = "afs_passwd"
+        "username" = "afs_user",
+        "password" = "afs_passwd"
     )
     PROPERTIES
     (
-    "timeout" = "3600",
-    "max_filter_ratio" = "0.1"
+        "timeout" = "3600",
+        "max_filter_ratio" = "0.1"
     );
     ```
 
@@ -280,13 +280,13 @@ WITH BROKER broker_name
     )
     WITH BROKER my_hdfs_broker
     (
-    "username" = "hdfs_user",
-    "password" = "hdfs_passwd",
-    "dfs.nameservices" = "my_ha",
-    "dfs.ha.namenodes.my_ha" = "my_namenode1, my_namenode2",
-    "dfs.namenode.rpc-address.my_ha.my_namenode1" = "nn1_host:rpc_port",
-    "dfs.namenode.rpc-address.my_ha.my_namenode2" = "nn2_host:rpc_port",
-    "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
+        "username" = "hdfs_user",
+        "password" = "hdfs_passwd",
+        "dfs.nameservices" = "my_ha",
+        "dfs.ha.namenodes.my_ha" = "my_namenode1, my_namenode2",
+        "dfs.namenode.rpc-address.my_ha.my_namenode1" = "nn1_host:rpc_port",
+        "dfs.namenode.rpc-address.my_ha.my_namenode2" = "nn2_host:rpc_port",
+        "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
     )
     ```
 
@@ -302,9 +302,9 @@ WITH BROKER broker_name
     )
     WITH BROKER my_hdfs_broker
     (
-    "hadoop.security.authentication" = "kerberos",
-    "kerberos_principal"="starrocks@YOUR.COM",
-    "kerberos_keytab"="/home/palo/palo.keytab"
+        "hadoop.security.authentication" = "kerberos",
+        "kerberos_principal"="starrocks@YOUR.COM",
+        "kerberos_keytab"="/home/palo/palo.keytab"
     )
     ````
 
@@ -321,9 +321,9 @@ WITH BROKER broker_name
     )
     WITH BROKER my_hdfs_broker
     (
-    "hadoop.security.authentication"="kerberos",
-    "kerberos_principal"="starrocks@YOUR.COM",
-    "kerberos_keytab_content"="BQIAAABEAAEACUJBSURVLkNPTQAEcGFsbw"
+        "hadoop.security.authentication"="kerberos",
+        "kerberos_principal"="starrocks@YOUR.COM",
+        "kerberos_keytab_content"="BQIAAABEAAEACUJBSURVLkNPTQAEcGFsbw"
     )
     ```
 
@@ -359,9 +359,9 @@ WITH BROKER broker_name
     )
     WITH BROKER my_bos_broker
     (
-    "bos_endpoint" = "http://bj.bcebos.com",
-    "bos_accesskey" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "bos_secret_accesskey"="yyyyyyyyyyyyyyyyyyyy"
+        "bos_endpoint" = "http://bj.bcebos.com",
+        "bos_accesskey" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "bos_secret_accesskey"="yyyyyyyyyyyyyyyyyyyy"
     )
     ```
 
@@ -488,9 +488,9 @@ WITH BROKER broker_name
     )
     WITH BROKER my_broker
     (
-    "fs.oss.accessKeyId" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "fs.oss.accessKeySecret" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.oss.endpoint" = "oss-cn-zhangjiakou-internal.aliyuncs.com"
+        "fs.oss.accessKeyId" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "fs.oss.accessKeySecret" = "yyyyyyyyyyyyyyyyyyyy",
+        "fs.oss.endpoint" = "oss-cn-zhangjiakou-internal.aliyuncs.com"
     )
     ```
 
@@ -505,9 +505,9 @@ WITH BROKER broker_name
     )
     WITH BROKER my_broker
     (
-    "fs.cosn.userinfo.secretId" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "fs.cosn.userinfo.secretKey" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.cosn.bucket.endpoint_suffix" = "cos.ap-beijing.myqcloud.com"
+        "fs.cosn.userinfo.secretId" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "fs.cosn.userinfo.secretKey" = "yyyyyyyyyyyyyyyyyyyy",
+        "fs.cosn.bucket.endpoint_suffix" = "cos.ap-beijing.myqcloud.com"
     )
     ```
 
@@ -522,9 +522,9 @@ WITH BROKER broker_name
     )
     WITH BROKER my_broker
     (
-    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.s3a.endpoint" = "s3-ap-northeast-1.amazonaws.com"
+        "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+        "fs.s3a.endpoint" = "s3-ap-northeast-1.amazonaws.com"
     )
     ```
 

@@ -125,12 +125,12 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     ```sql
     PROPERTIES (
-    "host" = "mysql_server_host",
-    "port" = "mysql_server_port",
-    "user" = "your_user_name",
-    "password" = "your_password",
-    "database" = "database_name",
-    "table" = "table_name"
+        "host" = "mysql_server_host",
+        "port" = "mysql_server_port",
+        "user" = "your_user_name",
+        "password" = "your_password",
+        "database" = "database_name",
+        "table" = "table_name"
     )
     ```
 
@@ -145,10 +145,10 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     ```sql
     PROPERTIES (
-    "broker_name" = "broker_name",
-    "path" = "file_path1[,file_path2]",
-    "column_separator" = "value_separator"
-    "line_delimiter" = "value_delimiter"
+        "broker_name" = "broker_name",
+        "path" = "file_path1[,file_path2]",
+        "column_separator" = "value_separator"
+        "line_delimiter" = "value_delimiter"
     )
     ```
 
@@ -156,8 +156,8 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     ```sql
     BROKER PROPERTIES(
-    "username" = "name",
-    "password" = "password"
+        "username" = "name",
+        "password" = "password"
     )
     ```
 
@@ -170,9 +170,9 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     ```sql
     PROPERTIES (
-    "database" = "hive_db_name",
-    "table" = "hive_table_name",
-    "hive.metastore.uris" = "thrift://127.0.0.1:9083"
+        "database" = "hive_db_name",
+        "table" = "hive_table_name",
+        "hive.metastore.uris" = "thrift://127.0.0.1:9083"
     )
     ```
 
@@ -277,7 +277,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     ```sql
     PROPERTIES (
-    "storage_medium" = "[SSD|HDD]",
+        "storage_medium" = "[SSD|HDD]",
     ["storage_cooldown_time" = "yyyy-MM-dd HH:mm:ss"],
     ["replication_num" = "3"]
     )
@@ -301,7 +301,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     ```sql
     PROPERTIES (
-    "bloom_filter_columns"="k1,k2,k3"
+        "bloom_filter_columns"="k1,k2,k3"
     )
     ```
 
@@ -309,7 +309,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     ```sql
     PROPERTIES (
-    "colocate_with"="table1"
+        "colocate_with"="table1"
     )
     ```
 
@@ -317,12 +317,12 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     ```sql
     PROPERTIES (
-    "dynamic_partition.enable" = "true|false",
-    "dynamic_partition.time_unit" = "DAY|WEEK|MONTH",
-    "dynamic_partition.start" = "${integer_value}",
-    "dynamic_partitoin.end" = "${integer_value}",
-    "dynamic_partition.prefix" = "${string_value}",
-    "dynamic_partition.buckets" = "${integer_value}"
+        "dynamic_partition.enable" = "true|false",
+        "dynamic_partition.time_unit" = "DAY|WEEK|MONTH",
+        "dynamic_partition.start" = "${integer_value}",
+        "dynamic_partitoin.end" = "${integer_value}",
+        "dynamic_partition.prefix" = "${string_value}",
+        "dynamic_partition.buckets" = "${integer_value}"
     ```
 
     dynamic_partition.enable: 用于指定表级别的动态分区功能是否开启。默认为 true。
@@ -346,7 +346,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     ```sql
     PROPERTIES (
-    "in_memory"="true"
+        "in_memory"="true"
     )
     ```
 
@@ -386,9 +386,9 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     UNIQUE KEY(k1, k2)
     DISTRIBUTED BY HASH (k1, k2) BUCKETS 32
     PROPERTIES(
-    "storage_type"="column"，
-    "storage_medium" = "SSD",
-    "storage_cooldown_time" = "2015-06-04 00:00:00"
+        "storage_type"="column"，
+        "storage_medium" = "SSD",
+        "storage_cooldown_time" = "2015-06-04 00:00:00"
     );
     ```
 
@@ -415,7 +415,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     )
     DISTRIBUTED BY HASH(k2) BUCKETS 32
     PROPERTIES(
-    "storage_medium" = "SSD", "storage_cooldown_time" = "2015-06-04 00:00:00"
+        "storage_medium" = "SSD", "storage_cooldown_time" = "2015-06-04 00:00:00"
     );
     ```
 
@@ -450,7 +450,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     )
     DISTRIBUTED BY HASH(k2) BUCKETS 32
     PROPERTIES(
-    "storage_medium" = "SSD"
+        "storage_medium" = "SSD"
     );
     ```
 
@@ -468,12 +468,12 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     ENGINE=mysql
     PROPERTIES
     (
-    "host" = "127.0.0.1",
-    "port" = "8239",
-    "user" = "mysql_user",
-    "password" = "mysql_passwd",
-    "database" = "mysql_db_test",
-    "table" = "mysql_table_test"
+        "host" = "127.0.0.1",
+        "port" = "8239",
+        "user" = "mysql_user",
+        "password" = "mysql_passwd",
+        "database" = "mysql_db_test",
+        "table" = "mysql_table_test"
     )
     ```
 
@@ -489,14 +489,14 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     )
     ENGINE=broker
     PROPERTIES (
-    "broker_name" = "hdfs",
-    "path" = "hdfs://hdfs_host:hdfs_port/data1,hdfs://hdfs_host:hdfs_port/data2,hdfs://hdfs_host:hdfs_port/data3%2c4",
-    "column_separator" = "|",
-    "line_delimiter" = "\n"
+        "broker_name" = "hdfs",
+        "path" = "hdfs://hdfs_host:hdfs_port/data1,hdfs://hdfs_host:hdfs_port/data2,hdfs://hdfs_host:hdfs_port/data3%2c4",
+        "column_separator" = "|",
+        "line_delimiter" = "\n"
     )
     BROKER PROPERTIES (
-    "username" = "hdfs_user",
-    "password" = "hdfs_password"
+        "username" = "hdfs_user",
+        "password" = "hdfs_password"
     )
     ```
 
@@ -542,7 +542,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     DUPLICATE KEY(`id`)
     DISTRIBUTED BY HASH(`id`) BUCKETS 10
     PROPERTIES (
-    "colocate_with" = "t1"
+        "colocate_with" = "t1"
     );
 
     CREATE TABLE `t2` (
@@ -552,7 +552,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     DUPLICATE KEY(`id`)
     DISTRIBUTED BY HASH(`id`) BUCKETS 10
     PROPERTIES (
-    "colocate_with" = "t1"
+        "colocate_with" = "t1"
     );
     ```
 
@@ -564,13 +564,13 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     )
     ENGINE=broker
     PROPERTIES (
-    "broker_name" = "bos",
-    "path" = "bos://my_bucket/input/file",
+        "broker_name" = "bos",
+        "path" = "bos://my_bucket/input/file",
     )
     BROKER PROPERTIES (
-    "bos_endpoint" = "http://bj.bcebos.com",
-    "bos_accesskey" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "bos_secret_accesskey"="yyyyyyyyyyyyyyyyyyyy"
+        "bos_endpoint" = "http://bj.bcebos.com",
+        "bos_accesskey" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "bos_secret_accesskey"="yyyyyyyyyyyyyyyyyyyy"
     )
     ```
 
@@ -620,12 +620,12 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     )
     DISTRIBUTED BY HASH(k2) BUCKETS 32
     PROPERTIES(
-    "storage_medium" = "SSD",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-3",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.buckets" = "32"
+        "storage_medium" = "SSD",
+        "dynamic_partition.time_unit" = "DAY",
+        "dynamic_partition.start" = "-3",
+        "dynamic_partition.end" = "3",
+        "dynamic_partition.prefix" = "p",
+        "dynamic_partition.buckets" = "32"
     );
     ```
 
@@ -679,9 +679,9 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     ENGINE=hive
     PROPERTIES
     (
-    "database" = "hive_db_name",
-    "table" = "hive_table_name",
-    "hive.metastore.uris" = "thrift://127.0.0.1:9083"
+        "database" = "hive_db_name",
+        "table" = "hive_table_name",
+        "hive.metastore.uris" = "thrift://127.0.0.1:9083"
     );
     ```
 

@@ -48,8 +48,8 @@ PROPERTIES ("key"="value", ...);
     ON ( `backup_tbl` )
     PROPERTIES
     (
-    "backup_timestamp"="2018-05-04-16-45-08",
-    "replication_num" = "1"
+        "backup_timestamp"="2018-05-04-16-45-08",
+        "replication_num" = "1"
     );
     ````
 
@@ -65,7 +65,7 @@ PROPERTIES ("key"="value", ...);
     )
     PROPERTIES
     (
-    "backup_timestamp"="2018-05-04-17-11-01"
+        "backup_timestamp"="2018-05-04-17-11-01"
     );
     ```
 

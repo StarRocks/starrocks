@@ -63,7 +63,7 @@ FROM data_source
     ALTER ROUTINE LOAD FOR db1.label1
     PROPERTIES
     (
-    "desired_concurrent_number" = "1"
+        "desired_concurrent_number" = "1"
     );
     ```
 
@@ -73,13 +73,13 @@ FROM data_source
     ALTER ROUTINE LOAD FOR db1.label1
     PROPERTIES
     (
-    "desired_concurrent_number" = "10"
+        "desired_concurrent_number" = "10"
     )
     FROM kafka
     (
-    "kafka_partitions" = "0, 1, 2",
-    "kafka_offsets" = "100, 200, 100",
-    "property.group.id" = "new_group"
+        "kafka_partitions" = "0, 1, 2",
+        "kafka_offsets" = "100, 200, 100",
+        "property.group.id" = "new_group"
     );
     ```
 

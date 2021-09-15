@@ -95,8 +95,8 @@ FROM data_source
 
     ```sql
     PROPERTIES (
-    "key1" = "val1",
-    "key2" = "val2"
+        "key1" = "val1",
+        "key2" = "val2"
     )
     ```
 
@@ -275,17 +275,17 @@ FROM data_source
     COLUMNS(k1, k2, k3, v1, v2, v3 = k1 * 100)
     PROPERTIES
     (
-    "desired_concurrent_number"="3",
-    "max_batch_interval" = "20",
-    "strict_mode" = "false"
+        "desired_concurrent_number"="3",
+        "max_batch_interval" = "20",
+        "strict_mode" = "false"
     )
     FROM KAFKA
     (
-    "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
-    "kafka_topic" = "my_topic",
-    "property.group.id" = "xxx",
-    "property.client.id" = "xxx",
-    "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+        "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
+        "kafka_topic" = "my_topic",
+        "property.group.id" = "xxx",
+        "property.client.id" = "xxx",
+        "property.kafka_default_offsets" = "OFFSET_BEGINNING"
     );
     ```
 
@@ -297,16 +297,16 @@ FROM data_source
     WHERE k1 > 100 and k2 like "%starrocks%"
     PROPERTIES
     (
-    "desired_concurrent_number"="3",
-    "max_batch_interval" = "20",
-    "strict_mode" = "true"
+        "desired_concurrent_number"="3",
+        "max_batch_interval" = "20",
+        "strict_mode" = "true"
     )
     FROM KAFKA
     (
-    "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
-    "kafka_topic" = "my_topic",
-    "kafka_partitions" = "0,1,2,3",
-    "kafka_offsets" = "101,0,0,200"
+        "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
+        "kafka_topic" = "my_topic",
+        "kafka_partitions" = "0,1,2,3",
+        "kafka_offsets" = "101,0,0,200"
     );
     ```
 
@@ -318,21 +318,21 @@ FROM data_source
     WHERE k1 > 100 and k2 like "%starrocks%"
     PROPERTIES
     (
-    "desired_concurrent_number"="3",
-    "max_batch_interval" = "20",
-    "strict_mode" = "false",
-    "timezone" = "Africa/Abidjan"
+        "desired_concurrent_number"="3",
+        "max_batch_interval" = "20",
+        "strict_mode" = "false",
+        "timezone" = "Africa/Abidjan"
     )
     FROM KAFKA
     (
-    "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
-    "kafka_topic" = "my_topic",
-    "property.security.protocol" = "ssl",
-    "property.ssl.ca.location" = "FILE:ca.pem",
-    "property.ssl.certificate.location" = "FILE:client.pem",
-    "property.ssl.key.location" = "FILE:client.key",
-    "property.ssl.key.password" = "abcdefg",
-    "property.client.id" = "my_client_id"
+        "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
+        "kafka_topic" = "my_topic",
+        "property.security.protocol" = "ssl",
+        "property.ssl.ca.location" = "FILE:ca.pem",
+        "property.ssl.certificate.location" = "FILE:client.pem",
+        "property.ssl.key.location" = "FILE:client.key",
+        "property.ssl.key.password" = "abcdefg",
+        "property.client.id" = "my_client_id"
     );
     ```
 
@@ -343,17 +343,17 @@ FROM data_source
     COLUMNS(category,price,author)
     PROPERTIES
     (
-    "desired_concurrent_number"="3",
-    "max_batch_interval" = "20",
-    "strict_mode" = "false",
-    "format" = "json"
+        "desired_concurrent_number"="3",
+        "max_batch_interval" = "20",
+        "strict_mode" = "false",
+        "format" = "json"
     )
     FROM KAFKA
     (
-    "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
-    "kafka_topic" = "my_topic",
-    "kafka_partitions" = "0,1,2",
-    "kafka_offsets" = "0,0,0"
+        "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
+        "kafka_topic" = "my_topic",
+        "kafka_partitions" = "0,1,2",
+        "kafka_offsets" = "0,0,0"
     );
     支持两种json数据格式：
     1）{"category":"a9jadhx","author":"test","price":895}
@@ -382,27 +382,27 @@ FROM data_source
     PARTITION p20200511 VALUES [("20200511"), ("20200512")))
     DISTRIBUTED BY HASH(`category`,`author`,`timestamp`) BUCKETS 4
     PROPERTIES (
-    "storage_type" = "COLUMN",
-    "replication_num" = "1"
+        "storage_type" = "COLUMN",
+        "replication_num" = "1"
     );
 
     CREATE ROUTINE LOAD example_db.test1 ON example_tbl
     COLUMNS(category, author, price, timestamp, dt=from_unixtime(timestamp, '%Y%m%d'))
     PROPERTIES
     (
-    "desired_concurrent_number"="3",
-    "max_batch_interval" = "20",
-    "strict_mode" = "false",
-    "format" = "json",
-    "jsonpaths" = "[\"$.category\",\"$.author\",\"$.price\",\"$.timestamp\"]",
-    "strip_outer_array" = "true"
+        "desired_concurrent_number"="3",
+        "max_batch_interval" = "20",
+        "strict_mode" = "false",
+        "format" = "json",
+        "jsonpaths" = "[\"$.category\",\"$.author\",\"$.price\",\"$.timestamp\"]",
+        "strip_outer_array" = "true"
     )
     FROM KAFKA
     (
-    "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
-    "kafka_topic" = "my_topic",
-    "kafka_partitions" = "0,1,2",
-    "kafka_offsets" = "0,0,0"
+        "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
+        "kafka_topic" = "my_topic",
+        "kafka_partitions" = "0,1,2",
+        "kafka_offsets" = "0,0,0"
     );
     json数据格式:
     [
@@ -423,20 +423,20 @@ FROM data_source
     COLUMNS(category, author, price, timestamp, dt=from_unixtime(timestamp, '%Y%m%d'))
     PROPERTIES
     (
-    "desired_concurrent_number"="3",
-    "max_batch_interval" = "20",
-    "strict_mode" = "false",
-    "format" = "json",
-    "jsonpaths" = "[\"$.category\",\"$.author\",\"$.price\",\"$.timestamp\"]",
-    "strip_outer_array" = "true",
-    "json_root" = "$.RECORDS"
+        "desired_concurrent_number"="3",
+        "max_batch_interval" = "20",
+        "strict_mode" = "false",
+        "format" = "json",
+        "jsonpaths" = "[\"$.category\",\"$.author\",\"$.price\",\"$.timestamp\"]",
+        "strip_outer_array" = "true",
+        "json_root" = "$.RECORDS"
     )
     FROM KAFKA
     (
-    "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
-    "kafka_topic" = "my_topic",
-    "kafka_partitions" = "0,1,2",
-    "kafka_offsets" = "0,0,0"
+        "kafka_broker_list" = "broker1:9092,broker2:9092,broker3:9092",
+        "kafka_topic" = "my_topic",
+        "kafka_partitions" = "0,1,2",
+        "kafka_offsets" = "0,0,0"
     );
     json数据格式:
     {

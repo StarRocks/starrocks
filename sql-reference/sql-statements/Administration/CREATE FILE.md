@@ -39,8 +39,8 @@ md5: 可选。文件的 md5。如果指定，会在下载文件后进行校验�
     CREATE FILE "ca.pem"
     PROPERTIES
     (
-    "url" = "https://test.bj.bcebos.com/kafka-key/ca.pem",
-    "catalog" = "kafka"
+        "url" = "https://test.bj.bcebos.com/kafka-key/ca.pem",
+        "catalog" = "kafka"
     );
     ```
 
@@ -51,9 +51,9 @@ md5: 可选。文件的 md5。如果指定，会在下载文件后进行校验�
     IN my_database
     PROPERTIES
     (
-    "url" = "https://test.bj.bcebos.com/kafka-key/client.key",
-    "catalog" = "my_catalog",
-    "md5" = "b5bb901bf10f99205b39a46ac3557dd9"
+        "url" = "https://test.bj.bcebos.com/kafka-key/client.key",
+        "catalog" = "my_catalog",
+        "md5" = "b5bb901bf10f99205b39a46ac3557dd9"
     );
     ```
 
