@@ -113,10 +113,8 @@ Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
 Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
                                             const std::vector<uint32_t>& scanner_columns,
                                             std::vector<uint32_t>& reader_columns, vectorized::ReaderParams* params) {
-    params->tablet = _tablet;
     params->reader_type = READER_QUERY;
     params->skip_aggregation = _skip_aggregation;
-    params->version = Version(0, _version);
     params->profile = _scan_profile;
     params->runtime_state = _runtime_state;
     params->use_page_cache = !config::disable_storage_page_cache;
@@ -211,7 +209,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
     starrocks::vectorized::Schema child_schema =
             ChunkHelper::convert_schema_to_format_v2(tablet_schema, reader_columns);
-    _reader = std::make_shared<Reader>(std::move(child_schema));
+    _reader = std::make_shared<Reader>(_tablet, Version(0, _version), std::move(child_schema));
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -223,14 +221,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     if (!_un_push_down_conjuncts.empty() || !_un_push_down_predicates.empty()) {
         _expr_filter_timer = ADD_TIMER(_scan_profile, "ExprFilterTime");
     }
-    Status res = _reader->init(params);
-    if (!res.ok()) {
-        std::stringstream ss;
-        ss << "failed to initialize storage reader. tablet=" << params.tablet->full_name()
-           << ", res=" << res.to_string() << ", backend=" << BackendOptions::get_localhost();
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str().c_str());
-    }
+    RETURN_IF_ERROR(_reader->prepare());
+    RETURN_IF_ERROR(_reader->open(params));
     return Status::OK();
 }
 

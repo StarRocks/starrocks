@@ -146,9 +146,8 @@ private:
     RuntimeProfile* _scan_profile = nullptr;
 
     RuntimeProfile::Counter* _scan_timer = nullptr;
-    RuntimeProfile::Counter* _capture_rowset_timer = nullptr;
+    RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
     RuntimeProfile::Counter* _tablet_counter = nullptr;
-    RuntimeProfile::Counter* _reader_init_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
     RuntimeProfile::Counter* _decompress_timer = nullptr;
