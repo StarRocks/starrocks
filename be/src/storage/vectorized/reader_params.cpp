@@ -6,19 +6,13 @@
 
 namespace starrocks::vectorized {
 
-ReaderParams::ReaderParams() : version(-1, 0) {}
-
-void ReaderParams::check_validation() const {
-    if (version.first == -1) {
-        LOG(FATAL) << "verison is not set. tablet=" << tablet->full_name();
-    }
-}
+ReaderParams::ReaderParams() {}
 
 std::string ReaderParams::to_string() const {
     std::stringstream ss;
 
-    ss << "tablet=" << tablet->full_name() << " reader_type=" << reader_type << " skip_aggregation=" << skip_aggregation
-       << " version=" << version.first << "-" << version.second << " range=" << range << " end_range=" << end_range;
+    ss << "reader_type=" << reader_type << " skip_aggregation=" << skip_aggregation << " range=" << range
+       << " end_range=" << end_range;
 
     for (auto& key : start_key) {
         ss << " keys=" << key;
