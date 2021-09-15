@@ -855,6 +855,9 @@ RowBlockAllocator::~RowBlockAllocator() {
 }
 
 bool RowBlockAllocator::is_memory_enough_to_sort(size_t num_rows, size_t allocated_rows) {
+    if (num_rows <= allocated_rows) {
+        return true;
+    }
     size_t row_block_size = _row_len * (num_rows - allocated_rows);
     return _memory_allocated + row_block_size < _memory_limitation;
 }
