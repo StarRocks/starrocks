@@ -51,6 +51,7 @@ public class Table extends MetaObject implements Writable {
     public enum TableType {
         MYSQL,
         OLAP,
+        OLAP_EXTERNAL,
         SCHEMA,
         INLINE_VIEW,
         VIEW,
@@ -138,6 +139,10 @@ public class Table extends MetaObject implements Writable {
         return name;
     }
 
+    public void setType(TableType type) {
+        this.type = type;
+    }
+
     public TableType getType() {
         return type;
     }
@@ -188,6 +193,8 @@ public class Table extends MetaObject implements Writable {
             table = new HiveTable();
         } else if (type == TableType.ODBC) {
             table = new OdbcTable();
+        } else if (type == TableType.OLAP_EXTERNAL) {
+            table = new ExternalOlapTable();
         } else {
             throw new IOException("Unknown table type: " + type.name());
         }
@@ -314,21 +321,33 @@ public class Table extends MetaObject implements Writable {
 
     /*
      * 1. Only schedule OLAP table.
-     * 2. If table is colocate with other table, not schedule it.
+     * 2. If table is colocate with other table,
+     *   2.1 If is clone between bes or group is not stable, table can not be scheduled.
+     *   2.2 If is local balance and group is stable, table can be scheduled.
      * 3. (deprecated). if table's state is ROLLUP or SCHEMA_CHANGE, but alter job's state is FINISHING, we should also
      *      schedule the tablet to repair it(only for VERSION_IMCOMPLETE case, this will be checked in
      *      TabletScheduler).
      * 4. Even if table's state is ROLLUP or SCHEMA_CHANGE, check it. Because we can repair the tablet of base index.
+     * 5. PRIMARY_KEYS table does not support local balance.
      */
-    public boolean needSchedule() {
+    public boolean needSchedule(boolean isLocalBalance) {
         if (type != TableType.OLAP) {
             return false;
         }
 
-        OlapTable olapTable = (OlapTable) this;
+        ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+        if (colocateIndex.isColocateTable(getId())) {
+            boolean isGroupUnstable = colocateIndex.isGroupUnstable(colocateIndex.getGroup(getId()));
+            if (!isLocalBalance || isGroupUnstable) {
+                LOG.debug(
+                        "table {} is a colocate table, skip tablet checker. is local migration: {}, is group unstable: {}",
+                        name, isLocalBalance, isGroupUnstable);
+                return false;
+            }
+        }
 
-        if (Catalog.getCurrentColocateIndex().isColocateTable(olapTable.getId())) {
-            LOG.debug("table {} is a colocate table, skip tablet checker.", name);
+        OlapTable olapTable = (OlapTable) this;
+        if (isLocalBalance && olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
             return false;
         }
 

@@ -31,8 +31,8 @@
 #include "common/status.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "storage/kv_store.h"
 #include "storage/olap_common.h"
-#include "storage/olap_meta.h"
 #include "storage/rowset/rowset_id_generator.h"
 
 namespace starrocks {
@@ -55,7 +55,7 @@ public:
     void stop_bg_worker();
 
     const std::string& path() const { return _path; }
-    size_t path_hash() const { return _path_hash; }
+    int64_t path_hash() const { return _path_hash; }
     bool is_used() const { return _is_used; }
     void set_is_used(bool is_used) { _is_used = is_used; }
     int32_t cluster_id() const { return _cluster_id; }
@@ -79,7 +79,7 @@ public:
 
     OLAPStatus get_shard(uint64_t* shard);
 
-    OlapMeta* get_meta() { return _meta; }
+    KVStore* get_meta() { return _kv_store; }
 
     bool is_ssd_disk() const { return _storage_medium == TStorageMedium::SSD; }
 
@@ -138,7 +138,7 @@ private:
     bool _stop_bg_worker = false;
 
     std::string _path;
-    size_t _path_hash;
+    int64_t _path_hash;
     // user specified capacity
     int64_t _capacity_bytes;
     // the actual available capacity of the disk of this data dir
@@ -164,7 +164,7 @@ private:
 
     static const uint32_t MAX_SHARD_NUM = 1024;
 
-    OlapMeta* _meta = nullptr;
+    KVStore* _kv_store = nullptr;
     RowsetIdGenerator* _id_generator = nullptr;
 
     std::mutex _check_path_mutex;

@@ -73,10 +73,9 @@ public:
     OperatorFactory(int32_t id, int32_t plan_node_id) : _id(id), _plan_node_id(plan_node_id) {}
     virtual ~OperatorFactory() = default;
     // Create the operator for the specific sequence driver
-    // For some operators, when share some status, need to know the the driver_instance_count
-    virtual OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) = 0;
+    // For some operators, when share some status, need to know the the degree_of_parallelism
+    virtual OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) = 0;
     virtual bool is_source() const { return false; }
-
     int32_t plan_node_id() const { return _plan_node_id; }
 
 protected:

@@ -11,9 +11,9 @@ namespace starrocks::vectorized {
 class AggregateStreamingNode final : public AggregateBaseNode {
 public:
     AggregateStreamingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-            : AggregateBaseNode(pool, tnode, descs) {
-        _aggr_phase = AggrPhase1;
-    };
+            : AggregateBaseNode(pool, tnode, descs) {}
+
+    Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 

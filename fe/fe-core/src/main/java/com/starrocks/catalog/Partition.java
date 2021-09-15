@@ -234,6 +234,10 @@ public class Partition extends MetaObject implements Writable {
         }
     }
 
+    public void setBaseIndex(MaterializedIndex baseIndex) {
+        this.baseIndex = baseIndex;
+    }
+
     public MaterializedIndex getBaseIndex() {
         return baseIndex;
     }

@@ -45,6 +45,10 @@
 
 namespace starrocks {
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 #define DS_SUCCESS(x) ((x) >= 0)
 
 OlapScanNode::OlapScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)

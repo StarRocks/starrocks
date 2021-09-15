@@ -14,6 +14,8 @@ public abstract class ScalarOperator implements Cloneable {
     protected Type type;
     // this operator will not eval in predicate estimate
     protected boolean notEvalEstimate = false;
+    // Used to determine if it is derive from predicate range extractor
+    protected boolean fromPredicateRangeDerive = false;
 
     public ScalarOperator(OperatorType opType, Type type) {
         this.opType = requireNonNull(opType, "opType is null");
@@ -60,6 +62,14 @@ public abstract class ScalarOperator implements Cloneable {
 
     public void setNotEvalEstimate(boolean notEvalInPredicateEstimate) {
         this.notEvalEstimate = notEvalInPredicateEstimate;
+    }
+
+    public boolean isFromPredicateRangeDerive() {
+        return fromPredicateRangeDerive;
+    }
+
+    public void setFromPredicateRangeDerive(boolean fromPredicateRangeDerive) {
+        this.fromPredicateRangeDerive = fromPredicateRangeDerive;
     }
 
     public abstract List<ScalarOperator> getChildren();

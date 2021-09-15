@@ -68,6 +68,11 @@ using vectorized::ChunkPtr;
 // All subclasses need to make sure to check RuntimeState::is_cancelled()
 // periodically in order to ensure timely termination after the cancellation
 // flag gets set.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class ExecNode {
 public:
     // Init conjuncts.

@@ -39,6 +39,10 @@ import java.util.List;
  * Class representing a statement rewriter. A statement rewriter performs subquery
  * unnesting on an analyzed parse tree.
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
+@Deprecated
 public class StmtRewriter {
     private static final Logger LOG = LoggerFactory.getLogger(StmtRewriter.class);
 

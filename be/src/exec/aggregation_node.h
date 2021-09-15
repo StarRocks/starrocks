@@ -41,17 +41,9 @@ class Tuple;
 class TupleDescriptor;
 class SlotDescriptor;
 
-// Node for in-memory hash aggregation.
-// The node creates a hash set of aggregation output tuples, which
-// contain slots for all grouping and aggregation exprs (the grouping
-// slots precede the aggregation expr slots in the output tuple descriptor).
-//
-// For string aggregation, we need to append additional data to the tuple object
-// to reduce the number of string allocations (since we cannot know the length of
-// the output string beforehand).  For each string slot in the output tuple, a int32
-// will be appended to the end of the normal tuple data that stores the size of buffer
-// for that string slot.  This also results in the correct alignment because StringValue
-// slots are 8-byte aligned and form the tail end of the tuple.
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
 class AggregationNode : public ExecNode {
 public:
     AggregationNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);

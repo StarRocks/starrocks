@@ -317,8 +317,6 @@ Status SegmentIterator::_init() {
         }
     }
 
-    RETURN_IF_ERROR(_segment->_load_index());
-
     _selection.resize(_opts.chunk_size);
     _selected_idx.resize(_opts.chunk_size);
     CurrentMemTracker::consume(_selection.capacity() * sizeof(_selection[0]));
@@ -405,6 +403,7 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         return Status::OK();
     }
     DCHECK_EQ(0, _scan_range.span_size());
+    RETURN_IF_ERROR(_segment->_load_index());
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();

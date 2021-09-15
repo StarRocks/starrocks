@@ -65,6 +65,10 @@ import java.util.TreeSet;
  * The SPJG query is "Select Projection Join and Group-by" such as:
  * select t1.c1, sum(t2.c1) from t1, t2 where t1.c2=t2.c2 and t1.c3=1 group by t1.c 1;
  */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
+@Deprecated
 public class MaterializedViewSelector {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewSelector.class);
 

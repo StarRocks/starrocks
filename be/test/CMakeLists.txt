@@ -149,7 +149,7 @@ set(EXEC_FILES
         ./storage/memory/partial_row_batch_test.cpp
         ./storage/memory/schema_test.cpp
         ./storage/null_predicate_test.cpp
-        ./storage/olap_meta_test.cpp
+        ./storage/kv_store_test.cpp
         ./storage/protobuf_file_test.cpp
         #./storage/options_test.cpp
         ./storage/page_cache_test.cpp

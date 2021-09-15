@@ -38,6 +38,11 @@ class Tuple;
 // This handles the case where the result fits in memory.  This node will do a deep
 // copy of the tuples that are necessary for the output.
 // This is implemented by storing rows in a priority queue.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class TopNNode : public ExecNode {
 public:
     TopNNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);

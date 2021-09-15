@@ -32,6 +32,11 @@ class TupleRow;
 
 // Node that evaluates conjuncts and enforces a limit but otherwise passes along
 // the rows pulled from its child unchanged.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 class SelectNode : public ExecNode {
 public:
     SelectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);

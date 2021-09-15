@@ -239,6 +239,8 @@ public class ExportMgr {
                 infoMap.put("db", job.getTableName().getDb());
                 infoMap.put("tbl", job.getTableName().getTbl());
                 infoMap.put("partitions", partitions);
+                List<String> columns = job.getColumnNames() == null ? Lists.newArrayList("*") : job.getColumnNames();
+                infoMap.put("columns", job.isReplayed() ? "N/A" : columns);
                 infoMap.put("broker", job.getBrokerDesc().getName());
                 infoMap.put("column separator", job.getColumnSeparator());
                 infoMap.put("row delimiter", job.getRowDelimiter());

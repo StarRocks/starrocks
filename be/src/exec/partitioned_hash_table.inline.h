@@ -28,6 +28,10 @@
 
 namespace starrocks {
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 inline bool PartitionedHashTableCtx::EvalAndHashBuild(TupleRow* row) {
     uint8_t* expr_values = expr_values_cache_.cur_expr_values();
     uint8_t* expr_values_null = expr_values_cache_.cur_expr_values_null();

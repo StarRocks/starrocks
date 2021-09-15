@@ -40,6 +40,10 @@ using starrocks_udf::DateTimeVal;
 using starrocks_udf::StringVal;
 using starrocks_udf::AnyVal;
 
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 Status allocate_any_val(RuntimeState* state, MemPool* pool, const TypeDescriptor& type,
                         const std::string& mem_limit_exceeded_msg, AnyVal** result) {
     const int anyval_size = AnyValUtil::any_val_size(type);

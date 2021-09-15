@@ -105,6 +105,37 @@ public:
         return result == StringParser::PARSE_FAILURE || result == StringParser::PARSE_OVERFLOW;
     }
 
+    // If a decimal string is too large so that it can not be represented in decimal, then try to convert it into
+    // double value, and the double value shall be greater than the integer part of max decimal or less than the
+    // integer part of min decimal, in such situations, (max decimal + 1) and (min decimal - 1) are final result
+    // respectively. this function is used in `IN` predicates and for the purpose that convert sets of decimal
+    // strings into valid decimal values, in these scenarios, that overflow values are handled as max + 1 or min - 1
+    // values is accepted.
+    template <typename T>
+    static inline bool from_string_with_overflow_allowed(DecimalType<T>* value, int scale, const char* s, size_t n) {
+        StringParser::ParseResult result = StringParser::PARSE_SUCCESS;
+        *value = StringParser::string_to_decimal<T>(s, n, decimal_precision_limit<T>, scale, &result);
+        if (UNLIKELY(StringParser::PARSE_FAILURE == result)) {
+            return true;
+        }
+        if (UNLIKELY(StringParser::PARSE_OVERFLOW == result)) {
+            double double_value = StringParser::string_to_float<double>(s, n, &result);
+            if (result != StringParser::PARSE_SUCCESS) {
+                return true;
+            }
+            const auto max_integer = get_scale_factor<T>(decimal_precision_limit<T> - scale);
+            const auto min_integer = -max_integer;
+            if (double_value >= max_integer) {
+                *value = get_scale_factor<T>(decimal_precision_limit<T>);
+            } else if (double_value <= min_integer) {
+                *value = -get_scale_factor<T>(decimal_precision_limit<T>);
+            } else {
+                return true;
+            }
+        }
+        return false;
+    }
+
     template <typename ST>
     static inline std::string to_string(DecimalType<ST> const& value, int precision, int scale) {
         using T = typename unsigned_type<ST>::type;

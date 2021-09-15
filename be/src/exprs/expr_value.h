@@ -36,6 +36,11 @@ namespace starrocks {
 // for maintaining state across evaluations.
 // For example, the rand() math function uses double_val as its return value,
 // and int_val as the state for the random number generator.
+
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
+
 struct ExprValue {
     bool bool_val = false;
     int8_t tinyint_val = 0;

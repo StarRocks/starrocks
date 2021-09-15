@@ -340,6 +340,14 @@ OLAPStatus Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
     _timestamped_version_tracker.add_version(rowset->version());
 
     RETURN_NOT_OK(_tablet_meta->add_inc_rs_meta(rowset->rowset_meta()));
+
+    // warm-up this rowset
+    auto st = rowset->load();
+    if (!st.ok()) {
+        // only log load failure
+        LOG(WARNING) << "ignore load rowset error tablet:" << tablet_id() << " rowset:" << rowset->rowset_id() << " "
+                     << st;
+    }
     ++_newly_created_rowset_num;
     return OLAP_SUCCESS;
 }
@@ -695,6 +703,20 @@ void Tablet::delete_alter_task() {
 
 OLAPStatus Tablet::set_alter_state(AlterTabletState state) {
     return _tablet_meta->set_alter_state(state);
+}
+
+bool Tablet::check_migrate(const TabletSharedPtr& tablet) {
+    if (tablet->is_migrating()) {
+        LOG(WARNING) << "tablet is migrating. tablet_id=" << tablet->tablet_id();
+        return true;
+    } else {
+        if (tablet !=
+            StorageEngine::instance()->tablet_manager()->get_tablet(tablet->tablet_id(), tablet->schema_hash())) {
+            LOG(WARNING) << "tablet has been migrated. tablet_id=" << tablet->tablet_id();
+            return true;
+        }
+    }
+    return false;
 }
 
 bool Tablet::can_do_compaction() {

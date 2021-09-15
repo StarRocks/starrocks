@@ -36,14 +36,14 @@ private:
     std::atomic<bool> _is_finishing{false};
 };
 
-class ExchangeSourceOperatorFactory final : public OperatorFactory {
+class ExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     ExchangeSourceOperatorFactory(int32_t id, int32_t plan_node_id, int32_t num_sender, const RowDescriptor& row_desc)
-            : OperatorFactory(id, plan_node_id), _num_sender(num_sender), _row_desc(row_desc) {}
+            : SourceOperatorFactory(id, plan_node_id), _num_sender(num_sender), _row_desc(row_desc) {}
 
     ~ExchangeSourceOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<ExchangeSourceOperator>(_id, _plan_node_id, _num_sender, _row_desc);
     }
 

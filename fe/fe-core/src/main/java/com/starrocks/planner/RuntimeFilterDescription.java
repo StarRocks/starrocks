@@ -123,7 +123,7 @@ public class RuntimeFilterDescription {
     public boolean isLocalApplicable() {
         return joinMode.equals(HashJoinNode.DistributionMode.BROADCAST) ||
                 joinMode.equals(HashJoinNode.DistributionMode.COLOCATE) ||
-                joinMode.equals(HashJoinNode.DistributionMode.BUCKET_SHUFFLE);
+                joinMode.equals(HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET);
     }
 
     public boolean isBroadcastJoin() {
@@ -141,7 +141,7 @@ public class RuntimeFilterDescription {
         // because data are shuffled base on multiple columns
         // and we can not probe with only one column.
         if (joinMode.equals(HashJoinNode.DistributionMode.PARTITIONED) ||
-                joinMode.equals(HashJoinNode.DistributionMode.BUCKET_SHUFFLE)) {
+                joinMode.equals(HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET)) {
             return equalCount == 1;
         }
         return false;
@@ -191,7 +191,7 @@ public class RuntimeFilterDescription {
         assert (joinMode != HashJoinNode.DistributionMode.NONE);
         if (joinMode.equals(HashJoinNode.DistributionMode.BROADCAST)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.BORADCAST);
-        } else if (joinMode.equals(HashJoinNode.DistributionMode.BUCKET_SHUFFLE)) {
+        } else if (joinMode.equals(HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.BUCKET_SHUFFLE);
         } else if (joinMode.equals(HashJoinNode.DistributionMode.PARTITIONED)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.PARTITIONED);

@@ -156,11 +156,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         HashDistributionSpec rightDistribution = DistributionSpec.createHashDistributionSpec(
                 new HashDistributionDesc(rightOnPredicateColumns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
 
-        PhysicalPropertySet leftInputProperty = createPropertySetByDistribution(leftDistribution);
-        PhysicalPropertySet rightInputProperty = createPropertySetByDistribution(rightDistribution);
-
-        outputInputProps
-                .add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList(leftInputProperty, rightInputProperty)));
+        doHashShuffle(equalOnPredicate, leftDistribution, rightDistribution);
 
         // Respect use join hint
         if ("SHUFFLE".equalsIgnoreCase(hint)) {
@@ -182,6 +178,76 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
         // 5 resolve requirements
         return visitJoinRequirements(node, context);
+    }
+
+    private void doHashShuffle(List<BinaryPredicateOperator> equalOnPredicate, HashDistributionSpec leftDistribution,
+                               HashDistributionSpec rightDistribution) {
+
+        // Need to force shuffle if the on clause contains expression
+        // @Todo: It's a temporary solution
+        if (equalOnPredicate.stream().anyMatch(p -> !isColumnToColumnBinaryPredicate(p))) {
+            PhysicalPropertySet leftProperty = createPropertySetByDistribution(new HashDistributionSpec(
+                    new HashDistributionDesc(leftDistribution.getShuffleColumns(),
+                            HashDistributionDesc.SourceType.FORCE_SHUFFLE_JOIN)));
+
+            PhysicalPropertySet rightProperty = createPropertySetByDistribution(new HashDistributionSpec(
+                    new HashDistributionDesc(rightDistribution.getShuffleColumns(),
+                            HashDistributionDesc.SourceType.FORCE_SHUFFLE_JOIN)));
+
+            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
+                    Lists.newArrayList(leftProperty, rightProperty)));
+            return;
+        }
+
+        // shuffle
+        PhysicalPropertySet leftInputProperty = createPropertySetByDistribution(leftDistribution);
+        PhysicalPropertySet rightInputProperty = createPropertySetByDistribution(rightDistribution);
+
+        Optional<HashDistributionDesc> requiredShuffleDesc = getRequiredShuffleJoinDesc();
+        if (!requiredShuffleDesc.isPresent()) {
+            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
+                    Lists.newArrayList(leftInputProperty, rightInputProperty)));
+            return;
+        }
+
+        // try shuffle_hash_bucket
+        HashDistributionDesc requiredDesc = requiredShuffleDesc.get();
+
+        List<Integer> leftColumns = leftDistribution.getShuffleColumns();
+        List<Integer> rightColumns = rightDistribution.getShuffleColumns();
+        List<Integer> requiredColumns = requiredDesc.getColumns();
+
+        Preconditions.checkState(leftColumns.size() == rightColumns.size());
+        // Hash shuffle columns must keep same
+        boolean checkLeft = leftColumns.containsAll(requiredColumns) && leftColumns.size() == requiredColumns.size();
+        boolean checkRight = rightColumns.containsAll(requiredColumns) && rightColumns.size() == requiredColumns.size();
+
+        if (checkLeft || checkRight) {
+            // Adjust hash shuffle columns orders follow requirement
+            List<Integer> requiredLeft = Lists.newArrayList();
+            List<Integer> requiredRight = Lists.newArrayList();
+
+            for (Integer cid : requiredColumns) {
+                int idx = checkLeft ? leftColumns.indexOf(cid) : rightColumns.indexOf(cid);
+                requiredLeft.add(leftColumns.get(idx));
+                requiredRight.add(rightColumns.get(idx));
+            }
+
+            PhysicalPropertySet leftShuffleProperty = createPropertySetByDistribution(
+                    DistributionSpec.createHashDistributionSpec(new HashDistributionDesc(requiredLeft,
+                            HashDistributionDesc.SourceType.SHUFFLE_JOIN)));
+
+            PhysicalPropertySet rightShuffleProperty = createPropertySetByDistribution(
+                    DistributionSpec.createHashDistributionSpec(new HashDistributionDesc(requiredRight,
+                            HashDistributionDesc.SourceType.SHUFFLE_JOIN)));
+
+            outputInputProps.add(new Pair<>(distributeRequirements(),
+                    Lists.newArrayList(leftShuffleProperty, rightShuffleProperty)));
+            return;
+        }
+
+        outputInputProps
+                .add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList(leftInputProperty, rightInputProperty)));
     }
 
     /*
@@ -345,7 +411,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
         PhysicalPropertySet rightBucketShuffleProperty = createPropertySetByDistribution(
                 DistributionSpec.createHashDistributionSpec(new HashDistributionDesc(rightBucketShuffleColumns,
-                        HashDistributionDesc.SourceType.SHUFFLE_JOIN)));
+                        HashDistributionDesc.SourceType.BUCKET_JOIN)));
         PhysicalPropertySet leftLocalProperty =
                 createPropertySetByDistribution(createLocalByByHashColumns(leftLocalColumns));
 
@@ -382,6 +448,20 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         HashDistributionDesc requireDistributionDesc =
                 ((HashDistributionSpec) requirements.getDistributionProperty().getSpec()).getHashDistributionDesc();
         if (!HashDistributionDesc.SourceType.LOCAL.equals(requireDistributionDesc.getSourceType())) {
+            return Optional.empty();
+        }
+
+        return Optional.of(requireDistributionDesc);
+    }
+
+    private Optional<HashDistributionDesc> getRequiredShuffleJoinDesc() {
+        if (!requirements.getDistributionProperty().isShuffle()) {
+            return Optional.empty();
+        }
+
+        HashDistributionDesc requireDistributionDesc =
+                ((HashDistributionSpec) requirements.getDistributionProperty().getSpec()).getHashDistributionDesc();
+        if (!HashDistributionDesc.SourceType.SHUFFLE_JOIN.equals(requireDistributionDesc.getSourceType())) {
             return Optional.empty();
         }
 

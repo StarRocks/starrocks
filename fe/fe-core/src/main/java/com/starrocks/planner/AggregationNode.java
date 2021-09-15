@@ -43,11 +43,9 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 
-//import com.starrocks.thrift.TAggregateFunctionCall;
-
-/**
- * Aggregation computation.
- */
+// Our new cost based query optimizer is more powerful and stable than old query optimizer,
+// The old query optimizer related codes could be deleted safely.
+// TODO: Remove old query optimizer related codes before 2021-09-30
 public class AggregationNode extends PlanNode {
     private static final Logger LOG = LogManager.getLogger(AggregationNode.class);
     private final AggregateInfo aggInfo;
@@ -280,6 +278,7 @@ public class AggregationNode extends PlanNode {
         } else {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }
+        msg.agg_node.setAgg_func_set_version(2);
     }
 
     protected String getDisplayLabelDetail() {

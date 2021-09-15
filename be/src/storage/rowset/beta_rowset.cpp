@@ -72,19 +72,21 @@ OLAPStatus BetaRowset::init() {
 }
 
 Status BetaRowset::do_load() {
-    // Open all segments under the current rowset
+    // TODO: `BlockManager` should be passed in as an argument.
+    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+    MemTracker* mem_tracker = _mem_tracker.get();
+
+    _segments.clear();
+    size_t footer_size_hint = 4096;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        std::shared_ptr<segment_v2::Segment> segment;
-        // TODO: `BlockManager` should be passed in as an argument.
-        fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-        auto s = segment_v2::Segment::open(_mem_tracker.get(), block_mgr, seg_path, seg_id, _schema, &segment);
-        if (!s.ok()) {
-            LOG(WARNING) << "Fail to open segment=" << seg_path << " of rowset=" << unique_id() << ", "
-                         << s.to_string();
-            return s;
+        auto res = segment_v2::Segment::open(mem_tracker, block_mgr, seg_path, seg_id, _schema, &footer_size_hint);
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
+            _segments.clear();
+            return res.status();
         }
-        _segments.push_back(std::move(segment));
+        _segments.push_back(std::move(res).value());
     }
     return Status::OK();
 }
@@ -313,7 +315,7 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
 }
 
 StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iterators2(const vectorized::Schema& schema,
-                                                                                       OlapMeta* meta, int64_t version,
+                                                                                       KVStore* meta, int64_t version,
                                                                                        OlapReaderStatistics* stats) {
     RETURN_IF_ERROR(load());
 

@@ -1044,7 +1044,7 @@ Status TabletManager::start_trash_sweep() {
             if (st.ok()) {
                 if (tablet_meta->tablet_uid() != (*it)->tablet_uid()) {
                     LOG(INFO) << "Skipped remove tablet " << tablet_meta->tablet_id() << ": uid mismatch";
-                    ++it;
+                    it = _shutdown_tablets.erase(it);
                     continue;
                 }
                 if (tablet_meta->tablet_state() != TABLET_SHUTDOWN) {

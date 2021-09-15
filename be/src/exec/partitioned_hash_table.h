@@ -48,64 +48,10 @@ class RuntimeState;
 class Tuple;
 class TupleRow;
 
-/// Linear or quadratic probing hash table implementation tailored to the usage pattern
-/// for partitioned hash aggregation and hash joins. The hash table stores TupleRows and
-/// allows for different exprs for insertions and finds. This is the pattern we use for
-/// joins and aggregation where the input/build tuple row descriptor is different from the
-/// find/probe descriptor. The implementation is designed to allow codegen for some paths.
-//
-/// In addition to the hash table there is also an accompanying hash table context that is
-/// used for insertions and probes. For example, the hash table context stores evaluated
-/// expr results for the current row being processed when possible into a contiguous
-/// memory buffer. This allows for efficient hash computation.
-//
-/// The hash table does not support removes. The hash table is not thread safe.
-/// The table is optimized for the partition hash aggregation and hash joins and is not
-/// intended to be a generic hash table implementation. The API loosely mimics the
-/// std::hashset API.
-//
-/// The data (rows) are stored in a BufferedTupleStream3. The basic data structure of this
-/// hash table is a vector of buckets. The buckets (indexed by the mod of the hash)
-/// contain a pointer to either the slot in the tuple-stream or in case of duplicate
-/// values, to the head of a linked list of nodes that in turn contain a pointer to
-/// tuple-stream slots. When inserting an entry we start at the bucket at position
-/// (hash % size) and search for either a bucket with the same hash or for an empty
-/// bucket. If a bucket with the same hash is found, we then compare for row equality and
-/// either insert a duplicate node if the equality is true, or continue the search if the
-/// row equality is false. Similarly, when probing we start from the bucket at position
-/// (hash % size) and search for an entry with the same hash or for an empty bucket.
-/// In the former case, we then check for row equality and continue the search if the row
-/// equality is false. In the latter case, the probe is not successful. When growing the
-/// hash table, the number of buckets is doubled. We trigger a resize when the fill
-/// factor is approx 75%. Due to the doubling nature of the buckets, we require that the
-/// number of buckets is a power of 2. This allows us to perform a modulo of the hash
-/// using a bitmask.
-///
-/// We choose to use linear or quadratic probing because they exhibit good (predictable)
-/// cache behavior.
-///
-/// The first NUM_SMALL_BLOCKS of nodes_ are made of blocks less than the IO size (of 8MB)
-/// to reduce the memory footprint of small queries.
-///
-/// TODO: Compare linear and quadratic probing and remove the loser.
-/// TODO: We currently use 32-bit hashes. There is room in the bucket structure for at
-/// least 48-bits. We should exploit this space.
-/// TODO: Consider capping the probes with a threshold value. If an insert reaches
-/// that threshold it is inserted to another linked list of overflow entries.
-/// TODO: Smarter resizes, and perhaps avoid using powers of 2 as the hash table size.
-/// TODO: this is not a fancy hash table in terms of memory access patterns
-/// (cuckoo-hashing or something that spills to disk). We will likely want to invest
-/// more time into this.
-/// TODO: hash-join and aggregation have very different access patterns.  Joins insert all
-/// the rows and then calls scan to find them.  Aggregation interleaves FindProbeRow() and
-/// Inserts().  We may want to optimize joins more heavily for Inserts() (in particular
-/// growing).
-/// TODO: Batched interface for inserts and finds.
-/// TODO: Do we need to check mem limit exceeded so often. Check once per batch?
-/// TODO: as an optimization, compute variable-length data size for the agg node.
+// Our new vectorized query executor is more powerful and stable than old query executor,
+// The executor query executor related codes could be deleted safely.
+// TODO: Remove old query executor related codes before 2021-09-30
 
-/// Control block for a hash table. This class contains the logic as well as the variables
-/// needed by a thread to operate on a hash table.
 class PartitionedHashTableCtx {
 public:
     /// Create a hash table context with the specified parameters, invoke Init() to

@@ -5,6 +5,9 @@
 #include <memory>
 
 #include "column/column_helper.h"
+#include "exec/pipeline/exchange/local_exchange.h"
+#include "exec/pipeline/exchange/local_exchange_sink_operator.h"
+#include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sort/sort_sink_operator.h"
 #include "exec/pipeline/sort/sort_source_operator.h"
@@ -219,7 +222,8 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 
     // step 0: construct pipeline end with sort operator.
     // get operators before sort operator
-    OpFactories operator_sink_with_sort = _children[0]->decompose_to_pipeline(context);
+    OpFactories operators_sink_with_sort = _children[0]->decompose_to_pipeline(context);
+    context->maybe_interpolate_local_exchange(operators_sink_with_sort);
 
     static const uint SIZE_OF_CHUNK_FOR_TOPN = 3000;
     static const uint SIZE_OF_CHUNK_FOR_FULL_SORT = 5000;
@@ -234,21 +238,22 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
                                                                            SIZE_OF_CHUNK_FOR_FULL_SORT);
     }
 
-    // add sort operator to this pipeline
-    auto ope = std::make_shared<SortSinkOperatorFactory>(context->next_operator_id(), id(), chunks_sorter,
-                                                         _sort_exec_exprs, _order_by_types, _materialized_tuple_desc,
-                                                         child(0)->row_desc(), _row_descriptor);
-    operator_sink_with_sort.emplace_back(std::move(ope));
-    context->add_pipeline(operator_sink_with_sort);
+    // add SortSinkOperator to this pipeline
+    auto sort_sink_operator = std::make_shared<SortSinkOperatorFactory>(
+            context->next_operator_id(), id(), chunks_sorter, _sort_exec_exprs, _order_by_types,
+            _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
+    operators_sink_with_sort.emplace_back(std::move(sort_sink_operator));
+    context->add_pipeline(std::move(operators_sink_with_sort));
 
-    // step 1: costruct pipeline start with sort operator's result.
-    OpFactories operator_source_with_sort;
-    auto ope2 =
+    OpFactories operators_source_with_sort;
+    auto sort_source_operator =
             std::make_shared<SortSourceOperatorFactory>(context->next_operator_id(), id(), std::move(chunks_sorter));
-    operator_source_with_sort.emplace_back(std::move(ope2));
+    // SourceSourceOperator's instance count must be 1
+    sort_source_operator->set_degree_of_parallelism(1);
+    operators_source_with_sort.emplace_back(std::move(sort_source_operator));
 
     // return to the following pipeline
-    return operator_source_with_sort;
+    return operators_source_with_sort;
 }
 
 } // namespace starrocks::vectorized

@@ -39,14 +39,14 @@ namespace starrocks {
 
 const std::string ROWSET_PREFIX = "rst_";
 
-bool RowsetMetaManager::check_rowset_meta(OlapMeta* meta, TabletUid tablet_uid, const RowsetId& rowset_id) {
+bool RowsetMetaManager::check_rowset_meta(KVStore* meta, TabletUid tablet_uid, const RowsetId& rowset_id) {
     std::string key = ROWSET_PREFIX + tablet_uid.to_string() + "_" + rowset_id.to_string();
     std::string value;
     Status s = meta->get(META_COLUMN_FAMILY_INDEX, key, &value);
     return s.ok();
 }
 
-Status RowsetMetaManager::save(OlapMeta* meta, TabletUid tablet_uid, const RowsetId& rowset_id,
+Status RowsetMetaManager::save(KVStore* meta, TabletUid tablet_uid, const RowsetId& rowset_id,
                                const RowsetMetaPB& rowset_meta_pb) {
     std::string key = ROWSET_PREFIX + tablet_uid.to_string() + "_" + rowset_id.to_string();
     std::string value;
@@ -59,7 +59,7 @@ Status RowsetMetaManager::save(OlapMeta* meta, TabletUid tablet_uid, const Rowse
     return meta->put(META_COLUMN_FAMILY_INDEX, key, value);
 }
 
-Status RowsetMetaManager::remove(OlapMeta* meta, TabletUid tablet_uid, const RowsetId& rowset_id) {
+Status RowsetMetaManager::remove(KVStore* meta, TabletUid tablet_uid, const RowsetId& rowset_id) {
     std::string key = ROWSET_PREFIX + tablet_uid.to_string() + "_" + rowset_id.to_string();
     return meta->remove(META_COLUMN_FAMILY_INDEX, key);
 }
@@ -69,7 +69,7 @@ string RowsetMetaManager::get_rowset_meta_key(const TabletUid& tablet_uid, const
 }
 
 Status RowsetMetaManager::traverse_rowset_metas(
-        OlapMeta* meta, std::function<bool(const TabletUid&, const RowsetId&, const std::string&)> const& func) {
+        KVStore* meta, std::function<bool(const TabletUid&, const RowsetId&, const std::string&)> const& func) {
     auto traverse_rowset_meta_func = [&func](std::string_view key, std::string_view value) -> bool {
         std::string key_str(key);
         std::string value_str(value);

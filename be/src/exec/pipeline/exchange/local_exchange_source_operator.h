@@ -34,14 +34,14 @@ private:
     const std::shared_ptr<LocalExchangeMemoryManager>& _memory_manager;
 };
 
-class LocalExchangeSourceOperatorFactory final : public OperatorFactory {
+class LocalExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     LocalExchangeSourceOperatorFactory(int32_t id, const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager)
-            : OperatorFactory(id, -1), _memory_manager(memory_manager) {}
+            : SourceOperatorFactory(id, -1), _memory_manager(memory_manager) {}
 
     ~LocalExchangeSourceOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         std::shared_ptr<LocalExchangeSourceOperator> source =
                 std::make_shared<LocalExchangeSourceOperator>(_id, _memory_manager);
         _sources.emplace_back(source.get());

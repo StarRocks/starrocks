@@ -27,5 +27,22 @@ protected:
     MorselQueue* _morsel_queue;
     ChunkSourcePtr _chunk_source;
 };
+
+class SourceOperatorFactory : public OperatorFactory {
+public:
+    SourceOperatorFactory(int32_t id, int32_t plan_node_id) : OperatorFactory(id, plan_node_id) {}
+    bool is_source() const override { return true; }
+    // with_morsels returning true means that the SourceOperator needs attach to MorselQueue, only
+    // ScanOperator needs to do so.
+    virtual bool with_morsels() const { return false; }
+    // Set the DOP(degree of parallelism) of the SourceOperator, SourceOperator's DOP determine the Pipeline's DOP.
+    virtual void set_degree_of_parallelism(size_t degree_of_parallelism) {
+        this->_degree_of_parallelism = degree_of_parallelism;
+    }
+    virtual size_t degree_of_parallelism() const { return _degree_of_parallelism; }
+
+protected:
+    size_t _degree_of_parallelism = 1;
+};
 } // namespace pipeline
 } // namespace starrocks

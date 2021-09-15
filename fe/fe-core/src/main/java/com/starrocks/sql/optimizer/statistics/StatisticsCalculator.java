@@ -143,13 +143,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             limit = physical.getLimit();
         }
 
+        Statistics statistics = builder.build();
         if (null != predicate) {
-            // @todo: only reduce row count, need reduce cardinal/min/max
-            Statistics statistics = estimateStatistics(ImmutableList.of(predicate), builder.build());
-            builder.setOutputRowCount(statistics.getOutputRowCount());
+            statistics = estimateStatistics(ImmutableList.of(predicate), statistics);
         }
 
-        Statistics statistics = builder.build();
         if (limit != -1 && limit < statistics.getOutputRowCount()) {
             statistics = new Statistics(limit, statistics.getColumnStatistics());
         }
@@ -678,13 +676,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         notEqJoin.add(predicate);
 
         Statistics estimateStatistics;
-        // TODO(ywb) we do not estimate cross join for Q7, because it already calculate predicate in scan node
-        //  we will estimate this after we have histogram
-        if (joinType.equals(JoinOperator.CROSS_JOIN) || eqOnPredicates.isEmpty()) {
-            estimateStatistics = builder.build();
-        } else {
-            estimateStatistics = estimateStatistics(notEqJoin, builder.build());
-        }
+        estimateStatistics = estimateStatistics(notEqJoin, builder.build());
 
         if (limit != -1 && limit < estimateStatistics.getOutputRowCount()) {
             estimateStatistics = new Statistics(limit, estimateStatistics.getColumnStatistics());

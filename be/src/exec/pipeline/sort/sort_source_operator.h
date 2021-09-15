@@ -45,15 +45,15 @@ private:
     std::atomic<bool> _is_source_complete = false;
 };
 
-class SortSourceOperatorFactory final : public OperatorFactory {
+class SortSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     SortSourceOperatorFactory(int32_t id, int32_t plan_node_id,
                               std::shared_ptr<vectorized::ChunksSorter>&& chunks_sorter)
-            : OperatorFactory(id, plan_node_id), _chunks_sorter(chunks_sorter) {}
+            : SourceOperatorFactory(id, plan_node_id), _chunks_sorter(chunks_sorter) {}
 
     ~SortSourceOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         auto ope = std::make_shared<SortSourceOperator>(_id, _plan_node_id, std::move(_chunks_sorter));
         return ope;
     }
