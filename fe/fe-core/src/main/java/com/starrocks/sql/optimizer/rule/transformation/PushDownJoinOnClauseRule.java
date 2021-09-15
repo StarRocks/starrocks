@@ -51,7 +51,7 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
     }
 
     ScalarOperator equivalenceDeriveOnPredicate(ScalarOperator on, OptExpression joinOpt, LogicalJoinOperator join) {
-        // For SQl: select * from t1 left join t2 on t1.id = t2.id where t1.id > 1
+        // For SQl: select * from t1 left join t2 on t1.id = t2.id and t1.id > 1
         // Infer t2.id > 1 and Push down it to right child
         if (!join.getJoinType().isInnerJoin() && !join.getJoinType().isSemiJoin() &&
                 !join.getJoinType().isOuterJoin()) {
