@@ -288,5 +288,23 @@
     + [黑名单管理](/administration/Blacklist.md)
     + [内存管理](/administration/Memory_management.md)
     + [负载均衡](/administration/Load_balance.md)
++ FAQ
+  + [产品FAQ](/faq/Product_faq.md)
+  + [部署运维](/faq/Deploy_faq.md)
+  + 数据迁移
+    + 导入
+      + [导入通用FAQ](/faq/loading/Loading_faq.md)
+      + [Stream Load](/faq/loading/Stream_load_faq.md)
+      + [Routine Load](/faq/loading/Routine_load_faq.md)
+      + [Broker Load](/faq/loading/Broker_load_faq.md)
+      + [Spark Load](/faq/loading/Spark_load_faq.md)
+      + [Insert Into](/faq/loading/Insert_into_faq.md)
+      + [Flink connector](/faq/loading/Flink_connector_faq.md)
+      + [DataX](/faq/loading/DataX_faq.md)
+      + [其他](/faq/loading/Others.md)
+    + [导出](/faq/Exporting_faq.md)
+  + [SQL FAQ](/faq/Sql_faq.md)
+  + [视频资源](/faq/Video.md)
+  + [其他](/faq/Others.md)
 + 性能测试
   + [SSB性能测试](/benchmarking/SSB_Benchmarking.md)
