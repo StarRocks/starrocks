@@ -19,11 +19,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#ifdef __AVX2__
 #include <glog/logging.h>
 
-#ifdef __AVX2__
 #include <immintrin.h>
-#endif
 
 #include "column/fixed_length_column.h"
 
@@ -109,3 +108,4 @@ public:
 
 } // namespace vectorized
 } // namespace starrocks
+#endif

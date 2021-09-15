@@ -591,7 +591,7 @@ CONF_mInt16(storage_format_version, "2");
 // do pre-aggregate if effect great than the factor, factor range:[1-100].
 CONF_Int16(pre_aggregate_factor, "80");
 
-#ifndef __aarch64__
+#ifdef __x86_64__
 // enable genearate minidump for crash
 CONF_Bool(sys_minidump_enable, "false");
 
