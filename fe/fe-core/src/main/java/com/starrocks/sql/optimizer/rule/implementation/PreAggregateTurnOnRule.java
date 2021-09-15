@@ -11,10 +11,13 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -22,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -65,7 +69,7 @@ public class PreAggregateTurnOnRule {
                     aggregate.getAggregations().values().stream().map(CallOperator::clone).collect(Collectors.toList());
             context.groupings =
                     aggregate.getGroupBys().stream().map(ScalarOperator::clone).collect(Collectors.toList());
-            context.hasJoin = false;
+            context.notPreAggregationJoin = false;
 
             return visit(optExpression, context);
         }
@@ -102,8 +106,8 @@ public class PreAggregateTurnOnRule {
                 return null;
             }
 
-            if (context.hasJoin) {
-                scan.setTurnOffReason("Has Join");
+            if (context.notPreAggregationJoin) {
+                scan.setTurnOffReason("Has can not pre-aggregation Join");
                 return null;
             }
 
@@ -272,15 +276,50 @@ public class PreAggregateTurnOnRule {
 
         @Override
         public Void visitPhysicalHashJoin(OptExpression optExpression, PreAggregationContext context) {
-            context.hasJoin = true;
-            context.groupings.clear();
-            context.aggregations.clear();
-            return visit(optExpression, context);
+            PhysicalHashJoinOperator hashJoinOperator = (PhysicalHashJoinOperator) optExpression.getOp();
+            OptExpression leftChild = optExpression.getInputs().get(0);
+            OptExpression rightChild = optExpression.getInputs().get(1);
+
+            ColumnRefSet leftOutputColumns = optExpression.getInputs().get(0).getOutputColumns();
+            ColumnRefSet rightOutputColumns = optExpression.getInputs().get(1).getOutputColumns();
+
+            List<BinaryPredicateOperator> eqOnPredicates = JoinPredicateUtils.getEqConj(leftOutputColumns,
+                    rightOutputColumns, Utils.extractConjuncts(hashJoinOperator.getJoinPredicate()));
+            // cross join can not do pre-aggregation
+            if (hashJoinOperator.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
+                context.notPreAggregationJoin = true;
+                context.groupings.clear();
+                context.aggregations.clear();
+                return visit(optExpression, context);
+            }
+
+            // For other types of joins, only one side can turn on pre aggregation
+            ColumnRefSet usedColumns = new ColumnRefSet();
+            context.groupings.forEach(g -> usedColumns.union(g.getUsedColumns()));
+            context.aggregations.forEach(a -> usedColumns.union(a.getUsedColumns()));
+            boolean checkLeft = leftOutputColumns.contains(usedColumns);
+            boolean checkRight = rightOutputColumns.contains(usedColumns);
+
+            PreAggregationContext disableContext = new PreAggregationContext();
+            disableContext.notPreAggregationJoin = true;
+
+            if (checkLeft) {
+                leftChild.getOp().accept(this, leftChild, context);
+                rightChild.getOp().accept(this, rightChild, disableContext);
+            } else if (checkRight) {
+                rightChild.getOp().accept(this, rightChild, context);
+                leftChild.getOp().accept(this, leftChild, disableContext);
+            } else {
+                leftChild.getOp().accept(this, leftChild, disableContext);
+                rightChild.getOp().accept(this, rightChild, disableContext);
+            }
+            return null;
         }
     }
 
     public static class PreAggregationContext implements Cloneable {
-        public boolean hasJoin = false;
+        // Indicates that a pre-aggregation can not be turned on below the join
+        public boolean notPreAggregationJoin = false;
         public List<ScalarOperator> aggregations = Lists.newArrayList();
         public List<ScalarOperator> groupings = Lists.newArrayList();
 

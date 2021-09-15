@@ -2891,7 +2891,7 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
-    public void testPerAggregateForCrossJoin() throws Exception {
+    public void testPreAggregateForCrossJoin() throws Exception {
         String sql = "select join1.id from join1, join2 group by join1.id";
         String plan = getFragmentPlan(sql);
 
@@ -2910,7 +2910,62 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     PREAGGREGATION: ON"));
         Assert.assertTrue(plan.contains("  1:OlapScanNode\n" +
                 "     TABLE: baseall\n" +
-                "     PREAGGREGATION: OFF. Reason: Has Join"));
+                "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
+    }
+
+    @Test
+    public void testPreAggregationWithJoin() throws Exception {
+        // check left agg table with pre-aggregation
+        String sql = "select k2, sum(k9) from baseall join join2 on k1 = id group by k2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: ON"));
+
+        // check right agg table with pre-agg
+        sql = "select k2, sum(k9) from join2 join [broadcast] baseall on k1 = id group by k2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: ON"));
+
+        // check two agg tables only one agg table can pre-aggregation
+        sql = "select t1.k2, sum(t1.k9) from baseall t1 join baseall t2 on t1.k1 = t2.k1 group by t1.k2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: ON"));
+        Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
+                "  |       TABLE: baseall\n" +
+                "  |       PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
+
+        sql = "select t2.k2, sum(t2.k9) from baseall t1 join [broadcast] baseall t2 on t1.k1 = t2.k1 group by t2.k2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
+        Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: ON"));
+
+        // check multi tables only one agg table can pre-aggregation
+        sql = "select t1.k2, sum(t1.k9) from baseall t1 join join2 t2 on t1.k1 = t2.id join baseall t3 on t1.k1 = t3.k1 group by t1.k2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("5:OlapScanNode\n" +
+                "  |       TABLE: baseall\n" +
+                "  |       PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: ON"));
+
+        sql = "select t3.k2, sum(t3.k9) from baseall t1 join [broadcast] join2 t2 on t1.k1 = t2.id join [broadcast] baseall t3 on t1.k1 = t3.k1 group by t3.k2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
+        Assert.assertTrue(plan.contains("5:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: ON"));
     }
 
     @Test
