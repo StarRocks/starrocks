@@ -89,12 +89,23 @@ public class Delimiter {
         return writer.toString();
     }
 
+    /**
+        \t Insert a tab
+        \b Insert a backspace
+        \n Insert a newline
+        \r Insert a carriage
+        \f Insert a formed
+        \' Insert a single quote character
+        \" Insert a double quote character
+        \\ Insert a backslash
+        \x Insert a hex escape e.g. \x48 represent h
+     */
     private static int parseHexString(String originStr, StringWriter writer, int offset) throws AnalysisException {
-        if (offset+4 > originStr.length()) {
+        if (offset + 4 > originStr.length()) {
             writer.append(originStr, offset, offset + originStr.length());
             return originStr.length();
         }
-        String hexStr = originStr.substring(offset+2, offset+4);
+        String hexStr = originStr.substring(offset + 2, offset + 4);
         // check hex str
         if (hexStr.isEmpty()) {
             throw new AnalysisException("Invalid delimiter '" + originStr + ": empty hex string");
