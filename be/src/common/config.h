@@ -611,6 +611,7 @@ CONF_mInt32(sys_minidump_interval, "600");
 // requests will fail.
 CONF_Int16(tablet_max_versions, "1000");
 
+// will remove
 CONF_mBool(enable_bitmap_union_disk_format_with_set, "false");
 
 // yield PipelineDriver when maximum number of chunks has been moved
@@ -619,6 +620,10 @@ CONF_Int64(pipeline_yield_max_chunks_moved, "100");
 // yield PipelineDriver when maximum time in nano-seconds has spent
 // in current execution round.
 CONF_Int64(pipeline_yield_max_time_spent, "100000000");
+
+// bitmap serialize version
+CONF_Int16(bitmap_serialize_version, "1");
+
 } // namespace config
 
 } // namespace starrocks
