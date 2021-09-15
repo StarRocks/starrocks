@@ -78,12 +78,24 @@ public class AnalyzeState {
         return selectRelation;
     }
 
+    public Scope getOrderScope() {
+        return orderScope;
+    }
+
     public void setOrderScope(Scope orderScope) {
         this.orderScope = orderScope;
     }
 
+    public List<Expr> getOrderSourceExpressions() {
+        return orderSourceExpressions;
+    }
+
     public void setOrderSourceExpressions(List<Expr> orderSourceExpressions) {
         this.orderSourceExpressions = orderSourceExpressions;
+    }
+
+    public List<Expr> getOutputExpressions() {
+        return outputExpressions;
     }
 
     public void setOutputExpression(List<Expr> outputExpressions) {
@@ -92,6 +104,10 @@ public class AnalyzeState {
 
     public void setOutputScope(Scope outputScope) {
         this.outputScope = outputScope;
+    }
+
+    public boolean isDistinct() {
+        return isDistinct;
     }
 
     public void setIsDistinct(boolean isDistinct) {
@@ -106,24 +122,48 @@ public class AnalyzeState {
         return relation;
     }
 
+    public Expr getPredicate() {
+        return predicate;
+    }
+
     public void setPredicate(Expr predicate) {
         this.predicate = predicate;
+    }
+
+    public LimitElement getLimit() {
+        return limit;
     }
 
     public void setLimit(LimitElement limit) {
         this.limit = limit;
     }
 
+    public List<Expr> getGroupBy() {
+        return groupBy;
+    }
+
     public void setGroupBy(List<Expr> groupBy) {
         this.groupBy = groupBy;
+    }
+
+    public List<List<Expr>> getGroupingSetsList() {
+        return groupingSetsList;
     }
 
     public void setGroupingSetsList(List<List<Expr>> groupingSetsList) {
         this.groupingSetsList = groupingSetsList;
     }
 
+    public List<Expr> getGroupingFunctionCallExprs() {
+        return groupingFunctionCallExprs;
+    }
+
     public void setGroupingFunctionCallExprs(List<Expr> groupingFunctionCallExprs) {
         this.groupingFunctionCallExprs = groupingFunctionCallExprs;
+    }
+
+    public List<FunctionCallExpr> getAggregate() {
+        return aggregate;
     }
 
     public void setAggregate(List<FunctionCallExpr> aggregate) {
@@ -138,16 +178,32 @@ public class AnalyzeState {
         return having;
     }
 
+    public List<OrderByElement> getOrderBy() {
+        return orderBy;
+    }
+
     public void setOrderBy(List<OrderByElement> orderBy) {
         this.orderBy = orderBy;
+    }
+
+    public List<String> getColumnOutputNames() {
+        return columnOutputNames;
     }
 
     public void setColumnOutputNames(List<String> columnOutputNames) {
         this.columnOutputNames = columnOutputNames;
     }
 
+    public List<AnalyticExpr> getOutputAnalytic() {
+        return outputAnalytic;
+    }
+
     public void setOutputAnalytic(List<AnalyticExpr> outputAnalytic) {
         this.outputAnalytic = outputAnalytic;
+    }
+
+    public List<AnalyticExpr> getOrderByAnalytic() {
+        return orderByAnalytic;
     }
 
     public void setOrderByAnalytic(List<AnalyticExpr> orderByAnalytic) {

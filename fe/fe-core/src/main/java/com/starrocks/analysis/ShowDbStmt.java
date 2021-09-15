@@ -25,22 +25,15 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
 
 // Show database statement.
 public class ShowDbStmt extends ShowStmt {
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "schemata");
     private static final String DB_COL = "Database";
-    private static final ShowResultSetMetaData META_DATA =
-            ShowResultSetMetaData.builder()
-                    .addColumn(new Column(DB_COL, ScalarType.createVarchar(20)))
-                    .build();
-
-    private String pattern;
+    private final String pattern;
     private Expr where;
-    private SelectStmt selectStmt;
 
     public ShowDbStmt(String pattern) {
         this.pattern = pattern;
@@ -56,17 +49,13 @@ public class ShowDbStmt extends ShowStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
+    public void analyze(Analyzer analyzer) {
     }
 
     @Override
     public SelectStmt toSelectStmt(Analyzer analyzer) {
         if (where == null) {
             return null;
-        }
-        if (selectStmt != null) {
-            return selectStmt;
         }
         // Columns
         SelectList selectList = new SelectList();
@@ -75,7 +64,7 @@ public class ShowDbStmt extends ShowStmt {
         selectList.addItem(item);
         aliasMap.put(new SlotRef(null, DB_COL), item.getExpr().clone(null));
         where = where.substitute(aliasMap);
-        selectStmt = new SelectStmt(selectList,
+        SelectStmt selectStmt = new SelectStmt(selectList,
                 new FromClause(Lists.newArrayList(new TableRef(TABLE_NAME, null))),
                 where, null, null, null, LimitElement.NO_LIMIT);
 
@@ -96,8 +85,15 @@ public class ShowDbStmt extends ShowStmt {
         return toSql();
     }
 
+    private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
+            .addColumn(new Column(DB_COL, ScalarType.createVarchar(20))).build();
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowDatabasesStmt(this, context);
     }
 }

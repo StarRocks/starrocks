@@ -53,8 +53,8 @@ public class ValuesTransformer {
         List<ColumnRefOperator> valuesOutputColumns = Lists.newArrayList();
 
         // flag subquery
-        for (int i = 0; i < node.getOutputExpr().size(); i++) {
-            Expr expr = node.getOutputExpr().get(i);
+        for (int i = 0; i < node.getRows().get(0).size(); i++) {
+            Expr expr = node.getRows().get(0).get(i);
 
             List<Subquery> tmp = Lists.newArrayList();
             expr.collect(Subquery.class, tmp);
@@ -127,16 +127,16 @@ public class ValuesTransformer {
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
         SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
 
-        for (int i = 0; i < node.getOutputExpr().size(); i++) {
+        for (int i = 0; i < node.getRows().get(0).size(); i++) {
             if (!subqueriesIndex.get(i)) {
                 projections.put(outputColumns.get(i), outputColumns.get(i));
                 continue;
             }
 
-            Expr output = node.getOutputExpr().get(i);
+            Expr output = node.getRows().get(0).get(i);
             subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, output, cteContex);
             ColumnRefOperator columnRef = SqlToScalarOperatorTranslator
-                    .findOrCreateColumnRefForExpr(node.getOutputExpr().get(i), subOpt.getExpressionMapping(),
+                    .findOrCreateColumnRefForExpr(node.getRows().get(0).get(i), subOpt.getExpressionMapping(),
                             projections, columnRefFactory);
             outputTranslations.put(output, columnRef);
             outputColumns.set(i, columnRef);

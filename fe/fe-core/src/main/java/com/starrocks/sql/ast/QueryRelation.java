@@ -19,12 +19,10 @@ public abstract class QueryRelation extends Relation {
      * Because outputExpr may be rewritten, we recorded the primitive SQL column name
      * The alias will also be recorded in columnOutputNames
      */
-    private final List<String> columnOutputNames;
+    private List<String> columnOutputNames;
     protected List<OrderByElement> sortClause;
     protected LimitElement limit;
     private final List<CTERelation> cteRelations = new ArrayList<>();
-
-
 
     public QueryRelation(List<String> columnOutputNames) {
         this.columnOutputNames = columnOutputNames;
@@ -32,6 +30,10 @@ public abstract class QueryRelation extends Relation {
 
     public List<String> getColumnOutputNames() {
         return columnOutputNames;
+    }
+
+    public void setColumnOutputNames(List<String> columnOutputNames) {
+        this.columnOutputNames = columnOutputNames;
     }
 
     public Map<Expr, FieldId> getColumnReferences() {
@@ -42,12 +44,32 @@ public abstract class QueryRelation extends Relation {
         this.sortClause = sortClause;
     }
 
-    public List<OrderByElement> getOrderByElements() {
+    public List<OrderByElement> getOrderBy() {
         return sortClause;
     }
 
-    public void setLimitElement(LimitElement limit) {
+    public boolean hasOrderByClause() {
+        return sortClause != null;
+    }
+
+    public LimitElement getLimit() {
+        return limit;
+    }
+
+    public void setLimit(LimitElement limit) {
         this.limit = limit;
+    }
+
+    public boolean hasLimit() {
+        return limit != null;
+    }
+
+    public long getOffset() {
+        return limit.getOffset();
+    }
+
+    public boolean hasWithClause() {
+        return !cteRelations.isEmpty();
     }
 
     public void addCTERelation(CTERelation cteRelation) {
@@ -58,7 +80,29 @@ public abstract class QueryRelation extends Relation {
         return cteRelations;
     }
 
+    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitQueryRelation(this, context);
+    }
+
+    @Override
+    public String toSql() {
+        StringBuilder sqlBuilder = new StringBuilder();
+
+        if (hasOrderByClause()) {
+            sqlBuilder.append(" ORDER BY ");
+            for (int i = 0; i < sortClause.size(); ++i) {
+                if (i != 0) {
+                    sqlBuilder.append(", ");
+                }
+                sqlBuilder.append(sortClause.get(i).toSql());
+            }
+        }
+
+        // Limit clause.
+        if (limit != null) {
+            sqlBuilder.append(limit.toSql());
+        }
+        return sqlBuilder.toString();
     }
 }

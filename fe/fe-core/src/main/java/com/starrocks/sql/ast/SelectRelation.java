@@ -8,6 +8,7 @@ import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SelectList;
+import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.Scope;
 
@@ -28,7 +29,7 @@ public class SelectRelation extends QueryRelation {
      */
     private List<Expr> outputExpr;
 
-    private final Expr predicate;
+    private Expr predicate;
 
     /**
      * groupByClause is created by parser
@@ -58,7 +59,7 @@ public class SelectRelation extends QueryRelation {
      * Relations referenced in From clause. The Relation can be a CTE/table
      * reference a subquery or two relation joined together.
      */
-    private final Relation relation;
+    private Relation relation;
 
     private Map<Expr, FieldId> columnReferences;
 
@@ -75,7 +76,6 @@ public class SelectRelation extends QueryRelation {
         this.groupByClause = groupByClause;
         this.having = having;
     }
-
 
     public SelectRelation(List<Expr> outputExpr, List<String> columnOutputNames, boolean isDistinct,
                           Scope orderScope, List<Expr> orderSourceExpressions,
@@ -109,6 +109,31 @@ public class SelectRelation extends QueryRelation {
         this.columnReferences = columnReferences;
     }
 
+    public void fillResolvedAST(AnalyzeState analyzeState) {
+        super.setColumnOutputNames(analyzeState.getColumnOutputNames());
+        this.outputExpr = analyzeState.getOutputExpressions();
+        this.isDistinct = analyzeState.isDistinct();
+        this.orderScope = analyzeState.getOrderScope();
+        this.predicate = analyzeState.getPredicate();
+        this.limit = analyzeState.getLimit();
+
+        this.groupBy = analyzeState.getGroupBy();
+        this.aggregate = analyzeState.getAggregate();
+        this.groupingSetsList = analyzeState.getGroupingSetsList();
+        this.having = analyzeState.getHaving();
+        this.groupingFunctionCallExprs = analyzeState.getGroupingFunctionCallExprs();
+
+        this.sortClause = analyzeState.getOrderBy();
+        this.orderSourceExpressions = analyzeState.getOrderSourceExpressions();
+
+        this.outputAnalytic = analyzeState.getOutputAnalytic();
+        this.orderByAnalytic = analyzeState.getOrderByAnalytic();
+
+        this.columnReferences = analyzeState.getColumnReferences();
+
+        this.setScope(analyzeState.getOutputScope());
+    }
+
     public List<Expr> getOutputExpr() {
         return outputExpr;
     }
@@ -125,20 +150,12 @@ public class SelectRelation extends QueryRelation {
         return isDistinct;
     }
 
-    public LimitElement getLimit() {
-        return limit;
-    }
-
-    public void setLimit(LimitElement limit) {
-        this.limit = limit;
-    }
-
-    public boolean hasLimit() {
-        return limit != null;
-    }
-
     public List<FunctionCallExpr> getAggregate() {
         return aggregate;
+    }
+
+    public void setAggregate(List<FunctionCallExpr> aggregate) {
+        this.aggregate = aggregate;
     }
 
     public List<List<Expr>> getGroupingSetsList() {
@@ -153,8 +170,8 @@ public class SelectRelation extends QueryRelation {
         return groupBy;
     }
 
-    public List<OrderByElement> getOrderBy() {
-        return sortClause;
+    public void setGroupBy(List<Expr> groupBy) {
+        this.groupBy = groupBy;
     }
 
     public List<Expr> getOrderByExpressions() {
@@ -189,6 +206,10 @@ public class SelectRelation extends QueryRelation {
         return outputAnalytic;
     }
 
+    public void setOutputAnalytic(List<AnalyticExpr> outputAnalytic) {
+        this.outputAnalytic = outputAnalytic;
+    }
+
     public List<AnalyticExpr> getOrderByAnalytic() {
         return orderByAnalytic;
     }
@@ -197,8 +218,112 @@ public class SelectRelation extends QueryRelation {
         return columnReferences;
     }
 
+    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitSelect(this, context);
+    }
+
+    public void setOutputExpr(List<Expr> outputExpr) {
+        this.outputExpr = outputExpr;
+    }
+
+    public SelectList getSelectList() {
+        return selectList;
+    }
+
+    public boolean hasGroupByClause() {
+        return groupByClause != null;
+    }
+
+    public void setIsDistinct(boolean distinct) {
+        isDistinct = distinct;
+    }
+
+    public boolean hasWhereClause() {
+        return predicate != null;
+    }
+
+    public void setWhereClause(Expr predicate) {
+        this.predicate = predicate;
+    }
+
+    public Expr getWhereClause() {
+        return predicate;
+    }
+
+    public GroupByClause getGroupByClause() {
+        return groupByClause;
+    }
+
+    public boolean hasHavingClause() {
+        return having != null;
+    }
+
+    public Expr getHavingClause() {
+        return having;
+    }
+
+    public void setHaving(Expr having) {
+        this.having = having;
+    }
+
+    public void setRelation(Relation relation) {
+        this.relation = relation;
+    }
+
+    public void setColumnReferences(Map<Expr, FieldId> columnReferences) {
+        this.columnReferences = columnReferences;
+    }
+
+    public void setOrderScope(Scope orderScope) {
+        this.orderScope = orderScope;
+    }
+
+    @Override
+    public String toSql() {
+        StringBuilder sqlBuilder = new StringBuilder();
+        if (hasWithClause()) {
+            for (CTERelation cteRelation : getCteRelations()) {
+                sqlBuilder.append(cteRelation.toSql());
+                sqlBuilder.append(" ");
+            }
+        }
+
+        sqlBuilder.append("SELECT ");
+        if (selectList.isDistinct()) {
+            sqlBuilder.append("DISTINCT");
+        }
+
+        for (int i = 0; i < selectList.getItems().size(); ++i) {
+            if (i != 0) {
+                sqlBuilder.append(", ");
+            }
+            sqlBuilder.append(selectList.getItems().get(i).toSql());
+        }
+
+        if (relation != null) {
+            sqlBuilder.append(" FROM ");
+            sqlBuilder.append(relation.toSql());
+        }
+
+        if (hasWhereClause()) {
+            sqlBuilder.append(" WHERE ");
+            sqlBuilder.append(getWhereClause().toSql());
+        }
+
+        if (hasGroupByClause()) {
+            sqlBuilder.append(" GROUP BY ");
+            sqlBuilder.append(getGroupByClause().toSql());
+        }
+
+        if (hasHavingClause()) {
+            sqlBuilder.append(" HAVING ");
+            sqlBuilder.append(getHavingClause().toSql());
+        }
+
+        sqlBuilder.append(super.toSql());
+
+        return sqlBuilder.toString();
     }
 }
 

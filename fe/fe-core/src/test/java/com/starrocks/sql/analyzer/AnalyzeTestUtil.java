@@ -5,12 +5,12 @@ import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Catalog;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.InsertRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -154,13 +154,9 @@ public class AnalyzeTestUtil {
 
     public static QueryRelation analyzeSuccess(String originStmt) {
         try {
-            SqlScanner input =
-                    new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
-            SqlParser parser = new SqlParser(input);
-            StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
-
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt).get(0);
             Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
-            return (QueryRelation) analyzer.analyze(statementBase);
+            return (QueryRelation) analyzer.analyzeWithStatement(statementBase);
         } catch (Exception ex) {
             ex.printStackTrace();
             Assert.fail();
@@ -184,11 +180,7 @@ public class AnalyzeTestUtil {
         }
     }
 
-    public static void analyzeFail(String originStmt) {
-        analyzeFail(originStmt, "");
-    }
-
-    public static void analyzeFail(String originStmt, String exceptMessage) {
+    public static void analyzeFailUseInsert(String originStmt, String exceptMessage) {
         try {
             SqlScanner input =
                     new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
@@ -198,7 +190,26 @@ public class AnalyzeTestUtil {
             Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
             analyzer.analyze(statementBase);
             Assert.fail("Miss semantic error exception");
-        } catch (SemanticException | AnalysisException | UnsupportedException e) {
+        } catch (ParsingException | SemanticException | UnsupportedException e) {
+            if (!exceptMessage.equals("")) {
+                Assert.assertTrue(e.getMessage().contains(exceptMessage));
+            }
+        } catch (Exception e) {
+            Assert.fail("analyze exception");
+        }
+    }
+
+    public static void analyzeFail(String originStmt) {
+        analyzeFail(originStmt, "");
+    }
+
+    public static void analyzeFail(String originStmt, String exceptMessage) {
+        try {
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt).get(0);
+            Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), connectContext);
+            analyzer.analyzeWithStatement(statementBase);
+            Assert.fail("Miss semantic error exception");
+        } catch (ParsingException | SemanticException | UnsupportedException e) {
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage().contains(exceptMessage));
             }

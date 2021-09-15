@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public abstract class SetOperationRelation extends QueryRelation {
-    private final List<QueryRelation> relations;
+    private List<QueryRelation> relations;
     private final SetQualifier qualifier;
 
     public SetOperationRelation(List<QueryRelation> relations, SetQualifier qualifier) {
@@ -28,4 +28,13 @@ public abstract class SetOperationRelation extends QueryRelation {
     public SetQualifier getQualifier() {
         return qualifier;
     }
+
+    public void setRelations(List<QueryRelation> relations) {
+        this.relations = relations;
+    }
+
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitSetOp(this, context);
+    }
+
 }

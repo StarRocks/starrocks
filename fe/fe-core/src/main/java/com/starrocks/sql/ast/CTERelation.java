@@ -2,12 +2,14 @@
 
 package com.starrocks.sql.ast;
 
+import com.starrocks.analysis.TableName;
+
 import java.util.List;
 
 public class CTERelation extends Relation {
-    private final int cteId;
+    private int cteId;
     private final String name;
-    private final List<String> columnOutputNames;
+    private List<String> columnOutputNames;
     private final QueryRelation cteQuery;
 
     public CTERelation(int cteId, String name, List<String> columnOutputNames, QueryRelation cteQuery) {
@@ -33,6 +35,10 @@ public class CTERelation extends Relation {
         return columnOutputNames;
     }
 
+    public void setColumnOutputNames(List<String> columnOutputNames) {
+        this.columnOutputNames = columnOutputNames;
+    }
+
     @Override
     public String toString() {
         return name == null ? String.valueOf(cteId) : name;
@@ -41,5 +47,18 @@ public class CTERelation extends Relation {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCTE(this, context);
+    }
+
+    @Override
+    public TableName getAlias() {
+        if (alias != null) {
+            return alias;
+        } else {
+            return new TableName(null, name);
+        }
+    }
+
+    public List<String> getColLabels() {
+        return columnOutputNames;
     }
 }

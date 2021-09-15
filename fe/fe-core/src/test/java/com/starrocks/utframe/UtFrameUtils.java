@@ -27,7 +27,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.QueryStmt;
-import com.starrocks.analysis.SelectStmt;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
@@ -51,7 +50,9 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.optimizer.OperatorStrings;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -348,21 +349,28 @@ public class UtFrameUtils {
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        /*
         SqlScanner input =
                 new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
         SqlParser parser = new SqlParser(input);
         StatementBase statementBase = SqlParserUtils.getFirstStmt(parser);
-        connectContext.getDumpInfo().setOriginStmt(originStmt);
+         */
 
+        List<StatementBase> statements = com.starrocks.sql.parser.SqlParser.parse(originStmt);
+        connectContext.getDumpInfo().setOriginStmt(originStmt);
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
+        StatementBase statementBase = statements.get(0);
         try {
             // update session variable by adding optional hints.
-            if (statementBase instanceof SelectStmt) {
-                Map<String, String> optHints = ((SelectStmt) statementBase).getSelectList().getOptHints();
+            if (statementBase instanceof QueryStatement &&
+                    ((QueryStatement) statementBase).getQueryRelation() instanceof SelectRelation) {
+                SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
+                Map<String, String> optHints = selectRelation.getSelectList().getOptHints();
                 if (optHints != null) {
                     SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
                     for (String key : optHints.keySet()) {
-                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
+                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))),
+                                true);
                     }
                     connectContext.setSessionVariable(sessionVariable);
                 }
@@ -372,7 +380,7 @@ public class UtFrameUtils {
             OperatorStrings operatorPrinter = new OperatorStrings();
             return new Pair<>(operatorPrinter.printOperator(execPlan.getPhysicalPlan()), execPlan);
         } finally {
-            // before returing we have to restore session varibale.
+            // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
         }
     }

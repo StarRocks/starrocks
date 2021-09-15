@@ -178,7 +178,7 @@ public class CTEPlanTest extends PlanTestBase {
 
     @Test
     public void testCTEPredicate() throws Exception {
-        String sql = "explain with xx as (select * from t0) " +
+        String sql = "with xx as (select * from t0) " +
                 "select x1.v1 from xx x1 join xx x2 on x1.v2=x2.v3 where x1.v3 = 4 and x2.v2=3;";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +

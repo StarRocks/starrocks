@@ -62,10 +62,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
@@ -263,34 +263,39 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         Scope outputScope = setOperationRelation.getRelations().get(0).getScope();
         ExpressionMapping expressionMapping = new ExpressionMapping(outputScope, outputColumns);
 
-        LogicalOperator setOperator;
+        OptExprBuilder root;
         if (setOperationRelation instanceof UnionRelation) {
-            setOperator = new LogicalUnionOperator.Builder()
+            root = new OptExprBuilder(new LogicalUnionOperator.Builder()
                     .setOutputColumnRefOp(outputColumns)
                     .setChildOutputColumns(childOutputColumnList)
                     .isUnionAll(!SetQualifier.DISTINCT.equals(setOperationRelation.getQualifier()))
-                    .build();
+                    .build(),
+                    childPlan, expressionMapping);
 
             if (setOperationRelation.getQualifier().equals(SetQualifier.DISTINCT)) {
-                OptExprBuilder unionOpt = new OptExprBuilder(setOperator, childPlan, expressionMapping);
-                return new LogicalPlan(new OptExprBuilder(
-                        new LogicalAggregationOperator(AggType.GLOBAL, outputColumns, Maps.newHashMap()),
-                        Lists.newArrayList(unionOpt), expressionMapping), outputColumns, null);
+                root = root.withNewRoot(new LogicalAggregationOperator(AggType.GLOBAL, outputColumns, Maps.newHashMap()));
             }
         } else if (setOperationRelation instanceof ExceptRelation) {
-            setOperator = new LogicalExceptOperator.Builder()
+            root = new OptExprBuilder(new LogicalExceptOperator.Builder()
                     .setOutputColumnRefOp(outputColumns)
-                    .setChildOutputColumns(childOutputColumnList).build();
+                    .setChildOutputColumns(childOutputColumnList).build(),
+                    childPlan, expressionMapping);
 
         } else if (setOperationRelation instanceof IntersectRelation) {
-            setOperator = new LogicalIntersectOperator.Builder()
+            root = new OptExprBuilder(new LogicalIntersectOperator.Builder()
                     .setOutputColumnRefOp(outputColumns)
-                    .setChildOutputColumns(childOutputColumnList).build();
+                    .setChildOutputColumns(childOutputColumnList).build(),
+                    childPlan, expressionMapping);
         } else {
             throw unsupportedException("New Planner only support Query Statement");
         }
 
-        return new LogicalPlan(new OptExprBuilder(setOperator, childPlan, expressionMapping), outputColumns, null);
+        LimitElement limit = setOperationRelation.getLimit();
+        if (limit != null) {
+            LogicalLimitOperator limitOperator = new LogicalLimitOperator(limit.getLimit(), limit.getOffset());
+            root = root.withNewRoot(limitOperator);
+        }
+        return new LogicalPlan(root, outputColumns, null);
     }
 
     @Override
@@ -435,7 +440,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             ExpressionMapping expressionMapping = new ExpressionMapping(new Scope(RelationId.of(node),
                     node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields())),
                     Streams.concat(leftPlan.getRootBuilder().getFieldMappings().stream(),
-                            rightPlan.getRootBuilder().getFieldMappings().stream())
+                                    rightPlan.getRootBuilder().getFieldMappings().stream())
                             .collect(Collectors.toList()));
 
             Operator root = new LogicalApplyOperator(null, null, correlation, false);
@@ -453,8 +458,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields()));
         joinScope.setParent(node.getScope().getParent());
         ExpressionMapping expressionMapping = new ExpressionMapping(joinScope, Streams.concat(
-                leftPlan.getRootBuilder().getFieldMappings().stream(),
-                rightPlan.getRootBuilder().getFieldMappings().stream())
+                        leftPlan.getRootBuilder().getFieldMappings().stream(),
+                        rightPlan.getRootBuilder().getFieldMappings().stream())
                 .collect(Collectors.toList()));
 
         if (node.getOnPredicate() == null) {
@@ -503,8 +508,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     Lists.newArrayList(rightPlan.getRootBuilder().getFieldMappings()));
         } else {
             outputExpressionMapping = new ExpressionMapping(node.getScope(), Streams.concat(
-                    leftPlan.getRootBuilder().getFieldMappings().stream(),
-                    rightPlan.getRootBuilder().getFieldMappings().stream())
+                            leftPlan.getRootBuilder().getFieldMappings().stream(),
+                            rightPlan.getRootBuilder().getFieldMappings().stream())
                     .collect(Collectors.toList()));
         }
 

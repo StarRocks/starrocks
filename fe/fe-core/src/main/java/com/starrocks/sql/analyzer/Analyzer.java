@@ -8,6 +8,7 @@ import com.starrocks.analysis.CreateAnalyzeJobStmt;
 import com.starrocks.analysis.CreateTableAsSelectStmt;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.QueryStmt;
+import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Catalog;
@@ -17,6 +18,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.AnalyzeJob;
@@ -58,9 +60,18 @@ public class Analyzer {
             // this phrase do not analyze insertStmt, insertStmt will analyze in
             // StmtExecutor.handleCreateTableAsSelectStmt because planner will not do meta operations
             return new CTASAnalyzer(catalog, session).transformCTASStmt((CreateTableAsSelectStmt) node);
+        } else if (node instanceof ShowStmt) {
+            new ShowStmtAnalyzer(session).analyze((ShowStmt) node);
+            return null;
         } else {
             throw unsupportedException("New Planner only support Query Statement");
         }
+    }
+
+    public Relation analyzeWithStatement(StatementBase statement) {
+        QueryAnalyzerV2 analyzerV2 = new QueryAnalyzerV2(catalog, session);
+        analyzerV2.analyze(statement);
+        return ((QueryStatement) statement).getQueryRelation();
     }
 
     private Relation analyzeAnalyzeStmt(AnalyzeStmt node) {

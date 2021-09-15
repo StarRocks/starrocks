@@ -52,6 +52,8 @@ import com.starrocks.mysql.MysqlServerStatusFlag;
 import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
@@ -250,7 +252,18 @@ public class ConnectProcessor {
         StatementBase parsedStmt = null;
         try {
             ctx.setQueryId(UUIDUtil.genUUID());
-            List<StatementBase> stmts = analyze(originStmt);
+            List<StatementBase> stmts;
+            try {
+                stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt);
+            } catch (ParsingException parsingException) {
+                stmts = analyze(originStmt);
+                if (stmts.stream().allMatch(statementBase -> statementBase instanceof QueryStatement)) {
+                    throw new AnalysisException(parsingException.getMessage());
+                }
+            } catch (Exception e) {
+                stmts = analyze(originStmt);
+            }
+
             for (int i = 0; i < stmts.size(); ++i) {
                 ctx.getState().reset();
                 if (i > 0) {

@@ -28,23 +28,18 @@ import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ShowResultSetMetaData;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.starrocks.sql.ast.AstVisitor;
 
 // SHOW TABLES
 public class ShowTableStmt extends ShowStmt {
-    private static final Logger LOG = LogManager.getLogger(ShowTableStmt.class);
     private static final String NAME_COL_PREFIX = "Tables_in_";
     private static final String TYPE_COL = "Table_type";
     private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "tables");
     private String db;
-    private boolean isVerbose;
-    private String pattern;
+    private final boolean isVerbose;
+    private final String pattern;
     private Expr where;
-    private SelectStmt selectStmt;
 
     public ShowTableStmt(String db, boolean isVerbose, String pattern) {
         this.db = db;
@@ -73,18 +68,7 @@ public class ShowTableStmt extends ShowStmt {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(db)) {
-            db = analyzer.getDefaultDb();
-            if (Strings.isNullOrEmpty(db)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        } else {
-            db = ClusterNamespace.getFullName(analyzer.getClusterName(), db);
-        }
-
-        // we do not check db privs here. because user may not have any db privs,
-        // but if it has privs of tbls inside this db,it should be allowed to see this db.
+    public void analyze(Analyzer analyzer) {
     }
 
     @Override
@@ -92,10 +76,6 @@ public class ShowTableStmt extends ShowStmt {
         if (where == null) {
             return null;
         }
-        if (selectStmt != null) {
-            return selectStmt;
-        }
-        analyze(analyzer);
         // Columns
         SelectList selectList = new SelectList();
         ExprSubstitutionMap aliasMap = new ExprSubstitutionMap(false);
@@ -110,11 +90,9 @@ public class ShowTableStmt extends ShowStmt {
             aliasMap.put(new SlotRef(null, TYPE_COL), item.getExpr().clone(null));
         }
         where = where.substitute(aliasMap);
-        selectStmt = new SelectStmt(selectList,
+        SelectStmt selectStmt = new SelectStmt(selectList,
                 new FromClause(Lists.newArrayList(new TableRef(TABLE_NAME, null))),
                 where, null, null, null, LimitElement.NO_LIMIT);
-
-        analyzer.setSchemaInfo(ClusterNamespace.getNameFromFullName(db), null, null);
 
         return selectStmt;
     }
@@ -150,5 +128,14 @@ public class ShowTableStmt extends ShowStmt {
             builder.addColumn(new Column(TYPE_COL, ScalarType.createVarchar(20)));
         }
         return builder.build();
+    }
+
+    public void setDb(String db) {
+        this.db = db;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowTableStmt(this, context);
     }
 }

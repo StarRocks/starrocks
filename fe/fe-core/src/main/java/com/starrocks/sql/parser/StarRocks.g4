@@ -4,7 +4,7 @@ grammar StarRocks;
 import StarRocksLex;
 
 sqlStatements
-    : (singleStatement (SEMICOLON EOF? | EOF))*
+    : (singleStatement (SEMICOLON EOF? | EOF))+
     ;
 
 singleStatement
@@ -98,20 +98,19 @@ setQuantifier
     ;
 
 selectItem
-    : expression (AS? identifier)?                                                       #selectSingle
+    : expression (AS? (identifier | string))?                                            #selectSingle
     | qualifiedName '.' ASTERISK                                                         #selectAll
     | ASTERISK                                                                           #selectAll
     ;
 
 relation
-    : left=relation(
-        CROSS JOIN hint? LATERAL? right=aliasedRelation
-        | joinType hint? LATERAL? rightRelation=relation joinCriteria?)                  #joinRelation
+    : left=relation joinType hint? LATERAL? rightRelation=relation joinCriteria?         #joinRelation
     | aliasedRelation                                                                    #relationDefault
     ;
 
 joinType
     : JOIN | INNER JOIN
+    | CROSS | CROSS JOIN
     | LEFT JOIN | RIGHT JOIN | FULL JOIN
     | LEFT OUTER JOIN | RIGHT OUTER JOIN
     | FULL OUTER JOIN
@@ -142,10 +141,14 @@ columnAliases
     ;
 
 relationPrimary
-    : qualifiedName hint?                                                                 #tableName
+    : qualifiedName partitionNames? hint?                                                 #tableName
     | subquery                                                                            #subqueryRelation
-    | UNNEST '(' expression (',' expression)* ')'                                         #unnest
+    | qualifiedName '(' expression (',' expression)* ')'                                  #tableFunction
     | '(' relation ')'                                                                    #parenthesizedRelation
+    ;
+
+partitionNames
+    : PARTITIONS '(' identifier (',' identifier)* ')'
     ;
 
 expression
@@ -175,10 +178,12 @@ predicateOperations [ParserRuleContext value]
 
 valueExpression
     : primaryExpression                                                                   #valueExpressionDefault
+    | operator = (MINUS | PLUS | BITNOT) valueExpression                                  #arithmeticUnary
     | left = valueExpression operator =
         (ASTERISK | SLASH | PERCENT | INT_DIV | BITAND| BITOR | BITXOR)
       right = valueExpression                                                             #arithmeticBinary
     | left = valueExpression operator = (PLUS | MINUS) right=valueExpression              #arithmeticBinary
+    | left = valueExpression CONCAT right = valueExpression                               #concatenation
     ;
 
 primaryExpression
@@ -189,16 +194,17 @@ primaryExpression
     | number                                                                              #numericLiteral
     | booleanValue                                                                        #booleanLiteral
     | string                                                                              #stringLiteral
+    | variable                                                                            #var
+    | primaryExpression COLLATE (identifier | string)                                     #collate
     | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
     | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
-    | operator = (MINUS | PLUS | BITNOT) valueExpression                                  #arithmeticUnary
     | subquery                                                                            #subqueryExpression
     | EXISTS '(' query ')'                                                                #exists
     | CASE valueExpression whenClause+ (ELSE elseExpression=expression)? END              #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
-    | CAST '(' expression AS type ')'                                                     #cast
-    | identifier                                                                          #columnReference
-    | qualifiedName                                                                       #columnReference
+
+    | columnReference                                                                     #columnRef
+    | primaryExpression jsonOperator                                                      #jsonPath
     | EXTRACT '(' identifier FROM valueExpression ')'                                     #extract
     | '(' expression ')'                                                                  #parenthesizedExpression
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
@@ -208,6 +214,20 @@ primaryExpression
     | qualifiedName '(' ASTERISK ')' over?                                                #functionCall
     | qualifiedName '(' (setQuantifier? expression (',' expression)*)? ')'  over?         #functionCall
     | windowFunction over                                                                 #windowFunctionCall
+    | CAST '(' expression AS type ')'                                                     #cast
+    ;
+
+variable
+    : AT AT ((GLOBAL | SESSION | LOCAL) '.')? identifier
+    ;
+
+columnReference
+    : identifier
+    | qualifiedName
+    ;
+
+jsonOperator
+    : ARROW string
     ;
 
 informationFunctionExpression
@@ -229,7 +249,8 @@ windowFunction
     ;
 
 string
-    : STRING
+    : SINGLE_QUOTED_TEXT
+    | DOUBLE_QUOTED_TEXT
     ;
 
 comparisonOperator
@@ -319,9 +340,10 @@ nonReserved
     | DATA | DATE | DATETIME | DAY
     | END | EXTRACT
     | FILTER | FIRST | FOLLOWING
+    | GLOBAL
     | HOUR
     | INTERVAL
-    | LAST
+    | LAST | LOCAL
     | MINUTE | MONTH
     | NONE | NULLS
     | OFFSET
@@ -329,7 +351,7 @@ nonReserved
     | ROLLUP
     | SECOND | SESSION | SETS
     | TABLES | TIME | TYPE
-    | UNBOUNDED | UNNEST | USER
+    | UNBOUNDED | USER
     | VIEW
     | YEAR
     ;

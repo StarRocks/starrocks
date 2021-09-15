@@ -8,9 +8,9 @@ import java.util.List;
 
 public class JoinRelation extends Relation {
     private final JoinOperator type;
-    private final Relation left;
-    private final Relation right;
-    private final Expr onPredicate;
+    private Relation left;
+    private Relation right;
+    private Expr onPredicate;
     private String joinHint = "";
     private final boolean lateral;
 
@@ -40,8 +40,20 @@ public class JoinRelation extends Relation {
         return right;
     }
 
+    public void setLeft(Relation left) {
+        this.left = left;
+    }
+
+    public void setRight(Relation right) {
+        this.right = right;
+    }
+
     public Expr getOnPredicate() {
         return onPredicate;
+    }
+
+    public void setOnPredicate(Expr onPredicate) {
+        this.onPredicate = onPredicate;
     }
 
     public void setJoinHint(String joinHint) {
