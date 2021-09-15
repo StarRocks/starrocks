@@ -42,10 +42,6 @@ public:
     // whether rowset should return rows in sorted order.
     bool sorted = true;
 
-    // columns to load bloom filter index
-    // including columns in "=" or "in" conditions
-    const std::set<uint32_t>* load_bf_columns = nullptr;
-
     const DeletePredicates* delete_predicates = nullptr;
 
     const TabletSchema* tablet_schema = nullptr;
