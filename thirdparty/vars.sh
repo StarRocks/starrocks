@@ -25,7 +25,7 @@
 PARALLEL=$[$(nproc)/4+1]
 
 ###################################################
-# DO NOT change variables bellow unless you known 
+# DO NOT change variables bellow unless you known
 # what you are doing.
 ###################################################
 
@@ -111,7 +111,7 @@ GPERFTOOLS_MD5SUM="797e7b7f6663288e2b90ab664861c61a"
 # zlib
 ZLIB_DOWNLOAD="https://zlib.net/zlib-1.2.11.tar.gz"
 ZLIB_NAME=zlib-1.2.11.tar.gz
-ZLIB_SOURCE=zlib-1.2.11 
+ZLIB_SOURCE=zlib-1.2.11
 ZLIB_MD5SUM="1c9f62f0778697a09d36121ead88e08e"
 
 # lz4
@@ -126,12 +126,6 @@ BZIP_DOWNLOAD="ftp://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz"
 BZIP_NAME=bzip2-1.0.8.tar.gz
 BZIP_SOURCE=bzip2-1.0.8
 BZIP_MD5SUM="67e051268d0c475ea773822f7500d0e5"
-
-# lzo2
-LZO2_DOWNLOAD="http://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz"
-LZO2_NAME=lzo-2.10.tar.gz
-LZO2_SOURCE=lzo-2.10
-LZO2_MD5SUM="39d3f3f9c55c87b1e5d6888e1420f4b5"
 
 # rapidjson
 RAPIDJSON_DOWNLOAD="https://github.com/miloyip/rapidjson/archive/v1.1.0.tar.gz"
@@ -241,12 +235,6 @@ CCTZ_NAME="cctz-2.3.tar.gz"
 CCTZ_SOURCE="cctz-2.3"
 CCTZ_MD5SUM="209348e50b24dbbdec6d961059c2fc92"
 
-# GOOGLE BENCHMARK
-BENCHMARK_DOWNLOAD="https://github.com/google/benchmark/archive/v1.5.1.zip"
-BENCHMARK_NAME="benchmark-1.5.1.zip"
-BENCHMARK_SOURCE="benchmark-1.5.1"
-BENCHMARK_MD5SUM="5cc3c1cd63f02c42340540f1ab0de330"
-
 # FMT
 FMT_DOWNLOAD="https://github.com/fmtlib/fmt/releases/download/7.0.3/fmt-7.0.3.zip"
 FMT_NAME="fmt-7.0.3.zip"
@@ -297,4 +285,4 @@ MARIADB_SOURCE="mariadb-connector-c-3.1.14"
 MARIADB_MD5SUM="86c4052adeb8447900bf33b4e2ddd1f9"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
-TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP LZO2 CURL RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA FLATBUFFERS ARROW BROTLI DOUBLE_CONVERSION ZSTD S2 BITSHUFFLE CROARINGBITMAP JEMALLOC CCTZ BENCHMARK FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB"
+TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA FLATBUFFERS ARROW BROTLI DOUBLE_CONVERSION ZSTD S2 BITSHUFFLE CROARINGBITMAP JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB"
