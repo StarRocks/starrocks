@@ -681,11 +681,14 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         HashDistributionSpec hashDistributionSpec = node.getDistributionSpec();
 
         ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+        boolean satisfyLocalProperty;
         if (node.getSelectedPartitionId().size() > 1 && !colocateIndex.isColocateTable(node.getTable().getId())) {
             outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList()));
+            satisfyLocalProperty = false;
         } else {
             outputInputProps
                     .add(new Pair<>(createPropertySetByDistribution(hashDistributionSpec), Lists.newArrayList()));
+            satisfyLocalProperty = true;
         }
 
         Optional<HashDistributionDesc> required = getRequiredLocalDesc();
@@ -695,7 +698,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
         outputInputProps.clear();
         HashDistributionDesc requireDistributionDesc = required.get();
-        if (requireDistributionDesc.getColumns().containsAll(hashDistributionSpec.getShuffleColumns())) {
+        if (requireDistributionDesc.getColumns().containsAll(hashDistributionSpec.getShuffleColumns()) && satisfyLocalProperty) {
             outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList()));
         }
 
