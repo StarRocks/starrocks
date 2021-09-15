@@ -149,11 +149,9 @@ Status Compaction::construct_output_rowset_writer() {
 Status Compaction::merge_rowsets(MemTracker* mem_tracker, Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
-    Reader reader(schema);
+    Reader reader(_tablet, _output_rs_writer->version(), schema);
     ReaderParams reader_params;
-    reader_params.tablet = _tablet;
     reader_params.reader_type = compaction_type();
-    reader_params.version = _output_rs_writer->version();
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
 
     int64_t num_rows = 0;
@@ -172,7 +170,8 @@ Status Compaction::merge_rowsets(MemTracker* mem_tracker, Statistics* stats_outp
         chunk_size = config::vector_chunk_size;
     }
     reader_params.chunk_size = chunk_size;
-    RETURN_IF_ERROR(reader.init(reader_params));
+    RETURN_IF_ERROR(reader.prepare());
+    RETURN_IF_ERROR(reader.open(reader_params));
 
     int64_t output_rows = 0;
 

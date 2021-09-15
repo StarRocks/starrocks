@@ -6,7 +6,6 @@
 #include <vector>
 
 #include "storage/olap_common.h"
-#include "storage/tablet.h"
 #include "storage/tuple.h"
 #include "storage/vectorized/chunk_iterator.h"
 
@@ -23,8 +22,6 @@ class ColumnPredicate;
 struct ReaderParams {
     ReaderParams();
 
-    Version version;
-    TabletSharedPtr tablet;
     ReaderType reader_type = READER_QUERY;
 
     bool skip_aggregation = false;
@@ -48,7 +45,6 @@ struct ReaderParams {
 
     RuntimeProfile* profile = nullptr;
 
-    void check_validation() const;
     std::string to_string() const;
     int chunk_size = 1024;
 };

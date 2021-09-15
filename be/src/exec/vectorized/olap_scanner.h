@@ -11,6 +11,7 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
+#include "storage/tablet.h"
 #include "storage/vectorized/conjunctive_predicates.h"
 #include "storage/vectorized/reader.h"
 #include "storage/vectorized/reader_params.h"
