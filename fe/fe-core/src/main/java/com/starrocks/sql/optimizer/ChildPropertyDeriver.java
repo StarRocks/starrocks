@@ -13,6 +13,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
@@ -454,6 +455,17 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         return Optional.of(requireDistributionDesc);
     }
 
+    private Optional<GatherDistributionSpec> getRequiredGatherDesc() {
+        if (!requirements.getDistributionProperty().isGather()) {
+            return Optional.empty();
+        }
+
+        GatherDistributionSpec requireDistributionDesc =
+                ((GatherDistributionSpec) requirements.getDistributionProperty().getSpec());
+
+        return Optional.of(requireDistributionDesc);
+    }
+
     private Optional<HashDistributionDesc> getRequiredShuffleJoinDesc() {
         if (!requirements.getDistributionProperty().isShuffle()) {
             return Optional.empty();
@@ -468,13 +480,37 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         return Optional.of(requireDistributionDesc);
     }
 
-    private Void visitJoinRequirements(PhysicalHashJoinOperator node, ExpressionContext context) {
-        Optional<HashDistributionDesc> required = getRequiredLocalDesc();
+    private Void tryGatherForBroadcastJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
+        List<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>> result = Lists.newArrayList();
+        if (context.getChildLogicalProperty(0).isGatherToOneInstance()) {
+            for (Pair<PhysicalPropertySet, List<PhysicalPropertySet>> outputInputProp : outputInputProps) {
+                PhysicalPropertySet left = outputInputProp.second.get(0);
+                PhysicalPropertySet right = outputInputProp.second.get(1);
+                if (left.getDistributionProperty().isAny() && right.getDistributionProperty().isBroadcast()) {
+                    result.add(new Pair<>(distributeRequirements(),
+                            Lists.newArrayList(distributeRequirements(), right)));
+                } else {
+                    result.add(outputInputProp);
+                }
+            }
+            outputInputProps = result;
+            return visitOperator(node, context);
+        }
+        return visitOperator(node, context);
+    }
 
+    private Void visitJoinRequirements(PhysicalHashJoinOperator node, ExpressionContext context) {
+        //require property is gather
+        Optional<GatherDistributionSpec> requiredGatherDistribution = getRequiredGatherDesc();
+        if (requiredGatherDistribution.isPresent()) {
+            return tryGatherForBroadcastJoin(node, context);
+        }
+
+        Optional<HashDistributionDesc> required = getRequiredLocalDesc();
         if (!required.isPresent()) {
             return visitOperator(node, context);
         }
-
+        //require property is local
         HashDistributionDesc requireDistributionDesc = required.get();
         ColumnRefSet requiredLocalColumns = new ColumnRefSet();
         requireDistributionDesc.getColumns().forEach(requiredLocalColumns::union);
@@ -551,7 +587,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
         // If scan tablet sum leas than 1, do one phase local aggregate is enough
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0
-                && context.getRootProperty().isExecuteInOneInstance()
+                && context.getRootProperty().isExecuteInOneTablet()
                 && node.getType().isGlobal() && !node.isSplit()) {
             outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList(PhysicalPropertySet.EMPTY)));
             return visitAggregateRequirements(node, context);
@@ -653,7 +689,6 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         }
 
         Optional<HashDistributionDesc> required = getRequiredLocalDesc();
-
         if (!required.isPresent()) {
             return visitOperator(node, context);
         }
