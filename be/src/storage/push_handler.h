@@ -57,10 +57,8 @@ public:
     int64_t write_rows() const { return _write_rows; }
 
 private:
-    OLAPStatus _convert_v2(TabletSharedPtr cur_tablet, TabletSharedPtr new_tablet_vec, RowsetSharedPtr* cur_rowset,
-                           RowsetSharedPtr* new_rowset);
-    OLAPStatus _convert(TabletSharedPtr cur_tablet, TabletSharedPtr new_tablet_vec, RowsetSharedPtr* cur_rowset,
-                        RowsetSharedPtr* new_rowset);
+    OLAPStatus _convert(TabletSharedPtr cur_tablet, RowsetSharedPtr* cur_rowset);
+    OLAPStatus _convert_v2(TabletSharedPtr cur_tablet, RowsetSharedPtr* cur_rowset);
 
     void _get_tablet_infos(const std::vector<TabletVars>& tablet_infos, std::vector<TTabletInfo>* tablet_info_vec);
 
