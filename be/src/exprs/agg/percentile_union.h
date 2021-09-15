@@ -35,8 +35,8 @@ public:
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
         DCHECK(to->is_object());
         auto* column = down_cast<PercentileColumn*>(to);
-
-        column->append(&this->data(state));
+        auto& percentile_value = const_cast<PercentileValue&>(this->data(state));
+        column->append(std::move(percentile_value));
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
@@ -46,8 +46,8 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
         DCHECK(to->is_object());
         auto* column = down_cast<PercentileColumn*>(to);
-
-        column->append(&this->data(state));
+        auto& percentile_value = const_cast<PercentileValue&>(this->data(state));
+        column->append(std::move(percentile_value));
     }
 
     std::string get_name() const override { return "percentile_union"; }
