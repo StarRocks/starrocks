@@ -30,6 +30,7 @@ set -eo pipefail
 
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
+MACHINE_TYPE=$(uname -m)
 
 export STARROCKS_HOME=${ROOT}
 
@@ -96,6 +97,12 @@ CLEAN=
 RUN_UT=
 WITH_GCOV=OFF
 WITH_HDFS=ON
+
+
+# Disable WITH_HDFS on aarch64
+if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+    WITH_HDFS=OFF
+fi
 
 HELP=0
 if [ $# == 1 ] ; then
