@@ -3783,7 +3783,6 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select sum(x1) from (select sum(v1) as x1 from t0) as q";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  RESULT SINK\n" +
                 "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
@@ -3802,7 +3801,24 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select v2, SUM(x1) from (select v2, v3, sum(v1) as x1 from t0 group by v2, v3) as q group by v2";
         plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
+
+        sql = "select SUM(x1) from (select v2, sum(distinct v1), sum(v3) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
         System.out.println(plan);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: v3)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
     }
 
     @Test
@@ -3811,7 +3827,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan;
         sql = "select avg(x1) from (select avg(v1) as x1 from t0) as q";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  output: avg(1: v1)\n" +
                 "  |  group by: \n" +
@@ -3821,7 +3836,6 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select SUM(v2) from (select v2, sum(v1) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
@@ -3830,5 +3844,24 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  group by: 2: v2\n" +
                 "  |  use vectorized: true\n"));
+        sql = "select SUM(v2) from (select v2, sum(distinct v2) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: v2)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  use vectorized: true\n"));
+        sql = "select sum(distinct x1) from (select v2, sum(v2) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: v2)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n"));
     }
 }

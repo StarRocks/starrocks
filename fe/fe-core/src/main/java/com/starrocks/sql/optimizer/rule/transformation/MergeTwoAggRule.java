@@ -75,7 +75,7 @@ public class MergeTwoAggRule extends TransformationRule {
 
         for (CallOperator call : aggCallMapAbove.values()) {
             ColumnRefOperator ref = (ColumnRefOperator) call.getChild(0);
-            if (!ALLOW_MERGE_AGGREGATE_FUNCTIONS.contains(call.getFnName().toLowerCase())) {
+            if (!ALLOW_MERGE_AGGREGATE_FUNCTIONS.contains(call.getFnName().toLowerCase()) || call.isDistinct()) {
                 return false;
             }
 
@@ -85,7 +85,8 @@ public class MergeTwoAggRule extends TransformationRule {
                 return false;
             }
 
-            if (!aggCallMapBelow.get(ref).getFnName().equalsIgnoreCase(call.getFnName())) {
+            if (!aggCallMapBelow.get(ref).getFnName().equalsIgnoreCase(call.getFnName()) ||
+                    aggCallMapBelow.get(ref).isDistinct()) {
                 return false;
             }
         }
