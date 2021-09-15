@@ -203,6 +203,7 @@ Status SchemaColumnsScanner::fill_one_row(Tuple* tuple, MemPool* pool) {
     // set all bit to not null
     memset((void*)tuple, 0, _tuple_desc->num_null_bytes());
 
+    // https://dev.mysql.com/doc/refman/5.7/en/information-schema-columns-table.html
     // TABLE_CATALOG
     { tuple->set_null(_tuple_desc->slots()[0]->null_indicator_offset()); }
     // TABLE_SCHEMA
@@ -271,15 +272,30 @@ Status SchemaColumnsScanner::fill_one_row(Tuple* tuple, MemPool* pool) {
         memcpy(str_slot->ptr, buffer.c_str(), str_slot->len);
     }
     // CHARACTER_MAXIMUM_LENGTH
-    { tuple->set_null(_tuple_desc->slots()[8]->null_indicator_offset()); }
+    {
+        int data_type = _desc_result.columns[_column_index].columnDesc.columnType;
+        if (data_type == TPrimitiveType::VARCHAR || data_type == TPrimitiveType::CHAR) {
+            void* slot = tuple->get_slot(_tuple_desc->slots()[8]->tuple_offset());
+            int64_t* str_slot = reinterpret_cast<int64_t*>(slot);
+            if (_desc_result.columns[_column_index].columnDesc.__isset.columnLength) {
+                *str_slot = _desc_result.columns[_column_index].columnDesc.columnLength;
+            } else {
+                tuple->set_null(_tuple_desc->slots()[8]->null_indicator_offset());
+            }
+        } else {
+            tuple->set_null(_tuple_desc->slots()[8]->null_indicator_offset());
+        }
+    }
     // CHARACTER_OCTET_LENGTH
+    // For string columns, the maximum length in bytes.
     {
         int data_type = _desc_result.columns[_column_index].columnDesc.columnType;
         if (data_type == TPrimitiveType::VARCHAR || data_type == TPrimitiveType::CHAR) {
             void* slot = tuple->get_slot(_tuple_desc->slots()[9]->tuple_offset());
             int64_t* str_slot = reinterpret_cast<int64_t*>(slot);
             if (_desc_result.columns[_column_index].columnDesc.__isset.columnLength) {
-                *str_slot = _desc_result.columns[_column_index].columnDesc.columnLength;
+                // currently we save string use UTF-8 so * 3
+                *str_slot = _desc_result.columns[_column_index].columnDesc.columnLength * 3;
             } else {
                 tuple->set_null(_tuple_desc->slots()[9]->null_indicator_offset());
             }
