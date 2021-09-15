@@ -22,6 +22,7 @@
 #include "exec/exchange_node.h"
 
 #include "column/chunk.h"
+#include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -377,13 +378,18 @@ void ExchangeNode::debug_string(int indentation_level, std::stringstream* out) c
 pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators;
-    auto exchange_operator = std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
-                                                                             _num_senders, _input_row_desc);
-    // A merging ExchangeSourceOperator should not be parallelized.
-    exchange_operator->set_degree_of_parallelism(_is_merging ? 1 : context->degree_of_parallelism());
-    operators.emplace_back(std::move(exchange_operator));
-    if (limit() != -1) {
-        operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    if (!_is_merging) {
+        operators.emplace_back(std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
+                                                                               _num_senders, _input_row_desc));
+        if (limit() != -1) {
+            operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+        }
+    } else {
+        auto exchange_merge_sort_source_operator = std::make_shared<ExchangeMergeSortSourceOperatorFactory>(
+                context->next_operator_id(), id(), _num_senders, _input_row_desc, &_sort_exec_exprs, _is_asc_order,
+                _nulls_first, _offset, _limit);
+        exchange_merge_sort_source_operator->set_degree_of_parallelism(1);
+        operators.emplace_back(std::move(exchange_merge_sort_source_operator));
     }
     return operators;
 }
