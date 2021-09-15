@@ -55,12 +55,12 @@ inline uint32_t DataStreamMgr::get_hash_value(const TUniqueId& fragment_instance
 std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
         RuntimeState* state, const RowDescriptor& row_desc, const TUniqueId& fragment_instance_id,
         PlanNodeId dest_node_id, int num_senders, int buffer_size, const std::shared_ptr<RuntimeProfile>& profile,
-        bool is_merging, std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr) {
+        bool is_merging, std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline) {
     DCHECK(profile != NULL);
     VLOG_FILE << "creating receiver for fragment=" << fragment_instance_id << ", node=" << dest_node_id;
-    std::shared_ptr<DataStreamRecvr> recvr(
-            new DataStreamRecvr(this, state->instance_mem_tracker(), row_desc, fragment_instance_id, dest_node_id,
-                                num_senders, is_merging, buffer_size, profile, sub_plan_query_statistics_recvr));
+    std::shared_ptr<DataStreamRecvr> recvr(new DataStreamRecvr(
+            this, state->instance_mem_tracker(), row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging,
+            buffer_size, profile, sub_plan_query_statistics_recvr, is_pipeline));
     uint32_t hash_value = get_hash_value(fragment_instance_id, dest_node_id);
     std::lock_guard<std::mutex> l(_lock);
     _fragment_stream_set.emplace(fragment_instance_id, dest_node_id);
