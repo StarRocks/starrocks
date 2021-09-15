@@ -71,8 +71,15 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 }
 
 Status HdfsScanNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ScanNode::prepare(state));
+    // right now we don't force user to set JAVA_HOME.
+    // but when we access hdfs via JNI, we have to make sure JAVA_HOME is set,
+    // otherwise be will crash because of failure to create JVM.
+    const char* p = std::getenv("JAVA_HOME");
+    if (p == nullptr) {
+        return Status::RuntimeError("env 'JAVA_HOME' is not set");
+    }
 
+    RETURN_IF_ERROR(ScanNode::prepare(state));
     RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state, *_min_max_row_desc, expr_mem_tracker()));
     RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state, row_desc(), expr_mem_tracker()));
     _init_counter(state);
