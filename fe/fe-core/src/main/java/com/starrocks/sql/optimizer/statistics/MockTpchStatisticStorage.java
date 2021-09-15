@@ -18,13 +18,14 @@ import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.POSITIVE_INFINITY;
 
 public class MockTpchStatisticStorage implements StatisticStorage {
-    public static final MockTpchStatisticStorage INSTANCE = new MockTpchStatisticStorage();
-
     private final Map<String, Map<String, ColumnStatistic>> tableStatistics;
 
-    private MockTpchStatisticStorage() {
+    private final int tpchScala;
+
+    public MockTpchStatisticStorage(int tpchScala) {
         tableStatistics = new HashMap<>();
         mockTpchStatistics();
+        this.tpchScala = tpchScala;
     }
 
     private void mockTpchStatistics() {
@@ -181,19 +182,33 @@ public class MockTpchStatisticStorage implements StatisticStorage {
 
     @Override
     public ColumnStatistic getColumnStatistic(Table table, String column) {
-        if (tableStatistics.get(table.getName()) == null) {
-            return null;
+        if (tableStatistics.get(table.getName().toLowerCase()) == null) {
+            return ColumnStatistic.unknown();
         }
-        return tableStatistics.get(table.getName()).get(column);
+        ColumnStatistic statistic = tableStatistics.get(table.getName().toLowerCase()).get(column.toLowerCase());
+        if (statistic != null) {
+            if (table.getName().toLowerCase().equals("region") ||
+                    table.getName().toLowerCase().equals("nation") ||
+                    column.toLowerCase().contains("nationkey") ||
+                    column.toLowerCase().contains("regionkey")) {
+                return statistic;
+            } else if (column.toLowerCase().contains("key") || column.toLowerCase().contains("name")) {
+                return new ColumnStatistic(statistic.getMinValue(),
+                        statistic.getMaxValue() * tpchScala,
+                        statistic.getNullsFraction(),
+                        statistic.getAverageRowSize(),
+                        statistic.getDistinctValuesCount() * tpchScala);
+            } else {
+                return statistic;
+            }
+        }
+
+        return ColumnStatistic.unknown();
     }
 
     @Override
     public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
-        if (tableStatistics.get(table.getName()) == null) {
-            return null;
-        }
-        return columns.stream().map(column -> tableStatistics.get(table.getName()).get(column))
-                .collect(Collectors.toList());
+        return columns.stream().map(column -> getColumnStatistic(table, column)).collect(Collectors.toList());
     }
 
     private LocalDateTime formatDateFromString(String dateStr) {

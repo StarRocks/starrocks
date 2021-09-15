@@ -24,7 +24,6 @@ import com.starrocks.external.hive.HdfsFileDesc;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HiveTableStats;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -225,9 +224,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
         List<ColumnStatistic> columnStatisticList;
         try {
-            if (ConnectContext.get().getSessionVariable().getEnableMockTpch()) {
-                return estimateScanColumns(table);
-            }
             Map<String, HiveColumnStats> hiveColumnStatisticMap =
                     table.getTableLevelColumnStats(requiredColumns.stream().
                             map(ColumnRefOperator::getName).collect(Collectors.toList()));
