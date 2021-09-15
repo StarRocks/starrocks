@@ -232,6 +232,7 @@ bool DataStreamRecvr::SenderQueue::has_chunk() {
     return true;
 }
 
+// try_get_chunk will only be used when has_chunk return true(explicitly or implicitly).
 bool DataStreamRecvr::SenderQueue::try_get_chunk(vectorized::Chunk** chunk) {
     std::unique_lock<std::mutex> l(_lock);
     if (_is_cancelled) {
