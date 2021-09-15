@@ -103,7 +103,7 @@ Status Segment::new_iterator(const Schema& schema, const StorageReadOptions& rea
     DCHECK_NOTNULL(read_options.stats);
 
     // If input schema is not match the actual meta, must convert the read_options according
-    // to the actual format. And create an AdaptSegmentIterator to wrapp
+    // to the actual format. And create an AdaptSegmentIterator to wrap
     if (_needs_block_adapter) {
         std::unique_ptr<vectorized::SegmentV2IteratorAdapter> adapter(
                 new vectorized::SegmentV2IteratorAdapter(*_tablet_schema, _column_storage_types, schema));
@@ -142,7 +142,7 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const vectorized::Schema& schem
         return Status::InvalidArgument("stats is null pointer");
     }
     // If input schema is not match the actual meta, must convert the read_options according
-    // to the actual format. And create an AdaptSegmentIterator to wrapp
+    // to the actual format. And create an AdaptSegmentIterator to wrap
     if (_needs_chunk_adapter) {
         std::unique_ptr<vectorized::SegmentChunkIteratorAdapter> adapter(new vectorized::SegmentChunkIteratorAdapter(
                 *_tablet_schema, _column_storage_types, schema, read_options.chunk_size));
