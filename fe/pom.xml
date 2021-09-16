@@ -330,11 +330,12 @@ under the License.
                 <scope>test</scope>
             </dependency>
 
+
             <!-- https://mvnrepository.com/artifact/org.apache.thrift/libthrift -->
             <dependency>
                 <groupId>org.apache.thrift</groupId>
                 <artifactId>libthrift</artifactId>
-                <version>0.13.0</version>
+                <version>0.14.0</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-api -->
