@@ -205,7 +205,7 @@ public class StarRocksFE {
         options.addOption("v", "version", false, "Print the version of StarRocks Frontend");
         options.addOption("h", "helper", true, "Specify the helper node when joining a bdb je replication group");
         options.addOption("b", "bdb", false, "Run bdbje debug tools");
-        options.addOption("l", "listdb", false, "Run bdbje debug tools");
+        options.addOption("l", "listdb", false, "Print the list of databases in bdbje");
         options.addOption("d", "db", true, "Specify a database in bdbje");
         options.addOption("s", "stat", false, "Print statistic of a database, including count, first key, last key");
         options.addOption("f", "from", true, "Specify the start scan key");
