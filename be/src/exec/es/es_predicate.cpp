@@ -40,6 +40,7 @@
 #include "runtime/client_cache.h"
 #include "runtime/datetime_value.h"
 #include "runtime/large_int_value.h"
+#include "runtime/primitive_type.h"
 #include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
@@ -204,7 +205,8 @@ std::string SExtLiteral::get_decimalv2_string() {
 
 std::string SExtLiteral::get_largeint_string() {
     DCHECK(_type == TYPE_LARGEINT);
-    return LargeIntValue::to_string(*reinterpret_cast<__int128*>(_value));
+    __int128 v = unaligned_load<__int128>(_value);
+    return LargeIntValue::to_string(v);
 }
 
 EsPredicate::EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, ObjectPool* pool)
@@ -658,9 +660,6 @@ Status build_inpred_values(const Predicate* pred, bool& is_not_in, Func&& func) 
     return Status::OK();
 }
 
-// in_pred_values.emplace_back(                                              \
-//                     new SExtLiteral(slot_desc->type().type, static_cast<void*>(&v))); \
-
 #define BUILD_INPRED_VALUES(TYPE)                                                                         \
     case TYPE: {                                                                                          \
         RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                         \
@@ -704,8 +703,10 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
         bool is_not_in = false;
         // insert in list to ExtLiteral
         switch (expr->type().type) {
+            BUILD_INPRED_VALUES(TYPE_BOOLEAN);
             BUILD_INPRED_VALUES(TYPE_INT);
             BUILD_INPRED_VALUES(TYPE_TINYINT);
+            BUILD_INPRED_VALUES(TYPE_SMALLINT);
             BUILD_INPRED_VALUES(TYPE_BIGINT);
             BUILD_INPRED_VALUES(TYPE_LARGEINT);
             BUILD_INPRED_VALUES(TYPE_FLOAT);
@@ -740,7 +741,7 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
             break;
         }
         default:
-            DCHECK(false) << "unsupport type:" << conjunct->type().type;
+            DCHECK(false) << "unsupport type:" << expr->type().type;
             return Status::InternalError("unsupport type to push down to ES");
         }
 
