@@ -67,7 +67,7 @@ Status FileReader::_parse_footer() {
     // we may allocate on heap if local_buf is not large enough.
     DeferOp deferop([&] {
         if (footer_buf != local_buf) {
-            delete footer_buf;
+            delete[] footer_buf;
         }
     });
 
