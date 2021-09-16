@@ -3918,4 +3918,22 @@ public class PlanFragmentTest extends PlanTestBase {
 
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
+
+    @Test
+    public void testOuterJoinBucketShuffle() throws Exception {
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 RIGHT JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  6:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:"));
+    }
 }
