@@ -1389,10 +1389,10 @@ public:
                 _type = BITMAP;
                 break;
             case BITMAP: {
-                BitmapValue intersect_bitmap(*this);
-                *_bitmap |= *rhs._bitmap;
-                *intersect_bitmap._bitmap &= *rhs._bitmap;
-                *_bitmap -= *intersect_bitmap._bitmap;
+                BitmapValue rhs_bitmap(rhs);
+                *rhs_bitmap._bitmap -= *_bitmap;
+                *_bitmap -= *rhs._bitmap;
+                *_bitmap |= *rhs_bitmap._bitmap;
                 break;
             }
             case SET: {
