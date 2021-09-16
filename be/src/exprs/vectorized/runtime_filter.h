@@ -68,6 +68,7 @@ public:
 #endif
     }
 
+#ifdef __AVX2__
     void insert_hash_in_same_bucket(const uint64_t* hash_values, size_t n) {
         if (n == 0) return;
         const uint32_t bucket_idx = hash_values[0] & _directory_mask;
@@ -79,6 +80,7 @@ public:
         }
         _mm256_store_si256(addr, now);
     }
+#endif
 
     size_t max_serialized_size() const;
     size_t serialize(uint8_t* data) const;
@@ -92,7 +94,7 @@ private:
 
     // For scalar version:
     void make_mask(uint32_t key, uint32_t* masks) const;
-
+#ifdef __AVX2__
     // For simd version:
     __m256i make_mask(const uint32_t hash) const noexcept {
         // Load hash into a YMM register, repeated eight times
@@ -107,6 +109,8 @@ private:
         // Use these 5 bits to shift a single bit to a location in each 32-bit lane
         return _mm256_sllv_epi32(ones, hash_data);
     }
+#endif
+
     // log2(number of bytes in a bucket):
     static constexpr int LOG_BUCKET_BYTE_SIZE = 5;
 
