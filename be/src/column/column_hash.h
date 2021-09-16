@@ -210,13 +210,27 @@ public:
 template <class T>
 class StdHash {
 public:
-    std::size_t operator()(T value) const { return phmap_mix<sizeof(size_t)>()(std::hash<T>()(value)); }
+    std::size_t operator()(T value) const {
+        size_t t = std::hash<T>()(value);
+        if constexpr (sizeof(T) <= 4) {
+            return phmap_mix<4>()(t);
+        } else {
+            return phmap_mix<8>()(t);
+        }
+    }
 };
 
 template <class T, PhmapSeed seed>
 class StdHashWithSeed {
 public:
-    std::size_t operator()(T value) const { return phmap_mix_with_seed<sizeof(size_t), seed>()(std::hash<T>()(value)); }
+    std::size_t operator()(T value) const {
+        size_t t = std::hash<T>()(value);
+        if constexpr (sizeof(T) <= 4) {
+            return phmap_mix_with_seed<4, seed>()(t);
+        } else {
+            return phmap_mix_with_seed<8, seed>()(t);
+        }
+    }
 };
 
 } // namespace starrocks::vectorized
