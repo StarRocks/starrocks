@@ -847,14 +847,12 @@ Status DataStreamSender::find_partition(RuntimeState* state, TupleRow* row, Part
                 // TODO(zc): add counter to compute its
                 std::stringstream error_log;
                 error_log << "there is no corresponding partition for this key: ";
-                ctx->print_value(row, &error_log);
                 LOG(INFO) << error_log.str();
                 *ignore = true;
                 return Status::OK();
             } else {
                 std::stringstream error_log;
                 error_log << "there is no corresponding partition for this key: ";
-                ctx->print_value(row, &error_log);
                 return Status::InternalError(error_log.str());
             }
         }

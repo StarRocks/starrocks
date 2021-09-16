@@ -4,29 +4,6 @@
 #include "column/column_helper.h"
 #include "column/column_pool.h"
 #include "common/config.h"
-#include "exprs/bitmap_function.h"
-#include "exprs/cast_functions.h"
-#include "exprs/compound_predicate.h"
-#include "exprs/decimal_operators.h"
-#include "exprs/decimalv2_operators.h"
-#include "exprs/encryption_functions.h"
-#include "exprs/es_functions.h"
-#include "exprs/grouping_sets_functions.h"
-#include "exprs/hash_functions.h"
-#include "exprs/hll_function.h"
-#include "exprs/hll_hash_function.h"
-#include "exprs/is_null_predicate.h"
-#include "exprs/json_functions.h"
-#include "exprs/like_predicate.h"
-#include "exprs/math_functions.h"
-#include "exprs/new_in_predicate.h"
-#include "exprs/operators.h"
-#include "exprs/percentile_function.h"
-#include "exprs/string_functions.h"
-#include "exprs/time_operators.h"
-#include "exprs/timestamp_functions.h"
-#include "exprs/utility_functions.h"
-#include "geo/geo_functions.h"
 #include "gtest/gtest.h"
 #include "runtime/bufferpool/buffer_pool.h"
 #include "runtime/exec_env.h"
@@ -59,29 +36,6 @@ int main(int argc, char** argv) {
     starrocks::DiskInfo::init();
     starrocks::MemInfo::init();
     starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
-    starrocks::Operators::init();
-    starrocks::IsNullPredicate::init();
-    starrocks::LikePredicate::init();
-    starrocks::StringFunctions::init();
-    starrocks::CastFunctions::init();
-    starrocks::InPredicate::init();
-    starrocks::MathFunctions::init();
-    starrocks::EncryptionFunctions::init();
-    starrocks::TimestampFunctions::init();
-    starrocks::DecimalOperators::init();
-    starrocks::DecimalV2Operators::init();
-    starrocks::TimeOperators::init();
-    starrocks::UtilityFunctions::init();
-    starrocks::CompoundPredicate::init();
-    starrocks::JsonFunctions::init();
-    starrocks::HllHashFunctions::init();
-    starrocks::ESFunctions::init();
-    starrocks::GeoFunctions::init();
-    starrocks::GroupingSetsFunctions::init();
-    starrocks::BitmapFunctions::init();
-    starrocks::HllFunctions::init();
-    starrocks::HashFunctions::init();
-    starrocks::PercentileFunctions::init();
 
     starrocks::vectorized::ColumnHelper::init_static_variable();
     starrocks::vectorized::date::init_date_cache();

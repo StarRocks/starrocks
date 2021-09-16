@@ -27,7 +27,6 @@
 #include <sstream>
 
 #include "common/status.h"
-#include "exec/parquet_scanner.h"
 #include "runtime/exec_env.h"
 #include "storage/row.h"
 #include "storage/rowset/rowset_factory.h"
@@ -486,21 +485,12 @@ OLAPStatus PushBrokerReader::init(const Schema* schema, const TBrokerScanRange& 
         return OLAP_ERR_PUSH_INIT_ERROR;
     }
     _mem_pool = std::make_unique<MemPool>(_runtime_state->instance_mem_tracker());
-    _counter = std::make_unique<ScannerCounter>();
 
-    // init scanner
-    FileScanner* scanner = nullptr;
     switch (t_scan_range.ranges[0].format_type) {
-    case TFileFormatType::FORMAT_PARQUET:
-        scanner = new ParquetScanner(_runtime_state.get(), _runtime_profile, t_scan_range.params, t_scan_range.ranges,
-                                     t_scan_range.broker_addresses, _counter.get());
-        break;
     default:
         LOG(WARNING) << "Unsupported file format type: " << t_scan_range.ranges[0].format_type;
         return OLAP_ERR_PUSH_INIT_ERROR;
     }
-    _scanner.reset(scanner);
-    status = _scanner->open();
     if (UNLIKELY(!status.ok())) {
         LOG(WARNING) << "Failed to open scanner, msg: " << status.get_error_msg();
         return OLAP_ERR_PUSH_INIT_ERROR;
@@ -534,7 +524,7 @@ OLAPStatus PushBrokerReader::next(ContiguousRow* row) {
 
     memset(_tuple, 0, _tuple_desc->num_null_bytes());
     // Get from scanner
-    Status status = _scanner->get_next(_tuple, _mem_pool.get(), &_eof);
+    Status status = Status::OK();
     if (UNLIKELY(!status.ok())) {
         LOG(WARNING) << "FileScanner get next tuple failed";
         return OLAP_ERR_PUSH_INPUT_DATA_ERROR;

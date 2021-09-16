@@ -29,51 +29,10 @@ add_library(Exprs
   agg/aggregate_factory.cpp
   table_function/table_function_factory.cpp
   base64.cpp
-  encryption_functions.cpp
-  aggregate_functions.cpp
-  agg_fn_evaluator.cpp
-  anyval_util.cpp
-  arithmetic_expr.cpp
-  binary_predicate.cpp
-  case_expr.cpp
-  cast_expr.cpp
-  cast_functions.cpp
-  compound_predicate.cpp
-  conditional_functions.cpp
-  conditional_functions_ir.cpp
-  decimal_operators.cpp
-  decimalv2_operators.cpp
-  time_operators.cpp
-  es_functions.cpp
-  hash_functions.cpp
-  literal.cpp
   expr.cpp
-  expr_ir.cpp
   expr_context.cpp
-  in_predicate.cpp
-  new_in_predicate.cpp
-  is_null_predicate.cpp
-  like_predicate.cpp
-  math_functions.cpp
-  null_literal.cpp
-  scalar_fn_call.cpp
   slot_ref.cpp
-  string_functions.cpp
-  timestamp_functions.cpp
-  tuple_is_null_predicate.cpp
-  udf_builtins.cpp
-  utility_functions.cpp
-  info_func.cpp
-  hybird_set.cpp
-  json_functions.cpp
-  operators.cpp
-  hll_hash_function.cpp
-  agg_fn.cc
-  new_agg_fn_evaluator.cc
-  bitmap_function.cpp
-  hll_function.cpp
-  percentile_function.cpp
-  grouping_sets_functions.cpp
+  anyval_util.cpp
   vectorized/arithmetic_expr.cpp
   vectorized/array_expr.cpp
   vectorized/array_element_expr.cpp
