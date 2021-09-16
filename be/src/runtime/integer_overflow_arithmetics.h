@@ -101,6 +101,12 @@ inline int clz128(unsigned __int128 v) {
 }
 
 inline bool int128_mul_overflow(int128_t a, int128_t b, int128_t* c) {
+
+    if(a == 0 || b == 0) {
+        *c = 0;
+        return false;
+    }
+
     // sgn(x)
     auto sa = a >> 127;
     // sgn(y)
