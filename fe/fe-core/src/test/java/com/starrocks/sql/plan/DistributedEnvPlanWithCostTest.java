@@ -508,4 +508,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         Assert.assertTrue(plan.contains(" 11:AGGREGATE (update finalize)"));
         Assert.assertTrue(plan.contains("10:Project"));
     }
+
+    @Test
+    public void testGroupByDistributedColumnWithMultiPartitions() throws Exception {
+        String sql = "select k1, sum(k2) from pushdown_test group by k1";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)"));
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
+    }
 }
