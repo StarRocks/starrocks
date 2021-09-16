@@ -225,9 +225,9 @@ inline uint64_t crc_hash_uint64(uint64_t value, uint64_t seed) {
     return _mm_crc32_u64(seed, value);
 }
 
-inline uint64_t crc_hash_uint128(uint128_t value, uint64_t seed) {
-    uint64_t hash = _mm_crc32_u64(seed, value & (~0ULL));
-    hash = _mm_crc32_u64(hash, (value >> 64) & (~0ULL));
+inline uint64_t crc_hash_uint128(uint64_t value0, uint64_t value1, uint64_t seed) {
+    uint64_t hash = _mm_crc32_u64(seed, value0);
+    hash = _mm_crc32_u64(hash, value1);
     return hash;
 }
 

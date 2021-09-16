@@ -90,6 +90,13 @@ struct SliceKey8 {
     } u;
     static_assert(sizeof(u) == sizeof(u.value));
     bool operator==(const SliceKey8& k) const { return u.value == k.u.value; }
+    SliceKey8() {}
+    SliceKey8(const SliceKey8& x) { u.value = x.u.value; }
+    SliceKey8& operator=(const SliceKey8& x) {
+        u.value = x.u.value;
+        return *this;
+    }
+    SliceKey8(SliceKey8&& x) { u.value = x.u.value; }
 };
 
 struct SliceKey16 {
@@ -98,10 +105,20 @@ struct SliceKey16 {
             char data[15];
             uint8_t size;
         } __attribute__((packed));
+        struct {
+            uint64_t ui64[2];
+        } __attribute__((packed));
         int128_t value;
     } u;
     static_assert(sizeof(u) == sizeof(u.value));
     bool operator==(const SliceKey16& k) const { return u.value == k.u.value; }
+    SliceKey16() {}
+    SliceKey16(const SliceKey16& x) { u.value = x.u.value; }
+    SliceKey16& operator=(const SliceKey16& x) {
+        u.value = x.u.value;
+        return *this;
+    }
+    SliceKey16(SliceKey16&& x) { u.value = x.u.value; }
 };
 
 template <typename SliceKey, PhmapSeed seed>
@@ -117,9 +134,9 @@ public:
         } else {
             static_assert(sizeof(SliceKey) == 16);
             if constexpr (seed == PhmapSeed1) {
-                return crc_hash_uint128(s.u.value, CRC_HASH_SEED1);
+                return crc_hash_uint128(s.u.ui64[0], s.u.ui64[1], CRC_HASH_SEED1);
             } else {
-                return crc_hash_uint128(s.u.value, CRC_HASH_SEED2);
+                return crc_hash_uint128(s.u.ui64[0], s.u.ui64[1], CRC_HASH_SEED2);
             }
         }
     }
