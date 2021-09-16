@@ -101,6 +101,9 @@ Status SchemaScanNode::prepare(RuntimeState* state) {
     const std::vector<SlotDescriptor*>& src_slot_descs = _schema_scanner->get_slot_descs();
     const std::vector<SlotDescriptor*>& dest_slot_descs = _dest_tuple_desc->slots();
     int slot_num = dest_slot_descs.size();
+    if (0 == src_slot_descs.size()) {
+        slot_num = 0;
+    }
     for (int i = 0; i < slot_num; ++i) {
         int j = 0;
         for (; j < src_slot_descs.size(); ++j) {
@@ -235,10 +238,11 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
     if (nullptr == chunk->get()) {
         return Status::InternalError("Failed to allocate new chunk.");
     }
-    // init column information
-    for (auto& slot_desc : _dest_tuple_desc->slots()) {
-        ColumnPtr column = chunk_tmp->get_column_by_slot_id(slot_desc->id());
-        (*chunk)->append_column(std::move(column), slot_desc->id());
+    if (src_slot_descs.size()) {
+        for (auto& slot_desc : _dest_tuple_desc->slots()) {
+            ColumnPtr column = chunk_tmp->get_column_by_slot_id(slot_desc->id());
+            (*chunk)->append_column(std::move(column), slot_desc->id());
+        }
     }
 
     return Status::OK();
