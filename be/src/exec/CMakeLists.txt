@@ -110,6 +110,23 @@ set(EXEC_FILES
     vectorized/es_http_scan_node.cpp
     vectorized/es_http_scanner.cpp
     vectorized/es_http_components.cpp
+    vectorized/schema_scanner.cpp
+    vectorized/schema_scan_node.cpp
+    vectorized/schema_scanner/schema_tables_scanner.cpp
+    vectorized/schema_scanner/schema_dummy_scanner.cpp
+    vectorized/schema_scanner/schema_schemata_scanner.cpp
+    vectorized/schema_scanner/schema_variables_scanner.cpp
+    vectorized/schema_scanner/schema_columns_scanner.cpp
+    vectorized/schema_scanner/schema_charsets_scanner.cpp
+    vectorized/schema_scanner/schema_collations_scanner.cpp
+    vectorized/schema_scanner/schema_statistics_scanner.cpp
+    vectorized/schema_scanner/schema_triggers_scanner.cpp
+    vectorized/schema_scanner/schema_events_scanner.cpp
+    vectorized/schema_scanner/schema_views_scanner.cpp
+    vectorized/schema_scanner/schema_user_privileges_scanner.cpp
+    vectorized/schema_scanner/schema_schema_privileges_scanner.cpp
+    vectorized/schema_scanner/schema_table_privileges_scanner.cpp
+    vectorized/schema_scanner/schema_helper.cpp
     parquet/column_chunk_reader.cpp
     parquet/column_reader.cpp
     parquet/encoding.cpp
