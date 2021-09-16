@@ -612,15 +612,21 @@ bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs,
     case NAME:                                                        \
         size += sizeof(vectorized::RunTimeTypeTraits<NAME>::CppType); \
         break
+            ACC_FIELD_SIZE(TYPE_BOOLEAN);
             ACC_FIELD_SIZE(TYPE_TINYINT);
             ACC_FIELD_SIZE(TYPE_SMALLINT);
             ACC_FIELD_SIZE(TYPE_INT);
             ACC_FIELD_SIZE(TYPE_BIGINT);
+            ACC_FIELD_SIZE(TYPE_LARGEINT);
             ACC_FIELD_SIZE(TYPE_DATE);
             ACC_FIELD_SIZE(TYPE_DATETIME);
             ACC_FIELD_SIZE(TYPE_FLOAT);
             ACC_FIELD_SIZE(TYPE_DOUBLE);
-            // todo(yan): decimal or largeint
+            ACC_FIELD_SIZE(TYPE_DECIMAL);
+            ACC_FIELD_SIZE(TYPE_DECIMALV2);
+            ACC_FIELD_SIZE(TYPE_DECIMAL32);
+            ACC_FIELD_SIZE(TYPE_DECIMAL64);
+            ACC_FIELD_SIZE(TYPE_DECIMAL128);
         default:
             return false;
         }
@@ -750,7 +756,9 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
     }
 
     int real_fixed_size = 0;
-    if (_group_by_expr_ctxs.size() > 1) {
+    // this optimization don't need to be limited to multi-column group by.
+    // single column like float/double/decimal/largeint could also be applied to.
+    if (type == HashVariantType::Type::phase1_slice || HashVariantType::Type::phase2_slice) {
         size_t max_size = 0;
         bool has_null = false;
         if (is_group_columns_fixed_size(_group_by_expr_ctxs, _group_by_types, &max_size, &has_null)) {

@@ -516,6 +516,7 @@ struct AggHashMapWithSerializedKeyFixedSize {
     using ResultVector = typename std::vector<FixedSizeSliceKey>;
     HashMap hash_map;
 
+    // 0 means slice key size is varied.
     // -1 means slice key size is unset
     int real_fixed_size = -1;
     static constexpr size_t max_fixed_size = sizeof(FixedSizeSliceKey);

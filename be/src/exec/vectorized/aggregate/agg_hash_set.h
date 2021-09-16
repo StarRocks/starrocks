@@ -414,6 +414,7 @@ struct AggHashSetOfSerializedKeyFixedSize {
     HashSet hash_set;
 
     // 0 means slice key size is varied.
+    // -1 means slice key size is unset
     int real_fixed_size = -1;
     static constexpr size_t max_fixed_size = sizeof(FixedSizeSliceKey);
 
