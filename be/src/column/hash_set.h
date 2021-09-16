@@ -109,11 +109,18 @@ class FixedSizeSliceKeyHash {
 public:
     std::size_t operator()(const SliceKey& s) const {
         if constexpr (sizeof(SliceKey) == 8) {
-            return phmap_mix_with_seed<sizeof(size_t), seed>()(s.u.value);
+            if constexpr (seed == PhmapSeed1) {
+                return crc_hash_uint64(s.u.value, CRC_HASH_SEED1);
+            } else {
+                return crc_hash_uint64(s.u.value, CRC_HASH_SEED2);
+            }
         } else {
-            // todo(yan): better hash func?
-            Slice s2(s.u.data, 16);
-            return SliceHashWithSeed<seed>()(s2);
+            static_assert(sizeof(SliceKey) == 16);
+            if constexpr (seed == PhmapSeed1) {
+                return crc_hash_uint128(s.u.value, CRC_HASH_SEED1);
+            } else {
+                return crc_hash_uint128(s.u.value, CRC_HASH_SEED2);
+            }
         }
     }
 };
