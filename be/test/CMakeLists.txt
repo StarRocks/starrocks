@@ -25,29 +25,18 @@ set(EXEC_FILES
         ./env/env_posix_test.cpp
         ./env/env_memory_test.cpp
         ./env/output_stream_wrapper_test.cpp
-        #./exec/broker_reader_test.cpp
-        ./exec/broker_scanner_test.cpp
-        ./exec/file_scan_node_test.cpp
         ./exec/buffered_reader_test.cpp
-        ./exec/convert_scan_node_test.cpp
-        ./exec/es_http_scan_node_test.cpp
-        ./exec/es_predicate_test.cpp
         ./exec/es_query_builder_test.cpp
-        #./exec/es_scan_reader_test.cpp
-        #./exec/json_scanner_test.cpp
-        #./exec/orc_scanner_test.cpp
-        #./exec/parquet_scanner_test.cpp
         ./exec/plain_text_line_reader_bzip_test.cpp
         ./exec/plain_text_line_reader_gzip_test.cpp
         ./exec/plain_text_line_reader_lz4frame_test.cpp
         ./exec/plain_text_line_reader_uncompressed_test.cpp
-        #./exec/tablet_info_test.cpp
-        ./exec/tablet_sink_test.cpp
+        #./exec/tablet_sink_test.cpp
         ./exec/vectorized/agg_hash_map_test.cpp
-        ./exec/vectorized/csv_scanner_test.cpp
+        #./exec/vectorized/csv_scanner_test.cpp
         ./exec/vectorized/chunks_sorter_test.cpp
         ./exec/vectorized/join_hash_map_test.cpp
-        ./exec/vectorized/json_scanner_test.cpp
+        #./exec/vectorized/json_scanner_test.cpp
         ./exec/vectorized/hdfs_scanner_test.cpp
         ./exec/vectorized/orc_scanner_adapter_test.cpp
         ./exec/parquet/parquet_schema_test.cpp
@@ -57,14 +46,6 @@ set(EXEC_FILES
         ./exec/parquet/group_reader_test.cpp
         ./exec/parquet/file_reader_test.cpp
         ./exprs/agg/aggregate_test.cpp
-        ./exprs/bitmap_function_test.cpp
-        ./exprs/hll_function_test.cpp
-        ./exprs/hybird_set_test.cpp
-        ./exprs/json_function_test.cpp
-        ./exprs/math_functions_test.cpp
-        ./exprs/percentile_approx_test.cpp
-        ./exprs/string_functions_test.cpp
-        ./exprs/timestamp_functions_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp
         ./exprs/vectorized/arithmetic_operation_test.cpp
         ./exprs/vectorized/array_element_expr_test.cpp
@@ -120,20 +101,15 @@ set(EXEC_FILES
         ./formats/csv/float_converter_test.cpp
         ./formats/csv/nullable_converter_test.cpp
         ./formats/csv/numeric_converter_test.cpp
-        ./geo/geo_functions_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
-        #./http/http_client_test.cpp
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
-        #./http/metrics_action_test.cpp
         ./http/stream_load_test.cpp
         ./storage/aggregate_func_test.cpp
         ./storage/comparison_predicate_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/utils_test.cpp
-        #./storage/delete_handler_test.cpp
-        #./storage/delta_writer_test.cpp
         ./storage/del_vector_test.cpp
         ./storage/file_utils_test.cpp
         ./storage/fs/file_block_manager_test.cpp
@@ -151,7 +127,6 @@ set(EXEC_FILES
         ./storage/null_predicate_test.cpp
         ./storage/kv_store_test.cpp
         ./storage/protobuf_file_test.cpp
-        #./storage/options_test.cpp
         ./storage/page_cache_test.cpp
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
@@ -176,7 +151,6 @@ set(EXEC_FILES
         ./storage/rowset/segment_v2/segment_test.cpp
         ./storage/rowset/segment_v2/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
-        #./storage/schema_change_test.cpp
         ./storage/selection_vector_test.cpp
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp
@@ -203,17 +177,12 @@ set(EXEC_FILES
         ./storage/vectorized/cumulative_compaction_test.cpp
         ./storage/vectorized/base_compaction_test.cpp
         ./storage/vectorized/rowset_merger_test.cpp
-        #./plugin/plugin_loader_test.cpp
         ./plugin/plugin_mgr_test.cpp
-        #./plugin/plugin_zip_test.cpp
         ./runtime/buffer_control_block_test.cpp
-        #./runtime/buffered_block_mgr2_test.cpp
-        #./runtime/buffered_tuple_stream2_test.cpp
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
         ./runtime/decimalv3_test.cpp
         ./runtime/decimal_value_test.cpp
-        #./runtime/disk_io_mgr_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp
         ./runtime/free_list_test.cpp
@@ -221,15 +190,11 @@ set(EXEC_FILES
         ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/large_int_value_test.cpp
         ./runtime/load_channel_mgr_test.cpp
-        #./runtime/mem_limit_test.cpp
         ./runtime/memory/chunk_allocator_test.cpp
-        #./runtime/memory_scratch_sink_test.cpp
         ./runtime/memory/system_allocator_test.cpp
         ./runtime/mem_pool_test.cpp
         ./runtime/raw_value_test.cpp
         ./runtime/result_queue_mgr_test.cpp
-        #./runtime/routine_load_task_executor_test.cpp
-        #./runtime/small_file_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
         ./runtime/string_buffer_test.cpp
@@ -237,14 +202,11 @@ set(EXEC_FILES
         ./runtime/type_descriptor_test.cpp
         ./runtime/thread_resource_mgr_test.cpp
         ./runtime/type_descriptor_test.cpp
-        #./runtime/tmp_file_mgr_test.cpp
-        #./runtime/user_function_cache_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
         ./simd/simd_test.cpp
         ./util/aes_util_test.cpp
         ./util/arrow/arrow_row_batch_test.cpp
         ./util/arrow/arrow_row_block_test.cpp
-        #./util/arrow/arrow_work_flow_test.cpp
         ./util/bitmap_test.cpp
         ./util/bitmap_value_test.cpp
         ./util/bit_stream_utils_test.cpp
@@ -258,7 +220,6 @@ set(EXEC_FILES
         ./util/countdown_latch_test.cpp
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
-        #./util/starrocks_metrics_test.cpp
         ./util/faststring_test.cpp
         ./util/file_cache_test.cpp
         ./util/filesystem_util_test.cpp
@@ -278,7 +239,6 @@ set(EXEC_FILES
         ./util/scoped_cleanup_test.cpp
         ./util/string_parser_test.cpp
         ./util/string_util_test.cpp
-        #./util/system_metrics_test.cpp
         ./util/tdigest_test.cpp
         ./util/thread_test.cpp
         ./util/trace_test.cpp
@@ -288,7 +248,6 @@ set(EXEC_FILES
         ./util/buffered_stream_test.cpp
         ./util/int96_test.cpp
         ./util/bit_packing_test.cpp
-        #./util/zip_util_test.cpp
         )
 
 if (WITH_HDFS)

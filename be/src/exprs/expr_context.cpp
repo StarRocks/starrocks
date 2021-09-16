@@ -174,10 +174,7 @@ void ExprContext::free_local_allocations(const std::vector<FunctionContext*>& fn
 void ExprContext::get_value(TupleRow* row, bool as_ascii, TColumnValue* col_val) {}
 
 void* ExprContext::get_value(TupleRow* row) {
-    if (_root->is_slotref()) {
-        return SlotRef::get_value(_root, row);
-    }
-    return get_value(_root, row);
+    return nullptr;
 }
 
 bool ExprContext::is_nullable() {
@@ -185,136 +182,6 @@ bool ExprContext::is_nullable() {
         return SlotRef::is_nullable(_root);
     }
     return false;
-}
-
-void* ExprContext::get_value(Expr* e, TupleRow* row) {
-    switch (e->_type.type) {
-    case TYPE_NULL: {
-        return NULL;
-    }
-    case TYPE_BOOLEAN: {
-        starrocks_udf::BooleanVal v = e->get_boolean_val(this, row);
-        if (v.is_null) {
-            return NULL;
-        }
-        _result.bool_val = v.val;
-        return &_result.bool_val;
-    }
-    case TYPE_TINYINT: {
-        starrocks_udf::TinyIntVal v = e->get_tiny_int_val(this, row);
-        if (v.is_null) {
-            return NULL;
-        }
-        _result.tinyint_val = v.val;
-        return &_result.tinyint_val;
-    }
-    case TYPE_SMALLINT: {
-        starrocks_udf::SmallIntVal v = e->get_small_int_val(this, row);
-        if (v.is_null) {
-            return NULL;
-        }
-        _result.smallint_val = v.val;
-        return &_result.smallint_val;
-    }
-    case TYPE_INT: {
-        starrocks_udf::IntVal v = e->get_int_val(this, row);
-        if (v.is_null) {
-            return NULL;
-        }
-        _result.int_val = v.val;
-        return &_result.int_val;
-    }
-    case TYPE_BIGINT: {
-        starrocks_udf::BigIntVal v = e->get_big_int_val(this, row);
-        if (v.is_null) {
-            return NULL;
-        }
-        _result.bigint_val = v.val;
-        return &_result.bigint_val;
-    }
-    case TYPE_LARGEINT: {
-        starrocks_udf::LargeIntVal v = e->get_large_int_val(this, row);
-        if (v.is_null) {
-            return NULL;
-        }
-        _result.large_int_val = v.val;
-        return &_result.large_int_val;
-    }
-    case TYPE_FLOAT: {
-        starrocks_udf::FloatVal v = e->get_float_val(this, row);
-        if (v.is_null) {
-            return NULL;
-        }
-        _result.float_val = v.val;
-        return &_result.float_val;
-    }
-    case TYPE_TIME:
-    case TYPE_DOUBLE: {
-        starrocks_udf::DoubleVal v = e->get_double_val(this, row);
-        if (v.is_null) {
-            return NULL;
-        }
-        _result.double_val = v.val;
-        return &_result.double_val;
-    }
-    case TYPE_CHAR:
-    case TYPE_VARCHAR:
-    case TYPE_HLL:
-    case TYPE_OBJECT:
-    case TYPE_PERCENTILE: {
-        starrocks_udf::StringVal v = e->get_string_val(this, row);
-        if (v.is_null) {
-            return nullptr;
-        }
-        _result.string_val.ptr = reinterpret_cast<char*>(v.ptr);
-        _result.string_val.len = v.len;
-        return &_result.string_val;
-    }
-    case TYPE_DATE:
-    case TYPE_DATETIME: {
-        starrocks_udf::DateTimeVal v = e->get_datetime_val(this, row);
-        if (v.is_null) {
-            return NULL;
-        }
-        _result.datetime_val = DateTimeValue::from_datetime_val(v);
-        return &_result.datetime_val;
-    }
-    case TYPE_DECIMAL: {
-        DecimalVal v = e->get_decimal_val(this, row);
-        if (v.is_null) {
-            return NULL;
-        }
-        _result.decimal_val = DecimalValue::from_decimal_val(v);
-        return &_result.decimal_val;
-    }
-    case TYPE_DECIMALV2: {
-        DecimalV2Val v = e->get_decimalv2_val(this, row);
-        if (v.is_null) {
-            return NULL;
-        }
-        _result.decimalv2_val = DecimalV2Value::from_decimal_val(v);
-        return &_result.decimalv2_val;
-    }
-    default:
-        DCHECK(false) << "Type not implemented: " << e->_type;
-        return NULL;
-    }
-}
-
-void ExprContext::print_value(TupleRow* row, std::string* str) {
-    RawValue::print_value(get_value(row), _root->type(), _root->_output_scale, str);
-}
-
-void ExprContext::print_value(void* value, std::string* str) {
-    RawValue::print_value(value, _root->type(), _root->_output_scale, str);
-}
-
-void ExprContext::print_value(void* value, std::stringstream* stream) {
-    RawValue::print_value(value, _root->type(), _root->_output_scale, stream);
-}
-
-void ExprContext::print_value(TupleRow* row, std::stringstream* stream) {
-    RawValue::print_value(get_value(row), _root->type(), _root->_output_scale, stream);
 }
 
 BooleanVal ExprContext::get_boolean_val(TupleRow* row) {
@@ -362,38 +229,7 @@ DecimalV2Val ExprContext::get_decimalv2_val(TupleRow* row) {
 }
 
 Status ExprContext::get_const_value(RuntimeState* state, Expr& expr, AnyVal** const_val) {
-    DCHECK(_opened);
-    if (!expr.is_constant()) {
-        *const_val = nullptr;
-        return Status::OK();
-    }
-
-    // A constant expression shouldn't have any SlotRefs expr in it.
-    DCHECK_EQ(expr.get_slot_ids(nullptr), 0);
-    DCHECK(_pool != nullptr);
-    const TypeDescriptor& result_type = expr.type();
-    ObjectPool* obj_pool = state->obj_pool();
-    *const_val = create_any_val(obj_pool, result_type);
-    if (*const_val == NULL) {
-        return Status::InternalError("Could not create any val");
-    }
-
-    const void* result = ExprContext::get_value(&expr, nullptr);
-    AnyValUtil::set_any_val(result, result_type, *const_val);
-    if (result_type.is_string_type()) {
-        StringVal* sv = reinterpret_cast<StringVal*>(*const_val);
-        if (!sv->is_null && sv->len > 0) {
-            // Make sure the memory is owned by this evaluator.
-            char* ptr_copy = reinterpret_cast<char*>(_pool->try_allocate(sv->len));
-            if (ptr_copy == nullptr) {
-                return _pool->mem_tracker()->MemLimitExceeded(state, "Could not allocate constant string value",
-                                                              sv->len);
-            }
-            memcpy(ptr_copy, sv->ptr, sv->len);
-            sv->ptr = reinterpret_cast<uint8_t*>(ptr_copy);
-        }
-    }
-    return get_error(expr._fn_ctx_idx_start, expr._fn_ctx_idx_end);
+    return Status::OK();
 }
 
 Status ExprContext::get_error(int start_idx, int end_idx) const {
