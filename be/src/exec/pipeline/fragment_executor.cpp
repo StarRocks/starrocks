@@ -63,6 +63,10 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_fragment_instance_id(fragment_id);
     _fragment_ctx->set_fe_addr(request.coord);
 
+    auto&& report_token = exec_env->driver_dispatcher()->new_report_token();
+    _fragment_ctx->set_token(report_token.get());
+    _query_ctx->add_token(std::move(report_token));
+
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id)
               << " backend_num=" << request.backend_num;

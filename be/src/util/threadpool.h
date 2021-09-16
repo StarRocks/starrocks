@@ -356,6 +356,10 @@ public:
     // Returns true if all submissions are complete, false otherwise.
     bool wait_for(const MonoDelta& delta);
 
+    // Returns true if this token has a task queued and ready to run, or if a
+    // task belonging to this token is already running.
+    bool is_active() const { return _state == State::RUNNING || _state == State::QUIESCING; }
+
 private:
     // All possible token states. Legal state transitions:
     //   IDLE      -> RUNNING: task is submitted via token
@@ -398,10 +402,6 @@ private:
 
     // Changes this token's state to 'new_state' taking actions as needed.
     void transition(State new_state);
-
-    // Returns true if this token has a task queued and ready to run, or if a
-    // task belonging to this token is already running.
-    bool is_active() const { return _state == State::RUNNING || _state == State::QUIESCING; }
 
     // Returns true if new tasks may be submitted to this token.
     bool may_submit_new_tasks() const { return _state != State::QUIESCING && _state != State::QUIESCED; }

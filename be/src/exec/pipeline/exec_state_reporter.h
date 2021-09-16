@@ -22,7 +22,7 @@ public:
                                                                     bool done);
     static Status report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env, TNetworkAddress fe_addr);
     ExecStateReporter();
-    void submit(FragmentContext* fragment_ctx, const Status& status, bool done, bool clean);
+    std::unique_ptr<ThreadPoolToken> new_token() { return _thread_pool->new_token(ThreadPool::ExecutionMode::SERIAL); }
 
 private:
     std::unique_ptr<ThreadPool> _thread_pool;

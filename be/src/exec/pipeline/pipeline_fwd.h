@@ -2,12 +2,14 @@
 
 #pragma once
 
+#include <list>
 #include <memory>
 #include <vector>
 namespace starrocks {
 namespace pipeline {
 class QueryContext;
 using QueryContextPtr = std::shared_ptr<QueryContext>;
+using QueryContextList = std::list<QueryContextPtr>;
 class FragmentContext;
 using FragmentContextPtr = std::shared_ptr<FragmentContext>;
 class FragmentContextManager;

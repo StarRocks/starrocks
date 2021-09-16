@@ -17,6 +17,8 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
+#include "util/threadpool.h"
+
 namespace starrocks {
 class MemTracker;
 namespace pipeline {
@@ -83,6 +85,11 @@ public:
     bool is_canceled() { return _cancel_flag.load(std::memory_order_acquire) == true; }
 
     MorselQueueMap& morsel_queues() { return _morsel_queues; }
+    void set_token(ThreadPoolToken* token) { _token = token; }
+    ThreadPoolToken* token() {
+        DCHECK(_token != nullptr);
+        return _token;
+    }
 
 private:
     // Id of this query
@@ -110,6 +117,7 @@ private:
     std::atomic<size_t> _num_drivers;
     std::atomic<Status*> _final_status;
     std::atomic<bool> _cancel_flag;
+    ThreadPoolToken* _token = nullptr;
 };
 class FragmentContextManager {
 public:

@@ -40,19 +40,26 @@ public:
     // 2. for the second time report_exec_state, clean is true means that all the drivers has finished,
     // so now FragmentContext can be unregistered safely.
     virtual void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done, bool clean) = 0;
+
+    virtual std::unique_ptr<ThreadPoolToken> new_report_token() = 0;
+
+    virtual void add_dying_query_ctx(QueryContextPtr&& query_ctx) = 0;
 };
 
 class GlobalDriverDispatcher final : public FactoryMethod<DriverDispatcher, GlobalDriverDispatcher> {
 public:
-    explicit GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool);
+    explicit GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool, size_t reaper_slot_size);
     ~GlobalDriverDispatcher() override {}
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
     void dispatch(DriverPtr driver) override;
     void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done, bool clean) override;
+    std::unique_ptr<ThreadPoolToken> new_report_token() override;
+    void add_dying_query_ctx(QueryContextPtr&& query_ctx) override;
 
 private:
     void run();
+    void reap_inactive_dying_query_contexts(int& slot_idx, int slot_stride, int slot_size);
 
 private:
     LimitSetter _num_threads_setter;
@@ -60,6 +67,7 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool;
     PipelineDriverPollerPtr _blocked_driver_poller;
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
+    std::unique_ptr<DyingQueryContextReaper> _query_context_reaper;
 };
 
 } // namespace pipeline

@@ -156,29 +156,5 @@ ExecStateReporter::ExecStateReporter() {
     }
 }
 
-void ExecStateReporter::submit(FragmentContext* fragment_ctx, const Status& status, bool done, bool clean) {
-    auto report_func = [=]() {
-        auto params = create_report_exec_status_params(fragment_ctx, status, done);
-        auto status = report_exec_status(params, fragment_ctx->runtime_state()->exec_env(), fragment_ctx->fe_addr());
-        if (!status.ok()) {
-            LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id="
-                         << fragment_ctx->fragment_instance_id();
-        } else {
-            LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id="
-                      << fragment_ctx->fragment_instance_id();
-        }
-        if (clean) {
-            auto query_id = fragment_ctx->query_id();
-            auto&& query_ctx = QueryContextManager::instance()->get(query_id);
-            DCHECK(query_ctx);
-            query_ctx->fragment_mgr()->unregister(fragment_ctx->fragment_instance_id());
-            if (query_ctx->count_down_fragment()) {
-                QueryContextManager::instance()->unregister(query_id);
-            }
-        }
-    };
-    _thread_pool->submit_func(report_func);
-}
-
 } // namespace pipeline
 } // namespace starrocks

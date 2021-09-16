@@ -44,7 +44,12 @@ DriverPtr QuerySharedDriverQueue::take(size_t* queue_index) {
                 break;
             }
             _is_empty = true;
-            _cv.wait(lock);
+            // wait for drivers' arrival, but awake execution threads to process dying QueryContexts after
+            // 100 micro-seconds' waiting.
+            auto cv_status = _cv.wait_for(lock, std::chrono::microseconds(100));
+            if (cv_status == std::cv_status::timeout) {
+                return nullptr;
+            }
         }
         // record queue's index to accumulate time for it.
         *queue_index = queue_idx;
