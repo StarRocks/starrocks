@@ -76,6 +76,7 @@ public class OptimizerTaskTest {
     public void init() throws Exception {
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setMaxTransformReorderJoins(8);
+        ctx.getSessionVariable().setEnableReplicationJoin(false);
         ctx.setDumpInfo(new MockDumpInfo());
         call = new CallOperator("sum", Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
         new Expectations(call) {{
@@ -185,8 +186,6 @@ public class OptimizerTaskTest {
                 columnRefFactory);
 
         Memo memo = optimizer.getContext().getMemo();
-        //        assertEquals(7, memo.getGroups().size());
-        //        assertEquals(30, memo.getGroupExpressions().size());
 
         assertEquals(memo.getGroups().get(0).getLogicalExpressions().size(), 1);
         assertEquals(memo.getGroups().get(0).getPhysicalExpressions().size(), 1);
@@ -266,13 +265,6 @@ public class OptimizerTaskTest {
         Optimizer optimizer = new Optimizer();
         optimizer.optimize(ctx, topJoin, new PhysicalPropertySet(), new ColumnRefSet(),
                 columnRefFactory);
-
-        //        Memo memo = optimizer.getContext().getMemo();
-        //        assertEquals(15, memo.getGroups().size());
-        //        assertEquals(108, memo.getGroupExpressions().size());
-        //
-        //        MemoStatusChecker checker = new MemoStatusChecker(memo, 4, new ColumnRefSet());
-        //        checker.checkStatus();
     }
 
     @Test
@@ -324,13 +316,6 @@ public class OptimizerTaskTest {
         Optimizer optimizer = new Optimizer();
         optimizer.optimize(ctx, topJoin, new PhysicalPropertySet(), new ColumnRefSet(),
                 columnRefFactory);
-
-        //        Memo memo = optimizer.getContext().getMemo();
-        //        assertEquals(31, memo.getGroups().size());
-        //        assertEquals(370, memo.getGroupExpressions().size());
-        //
-        //        MemoStatusChecker checker = new MemoStatusChecker(memo, 5, new ColumnRefSet());
-        //        checker.checkStatus();
     }
 
     @Test
@@ -409,13 +394,6 @@ public class OptimizerTaskTest {
         Optimizer optimizer = new Optimizer();
         optimizer.optimize(ctx, topJoin, new PhysicalPropertySet(), new ColumnRefSet(),
                 columnRefFactory);
-        //        Memo memo = optimizer.getContext().getMemo();
-        //
-        //        assertEquals(255, memo.getGroups().size());
-        //        assertEquals(12116, memo.getGroupExpressions().size());
-        //
-        //        MemoStatusChecker checker = new MemoStatusChecker(memo, 8, new ColumnRefSet());
-        //        checker.checkStatus();
     }
 
     @Test

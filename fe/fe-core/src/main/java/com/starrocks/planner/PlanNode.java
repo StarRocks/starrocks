@@ -124,7 +124,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // we should generate nullable columns for group by columns
     protected boolean hasNullableGenerateChild = false;
 
-    protected boolean isColocate = false; //the flag for colocate join
+    protected boolean isColocate = false; // the flag for colocate join
+
+    protected boolean isReplicated = false; // the flag for replication join
 
     // Runtime filters be consumed by this node.
     protected List<RuntimeFilterDescription> probeRuntimeFilters = Lists.newArrayList();
@@ -276,6 +278,14 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             return;
         }
         this.conjuncts.addAll(conjuncts);
+    }
+
+    public boolean isReplicated() {
+        return isReplicated;
+    }
+
+    public void setReplicated(boolean replicated) {
+        isReplicated = replicated;
     }
 
     public void transferConjuncts(PlanNode recipient) {
@@ -822,5 +832,15 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             return true;
         }
         return false;
+    }
+
+    public boolean canDoReplicatedJoin() {
+        if (children.size() == 1) {
+            return getChild(0).canDoReplicatedJoin();
+        } else if (children.size() == 2){
+            return getChild(1).canDoReplicatedJoin();
+        } else {
+            return false;
+        }
     }
 }
