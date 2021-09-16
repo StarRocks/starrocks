@@ -122,7 +122,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                         Lists.newArrayList(new PhysicalPropertySet(), rightBroadcastProperty)));
             }
             // If child has limit, only do broadcast join
-            return visitJoinRequirements(node, context);
+            return visitJoinRequirements(node, context, false);
         } else {
             outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
                     Lists.newArrayList(new PhysicalPropertySet(), rightBroadcastProperty)));
@@ -137,7 +137,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         if (node.getJoinType().isCrossJoin() || JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN.equals(node.getJoinType())
                 || (node.getJoinType().isInnerJoin() && equalOnPredicate.isEmpty())
                 || "BROADCAST".equalsIgnoreCase(hint)) {
-            return visitJoinRequirements(node, context);
+            tryReplicatedCrossJoin(context);
+            return visitJoinRequirements(node, context, false);
         }
 
         if (node.getJoinType().isRightJoin() || node.getJoinType().isFullOuterJoin()
@@ -161,24 +162,26 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
         // Respect use join hint
         if ("SHUFFLE".equalsIgnoreCase(hint)) {
-            return visitJoinRequirements(node, context);
+            return visitJoinRequirements(node, context, false);
         }
 
+        tryReplicatedHashJoin(context, node.getJoinType(), leftDistribution);
         // Colocate join and bucket shuffle join only support column to column binary predicate
         if (equalOnPredicate.stream().anyMatch(p -> !isColumnToColumnBinaryPredicate(p))) {
-            return visitJoinRequirements(node, context);
+            return visitJoinRequirements(node, context, false);
         }
 
+        boolean canDoColocatedJoin = false;
         // 3 For colocate join
         if (!"BUCKET".equalsIgnoreCase(hint)) {
-            tryColocate(leftDistribution, rightDistribution);
+            canDoColocatedJoin = tryColocate(leftDistribution, rightDistribution);
         }
 
         // 4 For bucket shuffle join
         tryBucketShuffle(node, leftDistribution, rightDistribution);
 
         // 5 resolve requirements
-        return visitJoinRequirements(node, context);
+        return visitJoinRequirements(node, context, canDoColocatedJoin);
     }
 
     private void doHashShuffle(List<BinaryPredicateOperator> equalOnPredicate, HashDistributionSpec leftDistribution,
@@ -269,22 +272,22 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
      *        s1    s2       s3     s4
      *
      * */
-    private void tryColocate(HashDistributionSpec leftShuffleDistribution,
+    private boolean tryColocate(HashDistributionSpec leftShuffleDistribution,
                              HashDistributionSpec rightShuffleDistribution) {
         if (Config.disable_colocate_join || ConnectContext.get().getSessionVariable().isDisableColocateJoin()) {
-            return;
+            return false;
         }
 
         Optional<LogicalOlapScanOperator> leftTable = findLogicalOlapScanOperator(leftShuffleDistribution);
         if (!leftTable.isPresent()) {
-            return;
+            return false;
         }
 
         LogicalOlapScanOperator left = leftTable.get();
 
         Optional<LogicalOlapScanOperator> rightTable = findLogicalOlapScanOperator(rightShuffleDistribution);
         if (!rightTable.isPresent()) {
-            return;
+            return false;
         }
 
         LogicalOlapScanOperator right = rightTable.get();
@@ -295,25 +298,25 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                 !colocateIndex.isSameGroup(left.getTable().getId(), right.getTable().getId())) {
             if (!left.getSelectedPartitionId().equals(right.getSelectedPartitionId())
                     || left.getSelectedPartitionId().size() > 1) {
-                return;
+                return false;
             }
 
             PhysicalPropertySet rightLocalProperty = createPropertySetByDistribution(
                     createLocalByByHashColumns(rightShuffleDistribution.getShuffleColumns()));
             PhysicalPropertySet leftLocalProperty = createPropertySetByDistribution(
                     createLocalByByHashColumns(leftShuffleDistribution.getShuffleColumns()));
-
             outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
                     Lists.newArrayList(leftLocalProperty, rightLocalProperty)));
+            return true;
         } else {
             // colocate group
             if (!colocateIndex.isSameGroup(left.getTable().getId(), right.getTable().getId())) {
-                return;
+                return false;
             }
 
             ColocateTableIndex.GroupId groupId = colocateIndex.getGroup(left.getTable().getId());
             if (colocateIndex.isGroupUnstable(groupId)) {
-                return;
+                return false;
             }
 
             HashDistributionSpec leftScanDistribution = left.getDistributionSpec();
@@ -323,11 +326,11 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                     rightScanDistribution.getShuffleColumns().size());
 
             if (!leftShuffleDistribution.getShuffleColumns().containsAll(leftScanDistribution.getShuffleColumns())) {
-                return;
+                return false;
             }
 
             if (!rightShuffleDistribution.getShuffleColumns().containsAll(rightScanDistribution.getShuffleColumns())) {
-                return;
+                return false;
             }
 
             // check orders of predicate columns is right
@@ -340,7 +343,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                 int rightIndex = rightShuffleDistribution.getShuffleColumns().indexOf(rightScanColumnId);
 
                 if (leftIndex != rightIndex) {
-                    return;
+                    return false;
                 }
             }
 
@@ -351,6 +354,77 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
             outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
                     Lists.newArrayList(leftLocalProperty, rightLocalProperty)));
+            return true;
+        }
+    }
+
+    private void tryReplicatedCrossJoin(ExpressionContext context) {
+        if (!ConnectContext.get().getSessionVariable().isEnableReplicationJoin()) {
+            return;
+        }
+
+        // For simplicity, only support replicated join when left child has one olap scan
+        GroupExpression leftChild = context.getChildGroupExpression(0);
+        List<LogicalOlapScanOperator> leftScanLists = Lists.newArrayList();
+        Utils.extractOlapScanOperator(leftChild, leftScanLists);
+        if (leftScanLists.size() != 1) {
+            return;
+        }
+
+        GroupExpression rightChild = context.getChildGroupExpression(1);
+        List<LogicalOlapScanOperator> rightScanLists = Lists.newArrayList();
+        Utils.extractOlapScanOperator(rightChild, rightScanLists);
+        if (rightScanLists.size() != 1) {
+            return;
+        }
+
+        LogicalOlapScanOperator rightScan = rightScanLists.get(0);
+        if (rightScan.canDoReplicatedJoin()) {
+            generatePropertiesForReplicated(leftScanLists.get(0), rightScan);
+        }
+    }
+
+    private void generatePropertiesForReplicated(LogicalOlapScanOperator leftScan,
+                                                 LogicalOlapScanOperator rightScan) {
+        HashDistributionSpec leftScanDistribution = leftScan.getDistributionSpec();
+        HashDistributionSpec rightScanDistribution = rightScan.getDistributionSpec();
+        PhysicalPropertySet leftLocalProperty = createPropertySetByDistribution(
+                createLocalByByHashColumns(leftScanDistribution.getShuffleColumns()));
+        PhysicalPropertySet rightLocalProperty = createPropertySetByDistribution(
+                createLocalByByHashColumns(rightScanDistribution.getShuffleColumns()));
+        // For query schedule, we need left is hash local
+        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
+                Lists.newArrayList(leftLocalProperty, rightLocalProperty)));
+    }
+
+    private void tryReplicatedHashJoin(ExpressionContext context,
+                                       JoinOperator joinType,
+                                       HashDistributionSpec leftShuffleDistribution) {
+        if (!ConnectContext.get().getSessionVariable().isEnableReplicationJoin()) {
+            return;
+        }
+
+        // Right join or full outer join couldn't do replicated join
+        if (joinType.isRightJoin() || joinType.isFullOuterJoin()) {
+            return;
+        }
+
+        Optional<LogicalOlapScanOperator> leftTable = findLogicalOlapScanOperator(leftShuffleDistribution);
+        if (!leftTable.isPresent()) {
+            return;
+        }
+
+        GroupExpression rightChild = context.getChildGroupExpression(1);
+        List<LogicalOlapScanOperator> scanLists = Lists.newArrayList();
+        Utils.extractOlapScanOperator(rightChild, scanLists);
+
+        if (scanLists.size() != 1) {
+            return;
+        }
+
+        LogicalOlapScanOperator right = scanLists.get(0);
+        if (right.canDoReplicatedJoin()) {
+            generatePropertiesForReplicated(leftTable.get(), right);
         }
     }
 
@@ -499,7 +573,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         return visitOperator(node, context);
     }
 
-    private Void visitJoinRequirements(PhysicalHashJoinOperator node, ExpressionContext context) {
+    private Void visitJoinRequirements(PhysicalHashJoinOperator node, ExpressionContext context,
+                                       boolean canDoColocated) {
         //require property is gather
         Optional<GatherDistributionSpec> requiredGatherDistribution = getRequiredGatherDesc();
         if (requiredGatherDistribution.isPresent()) {
@@ -550,6 +625,12 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
                 }
             }
         } else {
+            // Could only requiredLocalColumnsFromRight for colocated join
+            if (!canDoColocated) {
+                outputInputProps.clear();
+                return visitOperator(node, context);
+            }
+
             for (Pair<PhysicalPropertySet, List<PhysicalPropertySet>> outputInputProp : outputInputProps) {
                 PhysicalPropertySet right = outputInputProp.second.get(1);
 

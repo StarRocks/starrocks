@@ -46,7 +46,6 @@ import com.starrocks.planner.Planner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
@@ -109,10 +108,7 @@ public class StarRocksAssert {
 
     public boolean databaseExist(String dbName) {
         Database db = Catalog.getCurrentCatalog().getDb("default_cluster:" + dbName);
-        if (db == null) {
-            return false;
-        }
-        return true;
+        return db != null;
     }
 
     public StarRocksAssert useDatabase(String dbName) {
@@ -214,28 +210,16 @@ public class StarRocksAssert {
 
         public String explainQuery() throws Exception {
             if (connectContext.getSessionVariable().isEnableNewPlanner()) {
-                String ret = UtFrameUtils.getNewFragmentPlan(connectContext, sql);
-                return ret;
+                return UtFrameUtils.getNewFragmentPlan(connectContext, sql);
             }
-            // note(yan): please leave a temp variable here to make it easier to set breakpoint
-            String ret = internalExecute("explain " + sql);
-            return ret;
+            return internalExecute("explain " + sql);
         }
 
         public void analysisError(String keywords) {
             try {
                 explainQuery();
-            } catch (AnalysisException analysisException) {
-                System.out.println(analysisException.getMessage());
+            } catch (AnalysisException | StarRocksPlannerException analysisException) {
                 Assert.assertTrue(Stream.of(keywords).allMatch(analysisException.getMessage()::contains));
-                return;
-            } catch (SemanticException semanticException) {
-                System.out.println(semanticException.getMessage());
-                Assert.assertTrue(Stream.of(keywords).allMatch(semanticException.getMessage()::contains));
-                return;
-            } catch (StarRocksPlannerException plannerException) {
-                System.out.println(plannerException.getMessage());
-                Assert.assertTrue(Stream.of(keywords).allMatch(plannerException.getMessage()::contains));
                 return;
             } catch (Exception ex) {
                 Assert.fail();

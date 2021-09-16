@@ -59,7 +59,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testScan() throws Exception {
         String sql = "select * from t0";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains(" OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n"
                 + "  PARTITION: RANDOM"));
     }
@@ -68,7 +67,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testProject() throws Exception {
         String sql = "select v1 from t0";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n"
                 + " OUTPUT EXPRS:1: v1\n"
                 + "  PARTITION: RANDOM\n"
@@ -85,7 +83,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testLimit() throws Exception {
         String sql = "select v1 from t0 limit 1";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n"
                 + " OUTPUT EXPRS:1: v1\n"
                 + "  PARTITION: RANDOM\n"
@@ -3761,7 +3758,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testSemiJoinPredicateDerive() throws Exception {
         String sql = "select * from t0 left semi join t1 on v1 = v4 where v1 = 2";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -3811,7 +3807,6 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select SUM(x1) from (select v2, sum(distinct v1), sum(v3) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(3: v3)\n" +
                 "  |  group by: \n" +
@@ -3856,12 +3851,58 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  use vectorized: true\n"));
         sql = "select sum(distinct x1) from (select v2, sum(v2) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: 2: v2\n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n"));
+    }
+
+    @Test
+    public void testReplicatedJoin() throws Exception {
+        connectContext.getSessionVariable().setEnableReplicationJoin(true);
+
+        String sql = "select * from join1 join join2 on join1.id = join2.id;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (REPLICATED)"));
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        sql = "select * from join2 right join join1 on join1.id = join2.id;";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("join op: INNER JOIN (REPLICATED)"));
+
+        sql = "select * from join1 as a join join1 as b on a.id = b.id;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (REPLICATED)"));
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        sql = "select * from join1 as a join (select sum(id),id from join2 group by id) as b on a.id = b.id;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (REPLICATED)"));
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select * from join1 as a join (select sum(id),dt from join2 group by dt) as b on a.id = b.dt;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (BROADCAST)"));
+        Assert.assertTrue(plan.contains("EXCHANGE"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+        sql = "select a.* from join1 as a join join1 as b ;";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        sql = "select a.* from join1 as a join (select sum(id) from join1 group by dt) as b ;";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select a.* from join1 as a join (select sum(id) from join1 group by dt) as b ;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("EXCHANGE"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
 }
