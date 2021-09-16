@@ -101,22 +101,23 @@ bool ParquetChunkFile::closed() const {
     return false;
 }
 
-arrow::Status ParquetChunkFile::Read(int64_t nbytes, int64_t* bytes_read, void* buffer) {
-    return ReadAt(_pos, nbytes, bytes_read, buffer);
+arrow::Result<int64_t> ParquetChunkFile::Read(int64_t nbytes, void* buffer) {
+    return ReadAt(_pos, nbytes, buffer);
 }
 
-arrow::Status ParquetChunkFile::ReadAt(int64_t position, int64_t nbytes, int64_t* bytes_read, void* out) {
+arrow::Result<int64_t> ParquetChunkFile::ReadAt(int64_t position, int64_t nbytes, void* out) {
     _pos += nbytes;
     Slice s;
     s.data = (char*)out;
     s.size = nbytes;
     auto status = _file->read_at(position, s);
-    *bytes_read = status.ok() ? nbytes : -1;
-    return convert_status(status);
+    return status.ok() ? nbytes : -1;
 }
 
-arrow::Status ParquetChunkFile::GetSize(int64_t* size) {
-    return convert_status(_file->size((uint64_t*)size));
+arrow::Result<int64_t> ParquetChunkFile::GetSize() {
+    int64_t size = 0;
+    _file->size((uint64_t*)&size);
+    return size;
 }
 
 arrow::Status ParquetChunkFile::Seek(int64_t position) {
@@ -124,23 +125,22 @@ arrow::Status ParquetChunkFile::Seek(int64_t position) {
     return ArrowStatus::OK();
 }
 
-arrow::Status ParquetChunkFile::Tell(int64_t* position) const {
-    *position = _pos;
-    return ArrowStatus::OK();
+arrow::Result<int64_t> ParquetChunkFile::Tell() const {
+    return _pos;
 }
 
-arrow::Status ParquetChunkFile::Read(int64_t nbytes, std::shared_ptr<arrow::Buffer>* out) {
-    std::shared_ptr<arrow::Buffer> read_buf;
-    ARROW_RETURN_NOT_OK(arrow::AllocateBuffer(arrow::default_memory_pool(), nbytes, &read_buf));
-    int64_t bytes_read = 0;
-    ARROW_RETURN_NOT_OK(ReadAt(_pos, nbytes, &bytes_read, read_buf->mutable_data()));
+arrow::Result<std::shared_ptr<arrow::Buffer>> ParquetChunkFile::Read(int64_t nbytes) {
+    auto buffer_res = arrow::AllocateBuffer(nbytes, arrow::default_memory_pool());
+    ARROW_RETURN_NOT_OK(buffer_res);
+    std::shared_ptr<arrow::Buffer> read_buf = std::move(buffer_res.ValueOrDie());
+    arrow::Result<int64_t> bytes_read_res = ReadAt(_pos, nbytes, read_buf->mutable_data());
+    ARROW_RETURN_NOT_OK(bytes_read_res);
     // If bytes_read is equal with read_buf's capacity, we just assign
-    if (bytes_read == nbytes) {
-        *out = std::move(read_buf);
+    if (bytes_read_res.ValueOrDie() == nbytes) {
+        return std::move(read_buf);
     } else {
-        *out = arrow::SliceBuffer(read_buf, 0, bytes_read);
+        return arrow::SliceBuffer(read_buf, 0, bytes_read_res.ValueOrDie());
     }
-    return ArrowStatus::OK();
 }
 
 } // namespace starrocks::vectorized
