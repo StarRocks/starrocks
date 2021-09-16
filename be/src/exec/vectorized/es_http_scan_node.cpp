@@ -82,10 +82,6 @@ Status EsHttpScanNode::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status EsHttpScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("EsHttpScanNode don't support row_batch");
-}
-
 Status EsHttpScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     DCHECK(state != nullptr && chunk != nullptr && eos != nullptr);

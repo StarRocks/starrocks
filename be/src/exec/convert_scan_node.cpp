@@ -42,7 +42,7 @@ Status ConvertScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos
 
     _convert_row_batch->reset();
 
-    RETURN_IF_ERROR(get_next(state, _convert_row_batch.get(), eos));
+    // RETURN_IF_ERROR(get_next(state, _convert_row_batch.get(), eos));
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     if (_convert_row_batch->num_rows() > 0) {

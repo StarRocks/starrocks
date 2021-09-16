@@ -27,7 +27,6 @@
 #include "column/chunk.h"
 #include "column/column.h"
 #include "common/status.h"
-#include "exprs/expr_value.h"
 #include "udf/udf.h"
 #include "udf/udf_internal.h" // for ArrayVal
 
@@ -112,12 +111,6 @@ public:
     /// Note: timestamp is converted to string via RawValue::PrintValue because HiveServer2
     /// requires timestamp in a string format.
     void get_value(TupleRow* row, bool as_ascii, TColumnValue* col_val);
-
-    /// Convenience functions: print value into 'str' or 'stream'.  NULL turns into "NULL".
-    void print_value(TupleRow* row, std::string* str);
-    void print_value(void* value, std::string* str);
-    void print_value(void* value, std::stringstream* stream);
-    void print_value(TupleRow* row, std::stringstream* stream);
 
     /// Creates a FunctionContext, and returns the index that's passed to fn_context() to
     /// retrieve the created context. Exprs that need a FunctionContext should call this in
@@ -211,10 +204,6 @@ private:
     /// The expr tree this context is for.
     Expr* _root;
 
-    /// Stores the result of the root expr. This is used in interpreted code when we need a
-    /// void*.
-    ExprValue _result;
-
     /// True if this context came from a Clone() call. Used to manage FunctionStateScope.
     bool _is_clone;
 
@@ -223,10 +212,6 @@ private:
     bool _opened;
     // In operator, the ExprContext::close method will be called concurrently
     std::atomic<bool> _closed;
-
-    /// Calls the appropriate Get*Val() function on 'e' and stores the result in result_.
-    /// This is used by Exprs to call GetValue() on a child expr, rather than root_.
-    void* get_value(Expr* e, TupleRow* row);
 };
 
 } // namespace starrocks

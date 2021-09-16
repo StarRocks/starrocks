@@ -30,21 +30,8 @@
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
 #include "common/status.h"
-#include "exprs/aggregate_functions.h"
 #include "exprs/anyval_util.h"
-#include "exprs/arithmetic_expr.h"
-#include "exprs/binary_predicate.h"
-#include "exprs/case_expr.h"
-#include "exprs/cast_expr.h"
-#include "exprs/compound_predicate.h"
-#include "exprs/conditional_functions.h"
-#include "exprs/in_predicate.h"
-#include "exprs/info_func.h"
-#include "exprs/literal.h"
-#include "exprs/null_literal.h"
-#include "exprs/scalar_fn_call.h"
 #include "exprs/slot_ref.h"
-#include "exprs/tuple_is_null_predicate.h"
 #include "exprs/vectorized/arithmetic_expr.h"
 #include "exprs/vectorized/array_element_expr.h"
 #include "exprs/vectorized/array_expr.h"
@@ -78,10 +65,6 @@ using vectorized::DoubleColumn;
 using vectorized::FloatColumn;
 using vectorized::BooleanColumn;
 
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
-
 const char* Expr::_s_get_constant_symbol_prefix = "_ZN4starrocks4Expr12get_constant";
 
 template <class T>
@@ -91,12 +74,7 @@ bool parse_string(const std::string& str, T* val) {
     return !stream.fail();
 }
 
-void init_builtins_dummy() {
-    // Call one function from each of the classes to pull all the symbols
-    // from that class in.
-    // TODO: is there a better way to do this?
-    AggregateFunctions::init_null(NULL, NULL);
-}
+void init_builtins_dummy() {}
 
 FunctionContext* Expr::register_function_context(ExprContext* ctx, RuntimeState* state, int varargs_buffer_size) {
     FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
@@ -405,10 +383,6 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         *expr = pool->add(vectorized::VectorizedInPredicateFactory::from_thrift(texpr_node));
         break;
     }
-    case TExprNodeType::TUPLE_IS_NULL_PRED: {
-        *expr = pool->add(new TupleIsNullPredicate(texpr_node));
-        break;
-    }
     case TExprNodeType::SLOT_REF: {
         if (!texpr_node.__isset.slot_ref) {
             return Status::InternalError("Slot reference not set in thrift node");
@@ -439,6 +413,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::IS_NULL_PRED:
     case TExprNodeType::LIKE_PRED:
     case TExprNodeType::LITERAL_PRED:
+    case TExprNodeType::TUPLE_IS_NULL_PRED:
         break;
     }
     if (*expr == nullptr) {
@@ -453,117 +428,7 @@ Status Expr::create_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** e
     if (texpr_node.use_vectorized) {
         return create_vectorized_expr(pool, texpr_node, expr);
     }
-    auto type_desc = TypeDescriptor::from_thrift(texpr_node.type);
-    if (type_desc.is_decimalv3_type()) {
-        return Status::InternalError("Decimal32/64/128 is not supported in non-vectorized engine");
-    }
-    switch (texpr_node.node_type) {
-    case TExprNodeType::BOOL_LITERAL:
-    case TExprNodeType::INT_LITERAL:
-    case TExprNodeType::LARGE_INT_LITERAL:
-    case TExprNodeType::FLOAT_LITERAL:
-    case TExprNodeType::DECIMAL_LITERAL:
-    case TExprNodeType::DATE_LITERAL:
-    case TExprNodeType::STRING_LITERAL:
-        *expr = pool->add(new Literal(texpr_node));
-        break;
-    case TExprNodeType::COMPOUND_PRED:
-        switch (texpr_node.opcode) {
-        case TExprOpcode::COMPOUND_AND:
-            *expr = pool->add(new AndPredicate(texpr_node));
-            break;
-        case TExprOpcode::COMPOUND_OR:
-            *expr = pool->add(new OrPredicate(texpr_node));
-            break;
-        default:
-            *expr = pool->add(new NotPredicate(texpr_node));
-            break;
-        }
-        break;
-    case TExprNodeType::BINARY_PRED:
-        *expr = pool->add(BinaryPredicate::from_thrift(texpr_node));
-        break;
-    case TExprNodeType::NULL_LITERAL:
-        *expr = pool->add(new NullLiteral(texpr_node));
-        break;
-    case TExprNodeType::ARITHMETIC_EXPR:
-        if (texpr_node.opcode != TExprOpcode::INVALID_OPCODE) {
-            *expr = pool->add(ArithmeticExpr::from_thrift(texpr_node));
-            break;
-        }
-    case TExprNodeType::CAST_EXPR:
-        if (texpr_node.__isset.child_type) {
-            *expr = pool->add(CastExpr::from_thrift(texpr_node));
-            break;
-        }
-    case TExprNodeType::COMPUTE_FUNCTION_CALL:
-    case TExprNodeType::FUNCTION_CALL:
-        DCHECK(texpr_node.__isset.fn);
-
-        if (texpr_node.fn.name.function_name == "if") {
-            *expr = pool->add(new IfExpr(texpr_node));
-        } else if (texpr_node.fn.name.function_name == "nullif") {
-            *expr = pool->add(new NullIfExpr(texpr_node));
-        } else if (texpr_node.fn.name.function_name == "ifnull") {
-            *expr = pool->add(new IfNullExpr(texpr_node));
-        } else if (texpr_node.fn.name.function_name == "coalesce") {
-            *expr = pool->add(new CoalesceExpr(texpr_node));
-        } else {
-            *expr = pool->add(new ScalarFnCall(texpr_node));
-        }
-        break;
-    case TExprNodeType::CASE_EXPR: {
-        if (!texpr_node.__isset.case_expr) {
-            return Status::InternalError("Case expression not set in thrift node");
-        }
-
-        *expr = pool->add(new CaseExpr(texpr_node));
-        break;
-    }
-    case TExprNodeType::IN_PRED: {
-        switch (texpr_node.opcode) {
-        case TExprOpcode::FILTER_IN:
-        case TExprOpcode::FILTER_NOT_IN:
-            *expr = pool->add(new InPredicate(texpr_node));
-            break;
-        default:
-            *expr = pool->add(new ScalarFnCall(texpr_node));
-            break;
-        }
-        break;
-    }
-    case TExprNodeType::SLOT_REF: {
-        if (!texpr_node.__isset.slot_ref) {
-            return Status::InternalError("Slot reference not set in thrift node");
-        }
-
-        *expr = pool->add(new SlotRef(texpr_node));
-        break;
-    }
-    case TExprNodeType::TUPLE_IS_NULL_PRED: {
-        *expr = pool->add(new TupleIsNullPredicate(texpr_node));
-        break;
-    }
-    case TExprNodeType::INFO_FUNC: {
-        *expr = pool->add(new InfoFunc(texpr_node));
-        break;
-    }
-    case TExprNodeType::AGG_EXPR:
-    case TExprNodeType::TABLE_FUNCTION_EXPR:
-    case TExprNodeType::IS_NULL_PRED:
-    case TExprNodeType::LIKE_PRED:
-    case TExprNodeType::LITERAL_PRED:
-    case TExprNodeType::ARRAY_EXPR:
-    case TExprNodeType::ARRAY_ELEMENT_EXPR:
-    case TExprNodeType::ARRAY_SLICE_EXPR:
-        break;
-    }
-
-    if (*expr == nullptr) {
-        LOG(WARNING) << "Engine node type return nullptr: " + std::to_string(texpr_node.node_type);
-        return Status::InternalError("Engine not support the operator");
-    }
-    return Status::OK();
+    return Status::InternalError("Don't support old query engine any more");
 }
 
 struct MemLayoutData {
