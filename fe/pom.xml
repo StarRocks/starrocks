@@ -85,11 +85,6 @@ under the License.
                     <name>central maven repo https</name>
                     <url>https://repo.maven.apache.org/maven2</url>
                 </repository>
-                <repository>
-                    <id>Hortonworks</id>
-                    <name>Hortonworks Repository</name>
-                    <url>https://repo.hortonworks.com/content/repositories/releases/</url>
-                </repository>
                 <!-- for java-cup -->
                 <repository>
                     <id>cloudera-public</id>
@@ -330,7 +325,6 @@ under the License.
                 <scope>test</scope>
             </dependency>
 
-
             <!-- https://mvnrepository.com/artifact/org.apache.thrift/libthrift -->
             <dependency>
                 <groupId>org.apache.thrift</groupId>
@@ -462,7 +456,7 @@ under the License.
             <dependency>
                 <groupId>com.squareup.okhttp3</groupId>
                 <artifactId>okhttp</artifactId>
-                <version>3.14.9</version>
+                <version>4.9.1</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp-ws -->
