@@ -1664,7 +1664,7 @@ public:
     }
 
     // Append values to array
-    void to_array(std::vector<int64_t>* array) {
+    void to_array(std::vector<int64_t>* array) const {
         switch (_type) {
         case EMPTY:
             break;
@@ -1678,7 +1678,9 @@ public:
             break;
         }
         case SET:
-            array->insert(array->end(), _set.begin(), _set.end());
+            array->reserve(array->size() + _set.size());
+            auto iter = array->insert(array->end(), _set.begin(), _set.end());
+            std::sort(iter, array->end());
             break;
         }
     }
