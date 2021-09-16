@@ -64,10 +64,11 @@ public:
 
     static void set_starrocks_server(StarRocksServer* starrocks_server) { _s_starrocks_server = starrocks_server; }
 
-    void set_slot_descs(const std::vector<SlotDescriptor*>& slot_descs) { _slot_descs = slot_descs; }
     const std::vector<SlotDescriptor*>& get_slot_descs() { return _slot_descs; }
 
 protected:
+    Status _create_slot_descs(ObjectPool* pool);
+
     bool _is_init;
     // this is used for sub class
     SchemaScannerParam* _param;

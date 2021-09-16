@@ -57,6 +57,8 @@ Status SchemaScanner::init(SchemaScannerParam* param, ObjectPool* pool) {
         return Status::InternalError("invalid parameter");
     }
 
+    RETURN_IF_ERROR(_create_slot_descs(pool));
+
     _param = param;
     _is_init = true;
 
@@ -92,6 +94,61 @@ SchemaScanner* SchemaScanner::create(TSchemaTableType::type type) {
         return new (std::nothrow) vectorized::SchemaDummyScanner();
         break;
     }
+}
+
+Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
+    int null_column = 0;
+
+    for (int i = 0; i < _column_num; ++i) {
+        if (_columns[i].is_null) {
+            null_column++;
+        }
+    }
+
+    int offset = (null_column + 7) / 8;
+    int null_byte = 0;
+    int null_bit = 0;
+
+    for (int i = 0; i < _column_num; ++i) {
+        TSlotDescriptor t_slot_desc;
+        auto type_desc = TypeDescriptor(_columns[i].type);
+        if (_columns[i].type == PrimitiveType::TYPE_VARCHAR || _columns[i].type == PrimitiveType::TYPE_CHAR) {
+            type_desc.len = _columns[i].size;
+        }
+
+        t_slot_desc.__set_id(i + 1);
+        t_slot_desc.__set_slotType(type_desc.to_thrift());
+        t_slot_desc.__set_colName(_columns[i].name);
+        t_slot_desc.__set_columnPos(i);
+        t_slot_desc.__set_byteOffset(offset);
+
+        if (_columns[i].is_null) {
+            t_slot_desc.__set_nullIndicatorByte(null_byte);
+            t_slot_desc.__set_nullIndicatorBit(null_bit);
+            null_bit = (null_bit + 1) % 8;
+
+            if (0 == null_bit) {
+                null_byte++;
+            }
+        } else {
+            t_slot_desc.__set_nullIndicatorByte(0);
+            t_slot_desc.__set_nullIndicatorBit(-1);
+        }
+
+        t_slot_desc.__set_slotIdx(i);
+        t_slot_desc.__set_isMaterialized(true);
+
+        SlotDescriptor* slot = pool->add(new (std::nothrow) SlotDescriptor(t_slot_desc));
+
+        if (nullptr == slot) {
+            return Status::InternalError("no memory for _slot_descs.");
+        }
+
+        _slot_descs.push_back(slot);
+        offset += _columns[i].size;
+    }
+
+    return Status::OK();
 }
 
 } // namespace starrocks::vectorized

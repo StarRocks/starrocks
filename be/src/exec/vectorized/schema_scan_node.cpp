@@ -95,9 +95,31 @@ Status SchemaScanNode::prepare(RuntimeState* state) {
         return Status::InternalError("schema scanner get nullptr pointer.");
     }
 
-    _schema_scanner->set_slot_descs(_dest_tuple_desc->slots());
-
     RETURN_IF_ERROR(_schema_scanner->init(&_scanner_param, _pool));
+
+    // check whether we have requested columns in src_slot_descs.
+    const std::vector<SlotDescriptor*>& src_slot_descs = _schema_scanner->get_slot_descs();
+    const std::vector<SlotDescriptor*>& dest_slot_descs = _dest_tuple_desc->slots();
+    int slot_num = dest_slot_descs.size();
+    for (int i = 0; i < slot_num; ++i) {
+        int j = 0;
+        for (; j < src_slot_descs.size(); ++j) {
+            if (boost::iequals(dest_slot_descs[i]->col_name(), src_slot_descs[j]->col_name())) {
+                break;
+            }
+        }
+
+        if (j >= src_slot_descs.size()) {
+            LOG(WARNING) << "no match column for this column(" << dest_slot_descs[i]->col_name() << ")";
+            return Status::InternalError("no match column for this column.");
+        }
+
+        if (src_slot_descs[j]->type().type != dest_slot_descs[i]->type().type) {
+            LOG(WARNING) << "schema not match. input is " << src_slot_descs[j]->type() << " and output is "
+                         << dest_slot_descs[i]->type();
+            return Status::InternalError("schema not match.");
+        }
+    }
 
     _is_init = true;
 
@@ -153,12 +175,15 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         return Status::OK();
     }
 
-    *chunk = std::make_shared<vectorized::Chunk>();
-    const std::vector<SlotDescriptor*>& slot_descs = _schema_scanner->get_slot_descs();
+    ChunkPtr chunk_tmp = std::make_shared<vectorized::Chunk>();
+    if (nullptr == chunk_tmp.get()) {
+        return Status::InternalError("Failed to allocate new chunk.");
+    }
+    const std::vector<SlotDescriptor*>& src_slot_descs = _schema_scanner->get_slot_descs();
     // init column information
-    for (auto& slot_desc : slot_descs) {
+    for (auto& slot_desc : src_slot_descs) {
         ColumnPtr column = vectorized::ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
-        (*chunk)->append_column(std::move(column), slot_desc->id());
+        chunk_tmp->append_column(std::move(column), slot_desc->id());
     }
 
     bool scanner_eos = false;
@@ -174,14 +199,15 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
             if (row_num == 0) {
                 *eos = true;
             }
-            return Status::OK();
+            break;
         }
 
         if (row_num >= config::vector_chunk_size) {
-            return Status::OK();
+            break;
         }
 
-        RETURN_IF_ERROR(_schema_scanner->get_next(chunk, &scanner_eos));
+        size_t old_row = chunk_tmp->num_rows();
+        RETURN_IF_ERROR(_schema_scanner->get_next(&chunk_tmp, &scanner_eos));
 
         if (scanner_eos) {
             _is_finished = true;
@@ -190,12 +216,29 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
             if (row_num == 0) {
                 *eos = true;
             }
-            return Status::OK();
+            break;
         }
         ++row_num;
 
-        ++_num_rows_returned;
-        COUNTER_SET(_rows_returned_counter, _num_rows_returned);
+        // process where clause
+        if (!_conjunct_ctxs.empty()) {
+            ExecNode::eval_conjuncts(_conjunct_ctxs, chunk_tmp.get());
+        }
+
+        if (chunk_tmp->num_rows() != old_row) {
+            ++_num_rows_returned;
+            COUNTER_SET(_rows_returned_counter, _num_rows_returned);
+        }
+    }
+
+    *chunk = std::make_shared<vectorized::Chunk>();
+    if (nullptr == chunk->get()) {
+        return Status::InternalError("Failed to allocate new chunk.");
+    }
+    // init column information
+    for (auto& slot_desc : _dest_tuple_desc->slots()) {
+        ColumnPtr column = chunk_tmp->get_column_by_slot_id(slot_desc->id());
+        (*chunk)->append_column(std::move(column), slot_desc->id());
     }
 
     return Status::OK();
