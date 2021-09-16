@@ -8,26 +8,24 @@
 namespace starrocks::vectorized {
 
 AggregateBaseNode::AggregateBaseNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs), _tnode(tnode), _aggregator(std::make_shared<Aggregator>(tnode)) {}
+        : ExecNode(pool, tnode, descs), _tnode(tnode) {}
 
 AggregateBaseNode::~AggregateBaseNode() = default;
 
 Status AggregateBaseNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    return _aggregator->prepare(state, _pool, mem_tracker(), expr_mem_tracker(), &(child(0)->row_desc()),
-                                runtime_profile());
+    _aggregator = std::make_shared<Aggregator>(_tnode, child(0)->row_desc());
+    return _aggregator->prepare(state, _pool, mem_tracker(), expr_mem_tracker(), runtime_profile());
 }
 
 Status AggregateBaseNode::close(RuntimeState* state) {
     if (is_closed()) {
         return Status::OK();
     }
-    _aggregator->close(state);
+    if (_aggregator != nullptr) {
+        _aggregator->close(state);
+    }
     return ExecNode::close(state);
-}
-
-Status AggregateBaseNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("Vector query engine don't support row_batch");
 }
 
 void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state,

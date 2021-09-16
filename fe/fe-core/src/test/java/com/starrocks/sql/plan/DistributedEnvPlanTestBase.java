@@ -2,6 +2,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
 
@@ -88,8 +89,8 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
                 ");");
 
         Catalog catalog = connectContext.getCatalog();
-        connectContext.getSessionVariable().setTpchScale(100);
-        long scale = connectContext.getSessionVariable().getTpchScale();
+        int scale = 100;
+        connectContext.getCatalog().setStatisticStorage(new MockTpchStatisticStorage(scale));
         OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("region");
         setTableStatistics(t0, 5);
 

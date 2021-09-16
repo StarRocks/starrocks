@@ -31,9 +31,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedReader;
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -41,7 +38,6 @@ import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -298,41 +294,6 @@ public class Util {
         return Math.abs(new Random().nextInt());
     }
 
-    /**
-     * Chooses k unique random elements from a population sequence
-     */
-    public static <T> List<T> sample(List<T> population, int kNum) {
-        if (population.isEmpty() || population.size() < kNum) {
-            return null;
-        }
-
-        Collections.shuffle(population);
-        return population.subList(0, kNum);
-    }
-
-    /**
-     * Delete directory and all contents in this directory
-     */
-    public static boolean deleteDirectory(File directory) {
-        if (!directory.exists()) {
-            return true;
-        }
-
-        if (directory.isDirectory()) {
-            File[] files = directory.listFiles();
-            if (null != files) {
-                for (File file : files) {
-                    if (file.isDirectory()) {
-                        deleteDirectory(file);
-                    } else {
-                        file.delete();
-                    }
-                }
-            }
-        }
-        return directory.delete();
-    }
-
     public static String dumpThread(Thread t, int lineNum) {
         StringBuilder sb = new StringBuilder();
         StackTraceElement[] elements = t.getStackTrace();
@@ -420,7 +381,7 @@ public class Util {
         }
 
         try {
-            return Boolean.valueOf(valStr);
+            return Boolean.parseBoolean(valStr);
         } catch (NumberFormatException e) {
             throw new AnalysisException(hintMsg);
         }
@@ -428,37 +389,6 @@ public class Util {
 
     public static void stdoutWithTime(String msg) {
         System.out.println("[" + TimeUtils.longToTimeString(System.currentTimeMillis()) + "] " + msg);
-    }
-
-    // not support encode negative value now
-    public static void encodeVarint64(long source, DataOutput out) throws IOException {
-        assert source >= 0;
-        short B = 128;
-
-        while (source > B) {
-            out.write((int) (source & (B - 1) | B));
-            source = source >> 7;
-        }
-        out.write((int) (source & (B - 1)));
-    }
-
-    // not support decode negative value now
-    public static long decodeVarint64(DataInput in) throws IOException {
-        long result = 0;
-        int shift = 0;
-        short B = 128;
-
-        while (true) {
-            int oneByte = in.readUnsignedByte();
-            boolean isEnd = (oneByte & B) == 0;
-            result = result | ((long) (oneByte & B - 1) << (shift * 7));
-            if (isEnd) {
-                break;
-            }
-            shift++;
-        }
-
-        return result;
     }
 
     // return the ordinal string of an Integer

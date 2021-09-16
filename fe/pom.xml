@@ -85,6 +85,11 @@ under the License.
                     <name>central maven repo https</name>
                     <url>https://repo.maven.apache.org/maven2</url>
                 </repository>
+                <repository>
+                    <id>Hortonworks</id>
+                    <name>Hortonworks Repository</name>
+                    <url>https://repo.hortonworks.com/content/repositories/releases/</url>
+                </repository>
                 <!-- for java-cup -->
                 <repository>
                     <id>cloudera-public</id>
@@ -176,6 +181,12 @@ under the License.
                 <groupId>commons-validator</groupId>
                 <artifactId>commons-validator</artifactId>
                 <version>1.7</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>commons-collections</groupId>
+                        <artifactId>commons-collections</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.google.code.gson/gson -->
@@ -319,19 +330,12 @@ under the License.
                 <scope>test</scope>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/org.apache.thrift/libfb303 -->
-            <dependency>
-                <groupId>org.apache.thrift</groupId>
-                <artifactId>libfb303</artifactId>
-                <version>0.9.3</version>
-                <type>pom</type>
-            </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.thrift/libthrift -->
             <dependency>
                 <groupId>org.apache.thrift</groupId>
                 <artifactId>libthrift</artifactId>
-                <version>0.13.0</version>
+                <version>0.14.0</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-api -->
@@ -563,6 +567,10 @@ under the License.
                         <groupId>org.slf4j</groupId>
                         <artifactId>slf4j-log4j12</artifactId>
                     </exclusion>
+                    <exclusion>
+                        <artifactId>zookeeper</artifactId>
+                        <groupId>org.apache.zookeeper</groupId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -593,6 +601,12 @@ under the License.
                 <artifactId>hadoop-common</artifactId>
                 <version>2.6.5</version>
                 <scope>provided</scope>
+                <exclusions>
+                    <exclusion>
+                        <artifactId>zookeeper</artifactId>
+                        <groupId>org.apache.zookeeper</groupId>
+                    </exclusion>
+                </exclusions>
             </dependency>
             
             <dependency>

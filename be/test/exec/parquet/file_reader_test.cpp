@@ -12,7 +12,6 @@
 #include "exec/parquet/metadata.h"
 #include "exec/parquet/page_reader.h"
 #include "exprs/expr_context.h"
-#include "exprs/literal.h"
 #include "exprs/slot_ref.h"
 #include "exprs/vectorized/binary_predicate.h"
 #include "runtime/descriptor_helper.h"

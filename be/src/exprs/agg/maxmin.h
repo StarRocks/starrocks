@@ -9,6 +9,7 @@
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
+#include "util/raw_container.h"
 
 namespace starrocks::vectorized {
 
@@ -61,7 +62,7 @@ struct MaxAggregateData<TYPE_DATE, guard::Guard> {
 template <PrimitiveType PT>
 struct MaxAggregateData<PT, BinaryPTGuard<PT>> {
     int32_t size = -1;
-    Buffer<uint8_t> buffer;
+    raw::RawVector<uint8_t> buffer;
 
     bool has_value() const { return buffer.size() > 0; }
 
@@ -150,7 +151,6 @@ template <PrimitiveType PT>
 struct MaxElement<PT, MaxAggregateData<PT>, BinaryPTGuard<PT>> {
     void operator()(MaxAggregateData<PT>& state, const Slice& right) const {
         if (!state.has_value() || state.slice().compare(right) < 0) {
-            // TODO(kks): resize don't initialize
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
             state.size = right.size;
@@ -162,7 +162,6 @@ template <PrimitiveType PT>
 struct MinElement<PT, MinAggregateData<PT>, BinaryPTGuard<PT>> {
     void operator()(MinAggregateData<PT>& state, const Slice& right) const {
         if (!state.has_value() || state.slice().compare(right) > 0) {
-            // TODO(kks): resize don't initialize
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
             state.size = right.size;

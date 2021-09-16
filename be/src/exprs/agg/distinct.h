@@ -18,6 +18,8 @@ namespace starrocks::vectorized {
 
 enum AggDistinctType { COUNT = 0, SUM = 1 };
 
+static const size_t MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA = 24;
+
 template <PrimitiveType PT, typename = guard::Guard>
 struct DistinctAggregateState {};
 
@@ -35,7 +37,11 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
 
     int64_t disctint_count() const { return set.size(); }
 
-    size_t serialize_size() const { return set.dump_bound(); }
+    size_t serialize_size() const {
+        size_t size = set.dump_bound();
+        DCHECK(size >= MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA);
+        return size;
+    }
 
     void serialize(uint8_t* dst) const {
         phmap::InMemoryOutput output(reinterpret_cast<char*>(dst));
@@ -157,7 +163,11 @@ struct DistinctAggregateStateV2<PT, FixedLengthPTGuard<PT>> {
 
     int64_t disctint_count() const { return set.size(); }
 
-    size_t serialize_size() const { return set.size() * sizeof(T) + sizeof(size_t); }
+    size_t serialize_size() const {
+        size_t size = set.size() * sizeof(T) + sizeof(size_t);
+        size = std::max(size, MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA);
+        return size;
+    }
 
     void serialize(uint8_t* dst) const {
         size_t size = set.size();
@@ -261,8 +271,10 @@ public:
             mem_usage += this->data(state).deserialize_and_merge(ctx->impl()->mem_pool(), (const uint8_t*)slice.data,
                                                                  slice.size);
         } else {
-            // slice size larger than 16, means which is a hash set
-            if (slice.size > 16) {
+            // slice size larger than `MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA`, means which is a hash set
+            // that's said, size of hash set serialization data should be larger than `MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA`
+            // otherwise this slice could be reinterpreted as a single value going be to inserted into hashset.
+            if (slice.size >= MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA) {
                 mem_usage += this->data(state).deserialize_and_merge((const uint8_t*)slice.data, slice.size);
             } else {
                 T key;

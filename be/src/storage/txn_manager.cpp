@@ -31,7 +31,6 @@
 #include <set>
 
 #include "storage/data_dir.h"
-#include "storage/push_handler.h"
 #include "storage/reader.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/schema_change.h"

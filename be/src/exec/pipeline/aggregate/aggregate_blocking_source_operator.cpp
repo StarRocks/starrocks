@@ -25,8 +25,6 @@ Status AggregateBlockingSourceOperator::close(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    // TODO(hcf) force annotation
-    // RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
     RETURN_IF_CANCELLED(state);
 
     int32_t chunk_size = config::vector_chunk_size;
@@ -56,7 +54,6 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(Runti
     // ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
     _aggregator->update_num_rows_returned(-(old_size - chunk->num_rows()));
 
-    _aggregator->process_limit(&chunk);
     DCHECK_CHUNK(chunk);
 
     return std::move(chunk);

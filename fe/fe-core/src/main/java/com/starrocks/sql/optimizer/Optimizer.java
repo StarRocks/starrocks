@@ -88,6 +88,10 @@ public class Optimizer {
                 memo.getRootGroup(), RuleSetType.MERGE_LIMIT));
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
 
+        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
+                memo.getRootGroup(), RuleSetType.MERGE_AGGREGATE));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+
         //After the MERGE_LIMIT, ProjectNode that can be merged may appear.
         //So we do another column cropping
         rootTaskContext.setRequiredColumns((ColumnRefSet) requiredColumns.clone());

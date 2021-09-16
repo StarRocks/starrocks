@@ -21,6 +21,7 @@
 
 package com.starrocks.utframe;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
@@ -297,6 +298,10 @@ public class UtFrameUtils {
 
     public static int findValidPort() {
         String starRocksHome = System.getenv("STARROCKS_HOME");
+        File portDir = new File(starRocksHome + "/fe/ut_ports");
+        if (!portDir.exists()){
+            Preconditions.checkState(portDir.mkdirs());
+        }
         for (int i = 0; i < 10; i++) {
             try (ServerSocket socket = new ServerSocket(0)) {
                 socket.setReuseAddress(true);

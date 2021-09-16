@@ -5,7 +5,7 @@
 namespace starrocks::pipeline {
 
 bool AggregateStreamingSourceOperator::has_output() const {
-    // There are two cases where _buffer_chunk is not null
+    // There are two cases where chunk buffer is not null
     // case1：streaming mode is 'FORCE_STREAMING'
     // case2：streaming mode is 'AUTO'
     //     case 2.1: very poor aggregation
@@ -14,7 +14,7 @@ bool AggregateStreamingSourceOperator::has_output() const {
         return true;
     }
 
-    // There are two cases where _buffer_chunk is null,
+    // There are two cases where chunk buffer is null,
     // it will apply local aggregate, so need to wait sink operator finish
     // case1：streaming mode is 'FORCE_PREAGGREGATION'
     // case2：streaming mode is 'AUTO'
@@ -47,7 +47,6 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(Runt
 
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
     _output_chunk_from_hash_map(&chunk);
-    _aggregator->process_limit(&chunk);
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }

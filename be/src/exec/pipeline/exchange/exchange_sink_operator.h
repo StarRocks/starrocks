@@ -144,7 +144,7 @@ public:
 
     ~ExchangeSinkOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override;
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
     std::shared_ptr<SinkBuffer> _buffer;

@@ -481,4 +481,39 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
                 "  |  cardinality: 2"));
     }
+
+    @Test
+    public void testOneAggUponBroadcastJoinWithoutExchange() throws Exception {
+        String sql = "select \n" +
+                "  sum(p1) \n" +
+                "from \n" +
+                "  (\n" +
+                "    select \n" +
+                "      t0.p1 \n" +
+                "    from \n" +
+                "      (\n" +
+                "        select \n" +
+                "          count(n1.P_PARTKEY) as p1 \n" +
+                "        from \n" +
+                "          part n1\n" +
+                "      ) t0 \n" +
+                "      join (\n" +
+                "        select \n" +
+                "          count(n2.P_PARTKEY) as p2 \n" +
+                "        from \n" +
+                "          part n2\n" +
+                "      ) t1\n" +
+                "  ) t2;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 11:AGGREGATE (update finalize)"));
+        Assert.assertTrue(plan.contains("10:Project"));
+    }
+
+    @Test
+    public void testGroupByDistributedColumnWithMultiPartitions() throws Exception {
+        String sql = "select k1, sum(k2) from pushdown_test group by k1";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)"));
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
+    }
 }

@@ -72,10 +72,10 @@ public class SystemInfoService {
 
     // last backend id used by round robin for sequential choosing backends for
     // tablet creation
-    private ConcurrentHashMap<String, Long> lastBackendIdForCreationMap;
+    private final ConcurrentHashMap<String, Long> lastBackendIdForCreationMap;
     // last backend id used by round robin for sequential choosing backends in
     // other jobs
-    private ConcurrentHashMap<String, Long> lastBackendIdForOtherMap;
+    private final ConcurrentHashMap<String, Long> lastBackendIdForOtherMap;
 
     private long lastBackendIdForCreation = -1;
     private long lastBackendIdForOther = -1;
@@ -83,14 +83,11 @@ public class SystemInfoService {
     private volatile ImmutableMap<Long, DiskInfo> pathHashToDishInfoRef;
 
     // sort host backends list by num of backends, descending
-    private static final Comparator<List<Backend>> hostBackendsListComparator = new Comparator<List<Backend>>() {
-        @Override
-        public int compare(List<Backend> list1, List<Backend> list2) {
-            if (list1.size() > list2.size()) {
-                return -1;
-            } else {
-                return 1;
-            }
+    private static final Comparator<List<Backend>> hostBackendsListComparator = (list1, list2) -> {
+        if (list1.size() > list2.size()) {
+            return -1;
+        } else {
+            return 1;
         }
     };
 
@@ -132,8 +129,7 @@ public class SystemInfoService {
     public void addBackend(Backend backend) {
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.put(backend.getId(), backend);
-        ImmutableMap<Long, Backend> newIdToBackend = ImmutableMap.copyOf(copiedBackends);
-        idToBackendRef = newIdToBackend;
+        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
     }
 
     private void setBackendOwner(Backend backend, String clusterName) {
@@ -150,14 +146,12 @@ public class SystemInfoService {
         // update idToBackend
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.put(newBackend.getId(), newBackend);
-        ImmutableMap<Long, Backend> newIdToBackend = ImmutableMap.copyOf(copiedBackends);
-        idToBackendRef = newIdToBackend;
+        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
 
         // set new backend's report version as 0L
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.put(newBackend.getId(), new AtomicLong(0L));
-        ImmutableMap<Long, AtomicLong> newIdToReportVersion = ImmutableMap.copyOf(copiedReportVerions);
-        idToReportVersionRef = newIdToReportVersion;
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
 
         if (!Strings.isNullOrEmpty(destCluster)) {
             // add backend to destCluster
@@ -211,14 +205,12 @@ public class SystemInfoService {
         // update idToBackend
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.remove(droppedBackend.getId());
-        ImmutableMap<Long, Backend> newIdToBackend = ImmutableMap.copyOf(copiedBackends);
-        idToBackendRef = newIdToBackend;
+        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
 
         // update idToReportVersion
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.remove(droppedBackend.getId());
-        ImmutableMap<Long, AtomicLong> newIdToReportVersion = ImmutableMap.copyOf(copiedReportVerions);
-        idToReportVersionRef = newIdToReportVersion;
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
 
         // update cluster
         final Cluster cluster = Catalog.getCurrentCatalog().getCluster(droppedBackend.getOwnerClusterName());
@@ -249,18 +241,12 @@ public class SystemInfoService {
 
     public boolean checkBackendAvailable(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
-        if (backend == null || !backend.isAvailable()) {
-            return false;
-        }
-        return true;
+        return backend != null && backend.isAvailable();
     }
 
     public boolean checkBackendAlive(long backendId) {
         Backend backend = idToBackendRef.get(backendId);
-        if (backend == null || !backend.isAlive()) {
-            return false;
-        }
-        return true;
+        return backend != null && backend.isAlive();
     }
 
     public Backend getBackendWithHeartbeatPort(String host, int heartPort) {
@@ -283,16 +269,6 @@ public class SystemInfoService {
         return null;
     }
 
-    public Backend getBackendWithHttpPort(String host, int httpPort) {
-        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
-        for (Backend backend : idToBackend.values()) {
-            if (backend.getHost().equals(host) && backend.getHttpPort() == httpPort) {
-                return backend;
-            }
-        }
-        return null;
-    }
-
     public List<Long> getBackendIds(boolean needAlive) {
         ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
         List<Long> backendIds = Lists.newArrayList(idToBackend.keySet());
@@ -308,6 +284,10 @@ public class SystemInfoService {
             }
             return backendIds;
         }
+    }
+
+    public int backendSize() {
+        return idToBackendRef.size();
     }
 
     public List<Long> getDecommissionedBackendIds() {
@@ -353,7 +333,7 @@ public class SystemInfoService {
         }
 
         //  sort by number of backend in host
-        Collections.sort(hostBackendsList, hostBackendsListComparator);
+        hostBackendsList.sort(hostBackendsListComparator);
 
         // hostIsEmpty is used to mark if host is empty, so avoid
         // iterating hostIsEmpty with numOfHost in every circle.
@@ -368,7 +348,7 @@ public class SystemInfoService {
                 chosenBackendIds.add(hostBackendsList.get(i).remove(0).getId());
             } else {
                 // avoid counting repeatedly
-                if (hostIsEmpty[i] == false) {
+                if (!hostIsEmpty[i]) {
                     hostIsEmpty[i] = true;
                     numOfHost--;
                 }
@@ -396,10 +376,8 @@ public class SystemInfoService {
     public void releaseBackends(String clusterName, boolean isReplay) {
         ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
         final List<Long> backendIds = getClusterBackendIds(clusterName);
-        final Iterator<Long> iterator = backendIds.iterator();
 
-        while (iterator.hasNext()) {
-            final Long id = iterator.next();
+        for (Long id : backendIds) {
             if (!idToBackend.containsKey(id)) {
                 LOG.warn("cluster {} contain backend {} that does't exist", clusterName, id);
             } else {
@@ -445,7 +423,7 @@ public class SystemInfoService {
         }
 
         List<List<Backend>> hostList = Lists.newArrayList(hostBackendsMapInCluster.values());
-        Collections.sort(hostList, hostBackendsListComparator);
+        hostList.sort(hostBackendsListComparator);
 
         // in each cycle, choose one backend from the host which has maximal backends num.
         // break if all hosts are empty or get enough backends.
@@ -456,7 +434,7 @@ public class SystemInfoService {
                     // enough
                     break;
                 }
-                Collections.sort(hostList, hostBackendsListComparator);
+                hostList.sort(hostBackendsListComparator);
             } else {
                 // all hosts empty
                 break;
@@ -522,8 +500,8 @@ public class SystemInfoService {
             return null;
         }
 
-        Collections.sort(hostsNotInCluster, hostBackendsListComparator);
-        Collections.sort(hostsInCluster, hostBackendsListComparator);
+        hostsNotInCluster.sort(hostBackendsListComparator);
+        hostsInCluster.sort(hostBackendsListComparator);
 
         // first select backends which belong to the hosts NOT IN this cluster
         if (hostsNotInCluster.size() > 0) {
@@ -539,7 +517,7 @@ public class SystemInfoService {
                     chosenBackendIds.add(hostsNotInCluster.get(i).remove(0).getId());
                 } else {
                     // avoid counting repeatedly
-                    if (hostIsEmpty[i] == false) {
+                    if (!hostIsEmpty[i]) {
                         hostIsEmpty[i] = true;
                         numOfHost--;
                     }
@@ -561,7 +539,7 @@ public class SystemInfoService {
                 if (hostsInCluster.get(i).size() > 0) {
                     chosenBackendIds.add(hostsInCluster.get(i).remove(0).getId());
                 } else {
-                    if (hostIsEmpty[i] == false) {
+                    if (!hostIsEmpty[i]) {
                         hostIsEmpty[i] = true;
                         numOfHost--;
                     }
@@ -885,7 +863,7 @@ public class SystemInfoService {
     }
 
     public long getBackendReportVersion(long backendId) {
-        AtomicLong atomicLong = null;
+        AtomicLong atomicLong;
         if ((atomicLong = idToReportVersionRef.get(backendId)) == null) {
             return -1L;
         } else {
@@ -995,14 +973,12 @@ public class SystemInfoService {
         }
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.put(newBackend.getId(), newBackend);
-        ImmutableMap<Long, Backend> newIdToBackend = ImmutableMap.copyOf(copiedBackends);
-        idToBackendRef = newIdToBackend;
+        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
 
         // set new backend's report version as 0L
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.put(newBackend.getId(), new AtomicLong(0L));
-        ImmutableMap<Long, AtomicLong> newIdToReportVersion = ImmutableMap.copyOf(copiedReportVerions);
-        idToReportVersionRef = newIdToReportVersion;
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
 
         // to add be to DEFAULT_CLUSTER
         if (newBackend.getBackendState() == BackendState.using) {
@@ -1022,14 +998,12 @@ public class SystemInfoService {
         // update idToBackend
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.remove(backend.getId());
-        ImmutableMap<Long, Backend> newIdToBackend = ImmutableMap.copyOf(copiedBackends);
-        idToBackendRef = newIdToBackend;
+        idToBackendRef = ImmutableMap.copyOf(copiedBackends);
 
         // update idToReportVersion
         Map<Long, AtomicLong> copiedReportVerions = Maps.newHashMap(idToReportVersionRef);
         copiedReportVerions.remove(backend.getId());
-        ImmutableMap<Long, AtomicLong> newIdToReportVersion = ImmutableMap.copyOf(copiedReportVerions);
-        idToReportVersionRef = newIdToReportVersion;
+        idToReportVersionRef = ImmutableMap.copyOf(copiedReportVerions);
 
         // update cluster
         final Cluster cluster = Catalog.getCurrentCatalog().getCluster(backend.getOwnerClusterName());

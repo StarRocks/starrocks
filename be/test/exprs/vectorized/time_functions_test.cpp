@@ -7,7 +7,6 @@
 #include <gtest/gtest.h>
 
 #include "column/fixed_length_column.h"
-#include "exprs/timestamp_functions.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
 #include "runtime/vectorized/time_types.h"
@@ -1323,6 +1322,24 @@ TEST_F(TimeFunctionsTest, date_fomrat) {
         ASSERT_EQ(1, result->size());
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
         ASSERT_EQ(Slice("abcdef"), v->get_data()[0]);
+    }
+    {
+        // stack-buffer-overflow test
+        std::string test_string;
+        for (int i = 0; i < 10000; ++i) {
+            test_string.append("x");
+        }
+        auto fmt_col =
+                ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(test_string.c_str(), test_string.size()), 1);
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+
+        ctx->impl()->set_constant_columns(columns);
+        TimeFunctions::format_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ColumnPtr result = TimeFunctions::datetime_format(ctx, columns);
+        TimeFunctions::format_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_EQ(true, result->is_null(0));
     }
 }
 

@@ -36,7 +36,7 @@ export STARROCKS_HOME=${ROOT}
 . ${STARROCKS_HOME}/env.sh
 
 #build thirdparty libraries if necessary
-if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib/libhs.a ]]; then
+if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib/mariadb/libmariadbclient.a ]]; then
     echo "Thirdparty libraries need to be build ..."
     ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
 fi
@@ -54,18 +54,13 @@ Usage: $0 <options>
      --clean            clean and build target
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
-     --with-mysql       enable MySQL support(default)
-     --without-mysql    disable MySQL support
-     --with-lzo         enable LZO compress support(default)
-     --without-lzo      disable LZO compress  support
      --with-hdfs        enable hdfs support
      --without-hdfs     disable hdfs support
 
   Eg.
     $0                                      build all
     $0 --be                                 build Backend without clean
-    $0 --be --without-mysql                 build Backend with MySQL disable
-    $0 --be --without-mysql --without-lzo   build Backend with both MySQL and LZO disable
+    $0 --be --without-lzo                   build Backend with LZO disable
     $0 --fe --clean                         clean and build Frontend and Spark Dpp application
     $0 --fe --be --clean                    clean and build Frontend, Spark Dpp application and Backend
     $0 --spark-dpp                          build Spark DPP application alone
@@ -83,10 +78,6 @@ OPTS=$(getopt \
   -l 'clean' \
   -l 'with-gcov' \
   -l 'without-gcov' \
-  -l 'with-mysql' \
-  -l 'without-mysql' \
-  -l 'with-lzo' \
-  -l 'without-lzo' \
   -l 'with-hdfs' \
   -l 'without-hdfs' \
   -l 'help' \
@@ -103,11 +94,8 @@ BUILD_FE=
 BUILD_SPARK_DPP=
 CLEAN=
 RUN_UT=
-WITH_MYSQL=ON
-WITH_LZO=ON
 WITH_GCOV=OFF
 WITH_HDFS=ON
-WITH_BENCHMARK=ON
 
 HELP=0
 if [ $# == 1 ] ; then
@@ -130,12 +118,8 @@ else
             --spark-dpp) BUILD_SPARK_DPP=1 ; shift ;;
             --clean) CLEAN=1 ; shift ;;
             --ut) RUN_UT=1   ; shift ;;
-            --with-mysql) WITH_MYSQL=ON; shift ;;
-            --without-mysql) WITH_MYSQL=OFF; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
-            --with-lzo) WITH_LZO=ON; shift ;;
-            --without-lzo) WITH_LZO=OFF; shift ;;
             --with-hdfs) WITH_HDFS=ON; shift ;;
             --without-hdfs) WITH_HDFS=OFF; shift ;;
             -h) HELP=1; shift ;;
@@ -162,11 +146,8 @@ echo "Get params:
     BUILD_SPARK_DPP     -- $BUILD_SPARK_DPP
     CLEAN               -- $CLEAN
     RUN_UT              -- $RUN_UT
-    WITH_MYSQL          -- $WITH_MYSQL
-    WITH_LZO            -- $WITH_LZO
     WITH_GCOV           -- $WITH_GCOV
     WITH_HDFS           -- $WITH_HDFS
-    WITH_BENCHMARK      -- $WITH_BENCHMARK
 "
 
 # Clean and build generated code
@@ -198,8 +179,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     fi
     mkdir -p ${CMAKE_BUILD_DIR}
     cd ${CMAKE_BUILD_DIR}
-    ${CMAKE_CMD} .. -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} -DSTARROCKS_HOME=${STARROCKS_HOME} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DMAKE_TEST=OFF -DWITH_MYSQL=${WITH_MYSQL} -DWITH_HDFS=${WITH_HDFS} -DWITH_LZO=${WITH_LZO} -DWITH_GCOV=${WITH_GCOV} \
-        -DWITH_BENCHMARK=${WITH_BENCHMARK}
+    ${CMAKE_CMD} .. -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} -DSTARROCKS_HOME=${STARROCKS_HOME} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DMAKE_TEST=OFF -DWITH_HDFS=${WITH_HDFS} -DWITH_GCOV=${WITH_GCOV}
     time make -j${PARALLEL}
     make install
     cd ${STARROCKS_HOME}

@@ -1304,24 +1304,16 @@ StatusOr<Tablet::IteratorList> Tablet::capture_segment_iterators(const Version& 
         return _updates->read(spec_version.second, schema, options);
     }
     std::shared_lock rdlock(_meta_lock);
-    vector<Version> version_path;
+    std::vector<Version> version_path;
+    std::vector<RowsetSharedPtr> rowsets;
     OLAPStatus res = capture_consistent_versions(spec_version, &version_path);
     if (res != OLAP_SUCCESS) {
         LOG(WARNING) << "Fail to capture consistent versions. err=" << res;
         return Status::InternalError("capture consistent versions failed");
     }
-
-    std::vector<RowsetSharedPtr> rowsets;
-    rowsets.reserve(version_path.size());
-    for (auto version : version_path) {
-        auto it = _rs_version_map.find(version);
-        if (it == _rs_version_map.end()) {
-            return Status::InternalError("fail to find rowset for version");
-        }
-        const RowsetSharedPtr& rowset = it->second;
-        if (!rowset->empty()) {
-            rowsets.emplace_back(rowset);
-        }
+    res = _capture_consistent_rowsets_unlocked(version_path, &rowsets);
+    if (res != OLAP_SUCCESS) {
+        return Status::InternalError("fail to capture rowset for some version");
     }
     // Release lock before acquiring segment iterators.
     rdlock.unlock();
