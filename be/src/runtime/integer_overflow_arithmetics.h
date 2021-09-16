@@ -113,7 +113,7 @@ inline bool int128_mul_overflow(int128_t a, int128_t b, int128_t* c) {
     *c = a * b;
     // sgn(x * y) and abs(x) * abs(y) produces x * y;
     *c = (*c ^ sa) - sa;
-    static constexpr auto int128_max = get_min<int128_t>();
+    static constexpr auto int128_max = get_max<int128_t>();
     return clz128(a) + clz128(b) < sizeof(int128_t) || int128_max / a < b;
 }
 
