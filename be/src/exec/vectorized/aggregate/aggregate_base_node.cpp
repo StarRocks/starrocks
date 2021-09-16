@@ -28,10 +28,6 @@ Status AggregateBaseNode::close(RuntimeState* state) {
     return ExecNode::close(state);
 }
 
-Status AggregateBaseNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("Vector query engine don't support row_batch");
-}
-
 void AggregateBaseNode::push_down_join_runtime_filter(RuntimeState* state,
                                                       vectorized::RuntimeFilterProbeCollector* collector) {
     // accept runtime filters from parent if possible.

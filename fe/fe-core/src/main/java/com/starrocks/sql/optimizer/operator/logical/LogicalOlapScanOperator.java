@@ -11,6 +11,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
@@ -116,6 +117,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         HashDistributionDesc leftHashDesc =
                 new HashDistributionDesc(columnList, HashDistributionDesc.SourceType.LOCAL);
         return DistributionSpec.createHashDistributionSpec(leftHashDesc);
+    }
+
+    public boolean canDoReplicatedJoin() {
+        return Utils.canDoReplicatedJoin((OlapTable) table, selectedIndexId, selectedPartitionId, selectedTabletId);
     }
 
     @Override

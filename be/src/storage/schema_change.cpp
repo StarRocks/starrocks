@@ -61,7 +61,7 @@ public:
     virtual ~RowBlockSorter();
 
     bool sort(RowBlock** row_block);
-    size_t allocated_rows() { return _swap_row_block->capacity(); }
+    size_t allocated_rows() { return (_swap_row_block == nullptr) ? 0 : _swap_row_block->capacity(); }
 
 private:
     static bool _row_cursor_comparator(const RowCursor* a, const RowCursor* b) { return compare_row(*a, *b) < 0; }

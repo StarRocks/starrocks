@@ -30,11 +30,6 @@ namespace starrocks {
 EmptySetNode::EmptySetNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs) {}
 
-Status EmptySetNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    *eos = true;
-    return Status::OK();
-}
-
 Status EmptySetNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     *eos = true;
     return Status::OK();
