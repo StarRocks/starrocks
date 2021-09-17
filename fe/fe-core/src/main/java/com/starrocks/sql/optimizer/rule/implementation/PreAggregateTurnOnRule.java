@@ -29,8 +29,18 @@ import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
+/**
+ * This rule will turn on PreAggregation if conditions are met,
+ * and turning on PreAggregation will help optimize the storage layer merge on read.
+ * This rule traverses the query plan from the top down, and the Olap Scan node determines
+ * whether preAggregation can be turned on or not based on the information recorded by the PreAggregationContext.
+ *
+ * A cross join cannot turn on PreAggregation, and other types of joins can only be turn on on one side.
+ * If both sides are opened, many-to-many join results will appear, leading to errors in the upper aggregation results
+ */
 public class PreAggregateTurnOnRule {
     private static final PreAggregateVisitor VISITOR = new PreAggregateVisitor();
 
@@ -115,10 +125,11 @@ public class PreAggregateTurnOnRule {
                 scan.setTurnOffReason("None aggregate function");
                 return null;
             }
-
             // check has value conjunct
             boolean allKeyConjunct =
-                    Utils.extractColumnRef(scan.getPredicate()).stream().map(ref -> scan.getColumnRefMap().get(ref))
+                    Utils.extractColumnRef(
+                            Utils.compoundAnd(scan.getPredicate(), Utils.compoundAnd(context.joinPredicates))).stream()
+                            .map(ref -> scan.getColumnRefMap().get(ref)).filter(Objects::nonNull)
                             .allMatch(Column::isKey);
             if (!allKeyConjunct) {
                 scan.setTurnOffReason("Predicates include the value column");
@@ -294,19 +305,36 @@ public class PreAggregateTurnOnRule {
             }
 
             // For other types of joins, only one side can turn on pre aggregation
-            ColumnRefSet usedColumns = new ColumnRefSet();
-            context.groupings.forEach(g -> usedColumns.union(g.getUsedColumns()));
-            context.aggregations.forEach(a -> usedColumns.union(a.getUsedColumns()));
-            boolean checkLeft = leftOutputColumns.contains(usedColumns);
-            boolean checkRight = rightOutputColumns.contains(usedColumns);
+            ColumnRefSet aggregationColumns = new ColumnRefSet();
+            List<ScalarOperator> leftGroupOperator = Lists.newArrayList();
+            List<ScalarOperator> rightGroupOperator = Lists.newArrayList();
+
+            context.groupings.forEach(g -> {
+                if (leftOutputColumns.contains(g.getUsedColumns())) {
+                    leftGroupOperator.add(g);
+                }
+            });
+            context.groupings.forEach(g -> {
+                if (rightOutputColumns.contains(g.getUsedColumns())) {
+                    rightGroupOperator.add(g);
+                }
+            });
+            context.aggregations.forEach(a -> aggregationColumns.union(a.getUsedColumns()));
+            boolean checkLeft = leftOutputColumns.contains(aggregationColumns);
+            boolean checkRight = rightOutputColumns.contains(aggregationColumns);
+            // Add join on predicate and predicate to context
+            context.joinPredicates.add(hashJoinOperator.getJoinPredicate());
+            context.joinPredicates.add(hashJoinOperator.getPredicate());
 
             PreAggregationContext disableContext = new PreAggregationContext();
             disableContext.notPreAggregationJoin = true;
 
             if (checkLeft) {
+                context.groupings = leftGroupOperator;
                 leftChild.getOp().accept(this, leftChild, context);
                 rightChild.getOp().accept(this, rightChild, disableContext);
             } else if (checkRight) {
+                context.groupings = rightGroupOperator;
                 rightChild.getOp().accept(this, rightChild, context);
                 leftChild.getOp().accept(this, leftChild, disableContext);
             } else {
@@ -322,6 +350,7 @@ public class PreAggregateTurnOnRule {
         public boolean notPreAggregationJoin = false;
         public List<ScalarOperator> aggregations = Lists.newArrayList();
         public List<ScalarOperator> groupings = Lists.newArrayList();
+        public List<ScalarOperator> joinPredicates = Lists.newArrayList();
 
         @Override
         public PreAggregationContext clone() {
@@ -330,6 +359,7 @@ public class PreAggregateTurnOnRule {
                 // Just shallow copy
                 context.aggregations = Lists.newArrayList(aggregations);
                 context.groupings = Lists.newArrayList(groupings);
+                context.joinPredicates = Lists.newArrayList(joinPredicates);
                 return context;
             } catch (CloneNotSupportedException ignored) {
             }
