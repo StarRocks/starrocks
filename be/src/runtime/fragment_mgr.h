@@ -30,7 +30,7 @@
 #include <vector>
 
 #include "common/status.h"
-#include "gen_cpp/StarRocksExternalService_types.h"
+#include "gen_cpp/StarrocksExternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "http/rest_monitor_iface.h"

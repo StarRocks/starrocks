@@ -30,9 +30,9 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/BackendService.cpp
     ${GEN_CPP_DIR}/BackendService_types.cpp
     ${GEN_CPP_DIR}/FileBrokerService_types.cpp
-    ${GEN_CPP_DIR}/TStarRocksExternalService.cpp
-    ${GEN_CPP_DIR}/StarRocksExternalService_types.cpp
-    ${GEN_CPP_DIR}/StarRocksExternalService_constants.cpp
+    ${GEN_CPP_DIR}/TStarrocksExternalService.cpp
+    ${GEN_CPP_DIR}/StarrocksExternalService_types.cpp
+    ${GEN_CPP_DIR}/StarrocksExternalService_constants.cpp
     ${GEN_CPP_DIR}/QueryPlanExtra_types.cpp
     ${GEN_CPP_DIR}/QueryPlanExtra_constants.cpp
     ${GEN_CPP_DIR}/TFileBrokerService.cpp
