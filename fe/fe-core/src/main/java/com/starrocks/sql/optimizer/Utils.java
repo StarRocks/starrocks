@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -17,9 +18,11 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -319,6 +322,21 @@ public class Utils {
             count += 1;
         }
         return count;
+    }
+
+    public static boolean hasUnknownColumnsStats(OptExpression root) {
+        Operator operator = root.getOp();
+        if (operator instanceof LogicalScanOperator) {
+            LogicalScanOperator scanOperator = (LogicalScanOperator) operator;
+            List<String> colNames = scanOperator.getColumnRefMap().values().stream().map(Column::getName).collect(
+                    Collectors.toList());
+
+            List<ColumnStatistic> columnStatisticList =
+                    Catalog.getCurrentStatisticStorage().getColumnStatistics(scanOperator.getTable(), colNames);
+            return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
+        }
+
+        return root.getInputs().stream().anyMatch(Utils::hasUnknownColumnsStats);
     }
 
     public static long getLongFromDateTime(LocalDateTime dateTime) {
