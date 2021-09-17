@@ -359,10 +359,6 @@ protected:
     /// Valid to call in or after Prepare().
     bool is_in_subplan() const { return false; }
 
-    // Create a single exec node derived from thrift node; place exec node in 'pool'.
-    static Status create_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs,
-                              ExecNode** node);
-
     static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
                                          const DescriptorTbl& descs, ExecNode** node);
 

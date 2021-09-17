@@ -299,7 +299,7 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
     }
     int num_children = nodes[*node_idx].num_children;
     Expr* expr = NULL;
-    RETURN_IF_ERROR(create_expr(pool, nodes[*node_idx], &expr));
+    RETURN_IF_ERROR(create_vectorized_expr(pool, nodes[*node_idx], &expr));
     DCHECK(expr != NULL);
     if (parent != NULL) {
         parent->add_child(expr);
@@ -422,10 +422,6 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     }
 
     return Status::OK();
-}
-
-Status Expr::create_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr) {
-    return create_vectorized_expr(pool, texpr_node, expr);
 }
 
 struct MemLayoutData {
@@ -842,7 +838,7 @@ Status Expr::create(const TExpr& texpr, const RowDescriptor& row_desc, RuntimeSt
                     Expr** scalar_expr, MemTracker* tracker) {
     *scalar_expr = nullptr;
     Expr* root;
-    RETURN_IF_ERROR(create_expr(pool, texpr.nodes[0], &root));
+    RETURN_IF_ERROR(create_vectorized_expr(pool, texpr.nodes[0], &root));
     RETURN_IF_ERROR(create_tree(texpr, pool, root));
     // TODO pengyubing replace by Init()
     ExprContext* ctx = pool->add(new ExprContext(root));
@@ -917,7 +913,7 @@ Status Expr::create_tree_internal(const std::vector<TExprNode>& nodes, ObjectPoo
     const TExprNode& texpr_node = nodes[*child_node_idx];
     DCHECK_NE(texpr_node.node_type, TExprNodeType::AGG_EXPR);
     Expr* child_expr;
-    RETURN_IF_ERROR(create_expr(pool, texpr_node, &child_expr));
+    RETURN_IF_ERROR(create_vectorized_expr(pool, texpr_node, &child_expr));
     root->_children.push_back(child_expr);
 
     int num_children = nodes[*child_node_idx].num_children;
