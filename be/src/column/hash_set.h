@@ -67,19 +67,6 @@ using SliceHashSet = phmap::flat_hash_set<SliceWithHash, HashOnSliceWithHash, Eq
 
 using SliceNormalHashSet = phmap::flat_hash_set<Slice, SliceHash, SliceNormalEqual>;
 
-template <typename T>
-struct PhSetTraits {
-    using SetType = HashSet<T>;
-};
-
-template <>
-struct PhSetTraits<Slice> {
-    using SetType = SliceNormalHashSet;
-};
-
-template <typename T>
-using PhSet = typename PhSetTraits<T>::SetType;
-
 struct SliceKey8 {
     union U {
         struct {
