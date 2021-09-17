@@ -662,20 +662,6 @@ bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs,
     return true;
 }
 
-#define CHECK_AGGR_PHASE(TYPE, VALUE)                                             \
-    case TYPE: {                                                                  \
-        type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_##VALUE  \
-                                         : HashVariantType::Type::phase2_##VALUE; \
-        break;                                                                    \
-    }
-
-#define CHECK_AGGR_PHASE_NULL(TYPE, VALUE)                                             \
-    case TYPE: {                                                                       \
-        type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_null_##VALUE  \
-                                         : HashVariantType::Type::phase2_null_##VALUE; \
-        break;                                                                         \
-    }
-
 #define CHECK_AGGR_PHASE_DEFAULT()                                                                                    \
     {                                                                                                                 \
         type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice : HashVariantType::Type::phase2_slice; \
@@ -692,14 +678,27 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
         case 1: {
             auto group_by_expr = _group_by_expr_ctxs[0];
             switch (group_by_expr->root()->type().type) {
-                CHECK_AGGR_PHASE_NULL(TYPE_TINYINT, int8);
-                CHECK_AGGR_PHASE_NULL(TYPE_SMALLINT, int16);
-                CHECK_AGGR_PHASE_NULL(TYPE_INT, int32);
-                CHECK_AGGR_PHASE_NULL(TYPE_BIGINT, int64);
-                CHECK_AGGR_PHASE_NULL(TYPE_DATE, date);
-                CHECK_AGGR_PHASE_NULL(TYPE_DATETIME, timestamp);
-                CHECK_AGGR_PHASE_NULL(TYPE_CHAR, string);
-                CHECK_AGGR_PHASE_NULL(TYPE_VARCHAR, string);
+#define CHECK_AGGR_PHASE(TYPE, VALUE)                                                  \
+    case TYPE: {                                                                       \
+        type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_null_##VALUE  \
+                                         : HashVariantType::Type::phase2_null_##VALUE; \
+        break;                                                                         \
+    }
+                CHECK_AGGR_PHASE(TYPE_BOOLEAN, int8);
+                CHECK_AGGR_PHASE(TYPE_TINYINT, int8);
+                CHECK_AGGR_PHASE(TYPE_SMALLINT, int16);
+                CHECK_AGGR_PHASE(TYPE_INT, int32);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL32, int32);
+                CHECK_AGGR_PHASE(TYPE_BIGINT, int64);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL64, int64);
+                CHECK_AGGR_PHASE(TYPE_DATE, date);
+                CHECK_AGGR_PHASE(TYPE_DATETIME, timestamp);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL128, int128);
+                CHECK_AGGR_PHASE(TYPE_LARGEINT, int128);
+                CHECK_AGGR_PHASE(TYPE_CHAR, string);
+                CHECK_AGGR_PHASE(TYPE_VARCHAR, string);
+
+#undef CHECK_AGGR_PHASE
             default:
                 CHECK_AGGR_PHASE_DEFAULT();
             }
@@ -714,14 +713,28 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
         case 1: {
             auto group_by_expr = _group_by_expr_ctxs[0];
             switch (group_by_expr->root()->type().type) {
+#define CHECK_AGGR_PHASE(TYPE, VALUE)                                             \
+    case TYPE: {                                                                  \
+        type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_##VALUE  \
+                                         : HashVariantType::Type::phase2_##VALUE; \
+        break;                                                                    \
+    }
+                CHECK_AGGR_PHASE(TYPE_BOOLEAN, int8);
                 CHECK_AGGR_PHASE(TYPE_TINYINT, int8);
                 CHECK_AGGR_PHASE(TYPE_SMALLINT, int16);
                 CHECK_AGGR_PHASE(TYPE_INT, int32);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL32, int32);
                 CHECK_AGGR_PHASE(TYPE_BIGINT, int64);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL64, int64);
                 CHECK_AGGR_PHASE(TYPE_DATE, date);
                 CHECK_AGGR_PHASE(TYPE_DATETIME, timestamp);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL128, int128);
+                CHECK_AGGR_PHASE(TYPE_LARGEINT, int128);
                 CHECK_AGGR_PHASE(TYPE_CHAR, string);
                 CHECK_AGGR_PHASE(TYPE_VARCHAR, string);
+
+#undef CHECK_AGGR_PHASE
+
             default:
                 CHECK_AGGR_PHASE_DEFAULT();
             }

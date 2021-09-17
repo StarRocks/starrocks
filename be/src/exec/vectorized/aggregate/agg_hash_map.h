@@ -17,6 +17,9 @@
 namespace starrocks::vectorized {
 
 using AggDataPtr = uint8_t*;
+
+// =====================
+// one level agg hash map
 template <PhmapSeed seed>
 using Int8AggHashMap = phmap::flat_hash_map<int8_t, AggDataPtr, StdHashWithSeed<int8_t, seed>>;
 template <PhmapSeed seed>
@@ -26,12 +29,24 @@ using Int32AggHashMap = phmap::flat_hash_map<int32_t, AggDataPtr, StdHashWithSee
 template <PhmapSeed seed>
 using Int64AggHashMap = phmap::flat_hash_map<int64_t, AggDataPtr, StdHashWithSeed<int64_t, seed>>;
 template <PhmapSeed seed>
+using Int128AggHashMap = phmap::flat_hash_map<int128_t, AggDataPtr, StdHashWithSeed<int128_t, seed>>;
+template <PhmapSeed seed>
 using DateAggHashMap = phmap::flat_hash_map<DateValue, AggDataPtr, StdHashWithSeed<DateValue, seed>>;
 template <PhmapSeed seed>
 using TimeStampAggHashMap = phmap::flat_hash_map<TimestampValue, AggDataPtr, StdHashWithSeed<TimestampValue, seed>>;
 template <PhmapSeed seed>
 using SliceAggHashMap = phmap::flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual>;
 
+// ==================
+// one level fixed size slice hash map
+template <PhmapSeed seed>
+using FixedSize8SliceAggHashMap = phmap::flat_hash_map<SliceKey8, AggDataPtr, FixedSizeSliceKeyHash<SliceKey8, seed>>;
+template <PhmapSeed seed>
+using FixedSize16SliceAggHashMap =
+        phmap::flat_hash_map<SliceKey16, AggDataPtr, FixedSizeSliceKeyHash<SliceKey16, seed>>;
+
+// =====================
+// two level agg hash map
 template <PhmapSeed seed>
 using Int32AggTwoLevelHashMap = phmap::parallel_flat_hash_map<int32_t, AggDataPtr, StdHashWithSeed<int32_t, seed>>;
 
@@ -43,12 +58,7 @@ using SliceAggTwoLevelHashMap =
         phmap::parallel_flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual,
                                       phmap::priv::Allocator<phmap::priv::Pair<const Slice, AggDataPtr>>, PHMAPN>;
 
-template <PhmapSeed seed>
-using FixedSize8SliceAggHashMap = phmap::flat_hash_map<SliceKey8, AggDataPtr, FixedSizeSliceKeyHash<SliceKey8, seed>>;
-template <PhmapSeed seed>
-using FixedSize16SliceAggHashMap =
-        phmap::flat_hash_map<SliceKey16, AggDataPtr, FixedSizeSliceKeyHash<SliceKey16, seed>>;
-
+// ==============================================================
 // TODO(kks): Remove redundant code for compute_agg_states method
 // handle one number hash key
 template <typename FieldType, typename HashMap>

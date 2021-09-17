@@ -13,6 +13,8 @@
 
 namespace starrocks::vectorized {
 
+// =====================
+// one level agg hash set
 template <PhmapSeed seed>
 using Int8AggHashSet = phmap::flat_hash_set<int8_t, StdHashWithSeed<int8_t, seed>>;
 template <PhmapSeed seed>
@@ -22,13 +24,24 @@ using Int32AggHashSet = phmap::flat_hash_set<int32_t, StdHashWithSeed<int32_t, s
 template <PhmapSeed seed>
 using Int64AggHashSet = phmap::flat_hash_set<int64_t, StdHashWithSeed<int64_t, seed>>;
 template <PhmapSeed seed>
+using Int128AggHashSet = phmap::flat_hash_set<int128_t, StdHashWithSeed<int128_t, seed>>;
+template <PhmapSeed seed>
 using DateAggHashSet = phmap::flat_hash_set<DateValue, StdHashWithSeed<DateValue, seed>>;
 template <PhmapSeed seed>
 using TimeStampAggHashSet = phmap::flat_hash_set<TimestampValue, StdHashWithSeed<TimestampValue, seed>>;
-
 template <PhmapSeed seed>
 using SliceAggHashSet =
         phmap::flat_hash_set<TSliceWithHash<seed>, THashOnSliceWithHash<seed>, TEqualOnSliceWithHash<seed>>;
+
+// ==================
+// one level fixed size slice hash set
+template <PhmapSeed seed>
+using FixedSize8SliceAggHashSet = phmap::flat_hash_set<SliceKey8, FixedSizeSliceKeyHash<SliceKey8, seed>>;
+template <PhmapSeed seed>
+using FixedSize16SliceAggHashSet = phmap::flat_hash_set<SliceKey16, FixedSizeSliceKeyHash<SliceKey16, seed>>;
+
+// =====================
+// two level agg hash set
 template <PhmapSeed seed>
 using Int32AggTwoLevelHashSet = phmap::parallel_flat_hash_set<int32_t, StdHashWithSeed<int32_t, seed>>;
 
@@ -37,11 +50,7 @@ using SliceAggTwoLevelHashSet =
         phmap::parallel_flat_hash_set<TSliceWithHash<seed>, THashOnSliceWithHash<seed>, TEqualOnSliceWithHash<seed>,
                                       phmap::priv::Allocator<Slice>, 4>;
 
-template <PhmapSeed seed>
-using FixedSize8SliceAggHashSet = phmap::flat_hash_set<SliceKey8, FixedSizeSliceKeyHash<SliceKey8, seed>>;
-template <PhmapSeed seed>
-using FixedSize16SliceAggHashSet = phmap::flat_hash_set<SliceKey16, FixedSizeSliceKeyHash<SliceKey16, seed>>;
-
+// ==============================================================
 // handle one number hash key
 template <typename FieldType, typename HashSet>
 struct AggHashSetOfOneNumberKey {
