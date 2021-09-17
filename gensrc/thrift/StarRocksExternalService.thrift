@@ -114,7 +114,7 @@ struct TScanCloseResult {
 }
 
 // scan service expose ability of scanning data ability to other compute system
-service TDorisExternalService {
+service TStarRocksExternalService {
     // starrocks will build  a scan context for this session, context_id returned if success
     TScanOpenResult open_scanner(1: TScanOpenParams params);
 

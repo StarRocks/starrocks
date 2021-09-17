@@ -24,7 +24,7 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "gen_cpp/DorisExternalService_types.h"
+#include "gen_cpp/StarRocksExternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "util/arrow/row_batch.h"

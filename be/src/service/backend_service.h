@@ -31,8 +31,8 @@
 #include "agent/agent_server.h"
 #include "common/status.h"
 #include "gen_cpp/BackendService.h"
-#include "gen_cpp/DorisExternalService_types.h"
-#include "gen_cpp/TDorisExternalService.h"
+#include "gen_cpp/StarRocksExternalService_types.h"
+#include "gen_cpp/TStarRocksExternalService.h"
 
 namespace starrocks {
 
