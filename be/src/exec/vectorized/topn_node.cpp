@@ -249,7 +249,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     auto sort_source_operator =
             std::make_shared<SortSourceOperatorFactory>(context->next_operator_id(), id(), std::move(chunks_sorter));
     // SourceSourceOperator's instance count must be 1
-    sort_source_operator->set_num_driver_instances(1);
+    sort_source_operator->set_degree_of_parallelism(1);
     operators_source_with_sort.emplace_back(std::move(sort_source_operator));
 
     // return to the following pipeline

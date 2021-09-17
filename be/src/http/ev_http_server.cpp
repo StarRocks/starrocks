@@ -139,7 +139,9 @@ Status EvHttpServer::_bind() {
         ss << "convert address failed, host=" << _host << ", port=" << _port;
         return Status::InternalError(ss.str());
     }
-    _server_fd = butil::tcp_listen(point, true);
+    // reuse_addr arg is removed in brpc 0.9.7 and use gflag instead.
+    // default reuse_addr is true and reuse_port is false.
+    _server_fd = butil::tcp_listen(point);
     if (_server_fd < 0) {
         char buf[64];
         std::stringstream ss;

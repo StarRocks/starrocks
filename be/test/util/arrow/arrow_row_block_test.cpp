@@ -29,6 +29,7 @@
 #define ARROW_UTIL_LOGGING_H
 #include <arrow/buffer.h>
 #include <arrow/json/api.h>
+#include <arrow/result.h>
 
 #include "common/compiler_util.h"
 DIAGNOSTIC_PUSH
@@ -61,7 +62,8 @@ static std::string test_str() {
 }
 
 static void MakeBuffer(const std::string& data, std::shared_ptr<arrow::Buffer>* out) {
-    arrow::AllocateBuffer(arrow::default_memory_pool(), data.size(), out);
+    auto buffer_res = arrow::AllocateBuffer(data.size(), arrow::default_memory_pool());
+    *out = std::move(buffer_res.ValueOrDie());
     std::copy(std::begin(data), std::end(data), (*out)->mutable_data());
 }
 
@@ -74,9 +76,9 @@ TEST_F(ArrowRowBlockTest, Normal) {
             arrow::field("c1", arrow::int64()),
     });
 
-    std::shared_ptr<arrow::RecordBatch> record_batch;
-    auto arrow_st = arrow::json::ParseOne(parse_opts, buffer, &record_batch);
+    auto arrow_st = arrow::json::ParseOne(parse_opts, buffer);
     ASSERT_TRUE(arrow_st.ok());
+    std::shared_ptr<arrow::RecordBatch> record_batch = arrow_st.ValueOrDie();
 
     std::shared_ptr<Schema> schema;
     auto starrocks_st = convert_to_starrocks_schema(*record_batch->schema(), &schema);

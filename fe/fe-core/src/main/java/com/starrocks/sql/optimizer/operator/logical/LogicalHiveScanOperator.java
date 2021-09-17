@@ -24,7 +24,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class LogicalHiveScanOperator extends LogicalScanOperator {
-    private Table.TableType tableType;
+    private final Table.TableType tableType;
     // id -> partition key
     private final Map<Long, PartitionKey> idToPartitionKey = Maps.newHashMap();
     private Collection<Long> selectedPartitionIds = Lists.newArrayList();

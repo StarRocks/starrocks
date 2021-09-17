@@ -127,6 +127,7 @@ public:
     bool check_version_exist(const Version& version) const;
     void list_versions(std::vector<Version>* versions) const;
 
+    // REQUIRE: `obtain_header_rdlock()`ed
     OLAPStatus capture_consistent_rowsets(const Version& spec_version, vector<RowsetSharedPtr>* rowsets) const;
     OLAPStatus capture_rs_readers(const Version& spec_version, vector<RowsetReaderSharedPtr>* rs_readers) const;
     OLAPStatus capture_rs_readers(const vector<Version>& version_path, vector<RowsetReaderSharedPtr>* rs_readers) const;

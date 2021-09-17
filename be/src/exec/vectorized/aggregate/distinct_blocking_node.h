@@ -10,10 +10,13 @@ namespace starrocks::vectorized {
 class DistinctBlockingNode final : public AggregateBaseNode {
 public:
     DistinctBlockingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-            : AggregateBaseNode(pool, tnode, descs) {
-        _aggregator->set_aggr_phase(AggrPhase2);
-    };
+            : AggregateBaseNode(pool, tnode, descs) {}
+
+    Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
+
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
 };
 } // namespace starrocks::vectorized

@@ -105,9 +105,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         static_cast<ExchangeNode*>(exch_node)->set_num_senders(num_senders);
     }
 
-    int32_t driver_instance_count = 1;
+    int32_t degree_of_parallelism = 1;
     if (request.query_options.__isset.query_threads) {
-        driver_instance_count = std::max<int32_t>(request.query_options.query_threads, driver_instance_count);
+        degree_of_parallelism = std::max<int32_t>(request.query_options.query_threads, degree_of_parallelism);
     }
 
     // pipeline scan mode
@@ -132,7 +132,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         morsel_queues.emplace(scan_node->id(), std::make_unique<MorselQueue>(std::move(morsels)));
     }
 
-    PipelineBuilderContext context(_fragment_ctx, driver_instance_count);
+    PipelineBuilderContext context(_fragment_ctx, degree_of_parallelism);
     PipelineBuilder builder(context);
     _fragment_ctx->set_pipelines(builder.build(*_fragment_ctx, plan));
     // Set up sink, if required
@@ -154,7 +154,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
-        const auto driver_instance_count = pipeline->source_operator_factory()->num_driver_instances();
+        const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
         const bool is_root = (n == num_pipelines - 1);
         // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
         // at present, only ScanOperator need a MorselQueue attached.
@@ -162,12 +162,12 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
             DCHECK(morsel_queues.count(source_id));
             auto& morsel_queue = morsel_queues[source_id];
-            DCHECK(driver_instance_count <= morsel_queue->num_morsels());
+            DCHECK(degree_of_parallelism <= morsel_queue->num_morsels());
             if (is_root) {
-                _fragment_ctx->set_num_root_drivers(driver_instance_count);
+                _fragment_ctx->set_num_root_drivers(degree_of_parallelism);
             }
-            for (auto i = 0; i < driver_instance_count; ++i) {
-                Operators&& operators = pipeline->create_operators(driver_instance_count, i);
+            for (auto i = 0; i < degree_of_parallelism; ++i) {
+                Operators&& operators = pipeline->create_operators(degree_of_parallelism, i);
                 DriverPtr driver =
                         std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, 0, is_root);
                 driver->set_morsel_queue(morsel_queue.get());
@@ -181,10 +181,10 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             }
         } else {
             if (is_root) {
-                _fragment_ctx->set_num_root_drivers(driver_instance_count);
+                _fragment_ctx->set_num_root_drivers(degree_of_parallelism);
             }
-            for (auto i = 0; i < driver_instance_count; ++i) {
-                auto&& operators = pipeline->create_operators(driver_instance_count, i);
+            for (auto i = 0; i < degree_of_parallelism; ++i) {
+                auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
                 DriverPtr driver =
                         std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, i, is_root);
                 drivers.emplace_back(driver);

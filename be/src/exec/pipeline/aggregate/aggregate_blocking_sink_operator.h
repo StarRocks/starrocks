@@ -9,7 +9,9 @@ namespace starrocks::pipeline {
 class AggregateBlockingSinkOperator : public Operator {
 public:
     AggregateBlockingSinkOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : Operator(id, "aggregate_blocking_sink_operator", plan_node_id), _aggregator(aggregator) {}
+            : Operator(id, "aggregate_blocking_sink", plan_node_id), _aggregator(aggregator) {
+        _aggregator->set_aggr_phase(AggrPhase2);
+    }
     ~AggregateBlockingSinkOperator() = default;
 
     bool has_output() const override { return false; }
@@ -25,7 +27,7 @@ public:
 private:
     // It is used to perform aggregation algorithms
     // shared by AggregateBlockingSourceOperator
-    AggregatorPtr _aggregator;
+    AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
     bool _is_finished = false;
 };
@@ -37,11 +39,11 @@ public:
 
     ~AggregateBlockingSinkOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateBlockingSinkOperator>(_id, _plan_node_id, _aggregator);
     }
 
 private:
-    AggregatorPtr _aggregator;
+    AggregatorPtr _aggregator = nullptr;
 };
 } // namespace starrocks::pipeline

@@ -404,6 +404,7 @@ public class FileSystemManager {
         String accessKey = properties.getOrDefault(FS_S3A_ACCESS_KEY, "");
         String secretKey = properties.getOrDefault(FS_S3A_SECRET_KEY, "");
         String endpoint = properties.getOrDefault(FS_S3A_ENDPOINT, "");
+        String disableCache = properties.getOrDefault(FS_S3A_IMPL_DISABLE_CACHE, "true");
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will cache both.
         String host = S3A_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
@@ -430,7 +431,7 @@ public class FileSystemManager {
                 conf.set(FS_S3A_ACCESS_KEY, accessKey);
                 conf.set(FS_S3A_SECRET_KEY, secretKey);
                 conf.set(FS_S3A_ENDPOINT, endpoint);
-                conf.set(FS_S3A_IMPL_DISABLE_CACHE, "true");
+                conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCache);
                 FileSystem s3AFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(s3AFileSystem);
             }
@@ -458,6 +459,7 @@ public class FileSystemManager {
         String accessKey = properties.getOrDefault(FS_OSS_ACCESS_KEY, "");
         String secretKey = properties.getOrDefault(FS_OSS_SECRET_KEY, "");
         String endpoint = properties.getOrDefault(FS_OSS_ENDPOINT, "");
+        String disableCache = properties.getOrDefault(FS_OSS_IMPL_DISABLE_CACHE, "true");
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will cache both.
         String host = OSS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
@@ -485,7 +487,7 @@ public class FileSystemManager {
                 conf.set(FS_OSS_SECRET_KEY, secretKey);
                 conf.set(FS_OSS_ENDPOINT, endpoint);
                 conf.set(FS_OSS_IMPL, "org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem");
-                conf.set(FS_OSS_IMPL_DISABLE_CACHE, "true");
+                conf.set(FS_OSS_IMPL_DISABLE_CACHE, disableCache);
                 FileSystem ossFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(ossFileSystem);
             }
@@ -507,6 +509,7 @@ public class FileSystemManager {
         String accessKey = properties.getOrDefault(FS_COS_ACCESS_KEY, "");
         String secretKey = properties.getOrDefault(FS_COS_SECRET_KEY, "");
         String endpoint = properties.getOrDefault(FS_COS_ENDPOINT, "");
+        String disableCache = properties.getOrDefault(FS_COS_IMPL_DISABLE_CACHE, "true");
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will cache both.
         String host = COS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
@@ -534,7 +537,7 @@ public class FileSystemManager {
                 conf.set(FS_COS_SECRET_KEY, secretKey);
                 conf.set(FS_COS_ENDPOINT, endpoint);
                 conf.set(FS_COS_IMPL, "org.apache.hadoop.fs.CosFileSystem");
-                conf.set(FS_COS_IMPL_DISABLE_CACHE, "true");
+                conf.set(FS_COS_IMPL_DISABLE_CACHE, disableCache);
                 FileSystem cosFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(cosFileSystem);
             }
