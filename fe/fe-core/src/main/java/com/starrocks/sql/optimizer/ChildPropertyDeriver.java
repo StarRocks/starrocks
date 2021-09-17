@@ -595,9 +595,14 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
         boolean requiredLocalColumnsFromLeft = leftChildColumns.contains(requiredLocalColumns);
         boolean requiredLocalColumnsFromRight = rightChildColumns.contains(requiredLocalColumns);
+        boolean isLeftOrFullJoin = node.getJoinType().isLeftOuterJoin() || node.getJoinType().isFullOuterJoin();
+        boolean isRightOrFullJoin = node.getJoinType().isRightOuterJoin() || node.getJoinType().isFullOuterJoin();
 
-        // Not support local shuffle column appear on both sides at the same time
-        if (requiredLocalColumnsFromLeft == requiredLocalColumnsFromRight) {
+        // 1. Not support local shuffle column appear on both sides at the same time
+        // 2. Left outer join will cause right table produce NULL in different node, also right outer join
+        if ((requiredLocalColumnsFromLeft == requiredLocalColumnsFromRight) ||
+                (requiredLocalColumnsFromLeft && isRightOrFullJoin) ||
+                (requiredLocalColumnsFromRight && isLeftOrFullJoin)) {
             outputInputProps.clear();
             return visitOperator(node, context);
         }

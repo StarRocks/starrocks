@@ -228,7 +228,7 @@ public class StatisticExecutor {
             parsedStmt = parseSQL(sql.toString(), context);
             ((QueryStmt) parsedStmt).getDbs(context, dbs);
         } catch (Exception e) {
-            LOG.warn("Parse statistic table query fail.", e);
+            LOG.warn("Parse statistic table query fail. SQL: " + sql, e);
             throw e;
         }
 
