@@ -1064,11 +1064,12 @@ public:
         case BITMAP:
             switch (_type) {
             case EMPTY:
-                _bitmap = rhs._bitmap;
+                // TODO: Reduce memory copy.
+                _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
                 _type = BITMAP;
                 break;
             case SINGLE:
-                _bitmap = rhs._bitmap;
+                _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
                 _bitmap->add(_sv);
                 _type = BITMAP;
                 break;
@@ -1076,7 +1077,7 @@ public:
                 *_bitmap |= *rhs._bitmap;
                 break;
             case SET:
-                _bitmap = rhs._bitmap;
+                _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
                 for (const auto& x : _set) {
                     _bitmap->add(x);
                 }
@@ -1375,24 +1376,23 @@ public:
         case BITMAP:
             switch (_type) {
             case EMPTY:
-                _bitmap = rhs._bitmap;
+                _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
                 _type = BITMAP;
                 break;
             case SINGLE:
-                if (rhs._bitmap->contains(_sv)) {
-                    rhs._bitmap->remove(_sv);
+                _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
+                if (_bitmap->contains(_sv)) {
+                    _bitmap->remove(_sv);
                 } else {
-                    rhs._bitmap->add(_sv);
+                    _bitmap->add(_sv);
                 }
-                _bitmap = rhs._bitmap;
                 _type = BITMAP;
                 break;
             case BITMAP: {
-                BitmapValue lhs_bitmap(*this);
+                BitmapValue rhs_bitmap(rhs);
+                *rhs_bitmap._bitmap -= *_bitmap;
                 *_bitmap -= *rhs._bitmap;
-                *rhs._bitmap -= *lhs_bitmap._bitmap;
-
-                *_bitmap |= *rhs._bitmap;
+                *_bitmap |= *rhs_bitmap._bitmap;
                 break;
             }
             case SET: {
@@ -1402,8 +1402,8 @@ public:
                 get_only_value_to_set_and_common_value_to_bitmap(_set, *rhs._bitmap, &set, &bitmap);
 
                 // obtain values only in right bitmap
-                *rhs._bitmap -= bitmap;
-                _bitmap = rhs._bitmap;
+                _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
+                *_bitmap -= bitmap;
 
                 // collect all values that only in left set or only in right bitmap.
                 for (const auto& x : set) {
