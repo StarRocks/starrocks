@@ -13,6 +13,8 @@
 
 namespace starrocks::vectorized {
 
+// =====================
+// one level agg hash set
 template <PhmapSeed seed>
 using Int8AggHashSet = phmap::flat_hash_set<int8_t, StdHashWithSeed<int8_t, seed>>;
 template <PhmapSeed seed>
@@ -22,13 +24,24 @@ using Int32AggHashSet = phmap::flat_hash_set<int32_t, StdHashWithSeed<int32_t, s
 template <PhmapSeed seed>
 using Int64AggHashSet = phmap::flat_hash_set<int64_t, StdHashWithSeed<int64_t, seed>>;
 template <PhmapSeed seed>
+using Int128AggHashSet = phmap::flat_hash_set<int128_t, StdHashWithSeed<int128_t, seed>>;
+template <PhmapSeed seed>
 using DateAggHashSet = phmap::flat_hash_set<DateValue, StdHashWithSeed<DateValue, seed>>;
 template <PhmapSeed seed>
 using TimeStampAggHashSet = phmap::flat_hash_set<TimestampValue, StdHashWithSeed<TimestampValue, seed>>;
-
 template <PhmapSeed seed>
 using SliceAggHashSet =
         phmap::flat_hash_set<TSliceWithHash<seed>, THashOnSliceWithHash<seed>, TEqualOnSliceWithHash<seed>>;
+
+// ==================
+// one level fixed size slice hash set
+template <PhmapSeed seed>
+using FixedSize8SliceAggHashSet = phmap::flat_hash_set<SliceKey8, FixedSizeSliceKeyHash<SliceKey8, seed>>;
+template <PhmapSeed seed>
+using FixedSize16SliceAggHashSet = phmap::flat_hash_set<SliceKey16, FixedSizeSliceKeyHash<SliceKey16, seed>>;
+
+// =====================
+// two level agg hash set
 template <PhmapSeed seed>
 using Int32AggTwoLevelHashSet = phmap::parallel_flat_hash_set<int32_t, StdHashWithSeed<int32_t, seed>>;
 
@@ -37,6 +50,7 @@ using SliceAggTwoLevelHashSet =
         phmap::parallel_flat_hash_set<TSliceWithHash<seed>, THashOnSliceWithHash<seed>, TEqualOnSliceWithHash<seed>,
                                       phmap::priv::Allocator<Slice>, 4>;
 
+// ==============================================================
 // handle one number hash key
 template <typename FieldType, typename HashSet>
 struct AggHashSetOfOneNumberKey {
@@ -398,6 +412,120 @@ struct AggHashSetOfSerializedKey {
     std::unique_ptr<MemPool> _mem_pool;
     uint8_t* _buffer;
     ResultVector results;
+};
+
+template <typename HashSet>
+struct AggHashSetOfSerializedKeyFixedSize {
+    using Iterator = typename HashSet::iterator;
+    using KeyType = typename HashSet::key_type;
+    using FixedSizeSliceKey = typename HashSet::key_type;
+    using ResultVector = typename std::vector<FixedSizeSliceKey>;
+    HashSet hash_set;
+
+    bool has_null_column = false;
+    int fixed_byte_size = -1; // unset state
+    static constexpr size_t max_fixed_size = sizeof(FixedSizeSliceKey);
+
+    AggHashSetOfSerializedKeyFixedSize()
+            : _tracker(std::make_unique<MemTracker>()),
+              _mem_pool(std::make_unique<MemPool>(_tracker.get())),
+              buffer(_mem_pool->allocate(max_fixed_size * config::vector_chunk_size)) {
+        memset(buffer, 0x0, max_fixed_size * config::vector_chunk_size);
+    }
+
+    void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
+        DCHECK(fixed_byte_size != -1);
+        slice_sizes.assign(chunk_size, 0);
+
+        if (has_null_column) {
+            memset(buffer, 0x0, max_fixed_size * chunk_size);
+        }
+
+        for (const auto& key_column : key_columns) {
+            key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_fixed_size);
+        }
+
+        FixedSizeSliceKey key;
+
+        if (!has_null_column) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
+                hash_set.insert(key);
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
+                key.u.size = slice_sizes[i];
+                hash_set.insert(key);
+            }
+        }
+    }
+
+    // Elements queried in HashSet will be added to HashSet
+    // elements that cannot be queried are not processed,
+    // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
+    void build_set(size_t chunk_size, const Columns& key_columns, std::vector<uint8_t>* not_founds) {
+        DCHECK(fixed_byte_size != -1);
+        slice_sizes.assign(chunk_size, 0);
+
+        if (has_null_column) {
+            memset(buffer, 0x0, max_fixed_size * chunk_size);
+        }
+
+        for (const auto& key_column : key_columns) {
+            key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_fixed_size);
+        }
+
+        not_founds->assign(chunk_size, 0);
+
+        FixedSizeSliceKey key;
+
+        if (!has_null_column) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
+                (*not_founds)[i] = !hash_set.contains(key);
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
+                key.u.size = slice_sizes[i];
+                (*not_founds)[i] = !hash_set.contains(key);
+            }
+        }
+    }
+
+    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, int32_t batch_size) {
+        DCHECK(fixed_byte_size != -1);
+        tmp_slices.reserve(batch_size);
+
+        if (!has_null_column) {
+            for (int i = 0; i < batch_size; i++) {
+                FixedSizeSliceKey& key = keys[i];
+                tmp_slices[i].data = key.u.data;
+                tmp_slices[i].size = fixed_byte_size;
+            }
+        } else {
+            for (int i = 0; i < batch_size; i++) {
+                FixedSizeSliceKey& key = keys[i];
+                tmp_slices[i].data = key.u.data;
+                tmp_slices[i].size = key.u.size;
+            }
+        }
+
+        // deserialize by column
+        for (const auto& key_column : key_columns) {
+            key_column->deserialize_and_append_batch(tmp_slices, batch_size);
+        }
+    }
+
+    static constexpr bool has_single_null_key = false;
+
+    Buffer<uint32_t> slice_sizes;
+    std::unique_ptr<MemTracker> _tracker;
+    std::unique_ptr<MemPool> _mem_pool;
+    uint8_t* buffer;
+    ResultVector results;
+    std::vector<Slice> tmp_slices;
 };
 
 } // namespace starrocks::vectorized

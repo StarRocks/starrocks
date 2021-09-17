@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <nmmintrin.h>
+
 #include "util/hash_util.hpp"
 #include "util/slice.h"
 #include "util/unaligned_access.h"
@@ -132,12 +134,14 @@ static uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
     return hash;
 }
 
+// TODO: 0x811C9DC5 is not prime number
+static const uint32_t CRC_HASH_SEED1 = 0x811C9DC5;
+static const uint32_t CRC_HASH_SEED2 = 0x811C9DD7;
+
 class SliceHash {
 public:
-    // TODO: 0x811C9DC5 is not prime number
-    static const uint32_t CRC_SEED = 0x811C9DC5;
     std::size_t operator()(const Slice& slice) const {
-        return crc_hash_64(slice.data, static_cast<int32_t>(slice.size), CRC_SEED);
+        return crc_hash_64(slice.data, static_cast<int32_t>(slice.size), CRC_HASH_SEED1);
     }
 };
 
@@ -150,18 +154,16 @@ public:
 template <>
 class SliceHashWithSeed<PhmapSeed1> {
 public:
-    static const uint32_t CRC_SEED = 0x811C9DC5;
     std::size_t operator()(const Slice& slice) const {
-        return crc_hash_64(slice.data, static_cast<int32_t>(slice.size), CRC_SEED);
+        return crc_hash_64(slice.data, static_cast<int32_t>(slice.size), CRC_HASH_SEED1);
     }
 };
 
 template <>
 class SliceHashWithSeed<PhmapSeed2> {
 public:
-    static const uint32_t CRC_SEED = 0x811c9dd7;
     std::size_t operator()(const Slice& slice) const {
-        return crc_hash_64(slice.data, static_cast<int32_t>(slice.size), CRC_SEED);
+        return crc_hash_64(slice.data, static_cast<int32_t>(slice.size), CRC_HASH_SEED2);
     }
 };
 
@@ -218,5 +220,15 @@ class StdHashWithSeed {
 public:
     std::size_t operator()(T value) const { return phmap_mix_with_seed<sizeof(size_t), seed>()(std::hash<T>()(value)); }
 };
+
+inline uint64_t crc_hash_uint64(uint64_t value, uint64_t seed) {
+    return _mm_crc32_u64(seed, value);
+}
+
+inline uint64_t crc_hash_uint128(uint64_t value0, uint64_t value1, uint64_t seed) {
+    uint64_t hash = _mm_crc32_u64(seed, value0);
+    hash = _mm_crc32_u64(hash, value1);
+    return hash;
+}
 
 } // namespace starrocks::vectorized
