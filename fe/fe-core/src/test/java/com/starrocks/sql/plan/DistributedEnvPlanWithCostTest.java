@@ -306,9 +306,9 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().disableJoinReorder();
 
         // Left outer join
-        String sql = "select distinct join1.id from join1 left join [shuffle] join2 on join1.id = join2.id;";
+        String sql = "select distinct join1.id from join1 left join join2 on join1.id = join2.id;";
         String plan = getFragmentPlan(sql);
-        checkTwoPhaseAgg(plan);
+        checkOnePhaseAgg(plan);
 
         sql = "select distinct join2.id from join1 left join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
@@ -341,9 +341,9 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         plan = getFragmentPlan(sql);
         checkTwoPhaseAgg(plan);
 
-        sql = "select distinct join1.id from join1 join [shuffle] join2 on join1.id = join2.id;";
+        sql = "select distinct join1.id from join1 join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
-        checkTwoPhaseAgg(plan);
+        checkOnePhaseAgg(plan);
 
         // cross join
         sql = "select distinct join2.id from join1 join join2 on join1.id = join2.id, baseall;";
