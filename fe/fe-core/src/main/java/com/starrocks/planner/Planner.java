@@ -43,8 +43,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import static com.starrocks.planner.AdapterNode.insertAdapterNodeToFragment;
-
 /**
  * The planner is responsible for turning parse trees into plan fragments that can be shipped off to backends for
  * execution.
@@ -207,17 +205,6 @@ public class Planner {
         Collections.reverse(fragments);
 
         setOutfileSink(queryStmt);
-
-        // vectorized engine selector
-        if (analyzer.getContext().getSessionVariable().useVectorizedEngineEnable()) {
-            if (statement instanceof InsertStmt) {
-                if (analyzer.getContext().getSessionVariable().isVectorizedInsertEnable()) {
-                    insertAdapterNodeToFragment(fragments, plannerContext);
-                }
-            } else {
-                insertAdapterNodeToFragment(fragments, plannerContext);
-            }
-        }
 
         if (queryStmt instanceof SelectStmt) {
             SelectStmt selectStmt = (SelectStmt) queryStmt;

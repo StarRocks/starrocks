@@ -315,7 +315,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(table1, 10000);
         OlapTable table2 = (OlapTable) catalog.getDb("default_cluster:test").getTable("test_all_type");
         setTableStatistics(table2, 5000);
-        connectContext.getSessionVariable().setPreferJoinMethod("shuffle");
         String sql = "SELECT v2,t1d from t0 join test_all_type on t0.v2 = test_all_type.t1d ;";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  4:HASH JOIN\n"

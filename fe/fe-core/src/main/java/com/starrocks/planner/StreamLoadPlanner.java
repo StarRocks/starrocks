@@ -36,7 +36,6 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -125,20 +124,9 @@ public class StreamLoadPlanner {
         // create scan node
         StreamLoadScanNode scanNode =
                 new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc, destTable, streamLoadTask);
-        boolean useVectorizedLoad = Config.vectorized_load_enable;
-        if (useVectorizedLoad) {
-            scanNode.setUseVectorizedLoad(true);
-            scanNode.init(analyzer);
-            scanNode.finalize(analyzer);
-        }
-        if (useVectorizedLoad && scanNode.isVectorized()) {
-            scanNode.setUseVectorized(true);
-        } else {
-            scanNode.setUseVectorizedLoad(false);
-            scanNode.init(analyzer);
-            scanNode.finalize(analyzer);
-            scanNode.setUseVectorized(false);
-        }
+        scanNode.setUseVectorizedLoad(true);
+        scanNode.init(analyzer);
+        scanNode.finalize(analyzer);
 
         LOG.info("use vectorized load: {}, load job id: {}", scanNode.isUseVectorized(), loadId);
         descTable.computeMemLayout();
@@ -178,7 +166,6 @@ public class StreamLoadPlanner {
         execParams.setNum_senders(1);
         perNodeScanRange.put(scanNode.getId().asInt(), scanRangeParams);
         execParams.setPer_node_scan_ranges(perNodeScanRange);
-        execParams.setUse_vectorized(fragment.getPlanRoot().isUseVectorized());
         params.setParams(execParams);
         TQueryOptions queryOptions = new TQueryOptions();
         queryOptions.setQuery_type(TQueryType.LOAD);

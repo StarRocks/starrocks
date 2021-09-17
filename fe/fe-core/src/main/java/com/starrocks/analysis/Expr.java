@@ -292,7 +292,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // Needed for properly capturing expr precedences in the SQL string.
     protected boolean printSqlInParens = false;
 
-    protected boolean useVectorized = false;
+    protected boolean useVectorized = true;
 
     protected Expr() {
         super();

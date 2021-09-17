@@ -59,7 +59,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.system.Backend;
@@ -221,12 +220,6 @@ public class OlapScanNode extends ScanNode {
                 situation = "Connection context is null";
                 update = true;
                 break CHECK;
-            }
-            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-            if (sessionVariable.getTestMaterializedView()) {
-                throw new AnalysisException("The old scan range info is different from the new one when "
-                        + "test_materialized_view is true. "
-                        + scanRangeInfo);
             }
             situation = "The key type of table is aggregated.";
             update = false;
@@ -814,14 +807,6 @@ public class OlapScanNode extends ScanNode {
         }
 
         return true;
-    }
-
-    @Override
-    public void setUseVectorized(boolean flag) {
-        this.useVectorized = flag;
-        for (Expr expr : conjuncts) {
-            expr.setUseVectorized(flag);
-        }
     }
 
     @Override

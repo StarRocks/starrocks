@@ -568,18 +568,4 @@ public class HdfsScanNode extends ScanNode {
         }
         return true;
     }
-
-    @Override
-    public void setUseVectorized(boolean flag) {
-        this.useVectorized = flag;
-        for (Expr expr : noEvalPartitionConjuncts) {
-            expr.setUseVectorized(flag);
-        }
-        for (Expr expr : nonPartitionConjuncts) {
-            expr.setUseVectorized(flag);
-        }
-        for (Expr expr : minMaxConjuncts) {
-            expr.setUseVectorized(flag);
-        }
-    }
 }

@@ -499,23 +499,6 @@ public class HashJoinNode extends PlanNode {
         return true;
     }
 
-    @Override
-    public void setUseVectorized(boolean flag) {
-        this.useVectorized = flag;
-        for (Expr expr : conjuncts) {
-            expr.setUseVectorized(flag);
-        }
-        for (Expr expr : eqJoinConjuncts) {
-            expr.setUseVectorized(flag);
-        }
-        for (Expr expr : otherJoinConjuncts) {
-            expr.setUseVectorized(flag);
-        }
-        for (PlanNode node : getChildren()) {
-            node.setUseVectorized(flag);
-        }
-    }
-
     public enum DistributionMode {
         NONE("NONE"),
         BROADCAST("BROADCAST"),
