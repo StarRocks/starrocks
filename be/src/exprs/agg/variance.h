@@ -89,8 +89,8 @@ public:
         DCHECK(column->is_binary());
         Slice slice = column->get(row_num).get_slice();
 
-        TResult mean = *reinterpret_cast<TResult*>(slice.data);
-        TResult m2 = *reinterpret_cast<TResult*>(slice.data + sizeof(TResult));
+        TResult mean = unaligned_load<TResult>(slice.data);
+        TResult m2 = unaligned_load<TResult>(slice.data + sizeof(TResult));
         int64_t count = *reinterpret_cast<int64_t*>(slice.data + sizeof(TResult) * 2);
 
         TResult delta = this->data(state).mean - mean;
