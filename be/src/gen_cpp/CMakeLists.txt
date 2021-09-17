@@ -30,9 +30,9 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/BackendService.cpp
     ${GEN_CPP_DIR}/BackendService_types.cpp
     ${GEN_CPP_DIR}/FileBrokerService_types.cpp
-    ${GEN_CPP_DIR}/TDorisExternalService.cpp
-    ${GEN_CPP_DIR}/DorisExternalService_types.cpp
-    ${GEN_CPP_DIR}/DorisExternalService_constants.cpp
+    ${GEN_CPP_DIR}/TStarrocksExternalService.cpp
+    ${GEN_CPP_DIR}/StarrocksExternalService_types.cpp
+    ${GEN_CPP_DIR}/StarrocksExternalService_constants.cpp
     ${GEN_CPP_DIR}/QueryPlanExtra_types.cpp
     ${GEN_CPP_DIR}/QueryPlanExtra_constants.cpp
     ${GEN_CPP_DIR}/TFileBrokerService.cpp
@@ -88,7 +88,7 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/opcode/builtin_functions.cpp
 )
 
-# keep everything in one library, the object files reference 
+# keep everything in one library, the object files reference
 # each other
 add_library(StarRocksGen STATIC ${SRC_FILES})
 

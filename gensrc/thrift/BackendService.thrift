@@ -27,7 +27,7 @@ include "Types.thrift"
 include "PlanNodes.thrift"
 include "AgentService.thrift"
 include "InternalService.thrift"
-include "DorisExternalService.thrift"
+include "StarrocksExternalService.thrift"
 
 struct TExportTaskRequest {
     1: required InternalService.TExecPlanFragmentParams params
@@ -130,12 +130,12 @@ service BackendService {
     Status.TStatus submit_routine_load_task(1:list<TRoutineLoadTask> tasks);
 
     // starrocks will build  a scan context for this session, context_id returned if success
-    DorisExternalService.TScanOpenResult open_scanner(1: DorisExternalService.TScanOpenParams params);
+    StarrocksExternalService.TScanOpenResult open_scanner(1: StarrocksExternalService.TScanOpenParams params);
 
     // return the batch_size of data
-    DorisExternalService.TScanBatchResult get_next(1: DorisExternalService.TScanNextBatchParams params);
+    StarrocksExternalService.TScanBatchResult get_next(1: StarrocksExternalService.TScanNextBatchParams params);
 
     // release the context resource associated with the context_id
-    DorisExternalService.TScanCloseResult close_scanner(1: DorisExternalService.TScanCloseParams params);
+    StarrocksExternalService.TScanCloseResult close_scanner(1: StarrocksExternalService.TScanCloseParams params);
 
 }
