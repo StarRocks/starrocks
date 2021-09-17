@@ -425,10 +425,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
 }
 
 Status Expr::create_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr) {
-    if (texpr_node.use_vectorized) {
-        return create_vectorized_expr(pool, texpr_node, expr);
-    }
-    return Status::InternalError("Don't support old query engine any more");
+    return create_vectorized_expr(pool, texpr_node, expr);
 }
 
 struct MemLayoutData {
