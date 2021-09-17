@@ -131,6 +131,8 @@ public class Optimizer {
         if (!connectContext.getSessionVariable().isDisableJoinReorder()) {
             if (Utils.countInnerJoinNodeSize(tree) >
                     connectContext.getSessionVariable().getCboMaxReorderNodeUseExhaustive()) {
+                //If there is no statistical information, the DP and greedy reorder algorithm are disabled,
+                //and the query plan degenerates to the left deep tree
                 if (Utils.hasUnknownColumnsStats(tree) && !FeConstants.runningUnitTest) {
                     connectContext.getSessionVariable().disableDPJoinReorder();
                     connectContext.getSessionVariable().disableGreedyJoinReorder();

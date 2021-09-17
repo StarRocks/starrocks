@@ -328,7 +328,7 @@ public class Utils {
 
             List<ColumnStatistic> columnStatisticList =
                     Catalog.getCurrentStatisticStorage().getColumnStatistics(scanOperator.getTable(), colNames);
-            return columnStatisticList.stream().anyMatch(c -> c.isUnknown() || c.isUnknownValue());
+            return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
         }
 
         return root.getInputs().stream().anyMatch(Utils::hasUnknownColumnsStats);
