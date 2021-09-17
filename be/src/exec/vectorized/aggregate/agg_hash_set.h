@@ -413,9 +413,8 @@ struct AggHashSetOfSerializedKeyFixedSize {
     using ResultVector = typename std::vector<FixedSizeSliceKey>;
     HashSet hash_set;
 
-    // 0 means slice key size is varied.
-    // -1 means slice key size is unset
-    int real_fixed_size = -1;
+    bool has_null_column = false;
+    int fixed_byte_size = -1; // unset state
     static constexpr size_t max_fixed_size = sizeof(FixedSizeSliceKey);
 
     AggHashSetOfSerializedKeyFixedSize()
@@ -426,10 +425,10 @@ struct AggHashSetOfSerializedKeyFixedSize {
     }
 
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
-        DCHECK(real_fixed_size != -1);
+        DCHECK(fixed_byte_size != -1);
         slice_sizes.assign(chunk_size, 0);
 
-        if (real_fixed_size == 0) {
+        if (has_null_column) {
             memset(buffer, 0x0, max_fixed_size * chunk_size);
         }
 
@@ -439,7 +438,7 @@ struct AggHashSetOfSerializedKeyFixedSize {
 
         FixedSizeSliceKey key;
 
-        if (real_fixed_size != 0) {
+        if (!has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
                 hash_set.insert(key);
@@ -457,10 +456,10 @@ struct AggHashSetOfSerializedKeyFixedSize {
     // elements that cannot be queried are not processed,
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     void build_set(size_t chunk_size, const Columns& key_columns, std::vector<uint8_t>* not_founds) {
-        DCHECK(real_fixed_size != -1);
+        DCHECK(fixed_byte_size != -1);
         slice_sizes.assign(chunk_size, 0);
 
-        if (real_fixed_size == 0) {
+        if (has_null_column) {
             memset(buffer, 0x0, max_fixed_size * chunk_size);
         }
 
@@ -472,7 +471,7 @@ struct AggHashSetOfSerializedKeyFixedSize {
 
         FixedSizeSliceKey key;
 
-        if (real_fixed_size != 0) {
+        if (!has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
                 (*not_founds)[i] = !hash_set.contains(key);
@@ -487,14 +486,14 @@ struct AggHashSetOfSerializedKeyFixedSize {
     }
 
     void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, int32_t batch_size) {
-        DCHECK(real_fixed_size != -1);
+        DCHECK(fixed_byte_size != -1);
         tmp_slices.reserve(batch_size);
 
-        if (real_fixed_size != 0) {
+        if (!has_null_column) {
             for (int i = 0; i < batch_size; i++) {
                 FixedSizeSliceKey& key = keys[i];
                 tmp_slices[i].data = key.u.data;
-                tmp_slices[i].size = real_fixed_size;
+                tmp_slices[i].size = fixed_byte_size;
             }
         } else {
             for (int i = 0; i < batch_size; i++) {

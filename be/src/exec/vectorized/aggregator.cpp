@@ -605,6 +605,43 @@ void Aggregator::_evaluate_agg_fn_exprs(vectorized::Chunk* chunk) {
     }
 }
 
+// note(yan): in types.h and primitive_type.h there are similiar functions,
+// but they are for vectorized and non-vectorized version both
+// but here we just need to consider vectorized version.
+#define RETURN_PTYPE_BYTE_SIZE(TYPE, SIZE)                                           \
+    case TYPE:                                                                       \
+        static_assert(sizeof(vectorized::RunTimeTypeTraits<TYPE>::CppType) == SIZE); \
+        return SIZE;
+
+inline int get_byte_size_of_primitive_type(PrimitiveType type) {
+    switch (type) {
+        RETURN_PTYPE_BYTE_SIZE(TYPE_NULL, 1);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_BOOLEAN, 1);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_TINYINT, 1);
+
+        RETURN_PTYPE_BYTE_SIZE(TYPE_SMALLINT, 2);
+
+        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMAL32, 4);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_DATE, 4);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_INT, 4);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_FLOAT, 4);
+
+        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMAL64, 8);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_BIGINT, 8);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_TIME, 8);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_DATETIME, 8);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_DOUBLE, 8);
+
+        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMAL128, 16);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_LARGEINT, 16);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMALV2, 16);
+    default:
+        return 0;
+    }
+}
+
+#undef RETURN_PTYPE_BYTE_SIZE
+
 bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs,
                                  std::vector<GroupByColumnTypes>& group_by_types, size_t* max_size, bool* has_null) {
     size_t size = 0;
@@ -617,7 +654,7 @@ bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs,
             size += 1; // 1 bytes for  null flag.
         }
         PrimitiveType ptype = ctx->root()->type().type;
-        size_t byte_size = get_byte_size(ptype);
+        size_t byte_size = get_byte_size_of_primitive_type(ptype);
         if (byte_size == 0) return false;
         size += byte_size;
     }
@@ -744,22 +781,22 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
         }
     }
 
-    int real_fixed_size = 0;
+    bool has_null_column = false;
+    int fixed_byte_size = 0;
     // this optimization don't need to be limited to multi-column group by.
     // single column like float/double/decimal/largeint could also be applied to.
     if (type == HashVariantType::Type::phase1_slice || type == HashVariantType::Type::phase2_slice) {
         size_t max_size = 0;
-        bool has_null = false;
-        if (is_group_columns_fixed_size(_group_by_expr_ctxs, _group_by_types, &max_size, &has_null)) {
-            if (max_size < 8 || (!has_null && max_size == 8)) {
+        if (is_group_columns_fixed_size(_group_by_expr_ctxs, _group_by_types, &max_size, &has_null_column)) {
+            if (max_size < 8 || (!has_null_column && max_size == 8)) {
                 type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_fx8
                                                  : HashVariantType::Type::phase2_slice_fx8;
-            } else if (max_size < 16 || (!has_null && max_size == 16)) {
+            } else if (max_size < 16 || (!has_null_column && max_size == 16)) {
                 type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_fx16
                                                  : HashVariantType::Type::phase2_slice_fx16;
             }
-            if (!has_null) {
-                real_fixed_size = max_size;
+            if (!has_null_column) {
+                fixed_byte_size = max_size;
             }
         }
     }
@@ -769,7 +806,8 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
 
 #define SET_FIXED_SLICE_HASH_MAP_FIELD(TYPE)                  \
     if (type == HashVariantType::Type::TYPE) {                \
-        hash_variant.TYPE->real_fixed_size = real_fixed_size; \
+        hash_variant.TYPE->has_null_column = has_null_column; \
+        hash_variant.TYPE->fixed_byte_size = fixed_byte_size; \
     }
     SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx8);
     SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx16);
