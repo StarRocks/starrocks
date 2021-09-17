@@ -60,8 +60,6 @@ Status TabletsChannel::open(const PTabletWriterOpenRequest& params) {
         // Normal case, already open by other sender
         return Status::OK();
     }
-    LOG(INFO) << "Opening tablets channel=" << _key << " tablets num=" << params.tablets().size()
-              << " timeout=" << params.load_channel_timeout_s() << " vectorized=" << params.is_vectorized();
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = new OlapTableSchemaParam();
@@ -253,7 +251,6 @@ Status TabletsChannel::close(int sender_id, bool* finished,
             *finished = (_num_remaining_senders == 0);
             return _close_status;
         }
-        LOG(INFO) << "Closing tablets channel=" << _key << " sender id=" << sender_id;
         for (auto pid : partition_ids) {
             _partition_ids.emplace(pid);
         }
