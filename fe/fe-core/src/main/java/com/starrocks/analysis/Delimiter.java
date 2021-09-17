@@ -102,17 +102,10 @@ public class Delimiter {
      */
     private static int parseHexString(String originStr, StringWriter writer, int offset) throws AnalysisException {
         if (offset + 4 > originStr.length()) {
-            writer.append(originStr, offset, offset + originStr.length());
+            writer.append(originStr, offset, originStr.length());
             return originStr.length();
         }
         String hexStr = originStr.substring(offset + 2, offset + 4);
-        // check hex str
-        if (hexStr.isEmpty()) {
-            throw new AnalysisException("Invalid delimiter '" + originStr + ": empty hex string");
-        }
-        if (hexStr.length() % 2 != 0) {
-            throw new AnalysisException("Invalid delimiter '" + originStr + ": hex length must be a even number");
-        }
         for (char hexChar : hexStr.toUpperCase().toCharArray()) {
             if (HEX_STRING.indexOf(hexChar) == -1) {
                 throw new AnalysisException("Invalid delimiter '" + originStr + "': invalid hex format");
