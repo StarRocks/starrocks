@@ -8,7 +8,7 @@
 
 SQL语句在StarRocks中的生命周期可以分为查询解析(Query Parsing)、规划(Query Plan)、执行(Query Execution)三个阶段。对于StarRocks而言，查询解析一般不会成为瓶颈，因为分析型需求的QPS普遍不高。
 
-决定StarRocks中查询性能的关键就在于查询规划(Query Plan)和查询执行(Query Execution)，二者的关系可以用一句户描述：Query Plan负责组织算子(Join/Order/Aggregation)之间的关系，Query Exectuion负责执行具体算子。
+决定StarRocks中查询性能的关键就在于查询规划(Query Plan)和查询执行(Query Execution)，二者的关系可以用一句话描述：Query Plan负责组织算子(Join/Order/Aggregation)之间的关系，Query Exectuion负责执行具体算子。
 
 Query Plan可以从宏观的角度提供给DBA一个视角，获取Query执行的相关信息。一个好的Query Plan很大程度上决定了查询的性能，所以DBA经常需要去查看Query Plan，确定Query Plan是否生成得当。本章以TPCDS的query96为例，展示如何查看StarRocks的Query Plan。
 

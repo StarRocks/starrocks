@@ -50,7 +50,7 @@
 
 * 用户使用MySQL client执行SQL的DDL命令, 向FE的master节点发起请求; 比如: 创建表.
 * FE检查请求合法性, 然后向BE发起同步命令, 使操作在BE上生效; 比如: FE确定表的列类型是否合法, 计算tablet的副本的放置位置, 向BE发起请求, 创建tablet副本.
-* BE执行成功, 则修改内存的Catalog. 比如: 将table, partition, index, tablet的副本信息保存在Catalog中.
+* BE执行成功, 则修改FE内存的Catalog. 比如: 将table, partition, index, tablet的副本信息保存在Catalog中.
 * FE追加本次操作到EditLog并且持久化.
 * FE通过复制协议将EditLog的新增操作项同步到FE的follower节点.
 * FE的follower节点收到新追加的操作项后, 在自己的Catalog上按顺序播放, 使得自己状态追上FE master节点.
