@@ -5,6 +5,7 @@
 #include "column/column.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
+#include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
@@ -13,10 +14,12 @@
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
-
 namespace starrocks::vectorized {
 
 using AggDataPtr = uint8_t*;
+
+// =====================
+// one level agg hash map
 template <PhmapSeed seed>
 using Int8AggHashMap = phmap::flat_hash_map<int8_t, AggDataPtr, StdHashWithSeed<int8_t, seed>>;
 template <PhmapSeed seed>
@@ -26,12 +29,24 @@ using Int32AggHashMap = phmap::flat_hash_map<int32_t, AggDataPtr, StdHashWithSee
 template <PhmapSeed seed>
 using Int64AggHashMap = phmap::flat_hash_map<int64_t, AggDataPtr, StdHashWithSeed<int64_t, seed>>;
 template <PhmapSeed seed>
+using Int128AggHashMap = phmap::flat_hash_map<int128_t, AggDataPtr, StdHashWithSeed<int128_t, seed>>;
+template <PhmapSeed seed>
 using DateAggHashMap = phmap::flat_hash_map<DateValue, AggDataPtr, StdHashWithSeed<DateValue, seed>>;
 template <PhmapSeed seed>
 using TimeStampAggHashMap = phmap::flat_hash_map<TimestampValue, AggDataPtr, StdHashWithSeed<TimestampValue, seed>>;
 template <PhmapSeed seed>
 using SliceAggHashMap = phmap::flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual>;
 
+// ==================
+// one level fixed size slice hash map
+template <PhmapSeed seed>
+using FixedSize8SliceAggHashMap = phmap::flat_hash_map<SliceKey8, AggDataPtr, FixedSizeSliceKeyHash<SliceKey8, seed>>;
+template <PhmapSeed seed>
+using FixedSize16SliceAggHashMap =
+        phmap::flat_hash_map<SliceKey16, AggDataPtr, FixedSizeSliceKeyHash<SliceKey16, seed>>;
+
+// =====================
+// two level agg hash map
 template <PhmapSeed seed>
 using Int32AggTwoLevelHashMap = phmap::parallel_flat_hash_map<int32_t, AggDataPtr, StdHashWithSeed<int32_t, seed>>;
 
@@ -43,6 +58,7 @@ using SliceAggTwoLevelHashMap =
         phmap::parallel_flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual,
                                       phmap::priv::Allocator<phmap::priv::Pair<const Slice, AggDataPtr>>, PHMAPN>;
 
+// ==============================================================
 // TODO(kks): Remove redundant code for compute_agg_states method
 // handle one number hash key
 template <typename FieldType, typename HashMap>
@@ -502,4 +518,138 @@ struct AggHashMapWithSerializedKey {
     uint8_t* buffer;
     ResultVector results;
 };
+
+template <typename HashMap>
+struct AggHashMapWithSerializedKeyFixedSize {
+    using Iterator = typename HashMap::iterator;
+    using FixedSizeSliceKey = typename HashMap::key_type;
+    using ResultVector = typename std::vector<FixedSizeSliceKey>;
+    HashMap hash_map;
+
+    bool has_null_column = false;
+    int fixed_byte_size = -1; // unset state
+    static constexpr size_t max_fixed_size = sizeof(FixedSizeSliceKey);
+
+    AggHashMapWithSerializedKeyFixedSize()
+            : tracker(std::make_unique<MemTracker>()),
+              mem_pool(std::make_unique<MemPool>(tracker.get())),
+              buffer(mem_pool->allocate(max_fixed_size * config::vector_chunk_size)) {
+        memset(buffer, 0x0, max_fixed_size * config::vector_chunk_size);
+    }
+
+    template <typename Func>
+    void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
+                            Buffer<AggDataPtr>* agg_states) {
+        DCHECK(fixed_byte_size != -1);
+        slice_sizes.assign(chunk_size, 0);
+
+        if (has_null_column) {
+            memset(buffer, 0x0, max_fixed_size * chunk_size);
+        }
+
+        for (const auto& key_column : key_columns) {
+            key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_fixed_size);
+        }
+
+        FixedSizeSliceKey key;
+
+        if (!has_null_column) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
+                auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
+                    AggDataPtr pv = allocate_func();
+                    ctor(key, pv);
+                });
+                (*agg_states)[i] = iter->second;
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
+                key.u.size = slice_sizes[i];
+                auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
+                    AggDataPtr pv = allocate_func();
+                    ctor(key, pv);
+                });
+                (*agg_states)[i] = iter->second;
+            }
+        }
+    }
+
+    // Elements queried in HashMap will be added to HashMap,
+    // elements that cannot be queried are not processed,
+    // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
+    template <typename Func>
+    void compute_agg_states(size_t chunk_size, const Columns& key_columns, Func&& allocate_func,
+                            Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
+        DCHECK(fixed_byte_size != -1);
+        slice_sizes.assign(chunk_size, 0);
+
+        if (has_null_column) {
+            memset(buffer, 0x0, max_fixed_size * chunk_size);
+        }
+
+        for (const auto& key_column : key_columns) {
+            key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_fixed_size);
+        }
+
+        not_founds->assign(chunk_size, 0);
+
+        FixedSizeSliceKey key;
+
+        if (!has_null_column) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
+                if (auto iter = hash_map.find(key); iter != hash_map.end()) {
+                    (*agg_states)[i] = iter->second;
+                } else {
+                    (*not_founds)[i] = 1;
+                }
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
+                key.u.size = slice_sizes[i];
+                if (auto iter = hash_map.find(key); iter != hash_map.end()) {
+                    (*agg_states)[i] = iter->second;
+                } else {
+                    (*not_founds)[i] = 1;
+                }
+            }
+        }
+    }
+
+    void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, int32_t batch_size) {
+        DCHECK(fixed_byte_size != -1);
+        tmp_slices.reserve(batch_size);
+
+        if (!has_null_column) {
+            for (int i = 0; i < batch_size; i++) {
+                FixedSizeSliceKey& key = keys[i];
+                tmp_slices[i].data = key.u.data;
+                tmp_slices[i].size = fixed_byte_size;
+            }
+        } else {
+            for (int i = 0; i < batch_size; i++) {
+                FixedSizeSliceKey& key = keys[i];
+                tmp_slices[i].data = key.u.data;
+                tmp_slices[i].size = key.u.size;
+            }
+        }
+
+        // deserialize by column
+        for (const auto& key_column : key_columns) {
+            key_column->deserialize_and_append_batch(tmp_slices, batch_size);
+        }
+    }
+
+    static constexpr bool has_single_null_key = false;
+
+    Buffer<uint32_t> slice_sizes;
+    std::unique_ptr<MemTracker> tracker;
+    std::unique_ptr<MemPool> mem_pool;
+    uint8_t* buffer;
+    ResultVector results;
+    std::vector<Slice> tmp_slices;
+};
+
 } // namespace starrocks::vectorized
