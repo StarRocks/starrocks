@@ -30,7 +30,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXEC_FILES
     broker_reader.cpp
     buffered_reader.cpp
-    convert_scan_node.cpp
     data_sink.cpp
     decompressor.cpp
     empty_set_node.cpp
@@ -50,23 +49,6 @@ set(EXEC_FILES
     es/es_scroll_query.cpp
     es/es_scroll_parser.cpp
     es/es_query_builder.cpp
-    schema_scanner.cpp
-    schema_scan_node.cpp
-    schema_scanner/schema_tables_scanner.cpp
-    schema_scanner/schema_dummy_scanner.cpp
-    schema_scanner/schema_schemata_scanner.cpp
-    schema_scanner/schema_variables_scanner.cpp
-    schema_scanner/schema_columns_scanner.cpp
-    schema_scanner/schema_charsets_scanner.cpp
-    schema_scanner/schema_collations_scanner.cpp
-    schema_scanner/schema_statistics_scanner.cpp
-    schema_scanner/schema_triggers_scanner.cpp
-    schema_scanner/schema_events_scanner.cpp
-    schema_scanner/schema_views_scanner.cpp
-    schema_scanner/schema_user_privileges_scanner.cpp
-    schema_scanner/schema_schema_privileges_scanner.cpp
-    schema_scanner/schema_table_privileges_scanner.cpp
-    schema_scanner/schema_helper.cpp
     local_file_writer.cpp
     broker_writer.cpp
     parquet_reader.cpp

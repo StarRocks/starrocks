@@ -45,7 +45,6 @@ class TTupleDescriptor;
 class Expr;
 class ExprContext;
 class RuntimeState;
-class SchemaScanner;
 namespace vectorized {
 class SchemaScanner;
 } // namespace vectorized
@@ -108,7 +107,6 @@ public:
 private:
     friend class DescriptorTbl;
     friend class TupleDescriptor;
-    friend class SchemaScanner;
     friend class vectorized::SchemaScanner;
     friend class OlapTableSchemaParam;
 
@@ -292,7 +290,6 @@ public:
 
 private:
     friend class DescriptorTbl;
-    friend class SchemaScanner;
     friend class OlapTableSchemaParam;
 
     const TupleId _id;
