@@ -44,23 +44,21 @@ Apache 2.0 License (found in the LICENSE.Apache file in the root directory)
 StarRocks selects Apache 2.0 License of RocksDB.
 
 ============================================================================================
-LZO
-source: https://github.com/nemequ/lzo
+mariadb-connector-c
+source: https://github.com/mariadb-corporation/mariadb-connector-c
 
-LZO is under GNU General Public License Version 2(GPL-2), which is not compatible with Apache 2.0 License.
+This is LGPL MariaDB client library that can be used to connect to MySQL
+or MariaDB.
 
-So LZO is an optional feature when building StarRocks from source. You can disable the LZO support by adding
-`--without-lzo` argument in `build.sh` script. 
+This code is based on the LGPL libmysql client library from MySQL 3.23
+and PHP's mysqlnd extension.
 
-Disable LZO support does not affect normal use of StarRocks.
+This product includes PHP software, freely available from
+<http://www.php.net/software/>
 
-============================================================================================
-MySQL
-source: https://github.com/mysql/mysql-server
+If you want to be part of this development effort, you can discuss this at
+maria-developers@lists.launchpad.org.
 
-MySQL is under GNU General Public License Version 2(GPL-2), which is not compatible with Apache 2.0 License. 
+To report a bug you'll need to signup for an account at https://jira.mariadb.org
 
-So MySQL is an optional feature when building StarRocks from source. You can disable the MySQL support by adding
-`--without-mysql` argument in `build.sh` script. 
-
-Disable MySQL support with disable the feature of visiting a MySQL table as an external table in StarRocks.
+The MariaDB team

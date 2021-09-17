@@ -36,13 +36,13 @@ public:
     // ScanOperator needs to do so.
     virtual bool with_morsels() const { return false; }
     // Set the DOP(degree of parallelism) of the SourceOperator, SourceOperator's DOP determine the Pipeline's DOP.
-    virtual void set_num_driver_instances(size_t num_driver_instances) {
-        this->_num_driver_instances = num_driver_instances;
+    virtual void set_degree_of_parallelism(size_t degree_of_parallelism) {
+        this->_degree_of_parallelism = degree_of_parallelism;
     }
-    virtual size_t num_driver_instances() const { return _num_driver_instances; }
+    virtual size_t degree_of_parallelism() const { return _degree_of_parallelism; }
 
 protected:
-    size_t _num_driver_instances = 1;
+    size_t _degree_of_parallelism = 1;
 };
 } // namespace pipeline
 } // namespace starrocks

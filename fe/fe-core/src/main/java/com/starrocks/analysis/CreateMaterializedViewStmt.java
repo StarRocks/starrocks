@@ -140,7 +140,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         if (selectStmt.getAggInfo() != null) {
             mvKeysType = KeysType.AGG_KEYS;
         }
-        analyzeSelectClause();
+        analyzeSelectClause(analyzer.ignoreCast());
         analyzeFromClause();
         if (selectStmt.getWhereClause() != null) {
             throw new AnalysisException("The where clause is not supported in add materialized view clause, expr:"
@@ -157,7 +157,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         }
     }
 
-    public void analyzeSelectClause() throws AnalysisException {
+    public void analyzeSelectClause(boolean ignoreCast) throws AnalysisException {
         SelectList selectList = selectStmt.getSelectList();
         if (selectList.getItems().isEmpty()) {
             throw new AnalysisException("The materialized view must contain at least one column");
@@ -205,6 +205,10 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 if (!mvColumnPattern.match(functionCallExpr)) {
                     throw new AnalysisException(
                             "The function " + functionName + " must match pattern:" + mvColumnPattern.toString());
+                }
+                if (!ignoreCast && functionCallExpr.getChild(0) instanceof CastExpr) {
+                    throw new AnalysisException(
+                            "The function " + functionName + " disable cast expression");
                 }
                 // check duplicate column
                 List<SlotRef> slots = new ArrayList<>();

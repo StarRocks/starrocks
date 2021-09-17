@@ -1050,6 +1050,11 @@ public class PlanFragmentBuilder {
                     // right table isn't value operator
                     leftFragment.addChild(rightFragment.getChild(0));
                 }
+
+                if (!(joinNode.getChild(1) instanceof ExchangeNode)) {
+                    joinNode.setReplicated(true);
+                }
+
                 return leftFragment;
             } else {
                 JoinOperator joinOperator = node.getJoinType();
@@ -1069,7 +1074,12 @@ public class PlanFragmentBuilder {
                     distributionMode = HashJoinNode.DistributionMode.BROADCAST;
                 } else if (!(leftFragment.getPlanRoot() instanceof ExchangeNode) &&
                         !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
-                    distributionMode = HashJoinNode.DistributionMode.COLOCATE;
+                    if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
+                            rightFragment.getPlanRoot().canDoReplicatedJoin()) {
+                        distributionMode = HashJoinNode.DistributionMode.REPLICATED;
+                    } else {
+                        distributionMode = HashJoinNode.DistributionMode.COLOCATE;
+                    }
                 } else if (isShuffleHashBucket(leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
                     distributionMode = HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
                 } else {
@@ -1194,10 +1204,15 @@ public class PlanFragmentBuilder {
                     context.getFragments().add(joinFragment);
 
                     return joinFragment;
-                } else if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE)) {
+                } else if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE) ||
+                        distributionMode.equals(HashJoinNode.DistributionMode.REPLICATED)) {
+                    if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE)) {
+                        hashJoinNode.setColocate(true, "");
+                    } else {
+                        hashJoinNode.setReplicated(true);
+                    }
                     setJoinPushDown(hashJoinNode);
 
-                    hashJoinNode.setColocate(true, "");
                     hashJoinNode.setChild(0, leftFragment.getPlanRoot());
                     hashJoinNode.setChild(1, rightFragment.getPlanRoot());
                     leftFragment.setPlanRoot(hashJoinNode);

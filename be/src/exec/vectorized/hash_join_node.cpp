@@ -10,7 +10,6 @@
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/expr.h"
-#include "exprs/in_predicate.h"
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"

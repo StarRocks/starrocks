@@ -39,7 +39,7 @@ static inline std::shared_ptr<arrow::Array> create_constant_array(int64_t num_el
             builder->UnsafeAppend(CType(value));
         }
     };
-    ASSERT_OK_AND_ASSIGN(auto array, arrow::ArrayFromBuilderVisitor(type, num_elements, builder_fn));
+    EXPECT_OK_AND_ASSIGN(auto array, arrow::ArrayFromBuilderVisitor(type, num_elements, builder_fn));
     counter += num_elements;
     return array;
 }
@@ -178,21 +178,21 @@ template <typename ArrowType, bool is_nullable = false>
 static inline std::shared_ptr<arrow::Array> create_constant_binary_array(int64_t num_elements, const std::string& value,
                                                                          size_t& counter) {
     using offset_type = typename ArrowType::offset_type;
-    std::shared_ptr<arrow::Buffer> offsets_buf;
     size_t offsets_in_bytes = (num_elements + 1) * sizeof(offset_type);
-    arrow::AllocateBuffer(offsets_in_bytes, &offsets_buf);
+    auto offsets_buf_res = arrow::AllocateBuffer(offsets_in_bytes);
+    std::shared_ptr<arrow::Buffer> offsets_buf = std::move(offsets_buf_res.ValueOrDie());
     auto* offsets = (offset_type*)offsets_buf->mutable_data();
     offsets[0] = 0;
 
     auto value_size = value.size();
     size_t data_in_bytes = value_size * num_elements;
-    std::shared_ptr<arrow::Buffer> data_buf;
-    arrow::AllocateBuffer(data_in_bytes, &data_buf);
+    auto data_buf_res = arrow::AllocateBuffer(data_in_bytes);
+    std::shared_ptr<arrow::Buffer> data_buf = std::move(data_buf_res.ValueOrDie());
     auto* data = data_buf->mutable_data();
 
     auto null_bitmap_in_bytes = (num_elements + 7) / 8;
-    std::shared_ptr<arrow::Buffer> null_bitmap;
-    arrow::AllocateBuffer(null_bitmap_in_bytes, &null_bitmap);
+    auto null_bitmap_res = arrow::AllocateBuffer(null_bitmap_in_bytes);
+    std::shared_ptr<arrow::Buffer> null_bitmap = std::move(null_bitmap_res.ValueOrDie());
     auto nulls = null_bitmap->mutable_data();
     auto data_off = 0;
     for (auto i = 0; i < num_elements; ++i) {
@@ -428,13 +428,13 @@ static inline std::shared_ptr<arrow::Array> create_constant_fixed_size_binary_ar
                                                                                     const std::string& value,
                                                                                     size_t& counter) {
     auto data_buf_size = bytes_width * num_elements;
-    std::shared_ptr<arrow::Buffer> data_buf;
-    arrow::AllocateBuffer(data_buf_size, &data_buf);
+    auto data_buf_res = arrow::AllocateBuffer(data_buf_size);
+    std::shared_ptr<arrow::Buffer> data_buf = std::move(data_buf_res.ValueOrDie());
     auto* p = data_buf->mutable_data();
 
     auto null_bitmap_in_bytes = (num_elements + 7) / 8;
-    std::shared_ptr<arrow::Buffer> null_bitmap;
-    arrow::AllocateBuffer(null_bitmap_in_bytes, &null_bitmap);
+    auto null_bitmap_res = arrow::AllocateBuffer(null_bitmap_in_bytes);
+    std::shared_ptr<arrow::Buffer> null_bitmap = std::move(null_bitmap_res.ValueOrDie());
     auto* nulls = null_bitmap->mutable_data();
 
     for (auto i = 0; i < num_elements; ++i) {
@@ -588,8 +588,10 @@ std::shared_ptr<arrow::Array> create_constant_datetime_array(size_t num_elements
     buffers.resize(2);
     size_t null_bitmap_in_bytes = (num_elements + 7) / 8;
     size_t data_buff_in_bytes = num_elements * sizeof(value);
-    arrow::AllocateBuffer(null_bitmap_in_bytes, &buffers[0]);
-    arrow::AllocateBuffer(data_buff_in_bytes, &buffers[1]);
+    auto buffer0_res = arrow::AllocateBuffer(null_bitmap_in_bytes);
+    buffers[0] = std::move(buffer0_res.ValueOrDie());
+    auto buffer1_res = arrow::AllocateBuffer(data_buff_in_bytes);
+    buffers[1] = std::move(buffer1_res.ValueOrDie());
     auto* nulls = buffers[0]->mutable_data();
     auto* data = (ArrowCppType*)buffers[1]->mutable_data();
 
@@ -868,8 +870,10 @@ std::shared_ptr<arrow::Array> create_const_decimal_array(size_t num_elements,
     std::vector<std::shared_ptr<arrow::Buffer>> buffers;
     buffers.resize(2);
     auto byte_width = type->byte_width();
-    arrow::AllocateBuffer((num_elements + 7) / 8, &buffers[0]);
-    arrow::AllocateBuffer(type->byte_width() * num_elements, &buffers[1]);
+    auto buffer0_res = arrow::AllocateBuffer((num_elements + 7) / 8);
+    buffers[0] = std::move(buffer0_res.ValueOrDie());
+    auto buffer1_res = arrow::AllocateBuffer(type->byte_width() * num_elements);
+    buffers[1] = std::move(buffer1_res.ValueOrDie());
     auto* nulls = buffers[0]->mutable_data();
     auto* data = buffers[1]->mutable_data();
     for (auto i = 0; i < num_elements; ++i) {

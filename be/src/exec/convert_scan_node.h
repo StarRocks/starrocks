@@ -26,8 +26,6 @@ public:
 
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) = 0;
-
     Status close(RuntimeState* state) override;
 
     // Convert old rowbatch content to vectorized chunk

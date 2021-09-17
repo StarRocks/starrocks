@@ -29,7 +29,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.BaseTableRef;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
@@ -62,6 +61,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
@@ -92,7 +92,7 @@ import java.util.stream.Collectors;
 public class OlapScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(OlapScanNode.class);
 
-    private List<TScanRangeLocations> result = new ArrayList<>();
+    private final List<TScanRangeLocations> result = new ArrayList<>();
     /*
      * When the field value is ON, the storage engine can return the data directly without pre-aggregation.
      * When the field value is OFF, the storage engine needs to aggregate the data before returning to scan node.
@@ -127,7 +127,7 @@ public class OlapScanNode extends ScanNode {
     private ArrayList<Long> scanTabletIds = Lists.newArrayList();
     private boolean isFinalized = false;
 
-    private HashSet<Long> scanBackendIds = new HashSet<>();
+    private final HashSet<Long> scanBackendIds = new HashSet<>();
 
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
@@ -201,14 +201,13 @@ public class OlapScanNode extends ScanNode {
         if (selectedIndexId == this.selectedIndexId && isPreAggregation == this.isPreAggregation) {
             return;
         }
-        StringBuilder stringBuilder = new StringBuilder("The new selected index id ")
-                .append(selectedIndexId)
-                .append(", pre aggregation tag ").append(isPreAggregation)
-                .append(", reason ").append(reasonOfDisable == null ? "null" : reasonOfDisable)
-                .append(". The old selected index id ").append(this.selectedIndexId)
-                .append(" pre aggregation tag ").append(this.isPreAggregation)
-                .append(" reason ").append(this.reasonOfPreAggregation == null ? "null" : this.reasonOfPreAggregation);
-        String scanRangeInfo = stringBuilder.toString();
+        String scanRangeInfo = "The new selected index id " +
+                selectedIndexId +
+                ", pre aggregation tag " + isPreAggregation +
+                ", reason " + (reasonOfDisable == null ? "null" : reasonOfDisable) +
+                ". The old selected index id " + this.selectedIndexId +
+                " pre aggregation tag " + this.isPreAggregation +
+                " reason " + (this.reasonOfPreAggregation == null ? "null" : this.reasonOfPreAggregation);
         String situation;
         boolean update;
         CHECK:
@@ -231,7 +230,6 @@ public class OlapScanNode extends ScanNode {
             }
             situation = "The key type of table is aggregated.";
             update = false;
-            break CHECK;
         }
 
         if (update) {
@@ -458,7 +456,7 @@ public class OlapScanNode extends ScanNode {
     private void computePartitionInfo() throws AnalysisException {
         long start = System.currentTimeMillis();
         // Step1: compute partition ids
-        PartitionNames partitionNames = ((BaseTableRef) desc.getRef()).getPartitionNames();
+        PartitionNames partitionNames = desc.getRef().getPartitionNames();
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo.getType() == PartitionType.RANGE) {
             selectedPartitionIds = partitionPrune((RangePartitionInfo) partitionInfo, partitionNames);
@@ -749,9 +747,7 @@ public class OlapScanNode extends ScanNode {
         }
         if (expr instanceof BinaryPredicate) {
             final BinaryPredicate predicate = (BinaryPredicate) expr;
-            if (predicate.getOp().isEquivalence()) {
-                return true;
-            }
+            return predicate.getOp().isEquivalence();
         }
         return false;
     }
@@ -859,5 +855,10 @@ public class OlapScanNode extends ScanNode {
 
     public void setTotalTabletsNum(long totalTabletsNum) {
         this.totalTabletsNum = totalTabletsNum;
+    }
+
+    @Override
+    public boolean canDoReplicatedJoin() {
+        return Utils.canDoReplicatedJoin(olapTable, selectedIndexId, selectedPartitionIds, scanTabletIds);
     }
 }

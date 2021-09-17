@@ -78,6 +78,11 @@ under the License.
                     <name>central maven repo https</name>
                     <url>https://repo.maven.apache.org/maven2</url>
                 </repository>
+                <repository>
+                    <id>Hortonworks</id>
+                    <name>Hortonworks Repository</name>
+                    <url>https://repo.hortonworks.com/content/repositories/releases/</url>
+                </repository>
                 <!-- for java-cup -->
                 <repository>
                     <id>cloudera-thirdparty</id>
@@ -187,6 +192,19 @@ under the License.
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-auth</artifactId>
             <version>2.10.1</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>zookeeper</artifactId>
+                    <groupId>org.apache.zookeeper</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.zookeeper/zookeeper -->
+        <dependency>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper</artifactId>
+            <version>3.4.6.2.6.5.1225-3</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-common -->
@@ -222,7 +240,7 @@ under the License.
         <dependency>
             <groupId>org.apache.thrift</groupId>
             <artifactId>libthrift</artifactId>
-            <version>0.13.0</version>
+            <version>0.14.0</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/log4j/log4j -->

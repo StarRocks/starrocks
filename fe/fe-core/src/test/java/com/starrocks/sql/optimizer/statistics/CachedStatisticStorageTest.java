@@ -83,8 +83,6 @@ public class CachedStatisticStorageTest {
         String DB_NAME = "test";
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
 
-        connectContext.getSessionVariable().setEnableMockTpch(false);
-
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +

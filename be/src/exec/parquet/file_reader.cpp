@@ -12,8 +12,10 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/parquet_types.h"
+#include "gutil/strings/substitute.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/coding.h"
+#include "util/defer_op.h"
 #include "util/memcmp.h"
 #include "util/thrift_util.h"
 
@@ -58,23 +60,44 @@ Status FileReader::get_next(vectorized::ChunkPtr* chunk) {
 }
 
 Status FileReader::_parse_footer() {
-    // try
+    // try with buffer on stack
     constexpr uint64_t footer_buf_size = 16 * 1024;
+    uint8_t local_buf[footer_buf_size];
+    uint8_t* footer_buf = local_buf;
+    // we may allocate on heap if local_buf is not large enough.
+    DeferOp deferop([&] {
+        if (footer_buf != local_buf) {
+            delete[] footer_buf;
+        }
+    });
 
-    uint8_t footer_buf[footer_buf_size];
     uint64_t to_read = std::min(_file_size, footer_buf_size);
-    Slice slice(footer_buf, to_read);
     {
         SCOPED_RAW_TIMER(&_param.stats->footer_read_ns);
+        Slice slice(footer_buf, to_read);
         RETURN_IF_ERROR(_file->read_at(_file_size - to_read, slice));
     }
     // check magic
     RETURN_IF_ERROR(_check_magic(footer_buf + to_read - 4));
     // deserialize footer
     uint32_t footer_size = decode_fixed32_le(footer_buf + to_read - 8);
-    if (footer_size > to_read) {
-        // TODO(zc): suppport larger footer.
-        return Status::Corruption("");
+
+    // if local buf is not large enough, we have to allocate on heap and re-read.
+    // 4 bytes magic number, 4 bytes for footer_size, so total size is footer_size + 8.
+    if ((footer_size + 8) > to_read) {
+        VLOG_FILE << "parquet file has large footer. name = " << _file->file_name()
+                  << ", footer_size = " << footer_size;
+        to_read = footer_size + 8;
+        if (_file_size < to_read) {
+            return Status::Corruption(strings::Substitute("Invalid parquet file: name=$0, file_size=$1, footer_size=$2",
+                                                          _file->file_name(), _file_size, to_read));
+        }
+        footer_buf = new uint8[to_read];
+        {
+            SCOPED_RAW_TIMER(&_param.stats->footer_read_ns);
+            Slice slice(footer_buf, to_read);
+            RETURN_IF_ERROR(_file->read_at(_file_size - to_read, slice));
+        }
     }
 
     tparquet::FileMetaData t_metadata;

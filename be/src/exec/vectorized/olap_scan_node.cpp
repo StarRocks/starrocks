@@ -365,8 +365,7 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
 
     _scan_profile = _runtime_profile->create_child("SCAN", true, false);
 
-    _reader_init_timer = ADD_TIMER(_scan_profile, "ReaderInit");
-    _capture_rowset_timer = ADD_CHILD_TIMER(_scan_profile, "CaptureRowset", "ReaderInit");
+    _create_seg_iter_timer = ADD_TIMER(_scan_profile, "CreateSegmentIter");
 
     _read_compressed_counter = ADD_COUNTER(_scan_profile, "CompressedBytesRead", TUnit::BYTES);
     _read_uncompressed_counter = ADD_COUNTER(_scan_profile, "UncompressedBytesRead", TUnit::BYTES);
@@ -558,9 +557,9 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto source_id = scan_operator->plan_node_id();
     DCHECK(morsel_queues.count(source_id));
     auto& morsel_queue = morsel_queues[source_id];
-    // ScanOperator's instance_count is not more than the number of morsels
-    const auto instance_count = std::min<size_t>(morsel_queue->num_morsels(), context->driver_instance_count());
-    scan_operator->set_num_driver_instances(instance_count);
+    // ScanOperator's degree_of_parallelism is not more than the number of morsels
+    const auto degree_of_parallelism = std::min<size_t>(morsel_queue->num_morsels(), context->degree_of_parallelism());
+    scan_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators.emplace_back(std::move(scan_operator));
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));

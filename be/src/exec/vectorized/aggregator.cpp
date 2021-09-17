@@ -69,7 +69,10 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* me
     _agg_states_offsets.resize(agg_size);
     _is_merge_funcs.resize(agg_size);
 
-    int agg_func_set_version = _tnode.agg_node.agg_func_set_version;
+    int agg_func_set_version = 1;
+    if (_tnode.agg_node.__isset.agg_func_set_version) {
+        agg_func_set_version = _tnode.agg_node.agg_func_set_version;
+    }
 
     for (int i = 0; i < agg_size; ++i) {
         const TExpr& desc = _tnode.agg_node.aggregate_functions[i];
