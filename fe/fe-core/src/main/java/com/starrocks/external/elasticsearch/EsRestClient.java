@@ -43,7 +43,7 @@ import java.util.concurrent.TimeUnit;
 public class EsRestClient {
 
     private static final Logger LOG = LogManager.getLogger(EsRestClient.class);
-    private ObjectMapper mapper;
+    private final ObjectMapper mapper;
 
     {
         mapper = new ObjectMapper();
@@ -51,12 +51,12 @@ public class EsRestClient {
         mapper.configure(SerializationConfig.Feature.USE_ANNOTATIONS, false);
     }
 
-    private static OkHttpClient networkClient = new OkHttpClient.Builder()
+    private static final OkHttpClient networkClient = new OkHttpClient.Builder()
             .readTimeout(10, TimeUnit.SECONDS)
             .build();
 
-    private Request.Builder builder;
-    private String[] nodes;
+    private final Request.Builder builder;
+    private final String[] nodes;
     private String currentNode;
     private int currentNodeIndex = 0;
 
