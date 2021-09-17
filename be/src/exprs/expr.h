@@ -427,12 +427,6 @@ private:
     friend class ExprTest;
     friend class QueryJitter;
 
-    // Create a new Expr based on texpr_node.node_type within 'pool'.
-    static Status create_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr);
-
-    // Create a new Expr based on texpr_node.node_type within 'pool'.
-    static Status create_expr(ObjectPool* pool, const Expr* old_expr, Expr** new_expr);
-
     // Create a new vectorized expr
     static Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr);
 

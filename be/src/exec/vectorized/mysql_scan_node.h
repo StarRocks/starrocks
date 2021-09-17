@@ -6,7 +6,6 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
-#include "exec/convert_scan_node.h"
 #include "exec/mysql_scanner.h"
 #include "exec/scan_node.h"
 #include "runtime/descriptors.h"
