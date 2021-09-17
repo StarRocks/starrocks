@@ -43,7 +43,6 @@ import com.starrocks.planner.Planner;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
@@ -193,11 +192,7 @@ public class TableQueryPlanAction extends RestBaseAction {
         // use SE to resolve sql
         StmtExecutor stmtExecutor = new StmtExecutor(context, new OriginStatement(sql, 0), false);
         try {
-            SessionVariable sessionVariable = context.getSessionVariable();
-            // MemoryScratchSink does not implement send_chunk interface and TPlanFragmentExecParams
-            // use_vectorized is not set, so set vectorized_engine_enable false in query.
-            sessionVariable.setVectorizedEngineEnable(false);
-            TQueryOptions tQueryOptions = sessionVariable.toThrift();
+            TQueryOptions tQueryOptions = context.getSessionVariable().toThrift();
             // Conduct Planner create SingleNodePlan#createPlanFragments
             tQueryOptions.num_nodes = 1;
             // analyze sql
