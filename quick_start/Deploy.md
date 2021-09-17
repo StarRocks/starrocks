@@ -120,7 +120,7 @@ mysql -h 127.0.0.1 -P9030 -uroot
 第三步: 查看FE状态：
 
 ```Plain Text
-mysql> SHOW PROC '/frontends'\\G
+mysql> SHOW PROC '/frontends'\G
 
 ***1\. row***
 
@@ -232,7 +232,7 @@ host为helper节点的IP，如果有多个IP，需要选取priority\_networks里
 第四步: 查看集群状态, 确认部署成功：
 
 ```Plain Text
-mysql> SHOW PROC '/frontends'\\G
+mysql> SHOW PROC '/frontends'\G
 
 ***1\. row***
 
@@ -351,7 +351,7 @@ bin/start_be.sh --daemon
 第四步: 查看BE状态, 确认BE就绪:
 
 ```Plain Text
-mysql> SHOW PROC '/backends'\\G
+mysql> SHOW PROC '/backends'\G
 
 ***1\. row***
 
@@ -416,7 +416,7 @@ W0708 17:16:27.308156 11473 heartbeat\_server.cpp:82\] backend ip saved in maste
 此时需要，先用以下命令drop掉原来加进去的be，然后重新以正确的IP添加BE。
 
 ```sql
-mysql> ALTER SYSTEM DROP BACKEND "172.16.139.24:9050";
+mysql> ALTER SYSTEM DROPP BACKEND "172.16.139.24:9050";
 ```
 
 <br/>
