@@ -3,6 +3,7 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
 
 public class DistributedEnvPlanTestBase extends PlanTestBase {
@@ -122,5 +123,8 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
 
         OlapTable dates_n = (OlapTable) catalog.getDb("default_cluster:test").getTable("dates_n");
         setTableStatistics(dates_n, 2556);
+
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
     }
 }

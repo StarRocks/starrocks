@@ -334,7 +334,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
         sql = "select distinct join1.id from join1 full join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
-        checkOnePhaseAgg(plan);
+        checkTwoPhaseAgg(plan);
 
         // Inner join
         sql = "select distinct join2.id from join1 join join2 on join1.id = join2.id;";
