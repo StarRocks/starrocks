@@ -543,24 +543,7 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
 
 Status ExecNode::create_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs,
                              ExecNode** node) {
-    std::stringstream error_msg;
-
-    VLOG(2) << "tnode:\n" << apache::thrift::ThriftDebugString(tnode);
-
-    if (tnode.use_vectorized) {
-        return create_vectorized_node(state, pool, tnode, descs, node);
-    }
-
-    switch (tnode.node_type) {
-    case TPlanNodeType::SCHEMA_SCAN_NODE:
-        *node = pool->add(new SchemaScanNode(pool, tnode, descs));
-        return Status::OK();
-    default:
-        error_msg << " Don't support old query engine any more";
-        return Status::InternalError(error_msg.str());
-    }
-
-    return Status::OK();
+    return create_vectorized_node(state, pool, tnode, descs, node);
 }
 
 void ExecNode::set_debug_options(int node_id, TExecNodePhase::type phase, TDebugAction::type action, ExecNode* root) {
