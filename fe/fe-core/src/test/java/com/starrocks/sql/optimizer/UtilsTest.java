@@ -4,8 +4,15 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -15,18 +22,102 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.statistic.Constants;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class UtilsTest {
+    private static final String DEFAULT_CREATE_TABLE_TEMPLATE = ""
+            + "CREATE TABLE IF NOT EXISTS `table_statistic_v1` (\n"
+            + "  `table_id` bigint NOT NULL,\n"
+            + "  `column_name` varchar(65530) NOT NULL,\n"
+            + "  `db_id` bigint NOT NULL,\n"
+            + "  `table_name` varchar(65530) NOT NULL,\n"
+            + "  `db_name` varchar(65530) NOT NULL,\n"
+            + "  `row_count` bigint NOT NULL,\n"
+            + "  `data_size` bigint NOT NULL,\n"
+            + "  `distinct_count` bigint NOT NULL,\n"
+            + "  `null_count` bigint NOT NULL,\n"
+            + "  `max` varchar(65530) NOT NULL,\n"
+            + "  `min` varchar(65530) NOT NULL,\n"
+            + "  `update_time` datetime NOT NULL\n"
+            + "  )\n"
+            + "ENGINE=OLAP\n"
+            + "UNIQUE KEY(`table_id`,  `column_name`, `db_id`)\n"
+            + "DISTRIBUTED BY HASH(`table_id`, `column_name`, `db_id`) BUCKETS 2\n"
+            + "PROPERTIES (\n"
+            + "\"replication_num\" = \"1\",\n"
+            + "\"in_memory\" = \"false\",\n"
+            + "\"storage_format\" = \"V2\"\n"
+            + ");";
+
+    private static String runningDir = "fe/mocked/UtilsTest/" + UUID.randomUUID().toString() + "/";
+
+    private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
+
+    protected static void setTableStatistics(OlapTable table, long rowCount) {
+        for (Partition partition : table.getAllPartitions()) {
+            partition.getBaseIndex().setRowCount(rowCount);
+        }
+    }
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        FeConstants.default_scheduler_interval_millisecond = 1;
+        UtFrameUtils.createMinStarRocksCluster(runningDir);
+
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+        String DB_NAME = "test";
+        starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+        starRocksAssert.enableNewPlanner();
+
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000000000L);
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
+
+        starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL COMMENT \"\",\n" +
+                "  `v3` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
+        dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
+        try {
+            Catalog.getCurrentCatalog().createDb(dbStmt);
+        } catch (DdlException e) {
+            return;
+        }
+        starRocksAssert.useDatabase(Constants.StatisticsDBName);
+        starRocksAssert.withTable(DEFAULT_CREATE_TABLE_TEMPLATE);
+        FeConstants.runningUnitTest = true;
+    }
 
     @Test
     public void extractConjuncts() {
@@ -196,5 +287,33 @@ public class UtilsTest {
 
         assertEquals(5, ((ConstantOperator) rightChild.getChild(0)).getInt());
         assertEquals(6, ((ConstantOperator) rightChild.getChild(1)).getInt());
+    }
+
+    @Test
+    public void unknownStats() {
+        Catalog catalog = connectContext.getCatalog();
+
+        OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
+        setTableStatistics(t0, 10);
+        Catalog.getCurrentStatisticStorage().addColumnStatistic(t0, "v1",
+                new ColumnStatistic(1, 1, 0, 1, 1));
+
+        Map<ColumnRefOperator, Column> columnRefMap = new HashMap<>();
+        columnRefMap.put(new ColumnRefOperator(1, Type.BIGINT, "v1", true),
+                t0.getBaseColumn("v1"));
+        columnRefMap.put(new ColumnRefOperator(2, Type.BIGINT, "v2", true),
+                t0.getBaseColumn("v2"));
+        columnRefMap.put(new ColumnRefOperator(3, Type.BIGINT, "v3", true),
+                t0.getBaseColumn("v3"));
+
+        OptExpression opt = new OptExpression(new LogicalOlapScanOperator(t0, null, columnRefMap, null));
+        Assert.assertTrue(Utils.hasUnknownColumnsStats(opt));
+
+        Catalog.getCurrentStatisticStorage().addColumnStatistic(t0, "v2",
+                new ColumnStatistic(1, 1, 0, 1, 1));
+        Catalog.getCurrentStatisticStorage().addColumnStatistic(t0, "v3",
+                new ColumnStatistic(1, 1, 0, 1, 1));
+        opt = new OptExpression(new LogicalOlapScanOperator(t0, null, columnRefMap, null));
+        Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
     }
 }
