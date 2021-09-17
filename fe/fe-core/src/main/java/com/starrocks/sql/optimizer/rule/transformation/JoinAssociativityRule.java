@@ -92,13 +92,14 @@ public class JoinAssociativityRule extends TransformationRule {
         ColumnRefSet outputColumns = parentJoin.getOutputColumns(new ExpressionContext(input));
         outputColumns.union(parentJoin.getUsedColumns());
         newParentConjuncts.forEach(conjunct -> outputColumns.union(conjunct.getUsedColumns()));
+
         List<ColumnRefOperator> newRightOutputColumns =
                 newRightChildOutputColumns.getStream().filter(outputColumns::contains).
                         mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
 
-        newRightOutputColumns =
-                newRightChildOutputColumns.getStream().
-                        mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
+        //newRightOutputColumns =
+        //        newRightChildOutputColumns.getStream().
+        //                mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
 
         LogicalJoinOperator rightChildJoinOperator =
                 new LogicalJoinOperator(JoinOperator.INNER_JOIN, Utils.compoundAnd(newChildConjuncts));

@@ -23,7 +23,7 @@ public class OlapScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalOlapScanOperator scan = (LogicalOlapScanOperator) input.getOp();
         PhysicalOlapScanOperator physicalOlapScan =
-                new PhysicalOlapScanOperator(scan.getOlapTable(), scan.getColRefToColumnMetaMap());
+                new PhysicalOlapScanOperator(scan.getOlapTable(), scan.getColRefToColumnMetaMap(), scan.getDistributionSpec());
 
         physicalOlapScan.setSelectedIndexId(scan.getSelectedIndexId());
         physicalOlapScan.setSelectedPartitionId(Lists.newArrayList(scan.getSelectedPartitionId()));

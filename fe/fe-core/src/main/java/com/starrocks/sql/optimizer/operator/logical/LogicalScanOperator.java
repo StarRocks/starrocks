@@ -70,6 +70,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     public void setColRefToColumnMetaMap(Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
+        columnMetaToColRefMap.clear();
         for (Map.Entry<ColumnRefOperator, Column> entry : colRefToColumnMetaMap.entrySet()) {
             columnMetaToColRefMap.put(entry.getValue(), entry.getKey());
         }
@@ -111,7 +112,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             return false;
         }
         LogicalScanOperator that = (LogicalScanOperator) o;
-        return Objects.equals(table, that.table) && Objects.equals(colRefToColumnMetaMap, that.colRefToColumnMetaMap) &&
+        return Objects.equals(table, that.table) && Objects.equals(colRefToColumnMetaMap.keySet(), that.colRefToColumnMetaMap.keySet()) &&
                 Objects.equals(columnFilters, that.columnFilters);
     }
 

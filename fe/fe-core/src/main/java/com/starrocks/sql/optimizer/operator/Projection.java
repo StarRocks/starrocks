@@ -8,7 +8,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
+
 public class Projection {
+    public static Long totalTime = 0L;
+
     private final Map<ColumnRefOperator, ScalarOperator> columnRefMap;
     // Used for common operator compute result reuse, we need to compute
     // common sub operators firstly in BE
@@ -34,6 +37,7 @@ public class Projection {
 
     @Override
     public boolean equals(Object o) {
+        Long start = System.currentTimeMillis();
         if (this == o) {
             return true;
         }
@@ -41,11 +45,15 @@ public class Projection {
             return false;
         }
         Projection that = (Projection) o;
-        return columnRefMap.keySet().equals(that.columnRefMap.keySet());
+        boolean b = columnRefMap.keySet().equals(that.columnRefMap.keySet());
+        Long end = System.currentTimeMillis();
+
+        totalTime += (end - start);
+        return b;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(columnRefMap);
+        return Objects.hash(columnRefMap.keySet());
     }
 }

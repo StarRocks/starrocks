@@ -3,8 +3,6 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -31,8 +29,12 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private boolean isPreAggregation;
     private String turnOffReason;
 
-    public PhysicalOlapScanOperator(OlapTable table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+    private final HashDistributionSpec hashDistributionSpec;
+
+    public PhysicalOlapScanOperator(OlapTable table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                    HashDistributionSpec hashDistributionDesc) {
         super(OperatorType.PHYSICAL_OLAP_SCAN, table, colRefToColumnMetaMap);
+        this.hashDistributionSpec = hashDistributionDesc;
     }
 
     public long getSelectedIndexId() {
@@ -94,7 +96,9 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             return true;
         }
 
-        return table.getId() == rhs.getTable().getId() && Objects.equals(projection, rhs.getProjection());
+        return table.getId() == rhs.getTable().getId()
+                && Objects.equals(colRefToColumnMetaMap.keySet(), rhs.getColRefToColumnMetaMap().keySet())
+                && Objects.equals(projection, rhs.getProjection());
     }
 
     @Override
@@ -115,21 +119,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         return visitor.visitPhysicalOlapScan(optExpression, context);
     }
 
-    // TODO(kks): combine this method with LogicalOlapScanOperator::getDistributionSpec
     public HashDistributionSpec getDistributionSpec() {
-        DistributionInfo distributionInfo = ((OlapTable) table).getDefaultDistributionInfo();
         // In UT, the distributionInfo may be null
-        if (distributionInfo instanceof HashDistributionInfo) {
-            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-            List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
-            List<Integer> columnList = new ArrayList<>();
-            for (Column distributedColumn : distributedColumns) {
-                columnList.add(getColumnReference(distributedColumn).getId());
-            }
-
-            HashDistributionDesc leftHashDesc = new HashDistributionDesc(columnList,
-                    HashDistributionDesc.SourceType.LOCAL);
-            return DistributionSpec.createHashDistributionSpec(leftHashDesc);
+        if (hashDistributionSpec != null) {
+            return hashDistributionSpec;
         } else {
             // 1023 is a placeholder column id, only in order to pass UT
             HashDistributionDesc leftHashDesc = new HashDistributionDesc(Collections.singletonList(1023),

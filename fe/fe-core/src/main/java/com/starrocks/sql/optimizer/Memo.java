@@ -9,6 +9,7 @@ import com.starrocks.common.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -246,6 +247,28 @@ public class Memo {
                     iterator.remove();
                     break;
                 }
+            }
+        }
+    }
+
+    private void deepSearch(Group root, Map<Group, Boolean> map) {
+        for (Group group : root.getFirstLogicalExpression().getInputs()) {
+            map.put(group, true);
+            deepSearch(group, map);
+        }
+    }
+
+    public void func() {
+        Map<Group, Boolean> touch = new HashMap<>();
+        for (Group group : getGroups()) {
+            touch.put(group, false);
+        }
+        touch.put(rootGroup, true);
+        deepSearch(rootGroup, touch);
+
+        for (Map.Entry<Group, Boolean> e : touch.entrySet()) {
+            if (!e.getValue()) {
+                removeOneGroup(e.getKey());
             }
         }
     }

@@ -63,7 +63,7 @@ public class PlanTestBase {
         connectContext.getSessionVariable().setEnableMockTpch(true);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         starRocksAssert.enableNewPlanner();
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000000000L);
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000L);
 
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +

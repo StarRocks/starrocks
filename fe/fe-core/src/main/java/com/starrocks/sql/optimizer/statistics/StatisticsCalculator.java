@@ -295,26 +295,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Statistics.Builder estimateScanColumns(Table table, Map<ColumnRefOperator, Column> columnRefMap) {
         Statistics.Builder builder = Statistics.builder();
-        /*
-        List<ColumnRefOperator> requiredColumns = new ArrayList<>();
-        for (int columnId : requiredCols.getColumnIds()) {
-            ColumnRefOperator columnRefOperator = columnRefFactory.getColumnRef(columnId);
-            requiredColumns.add(columnRefOperator);
-        }
-        List<ColumnStatistic> columnStatisticList = Catalog.getCurrentStatisticStorage().getColumnStatistics(table,
-                requiredColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()));
-        */
-
-
-        /*
-        Preconditions.checkState(requiredColumns.size() == columnStatisticList.size());
-        for (int i = 0; i < requiredColumns.size(); ++i) {
-            builder.addColumnStatistic(requiredColumns.get(i), columnStatisticList.get(i));
-            dumpInfo.addTableStatistics(table, requiredColumns.get(i).getName(), columnStatisticList.get(i));
-        }
-
-         */
-
         List<ColumnRefOperator> columnRefOperators = new ArrayList<>(columnRefMap.keySet());
         List<ColumnStatistic> columnStatisticList = Catalog.getCurrentStatisticStorage().getColumnStatistics(table,
                 columnRefOperators.stream().map(columnRefMap::get).map(Column::getName).collect(Collectors.toList()));

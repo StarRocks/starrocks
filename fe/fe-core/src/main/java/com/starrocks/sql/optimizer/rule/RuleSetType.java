@@ -12,4 +12,6 @@ public enum RuleSetType {
     SUBQUERY_REWRITE,
     PRUNE_ASSERT_ROW,
     MULTI_DISTINCT_REWRITE,
+
+    PROJECT_MERGE,
 }

@@ -12,7 +12,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rewrite.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
-import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
@@ -108,8 +107,13 @@ public class Optimizer {
                 memo.getRootGroup(), RuleSetType.SCALAR_OPERATOR_REUSE));
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
 
+        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
+                memo.getRootGroup(), RuleSetType.PROJECT_MERGE));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+
         // Rewrite maybe produce empty groups, we need to remove them.
         memo.removeAllEmptyGroup();
+        memo.func();
 
         // collect all olap scan operator
         collectAllScanOperators(memo, rootTaskContext);
@@ -122,8 +126,10 @@ public class Optimizer {
         // So we need to explicitly derive all group logic property again
         memo.deriveAllGroupLogicalProperty();
 
-        // Phase 3: optimize based on memo and grouptree = memo.getRootGroup().extractLogicalTree();
+        // Phase 3: optimize based on memo and group
+        tree = memo.getRootGroup().extractLogicalTree();
 
+        /*
         if (!connectContext.getSessionVariable().isDisableJoinReorder()) {
             if (Utils.countInnerJoinNodeSize(tree) >
                     connectContext.getSessionVariable().getCboMaxReorderNodeUseExhaustive()) {
@@ -133,10 +139,12 @@ public class Optimizer {
                 context.getRuleSet().addJoinTransformationRules();
             }
         }
+         */
 
-        if (connectContext.getSessionVariable().isEnableNewPlannerPushDownJoinToAgg()) {
-            context.getRuleSet().addPushDownJoinToAggRule();
-        }
+        context.getRuleSet().addJoinTransformationRules();
+        //if (connectContext.getSessionVariable().isEnableNewPlannerPushDownJoinToAgg()) {
+       //     context.getRuleSet().addPushDownJoinToAggRule();
+        //}
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(
                 rootTaskContext, memo.getRootGroup()));
@@ -145,6 +153,8 @@ public class Optimizer {
                 rootTaskContext, memo.getRootGroup().getFirstLogicalExpression()));
 
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+
+        System.out.println("Memo size : " + memo.getGroups().size());
 
         OptExpression result = extractBestPlan(requiredProperty, memo.getRootGroup());
         tryOpenPreAggregate(result);
@@ -155,6 +165,7 @@ public class Optimizer {
 
         // Add project will case output change, re-derive output columns in property
         result = new DeriveOutputColumnsRule((ColumnRefSet) requiredColumns.clone()).rewrite(result, columnRefFactory);
+
         return result;
     }
 

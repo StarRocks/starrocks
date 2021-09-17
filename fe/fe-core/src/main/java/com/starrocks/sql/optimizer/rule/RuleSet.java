@@ -171,9 +171,7 @@ public class RuleSet {
         ));
 
         rewriteRules.put(RuleSetType.SCALAR_OPERATOR_REUSE, ImmutableList.of(
-                new ScalarOperatorsReuseRule(),
-                new PushDownJoinOnExpressionToChildProject(),
-                new MergeProjectWithChildRule()
+                new ScalarOperatorsReuseRule()
         ));
 
         rewriteRules.put(RuleSetType.PUSH_DOWN_PREDICATE, ImmutableList.of(
@@ -219,6 +217,11 @@ public class RuleSet {
                 new RewriteBitmapCountDistinctRule(),
                 new RewriteHllCountDistinctRule(),
                 new RewriteMultiDistinctRule()
+        ));
+
+        rewriteRules.put(RuleSetType.PROJECT_MERGE, ImmutableList.of(
+                new PushDownJoinOnExpressionToChildProject(),
+                new MergeProjectWithChildRule()
         ));
     }
 

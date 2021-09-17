@@ -82,8 +82,6 @@ public class LogicalJoinOperator extends LogicalOperator {
         return joinHint;
     }
 
-
-
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         if (projection != null) {
@@ -125,8 +123,10 @@ public class LogicalJoinOperator extends LogicalOperator {
         return visitor.visitLogicalJoin(optExpression, context);
     }
 
+    public static Long totalTime = 0L;
     @Override
     public boolean equals(Object o) {
+        Long start = System.currentTimeMillis();
         if (!(o instanceof LogicalJoinOperator)) {
             return false;
         }
@@ -135,8 +135,12 @@ public class LogicalJoinOperator extends LogicalOperator {
         if (this == rhs) {
             return true;
         }
-        return joinType == rhs.joinType && Objects.equals(onPredicate, rhs.onPredicate)
+        boolean b = joinType == rhs.joinType && Objects.equals(onPredicate, rhs.onPredicate)
                 && Objects.equals(predicate, rhs.predicate) && Objects.equals(projection, rhs.projection);
+
+        Long end = System.currentTimeMillis();
+        totalTime += (end - start);
+        return b;
     }
 
     @Override

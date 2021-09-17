@@ -30,6 +30,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private PartitionNames partitionNames;
     private List<Long> hintsTabletIds;
 
+    private HashDistributionSpec hashDistributionSpec;
+
     // Only for UT
     public LogicalOlapScanOperator(OlapTable table) {
         super(OperatorType.LOGICAL_OLAP_SCAN, table, Maps.newHashMap());
@@ -43,6 +45,19 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         selectedPartitionId = Lists.newArrayList();
         selectedIndexId = table.getBaseIndexId();
         selectedTabletId = Lists.newArrayList();
+
+        DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
+        Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
+        HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+        List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
+        List<Integer> hashDistributeColumns = new ArrayList<>();
+        for (Column distributedColumn : distributedColumns) {
+            hashDistributeColumns.add(getColumnReference(distributedColumn).getId());
+        }
+
+        HashDistributionDesc leftHashDesc =
+                new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
+        hashDistributionSpec = DistributionSpec.createHashDistributionSpec(leftHashDesc);
     }
 
     public OlapTable getOlapTable() {
@@ -89,20 +104,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.selectedTabletId = selectedTabletId;
     }
 
-    // TODO(kks): combine this method with PhysicalOlapScan::getDistributionSpec
     public HashDistributionSpec getDistributionSpec() {
-        DistributionInfo distributionInfo = ((OlapTable) table).getDefaultDistributionInfo();
-        Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
-        HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-        List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
-        List<Integer> columnList = new ArrayList<>();
-        for (Column distributedColumn : distributedColumns) {
-            columnList.add(getColumnReference(distributedColumn).getId());
-        }
-
-        HashDistributionDesc leftHashDesc =
-                new HashDistributionDesc(columnList, HashDistributionDesc.SourceType.LOCAL);
-        return DistributionSpec.createHashDistributionSpec(leftHashDesc);
+        return hashDistributionSpec;
     }
 
     @Override

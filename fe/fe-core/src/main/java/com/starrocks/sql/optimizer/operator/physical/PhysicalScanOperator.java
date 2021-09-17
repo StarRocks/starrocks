@@ -19,7 +19,6 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     protected Map<ColumnRefOperator, Column> colRefToColumnMetaMap;
     protected Map<Column, ColumnRefOperator> columnMetaToColRefMap;
 
-
     public PhysicalScanOperator(OperatorType type, Table table,
                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         super(type);
