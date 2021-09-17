@@ -174,6 +174,8 @@ struct TBrokerScanRangeParams {
     10: optional bool strict_mode
     // If multi_column_separator is set, column_separator becomes ignore.
     11: optional string multi_column_separator;
+    // Number of lines at the start of the sacn to skip.
+    12: optional i32 skip_header;
 }
 
 // Broker scan range

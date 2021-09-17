@@ -362,6 +362,21 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     if (!http_req->header(HTTP_ROW_DELIMITER).empty()) {
         request.__set_rowDelimiter(http_req->header(HTTP_ROW_DELIMITER));
     }
+    if (!http_req->header(HTTP_SKIP_HEADER).empty()) {
+        StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+        const auto& skip_header_str = http_req->header(HTTP_SKIP_HEADER);
+        auto skip_header = StringParser::string_to_unsigned_int<int32_t>(skip_header_str.c_str(),
+                                                                         skip_header_str.length(), &parse_result);
+        if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
+            return Status::InvalidArgument("Invalid skip header format");
+        }
+        if (skip_header < 0) {
+            return Status::InvalidArgument("skip_header must be equal or greater than 0");
+        }
+        request.__set_skipHeader(skip_header);
+    } else {
+        request.__set_skipHeader(0);
+    }
     if (!http_req->header(HTTP_PARTITIONS).empty()) {
         request.__set_partitions(http_req->header(HTTP_PARTITIONS));
         request.__set_isTempPartition(false);

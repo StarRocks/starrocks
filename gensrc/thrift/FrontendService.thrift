@@ -523,6 +523,7 @@ struct TStreamLoadPutRequest {
     26: optional string json_root
     // only valid when file type is CSV
     50: optional string rowDelimiter
+    51: optional i32 skipHeader
 }
 
 struct TStreamLoadPutResult {

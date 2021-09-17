@@ -72,6 +72,7 @@ public class StreamLoadTask {
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     private int timeout = Config.stream_load_default_timeout_second;
     private long loadMemLimit = 0;
+    private int skipHeader = 0;
 
     public StreamLoadTask(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -183,6 +184,9 @@ public class StreamLoadTask {
         }
         if (request.isSetRowDelimiter()) {
             setRowDelimiter(request.getRowDelimiter());
+        }
+        if (request.isSetSkipHeader()) {
+            skipHeader = request.getSkipHeader();
         }
         if (request.isSetPartitions()) {
             String[] partNames = request.getPartitions().trim().split("\\s*,\\s*");
@@ -325,5 +329,9 @@ public class StreamLoadTask {
 
     public long getLoadMemLimit() {
         return loadMemLimit;
+    }
+
+    public int getSkipHeader() {
+        return skipHeader;
     }
 }

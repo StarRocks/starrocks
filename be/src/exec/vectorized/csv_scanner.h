@@ -99,6 +99,8 @@ private:
 
         Status next_record(Record* record);
 
+        Status skip_header(int num_line);
+
         void set_limit(size_t limit) { _limit = limit; }
 
         void split_record(const Record& record, Fields* fields) const;
@@ -132,6 +134,7 @@ private:
     std::vector<Column*> _column_raw_ptrs;
     char _record_delimiter;
     string _field_delimiter;
+    int _skip_header_num_line = 0;
     int _num_fields_in_csv = 0;
     int _curr_file_index = -1;
     CSVReaderPtr _curr_reader;

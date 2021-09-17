@@ -34,6 +34,28 @@ Status CSVScanner::CSVReader::next_record(Record* record) {
     return Status::OK();
 }
 
+Status CSVScanner::CSVReader::skip_header(int num_line) {
+    if (_limit > 0 && _parsed_bytes > _limit) {
+        return Status::EndOfFile("Reached limit");
+    }
+    for (int i = 0; i < num_line; i++) {
+        char* d;
+        size_t pos = 0;
+        while ((d = _buff.find('\n', pos)) == nullptr) {
+            pos = _buff.available();
+            _buff.compact();
+            if (_buff.free_space() == 0) {
+                RETURN_IF_ERROR(_expand_buffer());
+            }
+            RETURN_IF_ERROR(_fill_buffer());
+        }
+        size_t l = d - _buff.position();
+        _buff.skip(l + 1);
+        _parsed_bytes += l + 1;
+    }
+    return Status::OK();
+}
+
 Status CSVScanner::CSVReader::_fill_buffer() {
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
 
@@ -109,7 +131,8 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
                        ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
-          _record_delimiter(scan_range.params.row_delimiter) {
+          _record_delimiter(scan_range.params.row_delimiter),
+          _skip_header_num_line(scan_range.params.skip_header) {
     if (scan_range.params.__isset.multi_column_separator) {
         _field_delimiter = scan_range.params.multi_column_separator;
     } else {
@@ -238,6 +261,13 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
     }
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
+
+    status = _curr_reader->skip_header(_skip_header_num_line);
+    if (status.is_end_of_file()) {
+        return chunk->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
+    } else if (!status.ok()) {
+        return status;
+    }
 
     for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
         status = _curr_reader->next_record(&record);

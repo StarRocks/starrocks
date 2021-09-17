@@ -182,6 +182,11 @@ public class StreamLoadScanNode extends LoadScanNode {
         } else {
             params.setRow_delimiter((byte) '\n');
         }
+        if (streamLoadTask.getSkipHeader() >= 0) {
+            params.setSkip_header(streamLoadTask.getSkipHeader());
+        } else {
+            throw new UserException("skip_header must be equal or greater than 0");
+        }
         params.setSrc_tuple_id(srcTupleDesc.getId().asInt());
         params.setDest_tuple_id(desc.getId().asInt());
         brokerScanRange.setParams(params);
