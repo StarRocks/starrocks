@@ -68,17 +68,21 @@ public:
     // Blocks until all rows in batch are pushed to the queue
     virtual Status send(RuntimeState* state, RowBatch* batch);
 
+    virtual Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
+
     virtual Status close(RuntimeState* state, Status exec_status);
 
     virtual RuntimeProfile* profile() { return _profile; }
 
 private:
     Status prepare_exprs(RuntimeState* state);
+    void flatten_row_desc_to_slots();
 
     ObjectPool* _obj_pool = nullptr;
     // Owned by the RuntimeState.
     const RowDescriptor& _row_desc;
     std::shared_ptr<arrow::Schema> _arrow_schema;
+    std::vector<SlotDescriptor*> _slots;
 
     BlockQueueSharedPtr _queue;
 

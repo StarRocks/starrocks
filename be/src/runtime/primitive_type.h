@@ -202,6 +202,7 @@ inline bool is_type_compatible(PrimitiveType lhs, PrimitiveType rhs) {
 
 VALUE_GUARD(PrimitiveType, BigIntPTGuard, pt_is_bigint, TYPE_BIGINT)
 VALUE_GUARD(PrimitiveType, BooleanPTGuard, pt_is_boolean, TYPE_BOOLEAN)
+VALUE_GUARD(PrimitiveType, LargeIntPTGuard, pt_is_largeint, TYPE_LARGEINT)
 VALUE_GUARD(PrimitiveType, IntegerPTGuard, pt_is_integer, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT,
             TYPE_LARGEINT)
 VALUE_GUARD(PrimitiveType, SumBigIntPTGuard, pt_is_sum_bigint, TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,
@@ -212,11 +213,13 @@ VALUE_GUARD(PrimitiveType, Decimal64PTGuard, pt_is_decimal64, TYPE_DECIMAL64)
 VALUE_GUARD(PrimitiveType, Decimal128PTGuard, pt_is_decimal128, TYPE_DECIMAL128)
 VALUE_GUARD(PrimitiveType, DecimalPTGuard, pt_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
 VALUE_GUARD(PrimitiveType, SumDecimal64PTGuard, pt_is_sum_decimal64, TYPE_DECIMAL32, TYPE_DECIMAL64)
+VALUE_GUARD(PrimitiveType, HllPTGuard, pt_is_hll, TYPE_HLL)
 VALUE_GUARD(PrimitiveType, BinaryPTGuard, pt_is_binary, TYPE_CHAR, TYPE_VARCHAR)
 
 VALUE_GUARD(PrimitiveType, DatePTGuard, pt_is_date, TYPE_DATE)
 VALUE_GUARD(PrimitiveType, DateTimePTGuard, pt_is_datetime, TYPE_DATETIME)
 VALUE_GUARD(PrimitiveType, TimePTGuard, pt_is_time, TYPE_TIME)
+VALUE_GUARD(PrimitiveType, DecimalV1PTGuard, pt_is_decimalv1, TYPE_DECIMAL)
 VALUE_GUARD(PrimitiveType, DecimalV2PTGuard, pt_is_decimalv2, TYPE_DECIMALV2)
 VALUE_GUARD(PrimitiveType, DecimalOfAnyVersionPTGuard, pt_is_decimal_of_any_version, TYPE_DECIMALV2, TYPE_DECIMAL32,
             TYPE_DECIMAL64, TYPE_DECIMAL128)
