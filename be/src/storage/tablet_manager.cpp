@@ -516,6 +516,9 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, SchemaHash sche
 }
 
 Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletInfo>& tablet_info_vec) {
+    if (tablet_info_vec.empty()) {
+        return Status::OK();
+    }
     for (int32 i = 0; i < _tablets_shards_size; i++) {
         std::unique_lock wlock(*_tablets_shards[i].lock);
         for (const TabletInfo& tablet_info : tablet_info_vec) {
