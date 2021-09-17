@@ -2489,6 +2489,14 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: id = 5: id\n" +
                 "  |  other join predicates: 2: id > 1"));
+        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+                "     TABLE: join1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1"));
+        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+                "     TABLE: join2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 5: id > 1"));
 
         // test left join: right table where predicate.
         // If we eliminate outer join, we could push predicate down to join1 and join2.
@@ -2511,6 +2519,11 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: id > 1"));
+        Assert.assertTrue(explainString.contains("0:OlapScanNode\n" +
+                "     TABLE: join1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: join1"));
 
         // test inner join: left table where predicate, both push down left table and right table
         sql = "select *\n from join1\n" +
