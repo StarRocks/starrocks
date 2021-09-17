@@ -454,76 +454,69 @@ TEST_F(BetaRowsetTest, DiscontinuousRowidTest) {
     }
 
     {
-        RowsetReaderContext reader_context;
-        reader_context.tablet_schema = &tablet_schema;
-        reader_context.need_ordered_result = true;
-        reader_context.stats = &_stats;
-
-        {
-            auto& schema = rowset->schema();
-            vector<uint32_t> pk_columns;
-            for (size_t i = 0; i < schema.num_key_columns(); i++) {
-                pk_columns.push_back((uint32_t)i);
-            }
-            vectorized::Schema pkey_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
-
-            OlapReaderStatistics stats;
-            vectorized::RowsetReadOptions rs_opts;
-
-            rs_opts.is_primary_keys = false;
-            rs_opts.sorted = false;
-            rs_opts.version = 0;
-            rs_opts.stats = &stats;
-
-            std::unique_ptr<vectorized::ColumnPredicate> predicate(
-                    vectorized::new_column_ne_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 0, "1"));
-
-            rs_opts.predicates[predicate->column_id()].emplace_back(predicate.get());
-
-            auto res = rowset->new_iterator(pkey_schema, rs_opts);
-            if (!res.ok()) {
-                ASSERT_TRUE(res.ok()) << res.status().to_string();
-            }
-
-            // TODO(cbl): refactor chunkandrowid
-            //            while (true) {
-            //                vectorized::ChunkAndRowid chunk_and_rowid;
-            //                chunk_and_rowid.chunk =
-            //                        vectorized::ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
-            //
-            //                Status st = itr->get_next(&chunk_and_rowid);
-            //
-            //                if (chunk_and_rowid.rowids_offset_col.empty()) {
-            //                    if (i == 0) {
-            //                        DCHECK_NE(UINT32_MAX, chunk_and_rowid.start_rowid);
-            //                        ASSERT_EQ(chunk_and_rowid.start_rowid, 0);
-            //                    }
-            //                } else {
-            //                    ASSERT_EQ(chunk_and_rowid.rowids_offset_col.size(), 4095);
-            //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-            //                                      chunk_and_rowid.rowids_offset_col.get_data()[0],
-            //                              0);
-            //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-            //                                      chunk_and_rowid.rowids_offset_col.get_data()[1],
-            //                              2);
-            //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-            //                                      chunk_and_rowid.rowids_offset_col.get_data()[2],
-            //                              3);
-            //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-            //                                      chunk_and_rowid.rowids_offset_col.get_data()[4094],
-            //                              4095);
-            //                }
-            //                DCHECK_NE(UINT32_MAX, chunk_and_rowid.segment_id);
-            //
-            //                i++;
-            //
-            //                if (st.is_end_of_file()) {
-            //                    break;
-            //                } else if (!st.ok()) {
-            //                    ASSERT_TRUE(st.ok()) << st.to_string();
-            //                }
-            //            }
+        auto& schema = rowset->schema();
+        vector<uint32_t> pk_columns;
+        for (size_t i = 0; i < schema.num_key_columns(); i++) {
+            pk_columns.push_back((uint32_t)i);
         }
+        vectorized::Schema pkey_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
+
+        OlapReaderStatistics stats;
+        vectorized::RowsetReadOptions rs_opts;
+
+        rs_opts.is_primary_keys = false;
+        rs_opts.sorted = false;
+        rs_opts.version = 0;
+        rs_opts.stats = &stats;
+
+        std::unique_ptr<vectorized::ColumnPredicate> predicate(
+                vectorized::new_column_ne_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 0, "1"));
+
+        rs_opts.predicates[predicate->column_id()].emplace_back(predicate.get());
+
+        auto res = rowset->new_iterator(pkey_schema, rs_opts);
+        if (!res.ok()) {
+            ASSERT_TRUE(res.ok()) << res.status().to_string();
+        }
+
+        // TODO(cbl): refactor chunkandrowid
+        //            while (true) {
+        //                vectorized::ChunkAndRowid chunk_and_rowid;
+        //                chunk_and_rowid.chunk =
+        //                        vectorized::ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
+        //
+        //                Status st = itr->get_next(&chunk_and_rowid);
+        //
+        //                if (chunk_and_rowid.rowids_offset_col.empty()) {
+        //                    if (i == 0) {
+        //                        DCHECK_NE(UINT32_MAX, chunk_and_rowid.start_rowid);
+        //                        ASSERT_EQ(chunk_and_rowid.start_rowid, 0);
+        //                    }
+        //                } else {
+        //                    ASSERT_EQ(chunk_and_rowid.rowids_offset_col.size(), 4095);
+        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
+        //                                      chunk_and_rowid.rowids_offset_col.get_data()[0],
+        //                              0);
+        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
+        //                                      chunk_and_rowid.rowids_offset_col.get_data()[1],
+        //                              2);
+        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
+        //                                      chunk_and_rowid.rowids_offset_col.get_data()[2],
+        //                              3);
+        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
+        //                                      chunk_and_rowid.rowids_offset_col.get_data()[4094],
+        //                              4095);
+        //                }
+        //                DCHECK_NE(UINT32_MAX, chunk_and_rowid.segment_id);
+        //
+        //                i++;
+        //
+        //                if (st.is_end_of_file()) {
+        //                    break;
+        //                } else if (!st.ok()) {
+        //                    ASSERT_TRUE(st.ok()) << st.to_string();
+        //                }
+        //            }
     }
 }
 
@@ -571,83 +564,76 @@ TEST_F(BetaRowsetTest, DiscontinuousRowid1Test) {
     }
 
     {
-        RowsetReaderContext reader_context;
-        reader_context.tablet_schema = &tablet_schema;
-        reader_context.need_ordered_result = true;
-        reader_context.stats = &_stats;
-
-        {
-            auto& schema = rowset->schema();
-            vector<uint32_t> pk_columns;
-            for (size_t i = 0; i < schema.num_key_columns(); i++) {
-                pk_columns.push_back((uint32_t)i);
-            }
-            vectorized::Schema pkey_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
-
-            OlapReaderStatistics stats;
-            vectorized::RowsetReadOptions rs_opts;
-
-            rs_opts.is_primary_keys = false;
-            rs_opts.sorted = false;
-            rs_opts.version = 0;
-            rs_opts.stats = &stats;
-
-            std::unique_ptr<vectorized::ColumnPredicate> predicate(
-                    vectorized::new_column_ne_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 0, "1"));
-
-            rs_opts.predicates[predicate->column_id()].emplace_back(predicate.get());
-
-            auto res = rowset->new_iterator(pkey_schema, rs_opts);
-            if (!res.ok()) {
-                ASSERT_TRUE(res.ok()) << res.status().to_string();
-            }
-
-            // TODO(cbl): refactor chunkandrowid
-            //            while (true) {
-            //                vectorized::ChunkAndRowid chunk_and_rowid;
-            //                chunk_and_rowid.chunk =
-            //                        vectorized::ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
-            //
-            //                Status st = itr->get_next(&chunk_and_rowid);
-            //
-            //                if (chunk_and_rowid.rowids_offset_col.empty()) {
-            //                    switch (i) {
-            //                    case 0:
-            //                        ASSERT_EQ(chunk_and_rowid.start_rowid, 0);
-            //                        break;
-            //                    case 1:
-            //                        ASSERT_EQ(chunk_and_rowid.start_rowid, 4097);
-            //                        break;
-            //                    case 2:
-            //                        ASSERT_EQ(chunk_and_rowid.start_rowid, 8193);
-            //                        break;
-            //                    }
-            //                } else {
-            //                    ASSERT_EQ(chunk_and_rowid.rowids_offset_col.size(), 4095);
-            //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-            //                                      chunk_and_rowid.rowids_offset_col.get_data()[0],
-            //                              0);
-            //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-            //                                      chunk_and_rowid.rowids_offset_col.get_data()[1],
-            //                              2);
-            //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-            //                                      chunk_and_rowid.rowids_offset_col.get_data()[2],
-            //                              3);
-            //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
-            //                                      chunk_and_rowid.rowids_offset_col.get_data()[4094],
-            //                              4095);
-            //                }
-            //                DCHECK_NE(UINT32_MAX, chunk_and_rowid.segment_id);
-            //
-            //                i++;
-            //
-            //                if (st.is_end_of_file()) {
-            //                    break;
-            //                } else if (!st.ok()) {
-            //                    ASSERT_TRUE(st.ok()) << st.to_string();
-            //                }
-            //            }
+        auto& schema = rowset->schema();
+        vector<uint32_t> pk_columns;
+        for (size_t i = 0; i < schema.num_key_columns(); i++) {
+            pk_columns.push_back((uint32_t)i);
         }
+        vectorized::Schema pkey_schema = vectorized::ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
+
+        OlapReaderStatistics stats;
+        vectorized::RowsetReadOptions rs_opts;
+
+        rs_opts.is_primary_keys = false;
+        rs_opts.sorted = false;
+        rs_opts.version = 0;
+        rs_opts.stats = &stats;
+
+        std::unique_ptr<vectorized::ColumnPredicate> predicate(
+                vectorized::new_column_ne_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 0, "1"));
+
+        rs_opts.predicates[predicate->column_id()].emplace_back(predicate.get());
+
+        auto res = rowset->new_iterator(pkey_schema, rs_opts);
+        if (!res.ok()) {
+            ASSERT_TRUE(res.ok()) << res.status().to_string();
+        }
+
+        // TODO(cbl): refactor chunkandrowid
+        //            while (true) {
+        //                vectorized::ChunkAndRowid chunk_and_rowid;
+        //                chunk_and_rowid.chunk =
+        //                        vectorized::ChunkHelper::new_chunk(pkey_schema, config::vector_chunk_size);
+        //
+        //                Status st = itr->get_next(&chunk_and_rowid);
+        //
+        //                if (chunk_and_rowid.rowids_offset_col.empty()) {
+        //                    switch (i) {
+        //                    case 0:
+        //                        ASSERT_EQ(chunk_and_rowid.start_rowid, 0);
+        //                        break;
+        //                    case 1:
+        //                        ASSERT_EQ(chunk_and_rowid.start_rowid, 4097);
+        //                        break;
+        //                    case 2:
+        //                        ASSERT_EQ(chunk_and_rowid.start_rowid, 8193);
+        //                        break;
+        //                    }
+        //                } else {
+        //                    ASSERT_EQ(chunk_and_rowid.rowids_offset_col.size(), 4095);
+        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
+        //                                      chunk_and_rowid.rowids_offset_col.get_data()[0],
+        //                              0);
+        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
+        //                                      chunk_and_rowid.rowids_offset_col.get_data()[1],
+        //                              2);
+        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
+        //                                      chunk_and_rowid.rowids_offset_col.get_data()[2],
+        //                              3);
+        //                    ASSERT_EQ(chunk_and_rowid.start_rowid +
+        //                                      chunk_and_rowid.rowids_offset_col.get_data()[4094],
+        //                              4095);
+        //                }
+        //                DCHECK_NE(UINT32_MAX, chunk_and_rowid.segment_id);
+        //
+        //                i++;
+        //
+        //                if (st.is_end_of_file()) {
+        //                    break;
+        //                } else if (!st.ok()) {
+        //                    ASSERT_TRUE(st.ok()) << st.to_string();
+        //                }
+        //            }
     }
 }
 
