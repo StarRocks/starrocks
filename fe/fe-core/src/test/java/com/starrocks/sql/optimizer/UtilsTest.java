@@ -8,9 +8,11 @@ import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -21,9 +23,10 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.Constants;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -33,12 +36,13 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-public class UtilsTest extends PlanTestBase {
+public class UtilsTest {
     private static final String DEFAULT_CREATE_TABLE_TEMPLATE = ""
             + "CREATE TABLE IF NOT EXISTS `table_statistic_v1` (\n"
             + "  `table_id` bigint NOT NULL,\n"
@@ -63,9 +67,46 @@ public class UtilsTest extends PlanTestBase {
             + "\"storage_format\" = \"V2\"\n"
             + ");";
 
+    private static String runningDir = "fe/mocked/UtilsTest/" + UUID.randomUUID().toString() + "/";
+
+    private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
+
+    protected static void setTableStatistics(OlapTable table, long rowCount) {
+        for (Partition partition : table.getAllPartitions()) {
+            partition.getBaseIndex().setRowCount(rowCount);
+        }
+    }
+
     @BeforeClass
     public static void beforeClass() throws Exception {
-        PlanTestBase.beforeClass();
+        FeConstants.default_scheduler_interval_millisecond = 1;
+        UtFrameUtils.createMinStarRocksCluster(runningDir);
+
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+        String DB_NAME = "test";
+        starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+        starRocksAssert.enableNewPlanner();
+
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000000000L);
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
+
+        starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL COMMENT \"\",\n" +
+                "  `v3` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
         CreateDbStmt dbStmt = new CreateDbStmt(false, Constants.StatisticsDBName);
         dbStmt.setClusterName(SystemInfoService.DEFAULT_CLUSTER);
         try {
@@ -249,7 +290,7 @@ public class UtilsTest extends PlanTestBase {
     }
 
     @Test
-    public void unknownStats() throws Exception {
+    public void unknownStats() {
         Catalog catalog = connectContext.getCatalog();
 
         OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
