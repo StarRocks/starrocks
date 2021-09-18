@@ -6,16 +6,18 @@ import glob
 import re
 import sys
 
-def gen_combined_notice(licenses_path, outpath):
+def gen_combined_notice(licenses_paths, outpath, gen_all):
     all = defaultdict(lambda: [None, None])
-    licenses = glob.glob(licenses_path + '/LICENSE-*.txt')
-    for l in licenses:
-        name = re.search(r'LICENSE-(.+)\.txt', l).group(1)
-        all[name][0] = l
-    notices = glob.glob(licenses_path + '/NOTICE-*.txt')
-    for n in notices:
-        name = re.search(r'NOTICE-(.+)\.txt', n).group(1)
-        all[name][1] = n
+    for licenses_path in licenses_paths.split(','):
+        notices = glob.glob(licenses_path + '/NOTICE-*.txt')
+        for n in notices:
+            name = re.search(r'NOTICE-(.+)\.txt', n).group(1)
+            all[name][1] = n
+        if gen_all:
+            licenses = glob.glob(licenses_path + '/LICENSE-*.txt')
+            for l in licenses:
+                name = re.search(r'LICENSE-(.+)\.txt', l).group(1)
+                all[name][0] = l
     with open(outpath, 'wt') as fout:
         fout.write('StarRocks\n\nCopyright 2021 StarRocks Limited\n')
         for name in sorted(all.keys(), key=str.lower):
@@ -28,5 +30,4 @@ def gen_combined_notice(licenses_path, outpath):
                     fout.write('\n---------------------------\n%s LICENSE\n---------------------------\n%s\n' % (name, fin.read()))
 
 if __name__ == "__main__":
-    # gen_combined_notice('licenses-binary', 'NOTICE-binary.txt')
-    gen_combined_notice(sys.argv[1], sys.argv[2])
+    gen_combined_notice(sys.argv[1], sys.argv[2], len(sys.argv) >= 4 and sys.argv[3] == 'all')

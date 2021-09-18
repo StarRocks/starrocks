@@ -262,7 +262,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
 fi
 
 cp -r -p ${STARROCKS_HOME}/LICENSE.txt ${STARROCKS_OUTPUT}/LICENSE.txt
-build-support/gen_notice.py ${STARROCKS_HOME}/licenses-binary ${STARROCKS_OUTPUT}/NOTICE.txt
+build-support/gen_notice.py ${STARROCKS_HOME}/licenses,${STARROCKS_HOME}/licenses-binary ${STARROCKS_OUTPUT}/NOTICE.txt all
 
 echo "***************************************"
 echo "Successfully build StarRocks"
