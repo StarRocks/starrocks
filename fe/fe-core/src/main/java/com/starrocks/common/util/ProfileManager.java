@@ -24,6 +24,10 @@ package com.starrocks.common.util;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.Config;
+import com.starrocks.common.profile.AsyncProfileStorage;
+import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,7 +54,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
  */
 public class ProfileManager {
     private static final Logger LOG = LogManager.getLogger(ProfileManager.class);
-    private static ProfileManager INSTANCE = null;
+    private static volatile ProfileManager INSTANCE = null;
+    private static AsyncProfileStorage PROFILE_STORAGE_INSTANCE = null;
     private static final int ARRAY_SIZE = 1000;
     public static final String QUERY_ID = "Query ID";
     public static final String START_TIME = "Start Time";
@@ -67,7 +72,9 @@ public class ProfileManager {
                     START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE));
 
     private class ProfileElement {
+        @SerializedName("infoStrings")
         public Map<String, String> infoStrings = Maps.newHashMap();
+        @SerializedName("profileContent")
         public String profileContent;
     }
 
@@ -80,8 +87,18 @@ public class ProfileManager {
     private Map<String, ProfileElement> profileMap; // from QueryId to RuntimeProfile
 
     public static ProfileManager getInstance() {
-        if (INSTANCE == null) {
+        if (INSTANCE != null) {
+            return INSTANCE;
+        }
+        synchronized (ProfileManager.class) {
+            if (INSTANCE != null) {
+                return INSTANCE;
+            }
             INSTANCE = new ProfileManager();
+            if (Config.profile_persist_enable) {
+                PROFILE_STORAGE_INSTANCE = AsyncProfileStorage.
+                        getInstance();
+            }
         }
         return INSTANCE;
     }
@@ -128,6 +145,10 @@ public class ProfileManager {
             profileDeque.addLast(element);
         } finally {
             writeLock.unlock();
+        }
+
+        if (PROFILE_STORAGE_INSTANCE != null) {
+            PROFILE_STORAGE_INSTANCE.collect(queryId, GsonUtils.GSON.toJson(element));
         }
 
         return element.profileContent;
