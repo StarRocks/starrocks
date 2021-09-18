@@ -353,7 +353,7 @@ public class Util {
     //      Base64.encodeBase64String("user:passwd".getBytes());
     // If no auth info, pass a null.
     public static String getResultForUrl(String urlStr, String encodedAuthInfo, int connectTimeoutMs,
-                                         int readTimeoutMs) {
+                                         int readTimeoutMs) throws  Exception {
         StringBuilder sb = new StringBuilder();
         InputStream stream = null;
         try {
@@ -372,16 +372,12 @@ public class Util {
             while ((line = br.readLine()) != null) {
                 sb.append(line);
             }
-        } catch (Exception e) {
-            LOG.warn("failed to get result from url: {}. {}", urlStr, e.getMessage());
-            return null;
         } finally {
             if (stream != null) {
                 try {
                     stream.close();
                 } catch (IOException e) {
                     LOG.warn("failed to close stream when get result from url: {}", urlStr, e);
-                    return null;
                 }
             }
         }

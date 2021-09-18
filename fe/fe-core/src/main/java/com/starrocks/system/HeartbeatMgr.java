@@ -295,7 +295,9 @@ public class HeartbeatMgr extends MasterDaemon {
             String url = "http://" + fe.getHost() + ":" + Config.http_port
                     + "/api/bootstrap?cluster_id=" + clusterId + "&token=" + token;
             try {
-                String result = Util.getResultForUrl(url, null, 2000, 2000);
+                String result = Util.getResultForUrl(url, null,
+                                                     FeConstants.heartbeat_interval_second * 1000,
+                                                     FeConstants.heartbeat_interval_second * 1000);
                 /*
                  * return:
                  * {"replayedJournalId":191224,"queryPort":9131,"rpcPort":9121,"status":"OK","msg":"Success"}
