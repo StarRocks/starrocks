@@ -176,6 +176,7 @@ public:
     int compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const override;
 
     void crc32_hash_at(uint32_t* hash, uint16_t idx) const;
+    void fvn_hash_at(uint32_t* hash, uint16_t idx) const;
     // Compute fvn hash, mainly used by shuffle column data
     // Note: shuffle hash function should be different from Aggregate and Join Hash map hash function
     void fvn_hash(uint32_t* hash, uint16_t from, uint16_t to) const override;

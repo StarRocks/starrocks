@@ -784,11 +784,13 @@ PARALLEL_TEST(ArrayColumnTest, test_array_hash) {
     auto* elements = down_cast<Int32Column*>(c0->elements_column().get());
 
     // insert [1, 2, 3], [4, 5, 6]
+    size_t array_size_1 = 3;
     elements->append(1);
     elements->append(2);
     elements->append(3);
     offsets->append(3);
 
+    size_t array_size_2 = 3;
     elements->append(4);
     elements->append(5);
     elements->append(6);
@@ -797,16 +799,30 @@ PARALLEL_TEST(ArrayColumnTest, test_array_hash) {
     uint32_t hash_value[2] = {0, 0};
     c0->crc32_hash(hash_value, 0, 2);
 
-    uint32_t hash_value_1 = 0;
+    uint32_t hash_value_1 = HashUtil::zlib_crc_hash(&array_size_1, sizeof(array_size_1), 0);
     for (int i = 0; i < 3; ++i) {
         elements->crc32_hash(&hash_value_1 - i, i, i + 1);
     }
-    uint32_t hash_value_2 = 0;
+    uint32_t hash_value_2 = HashUtil::zlib_crc_hash(&array_size_2, sizeof(array_size_2), 0);
     for (int i = 3; i < 6; ++i) {
         elements->crc32_hash(&hash_value_2 - i, i, i + 1);
     }
     ASSERT_EQ(hash_value_1, hash_value[0]);
     ASSERT_EQ(hash_value_2, hash_value[1]);
+
+    uint32_t hash_value_fnv[2] = {0, 0};
+    c0->fvn_hash(hash_value_fnv, 0, 2);
+    uint32_t hash_value_1_fnv = HashUtil::fnv_hash(&array_size_1, sizeof(array_size_1), 0);
+    for (int i = 0; i < 3; ++i) {
+        elements->fvn_hash(&hash_value_1_fnv - i, i, i + 1);
+    }
+    uint32_t hash_value_2_fnv = HashUtil::fnv_hash(&array_size_2, sizeof(array_size_2), 0);
+    for (int i = 3; i < 6; ++i) {
+        elements->fvn_hash(&hash_value_2_fnv - i, i, i + 1);
+    }
+
+    ASSERT_EQ(hash_value_1_fnv, hash_value_fnv[0]);
+    ASSERT_EQ(hash_value_2_fnv, hash_value_fnv[1]);
 }
 
 } // namespace starrocks::vectorized

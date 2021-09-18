@@ -307,11 +307,25 @@ int ArrayColumn::compare_at(size_t left, size_t right, const Column& right_colum
     return lhs_size < rhs_size ? -1 : (lhs_size == rhs_size ? 0 : 1);
 }
 
+void ArrayColumn::fvn_hash_at(uint32_t* hash, uint16_t idx) const {
+    DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
+    size_t offset = _offsets->get_data()[idx];
+    size_t array_size = _offsets->get_data()[idx + 1] - offset;
+
+    *hash = HashUtil::fnv_hash(&array_size, sizeof(array_size), *hash);
+    for (size_t i = 0; i < array_size; ++i) {
+        uint16_t ele_offset = offset + i;
+        uint32_t* target_hash_addr = hash - ele_offset;
+        _elements->fvn_hash(target_hash_addr, ele_offset, ele_offset + 1);
+    }
+}
+
 void ArrayColumn::crc32_hash_at(uint32_t* hash, uint16_t idx) const {
     DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
     size_t offset = _offsets->get_data()[idx];
     size_t array_size = _offsets->get_data()[idx + 1] - offset;
 
+    *hash = HashUtil::zlib_crc_hash(&array_size, sizeof(array_size), *hash);
     for (size_t i = 0; i < array_size; ++i) {
         uint16_t ele_offset = offset + i;
         uint32_t* target_hash_addr = hash - ele_offset;
@@ -320,7 +334,9 @@ void ArrayColumn::crc32_hash_at(uint32_t* hash, uint16_t idx) const {
 }
 
 void ArrayColumn::fvn_hash(uint32_t* hash, uint16_t from, uint16_t to) const {
-    crc32_hash(hash, from, to);
+    for (uint16_t i = from; i < to; ++i) {
+        fvn_hash_at(hash + i, i);
+    }
 }
 
 void ArrayColumn::crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) const {
