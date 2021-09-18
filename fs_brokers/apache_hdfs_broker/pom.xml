@@ -78,11 +78,6 @@ under the License.
                     <name>central maven repo https</name>
                     <url>https://repo.maven.apache.org/maven2</url>
                 </repository>
-                <repository>
-                    <id>Hortonworks</id>
-                    <name>Hortonworks Repository</name>
-                    <url>https://repo.hortonworks.com/content/repositories/releases/</url>
-                </repository>
                 <!-- for java-cup -->
                 <repository>
                     <id>cloudera-thirdparty</id>
@@ -204,7 +199,7 @@ under the License.
         <dependency>
             <groupId>org.apache.zookeeper</groupId>
             <artifactId>zookeeper</artifactId>
-            <version>3.4.6.2.6.5.1225-3</version>
+            <version>3.4.14</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-common -->
@@ -241,6 +236,30 @@ under the License.
             <groupId>org.apache.thrift</groupId>
             <artifactId>libthrift</artifactId>
             <version>0.14.0</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.tomcat.embed</groupId>
+                    <artifactId>tomcat-embed-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.tomcat</groupId>
+                    <artifactId>tomcat-annotations-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.tomcat.embed/tomcat-embed-core -->
+        <dependency>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-core</artifactId>
+            <version>8.5.70</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.tomcat/tomcat-annotations-api -->
+        <dependency>
+            <groupId>org.apache.tomcat</groupId>
+            <artifactId>tomcat-annotations-api</artifactId>
+            <version>8.5.70</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/log4j/log4j -->

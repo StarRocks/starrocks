@@ -1328,7 +1328,7 @@ public class Analyzer {
                 globalState.ojClauseByConjunct.put(conjunct.getId(), rhsRef);
                 ojConjuncts.add(conjunct.getId());
             }
-            if (rhsRef.getJoinOp().isSemiJoin()) {
+            if (rhsRef.getJoinOp().isSemiAntiJoin()) {
                 globalState.sjClauseByConjunct.put(conjunct.getId(), rhsRef);
             }
             if (rhsRef.getJoinOp().isInnerJoin()) {

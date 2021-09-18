@@ -595,9 +595,14 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
         boolean requiredLocalColumnsFromLeft = leftChildColumns.contains(requiredLocalColumns);
         boolean requiredLocalColumnsFromRight = rightChildColumns.contains(requiredLocalColumns);
+        boolean isLeftOrFullJoin = node.getJoinType().isLeftOuterJoin() || node.getJoinType().isFullOuterJoin();
+        boolean isRightOrFullJoin = node.getJoinType().isRightOuterJoin() || node.getJoinType().isFullOuterJoin();
 
-        // Not support local shuffle column appear on both sides at the same time
-        if (requiredLocalColumnsFromLeft == requiredLocalColumnsFromRight) {
+        // 1. Not support local shuffle column appear on both sides at the same time
+        // 2. Left outer join will cause right table produce NULL in different node, also right outer join
+        if ((requiredLocalColumnsFromLeft == requiredLocalColumnsFromRight) ||
+                (requiredLocalColumnsFromLeft && isRightOrFullJoin) ||
+                (requiredLocalColumnsFromRight && isLeftOrFullJoin)) {
             outputInputProps.clear();
             return visitOperator(node, context);
         }
@@ -762,11 +767,15 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         HashDistributionSpec hashDistributionSpec = node.getDistributionSpec();
 
         ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
-        if (node.getSelectedPartitionId().size() > 1 && !colocateIndex.isColocateTable(node.getTable().getId())) {
-            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList()));
-        } else {
+        boolean satisfyLocalProperty;
+        if (node.getSelectedPartitionId().size() <= 1 || (colocateIndex.isColocateTable(node.getTable().getId()) &&
+                !colocateIndex.isGroupUnstable(colocateIndex.getGroup(node.getTable().getId())))) {
             outputInputProps
                     .add(new Pair<>(createPropertySetByDistribution(hashDistributionSpec), Lists.newArrayList()));
+            satisfyLocalProperty = true;
+        } else {
+            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList()));
+            satisfyLocalProperty = false;
         }
 
         Optional<HashDistributionDesc> required = getRequiredLocalDesc();
@@ -776,7 +785,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
         outputInputProps.clear();
         HashDistributionDesc requireDistributionDesc = required.get();
-        if (requireDistributionDesc.getColumns().containsAll(hashDistributionSpec.getShuffleColumns())) {
+        if (requireDistributionDesc.getColumns().containsAll(hashDistributionSpec.getShuffleColumns()) &&
+                satisfyLocalProperty) {
             outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList()));
         }
 

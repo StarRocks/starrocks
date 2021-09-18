@@ -8,9 +8,24 @@
 
 namespace starrocks::vectorized {
 
+namespace in_pred_utils_detail {
 template <typename T>
-struct ItemHashSet : public PhSet<T> {
-    bool contains(const T& v) const { return PhSet<T>::contains(v); }
+struct PHashSetTraits {
+    using SetType = HashSet<T>;
+};
+
+template <>
+struct PHashSetTraits<Slice> {
+    using SetType = SliceNormalHashSet;
+};
+
+template <typename T>
+using PHashSet = typename PHashSetTraits<T>::SetType;
+} // namespace in_pred_utils_detail
+
+template <typename T>
+struct ItemHashSet : public in_pred_utils_detail::PHashSet<T> {
+    bool contains(const T& v) const { return in_pred_utils_detail::PHashSet<T>::contains(v); }
 };
 
 template <typename T, size_t N>

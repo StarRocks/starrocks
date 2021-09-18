@@ -31,7 +31,6 @@
 #include "common/status.h"
 #include "exec/empty_set_node.h"
 #include "exec/exchange_node.h"
-#include "exec/schema_scan_node.h"
 #include "exec/select_node.h"
 #include "exec/vectorized/adapter_node.h"
 #include "exec/vectorized/aggregate/aggregate_blocking_node.h"
@@ -417,7 +416,7 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
 
     int num_children = tnodes[*node_idx].num_children;
     ExecNode* node = NULL;
-    RETURN_IF_ERROR(create_node(state, pool, tnodes[*node_idx], descs, &node));
+    RETURN_IF_ERROR(create_vectorized_node(state, pool, tnodes[*node_idx], descs, &node));
 
     // assert(parent != NULL || (node_idx == 0 && root_expr != NULL));
     if (parent != NULL) {
@@ -539,28 +538,6 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
     }
-}
-
-Status ExecNode::create_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs,
-                             ExecNode** node) {
-    std::stringstream error_msg;
-
-    VLOG(2) << "tnode:\n" << apache::thrift::ThriftDebugString(tnode);
-
-    if (tnode.use_vectorized) {
-        return create_vectorized_node(state, pool, tnode, descs, node);
-    }
-
-    switch (tnode.node_type) {
-    case TPlanNodeType::SCHEMA_SCAN_NODE:
-        *node = pool->add(new SchemaScanNode(pool, tnode, descs));
-        return Status::OK();
-    default:
-        error_msg << " Don't support old query engine any more";
-        return Status::InternalError(error_msg.str());
-    }
-
-    return Status::OK();
 }
 
 void ExecNode::set_debug_options(int node_id, TExecNodePhase::type phase, TDebugAction::type action, ExecNode* root) {

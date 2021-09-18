@@ -23,8 +23,8 @@
 
 #include "common/status.h"
 #include "exec/data_sink.h"
-#include "gen_cpp/DorisExternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/StarrocksExternalService_types.h"
 #include "runtime/result_queue_mgr.h"
 #include "util/blocking_queue.hpp"
 

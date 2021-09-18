@@ -117,6 +117,7 @@ endif()
 # Set Boost
 set(Boost_DEBUG FALSE)
 set(Boost_USE_MULTITHREADED ON)
+set(Boost_NO_BOOST_CMAKE ON)
 set(BOOST_ROOT ${THIRDPARTY_DIR})
 # boost suppress warning is supported on cmake 3.20
 # https://cmake.org/cmake/help/latest/module/FindBoost.html

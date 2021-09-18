@@ -2489,6 +2489,14 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: id = 5: id\n" +
                 "  |  other join predicates: 2: id > 1"));
+        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+                "     TABLE: join1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1"));
+        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+                "     TABLE: join2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 5: id > 1"));
 
         // test left join: right table where predicate.
         // If we eliminate outer join, we could push predicate down to join1 and join2.
@@ -2511,6 +2519,11 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: id > 1"));
+        Assert.assertTrue(explainString.contains("0:OlapScanNode\n" +
+                "     TABLE: join1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: join1"));
 
         // test inner join: left table where predicate, both push down left table and right table
         sql = "select *\n from join1\n" +
@@ -3904,5 +3917,67 @@ public class PlanFragmentTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
 
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
+    }
+
+    @Test
+    public void testOuterJoinBucketShuffle() throws Exception {
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 RIGHT JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  6:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:"));
+
+        sql = "SELECT DISTINCT t0.v1 FROM t0 FULL JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  4:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----3:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  1:EXCHANGE\n" +
+                "     use vectorized: true"));
+
+        sql = "SELECT DISTINCT t1.v4 FROM t0 LEFT JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 4: v4\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  6:EXCHANGE\n" +
+                "     use vectorized: true\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    HASH_PARTITIONED: 4: v4\n" +
+                "\n" +
+                "  5:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 4: v4\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  4:Project\n" +
+                "  |  <slot 4> : 4: v4\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)"));
     }
 }
