@@ -72,11 +72,12 @@ StarRocks 会首先在指定的远端存储的路径中，建立一个名为 `__
 ~~~sql
 EXPORT TABLE db1.tbl1 
 PARTITION (p1,p2)
+(col1, col3)
 TO "hdfs://host/path/to/export/lineorder_" 
 PROPERTIES
 (
     "column_separator"=",",
-    "exec_mem_limit"="2147483648",
+    "load_mem_limit"="2147483648",
     "timeout" = "3600"
 )
 WITH BROKER "hdfs"
@@ -86,6 +87,10 @@ WITH BROKER "hdfs"
 );
 ~~~
 
+可以指定需要导出的分区，不写默认导出表中所有分区。
+
+可以指定需要导出的列，顺序可以跟 schema 不同，不写默认导出表中所有列。
+
 导出路径**如果指定到目录**，需要指定最后的`/`，否则最后的部分会被当做导出文件的前缀。不指定前缀默认为`data_`。
 示例中导出文件会生成到 export 目录中，文件前缀为 `lineorder_`。
 
@@ -93,7 +98,7 @@ PROPERTIES如下：
 
 * `column_separator`：列分隔符。默认为 `\t`。
 * `line_delimiter`：行分隔符。默认为 `\n`。
-* `exec_mem_limit`： 表示 Export 作业中，**一个查询计划**在**单个 BE** 上的内存使用限制。默认 2GB。单位字节。
+* `load_mem_limit`： 表示 Export 作业中，**一个查询计划**在**单个 BE** 上的内存使用限制。默认 2GB。单位字节。
 * `timeout`：作业超时时间。默认为 2 小时。单位秒。
 * `include_query_id`: 导出文件名中是否包含 query id，默认为 true。
 
@@ -115,7 +120,7 @@ SHOW EXPORT WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
      JobId: 14008
      State: FINISHED
   Progress: 100%
-  TaskInfo: {"partitions":["*"],"exec mem limit":2147483648,"column separator":",","line delimiter":"\n","tablet num":1,"broker":"hdfs","coord num":1,"db":"default_cluster:db1","tbl":"tbl3"}
+  TaskInfo: {"partitions":["*"],"mem limit":2147483648,"column separator":",","line delimiter":"\n","tablet num":1,"broker":"hdfs","coord num":1,"db":"default_cluster:db1","tbl":"tbl3",columns:["col1", "col3"]}
       Path: oss://bj-test/export/
 CreateTime: 2019-06-25 17:08:24
  StartTime: 2019-06-25 17:08:28
@@ -136,12 +141,13 @@ FinishTime: 2019-06-25 17:08:34
   * db：数据库名
   * tbl：表名
   * partitions：指定导出的分区。\*表示所有分区。
-  * exec mem limit：查询的内存使用限制。单位字节。
+  * mem limit：查询的内存使用限制。单位字节。
   * column separator：导出文件的列分隔符。
   * line delimiter：导出文件的行分隔符。
   * tablet num：涉及的总 Tablet 数量。
   * broker：使用的 broker 的名称。
   * coord num：查询计划的个数。
+  * columns：导出的列。
 
 * Path：远端存储上的导出路径。
 * CreateTime/StartTime/FinishTime：作业的创建时间、开始调度时间和结束时间。
@@ -165,7 +171,7 @@ CANCEL EXPORT WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
 
 一个作业的多个查询计划并行执行，任务线程池的大小通过 FE 参数 `export_task_pool_size` 配置，默认为 5。
 
-#### exec_mem_limit
+#### load_mem_limit
 
 通常一个导出作业的查询计划只有「扫描\-导出」两部分，不涉及需要太多内存的计算逻辑。所以通常 2GB 的默认内存限制可以满足需求。但在某些场景下，比如一个查询计划，在同一个 BE 上需要扫描的 Tablet 过多，或者 Tablet 的数据版本过多时，可能会导致内存不足。此时需要修改这个参数设置更大的内存，比如 4GB、8GB 等。
 
