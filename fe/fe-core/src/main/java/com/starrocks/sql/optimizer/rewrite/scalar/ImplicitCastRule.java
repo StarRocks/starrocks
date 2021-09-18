@@ -2,9 +2,11 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -19,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -51,6 +54,10 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                 }
             }
         } else {
+            Preconditions.checkArgument(
+                    fn.functionName().equalsIgnoreCase(FunctionSet.COUNT) ||
+                            Arrays.stream(fn.getArgs()).noneMatch(Type::isWildcardDecimal),
+                    String.format("Resolved function %s has wildcard decimal as argument type", fn.functionName()));
             for (int i = 0; i < fn.getNumArgs(); i++) {
                 Type type = fn.getArgs()[i];
                 ScalarOperator child = call.getChild(i);
