@@ -31,29 +31,90 @@ public class Delimiter {
             throw new AnalysisException("Delimiter cannot be empty or null");
         }
 
-        if (originStr.toUpperCase().startsWith("\\X") || originStr.toUpperCase().startsWith("0X")) {
-            String hexStr = originStr.substring(2);
-            // check hex str
-            if (hexStr.isEmpty()) {
-                throw new AnalysisException("Invalid delimiter '" + originStr + ": empty hex string");
-            }
-            if (hexStr.length() % 2 != 0) {
-                throw new AnalysisException("Invalid delimiter '" + originStr + ": hex length must be a even number");
-            }
-            for (char hexChar : hexStr.toUpperCase().toCharArray()) {
-                if (HEX_STRING.indexOf(hexChar) == -1) {
-                    throw new AnalysisException("Invalid delimiter '" + originStr + "': invalid hex format");
-                }
-            }
+        StringWriter writer = new StringWriter();
 
-            // transform to delimiter
-            StringWriter writer = new StringWriter();
-            for (byte b : hexStrToBytes(hexStr)) {
-                writer.append((char) b);
+        for (int i = 0; i < originStr.length(); i++) {
+            char ch = originStr.charAt(i);
+            boolean outputOneChar = true;
+            if (ch == '\\') {
+               char nextChar = (i == originStr.length() - 1) ? '\\' : originStr.charAt(i + 1);
+               switch (nextChar) {
+                   case '\\':
+                       ch = '\\';
+                       break;
+                   case 'b':
+                       ch = '\b';
+                       break;
+                   case 'f':
+                       ch = '\f';
+                       break;
+                   case 'n':
+                       ch = '\n';
+                       break;
+                   case 'r':
+                       ch = '\r';
+                       break;
+                   case 't':
+                       ch = '\t';
+                       break;
+                   case 'x':
+                   case 'X': {
+                       outputOneChar = false;
+                       i = parseHexString(originStr, writer, i);
+                       break;
+                   }
+                   case '\"':
+                       ch = '\"';
+                       break;
+                   case '\'':
+                       ch = '\'';
+                       break;
+                   default:
+                       writer.append(ch);
+                       continue;
+               }
+               if (outputOneChar) {
+                   writer.append(ch);
+                   i++;
+               }
+               // compatible previous 0x / 0X prefix
+            } else if (ch == '0' && i != originStr.length() - 1
+                    && (originStr.charAt(i + 1) == 'x' || originStr.charAt(i + 1) == 'X')) {
+                i = parseHexString(originStr, writer, i);
+            } else {
+                writer.append(ch);
             }
-            return writer.toString();
-        } else {
-            return originStr;
         }
+
+        return writer.toString();
     }
+
+    /**
+        \t Insert a tab
+        \b Insert a backspace
+        \n Insert a newline
+        \r Insert a carriage
+        \f Insert a formed
+        \' Insert a single quote character
+        \" Insert a double quote character
+        \\ Insert a backslash
+        \x Insert a hex escape e.g. \x48 represent h
+     */
+    private static int parseHexString(String originStr, StringWriter writer, int offset) throws AnalysisException {
+        if (offset + 4 > originStr.length()) {
+            writer.append(originStr, offset, originStr.length());
+            return originStr.length();
+        }
+        String hexStr = originStr.substring(offset + 2, offset + 4);
+        for (char hexChar : hexStr.toUpperCase().toCharArray()) {
+            if (HEX_STRING.indexOf(hexChar) == -1) {
+                throw new AnalysisException("Invalid delimiter '" + originStr + "': invalid hex format");
+            }
+        }
+        for (byte b : hexStrToBytes(hexStr)) {
+            writer.append((char) b);
+        }
+        return offset + 3;
+    }
+
 }
