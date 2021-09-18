@@ -252,10 +252,15 @@ public class ExpressionAnalyzer {
                     Type lhsType = node.getChild(0).getType();
                     Type rhsType = node.getChild(1).getType();
                     Type resultType = node.getType();
-                    Function fn = Expr.getBuiltinFunction(op.getName(), new Type[] {lhsType, rhsType},
-                            Function.CompareMode.IS_IDENTICAL);
+                    Type[] args = {lhsType, rhsType};
+                    Function fn = Expr.getBuiltinFunction(op.getName(), args, Function.CompareMode.IS_IDENTICAL);
+                    // In resolved function instance, it's argTypes and resultType are wildcard decimal type
+                    // (both precision and and scale are -1, only used in function instance resolution), it's
+                    // illegal for a function and expression to has a wildcard decimal type as its type in BE,
+                    // so here substitute wildcard decimal types with real decimal types.
+                    Function newFn = new Function(fn.getFunctionName(), args, resultType, fn.hasVarArgs());
                     node.setType(resultType);
-                    node.setFn(fn);
+                    node.setFn(newFn);
                     return null;
                 }
                 // Find result type of this operator
