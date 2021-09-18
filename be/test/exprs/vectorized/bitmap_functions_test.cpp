@@ -1680,7 +1680,7 @@ TEST_F(VecBitmapFunctionsTest, bitmapValueUnionOperator) {
 //BitmapValue test
 TEST_F(VecBitmapFunctionsTest, bitmapValueXorOperator) {
     int promote_to_bitmap = 33;
-    
+
     BitmapValue b1;
     for (int i = 0; i < promote_to_bitmap; ++i) {
         b1.add(i);
