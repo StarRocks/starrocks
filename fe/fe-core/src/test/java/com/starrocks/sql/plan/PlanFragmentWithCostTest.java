@@ -6,8 +6,8 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
-import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -78,7 +78,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     private static final String V3 = "v3";
 
     @Test
-    public void testAggWithLowCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+    public void testAggWithLowCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V2));
@@ -98,7 +98,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testAggWithHighCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+    public void testAggWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V2));
@@ -118,7 +118,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testSortWithLowCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+    public void testSortWithLowCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V1, V2));
@@ -135,7 +135,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testSortWithHighCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+    public void testSortWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V1, V2));
@@ -152,7 +152,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testTopNWithLowCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+    public void testTopNWithLowCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V1, V2));
@@ -169,7 +169,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testTopNWithHighCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+    public void testTopNWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V1, V2));
@@ -187,7 +187,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testDistinctWithoutGroupByWithLowCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage)
+    public void testDistinctWithoutGroupByWithLowCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage)
             throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(4);
         new Expectations() {
@@ -215,7 +215,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testDistinctWithoutGroupByWithHighCardinalityForceOneStage(
-            @Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+            @Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(1);
         new Expectations() {
             {
@@ -234,7 +234,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testDistinctWithGroupByWithLowCardinalityForceThreeStage(
-            @Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+            @Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(3);
         new Expectations() {
             {
@@ -254,7 +254,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testDistinctWithGroupByWithHighCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage)
+    public void testDistinctWithGroupByWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage)
             throws Exception {
         new Expectations() {
             {
@@ -271,7 +271,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
-    public void testPredicateRewrittenByProjectWithLowCardinality(@Mocked CachedStatisticStorage mockedStatisticStorage)
+    public void testPredicateRewrittenByProjectWithLowCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage)
             throws Exception {
         new Expectations() {
             {
@@ -289,7 +289,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testPredicateRewrittenByProjectWithHighCardinality(
-            @Mocked CachedStatisticStorage mockedStatisticStorage) throws Exception {
+            @Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V2, V3));
@@ -468,5 +468,28 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(planFragment.contains("  |  <slot 14> : 14: mv_bitmap_union_k7\n" +
                 "  |  <slot 15> : 15: mv_bitmap_union_k8"));
         Assert.assertTrue(planFragment.contains("rollup: bitmap_mv"));
+    }
+
+    @Test
+    public void testReplicatedJoin() throws Exception {
+        connectContext.getSessionVariable().setEnableReplicationJoin(true);
+        String sql = "select s_name, s_address from supplier, nation where s_suppkey in " +
+                "( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'forest%' ) and ps_availqty > " +
+                "( select 0.5 * sum(l_quantity) from lineitem where l_partkey = ps_partkey and l_suppkey = ps_suppkey and " +
+                "l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year ) ) " +
+                "and s_nationkey = n_nationkey and n_name = 'CANADA' order by s_name;";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains(" 3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (REPLICATED)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: S_NATIONKEY = 9: N_NATIONKEY"));
+        Assert.assertTrue(plan.contains("18:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: S_SUPPKEY = 15: PS_SUPPKEY"));
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
 }

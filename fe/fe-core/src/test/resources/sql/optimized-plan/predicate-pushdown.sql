@@ -130,7 +130,7 @@ select v1 from t0 left join t1 on v1 = v4 and v1 = 1
 LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4 AND 1: v1 = 1] post-join-predicate [null])
     SCAN (columns[1: v1] predicate[null])
     EXCHANGE SHUFFLE[4]
-        SCAN (columns[4: v4] predicate[null])
+        SCAN (columns[4: v4] predicate[4: v4 = 1])
 [end]
 
 [sql]

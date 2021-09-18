@@ -59,7 +59,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testScan() throws Exception {
         String sql = "select * from t0";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains(" OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n"
                 + "  PARTITION: RANDOM"));
     }
@@ -68,7 +67,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testProject() throws Exception {
         String sql = "select v1 from t0";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n"
                 + " OUTPUT EXPRS:1: v1\n"
                 + "  PARTITION: RANDOM\n"
@@ -85,7 +83,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testLimit() throws Exception {
         String sql = "select v1 from t0 limit 1";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n"
                 + " OUTPUT EXPRS:1: v1\n"
                 + "  PARTITION: RANDOM\n"
@@ -2492,6 +2489,14 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: id = 5: id\n" +
                 "  |  other join predicates: 2: id > 1"));
+        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+                "     TABLE: join1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1"));
+        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+                "     TABLE: join2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 5: id > 1"));
 
         // test left join: right table where predicate.
         // If we eliminate outer join, we could push predicate down to join1 and join2.
@@ -2514,6 +2519,11 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: id > 1"));
+        Assert.assertTrue(explainString.contains("0:OlapScanNode\n" +
+                "     TABLE: join1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: join1"));
 
         // test inner join: left table where predicate, both push down left table and right table
         sql = "select *\n from join1\n" +
@@ -3288,18 +3298,13 @@ public class PlanFragmentTest extends PlanTestBase {
     @Test
     public void testDistinctPushDown() throws Exception {
         String sql = "select distinct k1 from (select distinct k1 from test.pushdown_test) t where k1 > 1";
-        starRocksAssert.query(sql).explainContains("  2:AGGREGATE (update finalize)\n" +
-                "  |  group by: 1: k1\n" +
-                "  |  use vectorized: true\n" +
-                "  |  \n" +
+        starRocksAssert.query(sql).explainContains("  RESULT SINK\n" +
+                "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  group by: 1: k1\n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: pushdown_test\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 1: k1 > 1");
+                "  0:OlapScanNode");
     }
 
     @Test
@@ -3766,10 +3771,213 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testSemiJoinPredicateDerive() throws Exception {
         String sql = "select * from t0 left semi join t1 on v1 = v4 where v1 = 2";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: v1 = 2"));
+    }
+
+    @Test
+    public void testMergeAggregateNormal() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "select distinct x1 from (select distinct v1 as x1 from t0) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  use vectorized: true"));
+
+        sql = "select sum(x1) from (select sum(v1) as x1 from t0) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true"));
+
+        sql = "select SUM(x1) from (select v2, sum(v1) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true"));
+
+        sql = "select v2, SUM(x1) from (select v2, v3, sum(v1) as x1 from t0 group by v2, v3) as q group by v2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
+
+        sql = "select SUM(x1) from (select v2, sum(distinct v1), sum(v3) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: v3)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
+    }
+
+    @Test
+    public void testMergeAggregateFailed() throws Exception {
+        String sql;
+        String plan;
+        sql = "select avg(x1) from (select avg(v1) as x1 from t0) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: avg(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode"));
+
+        sql = "select SUM(v2) from (select v2, sum(v1) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: v2)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  use vectorized: true\n"));
+        sql = "select SUM(v2) from (select v2, sum(distinct v2) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: v2)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  use vectorized: true\n"));
+        sql = "select sum(distinct x1) from (select v2, sum(v2) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: v2)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n"));
+    }
+
+    @Test
+    public void testReplicatedJoin() throws Exception {
+        connectContext.getSessionVariable().setEnableReplicationJoin(true);
+
+        String sql = "select * from join1 join join2 on join1.id = join2.id;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (REPLICATED)"));
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        sql = "select * from join2 right join join1 on join1.id = join2.id;";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("join op: INNER JOIN (REPLICATED)"));
+
+        sql = "select * from join1 as a join join1 as b on a.id = b.id;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (REPLICATED)"));
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        sql = "select * from join1 as a join (select sum(id),id from join2 group by id) as b on a.id = b.id;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (REPLICATED)"));
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select * from join1 as a join (select sum(id),dt from join2 group by dt) as b on a.id = b.dt;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (BROADCAST)"));
+        Assert.assertTrue(plan.contains("EXCHANGE"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+        sql = "select a.* from join1 as a join join1 as b ;";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        sql = "select a.* from join1 as a join (select sum(id) from join1 group by dt) as b ;";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select a.* from join1 as a join (select sum(id) from join1 group by dt) as b ;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("EXCHANGE"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
+    }
+
+    @Test
+    public void testOuterJoinBucketShuffle() throws Exception {
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 RIGHT JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  6:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:"));
+
+        sql = "SELECT DISTINCT t0.v1 FROM t0 FULL JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  4:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----3:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  1:EXCHANGE\n" +
+                "     use vectorized: true"));
+
+        sql = "SELECT DISTINCT t1.v4 FROM t0 LEFT JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 4: v4\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  6:EXCHANGE\n" +
+                "     use vectorized: true\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    HASH_PARTITIONED: 4: v4\n" +
+                "\n" +
+                "  5:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 4: v4\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  4:Project\n" +
+                "  |  <slot 4> : 4: v4\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)"));
     }
 }

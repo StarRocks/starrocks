@@ -481,35 +481,25 @@ Status Aggregator::check_hash_set_memory_usage(RuntimeState* state) {
     return Status::OK();
 }
 
+#define CONVERT_TO_TWO_LEVEL(DST, SRC)                                                             \
+    if (_hash_map_variant.type == vectorized::HashMapVariant::Type::SRC) {                         \
+        _hash_map_variant.DST = std::make_unique<decltype(_hash_map_variant.DST)::element_type>(); \
+        _hash_map_variant.DST->hash_map.reserve(_hash_map_variant.SRC->hash_map.capacity());       \
+        _hash_map_variant.DST->hash_map.insert(_hash_map_variant.SRC->hash_map.begin(),            \
+                                               _hash_map_variant.SRC->hash_map.end());             \
+        _hash_map_variant.type = vectorized::HashMapVariant::Type::DST;                            \
+        _hash_map_variant.SRC.reset();                                                             \
+        return;                                                                                    \
+    }
+
 void Aggregator::try_convert_to_two_level_map() {
     if (_last_ht_memory_usage > two_level_memory_threshold) {
-        if (_hash_map_variant.type == vectorized::HashMapVariant::Type::phase1_slice) {
-            _hash_map_variant.phase1_slice_two_level =
-                    std::make_unique<vectorized::SerializedKeyTwoLevelAggHashMap<vectorized::PhmapSeed1>>();
-
-            _hash_map_variant.phase1_slice_two_level->hash_map.reserve(
-                    _hash_map_variant.phase1_slice->hash_map.capacity());
-
-            _hash_map_variant.phase1_slice_two_level->hash_map.insert(_hash_map_variant.phase1_slice->hash_map.begin(),
-                                                                      _hash_map_variant.phase1_slice->hash_map.end());
-
-            _hash_map_variant.type = vectorized::HashMapVariant::Type::phase1_slice_two_level;
-            _hash_map_variant.phase1_slice.reset();
-        } else if (_hash_map_variant.type == vectorized::HashMapVariant::Type::phase2_slice) {
-            _hash_map_variant.phase2_slice_two_level =
-                    std::make_unique<vectorized::SerializedKeyTwoLevelAggHashMap<vectorized::PhmapSeed2>>();
-
-            _hash_map_variant.phase2_slice_two_level->hash_map.reserve(
-                    _hash_map_variant.phase2_slice->hash_map.capacity());
-
-            _hash_map_variant.phase2_slice_two_level->hash_map.insert(_hash_map_variant.phase2_slice->hash_map.begin(),
-                                                                      _hash_map_variant.phase2_slice->hash_map.end());
-
-            _hash_map_variant.type = vectorized::HashMapVariant::Type::phase2_slice_two_level;
-            _hash_map_variant.phase2_slice.reset();
-        }
+        CONVERT_TO_TWO_LEVEL(phase1_slice_two_level, phase1_slice);
+        CONVERT_TO_TWO_LEVEL(phase2_slice_two_level, phase2_slice);
     }
 }
+
+#undef CONVERT_TO_TWO_LEVEL
 
 // When need finalize, create column by result type
 // otherwise, create column by serde type
@@ -615,6 +605,69 @@ void Aggregator::_evaluate_agg_fn_exprs(vectorized::Chunk* chunk) {
     }
 }
 
+// note(yan): in types.h and primitive_type.h there are similiar functions,
+// but they are for vectorized and non-vectorized version both
+// but here we just need to consider vectorized version.
+#define RETURN_PTYPE_BYTE_SIZE(TYPE, SIZE)                                           \
+    case TYPE:                                                                       \
+        static_assert(sizeof(vectorized::RunTimeTypeTraits<TYPE>::CppType) == SIZE); \
+        return SIZE;
+
+inline int get_byte_size_of_primitive_type(PrimitiveType type) {
+    switch (type) {
+        RETURN_PTYPE_BYTE_SIZE(TYPE_NULL, 1);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_BOOLEAN, 1);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_TINYINT, 1);
+
+        RETURN_PTYPE_BYTE_SIZE(TYPE_SMALLINT, 2);
+
+        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMAL32, 4);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_DATE, 4);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_INT, 4);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_FLOAT, 4);
+
+        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMAL64, 8);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_BIGINT, 8);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_TIME, 8);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_DATETIME, 8);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_DOUBLE, 8);
+
+        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMAL128, 16);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_LARGEINT, 16);
+        RETURN_PTYPE_BYTE_SIZE(TYPE_DECIMALV2, 16);
+    default:
+        return 0;
+    }
+}
+
+#undef RETURN_PTYPE_BYTE_SIZE
+
+bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs,
+                                 std::vector<GroupByColumnTypes>& group_by_types, size_t* max_size, bool* has_null) {
+    size_t size = 0;
+    *has_null = false;
+
+    for (size_t i = 0; i < group_by_expr_ctxs.size(); i++) {
+        ExprContext* ctx = group_by_expr_ctxs[i];
+        if (group_by_types[i].is_nullable) {
+            *has_null = true;
+            size += 1; // 1 bytes for  null flag.
+        }
+        PrimitiveType ptype = ctx->root()->type().type;
+        size_t byte_size = get_byte_size_of_primitive_type(ptype);
+        if (byte_size == 0) return false;
+        size += byte_size;
+    }
+    *max_size = size;
+    return true;
+}
+
+#define CHECK_AGGR_PHASE_DEFAULT()                                                                                    \
+    {                                                                                                                 \
+        type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice : HashVariantType::Type::phase2_slice; \
+        break;                                                                                                        \
+    }
+
 template <typename HashVariantType>
 void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
     auto type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice : HashVariantType::Type::phase2_slice;
@@ -625,55 +678,33 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
         case 1: {
             auto group_by_expr = _group_by_expr_ctxs[0];
             switch (group_by_expr->root()->type().type) {
-            case TYPE_TINYINT: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_null_int8
-                                                 : HashVariantType::Type::phase2_null_int8;
-                break;
+#define CHECK_AGGR_PHASE(TYPE, VALUE)                                                  \
+    case TYPE: {                                                                       \
+        type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_null_##VALUE  \
+                                         : HashVariantType::Type::phase2_null_##VALUE; \
+        break;                                                                         \
+    }
+                CHECK_AGGR_PHASE(TYPE_BOOLEAN, int8);
+                CHECK_AGGR_PHASE(TYPE_TINYINT, int8);
+                CHECK_AGGR_PHASE(TYPE_SMALLINT, int16);
+                CHECK_AGGR_PHASE(TYPE_INT, int32);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL32, int32);
+                CHECK_AGGR_PHASE(TYPE_BIGINT, int64);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL64, int64);
+                CHECK_AGGR_PHASE(TYPE_DATE, date);
+                CHECK_AGGR_PHASE(TYPE_DATETIME, timestamp);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL128, int128);
+                CHECK_AGGR_PHASE(TYPE_LARGEINT, int128);
+                CHECK_AGGR_PHASE(TYPE_CHAR, string);
+                CHECK_AGGR_PHASE(TYPE_VARCHAR, string);
+
+#undef CHECK_AGGR_PHASE
+            default:
+                CHECK_AGGR_PHASE_DEFAULT();
             }
-            case TYPE_SMALLINT: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_null_int16
-                                                 : HashVariantType::Type::phase2_null_int16;
-                break;
-            }
-            case TYPE_INT: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_null_int32
-                                                 : HashVariantType::Type::phase2_null_int32;
-                break;
-            }
-            case TYPE_BIGINT: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_null_int64
-                                                 : HashVariantType::Type::phase2_null_int64;
-                break;
-            }
-            case TYPE_DATE: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_null_date
-                                                 : HashVariantType::Type::phase2_null_date;
-                break;
-            }
-            case TYPE_DATETIME: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_null_timestamp
-                                                 : HashVariantType::Type::phase2_null_timestamp;
-                break;
-            }
-            case TYPE_CHAR:
-            case TYPE_VARCHAR: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_null_string
-                                                 : HashVariantType::Type::phase2_null_string;
-                break;
-            }
-            default: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice
-                                                 : HashVariantType::Type::phase2_slice;
-                break;
-            }
-            }
-            break;
-        }
-        default: {
-            type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice
-                                             : HashVariantType::Type::phase2_slice;
-            break;
-        }
+        } break;
+        default:
+            CHECK_AGGR_PHASE_DEFAULT();
         }
     } else {
         switch (_group_by_expr_ctxs.size()) {
@@ -682,59 +713,70 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
         case 1: {
             auto group_by_expr = _group_by_expr_ctxs[0];
             switch (group_by_expr->root()->type().type) {
-            case TYPE_TINYINT: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_int8
-                                                 : HashVariantType::Type::phase2_int8;
-                break;
+#define CHECK_AGGR_PHASE(TYPE, VALUE)                                             \
+    case TYPE: {                                                                  \
+        type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_##VALUE  \
+                                         : HashVariantType::Type::phase2_##VALUE; \
+        break;                                                                    \
+    }
+                CHECK_AGGR_PHASE(TYPE_BOOLEAN, int8);
+                CHECK_AGGR_PHASE(TYPE_TINYINT, int8);
+                CHECK_AGGR_PHASE(TYPE_SMALLINT, int16);
+                CHECK_AGGR_PHASE(TYPE_INT, int32);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL32, int32);
+                CHECK_AGGR_PHASE(TYPE_BIGINT, int64);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL64, int64);
+                CHECK_AGGR_PHASE(TYPE_DATE, date);
+                CHECK_AGGR_PHASE(TYPE_DATETIME, timestamp);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL128, int128);
+                CHECK_AGGR_PHASE(TYPE_LARGEINT, int128);
+                CHECK_AGGR_PHASE(TYPE_CHAR, string);
+                CHECK_AGGR_PHASE(TYPE_VARCHAR, string);
+
+#undef CHECK_AGGR_PHASE
+
+            default:
+                CHECK_AGGR_PHASE_DEFAULT();
             }
-            case TYPE_SMALLINT: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_int16
-                                                 : HashVariantType::Type::phase2_int16;
-                break;
-            }
-            case TYPE_INT: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_int32
-                                                 : HashVariantType::Type::phase2_int32;
-                break;
-            }
-            case TYPE_BIGINT: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_int64
-                                                 : HashVariantType::Type::phase2_int64;
-                break;
-            }
-            case TYPE_DATE: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_date
-                                                 : HashVariantType::Type::phase2_date;
-                break;
-            }
-            case TYPE_DATETIME: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_timestamp
-                                                 : HashVariantType::Type::phase2_timestamp;
-                break;
-            }
-            case TYPE_CHAR:
-            case TYPE_VARCHAR: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_string
-                                                 : HashVariantType::Type::phase2_string;
-                break;
-            }
-            default: {
-                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice
-                                                 : HashVariantType::Type::phase2_slice;
-                break;
-            }
-            }
-            break;
+        } break;
+        default:
+            CHECK_AGGR_PHASE_DEFAULT();
         }
-        default: {
-            type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice
-                                             : HashVariantType::Type::phase2_slice;
-            break;
-        }
+    }
+
+    bool has_null_column = false;
+    int fixed_byte_size = 0;
+    // this optimization don't need to be limited to multi-column group by.
+    // single column like float/double/decimal/largeint could also be applied to.
+    if (type == HashVariantType::Type::phase1_slice || type == HashVariantType::Type::phase2_slice) {
+        size_t max_size = 0;
+        if (is_group_columns_fixed_size(_group_by_expr_ctxs, _group_by_types, &max_size, &has_null_column)) {
+            if (max_size < 8 || (!has_null_column && max_size == 8)) {
+                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_fx8
+                                                 : HashVariantType::Type::phase2_slice_fx8;
+            } else if (max_size < 16 || (!has_null_column && max_size == 16)) {
+                type = _aggr_phase == AggrPhase1 ? HashVariantType::Type::phase1_slice_fx16
+                                                 : HashVariantType::Type::phase2_slice_fx16;
+            }
+            if (!has_null_column) {
+                fixed_byte_size = max_size;
+            }
         }
     }
     VLOG_ROW << "hash type is "
              << static_cast<typename std::underlying_type<typename HashVariantType::Type>::type>(type);
     hash_variant.init(type);
-}
+
+#define SET_FIXED_SLICE_HASH_MAP_FIELD(TYPE)                  \
+    if (type == HashVariantType::Type::TYPE) {                \
+        hash_variant.TYPE->has_null_column = has_null_column; \
+        hash_variant.TYPE->fixed_byte_size = fixed_byte_size; \
+    }
+    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx8);
+    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx16);
+    SET_FIXED_SLICE_HASH_MAP_FIELD(phase2_slice_fx8);
+    SET_FIXED_SLICE_HASH_MAP_FIELD(phase2_slice_fx16);
+#undef SET_FIXED_SLICE_HASH_MAP_FIELD
+
+} // namespace starrocks
 } // namespace starrocks

@@ -52,7 +52,7 @@ public class ClusterName implements Writable {
 
     public void analyze(Analyzer analyzer) throws AnalysisException {
         if (Strings.isNullOrEmpty(cluster)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NO_CLUSTER_NAME);
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_CLUSTER_NAME_NULL);
         }
 
         if (Strings.isNullOrEmpty(db)) {

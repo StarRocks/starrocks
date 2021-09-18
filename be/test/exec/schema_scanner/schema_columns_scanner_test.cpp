@@ -1,14 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
-#include "exec/schema_scanner/schema_columns_scanner.h"
+#include "exec/vectorized/schema_scanner/schema_columns_scanner.h"
 
 #include <gtest/gtest.h>
 
 #include <string>
 #include <tuple>
 #include <vector>
-
-#include "exec/schema_scanner/schema_helper.h"
 
 namespace starrocks::vectorized {
 class SchemaColumnsScannerTest : public ::testing::Test {};

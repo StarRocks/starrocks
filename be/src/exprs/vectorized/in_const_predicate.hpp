@@ -12,6 +12,7 @@
 namespace starrocks {
 namespace vectorized {
 
+namespace in_const_pred_detail {
 template <PrimitiveType Type, typename Enable = void>
 struct PHashSet {
     using PType = HashSet<RunTimeCppType<Type>>;
@@ -24,6 +25,7 @@ struct PHashSet<Type, std::enable_if_t<isSlicePT<Type>>> {
 
 template <PrimitiveType Type>
 using PHashSetType = typename PHashSet<Type>::PType;
+} // in_const_pred_detail
 
 /**
  * Support In predicate which right-values only contains const value.
@@ -218,7 +220,7 @@ public:
         }
     }
 
-    const PHashSetType<Type>& hash_set() const { return _hash_set; }
+    const in_const_pred_detail::PHashSetType<Type>& hash_set() const { return _hash_set; }
 
     bool is_not_in() const { return _is_not_in; }
 
@@ -237,7 +239,7 @@ private:
     bool _is_join_runtime_filter = false;
     bool _eq_null = false;
 
-    PHashSetType<Type> _hash_set;
+    in_const_pred_detail::PHashSetType<Type> _hash_set;
     // Ensure the string memory don't early free
     std::vector<ColumnPtr> _string_values;
 };

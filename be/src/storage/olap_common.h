@@ -374,7 +374,7 @@ using KeyRange = std::pair<WrapperField*, WrapperField*>;
 
 // ReaderStatistics used to collect statistics when scan data from storage
 struct OlapReaderStatistics {
-    int64_t capture_rowset_ns = 0;
+    int64_t create_segment_iter_ns = 0;
     int64_t io_ns = 0;
     int64_t compressed_bytes_read = 0;
 

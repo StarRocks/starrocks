@@ -68,6 +68,12 @@ public:
     Status get_batch(RowBatch** next_batch);
     Status get_chunk(vectorized::Chunk** chunk);
 
+    // check if data has come, work with try_get_chunk.
+    bool has_chunk();
+    // Probe for chunks, because _chunk_queue maybe empty when data hasn't come yet.
+    // So compute thread should do other works.
+    bool try_get_chunk(vectorized::Chunk** chunk);
+
     // Adds a row batch to this sender queue if this stream has not been cancelled;
     // blocks if this will make the stream exceed its buffer limit.
     // If the total size of the batches in this queue would exceed the allowed buffer size,
@@ -79,6 +85,10 @@ public:
     // If the total size of the chunks in this queue would exceed the allowed buffer size,
     // the queue is considered full and the call blocks until a chunk is dequeued.
     Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
+
+    // add_chunks_for_pipeline is almost the same like add_chunks except that it didn't
+    // notify compute thread to grab chunks, compute thread is notified by pipeline's dispatch thread.
+    Status add_chunks_for_pipeline(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
 
     // Decrement the number of remaining senders for this queue and signal eos ("new data")
     // if the count drops to 0. The number of senders will be 1 for a merging
@@ -100,6 +110,10 @@ public:
     bool is_finished() const;
 
 private:
+    // _add_chunks_internal is called by add_chunks and add_chunks_for_pipeline
+    Status _add_chunks_internal(const PTransmitChunkParams& request, ::google::protobuf::Closure** done,
+                                const std::function<void()>& cb);
+
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk, faststring* uncompressed_buffer);
 
@@ -203,6 +217,43 @@ bool DataStreamRecvr::SenderQueue::has_output() const {
 bool DataStreamRecvr::SenderQueue::is_finished() const {
     std::lock_guard<std::mutex> l(_lock);
     return _is_cancelled || (_num_remaining_senders == 0 && _chunk_queue.empty());
+}
+
+bool DataStreamRecvr::SenderQueue::has_chunk() {
+    std::unique_lock<std::mutex> l(_lock);
+    if (_is_cancelled) {
+        return true;
+    }
+
+    if (_chunk_queue.empty() && _num_remaining_senders > 0) {
+        return false;
+    }
+
+    return true;
+}
+
+// try_get_chunk will only be used when has_chunk return true(explicitly or implicitly).
+bool DataStreamRecvr::SenderQueue::try_get_chunk(vectorized::Chunk** chunk) {
+    std::unique_lock<std::mutex> l(_lock);
+    if (_is_cancelled) {
+        return false;
+    }
+
+    if (_chunk_queue.empty()) {
+        DCHECK_EQ(_num_remaining_senders, 0);
+        return false;
+    } else {
+        *chunk = _chunk_queue.front().second.release();
+        _recvr->_num_buffered_bytes -= _chunk_queue.front().first;
+        VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
+        _chunk_queue.pop_front();
+        if (!_pending_closures.empty()) {
+            auto closure_pair = _pending_closures.front();
+            closure_pair.first->Run();
+            _pending_closures.pop_front();
+        }
+        return true;
+    }
 }
 
 Status DataStreamRecvr::SenderQueue::get_chunk(vectorized::Chunk** chunk) {
@@ -360,8 +411,9 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
     return Status::OK();
 }
 
-Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& request,
-                                                ::google::protobuf::Closure** done) {
+Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkParams& request,
+                                                          ::google::protobuf::Closure** done,
+                                                          const std::function<void()>& cb) {
     DCHECK(request.chunks_size() > 0);
 
     int32_t be_number = request.be_number();
@@ -435,8 +487,19 @@ Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& requ
         }
         _recvr->_num_buffered_bytes += total_chunk_bytes;
     }
-    _data_arrival_cv.notify_one();
+    cb();
     return Status::OK();
+}
+
+Status DataStreamRecvr::SenderQueue::add_chunks(const PTransmitChunkParams& request,
+                                                ::google::protobuf::Closure** done) {
+    auto& condition = _data_arrival_cv;
+    return _add_chunks_internal(request, done, [&condition]() -> void { condition.notify_one(); });
+}
+
+Status DataStreamRecvr::SenderQueue::add_chunks_for_pipeline(const PTransmitChunkParams& request,
+                                                             ::google::protobuf::Closure** done) {
+    return _add_chunks_internal(request, done, []() -> void {});
 }
 
 Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk,
@@ -542,13 +605,57 @@ Status DataStreamRecvr::create_merger(const TupleRowComparator& less_than) {
 Status DataStreamRecvr::create_merger(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                                       const std::vector<bool>* is_null_first) {
     DCHECK(_is_merging);
-    _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>();
+    _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(_is_pipeline);
     vectorized::ChunkSuppliers chunk_suppliers;
     for (SenderQueue* q : _sender_queues) {
+        // we use chunk_supplier in non-pipeline.
         auto f = [q](vectorized::Chunk** chunk) -> Status { return q->get_chunk(chunk); };
         chunk_suppliers.emplace_back(std::move(f));
     }
-    RETURN_IF_ERROR(_chunks_merger->init(chunk_suppliers, &(exprs->lhs_ordering_expr_ctxs()), is_asc, is_null_first));
+    vectorized::ChunkProbeSuppliers chunk_probe_suppliers;
+    for (SenderQueue* q : _sender_queues) {
+        // we willn't use chunk_probe_supplier in non-pipeline.
+        auto f = [q](vectorized::Chunk** chunk) -> bool { return false; };
+        chunk_probe_suppliers.emplace_back(std::move(f));
+    }
+    vectorized::ChunkHasSuppliers chunk_has_suppliers;
+    for (SenderQueue* q : _sender_queues) {
+        // we willn't use chunk_has_supplier in non-pipeline.
+        auto f = [q]() -> bool { return false; };
+        chunk_has_suppliers.emplace_back(std::move(f));
+    }
+
+    RETURN_IF_ERROR(_chunks_merger->init(chunk_suppliers, chunk_probe_suppliers, chunk_has_suppliers,
+                                         &(exprs->lhs_ordering_expr_ctxs()), is_asc, is_null_first));
+    _chunks_merger->set_profile(_profile.get());
+    return Status::OK();
+}
+
+Status DataStreamRecvr::create_merger_for_pipeline(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
+                                                   const std::vector<bool>* is_null_first) {
+    DCHECK(_is_merging);
+    _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(_is_pipeline);
+    vectorized::ChunkSuppliers chunk_suppliers;
+    for (SenderQueue* q : _sender_queues) {
+        // we willn't use chunk_supplier in pipeline.
+        auto f = [q](vectorized::Chunk** chunk) -> Status { return Status::OK(); };
+        chunk_suppliers.emplace_back(std::move(f));
+    }
+    vectorized::ChunkProbeSuppliers chunk_probe_suppliers;
+    for (SenderQueue* q : _sender_queues) {
+        // we use chunk_probe_supplier in pipeline.
+        auto f = [q](vectorized::Chunk** chunk) -> bool { return q->try_get_chunk(chunk); };
+        chunk_probe_suppliers.emplace_back(std::move(f));
+    }
+    vectorized::ChunkHasSuppliers chunk_has_suppliers;
+    for (SenderQueue* q : _sender_queues) {
+        // we use chunk_has_supplier in pipeline.
+        auto f = [q]() -> bool { return q->has_chunk(); };
+        chunk_has_suppliers.emplace_back(std::move(f));
+    }
+
+    RETURN_IF_ERROR(_chunks_merger->init_for_pipeline(chunk_suppliers, chunk_probe_suppliers, chunk_has_suppliers,
+                                                      &(exprs->lhs_ordering_expr_ctxs()), is_asc, is_null_first));
     _chunks_merger->set_profile(_profile.get());
     return Status::OK();
 }
@@ -564,7 +671,8 @@ void DataStreamRecvr::transfer_all_resources(RowBatch* transfer_batch) {
 DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_tracker, const RowDescriptor& row_desc,
                                  const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
                                  bool is_merging, int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
-                                 std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr)
+                                 std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
+                                 bool is_pipeline)
         : _mgr(stream_mgr),
           _fragment_instance_id(fragment_instance_id),
           _dest_node_id(dest_node_id),
@@ -573,7 +681,8 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_t
           _is_merging(is_merging),
           _num_buffered_bytes(0),
           _profile(std::move(profile)),
-          _sub_plan_query_statistics_recvr(std::move(sub_plan_query_statistics_recvr)) {
+          _sub_plan_query_statistics_recvr(std::move(sub_plan_query_statistics_recvr)),
+          _is_pipeline(is_pipeline) {
     (void)parent_tracker;
     // TODO: Now the parent tracker may cause problem when we need spill to disk, so we
     // replace parent_tracker with nullptr, fix future
@@ -581,6 +690,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_t
     // _mem_tracker.reset(new MemTracker(_profile.get(), -1, "DataStreamRecvr", parent_tracker));
 
     // Create one queue per sender if is_merging is true.
+
     int num_queues = is_merging ? num_senders : 1;
     _sender_queues.reserve(num_queues);
     int num_sender_per_queue = is_merging ? 1 : num_senders;
@@ -615,6 +725,15 @@ Status DataStreamRecvr::get_next(vectorized::ChunkPtr* chunk, bool* eos) {
     return _chunks_merger->get_next(chunk, eos);
 }
 
+Status DataStreamRecvr::get_next_for_pipeline(vectorized::ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit) {
+    DCHECK(_chunks_merger.get() != NULL);
+    return _chunks_merger->get_next_for_pipeline(chunk, eos, should_exit);
+}
+
+bool DataStreamRecvr::is_data_ready() {
+    return _chunks_merger->is_data_ready();
+}
+
 void DataStreamRecvr::add_batch(const PRowBatch& batch, int sender_id, int be_number, int64_t packet_seq,
                                 ::google::protobuf::Closure** done) {
     int use_sender_id = _is_merging ? sender_id : 0;
@@ -627,7 +746,12 @@ Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google
     COUNTER_UPDATE(_request_received_counter, 1);
     int use_sender_id = _is_merging ? request.sender_id() : 0;
     // Add all batches to the same queue if _is_merging is false.
-    return _sender_queues[use_sender_id]->add_chunks(request, done);
+
+    if (!_is_pipeline) {
+        return _sender_queues[use_sender_id]->add_chunks(request, done);
+    } else {
+        return _sender_queues[use_sender_id]->add_chunks_for_pipeline(request, done);
+    }
 }
 
 void DataStreamRecvr::remove_sender(int sender_id, int be_number) {

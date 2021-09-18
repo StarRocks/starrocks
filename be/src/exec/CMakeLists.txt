@@ -28,82 +28,31 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_FILES
-    aggregation_node.cpp
-    aggregation_node_ir.cpp
-    analytic_eval_node.cpp
-    blocking_join_node.cpp
-    file_scan_node.cpp
     broker_reader.cpp
     buffered_reader.cpp
-    file_scanner.cpp
-    broker_scanner.cpp
-    convert_scan_node.cpp
-    cross_join_node.cpp
     data_sink.cpp
     decompressor.cpp
     empty_set_node.cpp
     exec_node.cpp
     exchange_node.cpp
-    hash_join_node.cpp
-    hash_join_node_ir.cpp
-    hash_table.cpp
     local_file_reader.cpp
-    merge_node.cpp
-    merge_join_node.cpp
     scan_node.cpp
     select_node.cpp
     text_converter.cpp
-    topn_node.cpp
     sort_exec_exprs.cpp
-    olap_scan_node.cpp
-    olap_scanner.cpp
     olap_common.cpp
     tablet_info.cpp
     tablet_sink.cpp
     plain_text_line_reader.cpp
-    es_http_scan_node.cpp
-    es_http_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
     es/es_scroll_parser.cpp
     es/es_query_builder.cpp
-    spill_sort_node.cc
-    union_node.cpp
-    union_node_ir.cpp
-    set_operation_node.cpp
-    intersect_node.cpp
-    except_node.cpp
-    repeat_node.cpp
-    schema_scanner.cpp
-    schema_scan_node.cpp
-    schema_scanner/schema_tables_scanner.cpp
-    schema_scanner/schema_dummy_scanner.cpp
-    schema_scanner/schema_schemata_scanner.cpp
-    schema_scanner/schema_variables_scanner.cpp
-    schema_scanner/schema_columns_scanner.cpp
-    schema_scanner/schema_charsets_scanner.cpp
-    schema_scanner/schema_collations_scanner.cpp
-    schema_scanner/schema_statistics_scanner.cpp
-    schema_scanner/schema_triggers_scanner.cpp
-    schema_scanner/schema_events_scanner.cpp
-    schema_scanner/schema_views_scanner.cpp
-    schema_scanner/schema_user_privileges_scanner.cpp
-    schema_scanner/schema_schema_privileges_scanner.cpp
-    schema_scanner/schema_table_privileges_scanner.cpp
-    schema_scanner/schema_helper.cpp
-    partitioned_hash_table.cc
-    partitioned_hash_table_ir.cc
-    partitioned_aggregation_node.cc
-    partitioned_aggregation_node_ir.cc
     local_file_writer.cpp
     broker_writer.cpp
-    parquet_scanner.cpp
     parquet_reader.cpp
     parquet_writer.cpp
-    orc_scanner.cpp
-    json_scanner.cpp
-    assert_num_rows_node.cpp
     vectorized/adapter_node.cpp
     vectorized/aggregator.cpp
     vectorized/aggregate/aggregate_base_node.cpp
@@ -140,10 +89,26 @@ set(EXEC_FILES
     vectorized/project_node.cpp
     vectorized/repeat_node.cpp
     vectorized/table_function_node.cpp
-    vectorized/mysql_scan_node.cpp
     vectorized/es_http_scan_node.cpp
     vectorized/es_http_scanner.cpp
     vectorized/es_http_components.cpp
+    vectorized/schema_scanner.cpp
+    vectorized/schema_scan_node.cpp
+    vectorized/schema_scanner/schema_tables_scanner.cpp
+    vectorized/schema_scanner/schema_dummy_scanner.cpp
+    vectorized/schema_scanner/schema_schemata_scanner.cpp
+    vectorized/schema_scanner/schema_variables_scanner.cpp
+    vectorized/schema_scanner/schema_columns_scanner.cpp
+    vectorized/schema_scanner/schema_charsets_scanner.cpp
+    vectorized/schema_scanner/schema_collations_scanner.cpp
+    vectorized/schema_scanner/schema_statistics_scanner.cpp
+    vectorized/schema_scanner/schema_triggers_scanner.cpp
+    vectorized/schema_scanner/schema_events_scanner.cpp
+    vectorized/schema_scanner/schema_views_scanner.cpp
+    vectorized/schema_scanner/schema_user_privileges_scanner.cpp
+    vectorized/schema_scanner/schema_schema_privileges_scanner.cpp
+    vectorized/schema_scanner/schema_table_privileges_scanner.cpp
+    vectorized/schema_scanner/schema_helper.cpp
     parquet/column_chunk_reader.cpp
     parquet/column_reader.cpp
     parquet/encoding.cpp
@@ -155,6 +120,7 @@ set(EXEC_FILES
     parquet/metadata.cpp
     parquet/group_reader.cpp
     parquet/file_reader.cpp
+    pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp
     pipeline/exchange/local_exchange.cpp
@@ -189,7 +155,7 @@ set(EXEC_FILES
 
 set(EXEC_FILES
     ${EXEC_FILES}
-    mysql_scan_node.cpp
+    vectorized/mysql_scan_node.cpp
     mysql_scanner.cpp
 )
 

@@ -55,8 +55,8 @@ public:
                              Column* to) const override {
         DCHECK(to->is_object());
         auto* column = down_cast<HyperLogLogColumn*>(to);
-
-        column->append(&this->data(state));
+        auto& hll_value = const_cast<HyperLogLog&>(this->data(state));
+        column->append(std::move(hll_value));
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
@@ -67,8 +67,8 @@ public:
                             Column* to) const override {
         DCHECK(to->is_object());
         auto* column = down_cast<HyperLogLogColumn*>(to);
-
-        column->append(&this->data(state));
+        auto& hll_value = const_cast<HyperLogLog&>(this->data(state));
+        column->append(std::move(hll_value));
     }
 
     std::string get_name() const override { return "hll_union"; }

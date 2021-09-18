@@ -12,6 +12,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -59,11 +60,12 @@ public class PlanTestBase {
         starRocksAssert = new StarRocksAssert(connectContext);
         String DB_NAME = "test";
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
-
-        connectContext.getSessionVariable().setEnableMockTpch(true);
-        connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         starRocksAssert.enableNewPlanner();
+
+        connectContext.getCatalog().setStatisticStorage(new MockTpchStatisticStorage(1));
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(10000000000L);
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
 
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +

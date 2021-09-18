@@ -22,6 +22,7 @@
 #include "exec/exchange_node.h"
 
 #include "column/chunk.h"
+#include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -138,84 +139,6 @@ Status ExchangeNode::fill_input_row_batch(RuntimeState* state) {
               << " is_cancelled=" << (ret_status.is_cancelled() ? "true" : "false")
               << " instance_id=" << state->fragment_instance_id();
     return ret_status;
-}
-
-Status ExchangeNode::get_next(RuntimeState* state, RowBatch* output_batch, bool* eos) {
-    RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::GETNEXT));
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-
-    if (reached_limit()) {
-        _stream_recvr->transfer_all_resources(output_batch);
-        *eos = true;
-        return Status::OK();
-    } else {
-        *eos = false;
-    }
-
-    if (_is_merging) {
-        return get_next_merging(state, output_batch, eos);
-    }
-
-    ExprContext* const* ctxs = &_conjunct_ctxs[0];
-    int num_ctxs = _conjunct_ctxs.size();
-
-    while (true) {
-        {
-            SCOPED_TIMER(_convert_row_batch_timer);
-            RETURN_IF_CANCELLED(state);
-            // copy rows until we hit the limit/capacity or until we exhaust _input_batch
-            while (!reached_limit() && !output_batch->at_capacity() && _input_batch != NULL &&
-                   _next_row_idx < _input_batch->capacity()) {
-                TupleRow* src = _input_batch->get_row(_next_row_idx);
-
-                if (ExecNode::eval_conjuncts(ctxs, num_ctxs, src)) {
-                    int j = output_batch->add_row();
-                    TupleRow* dest = output_batch->get_row(j);
-                    // if the input row is shorter than the output row, make sure not to leave
-                    // uninitialized Tuple* around
-                    output_batch->clear_row(dest);
-                    // this works as expected if rows from input_batch form a prefix of
-                    // rows in output_batch
-                    _input_batch->copy_row(src, dest);
-                    output_batch->commit_last_row();
-                    ++_num_rows_returned;
-                }
-
-                ++_next_row_idx;
-            }
-
-            if (VLOG_ROW_IS_ON) {
-                VLOG_ROW << "ExchangeNode output batch: " << output_batch->to_string();
-            }
-
-            COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-
-            if (reached_limit()) {
-                _stream_recvr->transfer_all_resources(output_batch);
-                *eos = true;
-                return Status::OK();
-            }
-
-            if (output_batch->at_capacity()) {
-                *eos = false;
-                return Status::OK();
-            }
-        }
-
-        // we need more rows
-        if (_input_batch != NULL) {
-            _input_batch->transfer_resource_ownership(output_batch);
-        }
-
-        RETURN_IF_ERROR(fill_input_row_batch(state));
-        *eos = (_input_batch == NULL);
-        if (*eos) {
-            return Status::OK();
-        }
-
-        _next_row_idx = 0;
-        DCHECK(_input_batch->row_desc().layout_is_prefix_of(output_batch->row_desc()));
-    }
 }
 
 Status ExchangeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
@@ -377,13 +300,18 @@ void ExchangeNode::debug_string(int indentation_level, std::stringstream* out) c
 pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators;
-    auto exchange_operator = std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
-                                                                             _num_senders, _input_row_desc);
-    // A merging ExchangeSourceOperator should not be parallelized.
-    exchange_operator->set_degree_of_parallelism(_is_merging ? 1 : context->degree_of_parallelism());
-    operators.emplace_back(std::move(exchange_operator));
-    if (limit() != -1) {
-        operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    if (!_is_merging) {
+        operators.emplace_back(std::make_shared<ExchangeSourceOperatorFactory>(context->next_operator_id(), id(),
+                                                                               _num_senders, _input_row_desc));
+        if (limit() != -1) {
+            operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+        }
+    } else {
+        auto exchange_merge_sort_source_operator = std::make_shared<ExchangeMergeSortSourceOperatorFactory>(
+                context->next_operator_id(), id(), _num_senders, _input_row_desc, &_sort_exec_exprs, _is_asc_order,
+                _nulls_first, _offset, _limit);
+        exchange_merge_sort_source_operator->set_degree_of_parallelism(1);
+        operators.emplace_back(std::move(exchange_merge_sort_source_operator));
     }
     return operators;
 }

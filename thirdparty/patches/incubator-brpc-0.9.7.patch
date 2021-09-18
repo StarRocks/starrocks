@@ -1,0 +1,61 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 3deb7342..13f739c6 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -115,13 +115,13 @@ set(CMAKE_C_FLAGS "${CMAKE_CPP_FLAGS} -O2 -pipe -Wall -W -fPIC -fstrict-aliasing
+ macro(use_cxx11)
+ if(CMAKE_VERSION VERSION_LESS "3.1.3")
+     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
++        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+     endif()
+     if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
++        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+     endif()
+ else()
+-    set(CMAKE_CXX_STANDARD 11)
++    set(CMAKE_CXX_STANDARD 17)
+     set(CMAKE_CXX_STANDARD_REQUIRED ON)
+ endif()
+ endmacro(use_cxx11)
+@@ -134,7 +134,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4 -msse4.2")
+     elseif((CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64"))
+         # segmentation fault in libcontext
+-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-gcse")
++        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-gcse -w")
+     endif()
+     if(NOT (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 7.0))
+         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-aligned-new")
+@@ -194,6 +194,7 @@ set(DYNAMIC_LIB
+     ${GFLAGS_LIBRARY}
+     ${PROTOBUF_LIBRARIES}
+     ${LEVELDB_LIB}
++    snappy
+     ${PROTOC_LIB}
+     ${CMAKE_THREAD_LIBS_INIT}
+     ${THRIFT_LIB}
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index ee616eb1..b39f8d40 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -62,11 +62,13 @@ add_executable(protoc-gen-mcpack ${protoc_gen_mcpack_SOURCES})
+ target_link_libraries(protoc-gen-mcpack brpc-shared)
+     
+ #install directory
+-install(TARGETS brpc-shared
+-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+-        )
++if(BUILD_SHARED_LIBS)
++    install(TARGETS brpc-shared
++            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
++            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
++            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
++            )
++endif()
+ 
+ install(TARGETS brpc-static
+         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}

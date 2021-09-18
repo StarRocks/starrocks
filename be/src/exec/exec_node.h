@@ -99,20 +99,9 @@ public:
     // Caller must not be holding any io buffers. This will cause deadlock.
     virtual Status open(RuntimeState* state);
 
-    // Retrieves rows and returns them via row_batch. Sets eos to true
-    // if subsequent calls will not retrieve any more rows.
-    // Data referenced by any tuples returned in row_batch must not be overwritten
-    // by the callee until close() is called. The memory holding that data
-    // can be returned via row_batch's tuple_data_pool (in which case it may be deleted
-    // by the caller) or held on to by the callee. The row_batch, including its
-    // tuple_data_pool, will be destroyed by the caller at some point prior to the final
-    // close() call.
-    // In other words, if the memory holding the tuple data will be referenced
-    // by the callee in subsequent get_next() calls, it must *not* be attached to the
-    // row_batch's tuple_data_pool.
-    // Caller must not be holding any io buffers. This will cause deadlock.
-    // TODO: AggregationNode and HashJoinNode cannot be "re-opened" yet.
-    virtual Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) = 0;
+    virtual Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
+        return Status::NotSupported("Don't support old query engine any more");
+    }
 
     virtual Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
@@ -170,12 +159,6 @@ public:
     void collect_scan_nodes(std::vector<ExecNode*>* nodes);
 
     bool _check_has_vectorized_scan_child();
-
-    // When the agg node is the scan node direct parent,
-    // we directly return agg object from scan node to agg node,
-    // and don't serialize the agg object.
-    // This improve is cautious, we ensure the correctness firstly.
-    void try_do_aggregate_serde_improve();
 
     typedef bool (*EvalConjunctsFn)(ExprContext* const* ctxs, int num_ctxs, TupleRow* row);
     // Evaluate exprs over row.  Returns true if all exprs return true.
@@ -375,10 +358,6 @@ protected:
     /// Returns true if this node is inside the right-hand side plan tree of a SubplanNode.
     /// Valid to call in or after Prepare().
     bool is_in_subplan() const { return false; }
-
-    // Create a single exec node derived from thrift node; place exec node in 'pool'.
-    static Status create_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs,
-                              ExecNode** node);
 
     static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
                                          const DescriptorTbl& descs, ExecNode** node);

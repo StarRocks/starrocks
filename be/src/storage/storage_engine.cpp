@@ -43,7 +43,6 @@
 #include "storage/fs/file_block_manager.h"
 #include "storage/lru_cache.h"
 #include "storage/memtable_flush_executor.h"
-#include "storage/push_handler.h"
 #include "storage/reader.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -425,18 +424,20 @@ bool StorageEngine::_delete_tablets_on_unused_root_path() {
     uint32_t unused_root_path_num = 0;
     uint32_t total_root_path_num = 0;
 
-    std::lock_guard<std::mutex> l(_store_lock);
-    if (_store_map.size() == 0) {
-        return false;
-    }
-
-    for (auto& it : _store_map) {
-        ++total_root_path_num;
-        if (it.second->is_used()) {
-            continue;
+    {
+        std::lock_guard<std::mutex> l(_store_lock);
+        if (_store_map.size() == 0) {
+            return false;
         }
-        it.second->clear_tablets(&tablet_info_vec);
-        ++unused_root_path_num;
+
+        for (auto& it : _store_map) {
+            ++total_root_path_num;
+            if (it.second->is_used()) {
+                continue;
+            }
+            it.second->clear_tablets(&tablet_info_vec);
+            ++unused_root_path_num;
+        }
     }
 
     if (too_many_disks_are_failed(unused_root_path_num, total_root_path_num)) {
