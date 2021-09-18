@@ -315,6 +315,7 @@ public class HeartbeatMgr extends MasterDaemon {
                             System.currentTimeMillis());
                 }
             } catch (Exception e) {
+                LOG.warn("get fe heartbeat failed", e);
                 return new FrontendHbResponse(fe.getNodeName(),
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
             }
