@@ -978,10 +978,6 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalRepeat(PhysicalRepeatOperator node, ExpressionContext context) {
         // Pass through the requirements to the child
         if (getRequiredLocalDesc().isPresent()) {
-            if (node.getRepeatColumnRef().size() > 2) {
-                return visitOperator(node, context);
-            }
-            outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList(distributeRequirements())));
             return visitOperator(node, context);
         }
         outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList(PhysicalPropertySet.EMPTY)));
