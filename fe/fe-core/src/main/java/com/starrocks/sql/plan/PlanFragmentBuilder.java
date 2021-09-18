@@ -182,6 +182,11 @@ public class PlanFragmentBuilder {
             return;
         }
 
+        if (execPlan.getScanNodes().stream().allMatch(d -> d instanceof SchemaScanNode)) {
+            inputFragment.setOutputExprs(outputExprs);
+            return;
+        }
+
         ExchangeNode exchangeNode =
                 new ExchangeNode(execPlan.getPlanCtx().getNextNodeId(), inputFragment.getPlanRoot(), false);
         exchangeNode.setNumInstances(1);
