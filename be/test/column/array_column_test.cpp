@@ -831,6 +831,17 @@ PARALLEL_TEST(ArrayColumnTest, test_array_hash) {
     offsets->append(elements->size());
     uint32_t hash_value_overflow_test[3] = {0, 0, 0};
     c0->crc32_hash(hash_value_overflow_test, 0, 3);
+
+    auto& offset_values = offsets->get_data();
+    size_t sz = offset_values[offset_values.size() - 1] - offset_values[offset_values.size() - 2];
+
+    uint32_t hash_value_overflow = HashUtil::zlib_crc_hash(&sz, sizeof(sz), 0);
+    for (int i = 0; i < 100000; ++i) {
+        uint32_t value = i;
+        hash_value_overflow = HashUtil::zlib_crc_hash(&value, sizeof(value), hash_value_overflow);
+    }
+
+    ASSERT_EQ(hash_value_overflow, hash_value_overflow_test[2]);
 }
 
 } // namespace starrocks::vectorized
