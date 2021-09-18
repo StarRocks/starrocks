@@ -1286,5 +1286,21 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static boolean enable_udf = false;
+
+    @ConfField(mutable = true, masterOnly = true)
+    public static boolean profile_persist_enable = false;
+    @ConfField(mutable = true, masterOnly = true)
+    public static String profile_storage_type = "kafka";
+    @ConfField(mutable = true, masterOnly = true)
+    public static int profile_storage_batch_size = 1000;
+
+    /**
+     * Available when profile_storage_type = kafka
+     */
+    @ConfField(mutable = true, masterOnly = true)
+    public static String profile_storage_kafka_servers = "";
+    @ConfField(mutable = true, masterOnly = true)
+    public static String profile_storage_kafka_topic = "";
+
 }
 
