@@ -28,44 +28,71 @@ import org.junit.Test;
 public class RowDelimiterTest {
     @Test
     public void testNormal() throws AnalysisException {
-        // \n
-        RowDelimiter delimiter = new RowDelimiter("\n");
-        delimiter.analyze();
-        Assert.assertEquals("'\n'", delimiter.toSql());
-        Assert.assertEquals("\n", delimiter.getRowDelimiter());
 
-        // \x01
-        delimiter = new RowDelimiter("\\x01");
-        delimiter.analyze();
-        Assert.assertEquals("'\\x01'", delimiter.toSql());
-        Assert.assertEquals("\1", delimiter.getRowDelimiter());
+        RowDelimiter separator = new RowDelimiter("\t");
+        separator.analyze();
+        Assert.assertEquals("'\t'", separator.toSql());
+        Assert.assertEquals("\t", separator.getRowDelimiter());
 
-        // \x00 \x01
-        delimiter = new RowDelimiter("\\x0001");
-        delimiter.analyze();
-        Assert.assertEquals("'\\x0001'", delimiter.toSql());
-        Assert.assertEquals("\0\1", delimiter.getRowDelimiter());
+        separator = new RowDelimiter("\\x01");
+        separator.analyze();
+        Assert.assertEquals("'\\x01'", separator.toSql());
+        Assert.assertEquals("\1", separator.getRowDelimiter());
 
-        delimiter = new RowDelimiter("|");
-        delimiter.analyze();
-        Assert.assertEquals("'|'", delimiter.toSql());
-        Assert.assertEquals("|", delimiter.getRowDelimiter());
+        separator = new RowDelimiter("0");
+        separator.analyze();
+        Assert.assertEquals("'0'", separator.toSql());
+        Assert.assertEquals("0", separator.getRowDelimiter());
 
-        delimiter = new RowDelimiter("\\|");
-        delimiter.analyze();
-        Assert.assertEquals("'\\|'", delimiter.toSql());
-        Assert.assertEquals("\\|", delimiter.getRowDelimiter());
+        separator = new RowDelimiter("0x");
+        separator.analyze();
+        Assert.assertEquals("'0x'", separator.toSql());
+        Assert.assertEquals("0x", separator.getRowDelimiter());
+
+        separator = new RowDelimiter("0x1");
+        separator.analyze();
+        Assert.assertEquals("'0x1'", separator.toSql());
+        Assert.assertEquals("0x1", separator.getRowDelimiter());
+
+        separator = new RowDelimiter("0x1");
+        separator.analyze();
+        Assert.assertEquals("'0x1'", separator.toSql());
+        Assert.assertEquals("0x1", separator.getRowDelimiter());
+
+        separator = new RowDelimiter("\\x");
+        separator.analyze();
+        Assert.assertEquals("'\\x'", separator.toSql());
+        Assert.assertEquals("\\x", separator.getRowDelimiter());
+
+        separator = new RowDelimiter("\\x1");
+        separator.analyze();
+        Assert.assertEquals("'\\x1'", separator.toSql());
+        Assert.assertEquals("\\x1", separator.getRowDelimiter());
+
+        separator = new RowDelimiter("\\x0001");
+        separator.analyze();
+        Assert.assertEquals("'\\x0001'", separator.toSql());
+        Assert.assertEquals("\u000001", separator.getRowDelimiter());
+
+        separator = new RowDelimiter("\\x011");
+        separator.analyze();
+        Assert.assertEquals("'\\x011'", separator.toSql());
+        Assert.assertEquals("\u00011", separator.getRowDelimiter());
+
+        separator = new RowDelimiter("\\|");
+        separator.analyze();
+        Assert.assertEquals("'\\|'", separator.toSql());
+        Assert.assertEquals("\\|", separator.getRowDelimiter());
+
+        separator = new RowDelimiter("\t\b");
+        separator.analyze();
+        Assert.assertEquals("'\t\b'", separator.toSql());
+        Assert.assertEquals("\t\b", separator.getRowDelimiter());
     }
 
     @Test(expected = AnalysisException.class)
     public void testHexFormatError() throws AnalysisException {
         RowDelimiter delimiter = new RowDelimiter("\\x0g");
-        delimiter.analyze();
-    }
-
-    @Test(expected = AnalysisException.class)
-    public void testHexLengthError() throws AnalysisException {
-        RowDelimiter delimiter = new RowDelimiter("\\x011");
         delimiter.analyze();
     }
 }
