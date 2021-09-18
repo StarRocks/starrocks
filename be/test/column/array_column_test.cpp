@@ -811,18 +811,26 @@ PARALLEL_TEST(ArrayColumnTest, test_array_hash) {
     ASSERT_EQ(hash_value_2, hash_value[1]);
 
     uint32_t hash_value_fnv[2] = {0, 0};
-    c0->fvn_hash(hash_value_fnv, 0, 2);
+    c0->fnv_hash(hash_value_fnv, 0, 2);
     uint32_t hash_value_1_fnv = HashUtil::fnv_hash(&array_size_1, sizeof(array_size_1), 0);
     for (int i = 0; i < 3; ++i) {
-        elements->fvn_hash(&hash_value_1_fnv - i, i, i + 1);
+        elements->fnv_hash(&hash_value_1_fnv - i, i, i + 1);
     }
     uint32_t hash_value_2_fnv = HashUtil::fnv_hash(&array_size_2, sizeof(array_size_2), 0);
     for (int i = 3; i < 6; ++i) {
-        elements->fvn_hash(&hash_value_2_fnv - i, i, i + 1);
+        elements->fnv_hash(&hash_value_2_fnv - i, i, i + 1);
     }
 
     ASSERT_EQ(hash_value_1_fnv, hash_value_fnv[0]);
     ASSERT_EQ(hash_value_2_fnv, hash_value_fnv[1]);
+
+    // overflow test
+    for (int i = 0; i < 100000; ++i) {
+        elements->append(i);
+    }
+    offsets->append(elements->size());
+    uint32_t hash_value_overflow_test[3] = {0, 0, 0};
+    c0->crc32_hash(hash_value_overflow_test, 0, 3);
 }
 
 } // namespace starrocks::vectorized

@@ -175,14 +175,14 @@ public:
     // For non Nullable and non floating point types, nan_direction_hint is ignored.
     int compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const override;
 
-    void crc32_hash_at(uint32_t* hash, uint16_t idx) const;
-    void fvn_hash_at(uint32_t* hash, uint16_t idx) const;
+    void crc32_hash_at(uint32_t* seed, int32_t idx) const override;
+    void fnv_hash_at(uint32_t* seed, int32_t idx) const override;
     // Compute fvn hash, mainly used by shuffle column data
     // Note: shuffle hash function should be different from Aggregate and Join Hash map hash function
-    void fvn_hash(uint32_t* hash, uint16_t from, uint16_t to) const override;
+    void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     // used by data loading compute tablet bucket
-    void crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) const override;
+    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     // Push one row to MysqlRowBuffer
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
@@ -206,7 +206,7 @@ public:
         return _elements->container_memory_usage() + _offsets->container_memory_usage();
     }
 
-    size_t element_memory_usage(size_t from, size_t size) const;
+    size_t element_memory_usage(size_t from, size_t size) const override;
 
     void swap_column(Column& rhs) override;
 
