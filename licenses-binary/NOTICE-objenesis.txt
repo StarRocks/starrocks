@@ -1,0 +1,8 @@
+// ------------------------------------------------------------------
+// NOTICE file corresponding to the section 4d of The Apache License,
+// Version 2.0, in this case for Objenesis
+// ------------------------------------------------------------------
+
+Objenesis
+Copyright 2006-2009 Joe Walnes, Henri Tremblay, Leonardo Mesquita
+
