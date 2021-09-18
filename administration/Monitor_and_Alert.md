@@ -250,7 +250,7 @@ scrape_configs:
         labels:
           group: fe # 这里配置了 fe 的 group，该 group 中包含了 3 个 Frontends
 
-      - targets: ['be_host1:http_port', 'be_host2:http_port', 'be_host3:http_port']
+      - targets: ['be_host1:webserver_port', 'be_host2:webserver_port', 'be_host3:webserver_port']
         labels:
           group: be # 这里配置了 be 的 group，该 group 中包含了 3 个 Backends
   - job_name: 'StarRocks_Cluster02' # 可以在Prometheus中监控多个StarRocks集群
@@ -261,7 +261,7 @@ scrape_configs:
         labels:
           group: fe
 
-      - targets: ['be_host1:http_port', 'be_host2:http_port', 'be_host3:http_port']
+      - targets: ['be_host1:webserver_port', 'be_host2:webserver_port', 'be_host3:webserver_port']
         labels:
           group: be
 ```
