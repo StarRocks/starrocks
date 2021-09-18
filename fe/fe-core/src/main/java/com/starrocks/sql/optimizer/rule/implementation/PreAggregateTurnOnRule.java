@@ -304,7 +304,10 @@ public class PreAggregateTurnOnRule {
                 return visit(optExpression, context);
             }
 
-            // For other types of joins, only one side can turn on pre aggregation
+            // For other types of joins, only one side can turn on pre aggregation which side has aggregation.
+            // The columns used by the aggregate functions can only be the columns of one of the children,
+            // the olap scan node will turn off pre aggregation if aggregation function used both sides columns,
+            // this can be guaranteed by checkAggregations in visitPhysicalOlapScan.
             ColumnRefSet aggregationColumns = new ColumnRefSet();
             List<ScalarOperator> leftGroupOperator = Lists.newArrayList();
             List<ScalarOperator> rightGroupOperator = Lists.newArrayList();
