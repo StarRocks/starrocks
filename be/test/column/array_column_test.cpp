@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
+
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
@@ -773,6 +775,38 @@ PARALLEL_TEST(ArrayColumnTest, test_clone_column) {
     ASSERT_EQ(0, cloned_column->size());
     ASSERT_EQ(0, down_cast<ArrayColumn*>(cloned_column.get())->elements_column()->size());
     ASSERT_EQ(1, down_cast<ArrayColumn*>(cloned_column.get())->offsets_column()->size());
+}
+
+PARALLEL_TEST(ArrayColumnTest, test_array_hash) {
+    auto c0 = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+
+    auto* offsets = down_cast<UInt32Column*>(c0->offsets_column().get());
+    auto* elements = down_cast<Int32Column*>(c0->elements_column().get());
+
+    // insert [1, 2, 3], [4, 5, 6]
+    elements->append(1);
+    elements->append(2);
+    elements->append(3);
+    offsets->append(3);
+
+    elements->append(4);
+    elements->append(5);
+    elements->append(6);
+    offsets->append(6);
+
+    uint32_t hash_value[2] = {0, 0};
+    c0->crc32_hash(hash_value, 0, 2);
+
+    uint32_t hash_value_1 = 0;
+    for (int i = 0; i < 3; ++i) {
+        elements->crc32_hash(&hash_value_1 - i, i, i + 1);
+    }
+    uint32_t hash_value_2 = 0;
+    for (int i = 3; i < 6; ++i) {
+        elements->crc32_hash(&hash_value_2 - i, i, i + 1);
+    }
+    ASSERT_EQ(hash_value_1, hash_value[0]);
+    ASSERT_EQ(hash_value_2, hash_value[1]);
 }
 
 } // namespace starrocks::vectorized

@@ -2,6 +2,8 @@
 
 #include "column/array_column.h"
 
+#include <cstdint>
+
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "gutil/bits.h"
@@ -305,14 +307,26 @@ int ArrayColumn::compare_at(size_t left, size_t right, const Column& right_colum
     return lhs_size < rhs_size ? -1 : (lhs_size == rhs_size ? 0 : 1);
 }
 
-void ArrayColumn::fvn_hash(uint32_t* seed, uint16_t from, uint16_t to) const {
-    // TODO: only used in shuffle.
-    DCHECK(false) << "If you use array element as join column, it should be implemented";
+void ArrayColumn::crc32_hash_at(uint32_t* hash, uint16_t idx) const {
+    DCHECK_LT(idx + 1, _offsets->size()) << "idx + 1 should be less than offsets size";
+    size_t offset = _offsets->get_data()[idx];
+    size_t array_size = _offsets->get_data()[idx + 1] - offset;
+
+    for (size_t i = 0; i < array_size; ++i) {
+        uint16_t ele_offset = offset + i;
+        uint32_t* target_hash_addr = hash - ele_offset;
+        _elements->crc32_hash(target_hash_addr, ele_offset, ele_offset + 1);
+    }
 }
 
-void ArrayColumn::crc32_hash(uint32_t* seed, uint16_t from, uint16_t to) const {
-    // TODO: only used in shuffle.
-    DCHECK(false) << "If you use array element as join column, it should be implemented";
+void ArrayColumn::fvn_hash(uint32_t* hash, uint16_t from, uint16_t to) const {
+    crc32_hash(hash, from, to);
+}
+
+void ArrayColumn::crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) const {
+    for (uint16_t i = from; i < to; ++i) {
+        crc32_hash_at(hash + i, i);
+    }
 }
 
 void ArrayColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {

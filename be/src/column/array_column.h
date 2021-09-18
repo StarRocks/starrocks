@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "column/column.h"
 #include "column/fixed_length_column.h"
 
@@ -173,12 +175,13 @@ public:
     // For non Nullable and non floating point types, nan_direction_hint is ignored.
     int compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const override;
 
+    void crc32_hash_at(uint32_t* hash, uint16_t idx) const;
     // Compute fvn hash, mainly used by shuffle column data
     // Note: shuffle hash function should be different from Aggregate and Join Hash map hash function
-    void fvn_hash(uint32_t* seed, uint16_t from, uint16_t to) const override;
+    void fvn_hash(uint32_t* hash, uint16_t from, uint16_t to) const override;
 
     // used by data loading compute tablet bucket
-    void crc32_hash(uint32_t* seed, uint16_t from, uint16_t to) const override;
+    void crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) const override;
 
     // Push one row to MysqlRowBuffer
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
