@@ -21,7 +21,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
-import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
@@ -264,7 +263,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) groupExpression.getOp();
         return !aggregate.getType().isGlobal() || aggregate.isSplit() ||
                 !groupExpression.getGroup().getStatistics().getColumnStatistics().values().stream()
-                        .allMatch(ColumnStatistic::isUnknown) ||
+                        .allMatch(d -> d.isUnknown() || d.getAverageRowSize() < 2) ||
                 !(childBestExpr.getOp() instanceof PhysicalDistributionOperator) ||
                 !((PhysicalDistributionOperator) childBestExpr.getOp()).getDistributionSpec().getType()
                         .equals(DistributionSpec.DistributionType.SHUFFLE);
