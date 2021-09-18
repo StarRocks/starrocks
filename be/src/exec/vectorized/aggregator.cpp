@@ -702,7 +702,7 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
             default:
                 CHECK_AGGR_PHASE_DEFAULT();
             }
-        }
+        } break;
         default:
             CHECK_AGGR_PHASE_DEFAULT();
         }
@@ -738,7 +738,7 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
             default:
                 CHECK_AGGR_PHASE_DEFAULT();
             }
-        }
+        } break;
         default:
             CHECK_AGGR_PHASE_DEFAULT();
         }
