@@ -29,8 +29,8 @@ template <PrimitiveType PT, ArrowTypeId AT, bool is_nullable>
 struct ColumnToArrowConverter<PT, AT, is_nullable, ConvFloatAndIntegerGuard<PT, AT>> {
     using StarRocksCppType = RunTimeCppType<PT>;
     using StarRocksColumnType = RunTimeColumnType<PT>;
-    using ArrowType = ArrowTypeValueToStruct<AT>;
-    using ArrowCppType = ArrowTypeValueToCppType<AT>;
+    using ArrowType = ArrowTypeIdToType<AT>;
+    using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
     static inline arrow::Status convert(const ColumnPtr& column, arrow::MemoryPool* pool,
                                         std::shared_ptr<arrow::Array>& array) {
@@ -42,7 +42,7 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvFloatAndIntegerGuard<PT, 
             const auto* null_column = down_cast<NullColumn*>(nullable_column->null_column().get());
             const auto& data = data_column->get_data();
             const auto num_rows = null_column->size();
-            for (auto i = 0; i <= num_rows; ++i) {
+            for (auto i = 0; i < num_rows; ++i) {
                 if (nullable_column->is_null(i)) {
                     ARROW_RETURN_NOT_OK(builder.AppendNull());
                 } else {
@@ -68,8 +68,8 @@ template <PrimitiveType PT, ArrowTypeId AT, bool is_nullable>
 struct ColumnToArrowConverter<PT, AT, is_nullable, ConvDecimalGuard<PT, AT>> {
     using StarRocksCppType = RunTimeCppType<PT>;
     using StarRocksColumnType = RunTimeColumnType<PT>;
-    using ArrowType = ArrowTypeValueToStruct<AT>;
-    using ArrowCppType = ArrowTypeValueToCppType<AT>;
+    using ArrowType = ArrowTypeIdToType<AT>;
+    using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
 
     static inline arrow::Decimal128 convert_datum(const StarRocksCppType& datum) {
@@ -106,7 +106,7 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvDecimalGuard<PT, AT>> {
             } else {
                 static_assert(pt_is_decimalv2<PT> || pt_is_decimal<PT>, "Illegal PrimitiveType");
             }
-            for (auto i = 0; i <= num_rows; ++i) {
+            for (auto i = 0; i < num_rows; ++i) {
                 if (nullable_column->is_null(i)) {
                     ARROW_RETURN_NOT_OK(builder->AppendNull());
                 } else {
@@ -126,7 +126,7 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvDecimalGuard<PT, AT>> {
             }
             const auto& data = data_column->get_data();
             const auto num_rows = column->size();
-            for (auto i = 0; i <= num_rows; ++i) {
+            for (auto i = 0; i < num_rows; ++i) {
                 ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i])));
             }
         }
@@ -145,8 +145,8 @@ template <PrimitiveType PT, ArrowTypeId AT, bool is_nullable>
 struct ColumnToArrowConverter<PT, AT, is_nullable, ConvBinaryGuard<PT, AT>> {
     using StarRocksCppType = RunTimeCppType<PT>;
     using StarRocksColumnType = RunTimeColumnType<PT>;
-    using ArrowType = ArrowTypeValueToStruct<AT>;
-    using ArrowCppType = ArrowTypeValueToCppType<AT>;
+    using ArrowType = ArrowTypeIdToType<AT>;
+    using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
 
     static inline std::string convert_datum(const StarRocksCppType& datum, [[maybe_unused]] int precision,
@@ -185,7 +185,7 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvBinaryGuard<PT, AT>> {
                 scale = data_column->scale();
             }
             const auto num_rows = null_column->size();
-            for (auto i = 0; i <= num_rows; ++i) {
+            for (auto i = 0; i < num_rows; ++i) {
                 if (nullable_column->is_null(i)) {
                     ARROW_RETURN_NOT_OK(builder->AppendNull());
                 } else {
@@ -202,7 +202,7 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvBinaryGuard<PT, AT>> {
                 precision = data_column->precision();
                 scale = data_column->scale();
             }
-            for (auto i = 0; i <= num_rows; ++i) {
+            for (auto i = 0; i < num_rows; ++i) {
                 ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i], precision, scale)));
             }
         }
@@ -279,20 +279,19 @@ private:
     std::shared_ptr<arrow::Array>& _array;
 };
 
-Status vectorized_convert_to_arrow_batch(Chunk* chunk, const std::vector<SlotDescriptor*>& slots,
+Status vectorized_convert_to_arrow_batch(Chunk* chunk, const std::vector<PrimitiveType>& primitive_types,
                                          const std::shared_ptr<arrow::Schema>& schema, arrow::MemoryPool* pool,
                                          std::shared_ptr<arrow::RecordBatch>* result) {
-    auto& chunk_schema = chunk->schema();
-    if (chunk_schema->num_fields() != schema->num_fields()) {
+    if (chunk->num_columns() != schema->num_fields()) {
         return Status::InvalidArgument("number fields not match");
     }
-    std::vector<std::shared_ptr<arrow::Array>> arrays;
 
-    for (auto i = 0; i < slots.size(); ++i) {
-        auto& slot = slots[i];
-        auto& column = chunk->get_column_by_slot_id(slot->id());
+    std::vector<std::shared_ptr<arrow::Array>> arrays(primitive_types.size());
+
+    for (auto i = 0; i < primitive_types.size(); ++i) {
+        auto& column = chunk->get_column_by_index(i);
         auto& array = arrays[i];
-        ColumnToArrowArrayConverter converter(column, pool, slot->type().type, array);
+        ColumnToArrowArrayConverter converter(column, pool, primitive_types[i], array);
         auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter);
         if (!arrow_st.ok()) {
             return Status::InvalidArgument(arrow_st.ToString());

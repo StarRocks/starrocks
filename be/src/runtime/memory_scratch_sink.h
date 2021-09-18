@@ -76,13 +76,13 @@ public:
 
 private:
     Status prepare_exprs(RuntimeState* state);
-    void flatten_row_desc_to_slots();
+    void convert_to_primitive_types();
 
     ObjectPool* _obj_pool = nullptr;
     // Owned by the RuntimeState.
     const RowDescriptor& _row_desc;
     std::shared_ptr<arrow::Schema> _arrow_schema;
-    std::vector<SlotDescriptor*> _slots;
+    std::vector<PrimitiveType> _primitive_types;
 
     BlockQueueSharedPtr _queue;
 

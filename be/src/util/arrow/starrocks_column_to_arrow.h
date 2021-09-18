@@ -22,7 +22,7 @@
 namespace starrocks {
 namespace vectorized {
 
-Status vectorized_convert_to_arrow_batch(Chunk* chunk, const std::vector<SlotDescriptor*>& slots,
+Status vectorized_convert_to_arrow_batch(Chunk* chunk, const std::vector<PrimitiveType>& slots,
                                          const std::shared_ptr<arrow::Schema>& schema, arrow::MemoryPool* pool,
                                          std::shared_ptr<arrow::RecordBatch>* result);
 }

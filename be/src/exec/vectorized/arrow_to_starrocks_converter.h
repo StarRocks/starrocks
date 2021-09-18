@@ -32,7 +32,6 @@ struct ArrowConvertContext {
     void report_error_message(const std::string& reason, const std::string& raw_data);
 };
 
-
 // fill null_column's range [column_start_idx, column_start_idx + num_elements) with
 // array's range [array_start_idx, array_start_idx + num_elements).
 size_t fill_null_column(const arrow::Array* array, size_t array_start_idx, size_t num_elements, NullColumn*,

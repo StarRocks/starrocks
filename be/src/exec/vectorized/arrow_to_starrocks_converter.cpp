@@ -94,8 +94,8 @@ void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_e
 template <ArrowTypeId AT, PrimitiveType PT, bool is_nullable, bool is_strict, typename = guard::Guard,
           typename = guard::Guard>
 struct ArrowConverter {
-    using ArrowArrayType = ArrowTypeValueToArrayType<AT>;
-    using ArrowCppType = ArrowTypeValueToCppType<AT>;
+    using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
+    using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using CppType = RunTimeCppType<PT>;
     using ColumnType = RunTimeColumnType<PT>;
 
@@ -177,8 +177,8 @@ static inline constexpr uint32_t binary_max_length = (PT == TYPE_VARCHAR) ? Type
 
 template <ArrowTypeId AT, PrimitiveType PT, bool is_nullable, bool is_strict>
 struct ArrowConverter<AT, PT, is_nullable, is_strict, BinaryATGuard<AT>, BinaryPTGuard<PT>> {
-    using ArrowArrayType = ArrowTypeValueToArrayType<AT>;
-    using ArrowCppType = ArrowTypeValueToCppType<AT>;
+    using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
+    using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using CppType = RunTimeCppType<PT>;
     using ColumnType = RunTimeColumnType<PT>;
     static void optimize_not_nullable_fixed_size_binary(const ArrowArrayType* array, size_t array_start_idx,
@@ -367,9 +367,9 @@ VALUE_GUARD(PrimitiveType, DecimalOfAnyVersionPTGuard, pt_is_decimal_of_any_vers
 template <PrimitiveType PT, bool is_nullable, bool is_strict>
 struct ArrowConverter<ArrowTypeId::DECIMAL, PT, is_nullable, is_strict, guard::Guard, DecimalOfAnyVersionPTGuard<PT>> {
     static constexpr ArrowTypeId AT = ArrowTypeId::DECIMAL;
-    using ArrowType = ArrowTypeValueToStruct<AT>;
-    using ArrowArrayType = ArrowTypeValueToArrayType<AT>;
-    using ArrowCppType = ArrowTypeValueToCppType<AT>;
+    using ArrowType = ArrowTypeIdToType<AT>;
+    using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
+    using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using CppType = RunTimeCppType<PT>;
     using ColumnType = RunTimeColumnType<PT>;
 
@@ -506,9 +506,9 @@ VALUE_GUARD(ArrowTypeId, DateOrDateTimeATGuard, at_is_date_or_datetime, ArrowTyp
 
 template <ArrowTypeId AT, PrimitiveType PT, bool is_nullable, bool is_strict>
 struct ArrowConverter<AT, PT, is_nullable, is_strict, DateOrDateTimeATGuard<AT>, DateOrDateTimePTGuard<PT>> {
-    using ArrowType = ArrowTypeValueToStruct<AT>;
-    using ArrowArrayType = ArrowTypeValueToArrayType<AT>;
-    using ArrowCppType = ArrowTypeValueToCppType<AT>;
+    using ArrowType = ArrowTypeIdToType<AT>;
+    using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
+    using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using CppType = RunTimeCppType<PT>;
     using ColumnType = RunTimeColumnType<PT>;
 
@@ -712,7 +712,7 @@ struct ArrowListConverter {
     template <ArrowTypeId AT>
     static void unfold(std::vector<const arrow::Array*>* layers, std::vector<std::pair<size_t, size_t>>* ranges,
                        const arrow::Array** last_layer, std::pair<size_t, size_t>* last_range) {
-        using ArrowArrayType = ArrowTypeValueToArrayType<AT>;
+        using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
         layers->push_back(*last_layer);
         ranges->push_back(*last_range);
         auto concrete_array = down_cast<const ArrowArrayType*>(*last_layer);

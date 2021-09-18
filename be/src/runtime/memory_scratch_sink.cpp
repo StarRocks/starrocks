@@ -49,10 +49,12 @@ MemoryScratchSink::MemoryScratchSink(const RowDescriptor& row_desc, const std::v
 
 MemoryScratchSink::~MemoryScratchSink() {}
 
-void MemoryScratchSink::flatten_row_desc_to_slots() {
+void MemoryScratchSink::convert_to_primitive_types() {
     for (auto* tuple_desc : _row_desc.tuple_descriptors()) {
         auto& slots = tuple_desc->slots();
-        _slots.insert(_slots.begin(), slots.begin(), slots.end());
+        for (auto slot : slots) {
+            _primitive_types.push_back(slot->type().type);
+        }
     }
 }
 
@@ -63,7 +65,7 @@ Status MemoryScratchSink::prepare_exprs(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc, _expr_mem_tracker.get()));
     // generate the arrow schema
     RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, &_arrow_schema));
-    flatten_row_desc_to_slots();
+    convert_to_primitive_types();
     return Status::OK();
 }
 
@@ -97,8 +99,8 @@ Status MemoryScratchSink::send_chunk(RuntimeState* state, vectorized::Chunk* chu
         return Status::OK();
     }
     std::shared_ptr<arrow::RecordBatch> result;
-    RETURN_IF_ERROR(
-            vectorized_convert_to_arrow_batch(chunk, _slots, _arrow_schema, arrow::default_memory_pool(), &result));
+    RETURN_IF_ERROR(vectorized_convert_to_arrow_batch(chunk, _primitive_types, _arrow_schema,
+                                                      arrow::default_memory_pool(), &result));
     _queue->blocking_put(result);
     return Status::OK();
 }
