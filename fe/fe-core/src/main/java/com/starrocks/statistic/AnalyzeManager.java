@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -24,6 +25,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class AnalyzeManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(AnalyzeManager.class);
@@ -112,7 +114,65 @@ public class AnalyzeManager implements Writable {
         }
     }
 
+    public void checkAndExpireCachedStatistics(Database db, Table table, AnalyzeJob job) {
+        if (null == db) {
+            return;
+        }
+        if (null == table || !Table.TableType.OLAP.equals(table.getType())) {
+            return;
+        }
+
+        // check table has update
+        LocalDateTime updateTime = StatisticUtils.getTableLastUpdateTime(table);
+        if (job.getWorkTime().isAfter(updateTime)) {
+            List<String> columns = (job.getColumns() == null || job.getColumns().isEmpty()) ?
+                    table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
+                            .collect(Collectors.toList()) : job.getColumns();
+            Catalog.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
+        }
+    }
+
+    public void expireCachedStatistics(AnalyzeJob job) {
+        if (job.getScheduleType().equals(Constants.ScheduleType.ONCE)) {
+            Database db = Catalog.getCurrentCatalog().getDb(job.getDbId());
+            if (null == db) {
+                return;
+            }
+            Catalog.getCurrentStatisticStorage()
+                    .expireColumnStatistics(db.getTable(job.getTableId()), job.getColumns());
+        } else {
+            if (job.getDbId() == AnalyzeJob.DEFAULT_ALL_ID) {
+                List<Long> dbIds = Catalog.getCurrentCatalog().getDbIds();
+                for (Long dbId : dbIds) {
+                    Database db = Catalog.getCurrentCatalog().getDb(dbId);
+                    if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
+                        continue;
+                    }
+
+                    for (Table table : db.getTables()) {
+                        checkAndExpireCachedStatistics(db, table, job);
+                    }
+                }
+            } else if (job.getDbId() != AnalyzeJob.DEFAULT_ALL_ID && job.getDbId() == AnalyzeJob.DEFAULT_ALL_ID) {
+                Database db = Catalog.getCurrentCatalog().getDb(job.getDbId());
+                if (null == db) {
+                    return;
+                }
+                for (Table table : db.getTables()) {
+                    checkAndExpireCachedStatistics(db, table, job);
+                }
+            } else {
+                Database db = Catalog.getCurrentCatalog().getDb(job.getDbId());
+                if (null == db) {
+                    return;
+                }
+                checkAndExpireCachedStatistics(db, db.getTable(job.getTableId()), job);
+            }
+        }
+    }
+
     public void replayAddAnalyzeJob(AnalyzeJob job) {
+        expireCachedStatistics(job);
         analyzeJobMap.put(job.getId(), job);
     }
 
