@@ -209,7 +209,16 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                 newPruneOutputColumns.add(c);
             }
         }
-        joinOperator.setPruneOutputColumns(newPruneOutputColumns);
-        return OptExpression.create(joinOperator, optExpression.getInputs());
+
+        LogicalJoinOperator newJoinOperator = new LogicalJoinOperator(
+                joinOperator.getJoinType(),
+                joinOperator.getOnPredicate(),
+                joinOperator.getJoinHint(),
+                joinOperator.getLimit(),
+                joinOperator.getPredicate(),
+                newPruneOutputColumns,
+                joinOperator.isHasPushDownJoinOnClause());
+
+        return OptExpression.create(newJoinOperator, optExpression.getInputs());
     }
 }
