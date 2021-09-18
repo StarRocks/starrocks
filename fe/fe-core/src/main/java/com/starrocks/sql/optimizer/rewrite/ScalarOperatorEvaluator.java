@@ -9,6 +9,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -27,6 +28,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Use for execute constant functions
@@ -241,14 +243,20 @@ public enum ScalarOperatorEvaluator {
             }
 
             ScalarOperatorEvaluator.FunctionSignature signature = (ScalarOperatorEvaluator.FunctionSignature) o;
-            return Objects.equals(name, signature.name)
-                    && argTypes.equals(signature.argTypes)
-                    && Objects.equals(returnType, signature.returnType);
+
+            List<PrimitiveType> primitiveTypes =
+                    argTypes.stream().map(Type::getPrimitiveType).collect(Collectors.toList());
+            List<PrimitiveType> sigPrimitiveTypes =
+                    signature.argTypes.stream().map(Type::getPrimitiveType).collect(Collectors.toList());
+            return Objects.equals(name, signature.name) &&
+                    primitiveTypes.equals(sigPrimitiveTypes) &&
+                    returnType.matchesType(signature.returnType);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(name, argTypes, returnType);
+            List<PrimitiveType> primitiveTypes = argTypes.stream().map(Type::getPrimitiveType).collect(Collectors.toList());
+            return Objects.hash(name, primitiveTypes, returnType.getPrimitiveType());
         }
     }
 }
