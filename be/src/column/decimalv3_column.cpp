@@ -58,7 +58,7 @@ std::string DecimalV3Column<T>::debug_item(uint32_t idx) const {
 }
 
 template <typename T>
-void DecimalV3Column<T>::crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) const {
+void DecimalV3Column<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     const auto& data = this->get_data();
     // When decimal-v2 columns are used as distribution keys and users try to upgrade
     // decimal-v2 column to decimal-v3 by schema change, decimal128(27,9) shall be the
@@ -66,7 +66,7 @@ void DecimalV3Column<T>::crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) 
     // compatible with type decimal-v2 is required in order to keep data layout consistency.
     if constexpr (std::is_same_v<T, int128_t>) {
         if (_precision == 27 && _scale == 9) {
-            for (uint16_t i = from; i < to; ++i) {
+            for (uint32_t i = from; i < to; ++i) {
                 auto& decimal_v2_value = (DecimalV2Value&)(data[i]);
                 int64_t int_val = decimal_v2_value.int_value();
                 int32_t frac_val = decimal_v2_value.frac_value();
@@ -76,7 +76,7 @@ void DecimalV3Column<T>::crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) 
             return;
         }
     }
-    for (uint16_t i = from; i < to; ++i) {
+    for (uint32_t i = from; i < to; ++i) {
         hash[i] = HashUtil::zlib_crc_hash(&data[i], sizeof(T), hash[i]);
     }
 }

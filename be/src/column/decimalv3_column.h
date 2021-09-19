@@ -32,7 +32,7 @@ public:
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const;
     std::string debug_item(uint32_t idx) const override;
-    void crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) const override;
+    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
 private:
     int _precision;
