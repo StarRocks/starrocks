@@ -25,8 +25,8 @@ FE 有可能因为某些原因出现无法启动 bdbje、FE 之间无法同步�
 
 3. 以下操作在2选出来的元数据最新的FE节点执行：
     1. 如果该节点是一个 OBSERVER，先将 meta_dir/image/ROLE 文件中的 `role=OBSERVER` 改为 `role=FOLLOWER`。（从 OBSERVER 节点恢复会比较麻烦，先按这里的步骤操作，后面会有单独说明）如果该节点是一个 FOLLOWER，跳过3.1步骤。
-    2. 在 fe.conf 中添加配置：`metadata_failure_recovery=true` `metadata_failure_recovery=true` 的含义是，清空 "bdbje" 的元数据。这样 bdbje 就不会再联系之前的其他 FE ，而作为一个独立的 FE 启动。这个参数只有在恢复启动时才需要设置为 true。恢复完成后，一定要设置为 false（后面有步骤说明），否则一旦重启，bdbje 的元数据又会被清空，导致其他 FE 无法正常工作。
-    3. 执行`sh bin/start_fe.sh --deamon` 启动该FE，如果正常，这个 FE 会以 MASTER 的角色启动，在 fe.log 中会看到 `transfer from XXXX to MASTER` 等字样。
+    2. 在 fe.conf 中添加配置：`metadata_failure_recovery=true`, `metadata_failure_recovery=true` 的含义是，清空 "bdbje" 的元数据。这样 bdbje 就不会再联系之前的其他 FE ，而作为一个独立的 FE 启动。这个参数只有在恢复启动时才需要设置为 true。恢复完成后，一定要设置为 false（后面有步骤说明），否则一旦重启，bdbje 的元数据又会被清空，导致其他 FE 无法正常工作。
+    3. 执行`sh bin/start_fe.sh --daemon` 启动该FE，如果正常，这个 FE 会以 MASTER 的角色启动，在 fe.log 中会看到 `transfer from XXXX to MASTER` 等字样。
     4. 启动完成后，先连接到这个 FE，执行一些查询导入，检查是否能够正常访问。如果不正常，有可能是操作有误，查看FE启动日志，排查问题后重新启动FE。
     5. 如果成功，通过 `show frontends;` 命令，应该可以看到之前集群所添加的所有 FE，并且当前 FE 是 master。
     6. 将 fe.conf 中的 `metadata_failure_recovery=true` 配置项删除，或者设置为 false，然后重启这个 FE（重要）。
