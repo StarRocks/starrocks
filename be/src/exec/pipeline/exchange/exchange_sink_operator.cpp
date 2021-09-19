@@ -334,7 +334,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
             if (_part_type == TPartitionType::HASH_PARTITIONED) {
                 _hash_values.assign(num_rows, HashUtil::FNV_SEED);
                 for (const vectorized::ColumnPtr& column : _partitions_columns) {
-                    column->fvn_hash(&_hash_values[0], 0, num_rows);
+                    column->fnv_hash(&_hash_values[0], 0, num_rows);
                 }
             } else {
                 // The data distribution was calculated using CRC32_HASH,

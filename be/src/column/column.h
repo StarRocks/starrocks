@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -265,10 +266,14 @@ public:
 
     // Compute fvn hash, mainly used by shuffle column data
     // Note: shuffle hash function should be different from Aggregate and Join Hash map hash function
-    virtual void fvn_hash(uint32_t* seed, uint16_t from, uint16_t to) const = 0;
+    virtual void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
 
     // used by data loading compute tablet bucket
-    virtual void crc32_hash(uint32_t* seed, uint16_t from, uint16_t to) const = 0;
+    virtual void crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
+
+    virtual void crc32_hash_at(uint32_t* seed, int32_t idx) const { crc32_hash(seed - idx, idx, idx + 1); }
+
+    virtual void fnv_hash_at(uint32_t* seed, int32_t idx) const { fnv_hash(seed - idx, idx, idx + 1); }
 
     // Push one row to MysqlRowBuffer
     virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const = 0;
