@@ -61,15 +61,14 @@ using SliceAggTwoLevelHashMap =
 // ==============================================================
 // TODO(kks): Remove redundant code for compute_agg_states method
 // handle one number hash key
-template <typename FieldType, typename HashMap>
+template <PrimitiveType primitive_type, typename HashMap>
 struct AggHashMapWithOneNumberKey {
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
-    using ResultVector = typename std::vector<FieldType>;
+    using ColumnType = RunTimeColumnType<primitive_type>;
+    using ResultVector = typename ColumnType::Container;
+    using FieldType = RunTimeCppType<primitive_type>;
     HashMap hash_map;
-
-    using ColumnType = type_select_t<cond<IsDate<FieldType>, DateColumn>, cond<IsTimestamp<FieldType>, TimestampColumn>,
-                                     cond<std::is_integral_v<FieldType>, FixedLengthColumn<FieldType>>>;
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
@@ -114,15 +113,13 @@ struct AggHashMapWithOneNumberKey {
     ResultVector results;
 };
 
-template <typename FieldType, typename HashMap>
+template <PrimitiveType primitive_type, typename HashMap>
 struct AggHashMapWithOneNullableNumberKey {
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
-    using ResultVector = typename std::vector<FieldType>;
+    using ColumnType = RunTimeColumnType<primitive_type>;
+    using ResultVector = typename ColumnType::Container;
     HashMap hash_map;
-
-    using ColumnType = type_select_t<cond<IsDate<FieldType>, DateColumn>, cond<IsTimestamp<FieldType>, TimestampColumn>,
-                                     cond<std::is_integral_v<FieldType>, FixedLengthColumn<FieldType>>>;
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
