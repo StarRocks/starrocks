@@ -261,6 +261,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/java-se-8u41-ri/jre/lib/amd64 ${STARROCKS_OUTPUT}/be/lib/jvm/
 fi
 
+cp -r -p "${STARROCKS_HOME}/LICENSE.txt" "${STARROCKS_OUTPUT}/LICENSE.txt"
+build-support/gen_notice.py "${STARROCKS_HOME}/licenses,${STARROCKS_HOME}/licenses-binary" "${STARROCKS_OUTPUT}/NOTICE.txt" all
+
 echo "***************************************"
 echo "Successfully build StarRocks"
 echo "***************************************"

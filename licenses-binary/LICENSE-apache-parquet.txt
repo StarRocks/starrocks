@@ -1,4 +1,3 @@
-Portions of this code are available here [https://github.com/apache/incubator-doris].
 
                                  Apache License
                            Version 2.0, January 2004
@@ -177,87 +176,42 @@ Portions of this code are available here [https://github.com/apache/incubator-do
 
    END OF TERMS AND CONDITIONS
 
-   APPENDIX: How to apply the Apache License to your work.
+--------------------------------------------------------------------------------
 
-      To apply the Apache License to your work, attach the following
-      boilerplate notice, with the fields enclosed by brackets "[]"
-      replaced with your own identifying information. (Don't include
-      the brackets!)  The text should be enclosed in the appropriate
-      comment syntax for the file format. We also recommend that a
-      file or class name and description of purpose be included on the
-      same "printed page" as the copyright notice for easier
-      identification within third-party archives.
+This product includes code from Apache Avro.
 
-   Copyright [yyyy] [name of copyright owner]
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Copyright: 2014 The Apache Software Foundation.
+Home page: https://avro.apache.org/
+License: http://www.apache.org/licenses/LICENSE-2.0
 
 --------------------------------------------------------------------------------
 
-This product includes code from Apache Doris (incubating), which includes the
-following in its NOTICE file:
+This project includes code from Daniel Lemire's JavaFastPFOR project. The
+"Lemire" bit packing source code produced by parquet-generator is derived from
+the JavaFastPFOR project.
 
-Apache Doris (incubating)
-Copyright 2018-2021 The Apache Software Foundation
-
-This product includes software developed at
-The Apache Software Foundation (http://www.apache.org/).
-
-Based on source code originally developed by
-Baidu (http://www.baidu.com/).
+Copyright: 2013 Daniel Lemire
+Home page: http://lemire.me/en/
+Project page: https://github.com/lemire/JavaFastPFOR
+License: Apache License Version 2.0 http://www.apache.org/licenses/LICENSE-2.0
 
 --------------------------------------------------------------------------------
 
-This product includes code from Apache Impala, which includes the following in
-its NOTICE file:
+This product includes code from Apache Spark.
 
-    Apache Impala
-    Copyright 2019 The Apache Software Foundation
+* dev/merge_parquet_pr.py is based on Spark's dev/merge_spark_pr.py
 
-    This product includes software developed at
-    The Apache Software Foundation (http://www.apache.org/).
-
-    Portions of this software were developed at
-    Cloudera, Inc (http://www.cloudera.com/).
-
-    This product includes software developed by the OpenSSL
-    Project for use in the OpenSSL Toolkit (http://www.openssl.org/)
-
-    This product includes cryptographic software written by Eric Young
-    (eay@cryptsoft.com).  This product includes software written by Tim
-    Hudson (tjh@cryptsoft.com).
-
-    This product includes software developed by the University of Chicago,
-    as Operator of Argonne National Laboratory.
-    Copyright (C) 1999 University of Chicago. All rights reserved.
+Copyright: 2014 The Apache Software Foundation.
+Home page: https://spark.apache.org/
+License: http://www.apache.org/licenses/LICENSE-2.0
 
 --------------------------------------------------------------------------------
 
-This product includes code from Apache Kudu, which includes the following in
-its NOTICE file:
+This product includes code from Twitter's ElephantBird project.
 
-    Apache Kudu
-    Copyright 2016 The Apache Software Foundation
+* parquet-hadoop's UnmaterializableRecordCounter.java includes code from
+  ElephantBird's LzoRecordReader.java
 
-    This product includes software developed at
-    The Apache Software Foundation (http://www.apache.org/).
-
-    Portions of this software were developed at
-    Cloudera, Inc (http://www.cloudera.com/).
-
-    This product includes software developed by the OpenSSL
-    Project for use in the OpenSSL Toolkit (http://www.openssl.org/)
-
-    This product includes cryptographic software written by Eric Young
-    (eay@cryptsoft.com).  This product includes software written by Tim
-    Hudson (tjh@cryptsoft.com).
+Copyright: 2012-2014 Twitter
+Home page: https://github.com/twitter/elephant-bird
+License: http://www.apache.org/licenses/LICENSE-2.0
