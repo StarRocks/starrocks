@@ -4,6 +4,12 @@
 
 #include "gutil/strings/substitute.h"
 namespace starrocks::pipeline {
+void QuerySharedDriverQueue::close() {
+    std::unique_lock<std::mutex> lock(_global_mutex);
+    _is_closed = true;
+    _cv.notify_all();
+}
+
 void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
     int level = driver->driver_acct().get_level();
     {
@@ -25,6 +31,10 @@ DriverRawPtr QuerySharedDriverQueue::take(size_t* queue_index) {
     {
         std::unique_lock<std::mutex> lock(_global_mutex);
         while (true) {
+            if (_is_closed) {
+                return nullptr;
+            }
+
             for (int i = 0; i < QUEUE_SIZE; ++i) {
                 // we just search for queue has element
                 if (!_queues[i].queue.empty()) {

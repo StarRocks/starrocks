@@ -25,6 +25,7 @@
 #include <thrift/TApplicationException.h>
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/protocol/TDebugProtocol.h>
+#include <thrift/protocol/TJSONProtocol.h>
 #include <thrift/transport/TBufferTransports.h>
 
 #include <memory>
@@ -114,30 +115,27 @@ private:
     std::shared_ptr<apache::thrift::protocol::TProtocol> _protocol;
 };
 
-class ThriftDeserializer {
-public:
-    ThriftDeserializer(bool compact);
-
-private:
-    std::shared_ptr<apache::thrift::protocol::TProtocolFactory> _factory;
-    std::shared_ptr<apache::thrift::protocol::TProtocol> _tproto;
+enum TProtocolType {
+    COMPACT, // 0
+    BINARY,  // 1
+    JSON     // 2
 };
 
 // Utility to create a protocol (deserialization) object for 'mem'.
 std::shared_ptr<apache::thrift::protocol::TProtocol> create_deserialize_protocol(
-        const std::shared_ptr<apache::thrift::transport::TMemoryBuffer>& mem, bool compact);
+        const std::shared_ptr<apache::thrift::transport::TMemoryBuffer>& mem, TProtocolType type);
 
 // Deserialize a thrift message from buf/len.  buf/len must at least contain
 // all the bytes needed to store the thrift message.  On return, len will be
 // set to the actual length of the header.
 template <class T>
-Status deserialize_thrift_msg(const uint8_t* buf, uint32_t* len, bool compact, T* deserialized_msg) {
+Status deserialize_thrift_msg(const uint8_t* buf, uint32_t* len, TProtocolType type, T* deserialized_msg) {
     // Deserialize msg bytes into c++ thrift msg using memory
     // transport. TMemoryBuffer is not const-safe, although we use it in
     // a const-safe way, so we have to explicitly cast away the const.
     std::shared_ptr<apache::thrift::transport::TMemoryBuffer> tmem_transport(
             new apache::thrift::transport::TMemoryBuffer(const_cast<uint8_t*>(buf), *len));
-    std::shared_ptr<apache::thrift::protocol::TProtocol> tproto = create_deserialize_protocol(tmem_transport, compact);
+    std::shared_ptr<apache::thrift::protocol::TProtocol> tproto = create_deserialize_protocol(tmem_transport, type);
 
     try {
         deserialized_msg->read(tproto.get());

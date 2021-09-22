@@ -2,10 +2,12 @@
 
 #pragma once
 
+#include <future>
 #include <memory>
 #include <vector>
-namespace starrocks {
-namespace pipeline {
+
+namespace starrocks::pipeline {
+
 class QueryContext;
 using QueryContextPtr = std::shared_ptr<QueryContext>;
 class FragmentContext;
@@ -24,5 +26,8 @@ class DriverDispatcher;
 using DriverDispatcherPtr = std::shared_ptr<DriverDispatcher>;
 class GlobalDriverDispatcher;
 class ExecStateReporter;
-} // namespace pipeline
-} // namespace starrocks
+using QueryPromise = std::promise<void>;
+using QueryFuture = std::future<void>;
+using QueryPromisePtr = std::shared_ptr<QueryPromise>;
+
+} // namespace starrocks::pipeline

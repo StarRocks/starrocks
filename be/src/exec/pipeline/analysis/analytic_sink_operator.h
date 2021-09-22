@@ -35,7 +35,7 @@ private:
 class AnalyticSinkOperatorFactory final : public OperatorFactory {
 public:
     AnalyticSinkOperatorFactory(int32_t id, int32_t plan_node_id, AnalytorPtr analytor)
-            : OperatorFactory(id, plan_node_id), _analytor(analytor) {}
+            : OperatorFactory(id, "analytor_sink", plan_node_id), _analytor(analytor) {}
 
     ~AnalyticSinkOperatorFactory() override = default;
 

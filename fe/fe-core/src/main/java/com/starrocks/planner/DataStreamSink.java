@@ -82,4 +82,9 @@ public class DataStreamSink extends DataSink {
         result.setStream_sink(tStreamSink);
         return result;
     }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
+    }
 }

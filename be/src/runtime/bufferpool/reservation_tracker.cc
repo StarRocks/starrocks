@@ -36,9 +36,7 @@ namespace starrocks {
 
 ReservationTracker::ReservationTracker() = default;
 
-ReservationTracker::~ReservationTracker() {
-    DCHECK(!initialized_);
-}
+ReservationTracker::~ReservationTracker() {}
 
 void ReservationTracker::InitRootTracker(RuntimeProfile* profile, int64_t reservation_limit) {
     std::lock_guard<SpinLock> l(lock_);
