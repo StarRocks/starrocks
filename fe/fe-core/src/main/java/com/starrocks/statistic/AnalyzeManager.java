@@ -115,16 +115,18 @@ public class AnalyzeManager implements Writable {
     }
 
     public void checkAndExpireCachedStatistics(Database db, Table table, AnalyzeJob job) {
-        if (null == db) {
-            return;
-        }
         if (null == table || !Table.TableType.OLAP.equals(table.getType())) {
             return;
         }
 
         // check table has update
+        // use job last work time compare table update time to determine whether to expire cached statistics
         LocalDateTime updateTime = StatisticUtils.getTableLastUpdateTime(table);
-        if (job.getWorkTime().isAfter(updateTime)) {
+        LocalDateTime jobLastWorkTime = LocalDateTime.MIN;
+        if (analyzeJobMap.containsKey(job.getId())) {
+            jobLastWorkTime = analyzeJobMap.get(job.getId()).getWorkTime();
+        }
+        if (jobLastWorkTime.isBefore(updateTime)) {
             List<String> columns = (job.getColumns() == null || job.getColumns().isEmpty()) ?
                     table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                             .collect(Collectors.toList()) : job.getColumns();
