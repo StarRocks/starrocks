@@ -117,6 +117,7 @@ endif()
 # Set Boost
 set(Boost_DEBUG FALSE)
 set(Boost_USE_MULTITHREADED ON)
+set(Boost_NO_BOOST_CMAKE ON)
 set(BOOST_ROOT ${THIRDPARTY_DIR})
 # boost suppress warning is supported on cmake 3.20
 # https://cmake.org/cmake/help/latest/module/FindBoost.html
@@ -214,9 +215,6 @@ set_target_properties(zstd PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/
 
 add_library(arrow STATIC IMPORTED)
 set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libarrow.a)
-
-add_library(double-conversion STATIC IMPORTED)
-set_target_properties(double-conversion PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libdouble-conversion.a)
 
 add_library(parquet STATIC IMPORTED)
 set_target_properties(parquet PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libparquet.a)
@@ -470,7 +468,6 @@ set(STARROCKS_DEPENDENCIES
     leveldb
     bitshuffle
     roaring
-    double-conversion
     jemalloc
     brotlicommon
     brotlidec

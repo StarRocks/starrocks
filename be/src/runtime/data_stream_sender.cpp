@@ -753,7 +753,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
             if (_part_type == TPartitionType::HASH_PARTITIONED) {
                 _hash_values.assign(num_rows, HashUtil::FNV_SEED);
                 for (const ColumnPtr& column : _partitions_columns) {
-                    column->fvn_hash(&_hash_values[0], 0, num_rows);
+                    column->fnv_hash(&_hash_values[0], 0, num_rows);
                 }
             } else {
                 // The data distribution was calculated using CRC32_HASH,
@@ -847,14 +847,12 @@ Status DataStreamSender::find_partition(RuntimeState* state, TupleRow* row, Part
                 // TODO(zc): add counter to compute its
                 std::stringstream error_log;
                 error_log << "there is no corresponding partition for this key: ";
-                ctx->print_value(row, &error_log);
                 LOG(INFO) << error_log.str();
                 *ignore = true;
                 return Status::OK();
             } else {
                 std::stringstream error_log;
                 error_log << "there is no corresponding partition for this key: ";
-                ctx->print_value(row, &error_log);
                 return Status::InternalError(error_log.str());
             }
         }

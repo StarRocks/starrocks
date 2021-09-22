@@ -252,32 +252,32 @@ const uint8_t* NullableColumn::deserialize_column(const uint8_t* src) {
 }
 
 // Note: the hash function should be same with RawValue::get_hash_value_fvn
-void NullableColumn::fvn_hash(uint32_t* hash, uint16_t from, uint16_t to) const {
+void NullableColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     // fast path when _has_null is false
     if (!_has_null) {
-        _data_column->fvn_hash(hash, from, to);
+        _data_column->fnv_hash(hash, from, to);
         return;
     }
 
     auto null_data = _null_column->get_data();
     uint32_t value = 0x9e3779b9;
     while (from < to) {
-        uint16_t new_from = from + 1;
+        uint32_t new_from = from + 1;
         while (new_from < to && null_data[from] == null_data[new_from]) {
             ++new_from;
         }
         if (null_data[from]) {
-            for (uint16_t i = from; i < new_from; ++i) {
+            for (uint32_t i = from; i < new_from; ++i) {
                 hash[i] = hash[i] ^ (value + (hash[i] << 6) + (hash[i] >> 2));
             }
         } else {
-            _data_column->fvn_hash(hash, from, new_from);
+            _data_column->fnv_hash(hash, from, new_from);
         }
         from = new_from;
     }
 }
 
-void NullableColumn::crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) const {
+void NullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     // fast path when _has_null is false
     if (!_has_null) {
         _data_column->crc32_hash(hash, from, to);
@@ -288,12 +288,12 @@ void NullableColumn::crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) cons
     // NULL is treat as 0 when crc32 hash for data loading
     static const int INT_VALUE = 0;
     while (from < to) {
-        uint16_t new_from = from + 1;
+        uint32_t new_from = from + 1;
         while (new_from < to && null_data[from] == null_data[new_from]) {
             ++new_from;
         }
         if (null_data[from]) {
-            for (uint16_t i = from; i < new_from; ++i) {
+            for (uint32_t i = from; i < new_from; ++i) {
                 hash[i] = HashUtil::zlib_crc_hash(&INT_VALUE, 4, hash[i]);
             }
         } else {

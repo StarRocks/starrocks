@@ -5,6 +5,12 @@ package com.starrocks.sql.optimizer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -12,14 +18,17 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.BitSet;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -315,6 +324,21 @@ public class Utils {
         return count;
     }
 
+    public static boolean hasUnknownColumnsStats(OptExpression root) {
+        Operator operator = root.getOp();
+        if (operator instanceof LogicalScanOperator) {
+            LogicalScanOperator scanOperator = (LogicalScanOperator) operator;
+            List<String> colNames = scanOperator.getColumnRefMap().values().stream().map(Column::getName).collect(
+                    Collectors.toList());
+
+            List<ColumnStatistic> columnStatisticList =
+                    Catalog.getCurrentStatisticStorage().getColumnStatistics(scanOperator.getTable(), colNames);
+            return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
+        }
+
+        return root.getInputs().stream().anyMatch(Utils::hasUnknownColumnsStats);
+    }
+
     public static long getLongFromDateTime(LocalDateTime dateTime) {
         return dateTime.atZone(ZoneId.systemDefault()).toInstant().getEpochSecond();
     }
@@ -342,5 +366,31 @@ public class Utils {
             }
         }
         return smallestColumnRef;
+    }
+
+    public static boolean canDoReplicatedJoin(OlapTable table, long selectedIndexId,
+                                              Collection<Long> selectedPartitionId,
+                                              Collection<Long> selectedTabletId) {
+        int backendSize = Catalog.getCurrentSystemInfo().backendSize();
+        int aliveBackendSize = Catalog.getCurrentSystemInfo().getBackendIds(true).size();
+        int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
+        for (Long partitionId : selectedPartitionId) {
+            Partition partition = table.getPartition(partitionId);
+            if (partition.getReplicaCount() < backendSize) {
+                return false;
+            }
+            long visibleVersion = partition.getVisibleVersion();
+            long visibleVersionHash = partition.getVisibleVersionHash();
+            MaterializedIndex materializedIndex = partition.getIndex(selectedIndexId);
+            for (Long id : selectedTabletId) {
+                Tablet tablet = materializedIndex.getTablet(id);
+                Preconditions.checkNotNull(tablet);
+                if (tablet.getQueryableReplicasSize(visibleVersion, visibleVersionHash, schemaHash)
+                        != aliveBackendSize) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 }

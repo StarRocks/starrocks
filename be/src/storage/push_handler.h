@@ -26,10 +26,10 @@
 #include <string>
 #include <vector>
 
-#include "exec/file_scanner.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/MasterService_types.h"
+#include "runtime/tuple.h"
 #include "storage/merger.h"
 #include "storage/olap_common.h"
 #include "storage/row_cursor.h"
@@ -57,10 +57,8 @@ public:
     int64_t write_rows() const { return _write_rows; }
 
 private:
-    OLAPStatus _convert_v2(TabletSharedPtr cur_tablet, TabletSharedPtr new_tablet_vec, RowsetSharedPtr* cur_rowset,
-                           RowsetSharedPtr* new_rowset);
-    OLAPStatus _convert(TabletSharedPtr cur_tablet, TabletSharedPtr new_tablet_vec, RowsetSharedPtr* cur_rowset,
-                        RowsetSharedPtr* new_rowset);
+    OLAPStatus _convert(TabletSharedPtr cur_tablet, RowsetSharedPtr* cur_rowset);
+    OLAPStatus _convert_v2(TabletSharedPtr cur_tablet, RowsetSharedPtr* cur_rowset);
 
     void _get_tablet_infos(const std::vector<TabletVars>& tablet_infos, std::vector<TTabletInfo>* tablet_info_vec);
 
@@ -80,8 +78,6 @@ class PushBrokerReader {
 public:
     PushBrokerReader() = default;
     ~PushBrokerReader() {
-        _scanner.reset();
-        _counter.reset();
         _mem_pool.reset();
         if (_runtime_state != nullptr && _runtime_state->instance_mem_tracker() != nullptr) {
             _runtime_state->instance_mem_tracker()->release(_runtime_state->instance_mem_tracker()->consumption());
@@ -108,8 +104,6 @@ private:
     std::unique_ptr<RuntimeState> _runtime_state;
     RuntimeProfile* _runtime_profile = nullptr;
     std::unique_ptr<MemPool> _mem_pool;
-    std::unique_ptr<ScannerCounter> _counter;
-    std::unique_ptr<FileScanner> _scanner;
 };
 
 } // namespace starrocks

@@ -26,7 +26,6 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
-#include "exec/schema_scanner/schema_helper.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"

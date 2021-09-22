@@ -33,34 +33,18 @@ class TupleRow;
 // Node that evaluates conjuncts and enforces a limit but otherwise passes along
 // the rows pulled from its child unchanged.
 
-// Our new vectorized query executor is more powerful and stable than old query executor,
-// The executor query executor related codes could be deleted safely.
-// TODO: Remove old query executor related codes before 2021-09-30
-
 class SelectNode : public ExecNode {
 public:
     SelectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
 
     virtual Status prepare(RuntimeState* state);
     virtual Status open(RuntimeState* state);
-    virtual Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos);
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     virtual Status close(RuntimeState* state);
 
 private:
-    // current row batch of child
-    std::unique_ptr<RowBatch> _child_row_batch;
-
-    // index of current row in _child_row_batch
-    int _child_row_idx;
-
     // true if last get_next() call on child signalled eos
     bool _child_eos;
-
-    // Copy rows from _child_row_batch for which _conjuncts evaluate to true to
-    // output_batch, up to _limit.
-    // Return true if limit was hit or output_batch should be returned, otherwise false.
-    bool copy_rows(RowBatch* output_batch);
 
     RuntimeProfile::Counter* _conjunct_evaluate_timer = nullptr;
 };

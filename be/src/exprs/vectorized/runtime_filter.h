@@ -346,7 +346,7 @@ public:
                 _hash_values.assign(size, 0);
             } else if (_join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED) {
                 _hash_values.assign(size, HashUtil::FNV_SEED);
-                input_column->fvn_hash(_hash_values.data(), 0, size);
+                input_column->fnv_hash(_hash_values.data(), 0, size);
                 for (size_t i = 0; i < size; i++) {
                     _hash_values[i] %= _hash_partition_number;
                 }

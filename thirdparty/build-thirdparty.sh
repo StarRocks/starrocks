@@ -123,7 +123,7 @@ check_prerequest "libtoolize --version" "libtool"
 # Name of cmake build directory in each thirdpary project.
 # Do not use `build`, because many projects contained a file named `BUILD`
 # and if the filesystem is not case sensitive, `mkdir` will fail.
-BUILD_DIR=starocks_build
+BUILD_DIR=starrocks_build
 
 check_if_source_exist() {
     if [ -z $1 ]; then
@@ -259,8 +259,8 @@ build_protobuf() {
     check_if_source_exist $PROTOBUF_SOURCE
     cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE
     rm -fr gmock
-    mkdir gmock && cd gmock && tar xf ${TP_SOURCE_DIR}/googletest-release-1.8.0.tar.gz \
-    && mv googletest-release-1.8.0 gtest && cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE && ./autogen.sh
+    mkdir gmock && cd gmock && tar xf ${TP_SOURCE_DIR}/$GTEST_NAME \
+    && mv $GTEST_SOURCE gtest && cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE && ./autogen.sh
     CXXFLAGS="-fPIC -O2 -I ${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     ./configure --prefix=${TP_INSTALL_DIR} --disable-shared --enable-static --with-zlib=${TP_INSTALL_DIR}/include
@@ -305,7 +305,7 @@ build_gtest() {
     cd $TP_SOURCE_DIR/$GTEST_SOURCE
     mkdir -p $BUILD_DIR && cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+    $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_POSITION_INDEPENDENT_CODE=On ../
     make -j$PARALLEL && make install
 }
@@ -333,7 +333,6 @@ build_snappy() {
     make -j$PARALLEL && make install
     if [ -f $TP_INSTALL_DIR/lib64/libsnappy.a ]; then
         mkdir -p $TP_INSTALL_DIR/lib && cp $TP_INSTALL_DIR/lib64/libsnappy.a $TP_INSTALL_DIR/lib/libsnappy.a
-
     fi
 
     #build for libarrow.a
@@ -381,7 +380,7 @@ build_lz4() {
     cd $TP_SOURCE_DIR/$LZ4_SOURCE
 
     make -j$PARALLEL install PREFIX=$TP_INSTALL_DIR \
-    INCLUDEDIR=$TP_INCLUDE_DIR/lz4/
+    INCLUDEDIR=$TP_INCLUDE_DIR/lz4/ BUILD_SHARED=no
 }
 
 # bzip
@@ -391,18 +390,6 @@ build_bzip() {
 
     CFLAGS="-fPIC"
     make -j$PARALLEL install PREFIX=$TP_INSTALL_DIR
-}
-
-# lzo2
-build_lzo2() {
-    check_if_source_exist $LZO2_SOURCE
-    cd $TP_SOURCE_DIR/$LZO2_SOURCE
-
-    CPPFLAGS="-I${TP_INCLUDE_DIR} -fPIC" \
-    LDFLAGS="-L${TP_LIB_DIR}" \
-    CFLAGS="-fPIC" \
-    ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static
-    make -j$PARALLEL && make install
 }
 
 # curl
@@ -455,10 +442,10 @@ build_brpc() {
     mkdir -p $BUILD_DIR && cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    $CMAKE_CMD -v -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+    $CMAKE_CMD -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DBRPC_WITH_GLOG=ON -DWITH_GLOG=ON -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" \
-    -DPROTOBUF_PROTOC_EXECUTABLE=$TP_INSTALL_DIR/bin/protoc ..
+    -DProtobuf_PROTOC_EXECUTABLE=$TP_INSTALL_DIR/bin/protoc ..
     make -j$PARALLEL && make install
     if [ -f $TP_INSTALL_DIR/lib/libbrpc.a ]; then
         mkdir -p $TP_INSTALL_DIR/lib64 && cp $TP_INSTALL_DIR/lib/libbrpc.a $TP_INSTALL_DIR/lib64/libbrpc.a
@@ -512,15 +499,18 @@ build_arrow() {
     check_if_source_exist $ARROW_SOURCE
     cd $TP_SOURCE_DIR/$ARROW_SOURCE/cpp && mkdir -p release && cd release
     export ARROW_BROTLI_URL=${TP_SOURCE_DIR}/${BROTLI_NAME}
-    export ARROW_DOUBLE_CONVERSION_URL=${TP_SOURCE_DIR}/${DOUBLE_CONVERSION_NAME}
     export ARROW_GLOG_URL=${TP_SOURCE_DIR}/${GLOG_NAME}
     export ARROW_LZ4_URL=${TP_SOURCE_DIR}/${LZ4_NAME}
+    export ARROW_SNAPPY_URL=${TP_SOURCE_DIR}/${SNAPPY_NAME}
+    export ARROW_ZLIB_URL=${TP_SOURCE_DIR}/${ZLIB_NAME}
     export ARROW_FLATBUFFERS_URL=${TP_SOURCE_DIR}/${FLATBUFFERS_NAME}
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
     export ARROW_JEMALLOC_URL=${TP_SOURCE_DIR}/${JEMALLOC_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
 
-    ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_IPC=ON -DARROW_USE_GLOG=off -DARROW_BUILD_SHARED=OFF \
+    ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_SHARED=OFF \
+    -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
+    -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DARROW_BOOST_USE_SHARED=OFF -DARROW_GFLAGS_USE_SHARED=OFF -DBoost_NO_BOOST_CMAKE=ON -DBOOST_ROOT=$TP_INSTALL_DIR \
@@ -543,7 +533,6 @@ build_arrow() {
     fi
     # copy zstd headers
     mkdir -p ${TP_INSTALL_DIR}/include/zstd && cp ./zstd_ep-install/include/* ${TP_INSTALL_DIR}/include/zstd
-    cp -rf ./double-conversion_ep/src/double-conversion_ep/lib/libdouble-conversion.a $TP_INSTALL_DIR/lib64/libdouble-conversion.a
 }
 
 # s2
@@ -554,7 +543,7 @@ build_s2() {
     rm -rf CMakeCache.txt CMakeFiles/
     CXXFLAGS="-O3" \
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    $CMAKE_CMD -v -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+    $CMAKE_CMD -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
     -DBUILD_SHARED_LIBS=OFF \
     -DGFLAGS_ROOT_DIR="$TP_INSTALL_DIR/include" \
@@ -605,7 +594,7 @@ build_bitshuffle() {
             objcopy --redefine-syms=renames.txt $tmp_obj $dst_obj
         else
             mv $tmp_obj $dst_obj
-        fi  
+        fi
         to_link="$to_link $dst_obj"
     done
     rm -f libbitshuffle.a
@@ -624,7 +613,7 @@ build_croaringbitmap() {
     rm -rf CMakeCache.txt CMakeFiles/
     CXXFLAGS="-O3" \
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    $CMAKE_CMD -v -DROARING_BUILD_STATIC=ON -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+    $CMAKE_CMD -DROARING_BUILD_STATIC=ON -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
     -DENABLE_ROARING_TESTS=OFF \
     -DROARING_DISABLE_NATIVE=ON \
@@ -648,7 +637,7 @@ build_orc() {
     -DZLIB_HOME=$TP_INSTALL_DIR\
     -DBUILD_LIBHDFSPP=OFF \
     -DBUILD_CPP_TESTS=OFF \
-    -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR 
+    -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR
 
     make -j$PARALLEL && make install
 }
@@ -661,22 +650,13 @@ build_cctz() {
     make -j$PARALLEL && PREFIX=${TP_INSTALL_DIR} make install
 }
 
-#benchmark
-build_benchmark() {
-    check_if_source_exist $BENCHMARK_SOURCE
-    cd $TP_SOURCE_DIR/$BENCHMARK_SOURCE
-    mkdir -p build && cd build
-    cmake -DCMAKE_BUILD_TYPE=Release -DBENCHMARK_DOWNLOAD_DEPENDENCIES=OFF -DBENCHMARK_ENABLE_GTEST_TESTS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../
-    make -j$PARALLEL && make install
-}
-
 #fmt
 build_fmt() {
     check_if_source_exist $FMT_SOURCE
     cd $TP_SOURCE_DIR/$FMT_SOURCE
     mkdir -p build && cd build
     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
-			-DCMAKE_INSTALL_LIBDIR=lib64
+            -DCMAKE_INSTALL_LIBDIR=lib64
     make -j$PARALLEL && make install
 }
 
@@ -717,12 +697,12 @@ build_jdk() {
 }
 
 # ragel
-# ragel-6.9+ is used by hypercan, so we build it first. 
+# ragel-6.9+ is used by hypercan, so we build it first.
 build_ragel() {
     check_if_source_exist $RAGEL_SOURCE
     cd $TP_SOURCE_DIR/$RAGEL_SOURCE
     ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static
-    make -j$PARALLEL && make install    
+    make -j$PARALLEL && make install
 }
 
 #hyperscan
@@ -748,7 +728,6 @@ build_libevent
 build_zlib
 build_lz4
 build_bzip
-build_lzo2
 build_openssl
 build_boost # must before thrift
 build_protobuf
@@ -771,7 +750,6 @@ build_s2
 build_bitshuffle
 build_croaringbitmap
 build_cctz
-build_benchmark
 build_fmt
 build_ryu
 build_breakpad

@@ -132,7 +132,7 @@ public class JoinPredicateUtils {
                     rightPushDown.add(predicate);
                 }
             }
-        } else if (join.getJoinType().isSemiAntiJoin()) {
+        } else if (join.getJoinType().isSemiJoin() || join.getJoinType().isAntiJoin()) {
             for (ScalarOperator predicate : conjunctList) {
                 ColumnRefSet usedColumns = predicate.getUsedColumns();
                 if (leftColumns.contains(usedColumns)) {

@@ -31,8 +31,8 @@
 #include "agent/agent_server.h"
 #include "common/status.h"
 #include "gen_cpp/BackendService.h"
-#include "gen_cpp/DorisExternalService_types.h"
-#include "gen_cpp/TDorisExternalService.h"
+#include "gen_cpp/StarrocksExternalService_types.h"
+#include "gen_cpp/TStarrocksExternalService.h"
 
 namespace starrocks {
 
@@ -99,7 +99,7 @@ public:
 
     void delete_etl_files(TAgentResult& result, const TDeleteEtlFilesRequest& request) override {}
 
-    // StarRocksServer service
+    // StarrocksServer service
     void exec_plan_fragment(TExecPlanFragmentResult& return_val, const TExecPlanFragmentParams& params) override;
 
     void cancel_plan_fragment(TCancelPlanFragmentResult& return_val, const TCancelPlanFragmentParams& params) override;

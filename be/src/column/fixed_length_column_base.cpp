@@ -152,16 +152,16 @@ const uint8_t* FixedLengthColumnBase<T>::deserialize_column(const uint8_t* src) 
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::fvn_hash(uint32_t* hash, uint16_t from, uint16_t to) const {
-    for (uint16_t i = from; i < to; ++i) {
+void FixedLengthColumnBase<T>::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    for (uint32_t i = from; i < to; ++i) {
         hash[i] = HashUtil::fnv_hash(&_data[i], sizeof(ValueType), hash[i]);
     }
 }
 
 // Must same with RawValue::zlib_crc32
 template <typename T>
-void FixedLengthColumnBase<T>::crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) const {
-    for (uint16_t i = from; i < to; ++i) {
+void FixedLengthColumnBase<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
+    for (uint32_t i = from; i < to; ++i) {
         if constexpr (IsDate<T> || IsTimestamp<T>) {
             std::string str = _data[i].to_string();
             hash[i] = HashUtil::zlib_crc_hash(str.data(), str.size(), hash[i]);

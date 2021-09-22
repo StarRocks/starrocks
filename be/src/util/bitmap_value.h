@@ -75,7 +75,9 @@ struct BitmapTypeCode {
         // added in 0.12
         BITMAP64 = 4,
         // added in StarRocks 1.17
-        SET = 10
+        SET = 10,
+        BITMAP32_SERIV2 = 12,
+        BITMAP64_SERIV2 = 13,
     };
 };
 
@@ -85,8 +87,8 @@ class Roaring64MapSetBitForwardIterator;
 
 // Forked from https://github.com/RoaringBitmap/CRoaring/blob/v0.2.60/cpp/roaring64map.hh
 // What we change includes
-// - a custom serialization format is used inside read()/write()/getSizeInBytes()
 // - added clear() and is32BitsEnough()
+// - a custom serialization format is used inside read()/write()/getSizeInBytes()
 class Roaring64Map {
 public:
     /**
@@ -128,14 +130,7 @@ public:
     /**
      * Construct a 64-bit map from a 32-bit one
      */
-    Roaring64Map(const Roaring& r) { emplaceOrInsert(0, r); }
-
-    /**
-     * Construct a roaring object from the C struct.
-     *
-     * Passing a NULL point is unsafe.
-     */
-    Roaring64Map(roaring_bitmap_t* s) { emplaceOrInsert(0, s); }
+    Roaring64Map(const Roaring& r) { emplace(0, r); }
 
     /**
      * Construct a bitmap from a list of integer values.
@@ -571,29 +566,38 @@ public:
      * write a bitmap to a char buffer.
      * Returns how many bytes were written which should be getSizeInBytes().
      */
-    size_t write(char* buf) const {
+    size_t write(char* buf, int serialize_version) const {
+        bool use_v1 = serialize_version == 1;
+        BitmapTypeCode::type type_bitmap32 = BitmapTypeCode::EMPTY;
+        BitmapTypeCode::type type_bitmap64 = BitmapTypeCode::EMPTY;
+        if (use_v1) {
+            type_bitmap32 = BitmapTypeCode::type::BITMAP32;
+            type_bitmap64 = BitmapTypeCode::type::BITMAP64;
+        } else {
+            type_bitmap32 = BitmapTypeCode::type::BITMAP32_SERIV2;
+            type_bitmap64 = BitmapTypeCode::type::BITMAP64_SERIV2;
+        }
+
         if (is32BitsEnough()) {
-            *(buf++) = BitmapTypeCode::type::BITMAP32;
+            *(buf++) = type_bitmap32;
             auto it = roarings.find(0);
             if (it == roarings.end()) { // empty bitmap
                 Roaring r;
-                return r.write(buf) + 1;
+                return r.write(buf, use_v1) + 1;
             }
-            return it->second.write(buf) + 1;
+            return it->second.write(buf, use_v1) + 1;
         }
 
         const char* orig = buf;
         // put type code
-        *(buf++) = BitmapTypeCode::type::BITMAP64;
+        *(buf++) = type_bitmap64;
         // push map size
         buf = (char*)encode_varint64((uint8_t*)buf, roarings.size());
-        std::for_each(roarings.cbegin(), roarings.cend(), [&buf](const std::pair<const uint32_t, Roaring>& map_entry) {
-            // push map key
-            encode_fixed32_le((uint8_t*)buf, map_entry.first);
+        for (const auto& [high, v] : roarings) {
+            encode_fixed32_le((uint8_t*)buf, high);
             buf += sizeof(uint32_t);
-            // push map value Roaring
-            buf += map_entry.second.write(buf);
-        });
+            buf += v.write(buf, use_v1);
+        }
         return buf - orig;
     }
 
@@ -605,14 +609,15 @@ public:
      */
     static Roaring64Map read(const char* buf) {
         Roaring64Map result;
-
-        if (*buf == BitmapTypeCode::BITMAP32) {
-            Roaring read = Roaring::read(buf + 1);
+        bool usev1 = BitmapTypeCode::BITMAP32 == *buf || BitmapTypeCode::BITMAP64 == *buf;
+        bool is_bitmap32 = BitmapTypeCode::BITMAP32 == *buf || BitmapTypeCode::BITMAP32_SERIV2 == *buf;
+        if (is_bitmap32) {
+            Roaring read = Roaring::read(buf + 1, usev1);
             result.emplace(0, std::move(read));
             return result;
         }
 
-        DCHECK_EQ(BitmapTypeCode::BITMAP64, *buf);
+        DCHECK(BitmapTypeCode::BITMAP64 == *buf || BitmapTypeCode::BITMAP64_SERIV2 == *buf);
         buf++;
 
         // get map size (varint64 took 1~10 bytes)
@@ -625,9 +630,9 @@ public:
             uint32_t key = decode_fixed32_le(reinterpret_cast<const uint8_t*>(buf));
             buf += sizeof(uint32_t);
             // read map value Roaring
-            Roaring read = Roaring::read(buf);
+            Roaring read = Roaring::read(buf, usev1);
             // forward buffer past the last Roaring Bitmap
-            buf += read.getSizeInBytes();
+            buf += read.getSizeInBytes(usev1);
             result.emplace(key, std::move(read));
         }
         return result;
@@ -636,21 +641,24 @@ public:
     /**
      * How many bytes are required to serialize this bitmap
      */
-    size_t getSizeInBytes() const {
+    size_t getSizeInBytes(int serialize_version) const {
+        bool usev1 = serialize_version == 1;
+        // we will use unportable deserialize interface
+        // This will reduce the serialized size of a bitmap
         if (is32BitsEnough()) {
             auto it = roarings.find(0);
             if (it == roarings.end()) { // empty bitmap
                 Roaring r;
-                return r.getSizeInBytes() + 1;
+                return r.getSizeInBytes(usev1) + 1;
             }
-            return it->second.getSizeInBytes() + 1;
+            return it->second.getSizeInBytes(usev1) + 1;
         }
         // start with type code, map size and size of keys for each map entry
         size_t init = 1 + varint_length(roarings.size()) + roarings.size() * sizeof(uint32_t);
         return std::accumulate(roarings.cbegin(), roarings.cend(), init,
                                [=](size_t previous, const std::pair<const uint32_t, Roaring>& map_entry) {
                                    // add in bytes used by each Roaring
-                                   return previous + map_entry.second.getSizeInBytes();
+                                   return previous + map_entry.second.getSizeInBytes(usev1);
                                });
     }
 
@@ -823,13 +831,7 @@ private:
     }
     // this is needed to tolerate gcc's C++11 libstdc++ lacking emplace
     // prior to version 4.8
-    void emplaceOrInsert(const uint32_t key, const Roaring& value) {
-#if defined(__GLIBCXX__) && __GLIBCXX__ < 20130322
-        roarings.insert(std::make_pair(key, value));
-#else
-        roarings.emplace(std::make_pair(key, value));
-#endif
-    }
+    void emplace(const uint32_t key, const Roaring& value) { roarings.emplace(std::make_pair(key, value)); }
 
     void emplace(const uint32_t key, Roaring&& value) { roarings.emplace(key, std::move(value)); }
 };
@@ -1020,17 +1022,9 @@ public:
             if (_sv == value) {
                 break;
             }
-            // For rolling upgrade, remove this if branch in StarRocks 0.18
-            if (config::enable_bitmap_union_disk_format_with_set) {
-                _set.insert(_sv);
-                _set.insert(value);
-                _type = SET;
-            } else {
-                _bitmap = std::make_shared<detail::Roaring64Map>();
-                _bitmap->add(_sv);
-                _bitmap->add(value);
-                _type = BITMAP;
-            }
+            _set.insert(_sv);
+            _set.insert(value);
+            _type = SET;
             break;
         case BITMAP:
             _bitmap->add(value);
@@ -1070,11 +1064,12 @@ public:
         case BITMAP:
             switch (_type) {
             case EMPTY:
-                _bitmap = rhs._bitmap;
+                // TODO: Reduce memory copy.
+                _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
                 _type = BITMAP;
                 break;
             case SINGLE:
-                _bitmap = rhs._bitmap;
+                _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
                 _bitmap->add(_sv);
                 _type = BITMAP;
                 break;
@@ -1082,7 +1077,7 @@ public:
                 *_bitmap |= *rhs._bitmap;
                 break;
             case SET:
-                _bitmap = rhs._bitmap;
+                _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
                 for (const auto& x : _set) {
                     _bitmap->add(x);
                 }
@@ -1381,24 +1376,23 @@ public:
         case BITMAP:
             switch (_type) {
             case EMPTY:
-                _bitmap = rhs._bitmap;
+                _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
                 _type = BITMAP;
                 break;
             case SINGLE:
-                if (rhs._bitmap->contains(_sv)) {
-                    rhs._bitmap->remove(_sv);
+                _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
+                if (_bitmap->contains(_sv)) {
+                    _bitmap->remove(_sv);
                 } else {
-                    rhs._bitmap->add(_sv);
+                    _bitmap->add(_sv);
                 }
-                _bitmap = rhs._bitmap;
                 _type = BITMAP;
                 break;
             case BITMAP: {
-                BitmapValue lhs_bitmap(*this);
+                BitmapValue rhs_bitmap(rhs);
+                *rhs_bitmap._bitmap -= *_bitmap;
                 *_bitmap -= *rhs._bitmap;
-                *rhs._bitmap -= *lhs_bitmap._bitmap;
-
-                *_bitmap |= *rhs._bitmap;
+                *_bitmap |= *rhs_bitmap._bitmap;
                 break;
             }
             case SET: {
@@ -1408,8 +1402,8 @@ public:
                 get_only_value_to_set_and_common_value_to_bitmap(_set, *rhs._bitmap, &set, &bitmap);
 
                 // obtain values only in right bitmap
-                *rhs._bitmap -= bitmap;
-                _bitmap = rhs._bitmap;
+                _bitmap = std::make_shared<detail::Roaring64Map>(*rhs._bitmap);
+                *_bitmap -= bitmap;
 
                 // collect all values that only in left set or only in right bitmap.
                 for (const auto& x : set) {
@@ -1527,7 +1521,7 @@ public:
             break;
         case BITMAP:
             DCHECK(_bitmap->cardinality() > 1);
-            res = _bitmap->getSizeInBytes();
+            res = _bitmap->getSizeInBytes(config::bitmap_serialize_version);
             break;
         case SET:
             res = 1 + sizeof(uint32_t) + sizeof(uint64_t) * _set.size();
@@ -1552,7 +1546,7 @@ public:
             }
             break;
         case BITMAP:
-            _bitmap->write(dst);
+            _bitmap->write(dst, config::bitmap_serialize_version);
             break;
         case SET:
 
@@ -1576,7 +1570,7 @@ public:
             return true;
         }
 
-        DCHECK((*src >= BitmapTypeCode::EMPTY && *src <= BitmapTypeCode::BITMAP64) || (*src == BitmapTypeCode::SET));
+        DCHECK(*src >= BitmapTypeCode::EMPTY && *src <= BitmapTypeCode::BITMAP64_SERIV2);
         switch (*src) {
         case BitmapTypeCode::EMPTY:
             _type = EMPTY;
@@ -1591,6 +1585,8 @@ public:
             break;
         case BitmapTypeCode::BITMAP32:
         case BitmapTypeCode::BITMAP64:
+        case BitmapTypeCode::BITMAP32_SERIV2:
+        case BitmapTypeCode::BITMAP64_SERIV2:
             _type = BITMAP;
             _bitmap = std::make_shared<detail::Roaring64Map>(detail::Roaring64Map::read(src));
             break;
@@ -1647,23 +1643,28 @@ public:
             break;
         }
         case SET:
+            int pos = 0;
+            int64_t values[_set.size()];
+            for (const auto value : _set) {
+                values[pos++] = value;
+            }
             bool first = true;
-            for (const auto& value : _set) {
+            std::sort(values, values + pos);
+            for (int i = 0; i < pos; ++i) {
                 if (!first) {
                     ss << ",";
                 } else {
                     first = false;
                 }
-                ss << value;
+                ss << values[i];
             }
-
             break;
         }
         return ss.str();
     }
 
     // Append values to array
-    void to_array(std::vector<int64_t>* array) {
+    void to_array(std::vector<int64_t>* array) const {
         switch (_type) {
         case EMPTY:
             break;
@@ -1677,7 +1678,9 @@ public:
             break;
         }
         case SET:
-            array->insert(array->end(), _set.begin(), _set.end());
+            array->reserve(array->size() + _set.size());
+            auto iter = array->insert(array->end(), _set.begin(), _set.end());
+            std::sort(iter, array->end());
             break;
         }
     }

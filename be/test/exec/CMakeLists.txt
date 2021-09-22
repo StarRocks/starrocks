@@ -25,9 +25,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/test/exec")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/test/exec")
 
-if(DEFINED STARROCKS_WITH_LZO)
-ADD_BE_TEST(plain_text_line_reader_lzop_test)
-endif()
 ADD_BE_TEST(tablet_info_test)
 ADD_BE_TEST(es_scan_reader_test)
 ADD_BE_TEST(vectorized/repeat_node_test)

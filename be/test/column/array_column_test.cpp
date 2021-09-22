@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
+
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
@@ -773,6 +775,73 @@ PARALLEL_TEST(ArrayColumnTest, test_clone_column) {
     ASSERT_EQ(0, cloned_column->size());
     ASSERT_EQ(0, down_cast<ArrayColumn*>(cloned_column.get())->elements_column()->size());
     ASSERT_EQ(1, down_cast<ArrayColumn*>(cloned_column.get())->offsets_column()->size());
+}
+
+PARALLEL_TEST(ArrayColumnTest, test_array_hash) {
+    auto c0 = ArrayColumn::create(Int32Column::create(), UInt32Column::create());
+
+    auto* offsets = down_cast<UInt32Column*>(c0->offsets_column().get());
+    auto* elements = down_cast<Int32Column*>(c0->elements_column().get());
+
+    // insert [1, 2, 3], [4, 5, 6]
+    size_t array_size_1 = 3;
+    elements->append(1);
+    elements->append(2);
+    elements->append(3);
+    offsets->append(3);
+
+    size_t array_size_2 = 3;
+    elements->append(4);
+    elements->append(5);
+    elements->append(6);
+    offsets->append(6);
+
+    uint32_t hash_value[2] = {0, 0};
+    c0->crc32_hash(hash_value, 0, 2);
+
+    uint32_t hash_value_1 = HashUtil::zlib_crc_hash(&array_size_1, sizeof(array_size_1), 0);
+    for (int i = 0; i < 3; ++i) {
+        elements->crc32_hash(&hash_value_1 - i, i, i + 1);
+    }
+    uint32_t hash_value_2 = HashUtil::zlib_crc_hash(&array_size_2, sizeof(array_size_2), 0);
+    for (int i = 3; i < 6; ++i) {
+        elements->crc32_hash(&hash_value_2 - i, i, i + 1);
+    }
+    ASSERT_EQ(hash_value_1, hash_value[0]);
+    ASSERT_EQ(hash_value_2, hash_value[1]);
+
+    uint32_t hash_value_fnv[2] = {0, 0};
+    c0->fnv_hash(hash_value_fnv, 0, 2);
+    uint32_t hash_value_1_fnv = HashUtil::fnv_hash(&array_size_1, sizeof(array_size_1), 0);
+    for (int i = 0; i < 3; ++i) {
+        elements->fnv_hash(&hash_value_1_fnv - i, i, i + 1);
+    }
+    uint32_t hash_value_2_fnv = HashUtil::fnv_hash(&array_size_2, sizeof(array_size_2), 0);
+    for (int i = 3; i < 6; ++i) {
+        elements->fnv_hash(&hash_value_2_fnv - i, i, i + 1);
+    }
+
+    ASSERT_EQ(hash_value_1_fnv, hash_value_fnv[0]);
+    ASSERT_EQ(hash_value_2_fnv, hash_value_fnv[1]);
+
+    // overflow test
+    for (int i = 0; i < 100000; ++i) {
+        elements->append(i);
+    }
+    offsets->append(elements->size());
+    uint32_t hash_value_overflow_test[3] = {0, 0, 0};
+    c0->crc32_hash(hash_value_overflow_test, 0, 3);
+
+    auto& offset_values = offsets->get_data();
+    size_t sz = offset_values[offset_values.size() - 1] - offset_values[offset_values.size() - 2];
+
+    uint32_t hash_value_overflow = HashUtil::zlib_crc_hash(&sz, sizeof(sz), 0);
+    for (int i = 0; i < 100000; ++i) {
+        uint32_t value = i;
+        hash_value_overflow = HashUtil::zlib_crc_hash(&value, sizeof(value), hash_value_overflow);
+    }
+
+    ASSERT_EQ(hash_value_overflow, hash_value_overflow_test[2]);
 }
 
 } // namespace starrocks::vectorized

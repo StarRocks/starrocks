@@ -1649,5 +1649,53 @@ TEST_F(VecBitmapFunctionsTest, bitmapToArrayOnlyNullTest) {
     }
 }
 
+//BitmapValue test
+TEST_F(VecBitmapFunctionsTest, bitmapValueUnionOperator) {
+    BitmapValue b1;
+    int promote_to_bitmap = 33;
+    for (int i = 0; i < promote_to_bitmap; ++i) {
+        b1.add(i);
+    }
+
+    BitmapValue b2;
+    b2.add(99);
+
+    {
+        BitmapValue a1;
+        a1 |= b1;
+
+        BitmapValue a2;
+        a2 |= b2;
+
+        BitmapValue a3;
+        a3 |= b1;
+        a3 |= b2;
+
+        ASSERT_TRUE(a1.cardinality() == promote_to_bitmap);
+        ASSERT_TRUE(a2.cardinality() == 1);
+        ASSERT_TRUE(a3.cardinality() == (promote_to_bitmap + 1));
+    }
+}
+
+//BitmapValue test
+TEST_F(VecBitmapFunctionsTest, bitmapValueXorOperator) {
+    int promote_to_bitmap = 33;
+
+    BitmapValue b1;
+    for (int i = 0; i < promote_to_bitmap; ++i) {
+        b1.add(i);
+    }
+
+    BitmapValue b2;
+    for (int i = 0; i < promote_to_bitmap; ++i) {
+        b2.add(i);
+    }
+
+    {
+        b1 ^= b2;
+        ASSERT_TRUE(b2.cardinality() == promote_to_bitmap);
+    }
+}
+
 } // namespace vectorized
 } // namespace starrocks

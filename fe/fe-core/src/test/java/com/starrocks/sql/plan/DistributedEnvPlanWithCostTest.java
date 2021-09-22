@@ -306,9 +306,9 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().disableJoinReorder();
 
         // Left outer join
-        String sql = "select distinct join1.id from join1 left join [shuffle] join2 on join1.id = join2.id;";
+        String sql = "select distinct join1.id from join1 left join join2 on join1.id = join2.id;";
         String plan = getFragmentPlan(sql);
-        checkTwoPhaseAgg(plan);
+        checkOnePhaseAgg(plan);
 
         sql = "select distinct join2.id from join1 left join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
@@ -325,7 +325,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
         sql = "select distinct join1.id from join1 right join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
-        checkOnePhaseAgg(plan);
+        checkTwoPhaseAgg(plan);
 
         // Full outer join
         sql = "select distinct join2.id from join1 full join join2 on join1.id = join2.id;";
@@ -334,16 +334,16 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
         sql = "select distinct join1.id from join1 full join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
-        checkOnePhaseAgg(plan);
+        checkTwoPhaseAgg(plan);
 
         // Inner join
         sql = "select distinct join2.id from join1 join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
         checkTwoPhaseAgg(plan);
 
-        sql = "select distinct join1.id from join1 join [shuffle] join2 on join1.id = join2.id;";
+        sql = "select distinct join1.id from join1 join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
-        checkTwoPhaseAgg(plan);
+        checkOnePhaseAgg(plan);
 
         // cross join
         sql = "select distinct join2.id from join1 join join2 on join1.id = join2.id, baseall;";
@@ -480,5 +480,40 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  cross join:\n" +
                 "  |  predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
                 "  |  cardinality: 2"));
+    }
+
+    @Test
+    public void testOneAggUponBroadcastJoinWithoutExchange() throws Exception {
+        String sql = "select \n" +
+                "  sum(p1) \n" +
+                "from \n" +
+                "  (\n" +
+                "    select \n" +
+                "      t0.p1 \n" +
+                "    from \n" +
+                "      (\n" +
+                "        select \n" +
+                "          count(n1.P_PARTKEY) as p1 \n" +
+                "        from \n" +
+                "          part n1\n" +
+                "      ) t0 \n" +
+                "      join (\n" +
+                "        select \n" +
+                "          count(n2.P_PARTKEY) as p2 \n" +
+                "        from \n" +
+                "          part n2\n" +
+                "      ) t1\n" +
+                "  ) t2;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 11:AGGREGATE (update finalize)"));
+        Assert.assertTrue(plan.contains("10:Project"));
+    }
+
+    @Test
+    public void testGroupByDistributedColumnWithMultiPartitions() throws Exception {
+        String sql = "select k1, sum(k2) from pushdown_test group by k1";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)"));
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
     }
 }

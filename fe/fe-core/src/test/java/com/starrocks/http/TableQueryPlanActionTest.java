@@ -34,10 +34,11 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.Base64;
+import java.util.Objects;
 
 public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
 
-    private static String PATH_URI = "/_query_plan";
+    private static final String PATH_URI = "/_query_plan";
     protected static String ES_TABLE_URL;
 
     @Override
@@ -57,7 +58,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .url(URI + PATH_URI)
                 .build();
         Response response = networkClient.newCall(request).execute();
-        String respStr = response.body().string();
+        String respStr = Objects.requireNonNull(response.body()).string();
         JSONObject jsonObject = new JSONObject(respStr);
         System.out.println(respStr);
         Assert.assertEquals(200, jsonObject.getInt("status"));
@@ -93,7 +94,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .url(URI + PATH_URI)
                 .build();
         Response response = networkClient.newCall(request).execute();
-        String respStr = response.body().string();
+        String respStr = Objects.requireNonNull(response.body()).string();
         System.out.println(respStr);
         Assert.assertNotNull(respStr);
         expectThrowsNoException(() -> new JSONObject(respStr));
@@ -114,7 +115,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .url(ES_TABLE_URL + PATH_URI)
                 .build();
         Response response = networkClient.newCall(request).execute();
-        String respStr = response.body().string();
+        String respStr = Objects.requireNonNull(response.body()).string();
         Assert.assertNotNull(respStr);
         expectThrowsNoException(() -> new JSONObject(respStr));
         JSONObject jsonObject = new JSONObject(respStr);
@@ -134,7 +135,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .url(ES_TABLE_URL + PATH_URI)
                 .build();
         Response response = networkClient.newCall(request).execute();
-        String respStr = response.body().string();
+        String respStr = Objects.requireNonNull(response.body()).string();
         Assert.assertNotNull(respStr);
         expectThrowsNoException(() -> new JSONObject(respStr));
         JSONObject jsonObject = new JSONObject(respStr);

@@ -162,7 +162,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             auto source_id = pipeline->get_op_factories()[0]->plan_node_id();
             DCHECK(morsel_queues.count(source_id));
             auto& morsel_queue = morsel_queues[source_id];
-            DCHECK(degree_of_parallelism <= morsel_queue->num_morsels());
+            if (morsel_queue->num_morsels() > 0) {
+                DCHECK(degree_of_parallelism <= morsel_queue->num_morsels());
+            }
             if (is_root) {
                 _fragment_ctx->set_num_root_drivers(degree_of_parallelism);
             }
