@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
@@ -414,15 +413,21 @@ public class OptimizerTaskTest {
         List<ColumnRefOperator> outputColumns1 = Lists.newArrayList();
         outputColumns1.add(column1);
         outputColumns1.add(column2);
+        Map<ColumnRefOperator, Column> scanColumnMap1 = Maps.newHashMap();
+        scanColumnMap1.put(column1, new Column());
+        scanColumnMap1.put(column2, new Column());
+
         List<ColumnRefOperator> outputColumns2 = Lists.newArrayList();
         outputColumns2.add(column3);
         outputColumns2.add(column4);
 
+        Map<ColumnRefOperator, Column> scanColumnMap2= Maps.newHashMap();
+        scanColumnMap2.put(column3, new Column());
+        scanColumnMap2.put(column4, new Column());
+
         OptExpression logicOperatorTree = OptExpression.create(new LogicalJoinOperator(),
-                OptExpression.create(new LogicalOlapScanOperator(
-                        olapTable1, outputColumns1, Maps.newHashMap(), ImmutableMap.of())),
-                OptExpression.create(new LogicalOlapScanOperator(
-                        olapTable2, outputColumns2, Maps.newHashMap(), ImmutableMap.of())));
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1, outputColumns1, scanColumnMap1, null, -1, null)),
+                OptExpression.create(new LogicalOlapScanOperator(olapTable2, outputColumns2, scanColumnMap2, null, -1, null)));
 
         List<ColumnRefOperator> outputColumns = Lists.newArrayList();
         outputColumns.addAll(outputColumns1);
@@ -521,8 +526,7 @@ public class OptimizerTaskTest {
         scanColumnMap.put(column3, new Column());
 
         OptExpression expression = OptExpression.create(new LogicalProjectOperator(ColumnRefMap1),
-                OptExpression.create(new LogicalOlapScanOperator(olapTable1, outputColumns2,
-                        scanColumnMap, ImmutableMap.of())));
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1, outputColumns2, scanColumnMap, null, -1, null)));
 
         Optimizer optimizer = new Optimizer();
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
@@ -565,8 +569,7 @@ public class OptimizerTaskTest {
         scanColumnMap.put(column3, new Column());
 
         OptExpression expression = OptExpression.create(new LogicalProjectOperator(ColumnRefMap1),
-                OptExpression.create(new LogicalOlapScanOperator(olapTable1, outputColumns2,
-                        scanColumnMap, ImmutableMap.of())));
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1, outputColumns2, scanColumnMap, null, -1, null)));
 
         Optimizer optimizer = new Optimizer();
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
@@ -637,8 +640,7 @@ public class OptimizerTaskTest {
 
         OptExpression expression = OptExpression.create(new LogicalProjectOperator(projectColumnMap),
                 OptExpression.create(aggregationOperator,
-                        OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns,
-                                scanColumnMap, ImmutableMap.of()))));
+                        OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null))));
 
         ColumnRefSet outputColumns = new ColumnRefSet(column2.getId());
 
@@ -722,8 +724,7 @@ public class OptimizerTaskTest {
 
         OptExpression expression = OptExpression.create(new LogicalProjectOperator(projectColumnMap),
                 OptExpression.create(aggregationOperator,
-                        OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns,
-                                scanColumnMap, ImmutableMap.of()))));
+                        OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null))));
 
         ColumnRefSet outputColumns = new ColumnRefSet(column5.getId());
 
@@ -767,8 +768,7 @@ public class OptimizerTaskTest {
 
         OptExpression expression = OptExpression.create(new LogicalProjectOperator(projectColumnMap),
                 OptExpression.create(aggregationOperator,
-                        OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns,
-                                scanColumnMap, ImmutableMap.of()))));
+                        OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null))));
 
         ColumnRefSet outputColumns = new ColumnRefSet(column4.getId());
 
@@ -814,8 +814,7 @@ public class OptimizerTaskTest {
                 new LogicalAggregationOperator(Lists.newArrayList(), map);
 
         OptExpression agg = OptExpression.create(aggregationOperator,
-                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns,
-                        scanColumnMap, ImmutableMap.of())));
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null)));
 
         OptExpression limit = OptExpression.create(new LogicalLimitOperator(1), agg);
 
@@ -868,8 +867,7 @@ public class OptimizerTaskTest {
 
         OptExpression expression = OptExpression.create(new LogicalProjectOperator(projectColumnMap),
                 OptExpression.create(sortOperator,
-                        OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns,
-                                scanColumnMap, ImmutableMap.of()))));
+                        OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null))));
 
         ColumnRefSet outputColumns = new ColumnRefSet(column2.getId());
 
@@ -925,8 +923,7 @@ public class OptimizerTaskTest {
                 new LogicalAggregationOperator(Lists.newArrayList(column1), map);
 
         OptExpression expression = OptExpression.create(aggregationOperator,
-                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns,
-                        scanColumnMap, ImmutableMap.of())));
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null)));
 
         ColumnRefSet outputColumns = new ColumnRefSet(column1.getId());
 
@@ -987,8 +984,7 @@ public class OptimizerTaskTest {
         map.put(column3, call);
         LogicalAggregationOperator aggregationOperator =
                 new LogicalAggregationOperator(Lists.newArrayList(), map);
-        LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(olapTable1, scanColumns,
-                scanColumnMap, ImmutableMap.of());
+        LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null);
 
         OptExpression expression = OptExpression.create(aggregationOperator, OptExpression.create(scanOperator));
 
@@ -1060,8 +1056,7 @@ public class OptimizerTaskTest {
                 new LogicalAggregationOperator(Lists.newArrayList(column2), map);
 
         OptExpression expression = OptExpression.create(aggregationOperator,
-                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns,
-                        scanColumnMap, ImmutableMap.of())));
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null)));
 
         ColumnRefSet outputColumns = new ColumnRefSet(Lists.newArrayList(column3, column2));
 
@@ -1136,8 +1131,7 @@ public class OptimizerTaskTest {
                 new LogicalAggregationOperator(Lists.newArrayList(), map);
 
         OptExpression expression = OptExpression.create(aggregationOperator,
-                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns,
-                        scanColumnMap, ImmutableMap.of())));
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null)));
 
         ColumnRefSet outputColumns = new ColumnRefSet(Lists.newArrayList(column3));
 
@@ -1209,8 +1203,8 @@ public class OptimizerTaskTest {
         projectColumnMap2.put(column2, column1);
 
         OptExpression project = OptExpression.create(new LogicalProjectOperator(projectColumnMap),
-                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns,
-                        scanColumnMap, ImmutableMap.of())));
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null)));
+
         OptExpression agg = OptExpression.create(aggregationOperator, project);
         OptExpression topProject = OptExpression.create(new LogicalProjectOperator(projectColumnMap2),
                 agg);
@@ -1276,8 +1270,7 @@ public class OptimizerTaskTest {
         projectColumnMap2.put(column6, column5);
 
         OptExpression projectExpression = OptExpression.create(new LogicalProjectOperator(projectColumnMap1),
-                OptExpression.create(new LogicalOlapScanOperator(
-                        olapTable1, scanColumns, scanColumnMap, ImmutableMap.of())));
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null)));
 
         OptExpression aggExpression = OptExpression.create(aggregationOperator, projectExpression);
         OptExpression havingExpression = OptExpression.create(filterOperator, aggExpression);
@@ -1334,8 +1327,7 @@ public class OptimizerTaskTest {
         projectColumnMap2.put(column4, column3);
 
         OptExpression projectExpression = OptExpression.create(new LogicalProjectOperator(projectColumnMap1),
-                OptExpression.create(new LogicalOlapScanOperator(
-                        olapTable1, scanColumns, scanColumnMap, ImmutableMap.of())));
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null)));
 
         OptExpression aggExpression = OptExpression.create(aggregationOperator, projectExpression);
         OptExpression havingExpression = OptExpression.create(filterOperator, aggExpression);
@@ -1391,8 +1383,7 @@ public class OptimizerTaskTest {
 
         OptExpression expression = OptExpression.create(new LogicalProjectOperator(projectMap),
                 OptExpression.create(new LogicalFilterOperator(predicate),
-                        OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns,
-                                scanColumnMap, ImmutableMap.of()))));
+                        OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null))));
 
         Optimizer optimizer = new Optimizer();
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
@@ -1403,7 +1394,7 @@ public class OptimizerTaskTest {
         PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) physicalTree.getInputs().get(0).getOp();
         assertTrue(physicalOlapScan.getPredicate() instanceof BinaryPredicateOperator);
 
-        assertTrue(physicalOlapScan.getColumnRefMap().containsKey(column2));
+        assertTrue(physicalOlapScan.getColRefToColumnMetaMap().containsKey(column2));
     }
 
     @Test
@@ -1435,8 +1426,7 @@ public class OptimizerTaskTest {
                 ConstantOperator.createInt(1));
 
         OptExpression project1 = OptExpression.create(new LogicalProjectOperator(projectMap),
-                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns,
-                        scanColumnMap, ImmutableMap.of())));
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null)));
 
         OptExpression project2 = OptExpression.create(new LogicalProjectOperator(projectMap2), project1);
 
@@ -1500,8 +1490,7 @@ public class OptimizerTaskTest {
         scanColumnMap.put(column3, new Column());
 
         OptExpression expression = OptExpression.create(new LogicalProjectOperator(projectMap),
-                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns,
-                        scanColumnMap, ImmutableMap.of())));
+                OptExpression.create(new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, null, -1, null)));
 
         Optimizer optimizer = new Optimizer();
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
@@ -1575,10 +1564,8 @@ public class OptimizerTaskTest {
                 column1,
                 column3);
 
-        LogicalOlapScanOperator scan1 = new LogicalOlapScanOperator(olapTable1, scan1Columns,
-                scan1ColumnMap, ImmutableMap.of(column2_, column2.getId()));
-        LogicalOlapScanOperator scan2 = new LogicalOlapScanOperator(olapTable2, scan2Columns,
-                scan2ColumnMap, ImmutableMap.of(column4_, column4.getId()));
+        LogicalOlapScanOperator scan1 = new LogicalOlapScanOperator(olapTable1, scan1Columns, scan1ColumnMap, null, -1, null);
+        LogicalOlapScanOperator scan2 = new LogicalOlapScanOperator(olapTable2, scan2Columns, scan2ColumnMap, null, -1, null);
         LogicalJoinOperator join = new LogicalJoinOperator(JoinOperator.INNER_JOIN, predicate);
 
         OptExpression expression = OptExpression.create(join,
@@ -1666,12 +1653,9 @@ public class OptimizerTaskTest {
                 column1,
                 column5);
 
-        LogicalOlapScanOperator scan1 = new LogicalOlapScanOperator(olapTable1, scan1Columns,
-                scan1ColumnMap, ImmutableMap.of(column2_, column2.getId()));
-        LogicalOlapScanOperator scan2 = new LogicalOlapScanOperator(olapTable2, scan2Columns,
-                scan2ColumnMap, ImmutableMap.of(column4_, column4.getId()));
-        LogicalOlapScanOperator scan3 = new LogicalOlapScanOperator(olapTable3, scan3Columns,
-                scan3ColumnMap, ImmutableMap.of(column6_, column6.getId()));
+        LogicalOlapScanOperator scan1 = new LogicalOlapScanOperator(olapTable1, scan1Columns, scan1ColumnMap, null, -1, null);
+        LogicalOlapScanOperator scan2 = new LogicalOlapScanOperator(olapTable2, scan2Columns, scan2ColumnMap, null, -1, null);
+        LogicalOlapScanOperator scan3 = new LogicalOlapScanOperator(olapTable3, scan3Columns, scan3ColumnMap, null, -1, null);
         LogicalJoinOperator join = new LogicalJoinOperator(JoinOperator.INNER_JOIN, predicate);
         LogicalJoinOperator join2 = new LogicalJoinOperator(JoinOperator.INNER_JOIN, predicate2);
 
@@ -1768,10 +1752,8 @@ public class OptimizerTaskTest {
                 column1,
                 column3);
 
-        LogicalOlapScanOperator scan1 = new LogicalOlapScanOperator(olapTable1, scan1Columns,
-                scan1ColumnMap, ImmutableMap.of(column2_, column2.getId()));
-        LogicalOlapScanOperator scan2 = new LogicalOlapScanOperator(olapTable2, scan2Columns,
-                scan2ColumnMap, ImmutableMap.of(column4_, column4.getId()));
+        LogicalOlapScanOperator scan1 = new LogicalOlapScanOperator(olapTable1, scan1Columns, scan1ColumnMap, null, -1, null);
+        LogicalOlapScanOperator scan2 = new LogicalOlapScanOperator(olapTable2, scan2Columns, scan2ColumnMap, null, -1, null);
         LogicalJoinOperator join = new LogicalJoinOperator(JoinOperator.INNER_JOIN, predicate);
         OptExpression expression = OptExpression.create(join,
                 OptExpression.create(scan1),
@@ -1781,7 +1763,8 @@ public class OptimizerTaskTest {
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
                 new ColumnRefSet(outputColumns), columnRefFactory);
         assertEquals(physicalTree.getInputs().get(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
-        PhysicalDistributionOperator rightOperator = (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
+        PhysicalDistributionOperator rightOperator =
+                (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
         assertEquals(rightOperator.getDistributionSpec().getType(), DistributionSpec.DistributionType.BROADCAST);
     }
 
@@ -1870,10 +1853,8 @@ public class OptimizerTaskTest {
                 column1,
                 column3);
 
-        LogicalOlapScanOperator scan1 = new LogicalOlapScanOperator(olapTable1, scan1Columns,
-                scan1ColumnMap, ImmutableMap.of(column2_, column2.getId()));
-        LogicalOlapScanOperator scan2 = new LogicalOlapScanOperator(olapTable2, scan2Columns,
-                scan2ColumnMap, ImmutableMap.of(column4_, column4.getId()));
+        LogicalOlapScanOperator scan1 = new LogicalOlapScanOperator(olapTable1, scan1Columns, scan1ColumnMap, null, -1, null);
+        LogicalOlapScanOperator scan2 = new LogicalOlapScanOperator(olapTable2, scan2Columns, scan2ColumnMap, null, -1, null);
         LogicalJoinOperator join = new LogicalJoinOperator(JoinOperator.INNER_JOIN, predicate);
         OptExpression expression = OptExpression.create(join,
                 OptExpression.create(scan1),
@@ -1883,7 +1864,8 @@ public class OptimizerTaskTest {
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
                 new ColumnRefSet(outputColumns), columnRefFactory);
         assertEquals(physicalTree.getInputs().get(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
-        PhysicalDistributionOperator rightOperator = (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
+        PhysicalDistributionOperator rightOperator =
+                (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
         assertEquals(rightOperator.getDistributionSpec().getType(), DistributionSpec.DistributionType.SHUFFLE);
     }
 
@@ -1976,10 +1958,8 @@ public class OptimizerTaskTest {
                 column1,
                 column3);
 
-        LogicalOlapScanOperator scan1 = new LogicalOlapScanOperator(olapTable1, scan1Columns,
-                scan1ColumnMap, ImmutableMap.of(column2_, column2.getId()));
-        LogicalOlapScanOperator scan2 = new LogicalOlapScanOperator(olapTable2, scan2Columns,
-                scan2ColumnMap, ImmutableMap.of(column4_, column4.getId()));
+        LogicalOlapScanOperator scan1 = new LogicalOlapScanOperator(olapTable1, scan1Columns, scan1ColumnMap, null, -1, null);
+        LogicalOlapScanOperator scan2 = new LogicalOlapScanOperator(olapTable2, scan2Columns, scan2ColumnMap, null, -1, null);
         LogicalJoinOperator join = new LogicalJoinOperator(JoinOperator.INNER_JOIN, predicate);
         OptExpression expression = OptExpression.create(join,
                 OptExpression.create(scan1),
@@ -1989,7 +1969,8 @@ public class OptimizerTaskTest {
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
                 new ColumnRefSet(outputColumns), columnRefFactory);
         assertEquals(physicalTree.getInputs().get(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
-        PhysicalDistributionOperator rightOperator = (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
+        PhysicalDistributionOperator rightOperator =
+                (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
         assertEquals(rightOperator.getDistributionSpec().getType(), DistributionSpec.DistributionType.BROADCAST);
         PhysicalOlapScanOperator
                 rightScan = (PhysicalOlapScanOperator) physicalTree.getInputs().get(1).getInputs().get(0).getOp();

@@ -126,7 +126,7 @@ public class Utils {
         if (OperatorType.LOGICAL_OLAP_SCAN.equals(groupExpression.getOp().getOpType())) {
             LogicalOlapScanOperator loso = (LogicalOlapScanOperator) groupExpression.getOp();
 
-            return ImmutableList.<ColumnRefOperator>builder().addAll(loso.getColumnRefMap().keySet()).build();
+            return ImmutableList.<ColumnRefOperator>builder().addAll(loso.getColRefToColumnMetaMap().keySet()).build();
         }
 
         List<Group> groups = groupExpression.getInputs();
@@ -328,7 +328,7 @@ public class Utils {
         Operator operator = root.getOp();
         if (operator instanceof LogicalScanOperator) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) operator;
-            List<String> colNames = scanOperator.getColumnRefMap().values().stream().map(Column::getName).collect(
+            List<String> colNames = scanOperator.getColRefToColumnMetaMap().values().stream().map(Column::getName).collect(
                     Collectors.toList());
 
             List<ColumnStatistic> columnStatisticList =

@@ -3,56 +3,51 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.base.DistributionSpec;
-import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
 public final class LogicalOlapScanOperator extends LogicalScanOperator {
+    private final HashDistributionSpec hashDistributionSpec;
     private long selectedIndexId;
-    private Collection<Long> selectedPartitionId;
     private Collection<Long> selectedTabletId;
+    private Collection<Long> selectedPartitionId;
 
     private PartitionNames partitionNames;
     private List<Long> hintsTabletIds;
 
-    private final ImmutableMap<Column, Integer> columnToIds;
-
     // Only for UT
-    public LogicalOlapScanOperator(OlapTable table) {
-        super(OperatorType.LOGICAL_OLAP_SCAN, table, Lists.newArrayList(), Maps.newHashMap());
-        this.columnToIds = ImmutableMap.of();
-        selectedPartitionId = Lists.newArrayList();
-        selectedIndexId = table.getBaseIndexId();
-        selectedTabletId = Lists.newArrayList();
+    public LogicalOlapScanOperator(Table table) {
+        this(table, Lists.newArrayList(), Maps.newHashMap(), null, -1, null);
     }
 
     public LogicalOlapScanOperator(
-            OlapTable table,
+            Table table,
             List<ColumnRefOperator> outputColumns,
             Map<ColumnRefOperator, Column> columnRefMap,
-            ImmutableMap<Column, Integer> columnToIds) {
-        super(OperatorType.LOGICAL_OLAP_SCAN, table, outputColumns, columnRefMap);
-        this.columnToIds = columnToIds;
-        selectedPartitionId = Lists.newArrayList();
-        selectedIndexId = table.getBaseIndexId();
+            HashDistributionSpec hashDistributionSpec,
+            long limit,
+            ScalarOperator predicate) {
+        super(OperatorType.LOGICAL_OLAP_SCAN, table, outputColumns, columnRefMap, limit, predicate);
+
+        Preconditions.checkState(table instanceof OlapTable);
+        this.hashDistributionSpec = hashDistributionSpec;
+        selectedIndexId = ((OlapTable) table).getBaseIndexId();
         selectedTabletId = Lists.newArrayList();
+        selectedPartitionId = Lists.newArrayList();
     }
 
     public OlapTable getOlapTable() {
@@ -99,24 +94,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.selectedTabletId = selectedTabletId;
     }
 
-    public ImmutableMap<Column, Integer> getColumnToIds() {
-        return columnToIds;
-    }
-
-    // TODO(kks): combine this method with PhysicalOlapScan::getDistributionSpec
     public HashDistributionSpec getDistributionSpec() {
-        DistributionInfo distributionInfo = ((OlapTable) table).getDefaultDistributionInfo();
-        Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
-        HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-        List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
-        List<Integer> columnList = new ArrayList<>();
-        for (Column distributedColumn : distributedColumns) {
-            columnList.add(columnToIds.get(distributedColumn));
-        }
-
-        HashDistributionDesc leftHashDesc =
-                new HashDistributionDesc(columnList, HashDistributionDesc.SourceType.LOCAL);
-        return DistributionSpec.createHashDistributionSpec(leftHashDesc);
+        return hashDistributionSpec;
     }
 
     public boolean canDoReplicatedJoin() {

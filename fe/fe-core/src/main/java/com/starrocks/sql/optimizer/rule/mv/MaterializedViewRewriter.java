@@ -70,11 +70,11 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<Void, Materia
     public Void visitLogicalTableScan(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
         LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) optExpression.getOp();
 
-        if (scanOperator.getColumnRefMap().containsKey(context.queryColumnRef)) {
+        if (scanOperator.getColRefToColumnMetaMap().containsKey(context.queryColumnRef)) {
             scanOperator.getOutputColumns().remove(context.queryColumnRef);
             scanOperator.getOutputColumns().add(context.mvColumnRef);
-            scanOperator.getColumnRefMap().remove(context.queryColumnRef);
-            scanOperator.getColumnRefMap().put(context.mvColumnRef, context.mvColumn);
+            scanOperator.getColRefToColumnMetaMap().remove(context.queryColumnRef);
+            scanOperator.getColRefToColumnMetaMap().put(context.mvColumnRef, context.mvColumn);
         }
         return null;
     }

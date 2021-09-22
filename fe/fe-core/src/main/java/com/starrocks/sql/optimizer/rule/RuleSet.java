@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule
 import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneExceptColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneFilterColumnsRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneHiveScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneIntersectColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneJoinColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneProjectColumnsRule;
@@ -151,9 +152,9 @@ public class RuleSet {
                 new MergeTwoProjectRule(),
                 PruneScanColumnRule.OLAP_SCAN,
                 PruneScanColumnRule.SCHEMA_SCAN,
-                PruneScanColumnRule.HIVE_SCAN,
                 PruneScanColumnRule.MYSQL_SCAN,
                 PruneScanColumnRule.ES_SCAN,
+                new PruneHiveScanColumnRule(),
                 new PruneProjectColumnsRule(),
                 new PruneFilterColumnsRule(),
                 new PruneAggregateColumnsRule(),

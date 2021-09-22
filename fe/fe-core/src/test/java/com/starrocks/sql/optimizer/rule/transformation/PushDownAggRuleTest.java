@@ -39,7 +39,7 @@ public class PushDownAggRuleTest {
         scanColumnMap.put(new ColumnRefOperator(2, Type.INT, "name", true), null);
 
         new Expectations(scanOp) {{
-            scanOp.getColumnRefMap();
+            scanOp.getColRefToColumnMetaMap();
             minTimes = 0;
             result = scanColumnMap;
         }};

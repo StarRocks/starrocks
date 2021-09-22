@@ -16,6 +16,12 @@ public abstract class Operator {
         this.opType = opType;
     }
 
+    public Operator(OperatorType opType, long limit, ScalarOperator predicate) {
+        this.opType = opType;
+        this.limit = limit;
+        this.predicate = predicate;
+    }
+
     public boolean isLogical() {
         return false;
     }
