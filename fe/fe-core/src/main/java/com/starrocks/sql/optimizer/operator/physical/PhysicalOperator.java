@@ -7,28 +7,8 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 public abstract class PhysicalOperator extends Operator {
-    protected long limit = -1;
-    protected ScalarOperator predicate;
-
-    public long getLimit() {
-        return limit;
-    }
-
-    public void setLimit(long limit) {
-        this.limit = limit;
-    }
-
-    public ScalarOperator getPredicate() {
-        return predicate;
-    }
-
-    public void setPredicate(ScalarOperator predicate) {
-        this.predicate = predicate;
-    }
-
     protected OrderSpec orderSpec;
     protected DistributionSpec distributionSpec;
 
