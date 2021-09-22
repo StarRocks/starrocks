@@ -12,6 +12,7 @@
 namespace starrocks::vectorized {
 
 #define APPLY_FOR_VARIANT_NOT_NULL(M) \
+    M(phase1_uint8)                   \
     M(phase1_int8)                    \
     M(phase1_int16)                   \
     M(phase1_int32)                   \
@@ -26,6 +27,7 @@ namespace starrocks::vectorized {
     M(phase1_slice)                   \
     M(phase1_slice_two_level)         \
     M(phase1_int32_two_level)         \
+    M(phase2_uint8)                   \
     M(phase2_int8)                    \
     M(phase2_int16)                   \
     M(phase2_int32)                   \
@@ -46,6 +48,7 @@ namespace starrocks::vectorized {
     M(phase2_slice_fx16)
 
 #define APPLY_FOR_VARIANT_NULL(M) \
+    M(phase1_null_uint8)          \
     M(phase1_null_int8)           \
     M(phase1_null_int16)          \
     M(phase1_null_int32)          \
@@ -57,6 +60,7 @@ namespace starrocks::vectorized {
     M(phase1_null_date)           \
     M(phase1_null_timestamp)      \
     M(phase1_null_string)         \
+    M(phase2_null_uint8)          \
     M(phase2_null_int8)           \
     M(phase2_null_int16)          \
     M(phase2_null_int32)          \
@@ -70,6 +74,7 @@ namespace starrocks::vectorized {
     M(phase2_null_string)
 
 #define APPLY_FOR_VARIANT_ALL(M) \
+    M(phase1_uint8)              \
     M(phase1_int8)               \
     M(phase1_int16)              \
     M(phase1_int32)              \
@@ -82,6 +87,7 @@ namespace starrocks::vectorized {
     M(phase1_timestamp)          \
     M(phase1_string)             \
     M(phase1_slice)              \
+    M(phase1_null_uint8)         \
     M(phase1_null_int8)          \
     M(phase1_null_int16)         \
     M(phase1_null_int32)         \
@@ -95,6 +101,7 @@ namespace starrocks::vectorized {
     M(phase1_null_string)        \
     M(phase1_slice_two_level)    \
     M(phase1_int32_two_level)    \
+    M(phase2_uint8)              \
     M(phase2_int8)               \
     M(phase2_int16)              \
     M(phase2_int32)              \
@@ -107,6 +114,7 @@ namespace starrocks::vectorized {
     M(phase2_timestamp)          \
     M(phase2_string)             \
     M(phase2_slice)              \
+    M(phase2_null_uint8)         \
     M(phase2_null_int8)          \
     M(phase2_null_int16)         \
     M(phase2_null_int32)         \
@@ -126,6 +134,8 @@ namespace starrocks::vectorized {
     M(phase2_slice_fx16)
 
 // Hash maps for phase1
+template <PhmapSeed seed>
+using UInt8AggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_BOOLEAN, Int8AggHashMap<seed>>;
 template <PhmapSeed seed>
 using Int8AggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_TINYINT, Int8AggHashMap<seed>>;
 template <PhmapSeed seed>
@@ -148,6 +158,8 @@ using DateAggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_DATE, Dat
 template <PhmapSeed seed>
 using TimeStampAggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_DATETIME, TimeStampAggHashMap<seed>>;
 
+template <PhmapSeed seed>
+using NullUInt8AggHashMapWithOneNumberKey = AggHashMapWithOneNullableNumberKey<TYPE_BOOLEAN, Int8AggHashMap<seed>>;
 template <PhmapSeed seed>
 using NullInt8AggHashMapWithOneNumberKey = AggHashMapWithOneNullableNumberKey<TYPE_TINYINT, Int8AggHashMap<seed>>;
 template <PhmapSeed seed>
@@ -206,7 +218,8 @@ using SerializedKeyFixedSize16AggHashMap = AggHashMapWithSerializedKeyFixedSize<
 // it will lead to a high conflict rate, resulting in performance degradation in the second stage.
 struct HashMapVariant {
     enum class Type {
-        phase1_int8 = 0,
+        phase1_uint8 = 0,
+        phase1_int8,
         phase1_int16,
         phase1_int32,
         phase1_int64,
@@ -217,6 +230,7 @@ struct HashMapVariant {
         phase1_date,
         phase1_timestamp,
         phase1_string,
+        phase1_null_uint8,
         phase1_null_int8,
         phase1_null_int16,
         phase1_null_int32,
@@ -235,6 +249,7 @@ struct HashMapVariant {
         phase1_slice_fx8,
         phase1_slice_fx16,
 
+        phase2_uint8,
         phase2_int8,
         phase2_int16,
         phase2_int32,
@@ -246,6 +261,7 @@ struct HashMapVariant {
         phase2_date,
         phase2_timestamp,
         phase2_string,
+        phase2_null_uint8,
         phase2_null_int8,
         phase2_null_int16,
         phase2_null_int32,
@@ -266,6 +282,7 @@ struct HashMapVariant {
     };
     Type type = Type::phase1_slice;
 
+    std::unique_ptr<UInt8AggHashMapWithOneNumberKey<PhmapSeed1>> phase1_uint8;
     std::unique_ptr<Int8AggHashMapWithOneNumberKey<PhmapSeed1>> phase1_int8;
     std::unique_ptr<Int16AggHashMapWithOneNumberKey<PhmapSeed1>> phase1_int16;
     std::unique_ptr<Int32AggHashMapWithOneNumberKey<PhmapSeed1>> phase1_int32;
@@ -278,6 +295,8 @@ struct HashMapVariant {
     std::unique_ptr<DateAggHashMapWithOneNumberKey<PhmapSeed1>> phase1_date;
     std::unique_ptr<TimeStampAggHashMapWithOneNumberKey<PhmapSeed1>> phase1_timestamp;
     std::unique_ptr<OneStringAggHashMap<PhmapSeed1>> phase1_string;
+
+    std::unique_ptr<NullUInt8AggHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_uint8;
     std::unique_ptr<NullInt8AggHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_int8;
     std::unique_ptr<NullInt16AggHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_int16;
     std::unique_ptr<NullInt32AggHashMapWithOneNumberKey<PhmapSeed1>> phase1_null_int32;
@@ -298,6 +317,7 @@ struct HashMapVariant {
     std::unique_ptr<SerializedKeyFixedSize8AggHashMap<PhmapSeed1>> phase1_slice_fx8;
     std::unique_ptr<SerializedKeyFixedSize16AggHashMap<PhmapSeed1>> phase1_slice_fx16;
 
+    std::unique_ptr<UInt8AggHashMapWithOneNumberKey<PhmapSeed2>> phase2_uint8;
     std::unique_ptr<Int8AggHashMapWithOneNumberKey<PhmapSeed2>> phase2_int8;
     std::unique_ptr<Int16AggHashMapWithOneNumberKey<PhmapSeed2>> phase2_int16;
     std::unique_ptr<Int32AggHashMapWithOneNumberKey<PhmapSeed2>> phase2_int32;
@@ -311,6 +331,7 @@ struct HashMapVariant {
     std::unique_ptr<DateAggHashMapWithOneNumberKey<PhmapSeed2>> phase2_date;
     std::unique_ptr<TimeStampAggHashMapWithOneNumberKey<PhmapSeed2>> phase2_timestamp;
     std::unique_ptr<OneStringAggHashMap<PhmapSeed2>> phase2_string;
+    std::unique_ptr<NullUInt8AggHashMapWithOneNumberKey<PhmapSeed2>> phase2_null_uint8;
     std::unique_ptr<NullInt8AggHashMapWithOneNumberKey<PhmapSeed2>> phase2_null_int8;
     std::unique_ptr<NullInt16AggHashMapWithOneNumberKey<PhmapSeed2>> phase2_null_int16;
     std::unique_ptr<NullInt32AggHashMapWithOneNumberKey<PhmapSeed2>> phase2_null_int32;
@@ -385,6 +406,8 @@ struct HashMapVariant {
 
 // Hash sets
 template <PhmapSeed seed>
+using UInt8AggHashSetOfOneNumberKey = AggHashSetOfOneNumberKey<TYPE_BOOLEAN, Int8AggHashSet<seed>>;
+template <PhmapSeed seed>
 using Int8AggHashSetOfOneNumberKey = AggHashSetOfOneNumberKey<TYPE_TINYINT, Int8AggHashSet<seed>>;
 template <PhmapSeed seed>
 using Int16AggHashSetOfOneNumberKey = AggHashSetOfOneNumberKey<TYPE_SMALLINT, Int16AggHashSet<seed>>;
@@ -406,6 +429,8 @@ using DateAggHashSetOfOneNumberKey = AggHashSetOfOneNumberKey<TYPE_DATE, DateAgg
 template <PhmapSeed seed>
 using TimeStampAggHashSetOfOneNumberKey = AggHashSetOfOneNumberKey<TYPE_DATETIME, TimeStampAggHashSet<seed>>;
 
+template <PhmapSeed seed>
+using NullUInt8AggHashSetOfOneNumberKey = AggHashSetOfOneNullableNumberKey<TYPE_BOOLEAN, Int8AggHashSet<seed>>;
 template <PhmapSeed seed>
 using NullInt8AggHashSetOfOneNumberKey = AggHashSetOfOneNullableNumberKey<TYPE_TINYINT, Int8AggHashSet<seed>>;
 template <PhmapSeed seed>
@@ -459,7 +484,8 @@ using SerializedKeyAggHashSetFixedSize16 = AggHashSetOfSerializedKeyFixedSize<Fi
 // it will lead to a high conflict rate, resulting in performance degradation in the second stage.
 struct HashSetVariant {
     enum class Type {
-        phase1_int8 = 0,
+        phase1_uint8 = 0,
+        phase1_int8,
         phase1_int16,
         phase1_int32,
         phase1_int64,
@@ -470,6 +496,7 @@ struct HashSetVariant {
         phase1_date,
         phase1_timestamp,
         phase1_string,
+        phase1_null_uint8,
         phase1_null_int8,
         phase1_null_int16,
         phase1_null_int32,
@@ -484,6 +511,7 @@ struct HashSetVariant {
         phase1_slice,
         phase1_slice_two_level,
         phase1_int32_two_level,
+        phase2_uint8,
         phase2_int8,
         phase2_int16,
         phase2_int32,
@@ -495,6 +523,7 @@ struct HashSetVariant {
         phase2_date,
         phase2_timestamp,
         phase2_string,
+        phase2_null_uint8,
         phase2_null_int8,
         phase2_null_int16,
         phase2_null_int32,
@@ -517,6 +546,7 @@ struct HashSetVariant {
     };
     Type type = Type::phase1_slice;
 
+    std::unique_ptr<UInt8AggHashSetOfOneNumberKey<PhmapSeed1>> phase1_uint8;
     std::unique_ptr<Int8AggHashSetOfOneNumberKey<PhmapSeed1>> phase1_int8;
     std::unique_ptr<Int16AggHashSetOfOneNumberKey<PhmapSeed1>> phase1_int16;
     std::unique_ptr<Int32AggHashSetOfOneNumberKey<PhmapSeed1>> phase1_int32;
@@ -531,6 +561,7 @@ struct HashSetVariant {
     std::unique_ptr<TimeStampAggHashSetOfOneNumberKey<PhmapSeed1>> phase1_timestamp;
     std::unique_ptr<OneStringAggHashSet<PhmapSeed1>> phase1_string;
 
+    std::unique_ptr<NullUInt8AggHashSetOfOneNumberKey<PhmapSeed1>> phase1_null_uint8;
     std::unique_ptr<NullInt8AggHashSetOfOneNumberKey<PhmapSeed1>> phase1_null_int8;
     std::unique_ptr<NullInt16AggHashSetOfOneNumberKey<PhmapSeed1>> phase1_null_int16;
     std::unique_ptr<NullInt32AggHashSetOfOneNumberKey<PhmapSeed1>> phase1_null_int32;
@@ -549,6 +580,7 @@ struct HashSetVariant {
     std::unique_ptr<SerializedTwoLevelKeyAggHashSet<PhmapSeed1>> phase1_slice_two_level;
     std::unique_ptr<Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed1>> phase1_int32_two_level;
 
+    std::unique_ptr<UInt8AggHashSetOfOneNumberKey<PhmapSeed2>> phase2_uint8;
     std::unique_ptr<Int8AggHashSetOfOneNumberKey<PhmapSeed2>> phase2_int8;
     std::unique_ptr<Int16AggHashSetOfOneNumberKey<PhmapSeed2>> phase2_int16;
     std::unique_ptr<Int32AggHashSetOfOneNumberKey<PhmapSeed2>> phase2_int32;
@@ -563,6 +595,7 @@ struct HashSetVariant {
     std::unique_ptr<TimeStampAggHashSetOfOneNumberKey<PhmapSeed2>> phase2_timestamp;
     std::unique_ptr<OneStringAggHashSet<PhmapSeed2>> phase2_string;
 
+    std::unique_ptr<NullUInt8AggHashSetOfOneNumberKey<PhmapSeed2>> phase2_null_uint8;
     std::unique_ptr<NullInt8AggHashSetOfOneNumberKey<PhmapSeed2>> phase2_null_int8;
     std::unique_ptr<NullInt16AggHashSetOfOneNumberKey<PhmapSeed2>> phase2_null_int16;
     std::unique_ptr<NullInt32AggHashSetOfOneNumberKey<PhmapSeed2>> phase2_null_int32;
