@@ -1,0 +1,12 @@
+stream-lib
+Copyright 2016 AddThis
+
+This product includes software developed by AddThis.
+
+This product also includes code adapted from:
+
+Apache Solr (http://lucene.apache.org/solr/)
+Copyright 2014 The Apache Software Foundation
+
+Apache Mahout (http://mahout.apache.org/)
+Copyright 2014 The Apache Software Foundation
