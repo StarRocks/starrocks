@@ -30,6 +30,14 @@ public:
 
     size_t merged_rows() const override { return _merged_rows; }
 
+    virtual Status init_res_schema(std::unordered_map<uint32_t, GlobalDictMap*>& dict_maps) override {
+        ChunkIterator::init_res_schema(dict_maps);
+        for (auto& child : _children) {
+            child->init_res_schema(dict_maps);
+        }
+        return Status::OK();
+    }
+
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override;

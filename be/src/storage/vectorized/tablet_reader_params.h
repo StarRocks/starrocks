@@ -3,8 +3,10 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
+#include "runtime/global_dicts.h"
 #include "storage/olap_common.h"
 #include "storage/tuple.h"
 #include "storage/vectorized/chunk_iterator.h"
@@ -47,6 +49,8 @@ struct TabletReaderParams {
 
     std::string to_string() const;
     int chunk_size = 1024;
+
+    std::unordered_map<uint32_t, GlobalDictMap*>* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 };
 
 } // namespace vectorized

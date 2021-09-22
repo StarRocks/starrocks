@@ -5,6 +5,7 @@
 #include <unordered_set>
 
 #include "column/chunk.h"
+#include "glog/logging.h"
 #include "runtime/current_mem_tracker.h"
 #include "storage/vectorized/chunk_helper.h"
 
@@ -20,6 +21,11 @@ public:
     void close() override;
 
     size_t merged_rows() const override { return _child->merged_rows(); }
+
+    virtual Status init_res_schema(std::unordered_map<uint32_t, GlobalDictMap*>& dict_maps) override {
+        ChunkIterator::init_res_schema(dict_maps);
+        return _child->init_res_schema(dict_maps);
+    }
 
 protected:
     Status do_get_next(Chunk* chunk) override;
@@ -51,7 +57,8 @@ void ProjectionIterator::build_index_map(const Schema& output, const Schema& inp
 
 Status ProjectionIterator::do_get_next(Chunk* chunk) {
     if (_chunk == nullptr) {
-        _chunk = ChunkHelper::new_chunk(_child->schema(), _chunk_size);
+        DCHECK_GT(_child->res_schema().num_fields(), 0);
+        _chunk = ChunkHelper::new_chunk(_child->res_schema(), _chunk_size);
         CurrentMemTracker::consume(_chunk->memory_usage());
     }
     _chunk->reset();
