@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "common/global_types.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -68,17 +69,22 @@ public:
     // Blocks until all rows in batch are pushed to the queue
     virtual Status send(RuntimeState* state, RowBatch* batch);
 
+    virtual Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
+
     virtual Status close(RuntimeState* state, Status exec_status);
 
     virtual RuntimeProfile* profile() { return _profile; }
 
 private:
     Status prepare_exprs(RuntimeState* state);
+    void convert_to_slot_types_and_ids();
 
     ObjectPool* _obj_pool = nullptr;
     // Owned by the RuntimeState.
     const RowDescriptor& _row_desc;
     std::shared_ptr<arrow::Schema> _arrow_schema;
+    std::vector<const TypeDescriptor*> _slot_types;
+    std::vector<SlotId> _slot_ids;
 
     BlockQueueSharedPtr _queue;
 
