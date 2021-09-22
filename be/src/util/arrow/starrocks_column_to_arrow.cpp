@@ -152,7 +152,7 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvBinaryGuard<PT, AT>> {
 
     static inline std::string convert_datum(const StarRocksCppType& datum, [[maybe_unused]] int precision,
                                             [[maybe_unused]] int scale) {
-        if constexpr (pt_is_binary<PT> || pt_is_decimalv1<PT> || pt_is_decimalv2<PT> || pt_is_date_or_datetime<PT>) {
+        if constexpr (pt_is_binary<PT> || pt_is_decimalv2<PT> || pt_is_date_or_datetime<PT>) {
             return datum.to_string();
         } else if constexpr (pt_is_hll<PT>) {
             std::string s;
@@ -280,10 +280,9 @@ private:
     std::shared_ptr<arrow::Array>& _array;
 };
 
-Status vectorized_convert_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDescriptor*>& slot_types,
-                                         const std::vector<SlotId>& slot_ids,
-                                         const std::shared_ptr<arrow::Schema>& schema, arrow::MemoryPool* pool,
-                                         std::shared_ptr<arrow::RecordBatch>* result) {
+Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDescriptor*>& slot_types,
+                                    const std::vector<SlotId>& slot_ids, const std::shared_ptr<arrow::Schema>& schema,
+                                    arrow::MemoryPool* pool, std::shared_ptr<arrow::RecordBatch>* result) {
     if (chunk->num_columns() != schema->num_fields()) {
         return Status::InvalidArgument("number fields not match");
     }
@@ -292,7 +291,7 @@ Status vectorized_convert_to_arrow_batch(Chunk* chunk, const std::vector<const T
 
     for (auto i = 0; i < slot_types.size(); ++i) {
         auto column = chunk->get_column_by_slot_id(slot_ids[i]);
-        if (column->only_null() || column->is_constant()) {
+        if (column->is_constant()) {
             column = vectorized::ColumnHelper::unfold_const_column(*slot_types[i], chunk->num_rows(), column);
         }
         auto& array = arrays[i];

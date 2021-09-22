@@ -100,8 +100,8 @@ Status MemoryScratchSink::send_chunk(RuntimeState* state, vectorized::Chunk* chu
         return Status::OK();
     }
     std::shared_ptr<arrow::RecordBatch> result;
-    RETURN_IF_ERROR(vectorized_convert_to_arrow_batch(chunk, _slot_types, _slot_ids, _arrow_schema,
-                                                      arrow::default_memory_pool(), &result));
+    RETURN_IF_ERROR(convert_chunk_to_arrow_batch(chunk, _slot_types, _slot_ids, _arrow_schema,
+                                                 arrow::default_memory_pool(), &result));
     _queue->blocking_put(result);
     return Status::OK();
 }

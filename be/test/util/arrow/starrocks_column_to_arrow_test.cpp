@@ -98,7 +98,7 @@ struct NotNullableColumnTester {
         std::shared_ptr<arrow::RecordBatch> result;
         std::vector<const TypeDescriptor*> slot_types{&type_desc};
         std::vector<SlotId> slot_ids{SlotId(0)};
-        vectorized_convert_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool.get(), &result);
+        convert_chunk_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool.get(), &result);
         ASSERT_TRUE(result);
         ASSERT_FALSE(result->columns().empty());
         auto array = result->columns()[0];
@@ -160,7 +160,7 @@ struct NullableColumnTester {
         std::shared_ptr<arrow::RecordBatch> result;
         std::vector<const TypeDescriptor*> slot_types{&type_desc};
         std::vector<SlotId> slot_ids{SlotId(0)};
-        vectorized_convert_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool.get(), &result);
+        convert_chunk_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool.get(), &result);
         ASSERT_TRUE(result);
         ASSERT_FALSE(result->columns().empty());
         auto array = result->columns()[0];
@@ -207,7 +207,7 @@ struct ConstNullColumnTester {
         std::shared_ptr<arrow::RecordBatch> result;
         std::vector<const TypeDescriptor*> slot_types{&type_desc};
         std::vector<SlotId> slot_ids{SlotId(0)};
-        vectorized_convert_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool.get(), &result);
+        convert_chunk_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool.get(), &result);
         ASSERT_TRUE(result);
         ASSERT_FALSE(result->columns().empty());
         auto array = result->columns()[0];
@@ -252,7 +252,7 @@ struct ConstColumnTester {
         std::shared_ptr<arrow::RecordBatch> result;
         std::vector<const TypeDescriptor*> slot_types{&type_desc};
         std::vector<SlotId> slot_ids{SlotId(0)};
-        vectorized_convert_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool.get(), &result);
+        convert_chunk_to_arrow_batch(chunk.get(), slot_types, slot_ids, arrow_schema, memory_pool.get(), &result);
         ASSERT_TRUE(result);
         ASSERT_FALSE(result->columns().empty());
         auto array = result->columns()[0];

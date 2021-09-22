@@ -219,7 +219,6 @@ VALUE_GUARD(PrimitiveType, BinaryPTGuard, pt_is_binary, TYPE_CHAR, TYPE_VARCHAR)
 VALUE_GUARD(PrimitiveType, DatePTGuard, pt_is_date, TYPE_DATE)
 VALUE_GUARD(PrimitiveType, DateTimePTGuard, pt_is_datetime, TYPE_DATETIME)
 VALUE_GUARD(PrimitiveType, TimePTGuard, pt_is_time, TYPE_TIME)
-VALUE_GUARD(PrimitiveType, DecimalV1PTGuard, pt_is_decimalv1, TYPE_DECIMAL)
 VALUE_GUARD(PrimitiveType, DecimalV2PTGuard, pt_is_decimalv2, TYPE_DECIMALV2)
 VALUE_GUARD(PrimitiveType, DecimalOfAnyVersionPTGuard, pt_is_decimal_of_any_version, TYPE_DECIMALV2, TYPE_DECIMAL32,
             TYPE_DECIMAL64, TYPE_DECIMAL128)
