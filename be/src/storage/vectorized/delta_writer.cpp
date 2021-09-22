@@ -281,6 +281,7 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
     _delta_written_success = true;
 
     const FlushStatistic& stat = _flush_token->get_stats();
+    LOG(INFO) << "Closed delta writer. tablet_id=" << _tablet->tablet_id() << " stats=" << stat;
     return Status::OK();
 }
 
