@@ -3983,8 +3983,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testSchemaScan() throws Exception {
         String sql = "select * from information_schema.columns";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
-        Assert.assertTrue(planFragment.contains("PARTITION: RANDOM\n" +
+        Assert.assertTrue(planFragment.contains("PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  RESULT SINK\n" +
                 "\n" +
