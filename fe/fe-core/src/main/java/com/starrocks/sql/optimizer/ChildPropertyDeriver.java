@@ -837,6 +837,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalSchemaScan(PhysicalSchemaScanOperator node, ExpressionContext context) {
         if (getRequiredLocalDesc().isPresent()) {
+            outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList()));
             return visitOperator(node, context);
         }
         outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList()));
@@ -846,6 +847,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
         if (getRequiredLocalDesc().isPresent()) {
+            outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList()));
             return visitOperator(node, context);
         }
         outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList()));

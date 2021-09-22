@@ -173,8 +173,8 @@ public class ThreadPoolManager {
     }
 
     /**
-     * A handler for rejected task that try to be blocked until the pool enqueue task succeed or timeout, used for fixed thread pool
-     * throw RejectedExecutionException if timeout or catch InterruptedException
+     * A handler for rejected task that try to be blocked until the pool enqueue task succeed or timeout,
+     * used for fixed thread pool throw RejectedExecutionException if timeout or catch InterruptedException
      */
     static class BlockedPolicy implements RejectedExecutionHandler {
 
