@@ -139,9 +139,9 @@ using Int128AggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_LARGEIN
 template <PhmapSeed seed>
 using Decimal32AggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_DECIMAL32, Int32AggHashMap<seed>>;
 template <PhmapSeed seed>
-using Decimal64AggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_DECIMAL64, Int32AggHashMap<seed>>;
+using Decimal64AggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_DECIMAL64, Int64AggHashMap<seed>>;
 template <PhmapSeed seed>
-using Decimal128AggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_DECIMAL128, Int32AggHashMap<seed>>;
+using Decimal128AggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_DECIMAL128, Int128AggHashMap<seed>>;
 
 template <PhmapSeed seed>
 using DateAggHashMapWithOneNumberKey = AggHashMapWithOneNumberKey<TYPE_DATE, DateAggHashMap<seed>>;

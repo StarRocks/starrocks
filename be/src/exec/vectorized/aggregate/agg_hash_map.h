@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <type_traits>
+
 #include "column/column.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
@@ -70,6 +72,8 @@ struct AggHashMapWithOneNumberKey {
     using FieldType = RunTimeCppType<primitive_type>;
     HashMap hash_map;
 
+    static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
+
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states) {
@@ -119,7 +123,10 @@ struct AggHashMapWithOneNullableNumberKey {
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using ResultVector = typename ColumnType::Container;
+    using FieldType = RunTimeCppType<primitive_type>;
     HashMap hash_map;
+
+    static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
     template <typename Func>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,

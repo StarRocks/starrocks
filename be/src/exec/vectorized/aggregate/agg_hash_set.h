@@ -59,7 +59,10 @@ struct AggHashSetOfOneNumberKey {
     using Iterator = typename HashSet::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using ResultVector = typename ColumnType::Container;
+    using FieldType = RunTimeCppType<primitive_type>;
     HashSet hash_set;
+
+    static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
         DCHECK(!key_columns[0]->is_nullable());
@@ -100,7 +103,10 @@ struct AggHashSetOfOneNullableNumberKey {
     using Iterator = typename HashSet::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using ResultVector = typename ColumnType::Container;
+    using FieldType = RunTimeCppType<primitive_type>;
     HashSet hash_set;
+
+    static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
         if (key_columns[0]->only_null()) {
