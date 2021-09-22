@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 #include "util/arrow/starrocks_column_to_arrow.h"
 
+#include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "common/statusor.h"
 #include "exec/vectorized/arrow_type_traits.h"
@@ -279,19 +280,23 @@ private:
     std::shared_ptr<arrow::Array>& _array;
 };
 
-Status vectorized_convert_to_arrow_batch(Chunk* chunk, const std::vector<PrimitiveType>& primitive_types,
+Status vectorized_convert_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDescriptor*>& slot_types,
+                                         const std::vector<SlotId>& slot_ids,
                                          const std::shared_ptr<arrow::Schema>& schema, arrow::MemoryPool* pool,
                                          std::shared_ptr<arrow::RecordBatch>* result) {
     if (chunk->num_columns() != schema->num_fields()) {
         return Status::InvalidArgument("number fields not match");
     }
 
-    std::vector<std::shared_ptr<arrow::Array>> arrays(primitive_types.size());
+    std::vector<std::shared_ptr<arrow::Array>> arrays(slot_types.size());
 
-    for (auto i = 0; i < primitive_types.size(); ++i) {
-        auto& column = chunk->get_column_by_index(i);
+    for (auto i = 0; i < slot_types.size(); ++i) {
+        auto column = chunk->get_column_by_slot_id(slot_ids[i]);
+        if (column->only_null() || column->is_constant()) {
+            column = vectorized::ColumnHelper::unfold_const_column(*slot_types[i], chunk->num_rows(), column);
+        }
         auto& array = arrays[i];
-        ColumnToArrowArrayConverter converter(column, pool, primitive_types[i], array);
+        ColumnToArrowArrayConverter converter(column, pool, slot_types[i]->type, array);
         auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter);
         if (!arrow_st.ok()) {
             return Status::InvalidArgument(arrow_st.ToString());

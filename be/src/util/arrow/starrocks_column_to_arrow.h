@@ -17,12 +17,14 @@
 #include <memory>
 
 #include "column/chunk.h"
+#include "common/global_types.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
 namespace vectorized {
 
-Status vectorized_convert_to_arrow_batch(Chunk* chunk, const std::vector<PrimitiveType>& slots,
+Status vectorized_convert_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDescriptor*>& _slot_types,
+                                         const std::vector<SlotId>& _slot_ids,
                                          const std::shared_ptr<arrow::Schema>& schema, arrow::MemoryPool* pool,
                                          std::shared_ptr<arrow::RecordBatch>* result);
 }

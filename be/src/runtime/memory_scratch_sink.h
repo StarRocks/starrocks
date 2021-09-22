@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "common/global_types.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
 #include "gen_cpp/DorisExternalService_types.h"
@@ -76,13 +77,14 @@ public:
 
 private:
     Status prepare_exprs(RuntimeState* state);
-    void convert_to_primitive_types();
+    void convert_to_slot_types_and_ids();
 
     ObjectPool* _obj_pool = nullptr;
     // Owned by the RuntimeState.
     const RowDescriptor& _row_desc;
     std::shared_ptr<arrow::Schema> _arrow_schema;
-    std::vector<PrimitiveType> _primitive_types;
+    std::vector<const TypeDescriptor*> _slot_types;
+    std::vector<SlotId> _slot_ids;
 
     BlockQueueSharedPtr _queue;
 
