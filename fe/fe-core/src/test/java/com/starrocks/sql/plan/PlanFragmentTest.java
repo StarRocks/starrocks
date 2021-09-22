@@ -3112,8 +3112,8 @@ public class PlanFragmentTest extends PlanTestBase {
         // test having aggregate column
         sql = "select count(*) as count from join1 left join join2 on join1.id = join2.id\n" +
                 "having count > 1;";
-        starRocksAssert.query(sql).explainContains("6:AGGREGATE (update finalize)\n" +
-                        "  |  output: count(*)\n" +
+        starRocksAssert.query(sql).explainContains("7:AGGREGATE (merge finalize)\n" +
+                        "  |  output: count(7: count())\n" +
                         "  |  group by: \n" +
                         "  |  having: 7: count() > 1",
                 "  3:HASH JOIN\n" +
