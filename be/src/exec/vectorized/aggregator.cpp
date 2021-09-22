@@ -688,12 +688,12 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
                 CHECK_AGGR_PHASE(TYPE_TINYINT, int8);
                 CHECK_AGGR_PHASE(TYPE_SMALLINT, int16);
                 CHECK_AGGR_PHASE(TYPE_INT, int32);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL32, int32);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL32, decimal32);
                 CHECK_AGGR_PHASE(TYPE_BIGINT, int64);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL64, int64);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL64, decimal64);
                 CHECK_AGGR_PHASE(TYPE_DATE, date);
                 CHECK_AGGR_PHASE(TYPE_DATETIME, timestamp);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL128, int128);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL128, decimal128);
                 CHECK_AGGR_PHASE(TYPE_LARGEINT, int128);
                 CHECK_AGGR_PHASE(TYPE_CHAR, string);
                 CHECK_AGGR_PHASE(TYPE_VARCHAR, string);
@@ -723,13 +723,13 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
                 CHECK_AGGR_PHASE(TYPE_TINYINT, int8);
                 CHECK_AGGR_PHASE(TYPE_SMALLINT, int16);
                 CHECK_AGGR_PHASE(TYPE_INT, int32);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL32, int32);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL32, decimal32);
                 CHECK_AGGR_PHASE(TYPE_BIGINT, int64);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL64, int64);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL64, decimal64);
                 CHECK_AGGR_PHASE(TYPE_DATE, date);
                 CHECK_AGGR_PHASE(TYPE_DATETIME, timestamp);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL128, int128);
                 CHECK_AGGR_PHASE(TYPE_LARGEINT, int128);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL128, decimal128);
                 CHECK_AGGR_PHASE(TYPE_CHAR, string);
                 CHECK_AGGR_PHASE(TYPE_VARCHAR, string);
 

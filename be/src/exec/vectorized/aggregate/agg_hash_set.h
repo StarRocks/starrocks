@@ -3,6 +3,7 @@
 #pragma once
 
 #include "column/column_hash.h"
+#include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "gutil/casts.h"
@@ -52,15 +53,16 @@ using SliceAggTwoLevelHashSet =
 
 // ==============================================================
 // handle one number hash key
-template <typename FieldType, typename HashSet>
+template <PrimitiveType primitive_type, typename HashSet>
 struct AggHashSetOfOneNumberKey {
     using KeyType = typename HashSet::key_type;
     using Iterator = typename HashSet::iterator;
-    using ResultVector = typename std::vector<FieldType>;
+    using ColumnType = RunTimeColumnType<primitive_type>;
+    using ResultVector = typename ColumnType::Container;
+    using FieldType = RunTimeCppType<primitive_type>;
     HashSet hash_set;
 
-    using ColumnType = type_select_t<cond<IsDate<FieldType>, DateColumn>, cond<IsTimestamp<FieldType>, TimestampColumn>,
-                                     cond<std::is_integral_v<FieldType>, FixedLengthColumn<FieldType>>>;
+    static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
         DCHECK(!key_columns[0]->is_nullable());
@@ -95,15 +97,16 @@ struct AggHashSetOfOneNumberKey {
     ResultVector results;
 };
 
-template <typename FieldType, typename HashSet>
+template <PrimitiveType primitive_type, typename HashSet>
 struct AggHashSetOfOneNullableNumberKey {
     using KeyType = typename HashSet::key_type;
     using Iterator = typename HashSet::iterator;
-    using ResultVector = typename std::vector<FieldType>;
+    using ColumnType = RunTimeColumnType<primitive_type>;
+    using ResultVector = typename ColumnType::Container;
+    using FieldType = RunTimeCppType<primitive_type>;
     HashSet hash_set;
 
-    using ColumnType = type_select_t<cond<IsDate<FieldType>, DateColumn>, cond<IsTimestamp<FieldType>, TimestampColumn>,
-                                     cond<std::is_integral_v<FieldType>, FixedLengthColumn<FieldType>>>;
+    static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
         if (key_columns[0]->only_null()) {
