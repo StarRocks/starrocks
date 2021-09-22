@@ -123,10 +123,6 @@ public final class ColumnRefOperator extends ScalarOperator {
             return false;
         }
 
-        if (obj == this) {
-            return true;
-        }
-
         final ColumnRefOperator column = (ColumnRefOperator) obj;
         // The column id is unique
         return id == column.id;

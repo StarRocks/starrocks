@@ -97,6 +97,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitPhysicalMetaScan(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     public R visitPhysicalMysqlScan(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
@@ -158,6 +162,10 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalTableFunction(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalDecode(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 }

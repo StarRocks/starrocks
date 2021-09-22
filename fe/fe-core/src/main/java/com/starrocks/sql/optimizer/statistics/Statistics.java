@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
@@ -32,7 +31,10 @@ public class Statistics {
 
     public ColumnStatistic getColumnStatistic(ColumnRefOperator column) {
         ColumnStatistic result = columnStatistics.get(column);
-        Preconditions.checkState(result != null);
+        if (result == null) {
+            return ColumnStatistic.unknown();
+        }
+        //Preconditions.checkState(result != null);
         return result;
     }
 

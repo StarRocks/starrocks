@@ -22,13 +22,17 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanFragment;
@@ -122,8 +126,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     // default value is 1
     private int parallelExecNum = 1;
 
-    private Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
-    private Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
+    private final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
+    private final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
+
+    private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
 
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
@@ -254,6 +260,24 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
         result.setPartition(dataPartition.toThrift());
 
+        if (!globalDicts.isEmpty()) {
+            List<TGlobalDict> dicts = Lists.newArrayList();
+            for(Pair<Integer, ColumnDict> dictPair: globalDicts) {
+                TGlobalDict globalDict = new TGlobalDict();
+                globalDict.setColumnId(dictPair.first);
+                List<String> strings = Lists.newArrayList();
+                List<Integer> integers = Lists.newArrayList();
+                for (Map.Entry<String, Integer> kv: dictPair.second.getDict().entrySet()) {
+                    strings.add(kv.getKey());
+                    integers.add(kv.getValue());
+                }
+                globalDict.setStrings(strings);
+                globalDict.setIds(integers);
+                dicts.add(globalDict);
+            }
+            result.setGlobal_dicts(dicts);
+        }
+
         // TODO chenhao , calculated by cost
         result.setMin_reservation_bytes(0);
         result.setInitial_reservation_total_claims(0);
@@ -309,6 +333,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (planRoot != null) {
             str.append(planRoot.getVerboseExplain("  ", "  "));
         }
+
         return str.toString();
     }
 
@@ -506,4 +531,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     public Map<Integer, RuntimeFilterDescription> getProbeRuntimeFilters() {
         return probeRuntimeFilters;
     }
+
+    public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
+        return globalDicts;
+    }
+
+    public void setGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
+        this.globalDicts = dicts;
+    }
+
 }
+

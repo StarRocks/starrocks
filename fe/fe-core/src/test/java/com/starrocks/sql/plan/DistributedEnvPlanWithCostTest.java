@@ -7,6 +7,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         DistributedEnvPlanTestBase.beforeClass();
@@ -525,5 +526,15 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
+    }
+
+    public void testGlobalDictRewrite() throws Exception {
+        String sql = "select count(*) from region group by R_COMMENT";
+        String plan = getFragmentPlan(sql);
+
+        sql = "select R_COMMENT, count(*) from region group by R_COMMENT";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:Decode\n" +
+                "  |  <dict id 6> : <string id 3>"));
     }
 }

@@ -2,6 +2,8 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.base.Preconditions;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -14,6 +16,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public class PhysicalHashAggregateOperator extends PhysicalOperator {
     private final AggType type;
@@ -21,7 +24,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     // For normal aggregate function, partitionByColumns are same with groupingKeys
     // but for single distinct function, partitionByColumns are not same with groupingKeys
     private final List<ColumnRefOperator> partitionByColumns;
-    private Map<ColumnRefOperator, CallOperator> aggregations;
+    private final Map<ColumnRefOperator, CallOperator> aggregations;
 
     // When generate plan fragment, we need this info.
     // For select count(distinct id_bigint), sum(id_int) from test_basic;
@@ -114,6 +117,32 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalHashAggregate(optExpression, context);
+    }
+
+    @Override
+    public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
+        Preconditions.checkState(!childDictColumns.isEmpty());
+        ColumnRefSet dictSet = new ColumnRefSet();
+        for (Integer id : childDictColumns) {
+            dictSet.union(id);
+        }
+
+        for (CallOperator operator : aggregations.values()) {
+            if (!couldApplyStringDict(operator, dictSet)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private boolean couldApplyStringDict(CallOperator operator, ColumnRefSet dictSet) {
+        ColumnRefSet usedColumns = operator.getUsedColumns();
+        if (usedColumns.isIntersect(dictSet)) {
+            // TODO(kks): support more functions
+            return operator.getFnName().equals(FunctionSet.COUNT);
+        }
+        return true;
     }
 
     @Override

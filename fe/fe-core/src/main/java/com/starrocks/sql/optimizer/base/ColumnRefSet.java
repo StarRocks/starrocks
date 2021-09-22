@@ -21,7 +21,7 @@ public class ColumnRefSet implements Cloneable {
         bitSet.set(id);
     }
 
-    public ColumnRefSet(List<ColumnRefOperator> refs) {
+    public ColumnRefSet(Iterable<ColumnRefOperator> refs) {
         bitSet = new BitSet();
         for (ColumnRefOperator ref : refs) {
             bitSet.set(ref.getId());

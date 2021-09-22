@@ -18,6 +18,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TStatisticData;
@@ -32,7 +33,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -46,14 +46,15 @@ public class CachedStatisticStorage implements StatisticStorage {
 
     private final StatisticExecutor statisticExecutor = new StatisticExecutor();
 
-    private final AsyncCacheLoader<CacheKey, Optional<ColumnStatistic>> loader =
-            new AsyncCacheLoader<CacheKey, Optional<ColumnStatistic>>() {
+    private final AsyncCacheLoader<ColumnIdentifier, Optional<ColumnStatistic>> statisticLoader =
+            new AsyncCacheLoader<ColumnIdentifier, Optional<ColumnStatistic>>() {
                 @Override
-                public @NonNull CompletableFuture<Optional<ColumnStatistic>> asyncLoad(@NonNull CacheKey cacheKey,
+                public @NonNull CompletableFuture<Optional<ColumnStatistic>> asyncLoad(@NonNull ColumnIdentifier columnIdentifier,
                                                                                        @NonNull Executor executor) {
                     return CompletableFuture.supplyAsync(() -> {
                         try {
-                            List<TStatisticData> statisticData = queryStatisticsData(cacheKey.tableId, cacheKey.column);
+                            List<TStatisticData> statisticData = queryStatisticsData(columnIdentifier.getTableId(),
+                                    columnIdentifier.getColumnName());
                             // check TStatisticData is not empty, There may be no such column Statistics in BE
                             if (!statisticData.isEmpty()) {
                                 return Optional.of(convert2ColumnStatistics(statisticData.get(0)));
@@ -69,29 +70,29 @@ public class CachedStatisticStorage implements StatisticStorage {
                 }
 
                 @Override
-                public CompletableFuture<Map<@NonNull CacheKey, @NonNull Optional<ColumnStatistic>>> asyncLoadAll(
-                        @NonNull Iterable<? extends @NonNull CacheKey> keys, @NonNull Executor executor) {
+                public CompletableFuture<Map<@NonNull ColumnIdentifier, @NonNull Optional<ColumnStatistic>>> asyncLoadAll(
+                        @NonNull Iterable<? extends @NonNull ColumnIdentifier> keys, @NonNull Executor executor) {
                     return CompletableFuture.supplyAsync(() -> {
-                        Map<CacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
+                        Map<ColumnIdentifier, Optional<ColumnStatistic>> result = new HashMap<>();
                         try {
                             long tableId = -1;
                             List<String> columns = new ArrayList<>();
-                            for (CacheKey key : keys) {
-                                tableId = key.tableId;
-                                columns.add(key.column);
+                            for (ColumnIdentifier key : keys) {
+                                tableId = key.getTableId();
+                                columns.add(key.getColumnName());
                             }
                             List<TStatisticData> statisticData = queryStatisticsData(tableId, columns);
                             // check TStatisticData is not empty, There may be no such column Statistics in BE
                             if (!statisticData.isEmpty()) {
                                 for (TStatisticData data : statisticData) {
                                     ColumnStatistic columnStatistic = convert2ColumnStatistics(data);
-                                    result.put(new CacheKey(data.tableId, data.columnName),
+                                    result.put(new ColumnIdentifier(data.tableId, data.columnName),
                                             Optional.of(columnStatistic));
                                 }
                             } else {
                                 // put null for cache key which can't get TStatisticData from BE
-                                for (CacheKey cacheKey : keys) {
-                                    result.put(cacheKey, Optional.empty());
+                                for (ColumnIdentifier columnIdentifier : keys) {
+                                    result.put(columnIdentifier, Optional.empty());
                                 }
                             }
                             return result;
@@ -105,23 +106,23 @@ public class CachedStatisticStorage implements StatisticStorage {
 
                 @Override
                 public CompletableFuture<Optional<ColumnStatistic>> asyncReload(
-                        @NonNull CacheKey key, @NonNull Optional<ColumnStatistic> oldValue,
+                        @NonNull ColumnIdentifier key, @NonNull Optional<ColumnStatistic> oldValue,
                         @NonNull Executor executor) {
                     return asyncLoad(key, executor);
                 }
             };
 
-    AsyncLoadingCache<CacheKey, Optional<ColumnStatistic>> cachedStatistics = Caffeine.newBuilder()
+    AsyncLoadingCache<ColumnIdentifier, Optional<ColumnStatistic>> cachedStatistics = Caffeine.newBuilder()
             .expireAfterWrite(Config.statistic_collect_interval_sec * 2, TimeUnit.SECONDS)
             .refreshAfterWrite(Config.statistic_collect_interval_sec, TimeUnit.SECONDS)
             .maximumSize(Config.statistic_cache_columns)
-            .buildAsync(loader);
+            .buildAsync(statisticLoader);
 
     @Override
     public void expireColumnStatistics(Table table, List<String> columns) {
-        List<CacheKey> allKeys = Lists.newArrayList();
+        List<ColumnIdentifier> allKeys = Lists.newArrayList();
         for (String column : columns) {
-            CacheKey key = new CacheKey(table.getId(), column);
+            ColumnIdentifier key = new ColumnIdentifier(table.getId(), column);
             allKeys.add(key);
         }
         cachedStatistics.synchronous().invalidateAll(allKeys);
@@ -187,7 +188,7 @@ public class CachedStatisticStorage implements StatisticStorage {
         return builder.setMinValue(minValue).
                 setMaxValue(maxValue).
                 setDistinctValuesCount(statisticData.countDistinct).
-                setAverageRowSize(statisticData.dataSize * 1.0 / Math.max(statisticData.rowCount, 1)).
+                setAverageRowSize(statisticData.dataSize / Math.max(statisticData.rowCount, 1)).
                 setNullsFraction(statisticData.nullCount * 1.0 / Math.max(statisticData.rowCount, 1)).build();
     }
 
@@ -205,7 +206,7 @@ public class CachedStatisticStorage implements StatisticStorage {
             return ColumnStatistic.unknown();
         }
 
-        CompletableFuture<Optional<ColumnStatistic>> result = cachedStatistics.get(new CacheKey(table.getId(), column));
+        CompletableFuture<Optional<ColumnStatistic>> result = cachedStatistics.get(new ColumnIdentifier(table.getId(), column));
         if (result.isDone()) {
             Optional<ColumnStatistic> realResult;
             try {
@@ -242,16 +243,17 @@ public class CachedStatisticStorage implements StatisticStorage {
             return getDefaultColumnStatisticList(columns);
         }
 
-        List<CacheKey> cacheKeys = new ArrayList<>();
+        List<ColumnIdentifier> columnIdentifiers = new ArrayList<>();
         long tableId = table.getId();
         for (String column : columns) {
-            cacheKeys.add(new CacheKey(tableId, column));
+            columnIdentifiers.add(new ColumnIdentifier(tableId, column));
         }
 
-        CompletableFuture<Map<CacheKey, Optional<ColumnStatistic>>> result = cachedStatistics.getAll(cacheKeys);
+        CompletableFuture<Map<ColumnIdentifier, Optional<ColumnStatistic>>> result = cachedStatistics.getAll(
+                columnIdentifiers);
         if (result.isDone()) {
             List<ColumnStatistic> columnStatistics = new ArrayList<>();
-            Map<CacheKey, Optional<ColumnStatistic>> realResult;
+            Map<ColumnIdentifier, Optional<ColumnStatistic>> realResult;
             try {
                 realResult = result.get();
             } catch (Exception e) {
@@ -260,7 +262,7 @@ public class CachedStatisticStorage implements StatisticStorage {
             }
             for (String column : columns) {
                 Optional<ColumnStatistic> columnStatistic =
-                        realResult.getOrDefault(new CacheKey(tableId, column), Optional.empty());
+                        realResult.getOrDefault(new ColumnIdentifier(tableId, column), Optional.empty());
                 if (columnStatistic.isPresent()) {
                     columnStatistics.add(columnStatistic.get());
                 } else {
@@ -274,39 +276,7 @@ public class CachedStatisticStorage implements StatisticStorage {
     }
 
     public void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic) {
-        this.cachedStatistics.synchronous().put(new CacheKey(table.getId(), column), Optional.of(columnStatistic));
-    }
-
-    static class CacheKey {
-        private final long tableId;
-        private final String column;
-
-        public CacheKey(long tableId, String column) {
-            this.tableId = tableId;
-            this.column = column;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-
-            CacheKey cacheKey = (CacheKey) o;
-
-            if (tableId != cacheKey.tableId) {
-                return false;
-            }
-            return column.equalsIgnoreCase(cacheKey.column);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(tableId, column);
-        }
+        this.cachedStatistics.synchronous().put(new ColumnIdentifier(table.getId(), column), Optional.of(columnStatistic));
     }
 
 }

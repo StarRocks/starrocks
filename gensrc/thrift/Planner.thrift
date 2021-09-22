@@ -65,6 +65,8 @@ struct TPlanFragment {
   // sink) in a single instance of this fragment. This is used for an optimization in
   // InitialReservation. Measured in bytes. required in V1
   8: optional i64 initial_reservation_total_claims
+
+  20: optional list<TGlobalDict> global_dicts 
 }
 
 // location information for a single scan range
@@ -76,6 +78,12 @@ struct TScanRangeLocation {
   // only set for TScanRange.hdfs_file_split
   2: optional i32 volume_id = -1
   3: optional i64 backend_id
+}
+
+struct TGlobalDict {
+    1: optional i32 columnId
+    2: optional list<string> strings
+    3: optional list<i32> ids
 }
 
 // A single scan range plus the hosts that serve it

@@ -59,6 +59,7 @@ enum TPlanNodeType {
   HDFS_SCAN_NODE,
   PROJECT_NODE,
   TABLE_FUNCTION_NODE,
+  DECODE_NODE,
 }
 
 // phases of an execution node
@@ -317,14 +318,6 @@ struct TSchemaScanNode {
   9: optional i64 thread_id
   10: optional string user_ip   // deprecated
   11: optional Types.TUserIdentity current_user_ident   // to replace the user and user_ip
-}
-
-struct TMetaScanNode {
-  1: required Types.TTupleId tuple_id
-  2: required string table_name
-  3: optional string db
-  4: optional string table
-  5: optional string user
 }
 
 struct TOlapScanNode {
@@ -745,6 +738,14 @@ struct TProjectNode {
     2: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
 }
 
+struct TMetaScanNode {
+    1: optional map<i32, string> id_to_names
+}
+
+struct TDecodeNode {
+    1: optional map<i32, i32> dict_id_to_string_ids
+}
+
 enum TRuntimeFilterBuildJoinMode {
   NONE,
   BORADCAST,
@@ -822,7 +823,6 @@ struct TPlanNode {
   21: optional TPreAggregationNode pre_agg_node
   22: optional TSchemaScanNode schema_scan_node
   23: optional TMergeJoinNode merge_join_node
-  24: optional TMetaScanNode meta_scan_node
   25: optional TAnalyticNode analytic_node
   28: optional TUnionNode union_node
   29: optional TBackendResourceProfile resource_profile
@@ -841,6 +841,8 @@ struct TPlanNode {
   54: optional TTableFunctionNode table_function_node
   // runtime filters be probed by this node.
   55: optional list<TRuntimeFilterDescription> probe_runtime_filters
+  56: optional TMetaScanNode meta_scan_node
+  57: optional TDecodeNode decode_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

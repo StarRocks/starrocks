@@ -92,5 +92,6 @@ struct TStatisticData {
     9: optional string max
     10: optional string min
     11: optional string histogram
+    12: optional binary dict
+    13: optional i64 meta_version
 }
-

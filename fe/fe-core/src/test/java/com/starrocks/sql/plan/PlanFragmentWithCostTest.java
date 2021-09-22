@@ -481,7 +481,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year ) ) " +
                 "and s_nationkey = n_nationkey and n_name = 'CANADA' order by s_name;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains(" 3:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (REPLICATED)\n" +
                 "  |  hash predicates:\n" +
@@ -558,7 +557,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         sql = "select SUM(v3) from t0 group by grouping sets(())";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  3:EXCHANGE\n" +
                 "     use vectorized: true\n" +
                 "\n" +

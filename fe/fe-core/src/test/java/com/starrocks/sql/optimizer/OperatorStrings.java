@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
@@ -175,6 +176,7 @@ public class OperatorStrings {
         /**
          * Physical operator visitor
          */
+        @Override
         public OperatorStr visitPhysicalOlapScan(OptExpression optExpression, Integer step) {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("SCAN (");
@@ -201,6 +203,13 @@ public class OperatorStrings {
         }
 
         @Override
+        public OperatorStr visitPhysicalMetaScan(OptExpression optExpression, Integer step) {
+            PhysicalMetaScanOperator scan = (PhysicalMetaScanOperator) optExpression.getOp();
+            String sb = "Meta SCAN (" + "columns" + scan.getUsedColumns() + ")";
+            return new OperatorStr(sb, step, Collections.emptyList());
+        }
+
+        @Override
         public OperatorStr visitPhysicalMysqlScan(OptExpression optExpression, Integer step) {
             PhysicalMysqlScanOperator scan = (PhysicalMysqlScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("SCAN (");
@@ -213,10 +222,19 @@ public class OperatorStrings {
             return new OperatorStr(sb.toString(), step, Collections.emptyList());
         }
 
+        @Override
         public OperatorStr visitPhysicalProject(OptExpression optExpression, Integer step) {
             return visit(optExpression.getInputs().get(0), step);
         }
 
+        @Override
+        public OperatorStr visitPhysicalDecode(OptExpression optExpression, Integer step) {
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+            String sb = "Decode ";
+            return new OperatorStr(sb, step, Collections.singletonList(child));
+        }
+
+        @Override
         public OperatorStr visitPhysicalHashAggregate(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
             PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) optExpression.getOp();
@@ -227,6 +245,7 @@ public class OperatorStrings {
             return new OperatorStr(sb.toString(), step, Collections.singletonList(child));
         }
 
+        @Override
         public OperatorStr visitPhysicalTopN(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
             PhysicalTopNOperator topn = (PhysicalTopNOperator) optExpression.getOp();
@@ -235,6 +254,7 @@ public class OperatorStrings {
             return new OperatorStr(sb, step, Collections.singletonList(child));
         }
 
+        @Override
         public OperatorStr visitPhysicalDistribution(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
             PhysicalDistributionOperator exchange = (PhysicalDistributionOperator) optExpression.getOp();
@@ -250,6 +270,7 @@ public class OperatorStrings {
                     Collections.singletonList(child));
         }
 
+        @Override
         public OperatorStr visitPhysicalHashJoin(OptExpression optExpression, Integer step) {
             OperatorStr left = visit(optExpression.getInputs().get(0), step + 1);
             OperatorStr right = visit(optExpression.getInputs().get(1), step + 1);

@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MysqlScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ProjectImplementationRule;
@@ -59,6 +60,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneTopNColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneWindowColumnsRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggProjectFilterRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyFilterRule;
@@ -102,6 +104,7 @@ public class RuleSet {
             new SchemaScanImplementationRule(),
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),
+            new MetaScanImplementationRule(),
             new HashJoinImplementationRule(),
             new HashAggImplementationRule(),
             new ProjectImplementationRule(),
@@ -221,7 +224,8 @@ public class RuleSet {
         ));
 
         rewriteRules.put(RuleSetType.MERGE_AGGREGATE, ImmutableList.of(
-                new MergeTwoAggRule()
+                new MergeTwoAggRule(),
+                new PushDownAggToMetaScanRule()
         ));
     }
 

@@ -10,6 +10,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rewrite.AddProjectForJoinOnBinaryPredicatesRule;
 import com.starrocks.sql.optimizer.rewrite.AddProjectForJoinPruneRule;
 import com.starrocks.sql.optimizer.rewrite.ExchangeSortToMergeRule;
@@ -165,14 +166,15 @@ public class Optimizer {
 
         OptExpression result = extractBestPlan(requiredProperty, memo.getRootGroup());
         tryOpenPreAggregate(result);
-        result = new AddProjectForJoinOnBinaryPredicatesRule().rewrite(result, columnRefFactory);
+        result = new AddProjectForJoinOnBinaryPredicatesRule().rewrite(result, rootTaskContext);
         result = new AddProjectForJoinPruneRule((ColumnRefSet) requiredColumns.clone())
-                .rewrite(result, columnRefFactory);
+                .rewrite(result, rootTaskContext);
         // Rewrite Exchange on top of Sort to Final Sort
         result = new ExchangeSortToMergeRule().rewrite(result);
 
-        // Add project will case output change, re-derive output columns in property
-        result = new DeriveOutputColumnsRule((ColumnRefSet) requiredColumns.clone()).rewrite(result, columnRefFactory);
+        // Add project will make output change, re-derive output columns in property
+        result = new DeriveOutputColumnsRule((ColumnRefSet) requiredColumns.clone()).rewrite(result, rootTaskContext);
+        result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         return result;
     }
 

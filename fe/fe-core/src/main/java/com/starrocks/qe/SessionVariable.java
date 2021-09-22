@@ -151,6 +151,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE_USE_DP = "cbo_max_reorder_node_use_dp";
     public static final String CBO_ENABLE_GREEDY_JOIN_REORDER = "cbo_enable_greedy_join_reorder";
     public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
+
+    public static final String ENABLE_LOW_CARDINALITY_OPTIMIZE = "enable_low_cardinality_optimize";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -368,6 +370,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DUMP)
     private boolean enableQueryDump = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_LOW_CARDINALITY_OPTIMIZE)
+    private boolean enableLowCardinalityOptimize = true;
 
     // value should be 0~4
     // 0 represents automatic selection, and 1, 2, 3, and 4 represent forced selection of AGG of
@@ -668,6 +673,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableReplicationJoin(boolean enableReplicationJoin) {
         this.enableReplicationJoin = enableReplicationJoin;
+    }
+
+    public boolean isEnableLowCardinalityOptimize() {
+        return enableLowCardinalityOptimize;
+    }
+
+    public void setEnableLowCardinalityOptimize(boolean enableLowCardinalityOptimize) {
+        this.enableLowCardinalityOptimize = enableLowCardinalityOptimize;
     }
 
     // Serialize to thrift object

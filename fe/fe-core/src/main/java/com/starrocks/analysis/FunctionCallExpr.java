@@ -945,7 +945,8 @@ public class FunctionCallExpr extends Expr {
                 fnName.getFunction().equalsIgnoreCase("std") ||
                 fnName.getFunction().equalsIgnoreCase("group_concat") ||
                 fnName.getFunction().equalsIgnoreCase("intersect_count") ||
-                fnName.getFunction().equalsIgnoreCase("bitmap_intersect");
+                fnName.getFunction().equalsIgnoreCase("bitmap_intersect") ||
+                fnName.getFunction().equals(FunctionSet.DICT_MERGE);
     }
 
     @Override
