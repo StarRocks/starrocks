@@ -182,11 +182,6 @@ public class PlanFragmentBuilder {
             return;
         }
 
-        if (execPlan.getScanNodes().stream().allMatch(d -> d instanceof SchemaScanNode)) {
-            inputFragment.setOutputExprs(outputExprs);
-            return;
-        }
-
         ExchangeNode exchangeNode =
                 new ExchangeNode(execPlan.getPlanCtx().getNextNodeId(), inputFragment.getPlanRoot(), false);
         exchangeNode.setNumInstances(1);
@@ -478,7 +473,7 @@ public class PlanFragmentBuilder {
 
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
-                    new PlanFragment(context.getPlanCtx().getNextFragmentId(), scanNode, DataPartition.RANDOM);
+                    new PlanFragment(context.getPlanCtx().getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);
             context.getFragments().add(fragment);
             return fragment;
         }
