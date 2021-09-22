@@ -41,6 +41,7 @@ public:
         // Reserve enough space for the page, plus a bit of slop since
         // we often overrun the page by a few values.
         _buffer.reserve(_options.data_page_size + 1024);
+        _max_count = _options.data_page_size / SIZE_OF_TYPE;
         reset();
     }
 
@@ -51,10 +52,11 @@ public:
             return 0;
         }
         size_t old_size = _buffer.size();
-        _buffer.resize(old_size + count * SIZE_OF_TYPE);
-        memcpy(&_buffer[old_size], vals, count * SIZE_OF_TYPE);
-        _count += count;
-        return count;
+        size_t to_add = std::min(_max_count - _count, count);
+        _buffer.resize(old_size + to_add * SIZE_OF_TYPE);
+        memcpy(&_buffer[old_size], vals, to_add * SIZE_OF_TYPE);
+        _count += to_add;
+        return to_add;
     }
 
     faststring* finish() override {
@@ -97,6 +99,7 @@ private:
     faststring _buffer;
     PageBuilderOptions _options;
     size_t _count;
+    size_t _max_count;
     typedef typename TypeTraits<Type>::CppType CppType;
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
     faststring _first_value;
