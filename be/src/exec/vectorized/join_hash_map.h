@@ -182,7 +182,7 @@ struct JoinKeyHash<int32_t> {
 #if defined __x86_64__
         size_t hash = _mm_crc32_u32(CRC_SEED, value + 2);
 #else
-        size_t hash = __crc32h(CRC_SEED, value + 2);
+        size_t hash = __crc32cw(CRC_SEED, value + 2);
 #endif
         hash = (hash << 16u) | (hash >> 16u);
         return hash;
