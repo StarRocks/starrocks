@@ -108,4 +108,5 @@ public:
 
 } // namespace vectorized
 } // namespace starrocks
+
 #endif

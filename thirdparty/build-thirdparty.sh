@@ -605,8 +605,8 @@ build_bitshuffle() {
 
 # croaring bitmap
 build_croaringbitmap() {
-    # aarch64 don't support avx2
     FORCE_AVX=ON
+    # avx2 is not supported by aarch64.
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         FORCE_AVX=FALSE
     fi

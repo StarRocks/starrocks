@@ -230,7 +230,7 @@ under the License.
             <dependency>
                 <groupId>com.sleepycat</groupId>
                 <artifactId>je</artifactId>
-                <version>18.3.12</version>
+                <version>7.3.7</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.mortbay.jetty/jetty -->
