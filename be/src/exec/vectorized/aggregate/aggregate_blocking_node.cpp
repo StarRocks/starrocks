@@ -7,6 +7,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/aggregator.h"
+#include "simd/simd.h"
 
 namespace starrocks::vectorized {
 
@@ -62,7 +63,16 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
             if (_aggregator->is_none_group_by_exprs()) {
                 _aggregator->compute_single_agg_state(chunk->num_rows());
             } else {
-                _aggregator->compute_batch_agg_states(chunk->num_rows());
+                if (_limit != -1) {
+                    size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());
+                    if (zero_count == _aggregator->streaming_selection().size()) {
+                        _aggregator->compute_batch_agg_states(chunk->num_rows());
+                    } else {
+                        _aggregator->compute_batch_agg_states_with_selection(chunk->num_rows());
+                    }
+                } else {
+                    _aggregator->compute_batch_agg_states(chunk->num_rows());
+                }
             }
 
             _aggregator->update_num_input_rows(chunk->num_rows());

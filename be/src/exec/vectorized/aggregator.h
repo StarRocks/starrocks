@@ -248,6 +248,10 @@ private:
 public:
     template <typename HashMapWithKey>
     void build_hash_map(HashMapWithKey& hash_map_with_key, size_t chunk_size) {
+        size_t limit = std::numeric_limits<size_t>::max();
+        if (_aggr_phase == AggrPhase2 && _limit != -1) {
+            limit = _limit;
+        }
         hash_map_with_key.compute_agg_states(
                 chunk_size, _group_by_columns, _mem_pool.get(),
                 [this]() {
@@ -258,7 +262,9 @@ public:
                     }
                     return agg_state;
                 },
-                &_tmp_agg_states);
+                &_tmp_agg_states,
+                limit,
+                &_streaming_selection);
     }
 
     template <typename HashMapWithKey>
