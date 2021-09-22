@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#ifdef __AVX2__
+#ifdef __x86_64__
 #include <glog/logging.h>
 
 #include <immintrin.h>

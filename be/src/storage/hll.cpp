@@ -21,7 +21,7 @@
 
 #include "storage/hll.h"
 
-#ifdef __AVX2__
+#ifdef __x86_64__
 #include <immintrin.h>
 #endif
 
