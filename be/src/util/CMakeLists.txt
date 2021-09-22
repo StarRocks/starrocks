@@ -27,6 +27,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/util")
 
 set(UTIL_FILES
   arrow/row_batch.cpp
+  arrow/starrocks_column_to_arrow.cpp
   arrow/row_block.cpp
   arrow/utils.cpp
   bfd_parser.cpp

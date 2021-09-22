@@ -10,6 +10,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "exec/vectorized/arrow_type_traits.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
@@ -30,8 +31,6 @@ struct ArrowConvertContext {
     int error_message_counter = 0;
     void report_error_message(const std::string& reason, const std::string& raw_data);
 };
-
-using ArrowTypeId = ::arrow::Type::type;
 
 // fill null_column's range [column_start_idx, column_start_idx + num_elements) with
 // array's range [array_start_idx, array_start_idx + num_elements).
