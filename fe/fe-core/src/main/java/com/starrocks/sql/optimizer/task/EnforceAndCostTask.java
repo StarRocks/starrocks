@@ -268,20 +268,23 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         }
 
         PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) groupExpression.getOp();
-        // check the agg node is 1 phase aggregation with default column statistics or output row count less than 1
+        // 1. check the agg node is global aggregation without split and child expr is PhysicalDistributionOperator
         if (aggregate.getType().isGlobal() && !aggregate.isSplit() &&
-                (groupExpression.getGroup().getStatistics().getColumnStatistics().values().stream()
-                        .allMatch(ColumnStatistic::isUnknown) ||
-                        groupExpression.getGroup().getStatistics().getOutputRowCount() <= 1) &&
                 childBestExpr.getOp() instanceof PhysicalDistributionOperator) {
-            // check child expr distribution, if it is shuffle or gather without limit, could disable this plan
-            PhysicalDistributionOperator distributionOperator = (PhysicalDistributionOperator) childBestExpr.getOp();
-            if (distributionOperator.getDistributionSpec().getType()
-                    .equals(DistributionSpec.DistributionType.SHUFFLE) ||
-                    (distributionOperator.getDistributionSpec().getType()
-                            .equals(DistributionSpec.DistributionType.GATHER) &&
-                            !((GatherDistributionSpec) distributionOperator.getDistributionSpec()).hasLimit())) {
-                return false;
+            // 2. check default column statistics or output row count less than 1
+            if ((groupExpression.getGroup().getStatistics().getColumnStatistics().values().stream()
+                    .allMatch(ColumnStatistic::isUnknown) ||
+                    groupExpression.getGroup().getStatistics().getOutputRowCount() <= 1)) {
+                // 3. check child expr distribution, if it is shuffle or gather without limit, could disable this plan
+                PhysicalDistributionOperator distributionOperator =
+                        (PhysicalDistributionOperator) childBestExpr.getOp();
+                if (distributionOperator.getDistributionSpec().getType()
+                        .equals(DistributionSpec.DistributionType.SHUFFLE) ||
+                        (distributionOperator.getDistributionSpec().getType()
+                                .equals(DistributionSpec.DistributionType.GATHER) &&
+                                !((GatherDistributionSpec) distributionOperator.getDistributionSpec()).hasLimit())) {
+                    return false;
+                }
             }
         }
         return true;
