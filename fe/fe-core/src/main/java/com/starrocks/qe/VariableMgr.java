@@ -125,9 +125,9 @@ public class VariableMgr {
     static {
         // Session value
         defaultSessionVariable = new SessionVariable();
-        ImmutableSortedMap.Builder<String, VarContext> ctx_builder =
+        ImmutableSortedMap.Builder<String, VarContext> ctxBuilder =
                 ImmutableSortedMap.orderedBy(String.CASE_INSENSITIVE_ORDER);
-        ImmutableSortedMap.Builder<String, String> alias_builder =
+        ImmutableSortedMap.Builder<String, String> aliasBuilder =
                 ImmutableSortedMap.orderedBy(String.CASE_INSENSITIVE_ORDER);
         for (Field field : SessionVariable.class.getDeclaredFields()) {
             VarAttr attr = field.getAnnotation(VarAttr.class);
@@ -141,12 +141,12 @@ public class VariableMgr {
             }
 
             field.setAccessible(true);
-            ctx_builder.put(attr.name(),
+            ctxBuilder.put(attr.name(),
                     new VarContext(field, defaultSessionVariable, SESSION | attr.flag(),
                             getValue(defaultSessionVariable, field), attr));
 
             if (!attr.alias().isEmpty()) {
-                alias_builder.put(attr.alias(), attr.name());
+                aliasBuilder.put(attr.alias(), attr.name());
             }
         }
 
@@ -158,16 +158,16 @@ public class VariableMgr {
             }
 
             field.setAccessible(true);
-            ctx_builder.put(attr.name(),
+            ctxBuilder.put(attr.name(),
                     new VarContext(field, null, GLOBAL | attr.flag(), getValue(null, field), attr));
 
             if (!attr.alias().isEmpty()) {
-                alias_builder.put(attr.alias(), attr.name());
+                aliasBuilder.put(attr.alias(), attr.name());
             }
         }
 
-        ctxByVarName = ctx_builder.build();
-        aliases = alias_builder.build();
+        ctxByVarName = ctxBuilder.build();
+        aliases = aliasBuilder.build();
     }
 
     public static SessionVariable getDefaultSessionVariable() {

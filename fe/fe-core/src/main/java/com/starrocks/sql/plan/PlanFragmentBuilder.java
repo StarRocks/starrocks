@@ -473,7 +473,7 @@ public class PlanFragmentBuilder {
 
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
-                    new PlanFragment(context.getPlanCtx().getNextFragmentId(), scanNode, DataPartition.RANDOM);
+                    new PlanFragment(context.getPlanCtx().getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);
             context.getFragments().add(fragment);
             return fragment;
         }
