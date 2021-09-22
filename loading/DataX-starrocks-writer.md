@@ -2,9 +2,9 @@
 
 StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能。在底层实现上， StarRocksWriter 通过Stream load以csv或 json 格式导入数据至StarRocks。内部将`reader`读取的数据进行缓存后批量导入至StarRocks，以提高写入性能。总体数据流是 `source -> Reader -> DataX channel -> Writer -> StarRocks`。
 
-[点击下载插件](http://starrocks-release.cdn.starrocks.com/starrockswriter.tar.gz?Expires=1990135845&OSSAccessKeyId=LTAI4GFYjbX9e7QmFnAAvkt8&Signature=wxTRzVOf1Tx8Di8PIBzTHEf5mwU%3D)
+[点击下载插件](https://github.com/StarRocks/DataX/releases)
 
-请前往`https://github.com/alibaba/DataX`下载DataX完整包，然后将starrockswriter插件放至 `datax/plugin/writer/` 目录下即可。
+[源码地址](https://github.com/StarRocks/DataX)
 
 测试时可以使用如下命令:
  `python datax.py --jvm="-Xms6G -Xmx6G" --loglevel=debug job.json`
@@ -13,7 +13,7 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
 
 ### 配置样例
 
-这里是一份从MySQL读取数据后导入至StarRocks的配置文件。
+* 这里使用一份从内存Mysql读取数据后导入至StarRocks。
 
 ```json
 {
@@ -73,9 +73,7 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
 
 ```
 
-## starrockswriter 参数说明
-
-**mysqlreader** 的配置，请参照 DataX 的说明 [mysqlreader](https://github.com/StarRocks/DataX/blob/master/mysqlreader/doc/mysqlreader.md)。
+### 参数说明
 
 * **username**
 
@@ -111,7 +109,7 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
 
 * **loadUrl**
 
-  * 描述：StarRocks FE的地址用于Stream load，可以为多个FE地址，形如`fe_ip:fe_http_port`。
+  * 描述：StarRocks FE的地址用于Streamload，可以为多个fe地址，形如`fe_ip:fe_http_port`。
 
   * 必选：是
 
@@ -119,10 +117,11 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
 
 * **column**
 
-  * 描述：目的表**需要写入数据**的字段，字段之间用英文逗号分隔。例如: "column": ["id","name","age"]。
-    >**column 配置项必须指定，不能留空！**
-  >
-    >注意：我们强烈不推荐你配置为空，因为当你目的表字段个数、类型等有改动时，你的任务可能运行不正确或者失败，必须和 reader 中的 querySQL 或 column 保持顺序一样
+  * 描述：目的表需要写入数据的字段,字段之间用英文逗号分隔。例如: "column": ["id","name","age"]。
+
+   **column配置项必须指定，不能留空！**
+
+  > 如果希望导入所有字段，可以使用 ["*"]
 
   * 必选：是
 
@@ -152,6 +151,22 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
 
   * 默认值：无
 
+* **maxBatchRows**
+
+  * 描述：单次StreamLoad导入的最大行数
+
+  * 必选：否
+
+  * 默认值：500000 (50W)
+
+* **maxBatchSize**
+
+  * 描述：单次StreamLoad导入的最大字节数。
+
+  * 必选：否
+
+  * 默认值：104857600 (100M)
+
 * **loadProps**
 
   * 描述：StreamLoad 的请求参数，详情参照StreamLoad介绍页面。
@@ -160,7 +175,7 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
 
   * 默认值：无
 
-## 类型转换
+### 类型转换
 
 默认传入的数据均会被转为字符串，并以`\t`作为列分隔符，`\n`作为行分隔符，组成`csv`文件进行StreamLoad导入操作。
 如需更改列分隔符， 则正确配置 `loadProps` 即可：
@@ -168,7 +183,7 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
 ```json
 "loadProps": {
     "column_separator": "\\x01",
-    "row_delimiter": "\\x02" 
+    "row_delimiter": "\\x02"
 }
 ```
 
@@ -180,8 +195,6 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
     "strip_outer_array": true
 }
 ```
-
-> 这里的 `json` 格式是针对 writer 给 StarRocks 导入数据时采用 json 格式。
 
 ## 关于时区
 
