@@ -71,7 +71,7 @@ public:
     explicit BitmapIndexWriterImpl(const TypeInfoPtr& type_info)
             : _typeinfo(type_info), _reverted_index_size(0), _tracker(), _pool(&_tracker) {}
 
-    ~BitmapIndexWriterImpl() = default;
+    ~BitmapIndexWriterImpl() override = default;
 
     void add_values(const void* values, size_t count) override {
         auto p = reinterpret_cast<const CppType*>(values);

@@ -231,7 +231,7 @@ class FutureRuleImpl : public FutureRule {
     }
 
 public:
-    virtual ~FutureRuleImpl() override;
+    ~FutureRuleImpl() override;
     bool isDefined() const override;
     const TimezoneVariant& getVariant(int64_t clk) const override;
     void print(std::ostream& out) const override;
@@ -501,24 +501,24 @@ static uint32_t decode32(const unsigned char* ptr) {
 
 class Version1Parser : public VersionParser {
 public:
-    virtual ~Version1Parser() override;
+    ~Version1Parser() override;
 
-    virtual uint64_t getVersion() const override { return 1; }
+    uint64_t getVersion() const override { return 1; }
 
     /**
      * Get the number of bytes
      */
-    virtual uint64_t getTimeSize() const override { return 4; }
+    uint64_t getTimeSize() const override { return 4; }
 
     /**
      * Parse the time at the given location.
      */
-    virtual int64_t parseTime(const unsigned char* ptr) const override {
+    int64_t parseTime(const unsigned char* ptr) const override {
         // sign extend from 32 bits
         return static_cast<int32_t>(decode32(ptr));
     }
 
-    virtual std::string parseFutureString(const unsigned char*, uint64_t, uint64_t) const override { return ""; }
+    std::string parseFutureString(const unsigned char*, uint64_t, uint64_t) const override { return ""; }
 };
 
 Version1Parser::~Version1Parser() {
@@ -527,23 +527,23 @@ Version1Parser::~Version1Parser() {
 
 class Version2Parser : public VersionParser {
 public:
-    virtual ~Version2Parser() override;
+    ~Version2Parser() override;
 
-    virtual uint64_t getVersion() const override { return 2; }
+    uint64_t getVersion() const override { return 2; }
 
     /**
      * Get the number of bytes
      */
-    virtual uint64_t getTimeSize() const override { return 8; }
+    uint64_t getTimeSize() const override { return 8; }
 
     /**
      * Parse the time at the given location.
      */
-    virtual int64_t parseTime(const unsigned char* ptr) const override {
+    int64_t parseTime(const unsigned char* ptr) const override {
         return static_cast<int64_t>(decode32(ptr)) << 32 | decode32(ptr + 4);
     }
 
-    virtual std::string parseFutureString(const unsigned char* ptr, uint64_t offset, uint64_t length) const override {
+    std::string parseFutureString(const unsigned char* ptr, uint64_t offset, uint64_t length) const override {
         return std::string(reinterpret_cast<const char*>(ptr) + offset + 1, length - 2);
     }
 };
@@ -555,7 +555,7 @@ Version2Parser::~Version2Parser() {
 class TimezoneImpl : public Timezone {
 public:
     TimezoneImpl(const std::string& name, const std::vector<unsigned char> bytes);
-    virtual ~TimezoneImpl() override;
+    ~TimezoneImpl() override;
 
     /**
      * Get the variant for the given time (time_t).

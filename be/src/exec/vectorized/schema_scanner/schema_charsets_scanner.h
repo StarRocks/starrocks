@@ -12,9 +12,9 @@ namespace starrocks::vectorized {
 class SchemaCharsetsScanner : public SchemaScanner {
 public:
     SchemaCharsetsScanner();
-    virtual ~SchemaCharsetsScanner();
+    ~SchemaCharsetsScanner() override;
 
-    virtual Status get_next(ChunkPtr* chunk, bool* eos);
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
     struct CharsetStruct {

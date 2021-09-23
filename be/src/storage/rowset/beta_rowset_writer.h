@@ -52,12 +52,11 @@ public:
 
     OLAPStatus add_chunk(const vectorized::Chunk& chunk) override;
 
-    OLAPStatus add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid);
+    OLAPStatus add_chunk_with_rssid(const vectorized::Chunk& chunk, const vector<uint32_t>& rssid) override;
 
     OLAPStatus flush_chunk(const vectorized::Chunk& chunk) override;
 
-    virtual OLAPStatus flush_chunk_with_deletes(const vectorized::Chunk& upserts,
-                                                const vectorized::Column& deletes) override;
+    OLAPStatus flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
 
     // add rowset by create hard link
     OLAPStatus add_rowset(RowsetSharedPtr rowset) override;

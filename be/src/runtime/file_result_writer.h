@@ -67,12 +67,12 @@ class FileResultWriter final : public ResultWriter {
 public:
     FileResultWriter(const ResultFileOptions* file_option, const std::vector<ExprContext*>& output_expr_ctxs,
                      RuntimeProfile* parent_profile);
-    virtual ~FileResultWriter();
+    ~FileResultWriter() override;
 
-    virtual Status init(RuntimeState* state) override;
-    virtual Status append_row_batch(const RowBatch* batch) override;
+    Status init(RuntimeState* state) override;
+    Status append_row_batch(const RowBatch* batch) override;
     Status append_chunk(vectorized::Chunk* chunk) override;
-    virtual Status close() override;
+    Status close() override;
 
 private:
     Status _write_csv_file(const RowBatch& batch);

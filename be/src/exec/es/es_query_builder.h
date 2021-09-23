@@ -118,7 +118,7 @@ class BooleanQueryBuilder : public QueryBuilder {
 public:
     BooleanQueryBuilder(const std::vector<ExtPredicate*>& predicates);
     BooleanQueryBuilder();
-    virtual ~BooleanQueryBuilder();
+    ~BooleanQueryBuilder() override;
     // class method for transfer predicate to es query value, invoker should enclose this value with `query`
     static void to_query(const std::vector<EsPredicate*>& predicates, rapidjson::Document* root,
                          rapidjson::Value* query);

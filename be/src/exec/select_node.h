@@ -37,10 +37,10 @@ class SelectNode : public ExecNode {
 public:
     SelectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
 
-    virtual Status prepare(RuntimeState* state);
-    virtual Status open(RuntimeState* state);
+    Status prepare(RuntimeState* state) override;
+    Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    virtual Status close(RuntimeState* state);
+    Status close(RuntimeState* state) override;
 
 private:
     // true if last get_next() call on child signalled eos

@@ -437,7 +437,7 @@ class TemplatedElementDeleter : public BaseDeleter {
 public:
     explicit TemplatedElementDeleter<STLContainer>(STLContainer* ptr) : container_ptr_(ptr) {}
 
-    virtual ~TemplatedElementDeleter<STLContainer>() { STLDeleteElements(container_ptr_); }
+    ~TemplatedElementDeleter<STLContainer>() override { STLDeleteElements(container_ptr_); }
 
 private:
     STLContainer* container_ptr_;
@@ -469,7 +469,7 @@ class TemplatedValueDeleter : public BaseDeleter {
 public:
     explicit TemplatedValueDeleter<STLContainer>(STLContainer* ptr) : container_ptr_(ptr) {}
 
-    virtual ~TemplatedValueDeleter<STLContainer>() { STLDeleteValues(container_ptr_); }
+    ~TemplatedValueDeleter<STLContainer>() override { STLDeleteValues(container_ptr_); }
 
 private:
     STLContainer* container_ptr_;

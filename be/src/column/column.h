@@ -358,11 +358,13 @@ public:
         return MutablePtr(new Derived(std::forward<std::initializer_list<T>>(arg)));
     }
 
-    typename AncestorBaseType::MutablePtr clone() const {
+    typename AncestorBaseType::MutablePtr clone() const override {
         return typename AncestorBase::MutablePtr(new Derived(*derived()));
     }
 
-    typename AncestorBaseType::Ptr clone_shared() const { return typename AncestorBase::Ptr(new Derived(*derived())); }
+    typename AncestorBaseType::Ptr clone_shared() const override {
+        return typename AncestorBase::Ptr(new Derived(*derived()));
+    }
 };
 
 } // namespace vectorized

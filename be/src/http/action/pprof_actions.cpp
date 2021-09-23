@@ -53,9 +53,9 @@ static std::mutex kPprofActionMutex;
 class HeapAction : public HttpHandler {
 public:
     HeapAction() {}
-    virtual ~HeapAction() {}
+    ~HeapAction() override {}
 
-    virtual void handle(HttpRequest* req) override;
+    void handle(HttpRequest* req) override;
 };
 
 void HeapAction::handle(HttpRequest* req) {
@@ -93,9 +93,9 @@ void HeapAction::handle(HttpRequest* req) {
 class GrowthAction : public HttpHandler {
 public:
     GrowthAction() {}
-    virtual ~GrowthAction() {}
+    ~GrowthAction() override {}
 
-    virtual void handle(HttpRequest* req) override;
+    void handle(HttpRequest* req) override;
 };
 
 void GrowthAction::handle(HttpRequest* req) {
@@ -115,9 +115,9 @@ void GrowthAction::handle(HttpRequest* req) {
 class ProfileAction : public HttpHandler {
 public:
     ProfileAction() {}
-    virtual ~ProfileAction() {}
+    ~ProfileAction() override {}
 
-    virtual void handle(HttpRequest* req) override;
+    void handle(HttpRequest* req) override;
 };
 
 void ProfileAction::handle(HttpRequest* req) {
@@ -158,23 +158,23 @@ void ProfileAction::handle(HttpRequest* req) {
 class PmuProfileAction : public HttpHandler {
 public:
     PmuProfileAction() {}
-    virtual ~PmuProfileAction() {}
-    virtual void handle(HttpRequest* req) override {}
+    ~PmuProfileAction() override {}
+    void handle(HttpRequest* req) override {}
 };
 
 class ContentionAction : public HttpHandler {
 public:
     ContentionAction() {}
-    virtual ~ContentionAction() {}
+    ~ContentionAction() override {}
 
-    virtual void handle(HttpRequest* req) override {}
+    void handle(HttpRequest* req) override {}
 };
 
 class CmdlineAction : public HttpHandler {
 public:
     CmdlineAction() {}
-    virtual ~CmdlineAction() {}
-    virtual void handle(HttpRequest* req) override;
+    ~CmdlineAction() override {}
+    void handle(HttpRequest* req) override;
 };
 
 void CmdlineAction::handle(HttpRequest* req) {
@@ -196,9 +196,9 @@ void CmdlineAction::handle(HttpRequest* req) {
 class SymbolAction : public HttpHandler {
 public:
     SymbolAction(BfdParser* parser) : _parser(parser) {}
-    virtual ~SymbolAction() {}
+    ~SymbolAction() override {}
 
-    virtual void handle(HttpRequest* req) override;
+    void handle(HttpRequest* req) override;
 
 private:
     BfdParser* _parser;

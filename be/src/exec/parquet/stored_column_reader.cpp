@@ -68,7 +68,7 @@ class OptionalStoredColumnReader : public StoredColumnReader {
 public:
     OptionalStoredColumnReader(const StoredColumnReaderOptions& opts) : _opts(opts) {}
 
-    ~OptionalStoredColumnReader() = default;
+    ~OptionalStoredColumnReader() override = default;
 
     Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata, RandomAccessFile* file) {
         _field = field;
@@ -93,7 +93,7 @@ public:
         }
     }
 
-    void set_needs_levels(bool needs_levels) { _needs_levels = needs_levels; }
+    void set_needs_levels(bool needs_levels) override { _needs_levels = needs_levels; }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         // _needs_levels must be true
@@ -150,7 +150,7 @@ public:
 
     Status read_records(size_t* num_rows, ColumnContentType content_type, vectorized::Column* dst) override;
 
-    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) {
+    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         *def_levels = nullptr;
         *rep_levels = nullptr;
         *num_levels = 0;

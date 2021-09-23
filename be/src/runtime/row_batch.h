@@ -100,7 +100,7 @@ public:
     //  - tuple_ptrs
     //  - tuple mem pool data
     //  - buffer handles from the io mgr
-    virtual ~RowBatch();
+    ~RowBatch() override;
 
     // used to c
     void clear();

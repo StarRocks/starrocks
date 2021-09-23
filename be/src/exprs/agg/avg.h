@@ -168,7 +168,7 @@ public:
         column->append(result);
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
 
         ResultColumnType* column = down_cast<ResultColumnType*>(dst);

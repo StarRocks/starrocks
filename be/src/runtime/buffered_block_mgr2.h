@@ -143,7 +143,7 @@ public:
     class Block : public InternalQueue<Block>::Node {
     public:
         // A null dtor to pass codestyle check
-        ~Block() {}
+        ~Block() override {}
 
         // Pins a block in memory--assigns a free buffer to a block and reads it from disk if
         // necessary. If there are no free blocks and no unpinned blocks, '*pinned' is set to

@@ -231,9 +231,9 @@ public:
     using ColumnType = RunTimeColumnType<Type>;
 
     RuntimeBloomFilter() = default;
-    ~RuntimeBloomFilter() = default;
+    ~RuntimeBloomFilter() override = default;
 
-    virtual RuntimeBloomFilter* create_empty(ObjectPool* pool) override { return pool->add(new RuntimeBloomFilter()); };
+    RuntimeBloomFilter* create_empty(ObjectPool* pool) override { return pool->add(new RuntimeBloomFilter()); };
 
     void init_min_max() {
         _has_min_max = false;
@@ -566,7 +566,7 @@ public:
         return offset;
     }
 
-    virtual bool check_equal(const JoinRuntimeFilter& base_rf) const override {
+    bool check_equal(const JoinRuntimeFilter& base_rf) const override {
         if (!JoinRuntimeFilter::check_equal(base_rf)) return false;
         const auto& rf = static_cast<const RuntimeBloomFilter<Type>&>(base_rf);
         if constexpr (!IsSlice<CppType>) {
