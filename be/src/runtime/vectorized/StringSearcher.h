@@ -77,14 +77,84 @@ public:
 
     template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
     inline bool compare(const CharT* haystack, const CharT* haystack_end, const CharT* pos) const {
-#ifdef __SSE4_1__
         if (needle_size < SSE2_WIDTH) {
             return compare_lt_sse4_1_width(haystack, haystack_end, pos);
         } else {
             return compare_ge_sse4_1_width(haystack, haystack_end, pos);
         }
+    }
+
+    template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
+    inline bool compare_lt_sse4_1_width(const CharT* haystack, const CharT* haystack_end, const CharT* pos) const {
+#ifdef __SSE4_1__
+        if (pageSafe(pos)) {
+            const auto v_haystack = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pos));
+            const auto v_against_cache = _mm_cmpeq_epi8(v_haystack, cache);
+            const auto mask = _mm_movemask_epi8(v_against_cache);
+
+            if (0xffff == cachemask) {
+                if (mask == cachemask) {
+                    pos += SSE2_WIDTH;
+                    const uint8_t* needle_pos = needle + SSE2_WIDTH;
+
+                    while (needle_pos < needle_end && *pos == *needle_pos) {
+                        ++pos, ++needle_pos;
+                    }
+
+                    if (needle_pos == needle_end) {
+                        return true;
+                    }
+                }
+            } else if ((mask & cachemask) == cachemask) {
+                return true;
+            }
+
+            return false;
+        }
 #endif
-        return compare_without_sse(haystack, haystack_end, pos);
+
+        if (*pos == first) {
+            ++pos;
+            const uint8_t* needle_pos = needle + 1;
+
+            while (needle_pos < needle_end && *pos == *needle_pos) {
+                ++pos, ++needle_pos;
+            }
+
+            if (needle_pos == needle_end) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
+    inline bool compare_ge_sse4_1_width(const CharT* haystack, const CharT* haystack_end, const CharT* pos) const {
+        const uint8_t* needle_pos = needle;
+#ifdef __SSE4_1__
+        size_t quotient = needle_size / SSE2_WIDTH;
+        for (int i = 0; i < quotient; ++i) {
+            const auto v_haystack = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pos));
+            const auto v_needle = _mm_loadu_si128(reinterpret_cast<const __m128i*>(needle_pos));
+            const auto v_against_cache = _mm_cmpeq_epi8(v_haystack, v_needle);
+            const auto mask = _mm_movemask_epi8(v_against_cache);
+            if (0xffff != mask) {
+                return false;
+            } else {
+                pos += SSE2_WIDTH;
+                needle_pos += SSE2_WIDTH;
+                continue;
+            }
+        }
+#endif
+        while (needle_pos < needle_end && *pos == *needle_pos) {
+            ++pos, ++needle_pos;
+        }
+        if (needle_pos == needle_end) {
+            return true;
+        }
+        return false;
     }
 
     template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
@@ -164,76 +234,6 @@ public:
     const CharT* search(const CharT* haystack, const size_t haystack_size) const {
         return search(haystack, haystack + haystack_size);
     }
-
-private:
-    template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
-    inline bool compare_without_sse(const CharT* haystack, const CharT* haystack_end, const CharT* pos) const {
-        if (*pos == first) {
-            ++pos;
-            const uint8_t* needle_pos = needle + 1;
-
-            while (needle_pos < needle_end && *pos == *needle_pos) {
-                ++pos, ++needle_pos;
-            }
-
-            if (needle_pos == needle_end) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-#ifdef __SSE4_1__
-    template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
-    inline bool compare_lt_sse4_1_width(const CharT* haystack, const CharT* haystack_end, const CharT* pos) const {
-        if (pageSafe(pos)) {
-            const auto v_haystack = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pos));
-            const auto v_against_cache = _mm_cmpeq_epi8(v_haystack, cache);
-            const auto mask = _mm_movemask_epi8(v_against_cache);
-
-            if (0xffff == cachemask) {
-                if (mask == cachemask) {
-                    pos += SSE2_WIDTH;
-                    const uint8_t* needle_pos = needle + SSE2_WIDTH;
-
-                    while (needle_pos < needle_end && *pos == *needle_pos) {
-                        ++pos, ++needle_pos;
-                    }
-
-                    if (needle_pos == needle_end) {
-                        return true;
-                    }
-                }
-            } else if ((mask & cachemask) == cachemask) {
-                return true;
-            }
-
-            return false;
-        }
-        return compare_without_sse(haystack, haystack_end, pos);
-    }
-
-    template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
-    inline bool compare_ge_sse4_1_width(const CharT* haystack, const CharT* haystack_end, const CharT* pos) const {
-        const uint8_t* needle_pos = needle;
-        size_t quotient = needle_size / SSE2_WIDTH;
-        for (int i = 0; i < quotient; ++i) {
-            const auto v_haystack = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pos));
-            const auto v_needle = _mm_loadu_si128(reinterpret_cast<const __m128i*>(needle_pos));
-            const auto v_against_cache = _mm_cmpeq_epi8(v_haystack, v_needle);
-            const auto mask = _mm_movemask_epi8(v_against_cache);
-            if (0xffff != mask) {
-                return false;
-            } else {
-                pos += SSE2_WIDTH;
-                needle_pos += SSE2_WIDTH;
-                continue;
-            }
-        }
-        return compare_without_sse(haystack, haystack_end, pos);
-    }
-#endif
-
 };
 
 /** Uses functions from libc.
