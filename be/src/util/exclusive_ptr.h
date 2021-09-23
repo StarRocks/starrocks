@@ -22,7 +22,7 @@ class exclusive_ptr {
 
 public:
     constexpr exclusive_ptr() {}
-    constexpr exclusive_ptr(nullptr_t) {}
+    constexpr exclusive_ptr(std::nullptr_t) {}
     explicit exclusive_ptr(pointer_type&& v) : _value(v.release()) {}
     exclusive_ptr(const exclusive_ptr& other) : _value(other.release()) {}
     exclusive_ptr(exclusive_ptr&& other) : _value(other.release()) {}
@@ -53,7 +53,7 @@ public:
         return *this;
     }
 
-    exclusive_ptr& operator=(nullptr_t) {
+    exclusive_ptr& operator=(std::nullptr_t) {
         this->_value = nullptr;
         return *this;
     }
