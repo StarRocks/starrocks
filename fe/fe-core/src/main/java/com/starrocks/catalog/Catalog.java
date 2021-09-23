@@ -4943,7 +4943,7 @@ public class Catalog {
     }
 
     public Collection<Partition> getPartitionsIncludeRecycleBin(OlapTable table) {
-        Collection<Partition> partitions = table.getPartitions();
+        Collection<Partition> partitions = new ArrayList<>(table.getPartitions());
         partitions.addAll(recycleBin.getPartitions(table.getId()));
         return partitions;
     }
