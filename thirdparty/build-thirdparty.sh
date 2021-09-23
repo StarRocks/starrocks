@@ -262,11 +262,8 @@ build_protobuf() {
     mkdir gmock && cd gmock && tar xf ${TP_SOURCE_DIR}/$GTEST_NAME \
     && mv $GTEST_SOURCE gtest && cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE && ./autogen.sh
     CXXFLAGS="-fPIC -O2 -I ${TP_INCLUDE_DIR}" \
-    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    ./configure --prefix=${TP_INSTALL_DIR} --disable-shared --enable-static --with-zlib=${TP_INSTALL_DIR}/include
-    cd src
-    sed -i 's/^AM_LDFLAGS\(.*\)$/AM_LDFLAGS\1 -all-static/' Makefile
-    cd -
+    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive" \
+    ./configure --prefix=${TP_INSTALL_DIR} --disable-shared --enable-static --with-zlib --with-zlib-include=${TP_INSTALL_DIR}/include
     make -j$PARALLEL && make install
 }
 
@@ -655,7 +652,7 @@ build_fmt() {
     check_if_source_exist $FMT_SOURCE
     cd $TP_SOURCE_DIR/$FMT_SOURCE
     mkdir -p build && cd build
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
+    $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
             -DCMAKE_INSTALL_LIBDIR=lib64
     make -j$PARALLEL && make install
 }
@@ -710,7 +707,7 @@ build_hyperscan() {
     check_if_source_exist $HYPERSCAN_SOURCE
     cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
     export PATH=$TP_INSTALL_DIR/bin:$PATH
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
+    $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
           -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc  -DCMAKE_INSTALL_LIBDIR=lib
     make -j$PARALLEL && make install
 }
@@ -720,7 +717,7 @@ build_mariadb() {
     check_if_source_exist $MARIADB_SOURCE
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE
     mkdir -p build && cd build
-    cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
+    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
     make -j$PARALLEL && make install
 }
 
