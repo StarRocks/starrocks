@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer.operator.pattern;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.GroupExpression;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
 import java.util.Arrays;
@@ -13,18 +12,17 @@ import java.util.List;
 /**
  * Pattern is used in rules as a placeholder for group
  */
-public class Pattern extends Operator {
-
+public class Pattern {
+    private final OperatorType opType;
     private final List<Pattern> children;
 
     protected Pattern(OperatorType opType) {
-        super(opType);
+        this.opType = opType;
         this.children = Lists.newArrayList();
     }
 
-    @Override
-    public boolean isPattern() {
-        return true;
+    public OperatorType getOpType() {
+        return opType;
     }
 
     public static Pattern create(OperatorType type, OperatorType... children) {
@@ -48,19 +46,12 @@ public class Pattern extends Operator {
         return this;
     }
 
-    public Pattern addChildren(OperatorType... children) {
-        for (OperatorType child : children) {
-            this.addChildren(new Pattern(child));
-        }
-        return this;
-    }
-
     public boolean isPatternLeaf() {
-        return OperatorType.PATTERN_LEAF.equals(getOpType());
+        return OperatorType.PATTERN_LEAF.equals(opType);
     }
 
     public boolean isPatternMultiLeaf() {
-        return OperatorType.PATTERN_MULTI_LEAF.equals(getOpType());
+        return OperatorType.PATTERN_MULTI_LEAF.equals(opType);
     }
 
     public boolean matchWithoutChild(GroupExpression expression) {
