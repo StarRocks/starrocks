@@ -231,6 +231,9 @@ private:
     AggrPhase _aggr_phase = AggrPhase1;
 
     std::vector<uint8_t> _streaming_selection;
+    int32_t _convert_hash_table_to_chunk_nums = 0;
+    int32_t _convert_hash_table_to_chunk_size = 0;
+    static const size_t MAX_CHUNK_SER_SIZE = 200 * (1 << 20); // 200M.
 
     RuntimeProfile::Counter* _get_results_timer{};
     RuntimeProfile::Counter* _agg_compute_timer{};
@@ -288,6 +291,39 @@ public:
 
     template <typename HashMapWithKey>
     void convert_hash_map_to_chunk(HashMapWithKey& hash_map_with_key, int32_t chunk_size, vectorized::ChunkPtr* chunk) {
+        if ((_convert_hash_table_to_chunk_nums++ & 31) == 0) {
+            // get one chunk for speculation.
+            internal_convert_hash_map_to_chunk(hash_map_with_key, 1, chunk);
+            // and guess how many chunks in the following rounds.
+            size_t one_chunk_ser_size = (*chunk)->serialize_size();
+            int32_t guess_chunk_size = MAX_CHUNK_SER_SIZE / (one_chunk_ser_size + 1);
+            _convert_hash_table_to_chunk_size = std::min(chunk_size, std::max(1, guess_chunk_size));
+            VLOG_FILE << "convert_hash_map_to_chunk: one_chunk_ser_size = " << one_chunk_ser_size
+                      << ", convert_hash_table_to_chunk_size = " << _convert_hash_table_to_chunk_size;
+        } else {
+            internal_convert_hash_map_to_chunk(hash_map_with_key, _convert_hash_table_to_chunk_size, chunk);
+        }
+    }
+
+    template <typename HashSetWithKey>
+    void convert_hash_set_to_chunk(HashSetWithKey& hash_set, int32_t chunk_size, vectorized::ChunkPtr* chunk) {
+        if ((_convert_hash_table_to_chunk_nums++ & 31) == 0) {
+            // get one chunk for speculation.
+            internal_convert_hash_set_to_chunk(hash_set, 1, chunk);
+            // and guess how many chunks in the following rounds.
+            size_t one_chunk_ser_size = (*chunk)->serialize_size();
+            int32_t guess_chunk_size = MAX_CHUNK_SER_SIZE / (one_chunk_ser_size + 1);
+            _convert_hash_table_to_chunk_size = std::min(chunk_size, std::max(1, guess_chunk_size));
+            VLOG_FILE << "convert_hash_set_to_chunk: one_chunk_ser_size = " << one_chunk_ser_size
+                      << ", convert_hash_table_to_chunk_size = " << _convert_hash_table_to_chunk_size;
+        } else {
+            internal_convert_hash_set_to_chunk(hash_set, _convert_hash_table_to_chunk_size, chunk);
+        }
+    }
+
+    template <typename HashMapWithKey>
+    void internal_convert_hash_map_to_chunk(HashMapWithKey& hash_map_with_key, int32_t chunk_size,
+                                            vectorized::ChunkPtr* chunk) {
         SCOPED_TIMER(_get_results_timer);
         using Iterator = typename HashMapWithKey::Iterator;
         auto it = std::any_cast<Iterator>(_it_hash);
@@ -380,7 +416,7 @@ public:
     }
 
     template <typename HashSetWithKey>
-    void convert_hash_set_to_chunk(HashSetWithKey& hash_set, int32_t chunk_size, vectorized::ChunkPtr* chunk) {
+    void internal_convert_hash_set_to_chunk(HashSetWithKey& hash_set, int32_t chunk_size, vectorized::ChunkPtr* chunk) {
         SCOPED_TIMER(_get_results_timer);
         using Iterator = typename HashSetWithKey::Iterator;
         auto it = std::any_cast<Iterator>(_it_hash);
