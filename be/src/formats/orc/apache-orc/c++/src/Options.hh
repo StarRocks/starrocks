@@ -29,6 +29,7 @@
 #include "orc/Reader.hh"
 
 #include <limits>
+#include <utility>
 
 namespace orc {
 
@@ -271,7 +272,7 @@ namespace orc {
   }
 
   RowReaderOptions& RowReaderOptions::rowReaderFilter(std::shared_ptr<RowReaderFilter> filter) {
-    privateBits->filter = filter;
+    privateBits->filter = std::move(filter);
     return *this;
   }
 

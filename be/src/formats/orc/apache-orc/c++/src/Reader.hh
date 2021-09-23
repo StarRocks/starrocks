@@ -188,7 +188,7 @@ public:
     * @param contents of the file
     * @param options options for reading
     */
-    RowReaderImpl(std::shared_ptr<FileContents> contents, const RowReaderOptions& options);
+    RowReaderImpl(const std::shared_ptr<FileContents>& contents, const RowReaderOptions& options);
 
     // Select the columns from the options object
     const std::vector<bool> getSelectedColumns() const override;

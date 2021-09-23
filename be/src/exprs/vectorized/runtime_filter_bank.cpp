@@ -135,7 +135,7 @@ ExprContext* RuntimeFilterHelper::create_runtime_in_filter(RuntimeState* state, 
     }
 }
 
-Status RuntimeFilterHelper::fill_runtime_in_filter(const ColumnPtr column, Expr* probe_expr, ExprContext* filter) {
+Status RuntimeFilterHelper::fill_runtime_in_filter(const ColumnPtr& column, Expr* probe_expr, ExprContext* filter) {
     PrimitiveType type = probe_expr->type().type;
     Expr* expr = filter->root();
 
@@ -186,7 +186,7 @@ JoinRuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* 
     return filter;
 }
 
-Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr column, PrimitiveType type,
+Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, PrimitiveType type,
                                                       JoinRuntimeFilter* filter) {
     JoinRuntimeFilter* expr = filter;
     if (!column->is_nullable()) {

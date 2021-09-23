@@ -39,6 +39,8 @@
 #define fstat _fstat64
 #else
 #include <unistd.h>
+
+#include <utility>
 #define O_BINARY 0
 #endif
 
@@ -52,7 +54,7 @@ private:
 
 public:
     FileInputStream(std::string _filename) {
-        filename = _filename;
+        filename = std::move(_filename);
         file = open(filename.c_str(), O_BINARY | O_RDONLY);
         if (file == -1) {
             throw ParseError("Can't open " + filename);
@@ -121,7 +123,7 @@ private:
 public:
     FileOutputStream(std::string _filename) {
         bytesWritten = 0;
-        filename = _filename;
+        filename = std::move(_filename);
         closed = false;
         file = open(filename.c_str(), O_BINARY | O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
         if (file == -1) {

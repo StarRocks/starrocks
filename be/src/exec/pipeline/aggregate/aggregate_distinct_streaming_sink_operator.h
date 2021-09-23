@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "exec/pipeline/operator.h"
 #include "exec/vectorized/aggregator.h"
 
@@ -9,7 +11,7 @@ namespace starrocks::pipeline {
 class AggregateDistinctStreamingSinkOperator : public Operator {
 public:
     AggregateDistinctStreamingSinkOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : Operator(id, "aggregate_distinct_streaming_sink", plan_node_id), _aggregator(aggregator) {
+            : Operator(id, "aggregate_distinct_streaming_sink", plan_node_id), _aggregator(std::move(aggregator)) {
         _aggregator->set_aggr_phase(AggrPhase1);
     }
     ~AggregateDistinctStreamingSinkOperator() override = default;
@@ -44,7 +46,7 @@ private:
 class AggregateDistinctStreamingSinkOperatorFactory final : public OperatorFactory {
 public:
     AggregateDistinctStreamingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : OperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
+            : OperatorFactory(id, plan_node_id), _aggregator(std::move(aggregator)) {}
 
     ~AggregateDistinctStreamingSinkOperatorFactory() override = default;
 

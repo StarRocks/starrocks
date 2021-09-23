@@ -61,7 +61,7 @@ public:
 
     PredicateLeaf() = default;
 
-    PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName, Literal literal);
+    PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName, const Literal& literal);
 
     PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName,
                   const std::initializer_list<Literal>& literalList);

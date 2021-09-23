@@ -422,7 +422,7 @@ OLAPStatus DataDir::load() {
     // if one rowset load failed, then the total data dir will not be loaded
     std::vector<RowsetMetaSharedPtr> dir_rowset_metas;
     LOG(INFO) << "begin loading rowset from meta";
-    auto load_rowset_func = [&dir_rowset_metas](TabletUid tablet_uid, RowsetId rowset_id,
+    auto load_rowset_func = [&dir_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
                                                 const std::string& meta_str) -> bool {
         RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
         bool parsed = rowset_meta->init(meta_str);

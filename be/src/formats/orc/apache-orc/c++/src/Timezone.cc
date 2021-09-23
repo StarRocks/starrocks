@@ -554,7 +554,7 @@ Version2Parser::~Version2Parser() {
 
 class TimezoneImpl : public Timezone {
 public:
-    TimezoneImpl(const std::string& name, const std::vector<unsigned char> bytes);
+    TimezoneImpl(const std::string& name, const std::vector<unsigned char>& bytes);
     ~TimezoneImpl() override;
 
     /**
@@ -616,7 +616,7 @@ Timezone::~Timezone() {
     // PASS
 }
 
-TimezoneImpl::TimezoneImpl(const std::string& _filename, const std::vector<unsigned char> buffer)
+TimezoneImpl::TimezoneImpl(const std::string& _filename, const std::vector<unsigned char>& buffer)
         : filename(_filename) {
     parseZoneFile(&buffer[0], 0, buffer.size(), Version1Parser());
     // Build the literal for the ORC epoch

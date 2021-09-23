@@ -261,7 +261,7 @@ pipeline::OpFactories ExecNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 // if pre chunk is not nullptr and pre chunk size + cur chunk size <= 4096, merge the two chunk
 // if pre chunk is not nullptr and pre chunk size + cur chunk size > 4096, return pre chunk
 Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* eos, ChunkPtr& pre_output_chunk,
-                                    std::function<Status(RuntimeState*, ChunkPtr*, bool*)> specific_get_next) {
+                                    const std::function<Status(RuntimeState*, ChunkPtr*, bool*)>& specific_get_next) {
     size_t batch_size = state->batch_size();
 
     while (true) {

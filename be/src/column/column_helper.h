@@ -30,7 +30,7 @@ public:
 
     // merge column with filter, and save result to filer.
     // `all_zero` means, after merging, if there is only zero value in filter.
-    static void merge_two_filters(const ColumnPtr column, Column::Filter* __restrict filter, bool* all_zero = nullptr);
+    static void merge_two_filters(const ColumnPtr& column, Column::Filter* __restrict filter, bool* all_zero = nullptr);
     static void merge_filters(const Columns& columns, Column::Filter* __restrict filter);
     static void merge_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected,
                                   bool* all_zero = nullptr);

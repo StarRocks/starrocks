@@ -171,7 +171,7 @@ private:
      * @param start start position of the input string
      * @param end end position of the input string
      */
-    static std::unique_ptr<Type> parseCategory(std::string category, const std::string& input, size_t start,
+    static std::unique_ptr<Type> parseCategory(const std::string& category, const std::string& input, size_t start,
                                                size_t end);
 };
 

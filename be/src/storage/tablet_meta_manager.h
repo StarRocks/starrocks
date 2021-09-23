@@ -80,14 +80,15 @@ public:
     static Status get_primary_meta(KVStore* meta, TTabletId tablet_id, TabletMetaPB& tablet_meta_pb, string* json_meta);
 
     static Status get_tablet_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
-                                  TabletMetaSharedPtr tablet_meta);
+                                  const TabletMetaSharedPtr& tablet_meta);
 
     static Status get_json_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash, std::string* json_meta);
 
     static Status build_primary_meta(DataDir* store, rapidjson::Document& doc, rocksdb::ColumnFamilyHandle* cf,
                                      rocksdb::WriteBatch& batch);
 
-    static Status save(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash, TabletMetaSharedPtr tablet_meta);
+    static Status save(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
+                       const TabletMetaSharedPtr& tablet_meta);
 
     static Status save(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash, const TabletMetaPB& meta_pb);
 

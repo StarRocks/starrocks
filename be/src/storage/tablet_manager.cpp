@@ -591,7 +591,7 @@ TabletSharedPtr TabletManager::_get_tablet_unlocked(TTabletId tablet_id, SchemaH
     return tablet;
 }
 
-TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, SchemaHash schema_hash, TabletUid tablet_uid,
+TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                                           bool include_deleted, std::string* err) {
     std::shared_lock rlock(_get_tablets_shard_lock(tablet_id));
     TabletSharedPtr tablet = _get_tablet_unlocked(tablet_id, schema_hash, include_deleted, err);
