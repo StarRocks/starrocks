@@ -1470,10 +1470,8 @@ bool SchemaChangeWithSorting::_internal_sorting(const std::vector<RowBlock*>& ro
 
     if (!merger.merge(row_block_arr, rowset_writer.get(), &merged_rows)) {
         LOG(WARNING) << "failed to merge row blocks.";
-        new_tablet->data_dir()->remove_pending_ids(ROWSET_ID_PREFIX + rowset_writer->rowset_id().to_string());
         return false;
     }
-    new_tablet->data_dir()->remove_pending_ids(ROWSET_ID_PREFIX + rowset_writer->rowset_id().to_string());
     add_merged_rows(merged_rows);
     *rowset = rowset_writer->build();
     return true;
@@ -1885,10 +1883,8 @@ OLAPStatus SchemaChangeHandler::_convert_historical_rowsets(const SchemaChangePa
             LOG(WARNING) << "failed to process the version."
                          << " version=" << rs_reader->version().first << "-" << rs_reader->version().second;
             res = OLAP_ERR_INPUT_PARAMETER_ERROR;
-            new_tablet->data_dir()->remove_pending_ids(ROWSET_ID_PREFIX + rowset_writer->rowset_id().to_string());
             goto PROCESS_ALTER_EXIT;
         }
-        new_tablet->data_dir()->remove_pending_ids(ROWSET_ID_PREFIX + rowset_writer->rowset_id().to_string());
         // Add the new version of the data to the header,
         // To prevent deadlocks, be sure to lock the old table first and then the new one
         sc_params.new_tablet->obtain_push_lock();
