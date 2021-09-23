@@ -6718,7 +6718,9 @@ public class Catalog {
                 }
             }
 
-            copiedTbl = olapTable.selectiveCopy(origPartitions.keySet(), true, IndexExtState.VISIBLE);
+            Set<String> partNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            partNames.addAll(origPartitions.keySet());
+            copiedTbl = olapTable.selectiveCopy(partNames, true, IndexExtState.VISIBLE);
         } finally {
             db.readUnlock();
         }
@@ -6779,7 +6781,7 @@ public class Catalog {
             // check partitions
             for (Map.Entry<String, Long> entry : origPartitions.entrySet()) {
                 Partition partition = copiedTbl.getPartition(entry.getValue());
-                if (partition == null || !partition.getName().equals(entry.getKey())) {
+                if (partition == null || !partition.getName().equalsIgnoreCase(entry.getKey())) {
                     throw new DdlException("Partition [" + entry.getKey() + "] is changed");
                 }
             }
