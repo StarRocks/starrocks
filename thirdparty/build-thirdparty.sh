@@ -123,7 +123,7 @@ check_prerequest "libtoolize --version" "libtool"
 # Name of cmake build directory in each thirdpary project.
 # Do not use `build`, because many projects contained a file named `BUILD`
 # and if the filesystem is not case sensitive, `mkdir` will fail.
-BUILD_DIR=starocks_build
+BUILD_DIR=starrocks_build
 MACHINE_TYPE=$(uname -m)
 
 check_if_source_exist() {
