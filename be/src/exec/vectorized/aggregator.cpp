@@ -684,7 +684,7 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
                                          : HashVariantType::Type::phase2_null_##VALUE; \
         break;                                                                         \
     }
-                CHECK_AGGR_PHASE(TYPE_BOOLEAN, int8);
+                CHECK_AGGR_PHASE(TYPE_BOOLEAN, uint8);
                 CHECK_AGGR_PHASE(TYPE_TINYINT, int8);
                 CHECK_AGGR_PHASE(TYPE_SMALLINT, int16);
                 CHECK_AGGR_PHASE(TYPE_INT, int32);
@@ -719,7 +719,7 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
                                          : HashVariantType::Type::phase2_##VALUE; \
         break;                                                                    \
     }
-                CHECK_AGGR_PHASE(TYPE_BOOLEAN, int8);
+                CHECK_AGGR_PHASE(TYPE_BOOLEAN, uint8);
                 CHECK_AGGR_PHASE(TYPE_TINYINT, int8);
                 CHECK_AGGR_PHASE(TYPE_SMALLINT, int16);
                 CHECK_AGGR_PHASE(TYPE_INT, int32);

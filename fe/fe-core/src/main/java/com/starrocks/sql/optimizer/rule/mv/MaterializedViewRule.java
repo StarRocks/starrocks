@@ -38,7 +38,6 @@ import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -79,8 +78,9 @@ public class MaterializedViewRule extends Rule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         this.factory = context.getColumnRefFactory();
-        if (isExistMVs(input)) {
-            init(input);
+        OptExpression optExpression = input;
+        if (isExistMVs(optExpression)) {
+            init(optExpression);
             for (LogicalOlapScanOperator scan : scanOperators) {
                 int relationId = factory.getRelationId(scan.getOutputColumns().get(0).getId());
                 // clear rewrite context since we are going to handle another scan operator.
@@ -96,19 +96,19 @@ public class MaterializedViewRule extends Rule {
                                 .collect(Collectors.toList());
                         if (!percentileContexts.isEmpty()) {
                             MVProjectAggProjectScanRewrite.getInstance().rewriteOptExpressionTree(
-                                    factory, relationId, input, percentileContexts);
+                                    factory, relationId, optExpression, percentileContexts);
                         }
                         rewriteContext.removeAll(percentileContexts);
 
                         MaterializedViewRewriter rewriter = new MaterializedViewRewriter();
                         for (MaterializedViewRule.RewriteContext rc : rewriteContext) {
-                            rewriter.rewrite(input, rc);
+                            optExpression = rewriter.rewrite(optExpression, rc);
                         }
                     }
                 }
             }
         }
-        return Collections.emptyList();
+        return Lists.newArrayList(optExpression);
     }
 
     public static boolean isExistMVs(OptExpression root) {
@@ -325,8 +325,8 @@ public class MaterializedViewRule extends Rule {
                 columnNameToIds.put(tableId, nameToIDs);
             }
 
-            for (Map.Entry<ColumnRefOperator, Column> kv : scanOperator.getColRefToColumnMetaMap().entrySet()) {
-                nameToIDs.put(kv.getValue().getName(), kv.getKey().getId());
+            for (Map.Entry<Column, ColumnRefOperator> entry : scanOperator.getColumnMetaToColRefMap().entrySet()) {
+                nameToIDs.put(entry.getKey().getName(), entry.getValue().getId());
             }
 
             for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {

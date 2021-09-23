@@ -223,10 +223,10 @@ OLAPStatus TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTra
         txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
         txn_tablet_map[key][tablet_info] = load_info;
         _insert_txn_partition_map_unlocked(transaction_id, partition_id);
-        LOG(INFO) << "commit transaction to engine successfully."
-                  << " partition_id: " << key.first << ", transaction_id: " << key.second
-                  << ", tablet: " << tablet_info.to_string() << ", rowsetid: " << rowset_ptr->rowset_id()
-                  << ", version: " << rowset_ptr->version().first;
+        LOG(INFO) << "committed transaction "
+                  << " partition_id: " << key.first << " transaction_id: " << key.second
+                  << " tablet: " << tablet_info.tablet_id << " rowsetid: " << rowset_ptr->rowset_id()
+                  << " version: " << rowset_ptr->version().first;
     }
     return OLAP_SUCCESS;
 }

@@ -31,17 +31,19 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
-        this(table, Lists.newArrayList(), Maps.newHashMap(), null, -1, null);
+        this(table, Lists.newArrayList(), Maps.newHashMap(), Maps.newHashMap(), null, -1, null);
     }
 
     public LogicalOlapScanOperator(
             Table table,
             List<ColumnRefOperator> outputColumns,
-            Map<ColumnRefOperator, Column> columnRefMap,
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
             HashDistributionSpec hashDistributionSpec,
             long limit,
             ScalarOperator predicate) {
-        super(OperatorType.LOGICAL_OLAP_SCAN, table, outputColumns, columnRefMap, limit, predicate);
+        super(OperatorType.LOGICAL_OLAP_SCAN, table, outputColumns,
+                colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate);
 
         Preconditions.checkState(table instanceof OlapTable);
         this.hashDistributionSpec = hashDistributionSpec;

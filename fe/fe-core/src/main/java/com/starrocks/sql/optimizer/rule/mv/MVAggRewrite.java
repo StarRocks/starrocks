@@ -10,6 +10,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -18,21 +19,44 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 
 public abstract class MVAggRewrite {
     // Use mv column instead of query column
-    protected static void rewriteOlapScanOperator(LogicalOlapScanOperator scanOperator,
-                                                  Column mvColumn,
-                                                  ColumnRefOperator baseColumnRef,
-                                                  ColumnRefOperator mvColumnRef) {
-        scanOperator.getOutputColumns().remove(baseColumnRef);
-        scanOperator.getOutputColumns().add(mvColumnRef);
+    protected static void rewriteOlapScanOperator(
+            OptExpression optExpression,
+            LogicalOlapScanOperator scanOperator,
+            Column mvColumn,
+            ColumnRefOperator baseColumnRef,
+            ColumnRefOperator mvColumnRef) {
+        List<ColumnRefOperator> outputColumns = new ArrayList<>(scanOperator.getOutputColumns());
+        outputColumns.remove(baseColumnRef);
+        outputColumns.add(mvColumnRef);
 
-        scanOperator.getColRefToColumnMetaMap().remove(baseColumnRef);
-        scanOperator.getColRefToColumnMetaMap().put(mvColumnRef, mvColumn);
+        Map<ColumnRefOperator, Column> columnRefOperatorColumnMap = new HashMap<>(scanOperator.getColRefToColumnMetaMap());
+        columnRefOperatorColumnMap.remove(baseColumnRef);
+        columnRefOperatorColumnMap.put(mvColumnRef, mvColumn);
+
+        LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
+                scanOperator.getTable(),
+                outputColumns,
+                columnRefOperatorColumnMap,
+                scanOperator.getColumnMetaToColRefMap(),
+                scanOperator.getDistributionSpec(),
+                scanOperator.getLimit(),
+                scanOperator.getPredicate());
+        newScanOperator.setSelectedIndexId(scanOperator.getSelectedIndexId());
+        newScanOperator.setSelectedPartitionId(scanOperator.getSelectedPartitionId());
+        newScanOperator.setSelectedTabletId(Lists.newArrayList(scanOperator.getSelectedTabletId()));
+        newScanOperator.setPartitionNames(scanOperator.getPartitionNames());
+        newScanOperator.setHintsTabletIds(scanOperator.getHintsTabletIds());
+
+        optExpression.setChild(0, OptExpression.create(newScanOperator));
     }
 
     // Use mv column instead of query column

@@ -78,7 +78,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     public String toString() {
         return "PhysicalOlapScan" + " {" +
                 "table='" + table.getId() + '\'' +
-                ", outputColumns='" + colRefToColumnMetaMap.keySet() + '\'' +
+                ", outputColumns='" + getOutputColumns() + '\'' +
                 '}';
     }
 

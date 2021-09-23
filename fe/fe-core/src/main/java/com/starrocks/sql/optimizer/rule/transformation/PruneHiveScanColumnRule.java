@@ -76,6 +76,7 @@ public class PruneHiveScanColumnRule extends TransformationRule {
                     scanOperator.getTableType(),
                     new ArrayList<>(scanColumns),
                     newColumnRefMap,
+                    scanOperator.getColumnMetaToColRefMap(),
                     scanOperator.getLimit(),
                     scanOperator.getPredicate());
 

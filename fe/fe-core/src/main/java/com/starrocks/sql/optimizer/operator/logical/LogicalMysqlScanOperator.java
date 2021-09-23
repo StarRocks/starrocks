@@ -18,9 +18,11 @@ public class LogicalMysqlScanOperator extends LogicalScanOperator {
     public LogicalMysqlScanOperator(Table table,
                                     List<ColumnRefOperator> outputColumns,
                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                    Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                     long limit,
                                     ScalarOperator predicate) {
-        super(OperatorType.LOGICAL_MYSQL_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate);
+        super(OperatorType.LOGICAL_MYSQL_SCAN, table, outputColumns,
+                colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate);
         Preconditions.checkState(table instanceof MysqlTable);
     }
 

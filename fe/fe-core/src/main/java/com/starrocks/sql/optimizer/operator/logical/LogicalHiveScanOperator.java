@@ -42,10 +42,17 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
     public LogicalHiveScanOperator(Table table,
                                    Table.TableType tableType,
                                    List<ColumnRefOperator> outputColumns,
-                                   Map<ColumnRefOperator, Column> columnRefMap,
+                                   Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                   Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                    long limit,
                                    ScalarOperator predicate) {
-        super(OperatorType.LOGICAL_HIVE_SCAN, table, outputColumns, columnRefMap, limit, predicate);
+        super(OperatorType.LOGICAL_HIVE_SCAN,
+                table,
+                outputColumns,
+                colRefToColumnMetaMap,
+                columnMetaToColRefMap,
+                limit,
+                predicate);
 
         Preconditions.checkState(table instanceof HiveTable);
         this.tableType = tableType;

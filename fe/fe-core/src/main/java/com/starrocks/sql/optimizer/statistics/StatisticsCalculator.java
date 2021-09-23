@@ -180,8 +180,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         ColumnStatistic partitionStatistic = adjustPartitionStatistic(selectedPartitionIds, olapTable);
         if (partitionStatistic != null) {
             String partitionColumnName = Lists.newArrayList(olapTable.getPartitionColumnNames()).get(0);
-            Optional<Map.Entry<ColumnRefOperator, Column>> partitionColumnEntry = colRefToColumnMetaMap.entrySet().stream().
-                    filter(column -> column.getValue().getName().equalsIgnoreCase(partitionColumnName)).findAny();
+            Optional<Map.Entry<ColumnRefOperator, Column>> partitionColumnEntry =
+                    colRefToColumnMetaMap.entrySet().stream().
+                            filter(column -> column.getValue().getName().equalsIgnoreCase(partitionColumnName))
+                            .findAny();
             Preconditions.checkState(partitionColumnEntry.isPresent());
             builder.addColumnStatistic(partitionColumnEntry.get().getKey(), partitionStatistic);
         }
@@ -227,12 +229,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     table.getTableLevelColumnStats(requiredColumns.stream().
                             map(ColumnRefOperator::getName).collect(Collectors.toList()));
             List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
-                    computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
+                            computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
                     .collect(Collectors.toList());
             columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats ->
-                    new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
-                            hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
-                            hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
+                            new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
+                                    hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
+                                    hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
                     .collect(Collectors.toList());
         } catch (Exception e) {
             LOG.warn("hive table {} get column failed. error : {}", table.getName(), e);
@@ -284,7 +286,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return computeMysqlScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
-    private Void computeMysqlScanNode(Operator node, ExpressionContext context, Table table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+    private Void computeMysqlScanNode(Operator node, ExpressionContext context, Table table,
+                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
         builder.setOutputRowCount(1);
         return visitOperator(node, context, builder);
@@ -300,7 +303,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return computeEsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
-    private Void computeEsScanNode(Operator node, ExpressionContext context, Table table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+    private Void computeEsScanNode(Operator node, ExpressionContext context, Table table,
+                                   Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
         builder.setOutputRowCount(1);
         return visitOperator(node, context, builder);

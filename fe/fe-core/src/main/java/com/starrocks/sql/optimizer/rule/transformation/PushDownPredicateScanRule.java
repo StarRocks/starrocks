@@ -52,6 +52,7 @@ public class PushDownPredicateScanRule extends TransformationRule {
                     olapScanOperator.getTable(),
                     olapScanOperator.getOutputColumns(),
                     olapScanOperator.getColRefToColumnMetaMap(),
+                    olapScanOperator.getColumnMetaToColRefMap(),
                     olapScanOperator.getDistributionSpec(),
                     olapScanOperator.getLimit(),
                     predicates);
@@ -62,7 +63,8 @@ public class PushDownPredicateScanRule extends TransformationRule {
             newScanOperator.setHintsTabletIds(olapScanOperator.getHintsTabletIds());
 
             Map<ColumnRefOperator, ScalarOperator> projectMap =
-                    newScanOperator.getOutputColumns().stream().collect(Collectors.toMap(Function.identity(), Function.identity()));
+                    newScanOperator.getOutputColumns().stream()
+                            .collect(Collectors.toMap(Function.identity(), Function.identity()));
             LogicalProjectOperator logicalProjectOperator = new LogicalProjectOperator(projectMap);
             OptExpression project = OptExpression.create(logicalProjectOperator, OptExpression.create(newScanOperator));
             return Lists.newArrayList(project);
@@ -72,11 +74,13 @@ public class PushDownPredicateScanRule extends TransformationRule {
                     esScanOperator.getTable(),
                     esScanOperator.getOutputColumns(),
                     esScanOperator.getColRefToColumnMetaMap(),
+                    esScanOperator.getColumnMetaToColRefMap(),
                     esScanOperator.getLimit(),
                     predicates);
 
             Map<ColumnRefOperator, ScalarOperator> projectMap =
-                    newScanOperator.getOutputColumns().stream().collect(Collectors.toMap(Function.identity(), Function.identity()));
+                    newScanOperator.getOutputColumns().stream()
+                            .collect(Collectors.toMap(Function.identity(), Function.identity()));
             LogicalProjectOperator logicalProjectOperator = new LogicalProjectOperator(projectMap);
             OptExpression project = OptExpression.create(logicalProjectOperator, OptExpression.create(newScanOperator));
             return Lists.newArrayList(project);

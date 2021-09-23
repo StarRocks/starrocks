@@ -40,6 +40,7 @@ public class MVProjectAggProjectScanRewrite extends MVAggRewrite {
             ColumnRefFactory factory,
             int relationId, OptExpression input,
             List<MaterializedViewRule.RewriteContext> rewriteContexts) {
+        input.attachGroupExpression(null);
         for (OptExpression child : input.getInputs()) {
             rewriteOptExpressionTree(factory, relationId, child, rewriteContexts);
         }
@@ -55,7 +56,7 @@ public class MVProjectAggProjectScanRewrite extends MVAggRewrite {
                     input.inputAt(0).inputAt(0).inputAt(0).getOp();
             if (factory.getRelationId(scanOperator.getOutputColumns().get(0).getId()) == relationId) {
                 for (MaterializedViewRule.RewriteContext context : rewriteContexts) {
-                    rewriteOlapScanOperator(scanOperator, context.mvColumn,
+                    rewriteOlapScanOperator(input.inputAt(0).inputAt(0), scanOperator, context.mvColumn,
                             context.queryColumnRef, context.mvColumnRef);
                     ColumnRefOperator projectColumn = rewriteProjectOperator(bellowProject,
                             context.queryColumnRef,

@@ -220,7 +220,7 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
     @Override
     public OptExprBuilder visitTable(TableRelation node, ExpressionMapping context) {
         ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMap = ImmutableMap.builder();
-        ImmutableMap.Builder<Column, Integer> columnToIds = ImmutableMap.builder();
+        ImmutableMap.Builder<Column, ColumnRefOperator> columnToIds = ImmutableMap.builder();
         ImmutableList.Builder<ColumnRefOperator> outputVariablesBuilder = ImmutableList.builder();
 
         int relationId = columnRefFactory.getNextRelationId();
@@ -232,9 +232,10 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
             columnRefFactory.updateColumnRefToColumns(columnRef, column.getValue(), node.getTable());
             outputVariablesBuilder.add(columnRef);
             colRefToColumnMetaMap.put(columnRef, column.getValue());
-            columnToIds.put(column.getValue(), columnRef.getId());
+            columnToIds.put(column.getValue(), columnRef);
         }
 
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnToIds.build();
         List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
         LogicalScanOperator scanOperator;
         if (node.getTable().getType().equals(Table.TableType.OLAP)) {
@@ -244,7 +245,7 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
             List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
             List<Integer> hashDistributeColumns = new ArrayList<>();
             for (Column distributedColumn : distributedColumns) {
-                hashDistributeColumns.add(columnToIds.build().get(distributedColumn));
+                hashDistributeColumns.add(columnMetaToColRefMap.get(distributedColumn).getId());
             }
 
             HashDistributionDesc hashDistributionDesc =
@@ -252,6 +253,7 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
             LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(node.getTable(),
                     outputVariables,
                     colRefToColumnMetaMap.build(),
+                    columnMetaToColRefMap,
                     DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
                     -1,
                     null);
@@ -260,18 +262,21 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
             scanOperator = olapScanOperator;
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), node.getTable().getType(), outputVariables,
-                    colRefToColumnMetaMap.build(), -1, null);
+                    colRefToColumnMetaMap.build(), columnMetaToColRefMap, -1, null);
         } else if (Table.TableType.SCHEMA.equals(node.getTable().getType())) {
             scanOperator =
-                    new LogicalSchemaScanOperator(node.getTable(), outputVariables, colRefToColumnMetaMap.build(), -1,
+                    new LogicalSchemaScanOperator(node.getTable(), outputVariables, colRefToColumnMetaMap.build(),
+                            columnMetaToColRefMap, -1,
                             null);
         } else if (Table.TableType.MYSQL.equals(node.getTable().getType())) {
             scanOperator =
-                    new LogicalMysqlScanOperator(node.getTable(), outputVariables, colRefToColumnMetaMap.build(), -1,
+                    new LogicalMysqlScanOperator(node.getTable(), outputVariables, colRefToColumnMetaMap.build(),
+                            columnMetaToColRefMap, -1,
                             null);
         } else if (Table.TableType.ELASTICSEARCH.equals(node.getTable().getType())) {
             scanOperator =
-                    new LogicalEsScanOperator(node.getTable(), outputVariables, colRefToColumnMetaMap.build(), -1,
+                    new LogicalEsScanOperator(node.getTable(), outputVariables, colRefToColumnMetaMap.build(),
+                            columnMetaToColRefMap, -1,
                             null);
             EsTablePartitions esTablePartitions = ((LogicalEsScanOperator) scanOperator).getEsTablePartitions();
             EsTable table = (EsTable) scanOperator.getTable();
