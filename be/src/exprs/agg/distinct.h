@@ -216,8 +216,8 @@ template <PrimitiveType PT>
 struct DistinctAggregateStateV2<PT, BinaryPTGuard<PT>> : public DistinctAggregateState<PT> {};
 
 // Dear god this template class as template parameter kills me!
-template <PrimitiveType PT, template <PrimitiveType X> class TDistinctAggState, AggDistinctType DistinctType,
-          typename T = RunTimeCppType<PT>>
+template <PrimitiveType PT, template <PrimitiveType X, typename = guard::Guard> class TDistinctAggState,
+          AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
 class TDistinctAggregateFunction
         : public AggregateFunctionBatchHelper<TDistinctAggState<PT>,
                                               TDistinctAggregateFunction<PT, TDistinctAggState, DistinctType, T>> {
