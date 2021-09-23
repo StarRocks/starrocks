@@ -22,7 +22,6 @@
 
 #include "orc/MemoryPool.hh"
 
-
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif

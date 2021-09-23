@@ -159,7 +159,7 @@ static uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
 #else
 #error "Not supported architecture"
 #endif
-        p += sizeof(uint64_t);
+    p += sizeof(uint64_t);
     return hash;
 }
 
