@@ -44,9 +44,9 @@ public:
     VectorizedInConstPredicate(const VectorizedInConstPredicate& other)
             : Predicate(other), _is_not_in(other._is_not_in), _null_in_set(false) {}
 
-    ~VectorizedInConstPredicate() {}
+    ~VectorizedInConstPredicate() override {}
 
-    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedInConstPredicate(*this)); }
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedInConstPredicate(*this)); }
 
     Status prepare([[maybe_unused]] RuntimeState* state) {
         if (_is_prepare) {

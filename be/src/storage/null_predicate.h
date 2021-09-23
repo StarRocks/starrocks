@@ -35,14 +35,14 @@ class VectorizedRowBatch;
 class NullPredicate : public ColumnPredicate {
 public:
     NullPredicate(uint32_t column_id, bool is_null);
-    virtual ~NullPredicate();
+    ~NullPredicate() override;
 
-    virtual void evaluate(VectorizedRowBatch* batch) const override;
+    void evaluate(VectorizedRowBatch* batch) const override;
 
     void evaluate(ColumnBlock* block, uint16_t* sel, uint16_t* size) const override;
 
-    virtual Status evaluate(const Schema& schema, const vector<BitmapIndexIterator*>& iterators, uint32_t num_rows,
-                            Roaring* roaring) const override;
+    Status evaluate(const Schema& schema, const vector<BitmapIndexIterator*>& iterators, uint32_t num_rows,
+                    Roaring* roaring) const override;
 
     Status convert_to(const ColumnPredicate** outpout, FieldType from_type, FieldType to_type,
                       ObjectPool* obj_pool) const override {

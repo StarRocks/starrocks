@@ -34,7 +34,7 @@ public:
 
     void add_morsel(Morsel* morsel) {}
 
-    virtual void finish(RuntimeState* state) override;
+    void finish(RuntimeState* state) override;
 
 private:
     std::shared_ptr<vectorized::ChunksSorter> _chunks_sorter;

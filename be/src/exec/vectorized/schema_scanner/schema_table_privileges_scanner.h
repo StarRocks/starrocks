@@ -12,7 +12,7 @@ namespace starrocks::vectorized {
 class SchemaTablePrivilegesScanner : public SchemaScanner {
 public:
     SchemaTablePrivilegesScanner();
-    virtual ~SchemaTablePrivilegesScanner();
+    ~SchemaTablePrivilegesScanner() override;
     Status start(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 

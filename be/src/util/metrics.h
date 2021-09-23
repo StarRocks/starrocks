@@ -94,7 +94,7 @@ template <typename T>
 class AtomicMetric : public Metric {
 public:
     AtomicMetric(MetricType type, MetricUnit unit) : Metric(type, unit), _value(T()) {}
-    virtual ~AtomicMetric() {}
+    ~AtomicMetric() override {}
 
     std::string to_string() const override { return std::to_string(value()); }
 
@@ -116,7 +116,7 @@ template <typename T>
 class LockSimpleMetric : public Metric {
 public:
     LockSimpleMetric(MetricType type, MetricUnit unit) : Metric(type, unit), _value(T()) {}
-    virtual ~LockSimpleMetric() {}
+    ~LockSimpleMetric() override {}
 
     std::string to_string() const override { return std::to_string(value()); }
 
@@ -155,7 +155,7 @@ class CoreLocalCounter : public Metric {
 public:
     CoreLocalCounter(MetricUnit unit) : Metric(MetricType::COUNTER, unit), _value() {}
 
-    virtual ~CoreLocalCounter() {}
+    ~CoreLocalCounter() override {}
 
     std::string to_string() const override {
         std::stringstream ss;
@@ -185,14 +185,14 @@ template <typename T>
 class AtomicCounter : public AtomicMetric<T> {
 public:
     AtomicCounter(MetricUnit unit) : AtomicMetric<T>(MetricType::COUNTER, unit) {}
-    virtual ~AtomicCounter() {}
+    ~AtomicCounter() override {}
 };
 
 template <typename T>
 class AtomicGauge : public AtomicMetric<T> {
 public:
     AtomicGauge(MetricUnit unit) : AtomicMetric<T>(MetricType::GAUGE, unit) {}
-    virtual ~AtomicGauge() {}
+    ~AtomicGauge() override {}
 };
 
 template <typename T>
@@ -396,7 +396,7 @@ class TcmallocMetric final : public UIntGauge {
 public:
     TcmallocMetric(const std::string& tcmalloc_var) : UIntGauge(MetricUnit::BYTES), _tcmalloc_var(tcmalloc_var) {}
 
-    virtual uint64_t value() const override {
+    uint64_t value() const override {
         uint64_t val = 0;
 #if !defined(ADDRESS_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(LEAK_SANITIZER)
         MallocExtension::instance()->GetNumericProperty(_tcmalloc_var.c_str(), reinterpret_cast<size_t*>(&val));

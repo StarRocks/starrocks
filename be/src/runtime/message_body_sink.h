@@ -41,7 +41,7 @@ public:
 class MessageBodyFileSink : public MessageBodySink {
 public:
     MessageBodyFileSink(const std::string& path) : _path(path) {}
-    virtual ~MessageBodyFileSink();
+    ~MessageBodyFileSink() override;
 
     Status open();
 

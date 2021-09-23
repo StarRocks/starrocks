@@ -69,7 +69,7 @@ public:
 
     Tablet(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta, DataDir* data_dir);
 
-    ~Tablet();
+    ~Tablet() override;
 
     OLAPStatus init();
     inline bool init_succeeded();

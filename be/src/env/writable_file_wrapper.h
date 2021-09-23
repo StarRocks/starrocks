@@ -12,7 +12,7 @@ public:
     // |file| must outlive WritableFileWrapper.
     explicit WritableFileWrapper(WritableFile* file, Ownership ownership) : _file(file), _ownership(ownership) {}
 
-    ~WritableFileWrapper() {
+    ~WritableFileWrapper() override {
         if (_ownership == kTakesOwnership) {
             delete _file;
         }

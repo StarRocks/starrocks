@@ -52,11 +52,11 @@ std::unique_ptr<StreamsFactory> createStreamsFactory(const WriterOptions& option
    */
 class RowIndexPositionRecorder : public PositionRecorder {
 public:
-    virtual ~RowIndexPositionRecorder() override;
+    ~RowIndexPositionRecorder() override;
 
     RowIndexPositionRecorder(proto::RowIndexEntry& entry) : rowIndexEntry(entry) {}
 
-    virtual void add(uint64_t pos) override { rowIndexEntry.add_positions(pos); }
+    void add(uint64_t pos) override { rowIndexEntry.add_positions(pos); }
 
 private:
     proto::RowIndexEntry& rowIndexEntry;

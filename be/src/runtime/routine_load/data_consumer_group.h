@@ -69,9 +69,9 @@ class KafkaDataConsumerGroup : public DataConsumerGroup {
 public:
     KafkaDataConsumerGroup() : DataConsumerGroup(), _queue(500) {}
 
-    virtual ~KafkaDataConsumerGroup();
+    ~KafkaDataConsumerGroup() override;
 
-    virtual Status start_all(StreamLoadContext* ctx) override;
+    Status start_all(StreamLoadContext* ctx) override;
     // assign topic partitions to all consumers equally
     Status assign_topic_partitions(StreamLoadContext* ctx);
 

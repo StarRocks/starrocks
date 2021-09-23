@@ -56,7 +56,7 @@ public:
     typedef std::function<void(PlanFragmentExecutor*)> FinishCallback;
 
     FragmentMgr(ExecEnv* exec_env);
-    virtual ~FragmentMgr();
+    ~FragmentMgr() override;
 
     // execute one plan fragment
     Status exec_plan_fragment(const TExecPlanFragmentParams& params);
@@ -75,7 +75,7 @@ public:
 
     void cancel_worker();
 
-    virtual void debug(std::stringstream& ss);
+    void debug(std::stringstream& ss) override;
 
     Status trigger_profile_report(const PTriggerProfileReportRequest* request);
 

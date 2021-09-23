@@ -40,7 +40,7 @@ class SlotRef final : public Expr {
 public:
     SlotRef(const TExprNode& node);
     SlotRef(const SlotDescriptor* desc);
-    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new SlotRef(*this)); }
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new SlotRef(*this)); }
 
     // TODO: this is a hack to allow aggregation nodes to work around NULL slot
     // descriptors. Ideally the FE would dictate the type of the intermediate SlotRefs.
@@ -51,34 +51,34 @@ public:
 
     Status prepare(const SlotDescriptor* slot_desc, const RowDescriptor& row_desc);
 
-    virtual Status prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* ctx);
+    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* ctx) override;
     static void* get_value(Expr* expr, TupleRow* row);
     void* get_slot(TupleRow* row);
     Tuple* get_tuple(TupleRow* row);
     bool is_null_bit_set(TupleRow* row);
     static bool vector_compute_fn(Expr* expr, VectorizedRowBatch* batch);
     static bool is_nullable(Expr* expr);
-    virtual std::string debug_string() const;
-    virtual bool is_constant() const { return false; }
-    virtual bool is_vectorized() const { return true; }
-    virtual bool is_bound(const std::vector<TupleId>& tuple_ids) const;
-    virtual int get_slot_ids(std::vector<SlotId>* slot_ids) const;
+    std::string debug_string() const override;
+    bool is_constant() const override { return false; }
+    bool is_vectorized() const override { return true; }
+    bool is_bound(const std::vector<TupleId>& tuple_ids) const override;
+    int get_slot_ids(std::vector<SlotId>* slot_ids) const override;
     SlotId slot_id() const { return _slot_id; }
     TupleId tuple_id() const { return _tuple_id; }
     inline NullIndicatorOffset null_indicator_offset() const { return _null_indicator_offset; }
 
-    virtual starrocks_udf::BooleanVal get_boolean_val(ExprContext* context, TupleRow*);
-    virtual starrocks_udf::TinyIntVal get_tiny_int_val(ExprContext* context, TupleRow*);
-    virtual starrocks_udf::SmallIntVal get_small_int_val(ExprContext* context, TupleRow*);
-    virtual starrocks_udf::IntVal get_int_val(ExprContext* context, TupleRow*);
-    virtual starrocks_udf::BigIntVal get_big_int_val(ExprContext* context, TupleRow*);
-    virtual starrocks_udf::LargeIntVal get_large_int_val(ExprContext* context, TupleRow*);
-    virtual starrocks_udf::FloatVal get_float_val(ExprContext* context, TupleRow*);
-    virtual starrocks_udf::DoubleVal get_double_val(ExprContext* context, TupleRow*);
-    virtual starrocks_udf::StringVal get_string_val(ExprContext* context, TupleRow*);
-    virtual starrocks_udf::DateTimeVal get_datetime_val(ExprContext* context, TupleRow*);
-    virtual starrocks_udf::DecimalVal get_decimal_val(ExprContext* context, TupleRow*);
-    virtual starrocks_udf::DecimalV2Val get_decimalv2_val(ExprContext* context, TupleRow*);
+    starrocks_udf::BooleanVal get_boolean_val(ExprContext* context, TupleRow*) override;
+    starrocks_udf::TinyIntVal get_tiny_int_val(ExprContext* context, TupleRow*) override;
+    starrocks_udf::SmallIntVal get_small_int_val(ExprContext* context, TupleRow*) override;
+    starrocks_udf::IntVal get_int_val(ExprContext* context, TupleRow*) override;
+    starrocks_udf::BigIntVal get_big_int_val(ExprContext* context, TupleRow*) override;
+    starrocks_udf::LargeIntVal get_large_int_val(ExprContext* context, TupleRow*) override;
+    starrocks_udf::FloatVal get_float_val(ExprContext* context, TupleRow*) override;
+    starrocks_udf::DoubleVal get_double_val(ExprContext* context, TupleRow*) override;
+    starrocks_udf::StringVal get_string_val(ExprContext* context, TupleRow*) override;
+    starrocks_udf::DateTimeVal get_datetime_val(ExprContext* context, TupleRow*) override;
+    starrocks_udf::DecimalVal get_decimal_val(ExprContext* context, TupleRow*) override;
+    starrocks_udf::DecimalV2Val get_decimalv2_val(ExprContext* context, TupleRow*) override;
     // virtual starrocks_udf::ArrayVal GetArrayVal(ExprContext* context, TupleRow*);
 
     // vector query engine

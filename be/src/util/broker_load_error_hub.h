@@ -56,15 +56,15 @@ public:
 
     BrokerLoadErrorHub(ExecEnv* env, const TBrokerErrorHubInfo& info, const std::string& error_log_file_name);
 
-    virtual ~BrokerLoadErrorHub();
+    ~BrokerLoadErrorHub() override;
 
-    virtual Status prepare();
+    Status prepare() override;
 
-    virtual Status export_error(const ErrorMsg& error_msg);
+    Status export_error(const ErrorMsg& error_msg) override;
 
-    virtual Status close();
+    Status close() override;
 
-    virtual std::string debug_string() const;
+    std::string debug_string() const override;
 
 private:
     Status write_to_broker();

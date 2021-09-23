@@ -345,7 +345,7 @@ public:
         ScanRange() : ScanRange(-1) {}
         ScanRange(int initial_capacity);
 
-        virtual ~ScanRange();
+        ~ScanRange() override;
 
         // Resets this scan range object with the scan range description.  The scan range
         // must fall within the file bounds (offset >= 0 and offset + len <= file_length).
@@ -504,7 +504,7 @@ public:
     class WriteRange : public RequestRange {
     public:
         // a null dtor to pass codestyle check
-        ~WriteRange() {}
+        ~WriteRange() override {}
 
         // This callback is invoked on each WriteRange after the write is complete or the
         // context is cancelled. The status returned by the callback parameter indicates
