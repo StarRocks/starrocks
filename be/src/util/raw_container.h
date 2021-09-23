@@ -67,10 +67,19 @@ private:
     static const size_t _trailing = trailing;
 };
 
+// https://github.com/StarRocks/starrocks/issues/233
+// older versions of CXX11 string abi are cow semantic and our optimization to provide raw_string causes crashes.
+//
+// So we can't use this optimization when we detect a link to an old version of abi,
+// and this may affect performance. So we strongly recommend to use the new version of abi
+//
+#if _GLIBCXX_USE_CXX11_ABI
 using RawString = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 0>>;
-
 using RawStringPad16 = std::basic_string<char, std::char_traits<char>, RawAllocator<char, 16>>;
-
+#else
+using RawString = std::string;
+using RawStringPad16 = std::string;
+#endif
 // From cpp reference: "A trivial destructor is a destructor that performs no action. Objects with
 // trivial destructors don't require a delete-expression and may be disposed of by simply
 // deallocating their storage. All data types compatible with the C language (POD types)
