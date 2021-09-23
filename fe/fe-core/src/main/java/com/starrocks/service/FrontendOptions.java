@@ -76,8 +76,7 @@ public class FrontendOptions {
                     if (isInPriorNetwork(addr.getHostAddress())) {
                         localAddr = addr;
                         break;
-                    }
-                    else {
+                    } else {
                         //print some logs to remind users to properly configure Priority_networks
                         LOG.warn("ip address range configured for priority_networks does not include the current IP address : {}", addr.getHostAddress());
                     }
