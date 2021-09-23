@@ -26,8 +26,9 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
         return iter->second.get();
     }
 
-    auto&& ctx = std::make_unique<QueryContext>();
+    auto&& ctx = std::make_shared<QueryContext>();
     auto* ctx_raw_ptr = ctx.get();
+    ctx_raw_ptr->set_query_id(query_id);
     ctx_raw_ptr->increment_num_fragments();
     _contexts.emplace(query_id, std::move(ctx));
     return ctx_raw_ptr;
@@ -43,9 +44,16 @@ QueryContextPtr QueryContextManager::get(const TUniqueId& query_id) {
     }
 }
 
-void QueryContextManager::unregister(const TUniqueId& query_id) {
+QueryContextPtr QueryContextManager::remove(const TUniqueId& query_id) {
     std::lock_guard lock(_lock);
-    _contexts.erase(query_id);
+    auto it = _contexts.find(query_id);
+    if (it != _contexts.end()) {
+        auto ctx = std::move(it->second);
+        _contexts.erase(it);
+        return ctx;
+    } else {
+        return nullptr;
+    }
 }
 
 } // namespace pipeline
