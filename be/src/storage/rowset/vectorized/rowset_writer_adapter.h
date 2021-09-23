@@ -36,8 +36,7 @@ public:
 
     OLAPStatus flush_chunk(const vectorized::Chunk& chunk) override;
 
-    virtual OLAPStatus flush_chunk_with_deletes(const vectorized::Chunk& upserts,
-                                                const vectorized::Column& deletes) override;
+    OLAPStatus flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
 
     OLAPStatus add_rowset(RowsetSharedPtr rowset) override { return _writer->add_rowset(rowset); }
 

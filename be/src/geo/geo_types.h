@@ -137,7 +137,7 @@ private:
 class GeoCircle : public GeoShape {
 public:
     GeoCircle();
-    ~GeoCircle();
+    ~GeoCircle() override;
 
     GeoParseStatus init(double lng, double lat, double radius);
 

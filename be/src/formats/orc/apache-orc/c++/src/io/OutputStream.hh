@@ -52,13 +52,13 @@ private:
 
 public:
     BufferedOutputStream(MemoryPool& pool, OutputStream* outStream, uint64_t capacity, uint64_t block_size);
-    virtual ~BufferedOutputStream() override;
+    ~BufferedOutputStream() override;
 
-    virtual bool Next(void** data, int* size) override;
-    virtual void BackUp(int count) override;
-    virtual google::protobuf::int64 ByteCount() const override;
-    virtual bool WriteAliasedRaw(const void* data, int size) override;
-    virtual bool AllowsAliasing() const override;
+    bool Next(void** data, int* size) override;
+    void BackUp(int count) override;
+    google::protobuf::int64 ByteCount() const override;
+    bool WriteAliasedRaw(const void* data, int size) override;
+    bool AllowsAliasing() const override;
 
     virtual std::string getName() const;
     virtual uint64_t getSize() const;

@@ -32,7 +32,7 @@ public:
     ParquetScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                    ScannerCounter* counter);
 
-    ~ParquetScanner();
+    ~ParquetScanner() override;
 
     Status open() override;
 

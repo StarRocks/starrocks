@@ -11,9 +11,9 @@ class VectorizedLiteral final : public Expr {
 public:
     VectorizedLiteral(const TExprNode& node);
 
-    virtual ~VectorizedLiteral();
+    ~VectorizedLiteral() override;
 
-    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedLiteral(*this)); }
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedLiteral(*this)); }
 
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
 

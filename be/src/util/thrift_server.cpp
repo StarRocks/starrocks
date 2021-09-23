@@ -46,24 +46,24 @@ public:
     ThriftServerEventProcessor(ThriftServer* thrift_server) : _thrift_server(thrift_server), _signal_fired(false) {}
 
     // friendly to code style
-    virtual ~ThriftServerEventProcessor() {}
+    ~ThriftServerEventProcessor() override {}
 
     // Called by TNonBlockingServer when server has acquired its resources and is ready to
     // serve, and signals to StartAndWaitForServer that start-up is finished.
     // From TServerEventHandler.
-    virtual void preServe();
+    void preServe() override;
 
     // Called when a client connects; we create per-client state and call any
     // SessionHandlerIf handler.
-    virtual void* createContext(std::shared_ptr<apache::thrift::protocol::TProtocol> input,
-                                std::shared_ptr<apache::thrift::protocol::TProtocol> output);
+    void* createContext(std::shared_ptr<apache::thrift::protocol::TProtocol> input,
+                        std::shared_ptr<apache::thrift::protocol::TProtocol> output) override;
 
     // Called when a client starts an RPC; we set the thread-local session key.
-    virtual void processContext(void* context, std::shared_ptr<apache::thrift::transport::TTransport> output);
+    void processContext(void* context, std::shared_ptr<apache::thrift::transport::TTransport> output) override;
 
     // Called when a client disconnects; we call any SessionHandlerIf handler.
-    virtual void deleteContext(void* serverContext, std::shared_ptr<apache::thrift::protocol::TProtocol> input,
-                               std::shared_ptr<apache::thrift::protocol::TProtocol> output);
+    void deleteContext(void* serverContext, std::shared_ptr<apache::thrift::protocol::TProtocol> input,
+                       std::shared_ptr<apache::thrift::protocol::TProtocol> output) override;
 
     // Waits for a timeout of TIMEOUT_MS for a server to signal that it has started
     // correctly.

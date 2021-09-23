@@ -630,7 +630,7 @@ public:
         return Status::OK();
     }
 
-    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) {
+    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         _element_reader->get_levels(def_levels, rep_levels, num_levels);
     }
 

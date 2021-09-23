@@ -54,7 +54,7 @@ public:
    */
 class SeekableInputStream : public google::protobuf::io::ZeroCopyInputStream {
 public:
-    virtual ~SeekableInputStream();
+    ~SeekableInputStream() override;
     virtual void seek(PositionProvider& position) = 0;
     virtual std::string getName() const = 0;
 };
@@ -72,13 +72,13 @@ private:
 public:
     SeekableArrayInputStream(const unsigned char* list, uint64_t length, uint64_t block_size = 0);
     SeekableArrayInputStream(const char* list, uint64_t length, uint64_t block_size = 0);
-    virtual ~SeekableArrayInputStream() override;
-    virtual bool Next(const void** data, int* size) override;
-    virtual void BackUp(int count) override;
-    virtual bool Skip(int count) override;
-    virtual google::protobuf::int64 ByteCount() const override;
-    virtual void seek(PositionProvider& position) override;
-    virtual std::string getName() const override;
+    ~SeekableArrayInputStream() override;
+    bool Next(const void** data, int* size) override;
+    void BackUp(int count) override;
+    bool Skip(int count) override;
+    google::protobuf::int64 ByteCount() const override;
+    void seek(PositionProvider& position) override;
+    std::string getName() const override;
 };
 
 /**
@@ -98,14 +98,14 @@ private:
 public:
     SeekableFileInputStream(InputStream* input, uint64_t offset, uint64_t byteCount, MemoryPool& pool,
                             uint64_t blockSize = 0);
-    virtual ~SeekableFileInputStream() override;
+    ~SeekableFileInputStream() override;
 
-    virtual bool Next(const void** data, int* size) override;
-    virtual void BackUp(int count) override;
-    virtual bool Skip(int count) override;
-    virtual int64_t ByteCount() const override;
-    virtual void seek(PositionProvider& position) override;
-    virtual std::string getName() const override;
+    bool Next(const void** data, int* size) override;
+    void BackUp(int count) override;
+    bool Skip(int count) override;
+    int64_t ByteCount() const override;
+    void seek(PositionProvider& position) override;
+    std::string getName() const override;
 };
 
 } // namespace orc

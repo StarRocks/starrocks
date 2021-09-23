@@ -48,7 +48,7 @@ struct alignas(CACHE_LINE_SIZE) CoreDataBlock {
 template <size_t ELEMENT_BYTES>
 class CoreDataAllocatorImpl : public CoreDataAllocator {
 public:
-    virtual ~CoreDataAllocatorImpl();
+    ~CoreDataAllocatorImpl() override;
     void* get_or_create(size_t id) override {
         size_t block_id = id / ELEMENTS_PER_BLOCK;
         {

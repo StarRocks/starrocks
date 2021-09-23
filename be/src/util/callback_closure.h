@@ -34,7 +34,7 @@ template <typename T>
 class CallBackClosure : public google::protobuf::Closure {
 public:
     CallBackClosure() : _refs(0) {}
-    ~CallBackClosure() {}
+    ~CallBackClosure() override {}
 
     // Disallow copy and assignment.
     CallBackClosure(const CallBackClosure& other) = delete;

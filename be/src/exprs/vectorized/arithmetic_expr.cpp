@@ -35,7 +35,7 @@ public:
             return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type>(l, r);
         }
     }
-    std::string debug_string() const {
+    std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
         out << "VectorizedArithmeticExpr ("

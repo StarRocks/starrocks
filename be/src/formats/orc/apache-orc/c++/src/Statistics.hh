@@ -208,7 +208,7 @@ private:
 public:
     ColumnStatisticsImpl() { reset(); }
     ColumnStatisticsImpl(const proto::ColumnStatistics& stats);
-    virtual ~ColumnStatisticsImpl() override;
+    ~ColumnStatisticsImpl() override;
 
     uint64_t getNumberOfValues() const override { return _stats.getNumberOfValues(); }
 
@@ -246,7 +246,7 @@ private:
 public:
     BinaryColumnStatisticsImpl() { reset(); }
     BinaryColumnStatisticsImpl(const proto::ColumnStatistics& stats, const StatContext& statContext);
-    virtual ~BinaryColumnStatisticsImpl() override;
+    ~BinaryColumnStatisticsImpl() override;
 
     uint64_t getNumberOfValues() const override { return _stats.getNumberOfValues(); }
 
@@ -316,7 +316,7 @@ private:
 public:
     BooleanColumnStatisticsImpl() { reset(); }
     BooleanColumnStatisticsImpl(const proto::ColumnStatistics& stats, const StatContext& statContext);
-    virtual ~BooleanColumnStatisticsImpl() override;
+    ~BooleanColumnStatisticsImpl() override;
 
     bool hasCount() const override { return _hasCount; }
 
@@ -406,7 +406,7 @@ private:
 public:
     DateColumnStatisticsImpl() { reset(); }
     DateColumnStatisticsImpl(const proto::ColumnStatistics& stats, const StatContext& statContext);
-    virtual ~DateColumnStatisticsImpl() override;
+    ~DateColumnStatisticsImpl() override;
 
     bool hasMinimum() const override { return _stats.hasMinimum(); }
 
@@ -498,7 +498,7 @@ private:
 public:
     DecimalColumnStatisticsImpl() { reset(); }
     DecimalColumnStatisticsImpl(const proto::ColumnStatistics& stats, const StatContext& statContext);
-    virtual ~DecimalColumnStatisticsImpl() override;
+    ~DecimalColumnStatisticsImpl() override;
 
     bool hasMinimum() const override { return _stats.hasMinimum(); }
 
@@ -660,7 +660,7 @@ private:
 public:
     DoubleColumnStatisticsImpl() { reset(); }
     DoubleColumnStatisticsImpl(const proto::ColumnStatistics& stats);
-    virtual ~DoubleColumnStatisticsImpl() override;
+    ~DoubleColumnStatisticsImpl() override;
 
     bool hasMinimum() const override { return _stats.hasMinimum(); }
 
@@ -789,7 +789,7 @@ private:
 public:
     IntegerColumnStatisticsImpl() { reset(); }
     IntegerColumnStatisticsImpl(const proto::ColumnStatistics& stats);
-    virtual ~IntegerColumnStatisticsImpl() override;
+    ~IntegerColumnStatisticsImpl() override;
 
     bool hasMinimum() const override { return _stats.hasMinimum(); }
 
@@ -921,7 +921,7 @@ private:
 public:
     StringColumnStatisticsImpl() { reset(); }
     StringColumnStatisticsImpl(const proto::ColumnStatistics& stats, const StatContext& statContext);
-    virtual ~StringColumnStatisticsImpl() override;
+    ~StringColumnStatisticsImpl() override;
 
     bool hasMinimum() const override { return _stats.hasMinimum(); }
 
@@ -1076,7 +1076,7 @@ private:
 public:
     TimestampColumnStatisticsImpl() { reset(); }
     TimestampColumnStatisticsImpl(const proto::ColumnStatistics& stats, const StatContext& statContext);
-    virtual ~TimestampColumnStatisticsImpl() override;
+    ~TimestampColumnStatisticsImpl() override;
 
     bool hasMinimum() const override { return _stats.hasMinimum(); }
 
@@ -1303,9 +1303,9 @@ public:
 
     StatisticsImpl(const proto::Footer& footer, const StatContext& statContext);
 
-    virtual const ColumnStatistics* getColumnStatistics(uint32_t columnId) const override { return colStats[columnId]; }
+    const ColumnStatistics* getColumnStatistics(uint32_t columnId) const override { return colStats[columnId]; }
 
-    virtual ~StatisticsImpl() override;
+    ~StatisticsImpl() override;
 
     uint32_t getNumberOfColumns() const override { return static_cast<uint32_t>(colStats.size()); }
 };
@@ -1324,18 +1324,18 @@ public:
                          std::vector<std::vector<proto::ColumnStatistics> >& indexStats,
                          const StatContext& statContext);
 
-    virtual const ColumnStatistics* getColumnStatistics(uint32_t columnId) const override {
+    const ColumnStatistics* getColumnStatistics(uint32_t columnId) const override {
         return columnStats->getColumnStatistics(columnId);
     }
 
     uint32_t getNumberOfColumns() const override { return columnStats->getNumberOfColumns(); }
 
-    virtual const ColumnStatistics* getRowIndexStatistics(uint32_t columnId, uint32_t rowIndex) const override {
+    const ColumnStatistics* getRowIndexStatistics(uint32_t columnId, uint32_t rowIndex) const override {
         // check id indices are valid
         return rowIndexStats[columnId][rowIndex].get();
     }
 
-    virtual ~StripeStatisticsImpl() override;
+    ~StripeStatisticsImpl() override;
 
     uint32_t getNumberOfRowIndexStats(uint32_t columnId) const override {
         return static_cast<uint32_t>(rowIndexStats[columnId].size());

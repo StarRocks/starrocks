@@ -126,7 +126,7 @@ class LinkedSchemaChange : public SchemaChange {
 public:
     explicit LinkedSchemaChange(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer)
             : SchemaChange(mem_tracker), _row_block_changer(row_block_changer) {}
-    ~LinkedSchemaChange() { _mem_tracker->release(_mem_tracker->consumption()); }
+    ~LinkedSchemaChange() override { _mem_tracker->release(_mem_tracker->consumption()); }
 
     bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                  TabletSharedPtr base_tablet) override;
@@ -142,10 +142,10 @@ public:
     // @params tablet           the instance of tablet which has new schema.
     // @params row_block_changer    changer to modifiy the data of RowBlock
     explicit SchemaChangeDirectly(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer);
-    virtual ~SchemaChangeDirectly();
+    ~SchemaChangeDirectly() override;
 
-    virtual bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer,
-                         TabletSharedPtr new_tablet, TabletSharedPtr base_tablet) override;
+    bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                 TabletSharedPtr base_tablet) override;
 
 private:
     const RowBlockChanger& _row_block_changer;
@@ -162,10 +162,10 @@ class SchemaChangeWithSorting : public SchemaChange {
 public:
     explicit SchemaChangeWithSorting(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer,
                                      size_t memory_limitation);
-    virtual ~SchemaChangeWithSorting();
+    ~SchemaChangeWithSorting() override;
 
-    virtual bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_builder,
-                         TabletSharedPtr new_tablet, TabletSharedPtr base_tablet) override;
+    bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_builder, TabletSharedPtr new_tablet,
+                 TabletSharedPtr base_tablet) override;
 
 private:
     bool _internal_sorting(const std::vector<RowBlock*>& row_block_arr, const Version& temp_delta_versions,

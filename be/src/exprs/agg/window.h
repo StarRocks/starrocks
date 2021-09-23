@@ -56,7 +56,7 @@ class WindowFunction : public AggregateFunctionStateHelper<State> {
     }
 
     void batch_finalize(FunctionContext* ctx, size_t batch_size, const Buffer<AggDataPtr>& agg_states,
-                        size_t state_offset, Column* to) const {
+                        size_t state_offset, Column* to) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 
@@ -129,7 +129,7 @@ class RowNumberWindowFunction final : public WindowFunction<RowNumberState> {
         this->data(state).cur_positon++;
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
         Int64Column* column = down_cast<Int64Column*>(dst);
         column->get_data()[start] = this->data(state).cur_positon;
@@ -162,7 +162,7 @@ class RankWindowFunction final : public WindowFunction<RankState> {
         this->data(state).count = peer_group_count;
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
         Int64Column* column = down_cast<Int64Column*>(dst);
         for (size_t i = start; i < end; ++i) {
@@ -193,7 +193,7 @@ class DenseRankWindowFunction final : public WindowFunction<DenseRankState> {
         }
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
         Int64Column* column = down_cast<Int64Column*>(dst);
         for (size_t i = start; i < end; ++i) {
@@ -241,7 +241,7 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
         this->data(state).has_value = true;
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         this->get_values_helper(state, dst, start, end);
     }
 
@@ -278,7 +278,7 @@ class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueSt
         this->data(state).value = column->get_data()[frame_end - 1];
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         this->get_values_helper(state, dst, start, end);
     }
 
@@ -336,7 +336,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<
         this->data(state).value = column->get_data()[frame_end - 1];
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         this->get_values_helper(state, dst, start, end);
     }
 
@@ -381,7 +381,7 @@ class FirstValueWindowFunction<PT, Slice, BinaryPTGuard<PT>> final : public Wind
         this->data(state).has_value = true;
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         this->get_slice_values(state, dst, start, end);
     }
 
@@ -420,7 +420,7 @@ class LastValueWindowFunction<PT, Slice, BinaryPTGuard<PT>> final : public Windo
         this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         this->get_slice_values(state, dst, start, end);
     }
 
@@ -481,7 +481,7 @@ class LeadLagWindowFunction<PT, Slice, BinaryPTGuard<PT>> final : public WindowF
         this->data(state).value.insert(this->data(state).value.end(), p, p + slice.size);
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         this->get_slice_values(state, dst, start, end);
     }
 
