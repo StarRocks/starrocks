@@ -6718,9 +6718,7 @@ public class Catalog {
                 }
             }
 
-            Set<String> partNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-            partNames.addAll(origPartitions.keySet());
-            copiedTbl = olapTable.selectiveCopy(partNames, true, IndexExtState.VISIBLE);
+            copiedTbl = olapTable.selectiveCopy(origPartitions.keySet(), true, IndexExtState.VISIBLE);
         } finally {
             db.readUnlock();
         }
