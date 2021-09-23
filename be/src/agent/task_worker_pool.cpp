@@ -201,17 +201,8 @@ bool TaskWorkerPool::_register_task_info(const TTaskType::type task_type, int64_
 }
 
 void TaskWorkerPool::_remove_task_info(const TTaskType::type task_type, int64_t signature) {
-    size_t queue_size;
-    {
-        std::lock_guard task_signatures_lock(_s_task_signatures_lock);
-        std::set<int64_t>& signature_set = _s_task_signatures[task_type];
-        signature_set.erase(signature);
-        queue_size = signature_set.size();
-    }
-
-    std::string type_str;
-    EnumToString(TTaskType, task_type, type_str);
-    LOG(INFO) << "remove task info. type=" << type_str << ", signature=" << signature << ", queue_size=" << queue_size;
+    std::lock_guard task_signatures_lock(_s_task_signatures_lock);
+    _s_task_signatures[task_type].erase(signature);
 }
 
 void TaskWorkerPool::_spawn_callback_worker_thread(CALLBACK_FUNCTION callback_func) {
@@ -251,12 +242,12 @@ void TaskWorkerPool::_finish_task(const TFinishTaskRequest& finish_task_request)
         AgentStatus client_status = _master_client->finish_task(finish_task_request, &result);
 
         if (client_status == STARROCKS_SUCCESS) {
-            LOG(INFO) << "finish task success.";
             break;
         } else {
-            StarRocksMetrics::instance()->finish_task_requests_failed.increment(1);
-            LOG(WARNING) << "finish task failed. status_code=" << result.status.status_code;
             try_time += 1;
+            StarRocksMetrics::instance()->finish_task_requests_failed.increment(1);
+            LOG(WARNING) << "finish task failed " << try_time << "/" << TASK_FINISH_MAX_RETRY
+                         << ". status_code=" << result.status.status_code;
         }
 #ifndef BE_TEST
         sleep(config::sleep_one_second);
