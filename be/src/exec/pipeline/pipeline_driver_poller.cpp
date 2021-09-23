@@ -96,7 +96,7 @@ void PipelineDriverPoller::run_internal() {
             sched_yield();
 #endif
         }
-        if (spin_count != 0 && spin_count == 640) {
+        if (spin_count == 640) {
             spin_count = 0;
             sched_yield();
         }
