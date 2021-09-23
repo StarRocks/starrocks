@@ -499,19 +499,6 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
     )
 endif()
 
-if (WITH_MYSQL)
-    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-        mysql
-        )
-endif()
-
-if (WITH_HDFS)
-    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-        hdfs
-        jvm
-        )
-endif()
-
 # Add all external dependencies. They should come after the starrocks libs.
 # static link gcc's lib
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}

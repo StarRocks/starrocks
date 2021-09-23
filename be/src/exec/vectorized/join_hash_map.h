@@ -12,7 +12,7 @@
 #include "runtime/mem_tracker.h"
 #include "util/phmap/phmap.h"
 
-#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#if defined(__aarch64__)
 #include "arm_acle.h"
 #endif
 namespace starrocks::vectorized {
