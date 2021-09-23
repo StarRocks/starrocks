@@ -48,6 +48,7 @@
 #include "exec/vectorized/intersect_node.h"
 #include "exec/vectorized/mysql_scan_node.h"
 #include "exec/vectorized/olap_scan_node.h"
+#include "exec/vectorized/olap_meta_scan_node.h"
 #include "exec/vectorized/project_node.h"
 #include "exec/vectorized/repeat_node.h"
 #include "exec/vectorized/schema_scan_node.h"
@@ -458,6 +459,9 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     switch (tnode.node_type) {
     case TPlanNodeType::OLAP_SCAN_NODE:
         *node = pool->add(new vectorized::OlapScanNode(pool, tnode, descs));
+        return Status::OK();
+    case TPlanNodeType::OLAP_META_SCAN_NODE:
+        *node = pool->add(new vectorized::OlapMetaScanNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::AGGREGATION_NODE:
         if (tnode.agg_node.__isset.use_streaming_preaggregation && tnode.agg_node.use_streaming_preaggregation) {

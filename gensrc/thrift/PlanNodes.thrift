@@ -30,6 +30,7 @@ include "Partitions.thrift"
 
 enum TPlanNodeType {
   OLAP_SCAN_NODE,
+  OLAP_META_SCAN_NODE,
   MYSQL_SCAN_NODE,
   CSV_SCAN_NODE,
   SCHEMA_SCAN_NODE,

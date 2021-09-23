@@ -318,6 +318,10 @@ public:
     // otherwise this method will always return false.
     virtual bool all_page_dict_encoded() const { return false; }
 
+    // if all data page of this colum are encoded as dictionary encoding.
+    // return all dictionary words that store in dict page
+    virtual Status fetch_all_dict_words(std::vector<Slice>* words) const { return Status::NotSupported("Not Support dict."); }
+
     // return a non-negative dictionary code of |word| if it exist in this segment file,
     // otherwise -1 is returned.
     // NOTE: this method can be invoked only if `all_page_dict_encoded` returns true.
@@ -396,6 +400,8 @@ public:
 
     bool all_page_dict_encoded() const override { return _all_dict_encoded; }
 
+    Status fetch_all_dict_words(std::vector<Slice>* words) const override;
+
     int dict_lookup(const Slice& word) override;
 
     Status next_dict_codes(size_t* n, vectorized::Column* dst) override;
@@ -426,6 +432,9 @@ private:
 
     template <FieldType Type>
     Status _do_init_dict_decoder();
+
+    template <FieldType Type>
+    Status _fetch_all_dict_words(std::vector<Slice>* words) const;
 
     Status _load_dict_page();
 
@@ -466,6 +475,8 @@ private:
     Status (FileColumnIterator::*_decode_dict_codes_func)(const int32_t* codes, size_t size,
                                                           vectorized::Column* words) = nullptr;
     Status (FileColumnIterator::*_init_dict_decoder_func)() = nullptr;
+
+    Status (FileColumnIterator::*_fetch_all_dict_words_func)(std::vector<Slice>* words) const = nullptr;
 
     // whether all data pages are dict-encoded.
     bool _all_dict_encoded = false;

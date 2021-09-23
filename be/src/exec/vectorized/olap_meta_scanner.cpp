@@ -1,0 +1,104 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+
+#include "exec/vectorized/olap_meta_scanner.h"
+#include "exec/vectorized/olap_meta_scan_node.h"
+#include "storage/storage_engine.h"
+
+namespace starrocks {
+namespace vectorized {
+
+OlapMetaScanner::OlapMetaScanner(OlapMetaScanNode* parent) : _parent(parent) {}
+
+/*
+// maybe can use ColumnHelper::create_column, same as SchemaScanNode
+static vectorized::Field convert_slot_to_field(const SlotDescriptor& slot) {
+    TypeInfoPtr type_info;
+    switch(slot.type()) {
+        // Note: array 类型得拼接，目前并不支持直接返回
+        case TYPE_ARRAY:
+            TypeInfoPtr child_type_info;
+            // 暂时默认用 string 作为子域，得改
+            FieldType t = OLAP_FIELD_TYPE_CHAR;
+            child_type_info = get_type_info(t);
+            type_info.reset(new ArrayTypeInfo(child_type_info));
+            break;
+        case TYPE_INT:
+            FieldType t = OLAP_FIELD_TYPE_INT;
+            type_info = get_type_info(t);
+            break;
+        default:
+            FieldType t = OLAP_FIELD_TYPE_CHAR;
+            type_info = get_type_info(t);
+            break;
+    }
+
+    starrocks::vectorized::Field f(slot.field_idx(), slot.col_name(), type_info, false);
+
+    return f;
+}
+*/
+
+Status OlapMetaScanner::init(RuntimeState* runtime_state, const OlapMetaScannerParams& params) {
+    _runtime_state = runtime_state;
+    RETURN_IF_ERROR(_get_tablet(params.scan_range));
+    RETURN_IF_ERROR(_init_meta_reader_params());
+
+    _reader = std::make_shared<MetaReader>();
+    if (_reader.get() == nullptr) {
+        return Status::InternalError("Failed to allocate meta reader.");
+    }
+
+    RETURN_IF_ERROR(_reader->init(_reader_params));
+
+    return Status::OK();
+}
+
+Status OlapMetaScanner::_init_meta_reader_params() {
+    _reader_params.tablet = _tablet;
+    _reader_params.version = Version(0, _version);
+    _reader_params.runtime_state = _runtime_state;
+    _reader_params.chunk_size = config::vector_chunk_size;
+    _reader_params.slots = &_parent->_tuple_desc->slots();
+
+    return Status::OK();
+}
+
+Status OlapMetaScanner::get_chunk(RuntimeState* state, ChunkPtr* chunk) {
+    if (state->is_cancelled()) {
+        return Status::Cancelled("canceled state");
+    }
+    return _reader->do_get_next(chunk);
+}
+
+Status OlapMetaScanner::close(RuntimeState* state) {
+    if (_is_closed) {
+        return Status::OK();
+    }
+    _is_closed = true;
+    return Status::OK();
+}
+
+bool OlapMetaScanner::has_more() {
+    return _reader->has_more();
+}
+
+Status OlapMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
+    TTabletId tablet_id = scan_range->tablet_id;
+    SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
+    _version = strtoul(scan_range->version.c_str(), nullptr, 10);
+
+    std::string err;
+    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash, true, &err);
+    if (!_tablet) {
+        std::stringstream ss;
+        ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash   
+           << ", reason=" << err;
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+    return Status::OK();
+}
+
+} // namespace vectorized
+
+} // namesapce starrocks

@@ -141,6 +141,7 @@ add_library(Olap STATIC
     vectorized/push_handler.cpp
     vectorized/reader.cpp
     vectorized/reader.cpp
+    vectorized/meta_read.cpp
     vectorized/reader_params.cpp
     vectorized/seek_tuple.cpp
     vectorized/union_iterator.cpp
