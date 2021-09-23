@@ -3055,7 +3055,7 @@ public class Catalog {
                     parsedCreateTableStmt.setIfNotExists();
                 }
                 createTable(parsedCreateTableStmt);
-            } else if (statementBase instanceof  CreateViewStmt) {
+            } else if (statementBase instanceof CreateViewStmt) {
                 ErrorReport.reportDdlException(ErrorCode.ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW);
             }
         } catch (UserException e) {
