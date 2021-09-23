@@ -1265,6 +1265,11 @@ public:
         return PolicyTraits::apply(EmplaceDecomposable{*this}, std::forward<Args>(args)...);
     }
 
+    template <class... Args, typename std::enable_if<IsDecomposable<Args...>::value, int>::type = 0>
+    std::pair<iterator, bool> emplace_with_hash(size_t hashval, Args&&... args) {
+        return PolicyTraits::apply(EmplaceDecomposableHashval{*this, hashval}, std::forward<Args>(args)...);
+    }
+
     // This overload kicks in if we cannot deduce the key from args. It constructs
     // value_type unconditionally and then either moves it into the table or
     // destroys.
@@ -1278,9 +1283,24 @@ public:
         return PolicyTraits::apply(InsertSlot<true>{*this, std::move(*slot)}, elem);
     }
 
+    template <class... Args, typename std::enable_if<!IsDecomposable<Args...>::value, int>::type = 0>
+    std::pair<iterator, bool> emplace_with_hash(size_t hashval, Args&&... args) {
+        typename std::aligned_storage<sizeof(slot_type), alignof(slot_type)>::type raw;
+        slot_type* slot = reinterpret_cast<slot_type*>(&raw);
+
+        PolicyTraits::construct(&alloc_ref(), slot, std::forward<Args>(args)...);
+        const auto& elem = PolicyTraits::element(slot);
+        return PolicyTraits::apply(InsertSlotWithHash<true>{*this, std::move(*slot), hashval}, elem);
+    }
+
     template <class... Args>
     iterator emplace_hint(const_iterator, Args&&... args) {
         return emplace(std::forward<Args>(args)...).first;
+    }
+
+    template <class... Args>
+    iterator emplace_hint_with_hash(size_t hashval, const_iterator, Args&&... args) {
+        return emplace_with_hash(hashval, std::forward<Args>(args)...).first;
     }
 
     // Extension API: support for lazy emplace.
@@ -1672,6 +1692,15 @@ private:
             return s.emplace_decomposable(key, s.hash(key), std::forward<Args>(args)...);
         }
         raw_hash_set& s;
+    };
+
+    struct EmplaceDecomposableHashval {
+        template <class K, class... Args>
+        std::pair<iterator, bool> operator()(const K& key, Args&&... args) const {
+            return s.emplace_decomposable(key, hashval, std::forward<Args>(args)...);
+        }
+        raw_hash_set& s;
+        size_t hashval;
     };
 
     template <bool do_destroy>
@@ -4018,6 +4047,8 @@ public:
     using Base::insert;
     using Base::emplace;
     using Base::emplace_hint;
+    using Base::emplace_with_hash;
+    using Base::emplace_hint_with_hash;
     using Base::extract;
     using Base::merge;
     using Base::swap;
