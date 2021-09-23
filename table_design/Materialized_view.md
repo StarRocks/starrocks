@@ -27,7 +27,7 @@
 CREATE MATERIALIZED VIEW materialized_view_name
 AS SELECT id, SUM(clicks) AS sum_clicks
 FROM  database_name.base_table
-GROUP BY id ORDER BY id’
+GROUP BY id’
 ~~~
 
  物化视图的创建当前为异步操作。创建物化视图的语法会立即返回结果，但物化视图的生成操作可能仍在运行。用户可以使用DESC "base\_table\_name" ALL命令查看当前BASE表的物化视图。可以使用 SHOW ALTER TABLE MATERIALIZED VIEW FROM "database\_name"命令查看当前以及历史物化视图的处理状态。
@@ -40,6 +40,7 @@ GROUP BY id ORDER BY id’
   * 物化视图中至少包含一个KEY列
   * 不支持表达式计算
   * 不支持指定物化视图查询
+  * 不支持 Order By
 
 ### **删除物化视图**
 
