@@ -215,7 +215,7 @@ public:
         down_cast<InputColumnType*>(to)->append(this->data(state).result);
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
         InputColumnType* column = down_cast<InputColumnType*>(dst);
         for (size_t i = start; i < end; ++i) {
@@ -270,7 +270,7 @@ public:
         column->append(this->data(state).slice());
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
         BinaryColumn* column = down_cast<BinaryColumn*>(dst);
         for (size_t i = start; i < end; ++i) {

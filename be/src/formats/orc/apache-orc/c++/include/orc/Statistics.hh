@@ -60,7 +60,7 @@ public:
    */
 class BinaryColumnStatistics : public ColumnStatistics {
 public:
-    virtual ~BinaryColumnStatistics();
+    ~BinaryColumnStatistics() override;
 
     /**
      * Check whether column has total length.
@@ -76,7 +76,7 @@ public:
    */
 class BooleanColumnStatistics : public ColumnStatistics {
 public:
-    virtual ~BooleanColumnStatistics();
+    ~BooleanColumnStatistics() override;
 
     /**
      * Check whether column has true/false count.
@@ -93,7 +93,7 @@ public:
    */
 class DateColumnStatistics : public ColumnStatistics {
 public:
-    virtual ~DateColumnStatistics();
+    ~DateColumnStatistics() override;
 
     /**
      * Check whether column has minimum.
@@ -125,7 +125,7 @@ public:
    */
 class DecimalColumnStatistics : public ColumnStatistics {
 public:
-    virtual ~DecimalColumnStatistics();
+    ~DecimalColumnStatistics() override;
 
     /**
      * Check whether column has minimum.
@@ -169,7 +169,7 @@ public:
    */
 class DoubleColumnStatistics : public ColumnStatistics {
 public:
-    virtual ~DoubleColumnStatistics();
+    ~DoubleColumnStatistics() override;
 
     /**
      * Check whether column has minimum.
@@ -216,7 +216,7 @@ public:
    */
 class IntegerColumnStatistics : public ColumnStatistics {
 public:
-    virtual ~IntegerColumnStatistics();
+    ~IntegerColumnStatistics() override;
 
     /**
      * Check whether column has minimum.
@@ -262,7 +262,7 @@ public:
    */
 class StringColumnStatistics : public ColumnStatistics {
 public:
-    virtual ~StringColumnStatistics();
+    ~StringColumnStatistics() override;
 
     /**
      * Check whether column has minimum.
@@ -306,7 +306,7 @@ public:
    */
 class TimestampColumnStatistics : public ColumnStatistics {
 public:
-    virtual ~TimestampColumnStatistics();
+    ~TimestampColumnStatistics() override;
 
     /**
      * Check whether minimum timestamp exists.
@@ -389,7 +389,7 @@ public:
 
 class StripeStatistics : public Statistics {
 public:
-    virtual ~StripeStatistics();
+    ~StripeStatistics() override;
 
     /**
      * Get the statistics of a given RowIndex entry in a given column.

@@ -51,7 +51,7 @@ public:
 
     MemTablet(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta, DataDir* data_dir);
 
-    virtual ~MemTablet();
+    ~MemTablet() override;
 
     // Initialize
     Status init();

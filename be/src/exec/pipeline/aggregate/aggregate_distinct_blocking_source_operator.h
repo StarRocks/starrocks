@@ -10,7 +10,7 @@ class AggregateDistinctBlockingSourceOperator : public SourceOperator {
 public:
     AggregateDistinctBlockingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
             : SourceOperator(id, "aggregate_distinct_blocking_source", plan_node_id), _aggregator(aggregator) {}
-    ~AggregateDistinctBlockingSourceOperator() = default;
+    ~AggregateDistinctBlockingSourceOperator() override = default;
 
     bool has_output() const override;
     bool is_finished() const override;

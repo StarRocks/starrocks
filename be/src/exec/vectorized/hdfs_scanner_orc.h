@@ -14,7 +14,7 @@ class OrcRowReaderFilter;
 class HdfsOrcScanner final : public HdfsScanner {
 public:
     HdfsOrcScanner() = default;
-    virtual ~HdfsOrcScanner() = default;
+    ~HdfsOrcScanner() override = default;
 
     void update_counter();
     Status do_open(RuntimeState* runtime_state) override;

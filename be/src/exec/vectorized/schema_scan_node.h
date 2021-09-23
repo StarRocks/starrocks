@@ -19,7 +19,7 @@ namespace starrocks::vectorized {
 class SchemaScanNode : public ScanNode {
 public:
     SchemaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~SchemaScanNode();
+    ~SchemaScanNode() override;
 
     // Prepare conjuncts, create Schema columns to slots mapping
     // initialize _schema_scanner

@@ -12,7 +12,7 @@ public:
             : Operator(id, "aggregate_blocking_sink", plan_node_id), _aggregator(aggregator) {
         _aggregator->set_aggr_phase(AggrPhase2);
     }
-    ~AggregateBlockingSinkOperator() = default;
+    ~AggregateBlockingSinkOperator() override = default;
 
     bool has_output() const override { return false; }
     bool need_input() const override { return true; }

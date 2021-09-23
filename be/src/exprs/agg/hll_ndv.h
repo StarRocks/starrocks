@@ -78,7 +78,7 @@ public:
         this->data(state).merge(hll);
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
         Int64Column* column = down_cast<Int64Column*>(dst);
         int64_t result = this->data(state).estimate_cardinality();

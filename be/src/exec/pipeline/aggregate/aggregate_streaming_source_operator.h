@@ -10,7 +10,7 @@ class AggregateStreamingSourceOperator : public SourceOperator {
 public:
     AggregateStreamingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
             : SourceOperator(id, "aggregate_streaming_source", plan_node_id), _aggregator(aggregator) {}
-    ~AggregateStreamingSourceOperator() = default;
+    ~AggregateStreamingSourceOperator() override = default;
 
     bool has_output() const override;
     bool is_finished() const override;

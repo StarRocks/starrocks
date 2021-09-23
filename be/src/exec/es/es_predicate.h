@@ -50,8 +50,8 @@ public:
 class SExtLiteral : public ExtLiteral {
 public:
     SExtLiteral(PrimitiveType type, void* value) : _type(type), _value(value) { _str = value_to_string(); }
-    ~SExtLiteral();
-    const std::string& to_string() const { return _str; }
+    ~SExtLiteral() override;
+    const std::string& to_string() const override { return _str; }
 
 private:
     int8_t get_byte();
@@ -82,7 +82,7 @@ public:
         _value = _value_to_string(column);
     }
     VExtLiteral() = default;
-    const std::string& to_string() const { return _value; }
+    const std::string& to_string() const override { return _value; }
 
 private:
     static std::string _value_to_string(ColumnPtr& column);
