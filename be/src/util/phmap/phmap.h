@@ -563,6 +563,8 @@ static inline HashtablezInfo* SampleSlow(int64_t*) {
 }
 static inline void UnsampleSlow(HashtablezInfo*) {}
 
+// #define PHMAP_USE_CUSTOM_INFO_HANDLE
+#ifndef PHMAP_USE_CUSTOM_INFO_HANDLE
 class HashtablezInfoHandle {
 public:
     inline void RecordStorageChanged(size_t, size_t) {}
@@ -571,6 +573,29 @@ public:
     inline void RecordErase() {}
     friend inline void swap(HashtablezInfoHandle&, HashtablezInfoHandle&) noexcept {}
 };
+
+#else
+
+class HashtablezInfoHandle {
+public:
+    inline void RecordStorageChanged(size_t, size_t) {}
+    inline void RecordRehash(size_t) { rehash_number += 1; }
+    inline void RecordInsert(size_t hash_val, size_t probe_length) {
+        insert_number += 1;
+        insert_probe_length += probe_length;
+    }
+    inline void RecordErase() {}
+    friend inline void swap(HashtablezInfoHandle& x, HashtablezInfoHandle& y) noexcept {
+        std::swap(x.insert_number, y.insert_number);
+        std::swap(x.insert_probe_length, y.insert_probe_length);
+        std::swap(x.rehash_number, y.rehash_number);
+    }
+    size_t insert_number = 0;
+    size_t insert_probe_length = 0;
+    size_t rehash_number = 0;
+};
+
+#endif
 
 static inline HashtablezInfoHandle Sample() {
     return HashtablezInfoHandle();
@@ -1817,6 +1842,8 @@ private:
             auto layout = MakeLayout(old_capacity);
             Deallocate<Layout::Alignment()>(&alloc_ref(), old_ctrl, layout.AllocSize());
         }
+
+        infoz_.RecordRehash(new_capacity);
     }
 
     void drop_deletes_without_resize() PHMAP_ATTRIBUTE_NOINLINE {
@@ -2002,6 +2029,9 @@ protected:
 
     iterator iterator_at(size_t i) { return {ctrl_ + i, slots_ + i}; }
     const_iterator iterator_at(size_t i) const { return {ctrl_ + i, slots_ + i}; }
+
+public:
+    const HashtablezInfoHandle& infoz() const { return infoz_; }
 
 private:
     friend struct RawHashSetTestOnlyAccess;

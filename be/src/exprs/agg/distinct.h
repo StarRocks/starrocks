@@ -209,6 +209,14 @@ struct DistinctAggregateStateV2<PT, FixedLengthPTGuard<PT>> {
         return sum;
     }
 
+    ~DistinctAggregateStateV2() {
+#ifdef PHMAP_USE_CUSTOM_INFO_HANDLE
+        const auto& info = set.infoz();
+        VLOG_FILE << "HashSet Info: # of insert = " << info.insert_number
+                  << ", insert probe length = " << info.insert_probe_length << ", # of rehash = " << info.rehash_number;
+#endif
+    }
+
     MyHashSet set;
 };
 
