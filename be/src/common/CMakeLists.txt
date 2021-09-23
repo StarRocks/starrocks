@@ -22,26 +22,17 @@
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/common")
 
+add_library(Common STATIC
+  daemon.cpp
+  status.cpp
+  statusor.cpp
+  resource_tls.cpp
+  logconfig.cpp
+  configbase.cpp
+)
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-  add_library(Common STATIC
-    daemon.cpp
-    status.cpp
-    statusor.cpp
-    resource_tls.cpp
-    logconfig.cpp
-    configbase.cpp
-    minidump.cpp
-  )
-else()
-  add_library(Common STATIC
-   daemon.cpp
-    status.cpp
-    statusor.cpp
-    resource_tls.cpp
-    logconfig.cpp
-    configbase.cpp
-  )
+    target_sources(Common PRIVATE minidump.cpp)
 endif()
 
 # Generate env_config.h according to env_config.h.in
