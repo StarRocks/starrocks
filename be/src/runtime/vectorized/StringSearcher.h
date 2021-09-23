@@ -210,7 +210,7 @@ private:
 
             return false;
         }
-
+        return compare_without_sse(haystack, haystack_end, pos);
     }
 
     template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
@@ -230,7 +230,7 @@ private:
                 continue;
             }
         }
-        return false;
+        return compare_without_sse(haystack, haystack_end, pos);
     }
 #endif
 
