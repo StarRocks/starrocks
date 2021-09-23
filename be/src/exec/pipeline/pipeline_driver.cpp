@@ -161,16 +161,16 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
             _fragment_ctx->finish();
             auto status = _fragment_ctx->final_status();
             _fragment_ctx->runtime_state()->exec_env()->driver_dispatcher()->report_exec_state(_fragment_ctx, status,
-                                                                                               true, false);
+                                                                                               true);
         }
     }
     // last finished driver notify FE the fragment's completion again and
     // unregister the FragmentContext.
     if (_fragment_ctx->count_down_drivers()) {
         auto status = _fragment_ctx->final_status();
+        auto fragment_id = _fragment_ctx->fragment_instance_id();
         VLOG_ROW << "[Driver] Last driver finished: final_status=" << status.to_string();
-        _fragment_ctx->runtime_state()->exec_env()->driver_dispatcher()->report_exec_state(_fragment_ctx, status, true,
-                                                                                           true);
+        _query_ctx->count_down_fragments();
     }
 }
 
