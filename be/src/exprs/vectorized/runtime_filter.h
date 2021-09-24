@@ -27,7 +27,7 @@ public:
     ~SimdBlockFilter() noexcept { free(_directory); }
 
     SimdBlockFilter(const SimdBlockFilter& bf) = delete;
-    SimdBlockFilter(SimdBlockFilter&& bf);
+    SimdBlockFilter(SimdBlockFilter&& bf) noexcept;
 
     void init(size_t nums);
 

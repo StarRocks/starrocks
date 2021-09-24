@@ -33,7 +33,7 @@ public:
     }
 
     // Move assignment
-    ArrayColumn& operator=(ArrayColumn&& rhs) {
+    ArrayColumn& operator=(ArrayColumn&& rhs) noexcept {
         ArrayColumn tmp(std::move(rhs));
         this->swap_column(tmp);
         return *this;

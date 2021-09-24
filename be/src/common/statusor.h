@@ -195,10 +195,10 @@ public:
     StatusOr& operator=(const StatusOr&) = default;
 
     // `StatusOr<T>` is move constructible if `T` is move constructible.
-    StatusOr(StatusOr&&) = default;
+    StatusOr(StatusOr&&) noexcept = default;
     // `StatusOr<T>` is moveAssignable if `T` is move constructible and move
     // assignable.
-    StatusOr& operator=(StatusOr&&) = default;
+    StatusOr& operator=(StatusOr&&) noexcept = default;
 
     // Converting Constructors
 
