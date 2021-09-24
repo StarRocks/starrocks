@@ -21,6 +21,8 @@
 
 #include "storage/memory/schema.h"
 
+#include <utility>
+
 #include "gutil/strings/split.h"
 
 namespace starrocks {
@@ -65,7 +67,7 @@ size_t get_type_byte_size(ColumnType type) {
     }
 }
 
-ColumnSchema::ColumnSchema(const TabletColumn& tcolumn) : _tcolumn(tcolumn) {}
+ColumnSchema::ColumnSchema(TabletColumn tcolumn) : _tcolumn(std::move(tcolumn)) {}
 
 ColumnSchema::ColumnSchema(uint32_t cid, const string& name, ColumnType type, bool nullable, bool is_key) {
     ColumnPB cpb;
@@ -116,7 +118,7 @@ Status Schema::create(const string& desc, scoped_refptr<Schema>* sc) {
     return Status::OK();
 }
 
-Schema::Schema(const TabletSchema& tschema) : _tschema(tschema) {
+Schema::Schema(TabletSchema tschema) : _tschema(std::move(tschema)) {
     _cid_size = 1;
     _cid_to_col.resize(_cid_size, nullptr);
     _column_byte_sizes.resize(_cid_size, 0);

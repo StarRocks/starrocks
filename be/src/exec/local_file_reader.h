@@ -30,7 +30,7 @@ namespace starrocks {
 
 class LocalFileReader : public FileReader {
 public:
-    LocalFileReader(const std::string& path, int64_t start_offset);
+    LocalFileReader(std::string path, int64_t start_offset);
     ~LocalFileReader() override;
 
     Status open() override;

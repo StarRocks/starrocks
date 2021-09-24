@@ -38,6 +38,7 @@ DIAGNOSTIC_POP
 #include <set>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include "common/config.h"
 #include "util/core_local.h"
@@ -216,7 +217,7 @@ struct MetricLabel {
     std::string value;
 
     MetricLabel() {}
-    MetricLabel(const std::string& name_, const std::string& value_) : name(name_), value(value_) {}
+    MetricLabel(std::string name_, std::string value_) : name(std::move(name_)), value(std::move(value_)) {}
 
     bool operator==(const MetricLabel& other) const { return name == other.name && value == other.value; }
     bool operator!=(const MetricLabel& other) const { return !(*this == other); }
@@ -332,7 +333,7 @@ private:
 
 class MetricRegistry {
 public:
-    MetricRegistry(const std::string& name) : _name(name) {}
+    MetricRegistry(std::string name) : _name(std::move(name)) {}
     ~MetricRegistry();
     bool register_metric(const std::string& name, Metric* metric) {
         return register_metric(name, MetricLabels::EmptyLabels, metric);
@@ -394,7 +395,7 @@ using DoubleGauge = LockGauge<double>;
 
 class TcmallocMetric final : public UIntGauge {
 public:
-    TcmallocMetric(const std::string& tcmalloc_var) : UIntGauge(MetricUnit::BYTES), _tcmalloc_var(tcmalloc_var) {}
+    TcmallocMetric(std::string tcmalloc_var) : UIntGauge(MetricUnit::BYTES), _tcmalloc_var(std::move(tcmalloc_var)) {}
 
     uint64_t value() const override {
         uint64_t val = 0;

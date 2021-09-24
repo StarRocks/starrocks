@@ -52,7 +52,7 @@ public:
     // batch being returned.
     typedef std::function<Status(RowBatch**)> RunBatchSupplier;
 
-    SortedRunMerger(const TupleRowComparator& compare_less_than, RowDescriptor* row_desc, RuntimeProfile* profile,
+    SortedRunMerger(TupleRowComparator compare_less_than, RowDescriptor* row_desc, RuntimeProfile* profile,
                     bool deep_copy_input);
 
     ~SortedRunMerger() {}

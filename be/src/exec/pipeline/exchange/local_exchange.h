@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/exchange/local_exchange_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
@@ -14,8 +16,8 @@ namespace pipeline {
 // Exchange the local data from local sink operator to local source operator
 class LocalExchanger {
 public:
-    LocalExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager)
-            : _memory_manager(memory_manager) {}
+    LocalExchanger(std::shared_ptr<LocalExchangeMemoryManager> memory_manager)
+            : _memory_manager(std::move(memory_manager)) {}
 
     virtual Status accept(const vectorized::ChunkPtr& chunk) = 0;
 
