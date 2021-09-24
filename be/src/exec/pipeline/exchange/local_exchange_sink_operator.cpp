@@ -26,7 +26,7 @@ void LocalExchangeSinkOperator::finish(RuntimeState* state) {
 }
 
 Status LocalExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    _exchanger->accept(std::move(chunk));
+    _exchanger->accept(chunk);
     return Status::OK();
 }
 
