@@ -80,10 +80,27 @@ struct AggHashMapWithOneNumberKey {
         DCHECK(!key_columns[0]->is_nullable());
         auto column = down_cast<ColumnType*>(key_columns[0].get());
 
+        AggDataPtr* agg_buf = agg_states->data();
+
+        // precompute hash value first, save it into `agg_states` array.
+        static_assert(sizeof(AggDataPtr) == sizeof(size_t));
+        size_t* hash_values = reinterpret_cast<size_t*>(agg_buf);
         for (size_t i = 0; i < column->size(); i++) {
             FieldType key = column->get_data()[i];
-            auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) { ctor(key, allocate_func()); });
-            (*agg_states)[i] = iter->second;
+            size_t hashval = hash_map.hash_function()(key);
+            hash_values[i] = hashval;
+        }
+
+        static const size_t prefetch = 16;
+        // during insert, we do prefetch and insert with hash.
+        for (size_t i = 0, j = prefetch; i < column->size(); i++, j++) {
+            if (j < column->size()) {
+                hash_map.prefetch_hash(hash_values[j]);
+            }
+            FieldType key = column->get_data()[i];
+            auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i],
+                                                        [&](const auto& ctor) { ctor(key, allocate_func()); });
+            agg_buf[i] = iter->second;
         }
     }
 
