@@ -15,7 +15,7 @@ MultiWorkerPool::MultiWorkerPool(const TaskWorkerType worker_type, ExecEnv* env,
 }
 
 void MultiWorkerPool::start() {
-    for (auto pool : _pools) {
+    for (const auto& pool : _pools) {
         pool->start();
     }
 }

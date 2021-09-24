@@ -41,13 +41,13 @@ Status TableFunctionNode::init(const TPlanNode& node, RuntimeState* state) {
     TFunction table_fn = node.table_function_node.table_function.nodes[0].fn;
     std::string table_function_name = table_fn.name.function_name;
     std::vector<PrimitiveType> arg_types;
-    for (TTypeDesc ttype_desc : table_fn.arg_types) {
+    for (const TTypeDesc& ttype_desc : table_fn.arg_types) {
         TypeDescriptor arg_type = TypeDescriptor::from_thrift(ttype_desc);
         arg_types.emplace_back(arg_type.type);
     }
 
     std::vector<PrimitiveType> return_types;
-    for (TTypeDesc ttype_desc : table_fn.table_fn.ret_types) {
+    for (const TTypeDesc& ttype_desc : table_fn.table_fn.ret_types) {
         TypeDescriptor return_type = TypeDescriptor::from_thrift(ttype_desc);
         return_types.emplace_back(return_type.type);
     }

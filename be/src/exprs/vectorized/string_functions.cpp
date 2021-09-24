@@ -2181,7 +2181,7 @@ static inline ColumnPtr concat_not_const_small(std::vector<ColumnViewer<TYPE_VAR
 static inline ColumnPtr concat_not_const(Columns const& columns) {
     std::vector<ColumnViewer<TYPE_VARCHAR>> list;
     list.reserve(columns.size());
-    for (ColumnPtr col : columns) {
+    for (const ColumnPtr& col : columns) {
         list.emplace_back(ColumnViewer<TYPE_VARCHAR>(col));
     }
     const auto num_rows = columns[0]->size();

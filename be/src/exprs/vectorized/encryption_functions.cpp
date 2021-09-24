@@ -155,7 +155,7 @@ ColumnPtr EncryptionFunctions::to_base64(FunctionContext* ctx, const Columns& co
 ColumnPtr EncryptionFunctions::md5sum(FunctionContext* ctx, const Columns& columns) {
     std::vector<ColumnViewer<TYPE_VARCHAR>> list;
     list.reserve(columns.size());
-    for (ColumnPtr col : columns) {
+    for (const ColumnPtr& col : columns) {
         list.emplace_back(ColumnViewer<TYPE_VARCHAR>(col));
     }
 
