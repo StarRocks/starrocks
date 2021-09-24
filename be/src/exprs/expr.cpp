@@ -79,6 +79,7 @@ void init_builtins_dummy() {}
 FunctionContext* Expr::register_function_context(ExprContext* ctx, RuntimeState* state, int varargs_buffer_size) {
     FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
     std::vector<FunctionContext::TypeDesc> arg_types;
+    arg_types.reserve(_children.size());
     for (int i = 0; i < _children.size(); ++i) {
         arg_types.push_back(AnyValUtil::column_type_to_type_desc(_children[i]->_type));
     }
@@ -516,6 +517,7 @@ int Expr::compute_results_layout(const std::vector<Expr*>& exprs, std::vector<in
 int Expr::compute_results_layout(const std::vector<ExprContext*>& ctxs, std::vector<int>* offsets,
                                  int* var_result_begin) {
     std::vector<Expr*> exprs;
+    exprs.reserve(ctxs.size());
     for (int i = 0; i < ctxs.size(); ++i) {
         exprs.push_back(ctxs[i]->root());
     }
@@ -625,6 +627,7 @@ std::string Expr::debug_string(const std::vector<Expr*>& exprs) {
 
 std::string Expr::debug_string(const std::vector<ExprContext*>& ctxs) {
     std::vector<Expr*> exprs;
+    exprs.reserve(ctxs.size());
     for (int i = 0; i < ctxs.size(); ++i) {
         exprs.push_back(ctxs[i]->root());
     }
