@@ -25,10 +25,12 @@ void OlapMetaScanNode::_init_counter(RuntimeState* state) {
 }
 
 Status OlapMetaScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
+
     for (auto& scan_range : scan_ranges) {
         _scan_ranges.emplace_back(new TInternalScanRange(scan_range.scan_range.internal_scan_range));
     }
-
+    // just for debug
+    std::cout << "set scan ranges" << std::endl;
     return Status::OK();
 }
 
@@ -48,7 +50,15 @@ Status OlapMetaScanNode::prepare(RuntimeState* state) {
     if (nullptr == _tuple_desc) {
         return Status::InternalError("Failed to get tuple descriptor.");
     }
+    
+    _is_init = true;
+    return Status::OK();
+}
 
+Status OlapMetaScanNode::open(RuntimeState* state) {
+    if (!_is_init) {
+        return Status::InternalError("Open before Init.");
+    }
     for (auto& scan_range : _scan_ranges) {
         OlapMetaScannerParams scanner_params;
         scanner_params.scan_range = scan_range.get();
@@ -63,14 +73,7 @@ Status OlapMetaScanNode::prepare(RuntimeState* state) {
 
     _scanner_cursor = _scanners.front();
     _end_scanner = _scanners.back();
-    _is_init = true;
-    return Status::OK();
-}
 
-Status OlapMetaScanNode::open(RuntimeState* state) {
-    if (!_is_init) {
-        return Status::InternalError("Open before Init.");
-    }
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(ExecNode::open(state));
     return Status::OK();

@@ -460,9 +460,9 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     case TPlanNodeType::OLAP_SCAN_NODE:
         *node = pool->add(new vectorized::OlapScanNode(pool, tnode, descs));
         return Status::OK();
-    case TPlanNodeType::OLAP_META_SCAN_NODE:
+    case TPlanNodeType::META_SCAN_NODE:
         // just for debug
-        std::cout << "create OLAP_META_SCAN_NODE" << std::endl;
+        std::cout << "create META_SCAN_NODE" << std::endl;
         *node = pool->add(new vectorized::OlapMetaScanNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::AGGREGATION_NODE:
@@ -708,7 +708,7 @@ void ExecNode::collect_nodes(TPlanNodeType::type node_type, std::vector<ExecNode
     if (_type == node_type) {
         nodes->push_back(this);
     }
-
+    
     for (int i = 0; i < _children.size(); ++i) {
         _children[i]->collect_nodes(node_type, nodes);
     }
@@ -720,6 +720,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::ES_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::ES_HTTP_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::HDFS_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::META_SCAN_NODE, nodes);
 }
 
 bool ExecNode::_check_has_vectorized_scan_child() {
