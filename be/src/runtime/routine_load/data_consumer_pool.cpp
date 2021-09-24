@@ -102,7 +102,7 @@ void DataConsumerPool::return_consumer(const std::shared_ptr<DataConsumer>& cons
 }
 
 void DataConsumerPool::return_consumers(DataConsumerGroup* grp) {
-    for (std::shared_ptr<DataConsumer> consumer : grp->consumers()) {
+    for (const std::shared_ptr<DataConsumer>& consumer : grp->consumers()) {
         return_consumer(consumer);
     }
 }

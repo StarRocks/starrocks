@@ -131,7 +131,7 @@ void TimestampedVersionTracker::add_stale_path_version(const std::vector<RowsetM
     }
 
     PathVersionListSharedPtr ptr(new TimestampedVersionPathContainer());
-    for (auto rs : stale_rs_metas) {
+    for (const auto& rs : stale_rs_metas) {
         TimestampedVersionSharedPtr vt_ptr(new TimestampedVersion(rs->version(), rs->creation_time()));
         ptr->add_timestamped_version(vt_ptr);
     }

@@ -136,7 +136,7 @@ AgentStatus AgentUtils::rsync_from_remote(const string& remote_host, const strin
     int ret_code = 0;
     std::stringstream cmd_stream;
     cmd_stream << "rsync -r -q -e \"ssh -o StrictHostKeyChecking=no\"";
-    for (auto exclude_file_pattern : exclude_file_patterns) {
+    for (const auto& exclude_file_pattern : exclude_file_patterns) {
         cmd_stream << " --exclude=" << exclude_file_pattern;
     }
     if (transport_speed_limit_kbps != 0) {

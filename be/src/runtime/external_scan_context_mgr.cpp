@@ -124,7 +124,7 @@ void ExternalScanContextMgr::gc_expired_context() {
                 }
             }
         }
-        for (auto expired_context : expired_contexts) {
+        for (const auto& expired_context : expired_contexts) {
             // must cancel the fragment instance, otherwise return thrift transport TTransportException
             _exec_env->fragment_mgr()->cancel(expired_context->fragment_instance_id);
             _exec_env->result_queue_mgr()->cancel(expired_context->fragment_instance_id);

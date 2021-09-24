@@ -965,11 +965,11 @@ void Tablet::delete_all_files() {
     // we have to call list_versions first, or else error occurs when
     // removing hash_map item and iterating hash_map concurrently.
     std::shared_lock rdlock(_meta_lock);
-    for (auto it : _rs_version_map) {
+    for (const auto& it : _rs_version_map) {
         it.second->remove();
     }
     _rs_version_map.clear();
-    for (auto it : _inc_rs_version_map) {
+    for (const auto& it : _inc_rs_version_map) {
         it.second->remove();
     }
     _inc_rs_version_map.clear();
