@@ -71,12 +71,11 @@ public:
     explicit SplitIterator(Delimiter d) : delimiter_(std::move(d)), predicate_(), is_end_(true) {}
     SplitIterator(Delimiter d, Predicate p) : delimiter_(std::move(d)), predicate_(std::move(p)), is_end_(true) {}
     // Two constructors taking the text to iterator.
-    SplitIterator(StringPiece text, Delimiter d)
-            : text_(std::move(text)), delimiter_(std::move(d)), predicate_(), is_end_(false) {
+    SplitIterator(StringPiece text, Delimiter d) : text_(text), delimiter_(std::move(d)), predicate_(), is_end_(false) {
         ++(*this);
     }
     SplitIterator(StringPiece text, Delimiter d, Predicate p)
-            : text_(std::move(text)), delimiter_(std::move(d)), predicate_(std::move(p)), is_end_(false) {
+            : text_(text), delimiter_(std::move(d)), predicate_(std::move(p)), is_end_(false) {
         ++(*this);
     }
 

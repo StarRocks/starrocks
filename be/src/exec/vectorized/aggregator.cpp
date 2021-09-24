@@ -266,7 +266,7 @@ vectorized::ChunkPtr Aggregator::poll_chunk_buffer() {
 
 void Aggregator::offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk) {
     std::lock_guard<std::mutex> l(_buffer_mutex);
-    _buffer.push(std::move(chunk));
+    _buffer.push(chunk);
 }
 
 bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,

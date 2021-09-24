@@ -172,7 +172,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     // set attachment if has
     TTxnCommitAttachment attachment;
     if (collect_load_stat(ctx, &attachment)) {
-        request.txnCommitAttachment = std::move(attachment);
+        request.txnCommitAttachment = attachment;
         request.__isset.txnCommitAttachment = true;
     }
 
@@ -216,7 +216,7 @@ void StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     // set attachment if has
     TTxnCommitAttachment attachment;
     if (collect_load_stat(ctx, &attachment)) {
-        request.txnCommitAttachment = std::move(attachment);
+        request.txnCommitAttachment = attachment;
         request.__isset.txnCommitAttachment = true;
     }
 
@@ -245,7 +245,7 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
             ml_attach.__set_errorLogUrl(ctx->error_url);
         }
 
-        attach->mlTxnCommitAttachment = std::move(ml_attach);
+        attach->mlTxnCommitAttachment = ml_attach;
         attach->__isset.mlTxnCommitAttachment = true;
         break;
     }
@@ -261,7 +261,7 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
             manual_load_attach.__set_errorLogUrl(ctx->error_url);
         }
 
-        attach->manualLoadTxnCommitAttachment = std::move(manual_load_attach);
+        attach->manualLoadTxnCommitAttachment = manual_load_attach;
         attach->__isset.manualLoadTxnCommitAttachment = true;
         break;
     }
@@ -278,7 +278,7 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         rl_attach.__set_loadedBytes(ctx->loaded_bytes);
         rl_attach.__set_loadCostMs(ctx->load_cost_nanos / 1000 / 1000);
 
-        attach->rlTaskTxnCommitAttachment = std::move(rl_attach);
+        attach->rlTaskTxnCommitAttachment = rl_attach;
         attach->__isset.rlTaskTxnCommitAttachment = true;
         break;
     }
@@ -295,7 +295,7 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         TKafkaRLTaskProgress kafka_progress;
         kafka_progress.partitionCmtOffset = ctx->kafka_info->cmt_offset;
 
-        rl_attach.kafkaRLTaskProgress = std::move(kafka_progress);
+        rl_attach.kafkaRLTaskProgress = kafka_progress;
         rl_attach.__isset.kafkaRLTaskProgress = true;
         if (!ctx->error_url.empty()) {
             rl_attach.__set_errorLogUrl(ctx->error_url);

@@ -16,7 +16,7 @@ using Pipelines = std::vector<PipelinePtr>;
 class Pipeline {
 public:
     Pipeline() = delete;
-    Pipeline(uint32_t id, const OpFactories& op_factories) : _id(id), _op_factories(std::move(op_factories)) {}
+    Pipeline(uint32_t id, const OpFactories& op_factories) : _id(id), _op_factories(op_factories) {}
 
     uint32_t get_id() const { return _id; }
 
