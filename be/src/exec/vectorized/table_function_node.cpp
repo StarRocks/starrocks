@@ -103,6 +103,7 @@ Status TableFunctionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
         }
     }
 
+    output_columns.reserve(_outer_slots.size());
     for (int outer_idx = 0; outer_idx < _outer_slots.size(); ++outer_idx) {
         output_columns.emplace_back(_input_chunk_ptr->get_column_by_slot_id(_outer_slots[outer_idx])->clone_empty());
     }
