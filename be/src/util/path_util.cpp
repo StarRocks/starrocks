@@ -93,7 +93,7 @@ std::string file_extension(const string& path) {
         return "";
     }
 
-    string::size_type pos = file_name.rfind(".");
+    string::size_type pos = file_name.rfind('.');
     return pos == string::npos ? "" : file_name.substr(pos);
 }
 
