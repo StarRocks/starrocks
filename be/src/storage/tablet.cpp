@@ -57,7 +57,7 @@ TabletSharedPtr Tablet::create_tablet_from_meta(MemTracker* mem_tracker, const T
 }
 
 Tablet::Tablet(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta, DataDir* data_dir)
-        : BaseTablet(mem_tracker, std::move(tablet_meta), data_dir),
+        : BaseTablet(mem_tracker, tablet_meta, data_dir),
           _last_cumu_compaction_failure_millis(0),
           _last_base_compaction_failure_millis(0),
           _last_cumu_compaction_success_millis(0),

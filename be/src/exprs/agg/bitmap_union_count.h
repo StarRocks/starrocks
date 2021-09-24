@@ -30,7 +30,7 @@ public:
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
-        *dst = std::move(src[0]);
+        *dst = src[0];
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {

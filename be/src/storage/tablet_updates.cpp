@@ -1933,7 +1933,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
                 return Status::InternalError("mismatched tablet id");
             }
             auto s = RowsetFactory::create_rowset(_tablet.mem_tracker(), &_tablet.tablet_schema(),
-                                                  _tablet.tablet_path(), std::move(rowset_meta), &rowset);
+                                                  _tablet.tablet_path(), rowset_meta, &rowset);
             if (s != OLAP_SUCCESS) {
                 return Status::RuntimeError("fail to create rowset");
             }

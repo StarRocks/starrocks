@@ -243,7 +243,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
             context->next_operator_id(), id(), chunks_sorter, _sort_exec_exprs, _order_by_types,
             _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor);
     operators_sink_with_sort.emplace_back(std::move(sort_sink_operator));
-    context->add_pipeline(std::move(operators_sink_with_sort));
+    context->add_pipeline(operators_sink_with_sort);
 
     OpFactories operators_source_with_sort;
     auto sort_source_operator =
