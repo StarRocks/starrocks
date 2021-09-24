@@ -55,7 +55,7 @@ StarRocks建表的默认模型是明细模型。
 CREATE TABLE IF NOT EXISTS detail (
     event_time DATETIME NOT NULL COMMENT "datetime of event",
     event_type INT NOT NULL COMMENT "type of event",
-    user_id INT COMMENT "id of user"
+    user_id INT COMMENT "id of user",
     device_code INT COMMENT "device of ",
     channel INT COMMENT ""
 )
@@ -121,7 +121,7 @@ StarRocks会将指标列按照相同维度列进行聚合。当多条数据具�
 CREATE TABLE IF NOT EXISTS example_db.aggregate_tbl (
     site_id LARGEINT NOT NULL COMMENT "id of site",
     date DATE NOT NULL COMMENT "time of event",
-    city_code VARCHAR(20) COMMENT "city_code of user"
+    city_code VARCHAR(20) COMMENT "city_code of user",
     pv BIGINT SUM DEFAULT "0" COMMENT "total page views"
 )
 DISTRIBUTED BY HASH(site_id) BUCKETS 8;
