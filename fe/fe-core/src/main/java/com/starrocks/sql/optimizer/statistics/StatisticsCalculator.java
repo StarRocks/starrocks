@@ -93,6 +93,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -837,25 +838,30 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalRepeat(LogicalRepeatOperator node, ExpressionContext context) {
-        return computeRepeatNode(context, node.getOutputGrouping());
+        return computeRepeatNode(context, node.getOutputGrouping(), node.getGroupingIds(), node.getRepeatColumnRef());
     }
 
     @Override
     public Void visitPhysicalRepeat(PhysicalRepeatOperator node, ExpressionContext context) {
-        return computeRepeatNode(context, node.getOutputGrouping());
+        return computeRepeatNode(context, node.getOutputGrouping(), node.getGroupingIds(), node.getRepeatColumnRef());
     }
 
-    private Void computeRepeatNode(ExpressionContext context, List<ColumnRefOperator> outputGrouping) {
+    private Void computeRepeatNode(ExpressionContext context, List<ColumnRefOperator> outputGrouping,
+                                   List<List<Long>> groupingIds, List<Set<ColumnRefOperator>> repeatColumnRef) {
         Preconditions.checkState(context.arity() == 1);
-
+        Preconditions.checkState(outputGrouping.size() == groupingIds.size());
         Statistics.Builder builder = Statistics.builder();
-        for (ColumnRefOperator columnRef : outputGrouping) {
-            builder.addColumnStatistic(columnRef, ColumnStatistic.unknown());
+        for (int index = 0; index < outputGrouping.size(); ++index) {
+            // calculate the column statistics for grouping
+            List<Long> groupingId = groupingIds.get(index);
+            builder.addColumnStatistic(outputGrouping.get(index),
+                    new ColumnStatistic(Collections.min(groupingId), Collections.max(groupingId), 0, 8,
+                            groupingId.size()));
         }
 
         Statistics inputStatistics = context.getChildStatistics(0);
         builder.addColumnStatistics(inputStatistics.getColumnStatistics());
-        builder.setOutputRowCount(inputStatistics.getOutputRowCount());
+        builder.setOutputRowCount(inputStatistics.getOutputRowCount() * repeatColumnRef.size());
 
         context.setStatistics(builder.build());
         return visitOperator(context.getOp(), context);
