@@ -67,6 +67,7 @@ public class FrontendOptions {
         }
 
         InetAddress loopBack = null;
+        boolean checkIpFlag = false;
         for (InetAddress addr : hosts) {
             LOG.debug("check ip address: {}", addr);
             if (addr instanceof Inet4Address) {
@@ -75,18 +76,19 @@ public class FrontendOptions {
                 } else if (!priorityCidrs.isEmpty()) {
                     if (isInPriorNetwork(addr.getHostAddress())) {
                         localAddr = addr;
+                        checkIpFlag = true;
                         break;
-                    } else {
-                        //print some logs to remind users to properly configure Priority_networks
-                        LOG.warn("ip address range configured for priority_networks does not include the current IP address : {}", addr.getHostAddress());
-                    }
+                    } 
                 } else {
                     localAddr = addr;
                     break;
                 }
             }
         }
-
+        //if all ips not match the priority_networks then print the warning log
+        if (!checkIpFlag) {
+            LOG.warn("ip address range configured for priority_networks does not include the current IP address");
+        }
         // nothing found, use loopback addr
         if (localAddr == null) {
             localAddr = loopBack;
