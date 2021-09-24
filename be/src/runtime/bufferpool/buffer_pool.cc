@@ -75,8 +75,8 @@ void BufferPool::PageHandle::Open(Page* page, ClientHandle* client) {
 }
 
 void BufferPool::PageHandle::Reset() {
-    page_ = NULL;
-    client_ = NULL;
+    page_ = nullptr;
+    client_ = nullptr;
 }
 
 int BufferPool::PageHandle::pin_count() const {
@@ -120,7 +120,7 @@ Status BufferPool::RegisterClient(const string& name, //TmpFileMgr::FileGroup* f
                                   ReservationTracker* parent_reservation, MemTracker* mem_tracker,
                                   int64_t reservation_limit, RuntimeProfile* profile, ClientHandle* client) {
     DCHECK(!client->is_registered());
-    DCHECK(parent_reservation != NULL);
+    DCHECK(parent_reservation != nullptr);
     client->impl_ = new Client(this, //file_group,
                                name, parent_reservation, mem_tracker, reservation_limit, profile);
     return Status::OK();
@@ -130,7 +130,7 @@ void BufferPool::DeregisterClient(ClientHandle* client) {
     if (!client->is_registered()) return;
     client->impl_->Close(); // Will DCHECK if any remaining buffers or pinned pages.
     delete client->impl_;   // Will DCHECK if there are any remaining pages.
-    client->impl_ = NULL;
+    client->impl_ = nullptr;
 }
 
 Status BufferPool::CreatePage(ClientHandle* client, int64_t len, PageHandle* handle, const BufferHandle** buffer) {
@@ -398,7 +398,7 @@ BufferPool::Page* BufferPool::Client::CreatePinnedPage(BufferHandle&& buffer) {
 }
 
 void BufferPool::Client::DestroyPageInternal(PageHandle* handle, BufferHandle* out_buffer) {
-    DCHECK(handle->is_pinned() || out_buffer == NULL);
+    DCHECK(handle->is_pinned() || out_buffer == nullptr);
     Page* page = handle->page_;
     // Remove the page from the list that it is currently present in (if any).
     {
@@ -420,7 +420,7 @@ void BufferPool::Client::DestroyPageInternal(PageHandle* handle, BufferHandle* o
     //file_group_->DestroyWriteHandle(move(page->write_handle));
     //}
     //
-    if (out_buffer != NULL) {
+    if (out_buffer != nullptr) {
         DCHECK(page->buffer.is_open());
         *out_buffer = std::move(page->buffer);
         buffers_allocated_bytes_ += out_buffer->len();

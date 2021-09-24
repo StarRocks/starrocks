@@ -44,14 +44,14 @@ inline bool BufferedTupleStream2::add_row(TupleRow* row, Status* status) {
 
 inline uint8_t* BufferedTupleStream2::allocate_row(int size, Status* status) {
     DCHECK(!_closed);
-    if (UNLIKELY(_write_block == NULL || _write_block->bytes_remaining() < size)) {
+    if (UNLIKELY(_write_block == nullptr || _write_block->bytes_remaining() < size)) {
         bool got_block;
         *status = new_block_for_write(size, &got_block);
         if (!status->ok() || !got_block) {
-            return NULL;
+            return nullptr;
         }
     }
-    DCHECK(_write_block != NULL);
+    DCHECK(_write_block != nullptr);
     DCHECK(_write_block->is_pinned());
     DCHECK_GE(_write_block->bytes_remaining(), size);
     ++_num_rows;
@@ -60,7 +60,7 @@ inline uint8_t* BufferedTupleStream2::allocate_row(int size, Status* status) {
 }
 
 inline void BufferedTupleStream2::get_tuple_row(const RowIdx& idx, TupleRow* row) const {
-    DCHECK(row != NULL);
+    DCHECK(row != nullptr);
     DCHECK(!_closed);
     DCHECK(is_pinned());
     DCHECK(!_delete_on_read);

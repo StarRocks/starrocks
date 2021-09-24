@@ -41,7 +41,7 @@ bool BufferedTupleStream2::deep_copy(TupleRow* row) {
 // TODO: in case of duplicate tuples, this can redundantly serialize data.
 template <bool HasNullableTuple>
 bool BufferedTupleStream2::deep_copy_internal(TupleRow* row) {
-    if (UNLIKELY(_write_block == NULL)) {
+    if (UNLIKELY(_write_block == nullptr)) {
         return false;
     }
     DCHECK_GE(_null_indicators_write_block, 0);
@@ -62,7 +62,7 @@ bool BufferedTupleStream2::deep_copy_internal(TupleRow* row) {
     // indicator.
     if (HasNullableTuple) {
         DCHECK_GT(_null_indicators_write_block, 0);
-        uint8_t* null_word = NULL;
+        uint8_t* null_word = nullptr;
         uint32_t null_pos = 0;
         // Calculate how much space it should return.
         int to_return = 0;
@@ -73,7 +73,7 @@ bool BufferedTupleStream2::deep_copy_internal(TupleRow* row) {
             const int tuple_size = _desc.tuple_descriptors()[i]->byte_size();
             Tuple* t = row->get_tuple(i);
             const uint8_t mask = 1 << (7 - null_pos);
-            if (t != NULL) {
+            if (t != nullptr) {
                 *null_word &= ~mask;
                 memcpy(tuple_buf, t, tuple_size);
                 tuple_buf += tuple_size;
@@ -93,7 +93,7 @@ bool BufferedTupleStream2::deep_copy_internal(TupleRow* row) {
             Tuple* t = row->get_tuple(i);
             // TODO: Once IMPALA-1306 (Avoid passing empty tuples of non-materialized slots)
             // is delivered, the check below should become DCHECK(t != NULL).
-            DCHECK(t != NULL || tuple_size == 0);
+            DCHECK(t != nullptr || tuple_size == 0);
             memcpy(tuple_buf, t, tuple_size);
             tuple_buf += tuple_size;
         }
@@ -104,7 +104,7 @@ bool BufferedTupleStream2::deep_copy_internal(TupleRow* row) {
     // by the string data so only the len information is necessary.
     for (int i = 0; i < _string_slots.size(); ++i) {
         Tuple* tuple = row->get_tuple(_string_slots[i].first);
-        if (HasNullableTuple && tuple == NULL) {
+        if (HasNullableTuple && tuple == nullptr) {
             continue;
         }
         if (UNLIKELY(!copy_strings(tuple, _string_slots[i].second, &bytes_allocated))) {

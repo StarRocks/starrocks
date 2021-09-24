@@ -44,7 +44,7 @@ private:
 template <class T>
 class UpdateType {
 public:
-    bool& isnull() { return *static_cast<bool*>(0); /*unused*/ }
+    bool& isnull() { return *static_cast<bool*>(nullptr); /*unused*/ }
     T& value() { return _value; }
 
 private:

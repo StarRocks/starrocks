@@ -64,7 +64,7 @@ namespace starrocks {
 const uint32_t TASK_FINISH_MAX_RETRY = 3;
 const uint32_t PUBLISH_VERSION_MAX_RETRY = 3;
 
-std::atomic_ulong TaskWorkerPool::_s_report_version(time(NULL) * 10000);
+std::atomic_ulong TaskWorkerPool::_s_report_version(time(nullptr) * 10000);
 std::mutex TaskWorkerPool::_s_task_signatures_lock;
 std::map<TTaskType::type, std::set<int64_t>> TaskWorkerPool::_s_task_signatures;
 FrontendServiceClientCache TaskWorkerPool::_master_service_client_cache;
@@ -219,7 +219,7 @@ void TaskWorkerPool::_spawn_callback_worker_thread(CALLBACK_FUNCTION callback_fu
     pthread_sigmask(SIG_SETMASK, &mask, &omask);
 
     while (true) {
-        err = pthread_create(&thread, NULL, callback_func, this);
+        err = pthread_create(&thread, nullptr, callback_func, this);
         if (err != 0) {
             LOG(WARNING) << "failed to spawn a thread. error: " << err;
 #ifndef BE_TEST
@@ -343,7 +343,7 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
@@ -397,7 +397,7 @@ void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_alter_tablet_worker_thread_callback(void* arg_this) {
@@ -444,7 +444,7 @@ void* TaskWorkerPool::_alter_tablet_worker_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgentTaskRequest& agent_task_req,
@@ -638,7 +638,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
     }
 #endif
 
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
@@ -703,7 +703,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_this) {
@@ -763,7 +763,7 @@ void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_t
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this) {
@@ -827,7 +827,7 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
         worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req.task_type, agent_task_req.signature);
     }
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
@@ -926,7 +926,7 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
     }
 #endif
 
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_this) {
@@ -1026,7 +1026,7 @@ void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_t
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) {
@@ -1081,7 +1081,7 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
@@ -1113,7 +1113,7 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
     }
 #endif
 
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_report_disk_state_worker_thread_callback(void* arg_this) {
@@ -1173,7 +1173,7 @@ void* TaskWorkerPool::_report_disk_state_worker_thread_callback(void* arg_this) 
     }
 #endif
 
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
@@ -1229,7 +1229,7 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
     }
 #endif
 
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_upload_worker_thread_callback(void* arg_this) {
@@ -1284,7 +1284,7 @@ void* TaskWorkerPool::_upload_worker_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_download_worker_thread_callback(void* arg_this) {
@@ -1341,7 +1341,7 @@ void* TaskWorkerPool::_download_worker_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
@@ -1416,7 +1416,7 @@ void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_release_snapshot_thread_callback(void* arg_this) {
@@ -1469,7 +1469,7 @@ void* TaskWorkerPool::_release_snapshot_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 AgentStatus TaskWorkerPool::_get_tablet_info(const TTabletId tablet_id, const TSchemaHash schema_hash,
@@ -1539,7 +1539,7 @@ void* TaskWorkerPool::_move_dir_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 AgentStatus TaskWorkerPool::_move_dir(const TTabletId tablet_id, const TSchemaHash schema_hash, const std::string& src,

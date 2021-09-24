@@ -220,7 +220,7 @@ private:
     // If new_pool is non-null, new_pool will *not* be notified.
     void update_pool_quotas(ResourcePool* new_pool);
 
-    void update_pool_quotas() { update_pool_quotas(NULL); }
+    void update_pool_quotas() { update_pool_quotas(nullptr); }
 };
 
 inline void ThreadResourceMgr::ResourcePool::acquire_thread_token() {
@@ -273,10 +273,10 @@ inline void ThreadResourceMgr::ResourcePool::release_thread_token(bool required)
     // since only scanner threads call this with any frequency and that only
     // happens once when the scanner thread is complete.
     // TODO: reconsider this.
-    if (num_available_threads() > 0 && _thread_available_fn != NULL) {
+    if (num_available_threads() > 0 && _thread_available_fn != nullptr) {
         std::unique_lock<std::mutex> l(_lock);
 
-        if (num_available_threads() > 0 && _thread_available_fn != NULL) {
+        if (num_available_threads() > 0 && _thread_available_fn != nullptr) {
             _thread_available_fn(this);
         }
     }

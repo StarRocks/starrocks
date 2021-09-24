@@ -52,8 +52,8 @@ static struct InitModule {
         int x = 0;
         // futexes are ints, so we can use them only when
         // that's the same size as the lockword_ in SpinLock.
-        have_futex = (sizeof(Atomic32) == sizeof(int) && sys_futex(&x, FUTEX_WAKE, 1, NULL, NULL, 0) >= 0);
-        if (have_futex && sys_futex(&x, FUTEX_WAKE | futex_private_flag, 1, NULL, NULL, 0) < 0) {
+        have_futex = (sizeof(Atomic32) == sizeof(int) && sys_futex(&x, FUTEX_WAKE, 1, nullptr, nullptr, 0) >= 0);
+        if (have_futex && sys_futex(&x, FUTEX_WAKE | futex_private_flag, 1, nullptr, nullptr, 0) < 0) {
             futex_private_flag = 0;
         }
     }
@@ -77,9 +77,9 @@ void SpinLockDelay(volatile Atomic32* w, int32 value, int loop) {
         if (have_futex) {
             tm.tv_nsec *= 16; // increase the delay; we expect explicit wakeups
             sys_futex(reinterpret_cast<int*>(const_cast<Atomic32*>(w)), FUTEX_WAIT | futex_private_flag, value,
-                      reinterpret_cast<struct kernel_timespec*>(&tm), NULL, 0);
+                      reinterpret_cast<struct kernel_timespec*>(&tm), nullptr, 0);
         } else {
-            nanosleep(&tm, NULL);
+            nanosleep(&tm, nullptr);
         }
         errno = save_errno;
     }
@@ -88,7 +88,7 @@ void SpinLockDelay(volatile Atomic32* w, int32 value, int loop) {
 void SpinLockWake(volatile Atomic32* w, bool all) {
     if (have_futex) {
         sys_futex(reinterpret_cast<int*>(const_cast<Atomic32*>(w)), FUTEX_WAKE | futex_private_flag, all ? INT_MAX : 1,
-                  NULL, NULL, 0);
+                  nullptr, nullptr, 0);
     }
 }
 

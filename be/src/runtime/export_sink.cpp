@@ -179,7 +179,7 @@ Status ExportSink::gen_row_buffer(TupleRow* row, std::stringstream* ss) {
             case TYPE_CHAR: {
                 const StringValue* string_val = (const StringValue*)(item);
 
-                if (string_val->ptr == NULL) {
+                if (string_val->ptr == nullptr) {
                     if (string_val->len == 0) {
                     } else {
                         (*ss) << "\\N";

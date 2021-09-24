@@ -259,7 +259,7 @@ private:
         static base::big_ test(typename U::mapped_type*);
         template <typename>
         static base::small_ test(...);
-        static const bool value = (sizeof(test<T>(0)) == sizeof(base::big_));
+        static const bool value = (sizeof(test<T>(nullptr)) == sizeof(base::big_));
     };
 
     // Base template handles splitting to non-map containers

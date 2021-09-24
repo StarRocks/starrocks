@@ -594,7 +594,7 @@ private:
 class ScopedCounter {
 public:
     ScopedCounter(RuntimeProfile::Counter* counter, int64_t val) : _val(val), _counter(counter) {
-        if (counter == NULL) {
+        if (counter == nullptr) {
             return;
         }
 
@@ -603,7 +603,7 @@ public:
 
     // Increment the counter when object is destroyed
     ~ScopedCounter() {
-        if (_counter != NULL) {
+        if (_counter != nullptr) {
             _counter->update(_val);
         }
     }
@@ -625,7 +625,7 @@ class ScopedTimer {
 public:
     explicit ScopedTimer(RuntimeProfile::Counter* counter, const bool* is_cancelled = nullptr)
             : _counter(counter), _is_cancelled(is_cancelled) {
-        if (counter == NULL) {
+        if (counter == nullptr) {
             return;
         }
         DCHECK(counter->type() == TUnit::TIME_NS);
@@ -643,7 +643,7 @@ public:
     bool is_cancelled() { return _is_cancelled != nullptr && *_is_cancelled; }
 
     void UpdateCounter() {
-        if (_counter != NULL && !is_cancelled()) {
+        if (_counter != nullptr && !is_cancelled()) {
             _counter->update(_sw.elapsed_time());
         }
     }

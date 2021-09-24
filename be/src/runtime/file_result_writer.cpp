@@ -205,7 +205,7 @@ Status FileResultWriter::_write_one_row_as_csv(TupleRow* row) {
             case TYPE_VARCHAR:
             case TYPE_CHAR: {
                 const StringValue* string_val = (const StringValue*)(item);
-                if (string_val->ptr == NULL) {
+                if (string_val->ptr == nullptr) {
                     if (string_val->len != 0) {
                         _plain_text_outstream << NULL_IN_CSV;
                     }

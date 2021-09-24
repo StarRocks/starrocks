@@ -112,7 +112,7 @@ public:
 
     // Removes this tracker from _parent->_child_trackers.
     void unregister_from_parent() {
-        DCHECK(_parent != NULL);
+        DCHECK(_parent != nullptr);
         std::lock_guard<std::mutex> l(_parent->_child_trackers_lock);
         _parent->_child_trackers.erase(_child_tracker_it);
         _child_tracker_it = _parent->_child_trackers.end();
@@ -127,14 +127,14 @@ public:
             if (bytes < 0) release(-bytes);
             return;
         }
-        if (_consumption_metric != NULL) {
+        if (_consumption_metric != nullptr) {
             RefreshConsumptionFromMetric();
             return;
         }
         for (std::vector<MemTracker*>::iterator tracker = _all_trackers.begin(); tracker != _all_trackers.end();
              ++tracker) {
             (*tracker)->_consumption->add(bytes);
-            if ((*tracker)->_consumption_metric == NULL) {
+            if ((*tracker)->_consumption_metric == nullptr) {
                 DCHECK_GE((*tracker)->_consumption->current_value(), 0);
             }
         }
@@ -146,7 +146,7 @@ public:
     /// to update tracking on a particular mem tracker but the consumption against
     /// the limit recorded in one of its ancestors already happened.
     void consume_local(int64_t bytes, MemTracker* end_tracker) {
-        DCHECK(_consumption_metric == NULL) << "Should not be called on root.";
+        DCHECK(_consumption_metric == nullptr) << "Should not be called on root.";
         for (int i = 0; i < _all_trackers.size(); ++i) {
             if (_all_trackers[i] == end_tracker) return;
             DCHECK(!_all_trackers[i]->has_limit());
@@ -187,7 +187,7 @@ public:
     WARN_UNUSED_RESULT
     bool try_consume(int64_t bytes) {
         if (UNLIKELY(bytes <= 0)) return true;
-        if (_consumption_metric != NULL) RefreshConsumptionFromMetric();
+        if (_consumption_metric != nullptr) RefreshConsumptionFromMetric();
         int i;
         // Walk the tracker tree top-down.
         for (i = _all_trackers.size() - 1; i >= 0; --i) {
@@ -229,7 +229,7 @@ public:
             if (bytes < 0) consume(-bytes);
             return;
         }
-        if (_consumption_metric != NULL) {
+        if (_consumption_metric != nullptr) {
             RefreshConsumptionFromMetric();
             return;
         }
@@ -242,7 +242,7 @@ public:
             /// metric. Don't blow up in this case. (Note that this doesn't affect non-process
             /// trackers since we can enforce that the reported memory usage is internally
             /// consistent.)
-            if ((*tracker)->_consumption_metric == NULL) {
+            if ((*tracker)->_consumption_metric == nullptr) {
                 DCHECK_GE((*tracker)->_consumption->current_value(), 0) << std::endl
                                                                         << (*tracker)->LogUsage(UNLIMITED_DEPTH);
             }
@@ -270,7 +270,7 @@ public:
                 return *tracker;
             }
         }
-        return NULL;
+        return nullptr;
     }
 
     // Returns the maximum consumption that can be made without exceeding the limit on
@@ -360,7 +360,7 @@ public:
             << "label: " << _label << "; "
             << "all tracker size: " << _all_trackers.size() << "; "
             << "limit trackers size: " << _limit_trackers.size() << "; "
-            << "parent is null: " << ((_parent == NULL) ? "true" : "false") << "; ";
+            << "parent is null: " << ((_parent == nullptr) ? "true" : "false") << "; ";
         return msg.str();
     }
 

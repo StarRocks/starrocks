@@ -92,7 +92,7 @@ Status ClientCacheHelper::reopen_client(const client_factory& factory_method, vo
     // client instead.
     _client_map.erase(*client_key);
     delete info;
-    *client_key = NULL;
+    *client_key = nullptr;
 
     if (_metrics_enabled) {
         _opened_clients->increment(-1);
@@ -117,7 +117,7 @@ Status ClientCacheHelper::create_client(const TNetworkAddress& hostport, const c
     Status status = client_impl->open();
 
     if (!status.ok()) {
-        *client_key = NULL;
+        *client_key = nullptr;
         return status;
     }
 
@@ -132,7 +132,7 @@ Status ClientCacheHelper::create_client(const TNetworkAddress& hostport, const c
 }
 
 void ClientCacheHelper::release_client(void** client_key) {
-    DCHECK(*client_key != NULL) << "Trying to release NULL client";
+    DCHECK(*client_key != nullptr) << "Trying to release NULL client";
     std::lock_guard<std::mutex> lock(_lock);
     ClientMap::iterator client_map_entry = _client_map.find(*client_key);
     DCHECK(client_map_entry != _client_map.end());
@@ -157,7 +157,7 @@ void ClientCacheHelper::release_client(void** client_key) {
         _used_clients->increment(-1);
     }
 
-    *client_key = NULL;
+    *client_key = nullptr;
 }
 
 void ClientCacheHelper::close_connections(const TNetworkAddress& hostport) {
@@ -210,7 +210,7 @@ void ClientCacheHelper::test_shutdown() {
 }
 
 void ClientCacheHelper::init_metrics(MetricRegistry* metrics, const std::string& key_prefix) {
-    DCHECK(metrics != NULL);
+    DCHECK(metrics != nullptr);
     // Not strictly needed if init_metrics is called before any cache
     // usage, but ensures that _metrics_enabled is published.
     std::lock_guard<std::mutex> lock(_lock);
