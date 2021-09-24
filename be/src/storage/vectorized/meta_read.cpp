@@ -47,14 +47,17 @@ Status MetaReader::_init_params(const MetaReaderParams& read_params) {
     _params = read_params;
 
     for (auto& slot : *(read_params.slots)) {
+         // just for debug
+        std::cout << "col_name " << slot->col_name() << std::endl;
         if (!slot->is_materialized()) {
+
+            // just for debug
+            std::cout << "not is_materialized: " << slot->col_name() << std::endl;
+
             continue;
         }
         // 可能需要拆分 col name, 才能得出正确的 col_name
         int32_t index = _tablet->field_index(slot->col_name());
-
-        // just for debug
-        std::cout << "slot name" << slot->col_name() << std::endl;
 
         if (index < 0) {
             std::stringstream ss;
