@@ -85,7 +85,7 @@ void PredicateLeaf::validate() const {
         if (mLiterals.size() < 1) {
             throw std::invalid_argument("At least one literal are required!");
         }
-        for (auto literal : mLiterals) {
+        for (const auto& literal : mLiterals) {
             if (static_cast<int>(literal.getType()) != static_cast<int>(mType)) {
                 throw std::invalid_argument("leaf and literal types do not match!");
             }
@@ -95,7 +95,7 @@ void PredicateLeaf::validate() const {
         if (mColumnName.empty()) {
             throw std::invalid_argument("column name should not be empty");
         }
-        for (auto literal : mLiterals) {
+        for (const auto& literal : mLiterals) {
             if (static_cast<int>(literal.getType()) != static_cast<int>(mType)) {
                 throw std::invalid_argument("leaf and literal types do not match!");
             }

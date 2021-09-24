@@ -595,7 +595,7 @@ OLAPStatus Reader::_init_return_columns(const ReaderParams& read_params) {
         _return_columns = read_params.return_columns;
         if (_delete_handler.conditions_num() != 0 && read_params.aggregation) {
             set<uint32_t> column_set(_return_columns.begin(), _return_columns.end());
-            for (auto conds : _delete_handler.get_delete_conditions()) {
+            for (const auto& conds : _delete_handler.get_delete_conditions()) {
                 for (auto cond_column : conds.del_cond->columns()) {
                     if (column_set.find(cond_column.first) == column_set.end()) {
                         column_set.insert(cond_column.first);

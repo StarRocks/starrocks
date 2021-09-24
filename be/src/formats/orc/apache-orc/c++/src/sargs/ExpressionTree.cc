@@ -49,7 +49,7 @@ ExpressionTree::ExpressionTree(TruthValue constant)
 
 ExpressionTree::ExpressionTree(const ExpressionTree& other)
         : mOperator(other.mOperator), mLeaf(other.mLeaf), mConstant(other.mConstant) {
-    for (TreeNode child : other.mChildren) {
+    for (const TreeNode& child : other.mChildren) {
         mChildren.emplace_back(std::make_shared<ExpressionTree>(*child));
     }
 }
