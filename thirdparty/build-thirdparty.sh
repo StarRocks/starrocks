@@ -683,11 +683,15 @@ build_breakpad() {
 
 #hadoop
 build_hadoop() {
-    check_if_source_exist $HADOOP_SOURCE
-    cp -r $TP_SOURCE_DIR/$HADOOP_SOURCE $TP_INSTALL_DIR/
+    HADOOP_TARGET=$HADOOP_SOURCE
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        HADOOP_TARGET=$HADOOP_AARCH64_SOURCE
+    fi
+    check_if_source_exist $HADOOP_TARGET
+    cp -r $TP_SOURCE_DIR/$HADOOP_TARGET $TP_INSTALL_DIR/
     mkdir -p $TP_INSTALL_DIR/include/hdfs
-    cp $TP_SOURCE_DIR/$HADOOP_SOURCE/include/hdfs.h $TP_INSTALL_DIR/include/hdfs
-    cp $TP_SOURCE_DIR/$HADOOP_SOURCE/lib/native/libhdfs.a $TP_INSTALL_DIR/lib
+    cp $TP_SOURCE_DIR/$HADOOP_TARGET/include/hdfs.h $TP_INSTALL_DIR/include/hdfs
+    cp $TP_SOURCE_DIR/$HADOOP_TARGET/lib/native/libhdfs.a $TP_INSTALL_DIR/lib
 }
 
 #jdk
