@@ -147,7 +147,7 @@ StatusOr<bool> BufferControlBlock::try_add_batch(TFetchDataResult* result) {
 }
 
 Status BufferControlBlock::get_batch(TFetchDataResult* result) {
-    TFetchDataResult* item = NULL;
+    TFetchDataResult* item = nullptr;
     {
         std::unique_lock<std::mutex> l(_lock);
 
@@ -187,7 +187,7 @@ Status BufferControlBlock::get_batch(TFetchDataResult* result) {
     _packet_num++;
     // destruct item new from Result writer
     delete item;
-    item = NULL;
+    item = nullptr;
 
     return Status::OK();
 }

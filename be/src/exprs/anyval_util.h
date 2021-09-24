@@ -295,7 +295,7 @@ public:
 
     // Utility to put val into an AnyVal struct
     static void set_any_val(const void* slot, const TypeDescriptor& type, starrocks_udf::AnyVal* dst) {
-        if (slot == NULL) {
+        if (slot == nullptr) {
             dst->is_null = true;
             return;
         }

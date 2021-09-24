@@ -205,7 +205,7 @@ std::string MySQLTableDescriptor::debug_string() const {
 
 TupleDescriptor::TupleDescriptor(const TTupleDescriptor& tdesc)
         : _id(tdesc.id),
-          _table_desc(NULL),
+          _table_desc(nullptr),
           _byte_size(tdesc.byteSize),
           _num_null_bytes(tdesc.numNullBytes),
           _num_materialized_slots(0),
@@ -221,7 +221,7 @@ TupleDescriptor::TupleDescriptor(const TTupleDescriptor& tdesc)
 
 TupleDescriptor::TupleDescriptor(const PTupleDescriptor& pdesc)
         : _id(pdesc.id()),
-          _table_desc(NULL),
+          _table_desc(nullptr),
           _byte_size(pdesc.byte_size()),
           _num_null_bytes(pdesc.num_null_bytes()),
           _num_materialized_slots(0),
@@ -282,7 +282,7 @@ void TupleDescriptor::to_protobuf(PTupleDescriptor* ptuple) const {
 std::string TupleDescriptor::debug_string() const {
     std::stringstream out;
     out << "Tuple(id=" << _id << " size=" << _byte_size;
-    if (_table_desc != NULL) {
+    if (_table_desc != nullptr) {
         //out << " " << _table_desc->debug_string();
     }
 
@@ -311,7 +311,7 @@ RowDescriptor::RowDescriptor(const DescriptorTbl& desc_tbl, const std::vector<TT
         TupleDescriptor* tupleDesc = desc_tbl.get_tuple_descriptor(row_tuples[i]);
         _num_null_slots += tupleDesc->num_null_slots();
         _tuple_desc_map.push_back(tupleDesc);
-        DCHECK(_tuple_desc_map.back() != NULL);
+        DCHECK(_tuple_desc_map.back() != nullptr);
     }
     _num_null_bytes = (_num_null_slots + 7) / 8;
 
@@ -474,7 +474,7 @@ Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tb
     // deserialize table descriptors first, they are being referenced by tuple descriptors
     for (size_t i = 0; i < thrift_tbl.tableDescriptors.size(); ++i) {
         const TTableDescriptor& tdesc = thrift_tbl.tableDescriptors[i];
-        TableDescriptor* desc = NULL;
+        TableDescriptor* desc = nullptr;
 
         switch (tdesc.tableType) {
         case TTableType::MYSQL_TABLE:
@@ -514,7 +514,7 @@ Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tb
         // fix up table pointer
         if (tdesc.__isset.tableId) {
             desc->_table_desc = (*tbl)->get_table_descriptor(tdesc.tableId);
-            DCHECK(desc->_table_desc != NULL);
+            DCHECK(desc->_table_desc != nullptr);
         }
 
         (*tbl)->_tuple_desc_map[tdesc.id] = desc;
@@ -541,7 +541,7 @@ Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tb
 TableDescriptor* DescriptorTbl::get_table_descriptor(TableId id) const {
     TableDescriptorMap::const_iterator i = _tbl_desc_map.find(id);
     if (i == _tbl_desc_map.end()) {
-        return NULL;
+        return nullptr;
     } else {
         return i->second;
     }
@@ -550,7 +550,7 @@ TableDescriptor* DescriptorTbl::get_table_descriptor(TableId id) const {
 TupleDescriptor* DescriptorTbl::get_tuple_descriptor(TupleId id) const {
     TupleDescriptorMap::const_iterator i = _tuple_desc_map.find(id);
     if (i == _tuple_desc_map.end()) {
-        return NULL;
+        return nullptr;
     } else {
         return i->second;
     }
@@ -561,7 +561,7 @@ SlotDescriptor* DescriptorTbl::get_slot_descriptor(SlotId id) const {
     SlotDescriptorMap::const_iterator i = _slot_desc_map.find(id);
 
     if (i == _slot_desc_map.end()) {
-        return NULL;
+        return nullptr;
     } else {
         return i->second;
     }

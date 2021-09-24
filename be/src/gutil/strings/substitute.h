@@ -74,7 +74,7 @@ public:
     // overload const string& as well, since this allows us to avoid a temporary
     // object.
     inline SubstituteArg(const char* value) // NOLINT(runtime/explicit)
-            : text_(value), size_(value == NULL ? 0 : strlen(text_)) {}
+            : text_(value), size_(value == nullptr ? 0 : strlen(text_)) {}
     inline SubstituteArg(const string& value) // NOLINT(runtime/explicit)
             : text_(value.data()), size_(value.size()) {}
     inline SubstituteArg(const StringPiece& value) // NOLINT(runtime/explicit)
@@ -134,7 +134,7 @@ public:
     static const SubstituteArg NoArg;
 
 private:
-    inline SubstituteArg() : text_(NULL), size_(-1) {}
+    inline SubstituteArg() : text_(nullptr), size_(-1) {}
 
     const char* text_;
     int size_;

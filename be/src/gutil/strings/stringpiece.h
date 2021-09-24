@@ -139,10 +139,10 @@ public:
     //
     // Style guide exception granted:
     // http://goto/style-guide-exception-20978288
-    StringPiece() : ptr_(NULL), length_(0) {}
+    StringPiece() : ptr_(nullptr), length_(0) {}
     StringPiece(const char* str) // NOLINT(runtime/explicit)
             : ptr_(str), length_(0) {
-        if (str != NULL) {
+        if (str != nullptr) {
             size_t length = strlen(str);
             assert(length <= static_cast<size_t>(std::numeric_limits<int>::max()));
             length_ = static_cast<int>(length);
@@ -174,7 +174,7 @@ public:
     bool empty() const { return length_ == 0; }
 
     void clear() {
-        ptr_ = NULL;
+        ptr_ = nullptr;
         length_ = 0;
     }
 
@@ -186,7 +186,7 @@ public:
 
     void set(const char* str) {
         ptr_ = str;
-        if (str != NULL)
+        if (str != nullptr)
             length_ = static_cast<int>(strlen(str));
         else
             length_ = 0;
@@ -231,7 +231,7 @@ public:
     // for a StringPiece be called "as_string()".  We also leave the
     // "as_string()" method defined here for existing code.
     std::string ToString() const {
-        if (ptr_ == NULL) return std::string();
+        if (ptr_ == nullptr) return std::string();
         return std::string(data(), size());
     }
 

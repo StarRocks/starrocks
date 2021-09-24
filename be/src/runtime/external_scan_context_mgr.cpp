@@ -99,7 +99,7 @@ void ExternalScanContextMgr::gc_expired_context() {
 #ifndef BE_TEST
     while (!_is_stop) {
         std::this_thread::sleep_for(std::chrono::seconds(starrocks::config::scan_context_gc_interval_min * 60));
-        time_t current_time = time(NULL);
+        time_t current_time = time(nullptr);
         std::vector<std::shared_ptr<ScanContext>> expired_contexts;
         {
             std::lock_guard<std::mutex> l(_lock);

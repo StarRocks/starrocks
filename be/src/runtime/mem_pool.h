@@ -235,7 +235,7 @@ private:
         // guarantee alignment.
         //static_assert(
         //INITIAL_CHUNK_SIZE >= config::FLAGS_MEMORY_MAX_ALIGNMENT, "Min chunk size too low");
-        if (UNLIKELY(!find_chunk(size, CHECK_LIMIT_FIRST))) return NULL;
+        if (UNLIKELY(!find_chunk(size, CHECK_LIMIT_FIRST))) return nullptr;
 
         ChunkInfo& info = chunks_[current_chunk_idx_];
         uint8_t* result = info.chunk.data + info.allocated_bytes;

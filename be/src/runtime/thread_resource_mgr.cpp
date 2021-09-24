@@ -61,7 +61,7 @@ ThreadResourceMgr::ResourcePool::ResourcePool(ThreadResourceMgr* parent) : _pare
 void ThreadResourceMgr::ResourcePool::reset() {
     _num_threads = 0;
     _num_reserved_optional_threads = 0;
-    _thread_available_fn = NULL;
+    _thread_available_fn = nullptr;
     _max_quota = INT_MAX;
 }
 
@@ -72,7 +72,7 @@ void ThreadResourceMgr::ResourcePool::reserve_optional_tokens(int num) {
 
 ThreadResourceMgr::ResourcePool* ThreadResourceMgr::register_pool() {
     std::unique_lock<std::mutex> l(_lock);
-    ResourcePool* pool = NULL;
+    ResourcePool* pool = nullptr;
 
     if (_free_pool_objs.empty()) {
         pool = new ResourcePool(this);
@@ -81,7 +81,7 @@ ThreadResourceMgr::ResourcePool* ThreadResourceMgr::register_pool() {
         _free_pool_objs.pop_front();
     }
 
-    DCHECK(pool != NULL);
+    DCHECK(pool != nullptr);
     DCHECK(_pools.find(pool) == _pools.end());
     _pools.insert(pool);
     pool->reset();
@@ -92,7 +92,7 @@ ThreadResourceMgr::ResourcePool* ThreadResourceMgr::register_pool() {
 }
 
 void ThreadResourceMgr::unregister_pool(ResourcePool* pool) {
-    DCHECK(pool != NULL);
+    DCHECK(pool != nullptr);
     std::unique_lock<std::mutex> l(_lock);
     // this may be double unregisted after pr #3326 by LaiYingChun, so check if the pool is already unregisted
     if (_pools.find(pool) != _pools.end()) {
@@ -104,7 +104,7 @@ void ThreadResourceMgr::unregister_pool(ResourcePool* pool) {
 
 void ThreadResourceMgr::ResourcePool::set_thread_available_cb(const thread_available_cb& fn) {
     std::unique_lock<std::mutex> l(_lock);
-    DCHECK(_thread_available_fn == NULL || fn == NULL);
+    DCHECK(_thread_available_fn == nullptr || fn == nullptr);
     _thread_available_fn = fn;
 }
 
@@ -124,7 +124,7 @@ void ThreadResourceMgr::update_pool_quotas(ResourcePool* new_pool) {
 
         std::unique_lock<std::mutex> l(pool->_lock);
 
-        if (pool->num_available_threads() > 0 && pool->_thread_available_fn != NULL) {
+        if (pool->num_available_threads() > 0 && pool->_thread_available_fn != nullptr) {
             pool->_thread_available_fn(pool);
         }
     }

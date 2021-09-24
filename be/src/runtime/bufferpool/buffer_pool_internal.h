@@ -159,7 +159,7 @@ public:
     /// and the page's buffer will be returned.
     /// Neither the client's lock nor handle->page_->buffer_lock should be held by the
     /// caller.
-    void DestroyPageInternal(PageHandle* handle, BufferHandle* out_buffer = NULL);
+    void DestroyPageInternal(PageHandle* handle, BufferHandle* out_buffer = nullptr);
 
     /// Updates client state to reflect that 'page' is now a dirty unpinned page. May
     /// initiate writes for this or other dirty unpinned pages.
