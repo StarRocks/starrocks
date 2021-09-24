@@ -540,7 +540,7 @@ CONF_mInt64(max_runnings_transactions_per_txn_map, "100");
 
 // tablet_map_lock shard size, the value must be power of two.
 // this is a an enhancement for better performance to manage tablet
-CONF_Int32(tablet_map_shard_size, "32");
+CONF_Int32(tablet_map_shard_size, "512");
 
 CONF_String(plugin_path, "${STARROCKS_HOME}/plugin");
 

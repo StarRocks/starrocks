@@ -85,6 +85,8 @@ public class CreateReplicaTask extends AgentTask {
     // true if this task is created by recover request(See comment of Config.recover_with_empty_tablet)
     private boolean isRecoverTask = false;
 
+    private long createTime = 0;
+
     public CreateReplicaTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
                              short shortKeyColumnCount, int schemaHash, long version, long versionHash,
                              KeysType keysType, TStorageType storageType,
@@ -115,6 +117,7 @@ public class CreateReplicaTask extends AgentTask {
 
         this.isInMemory = isInMemory;
         this.tabletType = tabletType;
+        this.createTime = System.currentTimeMillis();
     }
 
     public void setIsRecoverTask(boolean isRecoverTask) {
@@ -127,6 +130,7 @@ public class CreateReplicaTask extends AgentTask {
 
     public void countDownLatch(long backendId, long tabletId) {
         if (this.latch != null) {
+            LOG.info("created replica {}.{} cost={}", this.tabletId, backendId, System.currentTimeMillis() - this.createTime);
             if (latch.markedCountDown(backendId, tabletId)) {
                 LOG.debug("CreateReplicaTask current latch count: {}, backend: {}, tablet:{}",
                         latch.getCount(), backendId, tabletId);

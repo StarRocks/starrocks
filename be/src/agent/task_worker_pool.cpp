@@ -33,6 +33,7 @@
 #include <sstream>
 #include <string>
 
+#include "bvar/bvar.h"
 #include "common/status.h"
 #include "env/env.h"
 #include "gen_cpp/FrontendService.h"
@@ -68,6 +69,8 @@ std::atomic_ulong TaskWorkerPool::_s_report_version(time(NULL) * 10000);
 std::mutex TaskWorkerPool::_s_task_signatures_lock;
 std::map<TTaskType::type, std::set<int64_t>> TaskWorkerPool::_s_task_signatures;
 FrontendServiceClientCache TaskWorkerPool::_master_service_client_cache;
+
+bvar::LatencyRecorder g_create_tablet_latency("starrocks", "create_tablet");
 
 TaskWorkerPool::TaskWorkerPool(const TaskWorkerType task_worker_type, ExecEnv* env, const TMasterInfo& master_info,
                                int worker_count)
@@ -298,7 +301,7 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
             create_tablet_req = agent_task_req.create_tablet_req;
             worker_pool_this->_tasks.pop_front();
         }
-
+        auto t1 = std::chrono::steady_clock::now();
         TStatusCode::type status_code = TStatusCode::OK;
         std::vector<std::string> error_msgs;
         TStatus task_status;
@@ -337,6 +340,10 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
         finish_task_request.__set_task_type(agent_task_req.task_type);
         finish_task_request.__set_signature(agent_task_req.signature);
         finish_task_request.__set_task_status(task_status);
+        auto t2 = std::chrono::steady_clock::now();
+        auto cost_ms = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1).count();
+        g_create_tablet_latency << cost_ms;
+        LOG(INFO) << "Create tablet cost=" << cost_ms;
 
         worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req.task_type, agent_task_req.signature);

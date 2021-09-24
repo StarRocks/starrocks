@@ -3199,6 +3199,7 @@ public class Catalog {
             List<Partition> partitionList = Lists.newArrayListWithCapacity(singleRangePartitionDescs.size());
 
             for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
+                long t1 = System.currentTimeMillis();
                 long partitionId = getNextId();
                 DataProperty dataProperty = singleRangePartitionDesc.getPartitionDataProperty();
                 String partitionName = singleRangePartitionDesc.getPartitionName();
@@ -3221,6 +3222,8 @@ public class Catalog {
                 partitionList.add(partition);
                 tabletIdSetForAll.addAll(tabletIdSet);
                 partitionNameToTabletSet.put(partitionName, tabletIdSet);
+                long t2 = System.currentTimeMillis();
+                LOG.info("Created partition {} cost={}", partitionName, t2 - t1);
             }
 
             // check again
@@ -3562,7 +3565,8 @@ public class Catalog {
             KeysType keysType = indexMeta.getKeysType();
             int totalTaskNum = index.getTablets().size() * replicationNum;
             MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<Long, Long>(totalTaskNum);
-            AgentBatchTask batchTask = new AgentBatchTask();
+            // AgentBatchTask batchTask = new AgentBatchTask();
+            Map<Long, AgentBatchTask> batchTaskMap = new HashMap<Long, AgentBatchTask>();
             for (Tablet tablet : index.getTablets()) {
                 long tabletId = tablet.getId();
                 for (Replica replica : tablet.getReplicas()) {
@@ -3579,14 +3583,24 @@ public class Catalog {
                             indexes,
                             isInMemory,
                             tabletType);
+
+                    if (batchTaskMap.containsKey(backendId)) {
+                        batchTaskMap.get(backendId).addTask(task);
+                    } else {
+                        AgentBatchTask batchTask = new AgentBatchTask();
+                        batchTask.addTask(task);
+                        batchTaskMap.put(backendId, batchTask);
+                    }
+
                     task.setStorageFormat(storageFormat);
-                    batchTask.addTask(task);
                     // add to AgentTaskQueue for handling finish report.
                     // not for resending task
                     AgentTaskQueue.addTask(task);
                 }
             }
-            AgentTaskExecutor.submit(batchTask);
+            for (AgentBatchTask batchTask : batchTaskMap.values()) {
+                AgentTaskExecutor.submit(batchTask);
+            }
 
             // estimate timeout
             long timeout = Config.tablet_create_timeout_second * 1000L * totalTaskNum;
@@ -3601,7 +3615,9 @@ public class Catalog {
             if (!ok || !countDownLatch.getStatus().ok()) {
                 errMsg = "Failed to create partition[" + partitionName + "]. Timeout.";
                 // clear tasks
-                AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
+                for (AgentBatchTask batchTask : batchTaskMap.values()) {
+                    AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
+                }
 
                 if (!countDownLatch.getStatus().ok()) {
                     errMsg += " Error: " + countDownLatch.getStatus().getErrorMsg();
