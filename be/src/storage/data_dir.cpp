@@ -156,7 +156,7 @@ Status DataDir::_read_cluster_id(const std::string& path, int32_t* cluster_id) {
     fs.close();
     int32_t tmp_cluster_id = -1;
     if (!cluster_id_str.empty()) {
-        size_t pos = cluster_id_str.find("-");
+        size_t pos = cluster_id_str.find('-');
         if (pos != std::string::npos) {
             tmp_cluster_id = std::stoi(cluster_id_str.substr(0, pos).c_str());
         } else {
