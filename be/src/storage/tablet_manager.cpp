@@ -273,7 +273,6 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(const AlterTable
 
     // should remove the tablet's pending_id no matter create-tablet success or not
     DataDir* data_dir = tablet->data_dir();
-    SCOPED_CLEANUP({ data_dir->remove_pending_ids(StrCat(TABLET_ID_PREFIX, new_tablet_id)); });
 
     // TODO(yiguolei)
     // the following code is very difficult to understand because it mixed alter tablet v2
@@ -371,18 +370,8 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
                                                                     const bool is_schema_change,
                                                                     const Tablet* base_tablet,
                                                                     const std::vector<DataDir*>& data_dirs) {
-    std::string pending_id = StrCat(TABLET_ID_PREFIX, request.tablet_id);
-    // Many attempts are made here in the hope that even if a disk fails, it can still continue.
-    DataDir* last_dir = nullptr;
     for (const auto& data_dir : data_dirs) {
-        if (last_dir != nullptr) {
-            // If last_dir != null, it means the last attempt to create a tablet failed
-            last_dir->remove_pending_ids(pending_id);
-        }
-        last_dir = data_dir;
-
         TabletMetaSharedPtr tablet_meta;
-        // if create meta faild, do not need to clean dir, because it is only in memory
         Status st = _create_tablet_meta_unlocked(request, data_dir, is_schema_change, base_tablet, &tablet_meta);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to create tablet meta. root=" << data_dir->path() << " status=" << st.to_string();
