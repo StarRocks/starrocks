@@ -219,7 +219,7 @@ public:
 
     Index maxProcessed() const { return _max_processed; }
 
-    inline void add(std::vector<const TDigest*> digests) { add(digests.cbegin(), digests.cend()); }
+    inline void add(const std::vector<const TDigest*>& digests) { add(digests.cbegin(), digests.cend()); }
 
     // merge in a vector of tdigests in the most efficient manner possible
     // in constant space

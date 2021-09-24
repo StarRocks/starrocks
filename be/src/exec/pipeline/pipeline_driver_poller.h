@@ -30,7 +30,7 @@ public:
     // shutdown poller thread
     void shutdown();
     // add blocked driver to poller
-    void add_blocked_driver(DriverPtr driver);
+    void add_blocked_driver(const DriverPtr& driver);
 
 private:
     void run_internal();

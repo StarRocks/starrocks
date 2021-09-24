@@ -155,7 +155,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& updates) {
     // Load all rowsets of this tablet into memory.
     // NOTE: This may change in a near future, e.g, manage rowsets in a separate module and load
     // them on demand.
-    auto rowset_iterate_func = [&](RowsetMetaSharedPtr rowset_meta) -> bool {
+    auto rowset_iterate_func = [&](const RowsetMetaSharedPtr& rowset_meta) -> bool {
         RowsetSharedPtr rowset;
         auto ost = RowsetFactory::create_rowset(_tablet._mem_tracker, &_tablet.tablet_schema(), _tablet.tablet_path(),
                                                 rowset_meta, &rowset);

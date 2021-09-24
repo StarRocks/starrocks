@@ -102,7 +102,7 @@ void ThreadResourceMgr::unregister_pool(ResourcePool* pool) {
     }
 }
 
-void ThreadResourceMgr::ResourcePool::set_thread_available_cb(thread_available_cb fn) {
+void ThreadResourceMgr::ResourcePool::set_thread_available_cb(const thread_available_cb& fn) {
     std::unique_lock<std::mutex> l(_lock);
     DCHECK(_thread_available_fn == NULL || fn == NULL);
     _thread_available_fn = fn;

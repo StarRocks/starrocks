@@ -21,6 +21,8 @@
 
 #include "util/file_cache.h"
 
+#include <utility>
+
 #include "env/env.h"
 #include "gutil/strings/substitute.h"
 
@@ -32,7 +34,7 @@ FileCache<FileType>::FileCache(const std::string& cache_name, int max_open_files
 
 template <class FileType>
 FileCache<FileType>::FileCache(const std::string& cache_name, std::shared_ptr<Cache> cache)
-        : _cache_name(cache_name), _cache(cache), _is_cache_own(false) {}
+        : _cache_name(cache_name), _cache(std::move(cache)), _is_cache_own(false) {}
 
 template <class FileType>
 bool FileCache<FileType>::lookup(const std::string& file_name, OpenedFileHandle<FileType>* file_handle) {

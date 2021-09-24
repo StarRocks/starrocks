@@ -18,7 +18,7 @@ using Operators = std::vector<OperatorPtr>;
 
 class Operator {
 public:
-    Operator(int32_t id, std::string name, int32_t plan_node_id);
+    Operator(int32_t id, const std::string& name, int32_t plan_node_id);
     virtual ~Operator() = default;
 
     virtual Status prepare(RuntimeState* state);

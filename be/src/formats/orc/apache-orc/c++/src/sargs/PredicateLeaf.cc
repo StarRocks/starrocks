@@ -33,7 +33,7 @@
 
 namespace orc {
 
-PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName, Literal literal)
+PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName, const Literal& literal)
         : mOperator(op), mType(type), mColumnName(colName) {
     mLiterals.emplace_back(literal);
     mHashCode = hashCode();

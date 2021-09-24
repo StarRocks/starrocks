@@ -26,6 +26,7 @@
 #include <functional>
 #include <sstream>
 #include <unordered_set>
+#include <utility>
 
 namespace orc {
 
@@ -94,14 +95,14 @@ SearchArgumentBuilder& SearchArgumentBuilderImpl::end() {
     return *this;
 }
 
-size_t SearchArgumentBuilderImpl::addLeaf(PredicateLeaf leaf) {
+size_t SearchArgumentBuilderImpl::addLeaf(const PredicateLeaf& leaf) {
     size_t id = mLeaves.size();
     const auto& result = mLeaves.insert(std::make_pair(leaf, id));
     return result.first->second;
 }
 
 SearchArgumentBuilder& SearchArgumentBuilderImpl::compareOperator(PredicateLeaf::Operator op, const std::string& column,
-                                                                  PredicateDataType type, Literal literal) {
+                                                                  PredicateDataType type, const Literal& literal) {
     TreeNode parent = mCurrTree.front();
     if (column.empty()) {
         parent->addChild(std::make_shared<ExpressionTree>(TruthValue::YES_NO_NULL));
@@ -474,7 +475,7 @@ TreeNode SearchArgumentBuilderImpl::convertToCNF(TreeNode root) {
 }
 
 SearchArgumentImpl::SearchArgumentImpl(TreeNode root, const std::vector<PredicateLeaf>& leaves)
-        : mExpressionTree(root), mLeaves(leaves) {
+        : mExpressionTree(std::move(root)), mLeaves(leaves) {
     // PASS
 }
 

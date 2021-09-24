@@ -187,7 +187,7 @@ private:
     int64_t FreeToSystem(std::vector<BufferHandle>&& buffers);
 
     /// Compute a sum over all arenas. Does not lock the arenas.
-    int64_t SumOverArenas(std::function<int64_t(FreeBufferArena* arena)> compute_fn) const;
+    int64_t SumOverArenas(const std::function<int64_t(FreeBufferArena* arena)>& compute_fn) const;
 
     /// The pool that this allocator is associated with.
     BufferPool* const pool_;

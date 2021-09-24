@@ -22,6 +22,7 @@
 #include "runtime/disk_io_mgr.h"
 
 #include <boost/algorithm/string.hpp>
+#include <utility>
 
 #include "runtime/disk_io_mgr_internal.h"
 
@@ -241,7 +242,7 @@ DiskIoMgr::WriteRange::WriteRange(const string& file, int64_t file_offset, int d
     _file = file;
     _offset = file_offset;
     _disk_id = disk_id;
-    _callback = callback;
+    _callback = std::move(callback);
     _request_type = RequestType::WRITE;
 }
 

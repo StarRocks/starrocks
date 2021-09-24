@@ -45,7 +45,7 @@ uint128 CityHash128(const char* s, size_t len);
 
 // Hash function for a byte array.  For convenience, a 128-bit seed is also
 // hashed into the result.  The mapping will never change.
-uint128 CityHash128WithSeed(const char* s, size_t len, uint128 seed);
+uint128 CityHash128WithSeed(const char* s, size_t len, const uint128& seed);
 
 } // namespace util_hash
 

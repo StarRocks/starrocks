@@ -51,7 +51,7 @@ public:
         }
     }
 
-    void add_request(TransmitChunkInfo request) {
+    void add_request(const TransmitChunkInfo& request) {
         _in_flight_rpc_num++;
         _pending_chunks.put(request);
     }

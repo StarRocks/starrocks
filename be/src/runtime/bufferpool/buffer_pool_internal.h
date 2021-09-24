@@ -27,6 +27,7 @@
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <utility>
 
 #include "runtime/bufferpool/buffer_pool.h"
 #include "runtime/bufferpool/buffer_pool_counters.h"
@@ -117,7 +118,7 @@ public:
         return page;
     }
 
-    void iterate(std::function<bool(Page*)> fn) { list_.iterate(fn); }
+    void iterate(std::function<bool(Page*)> fn) { list_.iterate(std::move(fn)); }
     bool contains(Page* page) { return list_.contains(page); }
     Page* tail() { return list_.tail(); }
     bool empty() const { return list_.empty(); }

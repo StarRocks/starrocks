@@ -26,6 +26,7 @@
 #include <deque>
 #include <list>
 #include <mutex>
+#include <utility>
 
 #include "common/status.h"
 #include "common/statusor.h"
@@ -84,7 +85,9 @@ public:
 
     const TUniqueId& fragment_id() const { return _fragment_id; }
 
-    void set_query_statistics(std::shared_ptr<QueryStatistics> statistics) { _query_statistics = statistics; }
+    void set_query_statistics(std::shared_ptr<QueryStatistics> statistics) {
+        _query_statistics = std::move(statistics);
+    }
 
     void update_num_written_rows(int64_t num_rows) {
         // _query_statistics may be null when the result sink init failed

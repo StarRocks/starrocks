@@ -454,7 +454,7 @@ string FpToString(Fprint fp) {
 }
 
 // Default arguments
-string Uint128ToHexString(uint128 ui128) {
+string Uint128ToHexString(const uint128& ui128) {
     char buf[33];
     snprintf(buf, sizeof(buf), "%016" PRIx64, Uint128High64(ui128));
     snprintf(buf + 16, sizeof(buf) - 16, "%016" PRIx64, Uint128Low64(ui128));

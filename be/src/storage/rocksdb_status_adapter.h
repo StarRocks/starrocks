@@ -6,7 +6,7 @@
 
 namespace starrocks {
 
-static inline Status to_status(const rocksdb::Status from) {
+static inline Status to_status(const rocksdb::Status& from) {
     switch (from.code()) {
     case rocksdb::Status::kOk:
         return Status::OK();

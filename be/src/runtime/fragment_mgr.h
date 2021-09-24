@@ -62,7 +62,7 @@ public:
     Status exec_plan_fragment(const TExecPlanFragmentParams& params);
 
     // TODO(zc): report this is over
-    Status exec_plan_fragment(const TExecPlanFragmentParams& params, FinishCallback cb);
+    Status exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb);
 
     Status cancel(const TUniqueId& fragment_id) {
         return cancel(fragment_id, PPlanFragmentCancelReason::INTERNAL_ERROR);
@@ -86,7 +86,7 @@ public:
                                        std::vector<TScanColumnDesc>* selected_columns);
 
 private:
-    void exec_actual(std::shared_ptr<FragmentExecState> exec_state, FinishCallback cb);
+    void exec_actual(const std::shared_ptr<FragmentExecState>& exec_state, const FinishCallback& cb);
 
     // This is input params
     ExecEnv* _exec_env;

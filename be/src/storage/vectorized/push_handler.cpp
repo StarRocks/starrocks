@@ -239,8 +239,8 @@ void PushBrokerReader::print_profile() {
 //           clear schema change info in both current tablet and related
 //           tablets, finally we will only push for current tablets. this is
 //           very useful in rollup action.
-Status PushHandler::process_streaming_ingestion(TabletSharedPtr tablet, const TPushReq& request, PushType push_type,
-                                                std::vector<TTabletInfo>* tablet_info_vec) {
+Status PushHandler::process_streaming_ingestion(const TabletSharedPtr& tablet, const TPushReq& request,
+                                                PushType push_type, std::vector<TTabletInfo>* tablet_info_vec) {
     LOG(INFO) << "begin to realtime vectorized push. tablet=" << tablet->full_name()
               << ", transaction_id=" << request.transaction_id;
     DCHECK_EQ(push_type, PUSH_NORMAL_V2);
@@ -409,8 +409,8 @@ void PushHandler::_get_tablet_infos(const std::vector<TabletVars>& tablet_vars,
     }
 }
 
-Status PushHandler::_convert(TabletSharedPtr cur_tablet, TabletSharedPtr new_tablet_vec, RowsetSharedPtr* cur_rowset,
-                             RowsetSharedPtr* new_rowset) {
+Status PushHandler::_convert(const TabletSharedPtr& cur_tablet, const TabletSharedPtr& new_tablet_vec,
+                             RowsetSharedPtr* cur_rowset, RowsetSharedPtr* new_rowset) {
     Status st;
     uint32_t num_rows = 0;
     PUniqueId load_id;

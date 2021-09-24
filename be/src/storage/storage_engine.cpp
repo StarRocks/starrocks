@@ -675,7 +675,7 @@ OLAPStatus StorageEngine::_start_trash_sweep(double* usage) {
 
 void StorageEngine::_clean_unused_rowset_metas() {
     std::vector<RowsetMetaSharedPtr> invalid_rowset_metas;
-    auto clean_rowset_func = [this, &invalid_rowset_metas](TabletUid tablet_uid, RowsetId rowset_id,
+    auto clean_rowset_func = [this, &invalid_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
                                                            const std::string& meta_str) -> bool {
         RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
         bool parsed = rowset_meta->init(meta_str);
@@ -791,7 +791,7 @@ void StorageEngine::start_delete_unused_rowset() {
     }
 }
 
-void StorageEngine::add_unused_rowset(RowsetSharedPtr rowset) {
+void StorageEngine::add_unused_rowset(const RowsetSharedPtr& rowset) {
     if (rowset == nullptr) {
         return;
     }
