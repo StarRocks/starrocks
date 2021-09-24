@@ -94,7 +94,7 @@ public:
 
     static ReusableClosure<T>* create() { return new ReusableClosure<T>(); }
 
-    void addFailedHandler(std::function<void()> fn) { failed_handler = fn; }
+    void addFailedHandler(std::function<void()> fn) { failed_handler = std::move(fn); }
     void addSuccessHandler(std::function<void(const T&, bool)> fn) { success_handler = fn; }
 
     void join() {

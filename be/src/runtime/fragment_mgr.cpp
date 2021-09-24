@@ -96,7 +96,7 @@ public:
     const DateTimeValue& start_time() const { return _start_time; }
 
     // Update status of this fragment execute
-    Status update_status(Status status) {
+    Status update_status(const Status& status) {
         std::lock_guard<std::mutex> l(_status_lock);
         if (!status.ok() && _exec_status.ok()) {
             _exec_status = status;
@@ -359,7 +359,7 @@ FragmentMgr::~FragmentMgr() {
 
 static void empty_function(PlanFragmentExecutor* exec) {}
 
-void FragmentMgr::exec_actual(std::shared_ptr<FragmentExecState> exec_state, FinishCallback cb) {
+void FragmentMgr::exec_actual(const std::shared_ptr<FragmentExecState>& exec_state, const FinishCallback& cb) {
     exec_state->execute();
 
     {
@@ -382,7 +382,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params) {
     return exec_plan_fragment(params, std::bind<void>(&empty_function, std::placeholders::_1));
 }
 
-Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, FinishCallback cb) {
+Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb) {
     const TUniqueId& fragment_instance_id = params.params.fragment_instance_id;
     std::shared_ptr<FragmentExecState> exec_state;
     {

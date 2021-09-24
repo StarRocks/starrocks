@@ -21,6 +21,8 @@
 
 #include "runtime/buffer_control_block.h"
 
+#include <utility>
+
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/raw_value.h"
@@ -226,7 +228,7 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
 Status BufferControlBlock::close(Status exec_status) {
     std::unique_lock<std::mutex> l(_lock);
     _is_close = true;
-    _status = exec_status;
+    _status = std::move(exec_status);
 
     // notify blocked get thread
     _data_arriaval.notify_all();

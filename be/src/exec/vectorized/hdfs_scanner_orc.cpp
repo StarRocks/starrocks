@@ -2,6 +2,8 @@
 
 #include "exec/vectorized/hdfs_scanner_orc.h"
 
+#include <utility>
+
 #include "env/env.h"
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "gen_cpp/orc_proto.pb.h"
@@ -12,7 +14,7 @@ namespace starrocks::vectorized {
 class ORCHdfsFileStream : public orc::InputStream {
 public:
     ORCHdfsFileStream(std::shared_ptr<RandomAccessFile> file, uint64_t length, HdfsScanStats* stats)
-            : _file(file), _length(length), _stats(stats) {}
+            : _file(std::move(file)), _length(length), _stats(stats) {}
 
     ~ORCHdfsFileStream() override = default;
 

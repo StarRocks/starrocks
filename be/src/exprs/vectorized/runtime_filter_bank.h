@@ -41,11 +41,11 @@ public:
     // =================================
     // create and fill runtime IN filter
     static ExprContext* create_runtime_in_filter(RuntimeState* state, ObjectPool* pool, Expr* probe_expr, bool eq_null);
-    static Status fill_runtime_in_filter(const ColumnPtr column, Expr* probe_expr, ExprContext* filter);
+    static Status fill_runtime_in_filter(const ColumnPtr& column, Expr* probe_expr, ExprContext* filter);
 
     // ====================================
     static JoinRuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, PrimitiveType type);
-    static Status fill_runtime_bloom_filter(const ColumnPtr column, PrimitiveType type, JoinRuntimeFilter* filter);
+    static Status fill_runtime_bloom_filter(const ColumnPtr& column, PrimitiveType type, JoinRuntimeFilter* filter);
 };
 
 // how to generate & publish this runtime filter

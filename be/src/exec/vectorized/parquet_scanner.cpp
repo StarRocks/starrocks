@@ -226,7 +226,7 @@ Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotD
 }
 
 Status ParquetScanner::convert_array_to_column(ConvertFunc conv_func, size_t num_elements, const arrow::Array* array,
-                                               const TypeDescriptor* type_desc, ColumnPtr column) {
+                                               const TypeDescriptor* type_desc, const ColumnPtr& column) {
     uint8_t* null_data;
     Column* data_column;
     if (column->is_nullable()) {

@@ -23,6 +23,7 @@
 #define BE_EXEC_ES_PREDICATE_H
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "column/column.h"
@@ -154,7 +155,7 @@ struct ExtIsNullPredicate : public ExtPredicate {
 struct ExtFunction : public ExtPredicate {
     ExtFunction(TExprNodeType::type node_type, const std::string& func_name, std::vector<ExtColumnDesc> cols,
                 std::vector<ExtLiteral*> values)
-            : ExtPredicate(node_type), func_name(func_name), cols(cols), values(std::move(values)) {}
+            : ExtPredicate(node_type), func_name(func_name), cols(std::move(cols)), values(std::move(values)) {}
 
     const std::string func_name;
     std::vector<ExtColumnDesc> cols;

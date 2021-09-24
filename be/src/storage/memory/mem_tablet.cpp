@@ -28,7 +28,7 @@
 namespace starrocks {
 namespace memory {
 
-MemTablet::MemTablet(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta, DataDir* data_dir)
+MemTablet::MemTablet(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
         : BaseTablet(mem_tracker, tablet_meta, data_dir) {
     _mem_schema.reset(new Schema(tablet_meta->tablet_schema()));
     _mem_tracker->consume(sizeof(MemTablet));
@@ -38,7 +38,8 @@ MemTablet::~MemTablet() {
     _mem_tracker->release(sizeof(MemTablet));
 }
 
-std::shared_ptr<MemTablet> MemTablet::create_tablet_from_meta(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta,
+std::shared_ptr<MemTablet> MemTablet::create_tablet_from_meta(MemTracker* mem_tracker,
+                                                              const TabletMetaSharedPtr& tablet_meta,
                                                               DataDir* data_dir) {
     return std::make_shared<MemTablet>(mem_tracker, tablet_meta, data_dir);
 }

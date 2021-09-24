@@ -393,7 +393,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 // else: (TODO)
 //
 // MUST hold tablet's header lock, push lock, cumulative lock and base compaction lock
-Status SnapshotLoader::move(const std::string& snapshot_path, TabletSharedPtr tablet, bool overwrite) {
+Status SnapshotLoader::move(const std::string& snapshot_path, const TabletSharedPtr& tablet, bool overwrite) {
     std::string tablet_path = tablet->tablet_path();
     std::string store_path = tablet->data_dir()->path();
     LOG(INFO) << "begin to move snapshot files. from: " << snapshot_path << ", to: " << tablet_path
@@ -679,7 +679,7 @@ Status SnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, cons
 
 void SnapshotLoader::_assemble_file_name(const std::string& snapshot_path, const std::string& tablet_path,
                                          int64_t tablet_id, int64_t start_version, int64_t end_version,
-                                         int64_t vesion_hash, int32_t seg_num, const std::string suffix,
+                                         int64_t vesion_hash, int32_t seg_num, const std::string& suffix,
                                          std::string* snapshot_file, std::string* tablet_file) {
     std::stringstream ss1;
     ss1 << snapshot_path << "/" << tablet_id << "_" << start_version << "_" << end_version << "_" << vesion_hash << "_"

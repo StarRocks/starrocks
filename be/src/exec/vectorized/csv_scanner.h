@@ -3,6 +3,7 @@
 #pragma once
 
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "exec/vectorized/file_scanner.h"
@@ -93,7 +94,7 @@ private:
         CSVReader(std::shared_ptr<SequentialFile> file, char record_delimiter, string field_delimiter)
                 : _file(std::move(file)),
                   _record_delimiter(record_delimiter),
-                  _field_delimiter(field_delimiter),
+                  _field_delimiter(std::move(field_delimiter)),
                   _storage(kMinBufferSize),
                   _buff(_storage.data(), _storage.size()) {}
 

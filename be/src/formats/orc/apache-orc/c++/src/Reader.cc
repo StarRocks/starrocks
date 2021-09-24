@@ -185,7 +185,7 @@ ColumnSelector::ColumnSelector(const FileContents* _contents) : contents(_conten
     buildTypeNameIdMap(contents->schema.get());
 }
 
-RowReaderImpl::RowReaderImpl(std::shared_ptr<FileContents> _contents, const RowReaderOptions& opts)
+RowReaderImpl::RowReaderImpl(const std::shared_ptr<FileContents>& _contents, const RowReaderOptions& opts)
         : localTimezone(getLocalTimezone()),
           contents(_contents),
           throwOnHive11DecimalOverflow(opts.getThrowOnHive11DecimalOverflow()),
