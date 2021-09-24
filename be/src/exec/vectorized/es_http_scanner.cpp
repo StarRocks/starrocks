@@ -4,6 +4,8 @@
 
 #include <fmt/format.h>
 
+#include <memory>
+
 #include "exec/exec_node.h"
 #include "exprs/expr.h"
 #include "runtime/mem_tracker.h"
@@ -43,7 +45,7 @@ Status EsHttpScanner::open() {
     }
 
     const std::string& host = _properties.at(ESScanReader::KEY_HOST_PORT);
-    _es_reader.reset(new ESScanReader(host, _properties, _doc_value_mode));
+    _es_reader = std::make_unique<ESScanReader>(host, _properties, _doc_value_mode);
     RETURN_IF_ERROR(_es_reader->open());
 
     _rows_read_counter = ADD_COUNTER(_profile, "RowsRead", TUnit::UNIT);

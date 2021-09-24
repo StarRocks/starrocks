@@ -21,6 +21,7 @@
 
 #include "exec/tablet_info.h"
 
+#include <memory>
 #include <utility>
 
 #include "runtime/mem_pool.h"
@@ -195,8 +196,8 @@ Status OlapTablePartitionParam::init() {
         }
     }
 
-    _partitions_map.reset(new std::map<Tuple*, OlapTablePartition*, OlapTablePartKeyComparator>(
-            OlapTablePartKeyComparator(_partition_slot_descs)));
+    _partitions_map = std::make_unique<std::map<Tuple*, OlapTablePartition*, OlapTablePartKeyComparator>>(
+            OlapTablePartKeyComparator(_partition_slot_descs));
     if (_t_param.__isset.distributed_columns) {
         for (auto& col : _t_param.distributed_columns) {
             auto it = slots_map.find(col);

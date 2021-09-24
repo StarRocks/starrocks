@@ -24,6 +24,7 @@
 #include <boost/thread/thread.hpp>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <utility>
 
 #include "common/config.h"

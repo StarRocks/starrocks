@@ -333,7 +333,7 @@ Status FromRowBatchConverter::convert(std::shared_ptr<arrow::RecordBatch>* out) 
 
     for (size_t idx = 0; idx < num_fields; ++idx) {
         _cur_field_idx = idx;
-        _cur_slot_ref.reset(new SlotRef(slot_descs[idx]));
+        _cur_slot_ref = std::make_unique<SlotRef>(slot_descs[idx]);
         RETURN_IF_ERROR(_cur_slot_ref->prepare(slot_descs[idx], _batch.row_desc()));
         auto arrow_st = arrow::VisitTypeInline(*_schema->field(idx)->type(), this);
         if (!arrow_st.ok()) {
@@ -427,7 +427,7 @@ Status ToRowBatchConverter::convert(std::shared_ptr<RowBatch>* result) {
         }
     }
     for (size_t idx = 0; idx < num_fields; ++idx) {
-        _cur_slot_ref.reset(new SlotRef(slot_descs[idx]));
+        _cur_slot_ref = std::make_unique<SlotRef>(slot_descs[idx]);
         RETURN_IF_ERROR(_cur_slot_ref->prepare(slot_descs[idx], _row_desc));
         auto arrow_st = arrow::VisitArrayInline(*_batch.column(idx), this);
         if (!arrow_st.ok()) {

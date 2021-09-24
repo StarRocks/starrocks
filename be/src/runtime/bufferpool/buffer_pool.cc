@@ -20,6 +20,7 @@
 // under the License.
 #include <functional>
 #include <limits>
+#include <memory>
 #include <sstream>
 
 #include "gutil/strings/substitute.h"
@@ -345,7 +346,7 @@ bool BufferPool::ClientHandle::has_unpinned_pages() const {
 }
 
 BufferPool::SubReservation::SubReservation(ClientHandle* client) {
-    tracker_.reset(new ReservationTracker);
+    tracker_ = std::make_unique<ReservationTracker>();
     tracker_->InitChildTracker(nullptr, client->impl_->reservation(), nullptr, numeric_limits<int64_t>::max());
 }
 

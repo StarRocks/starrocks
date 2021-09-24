@@ -21,6 +21,8 @@
 
 #include "storage/memory/mem_tablet.h"
 
+#include <memory>
+
 #include "storage/memory/mem_sub_tablet.h"
 #include "storage/memory/mem_tablet_scan.h"
 #include "storage/memory/write_txn.h"
@@ -76,7 +78,7 @@ Status MemTablet::scan(std::unique_ptr<ScanSpec>* spec, std::unique_ptr<MemTable
 }
 
 Status MemTablet::create_write_txn(std::unique_ptr<WriteTxn>* wtxn) {
-    wtxn->reset(new WriteTxn(&_mem_schema));
+    *wtxn = std::make_unique<WriteTxn>(&_mem_schema);
     return Status::OK();
 }
 

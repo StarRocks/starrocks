@@ -23,6 +23,7 @@
 
 #include <gperftools/profiler.h>
 
+#include <memory>
 #include <sstream>
 
 #include "exprs/anyval_util.h"
@@ -63,7 +64,7 @@ Status ExprContext::prepare(RuntimeState* state, const RowDescriptor& row_desc, 
     _prepared = true;
     // TODO: use param tracker to replace instance_mem_tracker
     // _pool.reset(new MemPool(new MemTracker(-1)));
-    _pool.reset(new MemPool(state->instance_mem_tracker()));
+    _pool = std::make_unique<MemPool>(state->instance_mem_tracker());
     return _root->prepare(state, row_desc, this);
 }
 
@@ -120,7 +121,7 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx) {
     DCHECK(*new_ctx == nullptr);
 
     *new_ctx = state->obj_pool()->add(new ExprContext(_root));
-    (*new_ctx)->_pool.reset(new MemPool(_pool->mem_tracker()));
+    (*new_ctx)->_pool = std::make_unique<MemPool>(_pool->mem_tracker());
     for (int i = 0; i < _fn_contexts.size(); ++i) {
         (*new_ctx)->_fn_contexts.push_back(_fn_contexts[i]->impl()->clone((*new_ctx)->_pool.get()));
     }
@@ -139,7 +140,7 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx, Expr* root
     DCHECK(*new_ctx == nullptr);
 
     *new_ctx = state->obj_pool()->add(new ExprContext(root));
-    (*new_ctx)->_pool.reset(new MemPool(_pool->mem_tracker()));
+    (*new_ctx)->_pool = std::make_unique<MemPool>(_pool->mem_tracker());
     for (int i = 0; i < _fn_contexts.size(); ++i) {
         (*new_ctx)->_fn_contexts.push_back(_fn_contexts[i]->impl()->clone((*new_ctx)->_pool.get()));
     }

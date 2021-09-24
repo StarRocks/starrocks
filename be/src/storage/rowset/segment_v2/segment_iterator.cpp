@@ -21,6 +21,7 @@
 
 #include "storage/rowset/segment_v2/segment_iterator.h"
 
+#include <memory>
 #include <set>
 
 #include "gutil/strings/substitute.h"
@@ -76,7 +77,7 @@ Status SegmentIterator::_init() {
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_get_row_ranges_by_column_conditions());
     _init_lazy_materialization();
-    _range_iter.reset(new BitmapRangeIterator(_row_bitmap));
+    _range_iter = std::make_unique<BitmapRangeIterator>(_row_bitmap);
     return Status::OK();
 }
 
@@ -132,8 +133,8 @@ Status SegmentIterator::_prepare_seek(const StorageReadOptions::KeyRange& key_ra
             }
         }
     }
-    _seek_schema.reset(new Schema(key_fields, key_fields.size()));
-    _seek_block.reset(new RowBlockV2(*_seek_schema, 1));
+    _seek_schema = std::make_unique<Schema>(key_fields, key_fields.size());
+    _seek_block = std::make_unique<RowBlockV2>(*_seek_schema, 1);
 
     // create used column iterator
     for (auto cid : _seek_schema->column_ids()) {

@@ -21,6 +21,8 @@
 
 #include "runtime/test_env.h"
 
+#include <memory>
+
 #include "util/disk_info.h"
 #include "util/starrocks_metrics.h"
 
@@ -32,24 +34,24 @@ TestEnv::TestEnv() {
     if (_s_static_metrics == nullptr) {
         _s_static_metrics.reset(new MetricRegistry("test_env"));
     }
-    _exec_env.reset(new ExecEnv());
+    _exec_env = std::make_unique<ExecEnv>();
     // _exec_env->init_for_tests();
-    _io_mgr_tracker.reset(new MemTracker(-1));
-    _block_mgr_parent_tracker.reset(new MemTracker(-1));
+    _io_mgr_tracker = std::make_unique<MemTracker>(-1);
+    _block_mgr_parent_tracker = std::make_unique<MemTracker>(-1);
     _exec_env->disk_io_mgr()->init(_io_mgr_tracker.get());
     init_metrics();
-    _tmp_file_mgr.reset(new TmpFileMgr());
+    _tmp_file_mgr = std::make_unique<TmpFileMgr>();
     _tmp_file_mgr->init(_metrics.get());
 }
 
 void TestEnv::init_metrics() {
-    _metrics.reset(new MetricRegistry("test_env"));
+    _metrics = std::make_unique<MetricRegistry>("test_env");
 }
 
 void TestEnv::init_tmp_file_mgr(const std::vector<std::string>& tmp_dirs, bool one_dir_per_device) {
     // Need to recreate metrics to avoid error when registering metric twice.
     init_metrics();
-    _tmp_file_mgr.reset(new TmpFileMgr());
+    _tmp_file_mgr = std::make_unique<TmpFileMgr>();
     _tmp_file_mgr->init_custom(tmp_dirs, one_dir_per_device, _metrics.get());
 }
 
