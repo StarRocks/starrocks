@@ -547,16 +547,6 @@ OLAPStatus DataDir::load() {
     return OLAP_SUCCESS;
 }
 
-void DataDir::add_pending_ids(const std::string& id) {
-    std::unique_lock wr_lock(_pending_path_mutex);
-    _pending_path_ids.insert(id);
-}
-
-void DataDir::remove_pending_ids(const std::string& id) {
-    std::unique_lock wr_lock(_pending_path_mutex);
-    _pending_path_ids.erase(id);
-}
-
 // gc unused tablet schemahash dir
 void DataDir::perform_path_gc_by_tablet() {
     std::unique_lock<std::mutex> lck(_check_path_mutex);

@@ -99,10 +99,6 @@ public:
     // load data from meta and data files
     OLAPStatus load();
 
-    void add_pending_ids(const std::string& id);
-
-    void remove_pending_ids(const std::string& id);
-
     // this function scans the paths in data dir to collect the paths to check
     // this is a producer function. After scan, it will notify the perform_path_gc function to gc
     void perform_path_scan();
@@ -171,9 +167,6 @@ private:
     std::condition_variable _cv;
     std::set<std::string> _all_check_paths;
     std::set<std::string> _all_tablet_schemahash_paths;
-
-    std::shared_mutex _pending_path_mutex;
-    std::set<std::string> _pending_path_ids;
 };
 
 } // namespace starrocks
