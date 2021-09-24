@@ -61,9 +61,9 @@ struct AlphaNum {
     AlphaNum(double f) // NOLINT(runtime/explicit)
             : piece(digits, strlen(DoubleToBuffer(f, digits))) {}
 
-    AlphaNum(const char* c_str) : piece(c_str) {}      // NOLINT(runtime/explicit)
-    AlphaNum(StringPiece pc) : piece(std::move(pc)) {} // NOLINT(runtime/explicit)
-    AlphaNum(const string& s) : piece(s) {}            // NOLINT(runtime/explicit)
+    AlphaNum(const char* c_str) : piece(c_str) {} // NOLINT(runtime/explicit)
+    AlphaNum(StringPiece pc) : piece(pc) {}       // NOLINT(runtime/explicit)
+    AlphaNum(const string& s) : piece(s) {}       // NOLINT(runtime/explicit)
 
     StringPiece::size_type size() const { return piece.size(); }
     const char* data() const { return piece.data(); }

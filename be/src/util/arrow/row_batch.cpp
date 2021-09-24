@@ -234,13 +234,13 @@ public:
                 int len = 48;
                 char* v = LargeIntValue::to_string(reinterpret_cast<const PackedInt128*>(cell_ptr)->value, buf, &len);
                 std::string temp(v, len);
-                ARROW_RETURN_NOT_OK(builder.Append(std::move(temp)));
+                ARROW_RETURN_NOT_OK(builder.Append(temp));
                 break;
             }
             case TYPE_DECIMAL: {
                 const DecimalValue* decimal_val = reinterpret_cast<const DecimalValue*>(cell_ptr);
                 std::string decimal_str = decimal_val->to_string();
-                ARROW_RETURN_NOT_OK(builder.Append(std::move(decimal_str)));
+                ARROW_RETURN_NOT_OK(builder.Append(decimal_str));
                 break;
             }
             default: {

@@ -207,7 +207,7 @@ void CollectIterator::init(Reader* reader) {
 }
 
 OLAPStatus CollectIterator::add_child(RowsetReaderSharedPtr rs_reader) {
-    std::unique_ptr<ChildCtx> child(new ChildCtx(std::move(rs_reader), _reader));
+    std::unique_ptr<ChildCtx> child(new ChildCtx(rs_reader, _reader));
     RETURN_NOT_OK(child->init());
     if (child->current_row() == nullptr) {
         return OLAP_SUCCESS;
