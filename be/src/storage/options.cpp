@@ -55,7 +55,7 @@ OLAPStatus parse_root_path(const string& root_path, StorePath* path) {
 
     // parse root path name
     StripWhiteSpace(&tmp_vec[0]);
-    tmp_vec[0].erase(tmp_vec[0].find_last_not_of("/") + 1);
+    tmp_vec[0].erase(tmp_vec[0].find_last_not_of('/') + 1);
     if (tmp_vec[0].empty() || tmp_vec[0][0] != '/') {
         LOG(WARNING) << "invalid store path. path=" << tmp_vec[0];
         return OLAP_ERR_INPUT_PARAMETER_ERROR;

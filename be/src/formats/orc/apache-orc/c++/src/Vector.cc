@@ -501,7 +501,7 @@ Decimal::Decimal(const Int128& _value, int32_t _scale) : value(_value), scale(_s
 }
 
 Decimal::Decimal(const std::string& str) {
-    std::size_t foundPoint = str.find(".");
+    std::size_t foundPoint = str.find('.');
     // no decimal point, it is int
     if (foundPoint == std::string::npos) {
         value = Int128(str);

@@ -71,7 +71,7 @@ bool replaceenv(std::string& s) {
     std::size_t pos = 0;
     std::size_t start = 0;
     while ((start = s.find("${", pos)) != std::string::npos) {
-        std::size_t end = s.find("}", start + 2);
+        std::size_t end = s.find('}', start + 2);
         if (end == std::string::npos) {
             return false;
         }
