@@ -99,11 +99,6 @@ WITH_GCOV=OFF
 WITH_HDFS=ON
 
 
-# Disable WITH_HDFS on aarch64
-if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-    WITH_HDFS=OFF
-fi
-
 HELP=0
 if [ $# == 1 ] ; then
     # default
