@@ -333,7 +333,7 @@ static const int default_runtime_filter_wait_timeout_ms = 1000;
 
 RuntimeFilterProbeCollector::RuntimeFilterProbeCollector() : _wait_timeout_ms(default_runtime_filter_wait_timeout_ms) {}
 
-RuntimeFilterProbeCollector::RuntimeFilterProbeCollector(RuntimeFilterProbeCollector&& that)
+RuntimeFilterProbeCollector::RuntimeFilterProbeCollector(RuntimeFilterProbeCollector&& that) noexcept
         : _descriptors(std::move(that._descriptors)),
           _selectivity(std::move(that._selectivity)),
           _input_chunk_nums(that._input_chunk_nums),

@@ -54,12 +54,12 @@ BufferPool::PageHandle::PageHandle() {
     Reset();
 }
 
-BufferPool::PageHandle::PageHandle(PageHandle&& src) {
+BufferPool::PageHandle::PageHandle(PageHandle&& src) noexcept {
     Reset();
     *this = std::move(src);
 }
 
-BufferPool::PageHandle& BufferPool::PageHandle::operator=(PageHandle&& src) {
+BufferPool::PageHandle& BufferPool::PageHandle::operator=(PageHandle&& src) noexcept {
     DCHECK(!is_open());
     // Copy over all members then close src.
     page_ = src.page_;

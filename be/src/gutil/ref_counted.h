@@ -291,7 +291,7 @@ public:
         return *this = r.get();
     }
 
-    scoped_refptr<T>& operator=(scoped_refptr<T>&& r) {
+    scoped_refptr<T>& operator=(scoped_refptr<T>&& r) noexcept {
         scoped_refptr<T>(std::move(r)).swap(*this);
         return *this;
     }
