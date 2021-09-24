@@ -36,7 +36,7 @@ public:
 
     // Move constructor
     // NOTE: do *NOT* copy |_slices|
-    BinaryColumn(BinaryColumn&& rhs) : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)) {}
+    BinaryColumn(BinaryColumn&& rhs) noexcept : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)) {}
 
     // Copy assignment
     BinaryColumn& operator=(const BinaryColumn& rhs) {
@@ -46,7 +46,7 @@ public:
     }
 
     // Move assignment
-    BinaryColumn& operator=(BinaryColumn&& rhs) {
+    BinaryColumn& operator=(BinaryColumn&& rhs) noexcept {
         BinaryColumn tmp(std::move(rhs));
         this->swap_column(tmp);
         return *this;

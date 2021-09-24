@@ -28,7 +28,7 @@ public:
     }
 
     // Move assignment
-    ConstColumn& operator=(ConstColumn&& rhs) {
+    ConstColumn& operator=(ConstColumn&& rhs) noexcept {
         ConstColumn tmp(std::move(rhs));
         this->swap_column(tmp);
         return *this;
