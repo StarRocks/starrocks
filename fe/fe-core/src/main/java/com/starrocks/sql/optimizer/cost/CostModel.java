@@ -188,8 +188,14 @@ public class CostModel {
                     if (distinctColumnStats.isUnknown()) {
                         hashSetSize = rowSize * inputStatistics.getOutputRowCount() / statistics.getOutputRowCount();
                     } else {
+                        // we need to estimate the distinct values in each bucket because of do not know the
+                        // correlation between the Group BY column and the DISTINCT column.
+                        // There are estimated to (DistinctValuesCount / buckets * 2) entries distinct values in each bucket
+                        // except when bucket number equals 1.
+                        double distinctValuesPerBucket = buckets == 1 ? distinctColumnStats.getDistinctValuesCount() :
+                                distinctColumnStats.getDistinctValuesCount() / buckets * 2;
                         // 40 bytes is the state cost of hashset
-                        hashSetSize = rowSize * distinctColumnStats.getDistinctValuesCount() / buckets * 2 + 40;
+                        hashSetSize = rowSize * distinctValuesPerBucket + 40;
                     }
                     costEstimate = CostEstimate.addCost(costEstimate, CostEstimate.ofMemory(buckets * hashSetSize));
                 }
@@ -239,7 +245,8 @@ public class CostModel {
                     result = CostEstimate.of(statistics.getOutputSize(), 0, statistics.getOutputSize());
                     break;
                 default:
-                    throw new StarRocksPlannerException("not support " + distributionSpec.getType() + "distribution type",
+                    throw new StarRocksPlannerException(
+                            "not support " + distributionSpec.getType() + "distribution type",
                             ErrorType.UNSUPPORTED);
             }
             return result;
