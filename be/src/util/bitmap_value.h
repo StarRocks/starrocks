@@ -104,11 +104,11 @@ public:
         return *this;
     }
 
-    Roaring64Map(Roaring64Map&& other) : roarings(std::move(other.roarings)), copyOnWrite(other.copyOnWrite) {
+    Roaring64Map(Roaring64Map&& other) noexcept : roarings(std::move(other.roarings)), copyOnWrite(other.copyOnWrite) {
         other.copyOnWrite = false;
     }
 
-    Roaring64Map& operator=(Roaring64Map&& other) {
+    Roaring64Map& operator=(Roaring64Map&& other) noexcept {
         if (this != &other) {
             this->roarings = std::move(other.roarings);
             this->copyOnWrite = other.copyOnWrite;
@@ -965,13 +965,13 @@ public:
         return *this;
     }
 
-    BitmapValue(BitmapValue&& other)
+    BitmapValue(BitmapValue&& other) noexcept
             : _bitmap(std::move(other._bitmap)), _set(std::move(other._set)), _sv(other._sv), _type(other._type) {
         other._sv = 0;
         other._type = EMPTY;
     }
 
-    BitmapValue& operator=(BitmapValue&& other) {
+    BitmapValue& operator=(BitmapValue&& other) noexcept {
         if (this != &other) {
             this->_bitmap = std::move(other._bitmap);
             this->_set = std::move(other._set);

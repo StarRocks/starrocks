@@ -416,11 +416,11 @@ public:
 
     /// Allow move construction of handles to support std::move(). Inline to make moving
     /// efficient.
-    inline BufferHandle(BufferHandle&& src);
+    inline BufferHandle(BufferHandle&& src) noexcept;
 
     /// Allow move assignment of handles to support STL classes like std::vector.
     /// Destination must be uninitialized. Inline to make moving efficient.
-    inline BufferHandle& operator=(BufferHandle&& src);
+    inline BufferHandle& operator=(BufferHandle&& src) noexcept;
 
     bool is_open() const { return data_ != NULL; }
     int64_t len() const {
@@ -481,11 +481,11 @@ public:
     ~PageHandle() { DCHECK(!is_open()); }
 
     // Allow move construction of page handles, to support std::move().
-    PageHandle(PageHandle&& src);
+    PageHandle(PageHandle&& src) noexcept;
 
     // Allow move assignment of page handles, to support STL classes like std::vector.
     // Destination must be closed.
-    PageHandle& operator=(PageHandle&& src);
+    PageHandle& operator=(PageHandle&& src) noexcept;
 
     bool is_open() const { return page_ != NULL; }
     bool is_pinned() const { return pin_count() > 0; }
@@ -522,12 +522,12 @@ private:
     ClientHandle* client_;
 };
 
-inline BufferPool::BufferHandle::BufferHandle(BufferHandle&& src) {
+inline BufferPool::BufferHandle::BufferHandle(BufferHandle&& src) noexcept {
     Reset();
     *this = std::move(src);
 }
 
-inline BufferPool::BufferHandle& BufferPool::BufferHandle::operator=(BufferHandle&& src) {
+inline BufferPool::BufferHandle& BufferPool::BufferHandle::operator=(BufferHandle&& src) noexcept {
     DCHECK(!is_open());
     // Copy over all members then close src.
     client_ = src.client_;

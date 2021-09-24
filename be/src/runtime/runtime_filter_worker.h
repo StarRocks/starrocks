@@ -48,7 +48,7 @@ private:
 class RuntimeFilterMergerStatus {
 public:
     RuntimeFilterMergerStatus() = default;
-    RuntimeFilterMergerStatus(RuntimeFilterMergerStatus&& other)
+    RuntimeFilterMergerStatus(RuntimeFilterMergerStatus&& other) noexcept
             : arrives(std::move(other.arrives)),
               expect_number(other.expect_number),
               pool(std::move(other.pool)),

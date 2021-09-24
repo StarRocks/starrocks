@@ -123,7 +123,7 @@ private:
 class RuntimeFilterProbeCollector {
 public:
     RuntimeFilterProbeCollector();
-    RuntimeFilterProbeCollector(RuntimeFilterProbeCollector&& that);
+    RuntimeFilterProbeCollector(RuntimeFilterProbeCollector&& that) noexcept;
     size_t size() const { return _descriptors.size(); }
     Status prepare(RuntimeState* state, const RowDescriptor& row_desc, MemTracker* tracker, RuntimeProfile* p);
     Status open(RuntimeState* state);

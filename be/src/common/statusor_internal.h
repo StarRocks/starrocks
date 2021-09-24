@@ -196,7 +196,7 @@ public:
         return *this;
     }
 
-    StatusOrData& operator=(StatusOrData&& other) {
+    StatusOrData& operator=(StatusOrData&& other) noexcept {
         if (this == &other) return *this;
         if (other.ok())
             Assign(std::move(other.data_));
@@ -287,27 +287,27 @@ template <typename T, bool = std::is_copy_constructible<T>::value>
 struct CopyCtorBase {
     CopyCtorBase() = default;
     CopyCtorBase(const CopyCtorBase&) = default;
-    CopyCtorBase(CopyCtorBase&&) = default;
+    CopyCtorBase(CopyCtorBase&&) noexcept = default;
     CopyCtorBase& operator=(const CopyCtorBase&) = default;
-    CopyCtorBase& operator=(CopyCtorBase&&) = default;
+    CopyCtorBase& operator=(CopyCtorBase&&) noexcept = default;
 };
 
 template <typename T>
 struct CopyCtorBase<T, false> {
     CopyCtorBase() = default;
     CopyCtorBase(const CopyCtorBase&) = delete;
-    CopyCtorBase(CopyCtorBase&&) = default;
+    CopyCtorBase(CopyCtorBase&&) noexcept = default;
     CopyCtorBase& operator=(const CopyCtorBase&) = default;
-    CopyCtorBase& operator=(CopyCtorBase&&) = default;
+    CopyCtorBase& operator=(CopyCtorBase&&) noexcept = default;
 };
 
 template <typename T, bool = std::is_move_constructible<T>::value>
 struct MoveCtorBase {
     MoveCtorBase() = default;
     MoveCtorBase(const MoveCtorBase&) = default;
-    MoveCtorBase(MoveCtorBase&&) = default;
+    MoveCtorBase(MoveCtorBase&&) noexcept = default;
     MoveCtorBase& operator=(const MoveCtorBase&) = default;
-    MoveCtorBase& operator=(MoveCtorBase&&) = default;
+    MoveCtorBase& operator=(MoveCtorBase&&) noexcept = default;
 };
 
 template <typename T>
@@ -316,41 +316,41 @@ struct MoveCtorBase<T, false> {
     MoveCtorBase(const MoveCtorBase&) = default;
     MoveCtorBase(MoveCtorBase&&) = delete;
     MoveCtorBase& operator=(const MoveCtorBase&) = default;
-    MoveCtorBase& operator=(MoveCtorBase&&) = default;
+    MoveCtorBase& operator=(MoveCtorBase&&) noexcept = default;
 };
 
 template <typename T, bool = std::is_copy_constructible<T>::value&& std::is_copy_assignable<T>::value>
 struct CopyAssignBase {
     CopyAssignBase() = default;
     CopyAssignBase(const CopyAssignBase&) = default;
-    CopyAssignBase(CopyAssignBase&&) = default;
+    CopyAssignBase(CopyAssignBase&&) noexcept = default;
     CopyAssignBase& operator=(const CopyAssignBase&) = default;
-    CopyAssignBase& operator=(CopyAssignBase&&) = default;
+    CopyAssignBase& operator=(CopyAssignBase&&) noexcept = default;
 };
 
 template <typename T>
 struct CopyAssignBase<T, false> {
     CopyAssignBase() = default;
     CopyAssignBase(const CopyAssignBase&) = default;
-    CopyAssignBase(CopyAssignBase&&) = default;
+    CopyAssignBase(CopyAssignBase&&) noexcept = default;
     CopyAssignBase& operator=(const CopyAssignBase&) = delete;
-    CopyAssignBase& operator=(CopyAssignBase&&) = default;
+    CopyAssignBase& operator=(CopyAssignBase&&) noexcept = default;
 };
 
 template <typename T, bool = std::is_move_constructible<T>::value&& std::is_move_assignable<T>::value>
 struct MoveAssignBase {
     MoveAssignBase() = default;
     MoveAssignBase(const MoveAssignBase&) = default;
-    MoveAssignBase(MoveAssignBase&&) = default;
+    MoveAssignBase(MoveAssignBase&&) noexcept = default;
     MoveAssignBase& operator=(const MoveAssignBase&) = default;
-    MoveAssignBase& operator=(MoveAssignBase&&) = default;
+    MoveAssignBase& operator=(MoveAssignBase&&) noexcept = default;
 };
 
 template <typename T>
 struct MoveAssignBase<T, false> {
     MoveAssignBase() = default;
     MoveAssignBase(const MoveAssignBase&) = default;
-    MoveAssignBase(MoveAssignBase&&) = default;
+    MoveAssignBase(MoveAssignBase&&) noexcept = default;
     MoveAssignBase& operator=(const MoveAssignBase&) = default;
     MoveAssignBase& operator=(MoveAssignBase&&) = delete;
 };
