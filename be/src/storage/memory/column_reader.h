@@ -40,7 +40,7 @@ namespace memory {
 // Note: this class is only intended for single-thread single reader usage.
 class ColumnBlockHolder {
 public:
-    ColumnBlockHolder() {}
+    ColumnBlockHolder() = default;
     ColumnBlockHolder(ColumnBlock* cb, bool own) : _cb(cb), _own_cb(own) {}
 
     void init(ColumnBlock* cb, bool own) {
@@ -73,7 +73,7 @@ private:
 // Read only column reader, captures a specific version of a Column
 class ColumnReader {
 public:
-    virtual ~ColumnReader() {}
+    virtual ~ColumnReader() = default;
 
     // Get cell by rid, caller needs to make sure rid is in valid range
     virtual const void* get(const uint32_t rid) const = 0;

@@ -17,7 +17,7 @@ OlapTablePartitionParam::OlapTablePartitionParam(std::shared_ptr<OlapTableSchema
                                                  const TOlapTablePartitionParam& t_param)
         : _schema(std::move(schema)), _t_param(t_param) {}
 
-OlapTablePartitionParam::~OlapTablePartitionParam() {}
+OlapTablePartitionParam::~OlapTablePartitionParam() = default;
 
 Status OlapTablePartitionParam::init() {
     std::map<std::string, SlotDescriptor*> slots_map;

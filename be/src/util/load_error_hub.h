@@ -42,9 +42,9 @@ public:
         ErrorMsg(int64_t id, std::string message) : job_id(id), msg(std::move(message)) {}
     };
 
-    LoadErrorHub() {}
+    LoadErrorHub() = default;
 
-    virtual ~LoadErrorHub() {}
+    virtual ~LoadErrorHub() = default;
 
     static Status create_hub(ExecEnv* env, const TLoadErrorHubInfo* t_hub_info, const std::string& error_log_file_name,
                              std::unique_ptr<LoadErrorHub>* hub);

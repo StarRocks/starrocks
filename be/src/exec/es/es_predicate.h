@@ -99,7 +99,7 @@ struct ExtColumnDesc {
 
 struct ExtPredicate {
     ExtPredicate(TExprNodeType::type node_type) : node_type(node_type) {}
-    virtual ~ExtPredicate() {}
+    virtual ~ExtPredicate() = default;
 
     TExprNodeType::type node_type;
 };

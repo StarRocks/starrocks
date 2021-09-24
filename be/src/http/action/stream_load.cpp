@@ -115,7 +115,7 @@ StreamLoadAction::StreamLoadAction(ExecEnv* exec_env) : _exec_env(exec_env) {
                                                              &streaming_load_current_processing);
 }
 
-StreamLoadAction::~StreamLoadAction() {}
+StreamLoadAction::~StreamLoadAction() = default;
 
 void StreamLoadAction::handle(HttpRequest* req) {
     StreamLoadContext* ctx = (StreamLoadContext*)req->handler_ctx();

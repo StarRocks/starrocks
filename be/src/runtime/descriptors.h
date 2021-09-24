@@ -140,7 +140,7 @@ private:
 class TableDescriptor {
 public:
     TableDescriptor(const TTableDescriptor& tdesc);
-    virtual ~TableDescriptor() {}
+    virtual ~TableDescriptor() = default;
     int num_cols() const { return _num_cols; }
     int num_clustering_cols() const { return _num_clustering_cols; }
     TableId table_id() const { return _id; }
@@ -371,7 +371,7 @@ public:
     RowDescriptor(TupleDescriptor* tuple_desc, bool is_nullable);
 
     // dummy descriptor, needed for the JNI EvalPredicate() function
-    RowDescriptor() {}
+    RowDescriptor() = default;
 
     // Returns total size in bytes.
     // TODO: also take avg string lengths into account, ie, change this

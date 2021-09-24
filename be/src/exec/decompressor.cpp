@@ -57,7 +57,7 @@ Status Decompressor::create_decompressor(CompressionTypePB type, Decompressor** 
     return st;
 }
 
-Decompressor::~Decompressor() {}
+Decompressor::~Decompressor() = default;
 
 std::string Decompressor::debug_info() {
     return "Decompressor";

@@ -19,7 +19,7 @@ SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_vars_columns[] = {
 SchemaVariablesScanner::SchemaVariablesScanner(TVarType::type type)
         : SchemaScanner(_s_vars_columns, sizeof(_s_vars_columns) / sizeof(SchemaScanner::ColumnDesc)), _type(type) {}
 
-SchemaVariablesScanner::~SchemaVariablesScanner() {}
+SchemaVariablesScanner::~SchemaVariablesScanner() = default;
 
 Status SchemaVariablesScanner::start(RuntimeState* state) {
     TShowVariableRequest var_params;

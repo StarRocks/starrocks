@@ -419,10 +419,10 @@ void STLDeleteValues(T* v) {
 // directly.
 class BaseDeleter {
 public:
-    virtual ~BaseDeleter() {}
+    virtual ~BaseDeleter() = default;
 
 protected:
-    BaseDeleter() {}
+    BaseDeleter() = default;
 
 private:
     DISALLOW_EVIL_CONSTRUCTORS(BaseDeleter);
@@ -636,7 +636,7 @@ bool STLIncludes(const SortedSTLContainerA& a, const SortedSTLContainerB& b) {
 template <typename Pair, typename UnaryOp>
 class UnaryOperateOnFirst : public std::unary_function<Pair, typename UnaryOp::result_type> {
 public:
-    UnaryOperateOnFirst() {}
+    UnaryOperateOnFirst() = default;
 
     UnaryOperateOnFirst(const UnaryOp& f) : f_(f) { // TODO(user): explicit?
     }
@@ -655,7 +655,7 @@ UnaryOperateOnFirst<Pair, UnaryOp> UnaryOperate1st(const UnaryOp& f) {
 template <typename Pair, typename UnaryOp>
 class UnaryOperateOnSecond : public std::unary_function<Pair, typename UnaryOp::result_type> {
 public:
-    UnaryOperateOnSecond() {}
+    UnaryOperateOnSecond() = default;
 
     UnaryOperateOnSecond(const UnaryOp& f) : f_(f) { // TODO(user): explicit?
     }
@@ -674,7 +674,7 @@ UnaryOperateOnSecond<Pair, UnaryOp> UnaryOperate2nd(const UnaryOp& f) {
 template <typename Pair, typename BinaryOp>
 class BinaryOperateOnFirst : public std::binary_function<Pair, Pair, typename BinaryOp::result_type> {
 public:
-    BinaryOperateOnFirst() {}
+    BinaryOperateOnFirst() = default;
 
     BinaryOperateOnFirst(const BinaryOp& f) : f_(f) { // TODO(user): explicit?
     }
@@ -694,7 +694,7 @@ BinaryOperateOnFirst<Pair, BinaryOp> BinaryOperate1st(const BinaryOp& f) {
 template <typename Pair, typename BinaryOp>
 class BinaryOperateOnSecond : public std::binary_function<Pair, Pair, typename BinaryOp::result_type> {
 public:
-    BinaryOperateOnSecond() {}
+    BinaryOperateOnSecond() = default;
 
     BinaryOperateOnSecond(const BinaryOp& f) : f_(f) {}
 

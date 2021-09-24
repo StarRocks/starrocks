@@ -44,7 +44,7 @@ class Column;
 //   writer->get_new_column(&column);
 class ColumnWriter {
 public:
-    virtual ~ColumnWriter() {}
+    virtual ~ColumnWriter() = default;
 
     // Get cell by rid, caller needs to make sure rid is in valid range
     //

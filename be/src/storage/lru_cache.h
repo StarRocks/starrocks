@@ -61,7 +61,7 @@ public:
     // Create a slice that refers to s[0,strlen(s)-1]
     CacheKey(const char* s) : _data(s), _size(strlen(s)) {}
 
-    ~CacheKey() {}
+    ~CacheKey() = default;
 
     // Return a pointer to the beginning of the referenced data
     const char* data() const { return _data; }
@@ -136,7 +136,7 @@ enum class CachePriority { NORMAL = 0, DURABLE = 1 };
 
 class Cache {
 public:
-    Cache() {}
+    Cache() = default;
 
     // Destroys all existing entries by calling the "deleter"
     // function that was passed to the constructor.
@@ -325,7 +325,7 @@ static const int kNumShards = 1 << kNumShardBits;
 class ShardedLRUCache : public Cache {
 public:
     explicit ShardedLRUCache(size_t capacity);
-    ~ShardedLRUCache() override {}
+    ~ShardedLRUCache() override = default;
     Handle* insert(const CacheKey& key, void* value, size_t charge, void (*deleter)(const CacheKey& key, void* value),
                    CachePriority priority = CachePriority::NORMAL) override;
     Handle* lookup(const CacheKey& key) override;

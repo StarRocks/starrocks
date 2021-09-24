@@ -97,7 +97,7 @@ public:
     SchemaChange(MemTracker* mem_tracker) : _filtered_rows(0), _merged_rows(0) {
         _mem_tracker = std::make_unique<MemTracker>(-1, "", mem_tracker, true);
     }
-    virtual ~SchemaChange() {}
+    virtual ~SchemaChange() = default;
 
     virtual bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_builder, TabletSharedPtr tablet,
                          TabletSharedPtr base_tablet) = 0;
@@ -185,8 +185,8 @@ private:
 
 class SchemaChangeHandler {
 public:
-    SchemaChangeHandler() {}
-    virtual ~SchemaChangeHandler() {}
+    SchemaChangeHandler() = default;
+    virtual ~SchemaChangeHandler() = default;
 
     // schema change v2, it will not set alter task in base tablet
     OLAPStatus process_alter_tablet_v2(const TAlterTabletReqV2& request);

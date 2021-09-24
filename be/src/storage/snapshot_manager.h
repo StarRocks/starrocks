@@ -47,7 +47,7 @@ namespace starrocks {
 
 class SnapshotManager {
 public:
-    ~SnapshotManager() {}
+    ~SnapshotManager() = default;
 
     Status make_snapshot(const TSnapshotRequest& request, std::string* snapshot_path);
 

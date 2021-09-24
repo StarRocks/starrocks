@@ -41,7 +41,7 @@ namespace starrocks {
 
 class GeoShape {
 public:
-    virtual ~GeoShape() {}
+    virtual ~GeoShape() = default;
 
     virtual GeoShapeType type() const = 0;
 

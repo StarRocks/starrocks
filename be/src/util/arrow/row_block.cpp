@@ -150,7 +150,7 @@ public:
     FromRowBlockConverter(const RowBlockV2& block, std::shared_ptr<arrow::Schema> schema, arrow::MemoryPool* pool)
             : _block(block), _schema(std::move(schema)), _pool(pool) {}
 
-    ~FromRowBlockConverter() override {}
+    ~FromRowBlockConverter() override = default;
 
     // Use base class function
     using arrow::TypeVisitor::Visit;
@@ -227,7 +227,7 @@ class ToRowBlockConverter : public arrow::ArrayVisitor {
 public:
     ToRowBlockConverter(const arrow::RecordBatch& batch, const Schema& schema) : _batch(batch), _schema(schema) {}
 
-    ~ToRowBlockConverter() override {}
+    ~ToRowBlockConverter() override = default;
 
     using arrow::ArrayVisitor::Visit;
 

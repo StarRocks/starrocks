@@ -30,7 +30,7 @@ namespace starrocks {
 // actual lock implementation in template classes in if no thread safety is needed.
 class FakeLock {
 public:
-    FakeLock() {}
+    FakeLock() = default;
     void lock() {}
     void unlock() {}
     bool try_lock() { return true; }

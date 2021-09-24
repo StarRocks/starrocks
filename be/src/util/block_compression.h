@@ -36,7 +36,7 @@ namespace starrocks {
 // stream compression.
 class BlockCompressionCodec {
 public:
-    virtual ~BlockCompressionCodec() {}
+    virtual ~BlockCompressionCodec() = default;
 
     // This function will compress input data into output.
     // output should be preallocated, and its capacity must be large enough

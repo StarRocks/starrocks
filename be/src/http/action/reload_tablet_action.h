@@ -33,7 +33,7 @@ class ReloadTabletAction : public HttpHandler {
 public:
     ReloadTabletAction(ExecEnv* exec_env);
 
-    ~ReloadTabletAction() override {}
+    ~ReloadTabletAction() override = default;
 
     void handle(HttpRequest* req) override;
 

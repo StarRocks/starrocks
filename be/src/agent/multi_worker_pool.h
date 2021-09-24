@@ -14,7 +14,8 @@ class MultiWorkerPool : public TaskWorkerPool {
 public:
     MultiWorkerPool(const TaskWorkerType worker_type, ExecEnv* env, const TMasterInfo& master_info, int worker_num);
 
-    ~MultiWorkerPool() override{};
+    ~MultiWorkerPool() override = default;
+    ;
 
     void start() override;
 

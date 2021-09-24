@@ -12,7 +12,7 @@ SchemaScanner::ColumnDesc SchemaDummyScanner::_s_dummy_columns[] = {};
 SchemaDummyScanner::SchemaDummyScanner()
         : SchemaScanner(_s_dummy_columns, sizeof(_s_dummy_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
-SchemaDummyScanner::~SchemaDummyScanner() {}
+SchemaDummyScanner::~SchemaDummyScanner() = default;
 
 Status SchemaDummyScanner::start() {
     return Status::OK();

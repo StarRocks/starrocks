@@ -53,7 +53,7 @@ public:
     struct Node {
     public:
         Node() : parent_queue(nullptr), next_node(nullptr), prev_node(nullptr) {}
-        virtual ~Node() {}
+        virtual ~Node() = default;
 
         /// Returns true if the node is in a queue.
         bool in_queue() const { return parent_queue != nullptr; }

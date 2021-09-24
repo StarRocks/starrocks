@@ -85,7 +85,7 @@ class TScanRange;
 class ScanNode : public ExecNode {
 public:
     ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs) : ExecNode(pool, tnode, descs) {}
-    ~ScanNode() override {}
+    ~ScanNode() override = default;
 
     // Set up counters
     Status prepare(RuntimeState* state) override;

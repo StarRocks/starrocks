@@ -218,7 +218,7 @@ GeoShape* GeoShape::from_encoded(const void* ptr, size_t size) {
 }
 
 GeoPoint::GeoPoint() : _point(new S2Point()) {}
-GeoPoint::~GeoPoint() {}
+GeoPoint::~GeoPoint() = default;
 
 bool GeoPoint::st_distance_sphere(double x_lng, double x_lat, double y_lng, double y_lat, double* result) {
     S2LatLng x = S2LatLng::FromDegrees(x_lat, x_lng);
@@ -275,8 +275,8 @@ std::string GeoPoint::as_wkt() const {
     return ss.str();
 }
 
-GeoLine::GeoLine() {}
-GeoLine::~GeoLine() {}
+GeoLine::GeoLine() = default;
+GeoLine::~GeoLine() = default;
 
 GeoParseStatus GeoLine::from_coords(const GeoCoordinateList& list) {
     return to_s2polyline(list, &_polyline);
@@ -294,8 +294,8 @@ bool GeoLine::decode(const void* data, size_t size) {
     return _polyline->Decode(&decoder);
 }
 
-GeoPolygon::GeoPolygon() {}
-GeoPolygon::~GeoPolygon() {}
+GeoPolygon::GeoPolygon() = default;
+GeoPolygon::~GeoPolygon() = default;
 
 GeoParseStatus GeoPolygon::from_coords(const GeoCoordinateListList& list) {
     return to_s2polygon(list, &_polygon);
@@ -404,8 +404,8 @@ bool GeoPolygon::contains(const GeoShape* rhs) const {
     }
 }
 
-GeoCircle::GeoCircle() {}
-GeoCircle::~GeoCircle() {}
+GeoCircle::GeoCircle() = default;
+GeoCircle::~GeoCircle() = default;
 
 GeoParseStatus GeoCircle::init(double lng, double lat, double radius_meter) {
     S2Point center;

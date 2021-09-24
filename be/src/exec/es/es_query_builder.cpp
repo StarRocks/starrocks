@@ -170,7 +170,7 @@ void ExistsQueryBuilder::to_json(rapidjson::Document* document, rapidjson::Value
     query->AddMember("exists", term_node, allocator);
 }
 
-BooleanQueryBuilder::BooleanQueryBuilder() {}
+BooleanQueryBuilder::BooleanQueryBuilder() = default;
 BooleanQueryBuilder::~BooleanQueryBuilder() {
     for (auto clause : _must_clauses) {
         delete clause;
