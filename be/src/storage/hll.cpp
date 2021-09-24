@@ -385,7 +385,7 @@ int64_t HyperLogLog::estimate_cardinality() const {
     if (estimate <= num_streams * 2.5 && num_zero_registers != 0) {
         // Estimated cardinality is too low. Hll is too inaccurate here, instead use
         // linear counting.
-        estimate = num_streams * log(static_cast<float>(num_streams) / num_zero_registers);
+        estimate = num_streams * std::log(static_cast<float>(num_streams) / num_zero_registers);
     } else if (num_streams == 16384 && estimate < 72000) {
         // when Linear Couint change to HerperLoglog according to HerperLogLog Correction,
         // there are relatively large fluctuations, we fixed the problem refer to redis.
