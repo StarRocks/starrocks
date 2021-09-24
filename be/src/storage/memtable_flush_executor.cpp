@@ -42,7 +42,7 @@ std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
 // its reference count is not 0.
 OLAPStatus FlushToken::submit(const std::shared_ptr<MemTable>& memtable) {
     RETURN_NOT_OK(_flush_status.load());
-    _flush_token->submit_func(std::bind(&FlushToken::_flush_memtable, this, memtable));
+    _flush_token->submit_func([this, memtable] { _flush_memtable(memtable); });
     return OLAP_SUCCESS;
 }
 
@@ -52,7 +52,7 @@ Status FlushToken::submit(const std::shared_ptr<vectorized::MemTable>& memtable)
         ss << "tablet_id = " << memtable->tablet_id() << " flush_status error ";
         return Status::InternalError(ss.str());
     }
-    _flush_token->submit_func(std::bind(&FlushToken::_flush_vectorized_memtable, this, memtable));
+    _flush_token->submit_func([this, memtable] { _flush_vectorized_memtable(memtable); });
     return Status::OK();
 }
 
