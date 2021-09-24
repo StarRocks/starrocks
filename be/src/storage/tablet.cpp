@@ -382,7 +382,7 @@ void Tablet::delete_expired_inc_rowsets() {
         double diff = ::difftime(now, rs_meta->creation_time());
         if (diff >= config::inc_rowset_expired_sec) {
             Version version(rs_meta->version());
-            expired_versions.push_back(std::make_pair(version, rs_meta->version_hash()));
+            expired_versions.emplace_back(version, rs_meta->version_hash());
             VLOG(3) << "find expire incremental rowset. tablet=" << full_name() << ", version=" << version
                     << ", version_hash=" << rs_meta->version_hash() << ", exist_sec=" << diff;
         }

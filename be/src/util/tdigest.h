@@ -414,7 +414,7 @@ public:
         if (std::isnan(x)) {
             return false;
         }
-        _unprocessed.push_back(Centroid(x, w));
+        _unprocessed.emplace_back(x, w);
         _unprocessed_weight += w;
         processIfNecessary();
         return true;

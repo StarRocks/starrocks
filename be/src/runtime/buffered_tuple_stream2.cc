@@ -82,7 +82,7 @@ BufferedTupleStream2::BufferedTupleStream2(RuntimeState* state, const RowDescrip
         const int tuple_byte_size = tuple_desc->byte_size();
         _fixed_tuple_row_size += tuple_byte_size;
         if (!tuple_desc->string_slots().empty()) {
-            _string_slots.push_back(make_pair(i, tuple_desc->string_slots()));
+            _string_slots.emplace_back(i, tuple_desc->string_slots());
         }
         // if (!tuple_desc->collection_slots().empty()) {
         //     _collection_slots.push_back(make_pair(i, tuple_desc->collection_slots()));
