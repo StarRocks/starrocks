@@ -563,6 +563,8 @@ static inline HashtablezInfo* SampleSlow(int64_t*) {
 }
 static inline void UnsampleSlow(HashtablezInfo*) {}
 
+// #define PHMAP_USE_CUSTOM_INFO_HANDLE
+#ifndef PHMAP_USE_CUSTOM_INFO_HANDLE
 class HashtablezInfoHandle {
 public:
     inline void RecordStorageChanged(size_t, size_t) {}
@@ -571,6 +573,29 @@ public:
     inline void RecordErase() {}
     friend inline void swap(HashtablezInfoHandle&, HashtablezInfoHandle&) noexcept {}
 };
+
+#else
+
+class HashtablezInfoHandle {
+public:
+    inline void RecordStorageChanged(size_t, size_t) {}
+    inline void RecordRehash(size_t) { rehash_number += 1; }
+    inline void RecordInsert(size_t hash_val, size_t probe_length) {
+        insert_number += 1;
+        insert_probe_length += probe_length;
+    }
+    inline void RecordErase() {}
+    friend inline void swap(HashtablezInfoHandle& x, HashtablezInfoHandle& y) noexcept {
+        std::swap(x.insert_number, y.insert_number);
+        std::swap(x.insert_probe_length, y.insert_probe_length);
+        std::swap(x.rehash_number, y.rehash_number);
+    }
+    size_t insert_number = 0;
+    size_t insert_probe_length = 0;
+    size_t rehash_number = 0;
+};
+
+#endif
 
 static inline HashtablezInfoHandle Sample() {
     return HashtablezInfoHandle();
@@ -1265,6 +1290,11 @@ public:
         return PolicyTraits::apply(EmplaceDecomposable{*this}, std::forward<Args>(args)...);
     }
 
+    template <class... Args, typename std::enable_if<IsDecomposable<Args...>::value, int>::type = 0>
+    std::pair<iterator, bool> emplace_with_hash(size_t hashval, Args&&... args) {
+        return PolicyTraits::apply(EmplaceDecomposableHashval{*this, hashval}, std::forward<Args>(args)...);
+    }
+
     // This overload kicks in if we cannot deduce the key from args. It constructs
     // value_type unconditionally and then either moves it into the table or
     // destroys.
@@ -1278,9 +1308,24 @@ public:
         return PolicyTraits::apply(InsertSlot<true>{*this, std::move(*slot)}, elem);
     }
 
+    template <class... Args, typename std::enable_if<!IsDecomposable<Args...>::value, int>::type = 0>
+    std::pair<iterator, bool> emplace_with_hash(size_t hashval, Args&&... args) {
+        typename std::aligned_storage<sizeof(slot_type), alignof(slot_type)>::type raw;
+        slot_type* slot = reinterpret_cast<slot_type*>(&raw);
+
+        PolicyTraits::construct(&alloc_ref(), slot, std::forward<Args>(args)...);
+        const auto& elem = PolicyTraits::element(slot);
+        return PolicyTraits::apply(InsertSlotWithHash<true>{*this, std::move(*slot), hashval}, elem);
+    }
+
     template <class... Args>
     iterator emplace_hint(const_iterator, Args&&... args) {
         return emplace(std::forward<Args>(args)...).first;
+    }
+
+    template <class... Args>
+    iterator emplace_hint_with_hash(size_t hashval, const_iterator, Args&&... args) {
+        return emplace_with_hash(hashval, std::forward<Args>(args)...).first;
     }
 
     // Extension API: support for lazy emplace.
@@ -1674,6 +1719,15 @@ private:
         raw_hash_set& s;
     };
 
+    struct EmplaceDecomposableHashval {
+        template <class K, class... Args>
+        std::pair<iterator, bool> operator()(const K& key, Args&&... args) const {
+            return s.emplace_decomposable(key, hashval, std::forward<Args>(args)...);
+        }
+        raw_hash_set& s;
+        size_t hashval;
+    };
+
     template <bool do_destroy>
     struct InsertSlot {
         template <class K, class... Args>
@@ -1788,6 +1842,8 @@ private:
             auto layout = MakeLayout(old_capacity);
             Deallocate<Layout::Alignment()>(&alloc_ref(), old_ctrl, layout.AllocSize());
         }
+
+        infoz_.RecordRehash(new_capacity);
     }
 
     void drop_deletes_without_resize() PHMAP_ATTRIBUTE_NOINLINE {
@@ -1973,6 +2029,9 @@ protected:
 
     iterator iterator_at(size_t i) { return {ctrl_ + i, slots_ + i}; }
     const_iterator iterator_at(size_t i) const { return {ctrl_ + i, slots_ + i}; }
+
+public:
+    const HashtablezInfoHandle& infoz() const { return infoz_; }
 
 private:
     friend struct RawHashSetTestOnlyAccess;
@@ -4018,6 +4077,8 @@ public:
     using Base::insert;
     using Base::emplace;
     using Base::emplace_hint;
+    using Base::emplace_with_hash;
+    using Base::emplace_hint_with_hash;
     using Base::extract;
     using Base::merge;
     using Base::swap;
