@@ -201,7 +201,7 @@ const std::string& Thread::category() const {
 }
 
 std::string Thread::to_string() const {
-    return strings::Substitute("Thread $0 (name: \"$1\", category: \"$2\")", tid(), _name, _category);
+    return strings::Substitute(R"(Thread $0 (name: "$1", category: "$2"))", tid(), _name, _category);
 }
 
 Thread* Thread::current_thread() {

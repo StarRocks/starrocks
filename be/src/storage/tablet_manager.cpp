@@ -586,7 +586,7 @@ TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, SchemaHash schema
 
 bool TabletManager::get_tablet_id_and_schema_hash_from_path(const std::string& path, TTabletId* tablet_id,
                                                             TSchemaHash* schema_hash) {
-    static re2::RE2 normal_re("/data/\\d+/(\\d+)/(\\d+)($|/)");
+    static re2::RE2 normal_re(R"(/data/\d+/(\d+)/(\d+)($|/))");
     // match tablet schema hash data path, for example, the path is /data/1/16791/29998
     // 1 is shard id , 16791 is tablet id, 29998 is schema hash
     if (RE2::PartialMatch(path, normal_re, tablet_id, schema_hash)) {
@@ -605,7 +605,7 @@ bool TabletManager::get_tablet_id_and_schema_hash_from_path(const std::string& p
 }
 
 bool TabletManager::get_rowset_id_from_path(const std::string& path, RowsetId* rowset_id) {
-    static re2::RE2 re("/data/\\d+/\\d+/\\d+/([A-Fa-f0-9]+)_.*");
+    static re2::RE2 re(R"(/data/\d+/\d+/\d+/([A-Fa-f0-9]+)_.*)");
     std::string id_str;
     bool ret = RE2::PartialMatch(path, re, &id_str);
     if (ret) {
