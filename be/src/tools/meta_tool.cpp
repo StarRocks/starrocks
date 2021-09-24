@@ -352,7 +352,7 @@ void batch_delete_meta(const std::string& tablet_file) {
 
 Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
-    std::string file_name = input_file->file_name();
+    const std::string& file_name = input_file->file_name();
     uint64_t file_size;
     RETURN_IF_ERROR(input_file->size(&file_size));
 

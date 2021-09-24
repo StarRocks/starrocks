@@ -148,7 +148,7 @@ Status convert_to_row_desc(ObjectPool* pool, const arrow::Schema& schema, RowDes
     TDescriptorTableBuilder builder;
     TTupleDescriptorBuilder tuple_builder;
     for (int i = 0; i < schema.num_fields(); ++i) {
-        auto field = schema.field(i);
+        const auto& field = schema.field(i);
         TSlotDescriptorBuilder slot_builder;
         RETURN_IF_ERROR(convert_to_slot_desc(*field, i, &slot_builder));
         tuple_builder.add_slot(slot_builder.build());
