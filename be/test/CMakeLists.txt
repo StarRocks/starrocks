@@ -258,10 +258,10 @@ if (WITH_HDFS)
     set(EXEC_FILES ${EXEC_FILES} ./exec/vectorized/hdfs_scan_node_test.cpp)
 endif ()
 
-add_executable(starrocks_test ${EXEC_FILES})
+add_executable(starrocks_be_test ${EXEC_FILES})
 
-TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
-SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+TARGET_LINK_LIBRARIES(starrocks_be_test ${TEST_LINK_LIBS})
+SET_TARGET_PROPERTIES(starrocks_be_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 SET_TARGET_PROPERTIES(${PLUGIN_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/test")
 
 # bytes_test requires tcmalloc which conflicts with sanitizer.
