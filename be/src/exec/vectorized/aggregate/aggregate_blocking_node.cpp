@@ -68,7 +68,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
                     if (zero_count == _aggregator->streaming_selection().size()) {
                         _aggregator->compute_batch_agg_states(chunk->num_rows());
                     } else {
-                        _aggregator->compute_batch_agg_states_with_selection(chunk->num_rows());
+                        _aggregator->compute_batch_agg_states_with_limit(chunk->num_rows());
                     }
                 } else {
                     _aggregator->compute_batch_agg_states(chunk->num_rows());

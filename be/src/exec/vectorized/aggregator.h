@@ -111,6 +111,8 @@ public:
     void compute_single_agg_state(size_t chunk_size);
     // For aggregate with group by
     void compute_batch_agg_states(size_t chunk_size);
+    // For aggregate with group by + limit
+    void compute_batch_agg_states_with_limit(size_t chunk_size);
     void compute_batch_agg_states_with_selection(size_t chunk_size);
 
     // Convert one row agg states to chunk
@@ -248,23 +250,31 @@ private:
 public:
     template <typename HashMapWithKey>
     void build_hash_map(HashMapWithKey& hash_map_with_key, size_t chunk_size) {
-        size_t limit = std::numeric_limits<size_t>::max();
         if (_aggr_phase == AggrPhase2 && _limit != -1) {
-            limit = _limit;
+            hash_map_with_key.compute_agg_states_with_limit(
+                    chunk_size, _group_by_columns, _mem_pool.get(),
+                    [this]() {
+                        vectorized::AggDataPtr agg_state =
+                                _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+                        for (int i = 0; i < _agg_functions.size(); i++) {
+                            _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
+                        }
+                        return agg_state;
+                    },
+                    &_tmp_agg_states, _limit, &_streaming_selection);
+        } else {
+            hash_map_with_key.compute_agg_states(
+                    chunk_size, _group_by_columns, _mem_pool.get(),
+                    [this]() {
+                        vectorized::AggDataPtr agg_state =
+                                _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+                        for (int i = 0; i < _agg_functions.size(); i++) {
+                            _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
+                        }
+                        return agg_state;
+                    },
+                    &_tmp_agg_states);
         }
-        hash_map_with_key.compute_agg_states(
-                chunk_size, _group_by_columns, _mem_pool.get(),
-                [this]() {
-                    vectorized::AggDataPtr agg_state =
-                            _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-                    for (int i = 0; i < _agg_functions.size(); i++) {
-                        _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
-                    }
-                    return agg_state;
-                },
-                &_tmp_agg_states,
-                limit,
-                &_streaming_selection);
     }
 
     template <typename HashMapWithKey>

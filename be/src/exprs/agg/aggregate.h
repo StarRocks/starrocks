@@ -98,9 +98,9 @@ public:
                              AggDataPtr* states) const = 0;
 
     // selection[i] = 0, will be merged
-    virtual void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
-                             AggDataPtr* states,
-                             const std::vector<uint8_t>& filter) const {};
+    virtual void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset,
+                                         const Column* column, AggDataPtr* states,
+                                         const std::vector<uint8_t>& filter) const {};
 
     // merge result to single state
     virtual void merge_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column* column,
@@ -157,7 +157,7 @@ class AggregateFunctionBatchHelper : public AggregateFunctionStateHelper<State> 
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
-                     AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+                                 AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
         for (size_t i = 0; i < batch_size; i++) {
             // TODO: optimize with simd ?
             if (filter[i] == 0) {
