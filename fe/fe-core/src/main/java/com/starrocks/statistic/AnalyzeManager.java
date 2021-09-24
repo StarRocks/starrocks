@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -193,6 +194,7 @@ public class AnalyzeManager implements Writable {
                 Catalog.getCurrentStatisticStorage()
                         .expireColumnStatistics(db.getTable(job.getTableId()), job.getColumns());
             } else {
+                List<Table> tableNeedCheck = new ArrayList<>();
                 if (job.getDbId() == AnalyzeJob.DEFAULT_ALL_ID) {
                     List<Long> dbIds = Catalog.getCurrentCatalog().getDbIds();
                     for (Long dbId : dbIds) {
@@ -200,25 +202,25 @@ public class AnalyzeManager implements Writable {
                         if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                             continue;
                         }
-
-                        for (Table table : db.getTables()) {
-                            checkAndExpireCachedStatistics(table, job);
-                        }
+                        tableNeedCheck.addAll(db.getTables());
                     }
-                } else if (job.getDbId() != AnalyzeJob.DEFAULT_ALL_ID && job.getDbId() == AnalyzeJob.DEFAULT_ALL_ID) {
+                } else if (job.getDbId() != AnalyzeJob.DEFAULT_ALL_ID &&
+                        job.getTableId() == AnalyzeJob.DEFAULT_ALL_ID) {
                     Database db = Catalog.getCurrentCatalog().getDb(job.getDbId());
                     if (null == db) {
                         return;
                     }
-                    for (Table table : db.getTables()) {
-                        checkAndExpireCachedStatistics(table, job);
-                    }
+                    tableNeedCheck.addAll(db.getTables());
                 } else {
                     Database db = Catalog.getCurrentCatalog().getDb(job.getDbId());
                     if (null == db) {
                         return;
                     }
-                    checkAndExpireCachedStatistics(db.getTable(job.getTableId()), job);
+                    tableNeedCheck.add(db.getTable(job.getTableId()));
+                }
+
+                for (Table table : tableNeedCheck) {
+                    checkAndExpireCachedStatistics(table, job);
                 }
             }
         }
