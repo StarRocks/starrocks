@@ -314,7 +314,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         if (_current_request_bytes > _request_bytes_threshold) {
             butil::IOBuf attachment;
             // construct_brpc_attachment(&_chunk_request, &attachment);
-            for (auto channel : _channels) {
+            for (const auto& channel : _channels) {
                 RETURN_IF_ERROR(channel->send_chunk_request(&_chunk_request, attachment));
             }
             _current_request_bytes = 0;

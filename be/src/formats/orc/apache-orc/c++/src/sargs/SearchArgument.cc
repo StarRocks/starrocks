@@ -406,7 +406,7 @@ static void generateAllCombinations(std::vector<TreeNode>& result, const std::ve
         std::vector<TreeNode> work(result.begin(), result.end());
         result.clear();
         for (TreeNode& kid : kids) {
-            for (TreeNode node : work) {
+            for (const TreeNode& node : work) {
                 TreeNode copy = std::make_shared<ExpressionTree>(*node);
                 copy->addChild(kid);
                 result.emplace_back(copy);

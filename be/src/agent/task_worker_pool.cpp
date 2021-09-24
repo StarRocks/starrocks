@@ -787,7 +787,7 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
         std::vector<std::string> error_msgs;
         TStatus task_status;
 
-        for (auto tablet_meta_info : update_tablet_meta_req.tabletMetaInfos) {
+        for (const auto& tablet_meta_info : update_tablet_meta_req.tabletMetaInfos) {
             TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(
                     tablet_meta_info.tablet_id, tablet_meta_info.schema_hash);
             if (tablet == nullptr) {
