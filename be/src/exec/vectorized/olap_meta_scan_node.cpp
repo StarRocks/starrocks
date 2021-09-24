@@ -1,6 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 #include "exec/vectorized/olap_meta_scan_node.h"
 
+// just for debug
+#include <iostream>
+
 namespace starrocks {
 namespace vectorized {
 
@@ -38,6 +41,10 @@ Status OlapMetaScanNode::prepare(RuntimeState* state) {
 
     // get desc tuple desc
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
+
+    // just for debug
+    std::cout << "tuple_id: " << _tuple_id << std::endl;
+
     if (nullptr == _tuple_desc) {
         return Status::InternalError("Failed to get tuple descriptor.");
     }

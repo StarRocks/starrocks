@@ -461,6 +461,8 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new vectorized::OlapScanNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::OLAP_META_SCAN_NODE:
+        // just for debug
+        std::cout << "create OLAP_META_SCAN_NODE" << std::endl;
         *node = pool->add(new vectorized::OlapMetaScanNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::AGGREGATION_NODE:

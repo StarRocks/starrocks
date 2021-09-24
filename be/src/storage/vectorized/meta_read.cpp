@@ -9,6 +9,9 @@
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/segment_v2/column_reader.h"
 
+// just for debug
+#include <iostream>
+
 namespace starrocks {
 namespace vectorized { 
 
@@ -49,6 +52,10 @@ Status MetaReader::_init_params(const MetaReaderParams& read_params) {
         }
         // 可能需要拆分 col name, 才能得出正确的 col_name
         int32_t index = _tablet->field_index(slot->col_name());
+
+        // just for debug
+        std::cout << "slot name" << slot->col_name() << std::endl;
+
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << slot->col_name();
