@@ -156,7 +156,7 @@ Status DataDir::_read_cluster_id(const std::string& path, int32_t* cluster_id) {
     fs.close();
     int32_t tmp_cluster_id = -1;
     if (!cluster_id_str.empty()) {
-        size_t pos = cluster_id_str.find("-");
+        size_t pos = cluster_id_str.find('-');
         if (pos != std::string::npos) {
             tmp_cluster_id = std::stoi(cluster_id_str.substr(0, pos).c_str());
         } else {
@@ -422,7 +422,7 @@ OLAPStatus DataDir::load() {
     // if one rowset load failed, then the total data dir will not be loaded
     std::vector<RowsetMetaSharedPtr> dir_rowset_metas;
     LOG(INFO) << "begin loading rowset from meta";
-    auto load_rowset_func = [&dir_rowset_metas](TabletUid tablet_uid, RowsetId rowset_id,
+    auto load_rowset_func = [&dir_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
                                                 const std::string& meta_str) -> bool {
         RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
         bool parsed = rowset_meta->init(meta_str);

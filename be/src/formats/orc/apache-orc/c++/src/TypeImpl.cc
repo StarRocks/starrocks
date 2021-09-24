@@ -591,7 +591,7 @@ std::unique_ptr<Type> TypeImpl::parseDecimalType(const std::string& input, size_
     return std::unique_ptr<Type>(new TypeImpl(DECIMAL, precision, scale));
 }
 
-std::unique_ptr<Type> TypeImpl::parseCategory(std::string category, const std::string& input, size_t start,
+std::unique_ptr<Type> TypeImpl::parseCategory(const std::string& category, const std::string& input, size_t start,
                                               size_t end) {
     if (category == "boolean") {
         return std::unique_ptr<Type>(new TypeImpl(BOOLEAN));

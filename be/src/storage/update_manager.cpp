@@ -181,7 +181,7 @@ Status UpdateManager::get_latest_del_vec(KVStore* meta, const TabletSegmentId& t
     return Status::OK();
 }
 
-Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, DelVectorPtr delvec) {
+Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelVectorPtr& delvec) {
     VLOG(1) << "set_cached_del_vec tablet:" << tsid.tablet_id << " rss:" << tsid.segment_id
             << " version:" << delvec->version() << " #del:" << delvec->cardinality();
     std::lock_guard<std::mutex> lg(_del_vec_cache_lock);

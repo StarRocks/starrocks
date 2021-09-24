@@ -29,6 +29,16 @@ void GlobalDriverDispatcher::change_num_threads(int32_t num_threads) {
     }
 }
 
+void GlobalDriverDispatcher::finalize_driver(DriverPtr& driver, RuntimeState* runtime_state, DriverState state) {
+    DCHECK(driver);
+    driver->finalize(runtime_state, state);
+    if (driver->query_ctx()->is_finished()) {
+        auto query_id = driver->query_ctx()->query_id();
+        driver.reset();
+        QueryContextManager::instance()->remove(query_id);
+    }
+}
+
 void GlobalDriverDispatcher::run() {
     while (true) {
         if (_num_threads_setter.should_shrink()) {
@@ -48,13 +58,13 @@ void GlobalDriverDispatcher::run() {
                 driver->set_driver_state(DriverState::PENDING_FINISH);
                 _blocked_driver_poller->add_blocked_driver(driver);
             } else {
-                driver->finalize(runtime_state, DriverState::CANCELED);
+                finalize_driver(driver, runtime_state, DriverState::CANCELED);
             }
             continue;
         }
         // a blocked driver is canceled because of fragment cancellation or query expiration.
         if (driver->is_finished()) {
-            driver->finalize(runtime_state, driver->driver_state());
+            finalize_driver(driver, runtime_state, driver->driver_state());
             continue;
         }
         // query context has ready drivers to run, so extend its lifetime.
@@ -69,7 +79,7 @@ void GlobalDriverDispatcher::run() {
                 driver->set_driver_state(DriverState::PENDING_FINISH);
                 _blocked_driver_poller->add_blocked_driver(driver);
             } else {
-                driver->finalize(runtime_state, DriverState::INTERNAL_ERROR);
+                finalize_driver(driver, runtime_state, DriverState::INTERNAL_ERROR);
             }
             continue;
         }
@@ -88,7 +98,7 @@ void GlobalDriverDispatcher::run() {
             VLOG_ROW << strings::Substitute("[Driver] Finished, source=$0, state=$1, status=$2",
                                             driver->source_operator()->get_name(), ds_to_string(driver_state),
                                             fragment_ctx->final_status().to_string());
-            driver->finalize(runtime_state, driver_state);
+            finalize_driver(driver, runtime_state, driver_state);
             break;
         }
         case INPUT_EMPTY:
@@ -109,9 +119,22 @@ void GlobalDriverDispatcher::dispatch(DriverPtr driver) {
     this->_driver_queue->put_back(driver);
 }
 
-void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done,
-                                               bool clean) {
-    this->_exec_state_reporter->submit(fragment_ctx, status, done, clean);
+void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) {
+    auto params = ExecStateReporter::create_report_exec_status_params(fragment_ctx, status, done);
+    auto fe_addr = fragment_ctx->fe_addr();
+    auto exec_env = fragment_ctx->runtime_state()->exec_env();
+    auto fragment_id = fragment_ctx->fragment_instance_id();
+
+    auto report_task = [=]() {
+        auto status = ExecStateReporter::report_exec_status(params, exec_env, fe_addr);
+        if (!status.ok()) {
+            LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id=" << print_id(fragment_id);
+        } else {
+            LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id=" << print_id(fragment_id);
+        }
+    };
+
+    this->_exec_state_reporter->submit(std::move(report_task));
 }
 } // namespace pipeline
 } // namespace starrocks

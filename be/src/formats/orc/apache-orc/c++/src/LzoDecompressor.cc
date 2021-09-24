@@ -52,7 +52,7 @@ public:
 
     MalformedInputException(const MalformedInputException& other) : ParseError(other.what()) {}
 
-    virtual ~MalformedInputException() noexcept;
+    ~MalformedInputException() noexcept override;
 };
 
 MalformedInputException::~MalformedInputException() noexcept {

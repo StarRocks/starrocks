@@ -2,6 +2,8 @@
 
 #include "storage/vectorized/compaction.h"
 
+#include <utility>
+
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "storage/rowset/rowset_factory.h"
@@ -18,7 +20,7 @@ namespace starrocks::vectorized {
 Semaphore Compaction::_concurrency_sem;
 
 Compaction::Compaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
-        : _tablet(tablet),
+        : _tablet(std::move(tablet)),
           _input_rowsets_size(0),
           _input_row_num(0),
           _state(CompactionState::INITED),

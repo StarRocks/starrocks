@@ -221,7 +221,7 @@ public:
     }
 
     Status do_merge(Tablet& tablet, int64_t version, const Schema& schema, const vector<RowsetSharedPtr>& rowsets,
-                    RowsetWriter* writer, const MergeConfig& cfg) {
+                    RowsetWriter* writer, const MergeConfig& cfg) override {
         MonotonicStopWatch timer;
         timer.start();
         _chunk_size = cfg.chunk_size;

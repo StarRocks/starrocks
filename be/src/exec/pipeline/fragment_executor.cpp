@@ -28,7 +28,7 @@ namespace starrocks::pipeline {
 
 Morsels convert_scan_range_to_morsel(const std::vector<TScanRangeParams>& scan_ranges, int node_id) {
     Morsels morsels;
-    for (auto scan_range : scan_ranges) {
+    for (const auto& scan_range : scan_ranges) {
         morsels.emplace_back(std::make_unique<OlapMorsel>(node_id, scan_range));
     }
     return morsels;
@@ -198,10 +198,10 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 }
 
 Status FragmentExecutor::execute(ExecEnv* exec_env) {
-    for (auto driver : _fragment_ctx->drivers()) {
+    for (const auto& driver : _fragment_ctx->drivers()) {
         RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
     }
-    for (auto driver : _fragment_ctx->drivers()) {
+    for (const auto& driver : _fragment_ctx->drivers()) {
         exec_env->driver_dispatcher()->dispatch(driver);
     }
     return Status::OK();

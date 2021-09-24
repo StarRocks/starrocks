@@ -16,7 +16,7 @@ class ChunksSorter;
 class TopNNode final : public ::starrocks::ExecNode {
 public:
     TopNNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    virtual ~TopNNode();
+    ~TopNNode() override;
 
     // overridden methods defined in ::starrocks::ExecNode
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;

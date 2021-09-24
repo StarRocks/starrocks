@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "exec/pipeline/operator.h"
 #include "exec/vectorized/aggregator.h"
 
@@ -9,10 +11,10 @@ namespace starrocks::pipeline {
 class AggregateDistinctBlockingSinkOperator : public Operator {
 public:
     AggregateDistinctBlockingSinkOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : Operator(id, "aggregate_distinct_blocking_sink", plan_node_id), _aggregator(aggregator) {
+            : Operator(id, "aggregate_distinct_blocking_sink", plan_node_id), _aggregator(std::move(aggregator)) {
         _aggregator->set_aggr_phase(AggrPhase2);
     }
-    ~AggregateDistinctBlockingSinkOperator() = default;
+    ~AggregateDistinctBlockingSinkOperator() override = default;
 
     bool has_output() const override { return false; }
     bool need_input() const override { return true; }
@@ -35,7 +37,7 @@ private:
 class AggregateDistinctBlockingSinkOperatorFactory final : public OperatorFactory {
 public:
     AggregateDistinctBlockingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : OperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
+            : OperatorFactory(id, plan_node_id), _aggregator(std::move(aggregator)) {}
 
     ~AggregateDistinctBlockingSinkOperatorFactory() override = default;
 

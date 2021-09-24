@@ -21,6 +21,8 @@
 
 #include "exec/tablet_info.h"
 
+#include <utility>
+
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/row_batch.h"
@@ -161,7 +163,7 @@ std::string OlapTablePartition::debug_string(TupleDescriptor* tuple_desc) const 
 
 OlapTablePartitionParam::OlapTablePartitionParam(std::shared_ptr<OlapTableSchemaParam> schema,
                                                  const TOlapTablePartitionParam& t_param)
-        : _schema(schema),
+        : _schema(std::move(schema)),
           _t_param(t_param),
           _mem_tracker(new MemTracker()),
           _mem_pool(new MemPool(_mem_tracker.get())) {}

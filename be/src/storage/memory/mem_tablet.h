@@ -46,12 +46,13 @@ class WriteTxn;
 // TODO: will add more functionality as project evolves.
 class MemTablet : public BaseTablet {
 public:
-    static std::shared_ptr<MemTablet> create_tablet_from_meta(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta,
+    static std::shared_ptr<MemTablet> create_tablet_from_meta(MemTracker* mem_tracker,
+                                                              const TabletMetaSharedPtr& tablet_meta,
                                                               DataDir* data_dir = nullptr);
 
-    MemTablet(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta, DataDir* data_dir);
+    MemTablet(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir);
 
-    virtual ~MemTablet();
+    ~MemTablet() override;
 
     // Initialize
     Status init();

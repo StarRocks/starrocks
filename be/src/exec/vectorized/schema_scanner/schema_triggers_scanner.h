@@ -10,7 +10,7 @@ namespace starrocks::vectorized {
 class SchemaTriggersScanner : public SchemaScanner {
 public:
     SchemaTriggersScanner();
-    virtual ~SchemaTriggersScanner();
+    ~SchemaTriggersScanner() override;
 
 private:
     static SchemaScanner::ColumnDesc _s_cols_triggers[];

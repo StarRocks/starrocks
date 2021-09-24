@@ -69,7 +69,7 @@ public:
     ~PushHandler() = default;
 
     // Load local data file into specified tablet.
-    Status process_streaming_ingestion(TabletSharedPtr tablet, const TPushReq& request, PushType push_type,
+    Status process_streaming_ingestion(const TabletSharedPtr& tablet, const TPushReq& request, PushType push_type,
                                        std::vector<TTabletInfo>* tablet_info_vec);
 
     int64_t write_bytes() const { return _write_bytes; }
@@ -81,8 +81,8 @@ private:
 
     void _get_tablet_infos(const std::vector<TabletVars>& tablet_infos, std::vector<TTabletInfo>* tablet_info_vec);
 
-    Status _convert(TabletSharedPtr cur_tablet, TabletSharedPtr new_tablet_vec, RowsetSharedPtr* cur_rowset,
-                    RowsetSharedPtr* new_rowset);
+    Status _convert(const TabletSharedPtr& cur_tablet, const TabletSharedPtr& new_tablet_vec,
+                    RowsetSharedPtr* cur_rowset, RowsetSharedPtr* new_rowset);
 
 private:
     // mainly tablet_id, version and delta file path

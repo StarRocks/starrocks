@@ -26,7 +26,7 @@
 
 namespace starrocks {
 
-BaseTablet::BaseTablet(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta, DataDir* data_dir)
+BaseTablet::BaseTablet(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
         : _mem_tracker(mem_tracker),
           _state(tablet_meta->tablet_state()),
           _tablet_meta(tablet_meta),

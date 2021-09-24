@@ -68,17 +68,17 @@ protected:
 
 class GzipDecompressor : public Decompressor {
 public:
-    virtual ~GzipDecompressor();
+    ~GzipDecompressor() override;
 
-    virtual Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
-                              size_t output_len, size_t* output_bytes_written, bool* stream_end) override;
+    Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output, size_t output_len,
+                      size_t* output_bytes_written, bool* stream_end) override;
 
-    virtual std::string debug_info() override;
+    std::string debug_info() override;
 
 private:
     friend class Decompressor;
     GzipDecompressor(bool is_deflate);
-    virtual Status init() override;
+    Status init() override;
 
 private:
     bool _is_deflate;
@@ -92,17 +92,17 @@ private:
 
 class Bzip2Decompressor : public Decompressor {
 public:
-    virtual ~Bzip2Decompressor();
+    ~Bzip2Decompressor() override;
 
-    virtual Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
-                              size_t output_len, size_t* output_bytes_written, bool* stream_end) override;
+    Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output, size_t output_len,
+                      size_t* output_bytes_written, bool* stream_end) override;
 
-    virtual std::string debug_info() override;
+    std::string debug_info() override;
 
 private:
     friend class Decompressor;
     Bzip2Decompressor() : Decompressor(CompressionTypePB::BZIP2) {}
-    virtual Status init() override;
+    Status init() override;
 
 private:
     bz_stream _bz_strm;
@@ -110,17 +110,17 @@ private:
 
 class Lz4FrameDecompressor : public Decompressor {
 public:
-    virtual ~Lz4FrameDecompressor();
+    ~Lz4FrameDecompressor() override;
 
-    virtual Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
-                              size_t output_len, size_t* output_bytes_written, bool* stream_end) override;
+    Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output, size_t output_len,
+                      size_t* output_bytes_written, bool* stream_end) override;
 
-    virtual std::string debug_info() override;
+    std::string debug_info() override;
 
 private:
     friend class Decompressor;
     Lz4FrameDecompressor() : Decompressor(CompressionTypePB::LZ4_FRAME) {}
-    virtual Status init() override;
+    Status init() override;
 
     size_t get_block_size(const LZ4F_frameInfo_t* info);
 
@@ -134,12 +134,12 @@ private:
 /// It offers a very wide range of compression/speed trade-off.
 class ZstandardDecompressor : public Decompressor {
 public:
-    virtual ~ZstandardDecompressor();
+    ~ZstandardDecompressor() override;
 
-    virtual Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output,
-                              size_t output_len, size_t* output_bytes_write, bool* stream_end) override;
+    Status decompress(uint8_t* input, size_t input_len, size_t* input_bytes_read, uint8_t* output, size_t output_len,
+                      size_t* output_bytes_write, bool* stream_end) override;
 
-    virtual std::string debug_info() override;
+    std::string debug_info() override;
 
 private:
     friend class Decompressor;

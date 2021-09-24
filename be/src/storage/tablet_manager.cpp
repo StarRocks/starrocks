@@ -343,15 +343,6 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(const AlterTable
             break;
         }
         is_tablet_added = true;
-
-        // TODO(lingbin): The following logic seems useless, can be removed?
-        // Because if _add_tablet_unlocked() return OK, we must can get it from map.
-        TabletSharedPtr tablet_ptr = _get_tablet_unlocked(new_tablet_id, new_schema_hash);
-        if (tablet_ptr == nullptr) {
-            LOG(WARNING) << "Fail to get tablet. tablet_id=" << new_tablet_id;
-            status = Status::NotFound("tablet not found");
-            break;
-        }
     } while (0);
 
     if (status.ok()) {
@@ -402,18 +393,10 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
         std::string schema_hash_dir =
                 path_util::join_path_segments(tablet_dir, std::to_string(request.tablet_schema.schema_hash));
 
-        // Because the tablet is removed asynchronously, so that the dir may still exist when BE
-        // receive create-tablet request again, For example retried schema-change request
-        if (FileUtils::check_exist(schema_hash_dir)) {
-            LOG(WARNING) << "Skip create already exist path=" << schema_hash_dir;
+        st = FileUtils::create_dir(schema_hash_dir);
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to create " << schema_hash_dir << ": " << st.to_string();
             continue;
-        } else {
-            data_dir->add_pending_ids(pending_id);
-            st = FileUtils::create_dir(schema_hash_dir);
-            if (!st.ok()) {
-                LOG(WARNING) << "Fail to create path=" << schema_hash_dir << " error=" << st.to_string();
-                continue;
-            }
         }
 
         TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, data_dir);
@@ -591,7 +574,7 @@ TabletSharedPtr TabletManager::_get_tablet_unlocked(TTabletId tablet_id, SchemaH
     return tablet;
 }
 
-TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, SchemaHash schema_hash, TabletUid tablet_uid,
+TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                                           bool include_deleted, std::string* err) {
     std::shared_lock rlock(_get_tablets_shard_lock(tablet_id));
     TabletSharedPtr tablet = _get_tablet_unlocked(tablet_id, schema_hash, include_deleted, err);

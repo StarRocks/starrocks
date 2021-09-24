@@ -203,7 +203,7 @@ Status ChunksSorterTopn::_build_sorting_data(RuntimeState* state, Permutation& p
 
 void ChunksSorterTopn::_sort_data_by_row_cmp(
         Permutation& permutation, size_t rows_to_sort, size_t rows_size,
-        std::function<bool(const PermutationItem& l, const PermutationItem& r)> cmp_fn) {
+        const std::function<bool(const PermutationItem& l, const PermutationItem& r)>& cmp_fn) {
     if (rows_to_sort > 0 && rows_to_sort < rows_size / 5) {
         // when Limit >= 1/5 of all data, a full sort will be faster than partial sort.
         // partial sort

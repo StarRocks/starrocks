@@ -26,7 +26,7 @@ struct FrameRange {
 
 class AnalyticNode : public ExecNode {
 public:
-    ~AnalyticNode() {}
+    ~AnalyticNode() override {}
     AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;

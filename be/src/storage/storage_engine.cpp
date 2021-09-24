@@ -129,6 +129,7 @@ StorageEngine::~StorageEngine() {
 
 void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     std::vector<std::thread> threads;
+    threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
         threads.emplace_back([data_dir] {
             auto res = data_dir->load();
@@ -675,7 +676,7 @@ OLAPStatus StorageEngine::_start_trash_sweep(double* usage) {
 
 void StorageEngine::_clean_unused_rowset_metas() {
     std::vector<RowsetMetaSharedPtr> invalid_rowset_metas;
-    auto clean_rowset_func = [this, &invalid_rowset_metas](TabletUid tablet_uid, RowsetId rowset_id,
+    auto clean_rowset_func = [this, &invalid_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
                                                            const std::string& meta_str) -> bool {
         RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
         bool parsed = rowset_meta->init(meta_str);
@@ -791,7 +792,7 @@ void StorageEngine::start_delete_unused_rowset() {
     }
 }
 
-void StorageEngine::add_unused_rowset(RowsetSharedPtr rowset) {
+void StorageEngine::add_unused_rowset(const RowsetSharedPtr& rowset) {
     if (rowset == nullptr) {
         return;
     }

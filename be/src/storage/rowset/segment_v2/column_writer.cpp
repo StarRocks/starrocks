@@ -182,7 +182,7 @@ public:
         return _scalar_column_writer->append(data, null_flags, count, has_null);
     };
 
-    Status append(const RowCursorCell& cell) {
+    Status append(const RowCursorCell& cell) override {
         if (!_is_speculated) {
             _scalar_column_writer->set_encoding(DEFAULT_ENCODING);
             _is_speculated = true;

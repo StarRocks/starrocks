@@ -393,7 +393,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 // else: (TODO)
 //
 // MUST hold tablet's header lock, push lock, cumulative lock and base compaction lock
-Status SnapshotLoader::move(const std::string& snapshot_path, TabletSharedPtr tablet, bool overwrite) {
+Status SnapshotLoader::move(const std::string& snapshot_path, const TabletSharedPtr& tablet, bool overwrite) {
     std::string tablet_path = tablet->tablet_path();
     std::string store_path = tablet->data_dir()->path();
     LOG(INFO) << "begin to move snapshot files. from: " << snapshot_path << ", to: " << tablet_path
@@ -520,7 +520,7 @@ Status SnapshotLoader::_get_tablet_id_and_schema_hash_from_file_path(const std::
                                                                      int32_t* schema_hash) {
     // path should be like: /path/.../tablet_id/schema_hash
     // we try to extract tablet_id from path
-    size_t pos = src_path.find_last_of("/");
+    size_t pos = src_path.find_last_of('/');
     if (pos == std::string::npos || pos == src_path.length() - 1) {
         return Status::InternalError("failed to get tablet id from path: " + src_path);
     }
@@ -531,7 +531,7 @@ Status SnapshotLoader::_get_tablet_id_and_schema_hash_from_file_path(const std::
     ss1 >> *schema_hash;
 
     // skip schema hash part
-    size_t pos2 = src_path.find_last_of("/", pos - 1);
+    size_t pos2 = src_path.find_last_of('/', pos - 1);
     if (pos2 == std::string::npos) {
         return Status::InternalError("failed to get tablet id from path: " + src_path);
     }
@@ -604,7 +604,7 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
             }
 
             const std::string& file_name = file.path;
-            size_t pos = file_name.find_last_of(".");
+            size_t pos = file_name.find_last_of('.');
             if (pos == std::string::npos || pos == file_name.size() - 1) {
                 // Not found checksum separator, ignore this file
                 continue;
@@ -679,7 +679,7 @@ Status SnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, cons
 
 void SnapshotLoader::_assemble_file_name(const std::string& snapshot_path, const std::string& tablet_path,
                                          int64_t tablet_id, int64_t start_version, int64_t end_version,
-                                         int64_t vesion_hash, int32_t seg_num, const std::string suffix,
+                                         int64_t vesion_hash, int32_t seg_num, const std::string& suffix,
                                          std::string* snapshot_file, std::string* tablet_file) {
     std::stringstream ss1;
     ss1 << snapshot_path << "/" << tablet_id << "_" << start_version << "_" << end_version << "_" << vesion_hash << "_"
@@ -715,7 +715,7 @@ Status SnapshotLoader::_replace_tablet_id(const std::string& file_name, int64_t 
 Status SnapshotLoader::_get_tablet_id_from_remote_path(const std::string& remote_path, int64_t* tablet_id) {
     // eg:
     // bos://xxx/../__tbl_10004/__part_10003/__idx_10004/__10005
-    size_t pos = remote_path.find_last_of("_");
+    size_t pos = remote_path.find_last_of('_');
     if (pos == std::string::npos) {
         return Status::InternalError("invalid remove file path: " + remote_path);
     }

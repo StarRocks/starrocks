@@ -71,7 +71,7 @@ public:
     DataStreamSender(ObjectPool* pool, bool is_vectorized, int sender_id, const RowDescriptor& row_desc,
                      const TDataStreamSink& sink, const std::vector<TPlanFragmentDestination>& destinations,
                      int per_channel_buffer_size, bool send_query_statistics_with_every_batch);
-    virtual ~DataStreamSender();
+    ~DataStreamSender() override;
 
     Status init(const TDataSink& thrift_sink) override;
 

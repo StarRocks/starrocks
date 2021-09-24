@@ -33,7 +33,7 @@
 
 namespace starrocks {
 
-OLAPStatus Merger::merge_rowsets(MemTracker* mem_tracker, TabletSharedPtr tablet, ReaderType reader_type,
+OLAPStatus Merger::merge_rowsets(MemTracker* mem_tracker, const TabletSharedPtr& tablet, ReaderType reader_type,
                                  const std::vector<RowsetReaderSharedPtr>& src_rowset_readers,
                                  RowsetWriter* dst_rowset_writer, Merger::Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");

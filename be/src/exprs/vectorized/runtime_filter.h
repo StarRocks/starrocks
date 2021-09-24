@@ -68,6 +68,7 @@ public:
 #endif
     }
 
+#ifdef __AVX2__
     void insert_hash_in_same_bucket(const uint64_t* hash_values, size_t n) {
         if (n == 0) return;
         const uint32_t bucket_idx = hash_values[0] & _directory_mask;
@@ -91,6 +92,7 @@ public:
         }
 #endif
     }
+#endif
 
     size_t max_serialized_size() const;
     size_t serialize(uint8_t* data) const;
@@ -245,9 +247,9 @@ public:
     using ColumnType = RunTimeColumnType<Type>;
 
     RuntimeBloomFilter() = default;
-    ~RuntimeBloomFilter() = default;
+    ~RuntimeBloomFilter() override = default;
 
-    virtual RuntimeBloomFilter* create_empty(ObjectPool* pool) override { return pool->add(new RuntimeBloomFilter()); };
+    RuntimeBloomFilter* create_empty(ObjectPool* pool) override { return pool->add(new RuntimeBloomFilter()); };
 
     void init_min_max() {
         _has_min_max = false;
@@ -580,7 +582,7 @@ public:
         return offset;
     }
 
-    virtual bool check_equal(const JoinRuntimeFilter& base_rf) const override {
+    bool check_equal(const JoinRuntimeFilter& base_rf) const override {
         if (!JoinRuntimeFilter::check_equal(base_rf)) return false;
         const auto& rf = static_cast<const RuntimeBloomFilter<Type>&>(base_rf);
         if constexpr (!IsSlice<CppType>) {

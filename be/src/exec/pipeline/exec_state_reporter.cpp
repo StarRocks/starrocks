@@ -24,7 +24,7 @@ std::string to_load_error_http_path(const std::string& file_name) {
     return url.str();
 }
 
-std::string to_http_path(const std::string token, const std::string& file_name) {
+std::string to_http_path(const std::string& token, const std::string& file_name) {
     std::stringstream url;
     url << "http://" << BackendOptions::get_localhost() << ":" << config::webserver_port << "/api/_download_load?"
         << "token=" << token << "&file=" << file_name;
@@ -108,7 +108,7 @@ using apache::thrift::transport::TTransportException;
 
 // including the final status when execution finishes.
 Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
-                                             TNetworkAddress fe_addr) {
+                                             const TNetworkAddress& fe_addr) {
     Status fe_status;
     FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, &fe_status);
     if (!fe_status.ok()) {
@@ -156,28 +156,8 @@ ExecStateReporter::ExecStateReporter() {
     }
 }
 
-void ExecStateReporter::submit(FragmentContext* fragment_ctx, const Status& status, bool done, bool clean) {
-    auto report_func = [=]() {
-        auto params = create_report_exec_status_params(fragment_ctx, status, done);
-        auto status = report_exec_status(params, fragment_ctx->runtime_state()->exec_env(), fragment_ctx->fe_addr());
-        if (!status.ok()) {
-            LOG(WARNING) << "[Driver] Fail to report exec state: fragment_instance_id="
-                         << fragment_ctx->fragment_instance_id();
-        } else {
-            LOG(INFO) << "[Driver] Succeed to report exec state: fragment_instance_id="
-                      << fragment_ctx->fragment_instance_id();
-        }
-        if (clean) {
-            auto query_id = fragment_ctx->query_id();
-            auto&& query_ctx = QueryContextManager::instance()->get(query_id);
-            DCHECK(query_ctx);
-            query_ctx->fragment_mgr()->unregister(fragment_ctx->fragment_instance_id());
-            if (query_ctx->count_down_fragment()) {
-                QueryContextManager::instance()->unregister(query_id);
-            }
-        }
-    };
-    _thread_pool->submit_func(report_func);
+void ExecStateReporter::submit(std::function<void()>&& report_task) {
+    _thread_pool->submit_func(std::move(report_task));
 }
 
 } // namespace pipeline

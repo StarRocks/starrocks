@@ -59,21 +59,21 @@ public:
     MemoryScratchSink(const RowDescriptor& row_desc, const std::vector<TExpr>& select_exprs,
                       const TMemoryScratchSink& sink);
 
-    virtual ~MemoryScratchSink();
+    ~MemoryScratchSink() override;
 
-    virtual Status prepare(RuntimeState* state);
+    Status prepare(RuntimeState* state) override;
 
-    virtual Status open(RuntimeState* state);
+    Status open(RuntimeState* state) override;
 
     // send data in 'batch' to this backend queue mgr
     // Blocks until all rows in batch are pushed to the queue
-    virtual Status send(RuntimeState* state, RowBatch* batch);
+    Status send(RuntimeState* state, RowBatch* batch) override;
 
-    virtual Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
+    Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 
-    virtual Status close(RuntimeState* state, Status exec_status);
+    Status close(RuntimeState* state, Status exec_status) override;
 
-    virtual RuntimeProfile* profile() { return _profile; }
+    RuntimeProfile* profile() override { return _profile; }
 
 private:
     Status prepare_exprs(RuntimeState* state);

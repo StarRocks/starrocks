@@ -786,7 +786,7 @@ struct ArrowListConverter {
 
     template <typename T>
     static void list_offsets_copy(const arrow::Array* layer, const size_t layer_start_idx,
-                                  const size_t layer_num_elements, UInt32ColumnPtr offsets_layer) {
+                                  const size_t layer_num_elements, const UInt32ColumnPtr& offsets_layer) {
         using ArrowArrayType = typename arrow::TypeTraits<T>::ArrayType;
         using OffsetsType = typename T::offset_type;
         auto* concrete_array = down_cast<const ArrowArrayType*>(layer);

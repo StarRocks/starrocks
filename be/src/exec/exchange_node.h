@@ -50,7 +50,7 @@ class RuntimeProfile;
 class ExchangeNode final : public ExecNode {
 public:
     ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    virtual ~ExchangeNode() {}
+    ~ExchangeNode() override {}
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState* state) override;

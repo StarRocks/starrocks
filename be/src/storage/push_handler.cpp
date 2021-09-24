@@ -56,8 +56,8 @@ namespace starrocks {
 //           clear schema change info in both current tablet and related
 //           tablets, finally we will only push for current tablets. this is
 //           very useful in rollup action.
-OLAPStatus PushHandler::process_streaming_ingestion(TabletSharedPtr tablet, const TPushReq& request, PushType push_type,
-                                                    std::vector<TTabletInfo>* tablet_info_vec) {
+OLAPStatus PushHandler::process_streaming_ingestion(const TabletSharedPtr& tablet, const TPushReq& request,
+                                                    PushType push_type, std::vector<TTabletInfo>* tablet_info_vec) {
     LOG(INFO) << "begin to realtime push. tablet=" << tablet->full_name()
               << ", transaction_id=" << request.transaction_id;
 
@@ -79,8 +79,8 @@ OLAPStatus PushHandler::process_streaming_ingestion(TabletSharedPtr tablet, cons
     return res;
 }
 
-OLAPStatus PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushReq& request, PushType push_type,
-                                                std::vector<TabletVars>* tablet_vars,
+OLAPStatus PushHandler::_do_streaming_ingestion(const TabletSharedPtr& tablet, const TPushReq& request,
+                                                PushType push_type, std::vector<TabletVars>* tablet_vars,
                                                 std::vector<TTabletInfo>* tablet_info_vec) {
     // add transaction in engine, then check sc status
     // lock, prevent sc handler checking transaction concurrently
@@ -243,7 +243,7 @@ OLAPStatus PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TP
     return res;
 }
 
-OLAPStatus PushHandler::_convert(TabletSharedPtr cur_tablet, RowsetSharedPtr* cur_rowset) {
+OLAPStatus PushHandler::_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset) {
     OLAPStatus res = OLAP_SUCCESS;
     uint32_t num_rows = 0;
     PUniqueId load_id;
@@ -310,7 +310,7 @@ OLAPStatus PushHandler::_convert(TabletSharedPtr cur_tablet, RowsetSharedPtr* cu
     return res;
 }
 
-OLAPStatus PushHandler::_convert_v2(TabletSharedPtr cur_tablet, RowsetSharedPtr* cur_rowset) {
+OLAPStatus PushHandler::_convert_v2(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset) {
     OLAPStatus res = OLAP_SUCCESS;
     uint32_t num_rows = 0;
     PUniqueId load_id;

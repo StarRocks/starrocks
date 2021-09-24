@@ -42,7 +42,7 @@ MemoryPool::~MemoryPool() {
 
 class MemoryPoolImpl : public MemoryPool {
 public:
-    virtual ~MemoryPoolImpl() override;
+    ~MemoryPoolImpl() override;
 
     char* malloc(uint64_t size) override;
     void free(char* p) override;

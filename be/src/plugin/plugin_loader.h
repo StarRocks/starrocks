@@ -73,14 +73,14 @@ public:
               _install_path(install_path),
               _plugin_handler(nullptr){};
 
-    virtual ~DynamicPluginLoader() {
+    ~DynamicPluginLoader() override {
         // just close plugin, but don't clean install path (maybe other plugin has used)
         WARN_IF_ERROR(close_plugin(), "close plugin failed.");
     };
 
-    virtual Status install();
+    Status install() override;
 
-    virtual Status uninstall();
+    Status uninstall() override;
 
 private:
     Status open_plugin();
@@ -101,11 +101,11 @@ class BuiltinPluginLoader : public PluginLoader {
 public:
     BuiltinPluginLoader(const std::string& name, int type, const Plugin* plugin);
 
-    virtual ~BuiltinPluginLoader() { WARN_IF_ERROR(uninstall(), "close plugin failed."); }
+    ~BuiltinPluginLoader() override { WARN_IF_ERROR(uninstall(), "close plugin failed."); }
 
-    virtual Status install();
+    Status install() override;
 
-    virtual Status uninstall();
+    Status uninstall() override;
 };
 
 } // namespace starrocks

@@ -209,6 +209,7 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     std::set<std::string> disk_devices;
     std::vector<std::string> network_interfaces;
     std::vector<std::string> paths;
+    paths.reserve(store_paths.size());
     for (auto& store_path : store_paths) {
         paths.emplace_back(store_path.path);
     }

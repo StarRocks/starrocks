@@ -13,10 +13,10 @@ namespace starrocks::vectorized {
 class SchemaVariablesScanner : public SchemaScanner {
 public:
     SchemaVariablesScanner(TVarType::type type);
-    virtual ~SchemaVariablesScanner();
+    ~SchemaVariablesScanner() override;
 
-    virtual Status start(RuntimeState* state);
-    virtual Status get_next(ChunkPtr* chunk, bool* eos);
+    Status start(RuntimeState* state) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
     Status fill_chunk(ChunkPtr* chunk);

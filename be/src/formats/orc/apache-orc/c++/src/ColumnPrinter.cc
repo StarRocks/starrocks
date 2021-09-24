@@ -75,7 +75,7 @@ private:
 
 public:
     DoubleColumnPrinter(std::string&, const Type& type);
-    virtual ~DoubleColumnPrinter() override {}
+    ~DoubleColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -134,7 +134,7 @@ private:
 
 public:
     StringColumnPrinter(std::string&);
-    virtual ~StringColumnPrinter() override {}
+    ~StringColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -146,7 +146,7 @@ private:
 
 public:
     BinaryColumnPrinter(std::string&);
-    virtual ~BinaryColumnPrinter() override {}
+    ~BinaryColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -158,7 +158,7 @@ private:
 
 public:
     ListColumnPrinter(std::string&, const Type& type);
-    virtual ~ListColumnPrinter() override {}
+    ~ListColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -171,7 +171,7 @@ private:
 
 public:
     MapColumnPrinter(std::string&, const Type& type);
-    virtual ~MapColumnPrinter() override {}
+    ~MapColumnPrinter() override {}
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };

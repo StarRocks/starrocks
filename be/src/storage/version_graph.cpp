@@ -131,7 +131,7 @@ void TimestampedVersionTracker::add_stale_path_version(const std::vector<RowsetM
     }
 
     PathVersionListSharedPtr ptr(new TimestampedVersionPathContainer());
-    for (auto rs : stale_rs_metas) {
+    for (const auto& rs : stale_rs_metas) {
         TimestampedVersionSharedPtr vt_ptr(new TimestampedVersion(rs->version(), rs->creation_time()));
         ptr->add_timestamped_version(vt_ptr);
     }
@@ -139,7 +139,7 @@ void TimestampedVersionTracker::add_stale_path_version(const std::vector<RowsetM
     std::vector<TimestampedVersionSharedPtr>& timestamped_versions = ptr->timestamped_versions();
 
     struct TimestampedVersionPtrCompare {
-        bool operator()(const TimestampedVersionSharedPtr ptr1, const TimestampedVersionSharedPtr ptr2) {
+        bool operator()(const TimestampedVersionSharedPtr& ptr1, const TimestampedVersionSharedPtr& ptr2) {
             return ptr1->version().first < ptr2->version().first;
         }
     };
@@ -223,7 +223,7 @@ std::string TimestampedVersionTracker::_get_current_path_map_str() {
     return tracker_info.str();
 }
 
-void TimestampedVersionPathContainer::add_timestamped_version(TimestampedVersionSharedPtr version) {
+void TimestampedVersionPathContainer::add_timestamped_version(const TimestampedVersionSharedPtr& version) {
     // compare and refresh _max_create_time
     if (version->get_create_time() > _max_create_time) {
         _max_create_time = version->get_create_time();
