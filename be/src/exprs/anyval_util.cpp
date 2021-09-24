@@ -49,7 +49,7 @@ Status allocate_any_val(RuntimeState* state, MemPool* pool, const TypeDescriptor
     const int anyval_size = AnyValUtil::any_val_size(type);
     const int anyval_alignment = AnyValUtil::any_val_alignment(type);
     *result = reinterpret_cast<AnyVal*>(pool->try_allocate_aligned(anyval_size, anyval_alignment));
-    if (*result == NULL) {
+    if (*result == nullptr) {
         return pool->mem_tracker()->MemLimitExceeded(state, mem_limit_exceeded_msg, anyval_size);
     }
     DIAGNOSTIC_PUSH
@@ -109,7 +109,7 @@ AnyVal* create_any_val(ObjectPool* pool, const TypeDescriptor& type) {
         return pool->add(new DateTimeVal);
     default:
         DCHECK(false) << "Unsupported type: " << type.type;
-        return NULL;
+        return nullptr;
     }
 }
 

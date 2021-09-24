@@ -201,7 +201,7 @@ Status ExceptNode::close(RuntimeState* state) {
         Expr::close(exprs, state);
     }
 
-    if (_build_pool.get() != NULL) {
+    if (_build_pool.get() != nullptr) {
         _build_pool->free_all();
     }
 

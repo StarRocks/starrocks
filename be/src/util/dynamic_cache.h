@@ -72,7 +72,7 @@ public:
     }
 
     void set_mem_tracker(MemTracker* mem_tracker) {
-        DCHECK(_mem_tracker == NULL);
+        DCHECK(_mem_tracker == nullptr);
         _mem_tracker = mem_tracker;
     }
 

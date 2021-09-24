@@ -180,7 +180,7 @@ Status DiskInfo::get_disk_devices(const std::vector<std::string>& paths, std::se
     }
 
     Status status;
-    char* line_ptr = 0;
+    char* line_ptr = nullptr;
     size_t line_buf_size = 0;
     for (auto& path : real_paths) {
         size_t max_mount_size = 0;

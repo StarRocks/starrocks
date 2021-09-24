@@ -921,7 +921,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
         for (size_t i = 0; i < itrs.size(); i++) {
             auto itr = itrs[i].get();
-            if (itr == NULL) {
+            if (itr == nullptr) {
                 continue;
             }
             while (true) {

@@ -322,7 +322,7 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iter
     vectorized::SegmentReadOptions seg_options;
     seg_options.block_mgr = fs::fs_util::block_manager();
     seg_options.stats = stats;
-    seg_options.is_primary_keys = meta != NULL;
+    seg_options.is_primary_keys = meta != nullptr;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
     seg_options.version = version;

@@ -169,7 +169,7 @@ public:
     // Reader lock must be taken before this.
     void schedule_scan_range(DiskIoMgr::ScanRange* range) {
         DCHECK_EQ(_state, Active);
-        DCHECK(range != NULL);
+        DCHECK(range != nullptr);
         RequestContext::PerDiskState& state = _disk_states[range->disk_id()];
         state.in_flight_ranges()->enqueue(range);
         state.schedule_context(this, range->disk_id());
@@ -382,7 +382,7 @@ private:
             _num_remaining_ranges = 0;
             _is_on_queue = false;
             _num_threads_in_op = 0;
-            _next_scan_range_to_start = NULL;
+            _next_scan_range_to_start = nullptr;
         }
 
     private:

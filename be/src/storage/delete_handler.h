@@ -67,7 +67,7 @@ private:
 
 // Represents a delete condition
 struct DeleteConditions {
-    DeleteConditions() : filter_version(0), del_cond(NULL) {}
+    DeleteConditions() : filter_version(0), del_cond(nullptr) {}
     ~DeleteConditions() {}
 
     int32_t filter_version; // delete condition version

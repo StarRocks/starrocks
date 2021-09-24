@@ -127,7 +127,7 @@ Status ThriftServer::ThriftServerEventProcessor::start_and_wait_for_server() {
 }
 
 void ThriftServer::ThriftServerEventProcessor::supervise() {
-    DCHECK(_thrift_server->_server.get() != NULL);
+    DCHECK(_thrift_server->_server.get() != nullptr);
 
     try {
         _thrift_server->_server->serve();
@@ -178,7 +178,7 @@ void* ThriftServer::ThriftServerEventProcessor::createContext(
         std::shared_ptr<apache::thrift::protocol::TProtocol> output) {
     std::stringstream ss;
 
-    apache::thrift::transport::TSocket* socket = NULL;
+    apache::thrift::transport::TSocket* socket = nullptr;
     apache::thrift::transport::TTransport* transport = input->getTransport().get();
     {
         switch (_thrift_server->_server_type) {
@@ -213,7 +213,7 @@ void* ThriftServer::ThriftServerEventProcessor::createContext(
         _thrift_server->_session_keys[key_ptr.get()] = key_ptr;
     }
 
-    if (_thrift_server->_session_handler != NULL) {
+    if (_thrift_server->_session_handler != nullptr) {
         _thrift_server->_session_handler->session_start(*_session_key);
     }
 
@@ -238,7 +238,7 @@ void ThriftServer::ThriftServerEventProcessor::deleteContext(
         std::shared_ptr<apache::thrift::protocol::TProtocol> output) {
     _session_key = (SessionKey*)serverContext;
 
-    if (_thrift_server->_session_handler != NULL) {
+    if (_thrift_server->_session_handler != nullptr) {
         _thrift_server->_session_handler->session_end(*_session_key);
     }
 
@@ -262,8 +262,8 @@ ThriftServer::ThriftServer(const std::string& name, const std::shared_ptr<apache
           _server_thread(nullptr),
           _server(nullptr),
           _processor(processor),
-          _session_handler(NULL) {
-    if (metrics != NULL) {
+          _session_handler(nullptr) {
+    if (metrics != nullptr) {
         _metrics_enabled = true;
         _current_connections.reset(new IntGauge(MetricUnit::CONNECTIONS));
         metrics->register_metric("thrift_current_connections", MetricLabels().add("name", name),
@@ -295,11 +295,11 @@ Status ThriftServer::start() {
 
     // Note - if you change the transport types here, you must check that the
     // logic in createContext is still accurate.
-    apache::thrift::transport::TServerSocket* server_socket = NULL;
+    apache::thrift::transport::TServerSocket* server_socket = nullptr;
 
     switch (_server_type) {
     case NON_BLOCKING: {
-        if (transport_factory.get() == NULL) {
+        if (transport_factory.get() == nullptr) {
             transport_factory.reset(new apache::thrift::transport::TTransportFactory());
         }
 
@@ -314,7 +314,7 @@ Status ThriftServer::start() {
     case THREAD_POOL:
         fe_server_transport.reset(new apache::thrift::transport::TServerSocket(_port));
 
-        if (transport_factory.get() == NULL) {
+        if (transport_factory.get() == nullptr) {
             transport_factory.reset(new apache::thrift::transport::TBufferedTransportFactory());
         }
 
@@ -327,7 +327,7 @@ Status ThriftServer::start() {
         //      server_socket->setAcceptTimeout(500);
         fe_server_transport.reset(server_socket);
 
-        if (transport_factory.get() == NULL) {
+        if (transport_factory.get() == nullptr) {
             transport_factory.reset(new apache::thrift::transport::TBufferedTransportFactory());
         }
 
@@ -359,13 +359,13 @@ void ThriftServer::stop() {
 }
 
 void ThriftServer::join() {
-    DCHECK(_server_thread != NULL);
+    DCHECK(_server_thread != nullptr);
     DCHECK(_started);
     _server_thread->join();
 }
 
 void ThriftServer::stop_for_testing() {
-    DCHECK(_server_thread != NULL);
+    DCHECK(_server_thread != nullptr);
     DCHECK(_server);
     DCHECK_EQ(_server_type, THREADED);
     _server->stop();

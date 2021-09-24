@@ -307,10 +307,10 @@ Status ScrollParser::fill_tuple(const TupleDescriptor* tuple_desc, Tuple* tuple,
             std::string _id = obj[FIELD_ID].GetString();
             size_t len = _id.length();
             char* buffer = reinterpret_cast<char*>(tuple_pool->try_allocate_unaligned(len));
-            if (UNLIKELY(buffer == NULL)) {
+            if (UNLIKELY(buffer == nullptr)) {
                 std::string details =
                         strings::Substitute(ERROR_MEM_LIMIT_EXCEEDED, "MaterializeNextRow", len, "string slot");
-                return tuple_pool->mem_tracker()->MemLimitExceeded(NULL, details, len);
+                return tuple_pool->mem_tracker()->MemLimitExceeded(nullptr, details, len);
             }
             memcpy(buffer, _id.data(), len);
             reinterpret_cast<StringValue*>(slot)->ptr = buffer;
@@ -370,10 +370,10 @@ Status ScrollParser::fill_tuple(const TupleDescriptor* tuple_desc, Tuple* tuple,
             }
             size_t val_size = val.length();
             char* buffer = reinterpret_cast<char*>(tuple_pool->try_allocate_unaligned(val_size));
-            if (UNLIKELY(buffer == NULL)) {
+            if (UNLIKELY(buffer == nullptr)) {
                 std::string details =
                         strings::Substitute(ERROR_MEM_LIMIT_EXCEEDED, "MaterializeNextRow", val_size, "string slot");
-                return tuple_pool->mem_tracker()->MemLimitExceeded(NULL, details, val_size);
+                return tuple_pool->mem_tracker()->MemLimitExceeded(nullptr, details, val_size);
             }
             memcpy(buffer, val.data(), val_size);
             reinterpret_cast<StringValue*>(slot)->ptr = buffer;

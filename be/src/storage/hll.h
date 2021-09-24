@@ -244,7 +244,7 @@ public:
               _full_value_position(nullptr),
               _explicit_value(nullptr),
               _explicit_num(0),
-              _sparse_count(0) {}
+              _sparse_count(nullptr) {}
 
     ~HllSetResolver() = default;
 

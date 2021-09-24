@@ -40,7 +40,7 @@ namespace starrocks {
 
 MysqlResultWriter::MysqlResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                                      RuntimeProfile* parent_profile)
-        : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _row_buffer(NULL), _parent_profile(parent_profile) {}
+        : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _row_buffer(nullptr), _parent_profile(parent_profile) {}
 
 MysqlResultWriter::~MysqlResultWriter() {
     delete _row_buffer;
@@ -48,13 +48,13 @@ MysqlResultWriter::~MysqlResultWriter() {
 
 Status MysqlResultWriter::init(RuntimeState* state) {
     _init_profile();
-    if (NULL == _sinker) {
+    if (nullptr == _sinker) {
         return Status::InternalError("sinker is NULL pointer.");
     }
 
     _row_buffer = new (std::nothrow) MysqlRowBuffer();
 
-    if (NULL == _row_buffer) {
+    if (nullptr == _row_buffer) {
         return Status::InternalError("no memory to alloc.");
     }
 
@@ -76,7 +76,7 @@ Status MysqlResultWriter::_add_one_row(TupleRow* row) {
     for (int i = 0; i < num_columns; ++i) {
         void* item = _output_expr_ctxs[i]->get_value(row);
 
-        if (NULL == item) {
+        if (nullptr == item) {
             _row_buffer->push_null();
             continue;
         }
@@ -139,7 +139,7 @@ Status MysqlResultWriter::_add_one_row(TupleRow* row) {
         case TYPE_CHAR: {
             const StringValue* string_val = (const StringValue*)(item);
 
-            if (string_val->ptr == NULL) {
+            if (string_val->ptr == nullptr) {
                 if (string_val->len == 0) {
                     // 0x01 is a magic num, not usefull actually, just for present ""
                     char* tmp_val = reinterpret_cast<char*>(0x01);
@@ -221,7 +221,7 @@ Status MysqlResultWriter::_add_one_row(TupleRow* row) {
 
 Status MysqlResultWriter::append_row_batch(const RowBatch* batch) {
     SCOPED_TIMER(_append_row_batch_timer);
-    if (NULL == batch || 0 == batch->num_rows()) {
+    if (nullptr == batch || 0 == batch->num_rows()) {
         return Status::OK();
     }
 
@@ -249,7 +249,7 @@ Status MysqlResultWriter::append_row_batch(const RowBatch* batch) {
         status = _sinker->add_batch(result);
 
         if (status.ok()) {
-            result = NULL;
+            result = nullptr;
             _written_rows += num_rows;
         } else {
             LOG(WARNING) << "append result batch to sink failed.";
@@ -257,7 +257,7 @@ Status MysqlResultWriter::append_row_batch(const RowBatch* batch) {
     }
 
     delete result;
-    result = NULL;
+    result = nullptr;
 
     return status;
 }

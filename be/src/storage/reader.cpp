@@ -695,9 +695,9 @@ OLAPStatus Reader::_init_keys_param(const ReaderParams& read_params) {
     }
 
     size_t end_key_size = read_params.end_key.size();
-    _keys_param.end_keys.resize(end_key_size, NULL);
+    _keys_param.end_keys.resize(end_key_size, nullptr);
     for (size_t i = 0; i < end_key_size; ++i) {
-        if ((_keys_param.end_keys[i] = new (nothrow) RowCursor()) == NULL) {
+        if ((_keys_param.end_keys[i] = new (nothrow) RowCursor()) == nullptr) {
             LOG(WARNING) << "fail to new RowCursor!";
             return OLAP_ERR_MALLOC_ERROR;
         }

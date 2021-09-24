@@ -207,7 +207,7 @@ inline Status decode_slice(Slice* src, string* dest, bool is_last) {
     } else {
         uint8_t* separator = static_cast<uint8_t*>(memmem(src->data, src->size, "\0\0", 2));
         DCHECK(separator) << "bad encoded primary key, separator not found";
-        if (PREDICT_FALSE(separator == NULL)) {
+        if (PREDICT_FALSE(separator == nullptr)) {
             LOG(WARNING) << "bad encoded primary key, separator not found";
             return Status::InvalidArgument("bad encoded primary key, separator not found");
         }
