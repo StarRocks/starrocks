@@ -5,10 +5,10 @@
 #include "gutil/strings/stringpiece.h"
 
 #include <common/logging.h>
-#include <string.h>
 
 #include <algorithm>
 #include <climits>
+#include <cstring>
 #include <string>
 
 #include "gutil/hash/hash.h"

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <stdint.h>
-#include <string.h>
 #include <unistd.h>
 
+#include <cstdint>
+#include <cstring>
 #include <memory>
 #include <type_traits>
 

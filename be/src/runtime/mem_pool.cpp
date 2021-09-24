@@ -21,9 +21,8 @@
 
 #include "runtime/mem_pool.h"
 
-#include <stdio.h>
-
 #include <algorithm>
+#include <cstdio>
 #include <sstream>
 
 #include "runtime/mem_tracker.h"

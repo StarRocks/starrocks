@@ -24,9 +24,9 @@
 #include <pthread.h>
 #include <rapidjson/prettywriter.h>
 #include <rapidjson/stringbuffer.h>
-#include <stdio.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <map>
 #include <memory>
 #include <utility>

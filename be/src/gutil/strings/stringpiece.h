@@ -112,10 +112,9 @@
 #ifndef STRINGS_STRINGPIECE_H_
 #define STRINGS_STRINGPIECE_H_
 
-#include <assert.h>
-#include <stddef.h>
-#include <string.h>
-
+#include <cassert>
+#include <cstddef>
+#include <cstring>
 #include <functional>
 #include <iosfwd>
 #include <limits>

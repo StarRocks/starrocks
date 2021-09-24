@@ -21,8 +21,7 @@
 
 #pragma once
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <string>
 
 #include "runtime/vectorized/time_types.h"

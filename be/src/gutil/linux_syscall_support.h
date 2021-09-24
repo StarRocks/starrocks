@@ -148,20 +148,21 @@ extern "C" {
 #endif
 
 #include <endian.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <linux/unistd.h>
-#include <signal.h>
-#include <stdarg.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
 #include <sys/ptrace.h>
 #include <sys/resource.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <syscall.h>
 #include <unistd.h>
+
+#include <cerrno>
+#include <csignal>
+#include <cstdarg>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 
 #ifdef __mips__
 /* Include definitions of the ABI currently in use.                          */

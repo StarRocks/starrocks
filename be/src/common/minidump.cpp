@@ -6,8 +6,8 @@
 #include <common/linux/linux_libc_support.h>
 #include <glob.h>
 #include <google_breakpad/common/minidump_format.h>
-#include <signal.h>
 
+#include <csignal>
 #include <ctime>
 #include <filesystem>
 #include <fstream>

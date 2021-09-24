@@ -22,8 +22,7 @@
 #ifndef STARROCKS_BE_SRC_QUERY_BE_RUNTIME_MEM_LIMIT_H
 #define STARROCKS_BE_SRC_QUERY_BE_RUNTIME_MEM_LIMIT_H
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <unordered_map>

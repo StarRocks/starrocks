@@ -22,9 +22,8 @@
 #ifndef STARROCKS_BE_RUNTIME_THREAD_RESOURCE_MGR_H
 #define STARROCKS_BE_RUNTIME_THREAD_RESOURCE_MGR_H
 
-#include <stdlib.h>
-
 #include <boost/thread/thread.hpp>
+#include <cstdlib>
 #include <functional>
 #include <list>
 

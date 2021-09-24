@@ -22,9 +22,8 @@
 #ifndef STARROCKS_BE_UDF_UDF_H
 #define STARROCKS_BE_UDF_UDF_H
 
-#include <string.h>
-
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <vector>
 

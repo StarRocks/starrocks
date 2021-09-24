@@ -21,9 +21,8 @@
 
 #pragma
 
-#include <stdint.h>
-#include <time.h>
-
+#include <cstdint>
+#include <ctime>
 #include <string>
 
 #include "storage/field.h"

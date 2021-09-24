@@ -21,9 +21,8 @@
 
 #include "storage/snapshot_manager.h"
 
-#include <stdio.h>
-
 #include <algorithm>
+#include <cstdio>
 #include <iterator>
 #include <map>
 #include <set>

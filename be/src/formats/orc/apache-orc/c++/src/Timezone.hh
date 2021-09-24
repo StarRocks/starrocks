@@ -25,8 +25,7 @@
 
 // This file is for timezone routines.
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <string>
