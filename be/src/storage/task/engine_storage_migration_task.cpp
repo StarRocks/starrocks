@@ -305,6 +305,7 @@ void EngineStorageMigrationTask::_generate_new_header(DataDir* store, const uint
     tablet->generate_tablet_meta_copy_unlocked(new_tablet_meta);
 
     std::vector<RowsetMetaSharedPtr> rs_metas;
+    rs_metas.reserve(consistent_rowsets.size());
     for (auto& rs : consistent_rowsets) {
         rs_metas.push_back(rs->rowset_meta());
     }

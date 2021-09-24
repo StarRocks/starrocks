@@ -129,6 +129,7 @@ StorageEngine::~StorageEngine() {
 
 void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     std::vector<std::thread> threads;
+    threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
         threads.emplace_back([data_dir] {
             auto res = data_dir->load();
