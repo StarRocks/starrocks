@@ -15,6 +15,7 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 #include "util/raw_container.h"
+#include "util/sm3.h"
 #include "util/utf8.h"
 
 namespace starrocks {
@@ -2050,6 +2051,40 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
 
 ColumnPtr StringFunctions::unhex(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<unhexImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
+}
+
+DEFINE_STRING_UNARY_FN_WITH_IMPL(sm3Impl, str) {
+    const Slice& input_str = str;
+    std::stringstream result;
+
+    const unsigned char* message = (unsigned char*)input_str.data;
+    unsigned long message_len = input_str.size;
+    if (message_len > 0) {
+        unsigned char output[32];
+
+        // output as 256 bits(32 bytes) result.
+        Sm3::sm3_compute(message, message_len, output);
+        result << std::hex << std::setfill('0');
+
+        // first 4 bytes;
+        for (int i = 0; i < 4; ++i) {
+            result << std::setw(2) << (output[i] & 0xFF);
+        }
+
+        // remaining 4 bytes start with " ";
+        for (int i = 4; i < 32; ++i) {
+            if ((i % 4) == 0) {
+                result << " ";
+            }
+            result << std::setw(2) << (output[i] & 0xFF);
+        }
+    }
+
+    return result.str();
+}
+
+ColumnPtr StringFunctions::sm3(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+    return VectorizedStringStrictUnaryFunction<sm3Impl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
 // ascii

@@ -85,6 +85,7 @@ set(UTIL_FILES
   thrift_rpc_helper.cpp
   faststring.cc
   slice.cpp
+  sm3.cpp
   frame_of_reference_coding.cpp
   minizip/ioapi.c
   minizip/unzip.c

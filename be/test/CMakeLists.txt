@@ -82,6 +82,7 @@ set(EXEC_FILES
         ./exprs/vectorized/string_fn_pad_test.cpp
         ./exprs/vectorized/string_fn_repeat_test.cpp
         ./exprs/vectorized/string_fn_reverse_test.cpp
+        ./exprs/vectorized/string_fn_sm3_test.cpp
         ./exprs/vectorized/string_fn_space_test.cpp
         ./exprs/vectorized/string_fn_substr_test.cpp
         ./exprs/vectorized/string_fn_test.cpp
