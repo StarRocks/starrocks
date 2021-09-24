@@ -59,7 +59,7 @@ public:
     }
 
     // content_type such as "application/json"
-    void set_content_type(const std::string content_type) {
+    void set_content_type(const std::string& content_type) {
         std::string scratch_str = "Content-Type: " + content_type;
         _header_list = curl_slist_append(_header_list, scratch_str.c_str());
         curl_easy_setopt(_curl, CURLOPT_HTTPHEADER, _header_list);

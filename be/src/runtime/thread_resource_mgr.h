@@ -124,7 +124,7 @@ public:
         // TODO: rethink this.  How we do coordinate when we have multiple places in
         // the execution that all need threads (e.g. do we use that thread for
         // the scanner or for the join).
-        void set_thread_available_cb(thread_available_cb fn);
+        void set_thread_available_cb(const thread_available_cb& fn);
 
         // Returns the number of threads that are from acquire_thread_token.
         int num_required_threads() const { return _num_threads & 0xFFFFFFFF; }

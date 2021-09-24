@@ -58,7 +58,7 @@ public:
                column.type() != OLAP_FIELD_TYPE_DECIMAL128);
     }
 
-    Field(const TabletColumn column, std::shared_ptr<TypeInfo>&& type_info)
+    Field(const TabletColumn& column, std::shared_ptr<TypeInfo>&& type_info)
             : _name(column.name()),
               _type_info(type_info),
               _key_coder(get_key_coder(column.type())),

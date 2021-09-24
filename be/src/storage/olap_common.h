@@ -70,7 +70,7 @@ struct DataDirInfo {
 };
 
 struct TabletInfo {
-    TabletInfo(TTabletId in_tablet_id, TSchemaHash in_schema_hash, UniqueId in_uid)
+    TabletInfo(TTabletId in_tablet_id, TSchemaHash in_schema_hash, const UniqueId& in_uid)
             : tablet_id(in_tablet_id), schema_hash(in_schema_hash), tablet_uid(in_uid) {}
 
     bool operator<(const TabletInfo& right) const {

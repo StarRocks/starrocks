@@ -8,6 +8,7 @@
 #include <limits>
 #include <set>
 #include <unordered_map>
+#include <utility>
 
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
@@ -1337,7 +1338,7 @@ ChunkPtr OrcScannerAdapter::cast_chunk(ChunkPtr* chunk) {
 }
 
 void OrcScannerAdapter::set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter) {
-    _row_reader_options.rowReaderFilter(filter);
+    _row_reader_options.rowReaderFilter(std::move(filter));
 }
 
 static std::unordered_set<TExprOpcode::type> _supported_binary_ops = {
@@ -1755,8 +1756,8 @@ void OrcScannerAdapter::set_conjuncts_and_runtime_filters(const std::vector<Expr
         return Status::OK();                                   \
     } while (0)
 
-static Status decode_int_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats, ColumnPtr min_col,
-                                 ColumnPtr max_col) {
+static Status decode_int_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats,
+                                 const ColumnPtr& min_col, const ColumnPtr& max_col) {
     if (colStats.has_intstatistics() && colStats.intstatistics().has_minimum() &&
         colStats.intstatistics().has_maximum()) {
         const auto& stats = colStats.intstatistics();
@@ -1780,7 +1781,7 @@ static Status decode_int_min_max(PrimitiveType ptype, const orc::proto::ColumnSt
 }
 
 static Status decode_double_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats,
-                                    ColumnPtr min_col, ColumnPtr max_col) {
+                                    const ColumnPtr& min_col, const ColumnPtr& max_col) {
     if (colStats.has_doublestatistics() && colStats.doublestatistics().has_minimum() &&
         colStats.doublestatistics().has_maximum()) {
         const auto& stats = colStats.doublestatistics();
@@ -1798,7 +1799,7 @@ static Status decode_double_min_max(PrimitiveType ptype, const orc::proto::Colum
     return Status::NotFound("double column stats not found");
 }
 static Status decode_string_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats,
-                                    ColumnPtr min_col, ColumnPtr max_col) {
+                                    const ColumnPtr& min_col, const ColumnPtr& max_col) {
     if (colStats.has_stringstatistics() && colStats.stringstatistics().has_minimum() &&
         colStats.stringstatistics().has_maximum()) {
         const auto& stats = colStats.stringstatistics();
@@ -1816,8 +1817,8 @@ static Status decode_string_min_max(PrimitiveType ptype, const orc::proto::Colum
     return Status::NotFound("string column stats not found");
 }
 
-static Status decode_date_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats, ColumnPtr min_col,
-                                  ColumnPtr max_col) {
+static Status decode_date_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats,
+                                  const ColumnPtr& min_col, const ColumnPtr& max_col) {
     if (colStats.has_datestatistics() && colStats.datestatistics().has_minimum() &&
         colStats.datestatistics().has_maximum()) {
         const auto& stats = colStats.datestatistics();
@@ -1833,7 +1834,7 @@ static Status decode_date_min_max(PrimitiveType ptype, const orc::proto::ColumnS
 // but timestamp column vector batch stores seconds since unix epoch time.
 // https://orc.apache.org/specification/ORCv1/
 static Status decode_datetime_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats,
-                                      ColumnPtr min_col, ColumnPtr max_col) {
+                                      const ColumnPtr& min_col, const ColumnPtr& max_col) {
     if (colStats.has_timestampstatistics() && colStats.timestampstatistics().has_minimumutc() &&
         colStats.timestampstatistics().has_maximumutc()) {
         const auto& stats = colStats.timestampstatistics();

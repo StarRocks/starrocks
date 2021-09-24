@@ -33,6 +33,7 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "agent/status.h"
@@ -102,7 +103,7 @@ public:
     int32_t effective_cluster_id() const { return _effective_cluster_id; }
 
     void start_delete_unused_rowset();
-    void add_unused_rowset(RowsetSharedPtr rowset);
+    void add_unused_rowset(const RowsetSharedPtr& rowset);
 
     // Obtain shard path for new tablet.
     //
@@ -242,7 +243,7 @@ private:
 
     struct CompactionDiskStat {
         CompactionDiskStat(std::string path, uint32_t index, bool used)
-                : storage_path(path), disk_index(index), task_running(0), task_remaining(0), is_used(used) {}
+                : storage_path(std::move(path)), disk_index(index), task_running(0), task_remaining(0), is_used(used) {}
         const std::string storage_path;
         const uint32_t disk_index;
         uint32_t task_running;

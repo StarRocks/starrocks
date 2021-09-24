@@ -89,7 +89,7 @@ void ExpressionTree::setLeaf(size_t leaf) {
     mLeaf = leaf;
 }
 
-void ExpressionTree::addChild(TreeNode child) {
+void ExpressionTree::addChild(const TreeNode& child) {
     mChildren.push_back(child);
 }
 

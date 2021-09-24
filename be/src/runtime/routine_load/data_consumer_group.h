@@ -42,7 +42,7 @@ public:
 
     const std::vector<std::shared_ptr<DataConsumer>>& consumers() { return _consumers; }
 
-    void add_consumer(std::shared_ptr<DataConsumer> consumer) {
+    void add_consumer(const std::shared_ptr<DataConsumer>& consumer) {
         consumer->set_grp(_grp_id);
         _consumers.push_back(consumer);
         ++_counter;
@@ -77,8 +77,8 @@ public:
 
 private:
     // start a single consumer
-    void actual_consume(std::shared_ptr<DataConsumer> consumer, TimedBlockingQueue<RdKafka::Message*>* queue,
-                        int64_t max_running_time_ms, ConsumeFinishCallback cb);
+    void actual_consume(const std::shared_ptr<DataConsumer>& consumer, TimedBlockingQueue<RdKafka::Message*>* queue,
+                        int64_t max_running_time_ms, const ConsumeFinishCallback& cb);
 
 private:
     // blocking queue to receive msgs from all consumers

@@ -125,7 +125,7 @@ private:
 
 // Utility to create a protocol (deserialization) object for 'mem'.
 std::shared_ptr<apache::thrift::protocol::TProtocol> create_deserialize_protocol(
-        std::shared_ptr<apache::thrift::transport::TMemoryBuffer> mem, bool compact);
+        const std::shared_ptr<apache::thrift::transport::TMemoryBuffer>& mem, bool compact);
 
 // Deserialize a thrift message from buf/len.  buf/len must at least contain
 // all the bytes needed to store the thrift message.  On return, len will be

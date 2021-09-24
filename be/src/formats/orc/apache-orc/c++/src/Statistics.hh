@@ -24,6 +24,7 @@
 #define ORC_STATISTICS_IMPL_HH
 
 #include <sstream>
+#include <utility>
 
 #include "Timezone.hh"
 #include "TypeImpl.hh"
@@ -957,12 +958,12 @@ public:
 
     void setMinimum(std::string minimum) {
         _stats.setHasMinimum(true);
-        _stats.setMinimum(minimum);
+        _stats.setMinimum(std::move(minimum));
     }
 
     void setMaximum(std::string maximum) {
         _stats.setHasMaximum(true);
-        _stats.setMaximum(maximum);
+        _stats.setMaximum(std::move(maximum));
     }
 
     uint64_t getTotalLength() const override {
@@ -1004,7 +1005,7 @@ public:
         _stats.setTotalLength(_stats.getTotalLength() + length);
     }
 
-    void update(std::string value) { update(value.c_str(), value.length()); }
+    void update(const std::string& value) { update(value.c_str(), value.length()); }
 
     void merge(const MutableColumnStatistics& other) override {
         const StringColumnStatisticsImpl& strStats = dynamic_cast<const StringColumnStatisticsImpl&>(other);

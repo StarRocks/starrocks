@@ -35,7 +35,7 @@ using std::vector;
 string FpToString(Fprint fp);
 
 // Formats a uint128 as a 32-digit hex string.
-string Uint128ToHexString(uint128 ui128);
+string Uint128ToHexString(const uint128& ui128);
 
 // Convert strings to numeric values, with strict error checking.
 // Leading and trailing spaces are allowed.

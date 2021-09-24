@@ -209,7 +209,7 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
 }
 
 void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool* consumer_pool,
-                                        ExecFinishCallback cb) {
+                                        const ExecFinishCallback& cb) {
 #define HANDLE_ERROR(stmt, err_msg)                                                        \
     do {                                                                                   \
         Status _status_ = (stmt);                                                          \
