@@ -299,7 +299,7 @@ OLAPStatus copy_dir(const string& src_dir, const string& dst_dir) {
     // Iterate through the source directory
     for (const auto& file : std::filesystem::directory_iterator(src_path)) {
         try {
-            std::filesystem::path current(file.path());
+            const std::filesystem::path& current(file.path());
             if (std::filesystem::is_directory(current)) {
                 // Found directory: Recursion
                 OLAPStatus res = OLAP_SUCCESS;
