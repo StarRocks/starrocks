@@ -119,9 +119,9 @@ Status DataDir::_init_cluster_id() {
     }
 
     // obtain lock of all cluster id paths
-    FILE* fp = NULL;
+    FILE* fp = nullptr;
     fp = fopen(cluster_id_path.c_str(), "r+b");
-    if (fp == NULL) {
+    if (fp == nullptr) {
         RETURN_IF_ERROR_WITH_WARN(
                 Status::IOError(strings::Substitute("failed to open cluster id file $0", cluster_id_path)),
                 "open file failed");
@@ -130,7 +130,7 @@ Status DataDir::_init_cluster_id() {
     int lock_res = flock(fp->_fileno, LOCK_EX | LOCK_NB);
     if (lock_res < 0) {
         fclose(fp);
-        fp = NULL;
+        fp = nullptr;
         RETURN_IF_ERROR_WITH_WARN(
                 Status::IOError(strings::Substitute("failed to flock cluster id file $0", cluster_id_path)),
                 "flock file failed");
@@ -214,17 +214,17 @@ Status DataDir::_init_file_system() {
     }
 
     FILE* mount_tablet = nullptr;
-    if ((mount_tablet = setmntent(kMtabPath, "r")) == NULL) {
+    if ((mount_tablet = setmntent(kMtabPath, "r")) == nullptr) {
         RETURN_IF_ERROR_WITH_WARN(
                 Status::IOError(strings::Substitute("setmntent file $0 failed, err=$1", _path, errno_to_string(errno))),
                 "setmntent file failed");
     }
 
     bool is_find = false;
-    struct mntent* mount_entry = NULL;
+    struct mntent* mount_entry = nullptr;
     struct mntent ent;
     char buf[1024];
-    while ((mount_entry = getmntent_r(mount_tablet, &ent, buf, sizeof(buf))) != NULL) {
+    while ((mount_entry = getmntent_r(mount_tablet, &ent, buf, sizeof(buf))) != nullptr) {
         if (strcmp(_path.c_str(), mount_entry->mnt_dir) == 0 || strcmp(_path.c_str(), mount_entry->mnt_fsname) == 0) {
             is_find = true;
             break;

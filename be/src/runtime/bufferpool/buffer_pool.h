@@ -316,7 +316,7 @@ private:
 /// Client methods or BufferPool methods with the Client as an argument is not supported.
 class BufferPool::ClientHandle {
 public:
-    ClientHandle() : impl_(NULL) {}
+    ClientHandle() : impl_(nullptr) {}
     /// Client must be deregistered.
     ~ClientHandle() { DCHECK(!is_registered()); }
 
@@ -363,7 +363,7 @@ public:
     /// Call SetDebugDenyIncreaseReservation() on this client's ReservationTracker.
     void SetDebugDenyIncreaseReservation(double probability);
 
-    bool is_registered() const { return impl_ != NULL; }
+    bool is_registered() const { return impl_ != nullptr; }
 
     /// Return true if there are any unpinned pages for this client.
     bool has_unpinned_pages() const;
@@ -422,7 +422,7 @@ public:
     /// Destination must be uninitialized. Inline to make moving efficient.
     inline BufferHandle& operator=(BufferHandle&& src) noexcept;
 
-    bool is_open() const { return data_ != NULL; }
+    bool is_open() const { return data_ != nullptr; }
     int64_t len() const {
         DCHECK(is_open());
         return len_;
@@ -487,7 +487,7 @@ public:
     // Destination must be closed.
     PageHandle& operator=(PageHandle&& src) noexcept;
 
-    bool is_open() const { return page_ != NULL; }
+    bool is_open() const { return page_ != nullptr; }
     bool is_pinned() const { return pin_count() > 0; }
     int pin_count() const;
     int64_t len() const;
@@ -539,8 +539,8 @@ inline BufferPool::BufferHandle& BufferPool::BufferHandle::operator=(BufferHandl
 }
 
 inline void BufferPool::BufferHandle::Reset() {
-    client_ = NULL;
-    data_ = NULL;
+    client_ = nullptr;
+    data_ = nullptr;
     len_ = -1;
     home_core_ = -1;
 }

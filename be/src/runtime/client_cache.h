@@ -149,20 +149,20 @@ template <class T>
 class ClientConnection {
 public:
     ClientConnection(ClientCache<T>* client_cache, TNetworkAddress address, Status* status)
-            : _client_cache(client_cache), _client(NULL) {
+            : _client_cache(client_cache), _client(nullptr) {
         *status = _client_cache->get_client(address, &_client, 0);
 
         if (status->ok()) {
-            DCHECK(_client != NULL);
+            DCHECK(_client != nullptr);
         }
     }
 
     ClientConnection(ClientCache<T>* client_cache, TNetworkAddress address, int timeout_ms, Status* status)
-            : _client_cache(client_cache), _client(NULL) {
+            : _client_cache(client_cache), _client(nullptr) {
         *status = _client_cache->get_client(address, &_client, timeout_ms);
 
         if (status->ok()) {
-            DCHECK(_client != NULL);
+            DCHECK(_client != nullptr);
         }
     }
 
@@ -170,7 +170,7 @@ public:
     void operator=(const ClientConnection&) = delete;
 
     ~ClientConnection() {
-        if (_client != NULL) {
+        if (_client != nullptr) {
             _client_cache->release_client(&_client);
         }
     }

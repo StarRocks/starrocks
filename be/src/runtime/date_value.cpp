@@ -29,7 +29,7 @@ namespace vectorized {
 
 static const std::string s_day_name[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 static const char* s_month_name[] = {"",     "January", "February",  "March",   "April",    "May",      "June",
-                                     "July", "August",  "September", "October", "November", "December", NULL};
+                                     "July", "August",  "September", "October", "November", "December", nullptr};
 
 static int month_to_quarter[13] = {0, 1, 1, 1, 4, 4, 4, 7, 7, 7, 10, 10, 10};
 static int day_to_first[8] = {0 /*never use*/, 6, 0, 1, 2, 3, 4, 5};

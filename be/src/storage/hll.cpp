@@ -435,7 +435,7 @@ void HllSetResolver::parse() {
     // skip LengthValueType
     char* pdata = _buf_ref;
     _set_type = (HllDataType)pdata[0];
-    char* sparse_data = NULL;
+    char* sparse_data = nullptr;
     switch (_set_type) {
     case HLL_DATA_EXPLICIT:
         // first byte : type

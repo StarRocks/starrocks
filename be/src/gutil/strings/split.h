@@ -1061,9 +1061,9 @@ template <class Container, class InsertPolicy>
 bool SplitStringAndParseToInserter(StringPiece source, StringPiece delim,
                                    bool (*parse)(const string& str, typename Container::value_type* value),
                                    Container* result, InsertPolicy insert_policy) {
-    CHECK(NULL != parse);
-    CHECK(NULL != result);
-    CHECK(NULL != delim.data());
+    CHECK(nullptr != parse);
+    CHECK(nullptr != result);
+    CHECK(nullptr != delim.data());
     CHECK_GT(delim.size(), 0);
     bool retval = true;
     vector<StringPiece> pieces = strings::Split(source, strings::delimiter::AnyOf(delim), strings::SkipEmpty());
