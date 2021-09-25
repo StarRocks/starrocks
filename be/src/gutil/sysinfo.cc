@@ -442,17 +442,17 @@ static void InitializeSystemInfo() {
     }
 }
 
-double CyclesPerSecond(void) {
+double CyclesPerSecond() {
     InitializeSystemInfo();
     return cpuinfo_cycles_per_second;
 }
 
-int NumCPUs(void) {
+int NumCPUs() {
     InitializeSystemInfo();
     return cpuinfo_num_cpus;
 }
 
-int MaxCPUIndex(void) {
+int MaxCPUIndex() {
     InitializeSystemInfo();
     return cpuinfo_max_cpu_index;
 }
