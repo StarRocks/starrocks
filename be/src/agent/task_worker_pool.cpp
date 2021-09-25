@@ -375,7 +375,7 @@ void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
                                                                                           drop_tablet_req.schema_hash);
             if (!drop_status.ok()) {
                 LOG(WARNING) << "drop table failed! signature: " << agent_task_req.signature;
-                error_msgs.push_back("drop table failed!");
+                error_msgs.emplace_back("drop table failed!");
                 status_code = TStatusCode::RUNTIME_ERROR;
             }
             // if tablet is dropped by fe, then the related txn should also be removed
@@ -518,7 +518,7 @@ void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgen
     } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
         LOG(WARNING) << "alter table request task type invalid. "
                      << "signature:" << signature;
-        error_msgs.push_back("alter table request new tablet id or schema count invalid.");
+        error_msgs.emplace_back("alter table request new tablet id or schema count invalid.");
         task_status.__set_status_code(TStatusCode::ANALYSIS_ERROR);
     } else {
         LOG(WARNING) << process_name << " failed. signature: " << signature;
@@ -612,7 +612,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
 
         if (status == STARROCKS_SUCCESS) {
             VLOG(3) << "push ok. signature: " << agent_task_req.signature << ", push_type: " << push_req.push_type;
-            error_msgs.push_back("push success");
+            error_msgs.emplace_back("push success");
 
             ++_s_report_version;
 
@@ -621,11 +621,11 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
         } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
             LOG(WARNING) << "push request push_type invalid. type: " << push_req.push_type
                          << ", signature: " << agent_task_req.signature;
-            error_msgs.push_back("push request push_type invalid.");
+            error_msgs.emplace_back("push request push_type invalid.");
             task_status.__set_status_code(TStatusCode::ANALYSIS_ERROR);
         } else {
             LOG(WARNING) << "push failed, error_code: " << status << ", signature: " << agent_task_req.signature;
-            error_msgs.push_back("push failed");
+            error_msgs.emplace_back("push failed");
             task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
         }
         task_status.__set_error_msgs(error_msgs);
@@ -876,7 +876,7 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
                     status_code = TStatusCode::RUNTIME_ERROR;
                     LOG(WARNING) << "storage migrate failed. status:" << res
                                  << ", signature:" << agent_task_req.signature;
-                    error_msgs.push_back("storage migrate failed.");
+                    error_msgs.emplace_back("storage migrate failed.");
                 } else {
                     LOG(INFO) << "storage migrate success. status:" << res
                               << ", signature:" << agent_task_req.signature;
@@ -901,13 +901,13 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
             if (res != OLAP_SUCCESS) {
                 status_code = TStatusCode::RUNTIME_ERROR;
                 LOG(WARNING) << "clone failed. status:" << res << ", signature:" << agent_task_req.signature;
-                error_msgs.push_back("clone failed.");
+                error_msgs.emplace_back("clone failed.");
             } else {
                 if (status != STARROCKS_SUCCESS && status != STARROCKS_CREATE_TABLE_EXIST) {
                     StarRocksMetrics::instance()->clone_requests_failed.increment(1);
                     status_code = TStatusCode::RUNTIME_ERROR;
                     LOG(WARNING) << "clone failed. signature: " << agent_task_req.signature;
-                    error_msgs.push_back("clone failed.");
+                    error_msgs.emplace_back("clone failed.");
                 } else {
                     LOG(INFO) << "clone success, set tablet infos. status:" << status
                               << ", signature:" << agent_task_req.signature;
