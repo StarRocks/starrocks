@@ -66,7 +66,7 @@ JAVA_OPTS = "-Xmx4096m -XX:+UseMembar -XX:SurvivorRatio=8 -XX:MaxTenuringThresho
 第二步: 创建元数据目录:
 
 ```bash
-mkdir -p starrocks-meta
+mkdir -p starrocks-meta (1.18.2及以前的版本需要使用mkdir -p doris-meta)
 ```
 
 <br/>
@@ -122,40 +122,23 @@ mysql -h 127.0.0.1 -P9030 -uroot
 ```Plain Text
 mysql> SHOW PROC '/frontends'\G
 
-***1\. row***
-
-Name: 172.16.139.24_9010_1594200991015
-
-IP: 172.16.139.24
-
-HostName: starrocks-sandbox01
-
-EditLogPort: 9010
-
-HttpPort: 8030
-
-QueryPort: 9030
-
-RpcPort: 9020
-
-Role: FOLLOWER
-
-IsMaster: true
-
-ClusterId: 861797858
-
-Join: true
-
-Alive: true
-
+************************* 1. row ************************
+             Name: 172.16.139.24_9010_1594200991015
+               IP: 172.16.139.24
+         HostName: starrocks-sandbox01
+      EditLogPort: 9010
+         HttpPort: 8030
+        QueryPort: 9030
+          RpcPort: 9020
+             Role: FOLLOWER
+         IsMaster: true
+        ClusterId: 861797858
+             Join: true
+            Alive: true
 ReplayedJournalId: 64
-
-LastHeartbeat: 2020-03-23 20:15:07
-
-IsHelper: true
-
-ErrMsg:
-
+    LastHeartbeat: 2020-03-23 20:15:07
+         IsHelper: true
+           ErrMsg:
 1 row in set (0.03 sec)
 ```
 
@@ -234,66 +217,36 @@ host为helper节点的IP，如果有多个IP，需要选取priority\_networks里
 ```Plain Text
 mysql> SHOW PROC '/frontends'\G
 
-***1\. row***
-
-Name: 172.26.108.172_9010_1584965098874
-
-IP: 172.26.108.172
-
+********************* 1. row **********************
+    Name: 172.26.108.172_9010_1584965098874
+      IP: 172.26.108.172
 HostName: starrocks-sandbox01
-
 ......
-
-Role: FOLLOWER
-
+    Role: FOLLOWER
 IsMaster: true
-
 ......
-
-Alive: true
-
+   Alive: true
 ......
-
-***2\. row***
-
-Name: 172.26.108.174_9010_1584965098874
-
-IP: 172.26.108.174
-
+********************* 2. row **********************
+    Name: 172.26.108.174_9010_1584965098874
+      IP: 172.26.108.174
 HostName: starrocks-sandbox02
-
 ......
-
-Role: FOLLOWER
-
+    Role: FOLLOWER
 IsMaster: false
-
 ......
-
-Alive: true
-
+   Alive: true
 ......
-
-***3\. row***
-
-Name: 172.26.108.175_9010_1584965098874
-
-IP: 172.26.108.175
-
+********************* 3. row **********************
+    Name: 172.26.108.175_9010_1584965098874
+      IP: 172.26.108.175
 HostName: starrocks-sandbox03
-
 ......
-
-Role: FOLLOWER
-
+    Role: FOLLOWER
 IsMaster: false
-
 ......
-
-Alive: true
-
+   Alive: true
 ......
-
 3 rows in set (0.05 sec)
 ```
 
@@ -353,50 +306,28 @@ bin/start_be.sh --daemon
 ```Plain Text
 mysql> SHOW PROC '/backends'\G
 
-***1\. row***
-
-BackendId: 10002
-
-Cluster: default\_cluster
-
-IP: 172.16.139.24
-
-HostName: starrocks-sandbox01
-
-HeartbeatPort: 9050
-
-BePort: 9060
-
-HttpPort: 8040
-
-BrpcPort: 8060
-
-LastStartTime: 2020-03-23 20:19:07
-
-LastHeartbeat: 2020-03-23 20:34:49
-
-Alive: true
-
-SystemDecommissioned: false
-
+********************* 1. row **********************
+            BackendId: 10002
+              Cluster: default_cluster
+                   IP: 172.16.139.24
+             HostName: starrocks-sandbox01
+        HeartbeatPort: 9050
+               BePort: 9060
+             HttpPort: 8040
+             BrpcPort: 8060
+        LastStartTime: 2020-03-23 20:19:07
+        LastHeartbeat: 2020-03-23 20:34:49
+                Alive: true
+ SystemDecommissioned: false
 ClusterDecommissioned: false
-
-TabletNum: 0
-
-DataUsedCapacity: .000
-
-AvailCapacity: 327.292 GB
-
-TotalCapacity: 450.905 GB
-
-UsedPct: 27.41 %
-
-MaxDiskUsedPct: 27.41 %
-
-ErrMsg:
-
-Version:
-
+            TabletNum: 0
+     DataUsedCapacity: .000
+        AvailCapacity: 327.292 GB
+        TotalCapacity: 450.905 GB
+              UsedPct: 27.41 %
+       MaxDiskUsedPct: 27.41 %
+               ErrMsg:
+              Version:
 1 row in set (0.01 sec)
 ```
 
@@ -472,7 +403,7 @@ echo 0 | sudo tee /proc/sys/vm/swappiness
 
 * **Compaction相关**
 
-当使用聚合表或更新模型，导入数据比较快的时候，可改下列参数以加速compaction。
+当使用聚合表或更新模型，导入数据比较快的时候，可在配置文件 `be.conf` 中修改下列参数以加速compaction。
 
 ```shell
 cumulative_compaction_num_threads_per_disk = 4

@@ -104,7 +104,7 @@ tEnv.executeSql(
         "'table-name' = 'xxx'," +
         "'username' = 'xxx'," +
         "'password' = 'xxx'," +
-        "'sink.buffer-flush.max-rows' = '10000000'," +
+        "'sink.buffer-flush.max-rows' = '1000000'," +
         "'sink.buffer-flush.max-bytes' = '300000000'," +
         "'sink.buffer-flush.interval-ms' = '5000'," +
         "'sink.properties.column_separator' = '\\x01'," +
