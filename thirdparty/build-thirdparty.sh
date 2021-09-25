@@ -124,6 +124,7 @@ check_prerequest "libtoolize --version" "libtool"
 # Do not use `build`, because many projects contained a file named `BUILD`
 # and if the filesystem is not case sensitive, `mkdir` will fail.
 BUILD_DIR=starrocks_build
+MACHINE_TYPE=$(uname -m)
 
 check_if_source_exist() {
     if [ -z $1 ]; then
@@ -165,7 +166,6 @@ build_libevent() {
 }
 
 build_openssl() {
-    MACHINE_TYPE=$(uname -m)
     OPENSSL_PLATFORM="linux-x86_64"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         OPENSSL_PLATFORM="linux-aarch64"
@@ -228,7 +228,6 @@ build_thrift() {
 
 # llvm
 build_llvm() {
-    MACHINE_TYPE=$(uname -m)
     LLVM_TARGET="X86"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         LLVM_TARGET="AArch64"
@@ -562,7 +561,6 @@ build_bitshuffle() {
     # once with the flag and once without, and use some linker tricks to
     # suffix the AVX2 symbols with '_avx2'.
     arches="default avx2"
-    MACHINE_TYPE=$(uname -m)
     # Becuase aarch64 don't support avx2, disable it.
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         arches="default"
@@ -604,6 +602,11 @@ build_bitshuffle() {
 
 # croaring bitmap
 build_croaringbitmap() {
+    FORCE_AVX=ON
+    # avx2 is not supported by aarch64.
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        FORCE_AVX=FALSE
+    fi
     check_if_source_exist $CROARINGBITMAP_SOURCE
     cd $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE
     mkdir -p $BUILD_DIR && cd $BUILD_DIR
@@ -614,7 +617,7 @@ build_croaringbitmap() {
     -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
     -DENABLE_ROARING_TESTS=OFF \
     -DROARING_DISABLE_NATIVE=ON \
-    -DFORCE_AVX=ON \
+    -DFORCE_AVX=$FORCE_AVX \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
     make -j$PARALLEL && make install
 }
@@ -704,8 +707,12 @@ build_ragel() {
 
 #hyperscan
 build_hyperscan() {
-    check_if_source_exist $HYPERSCAN_SOURCE
-    cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
+    HYPERSCAN_TARGET=$HYPERSCAN_SOURCE
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        HYPERSCAN_TARGET=$HYPERSCAN_AARCH64_SOURCE
+    fi
+    check_if_source_exist $HYPERSCAN_TARGET
+    cd $TP_SOURCE_DIR/$HYPERSCAN_TARGET
     export PATH=$TP_INSTALL_DIR/bin:$PATH
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
           -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc  -DCMAKE_INSTALL_LIBDIR=lib
@@ -749,11 +756,15 @@ build_croaringbitmap
 build_cctz
 build_fmt
 build_ryu
-build_breakpad
 build_hadoop
 build_jdk
 build_ragel
 build_hyperscan
 build_mariadb
+
+if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
+    build_breakpad
+fi
+
 echo "Finihsed to build all thirdparties"
 

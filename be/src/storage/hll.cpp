@@ -21,7 +21,9 @@
 
 #include "storage/hll.h"
 
+#ifdef __x86_64__
 #include <immintrin.h>
+#endif
 
 #include <algorithm>
 #include <cmath>

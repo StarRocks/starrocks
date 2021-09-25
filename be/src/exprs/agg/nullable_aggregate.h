@@ -2,7 +2,9 @@
 
 #pragma once
 
+#ifdef __x86_64__
 #include <immintrin.h>
+#endif
 
 #include <utility>
 

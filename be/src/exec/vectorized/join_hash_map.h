@@ -12,6 +12,9 @@
 #include "runtime/mem_tracker.h"
 #include "util/phmap/phmap.h"
 
+#if defined(__aarch64__)
+#include "arm_acle.h"
+#endif
 namespace starrocks::vectorized {
 
 #define APPLY_FOR_JOIN_VARIANTS(M) \
@@ -176,7 +179,11 @@ template <>
 struct JoinKeyHash<int32_t> {
     static const uint32_t CRC_SEED = 0x811C9DC5;
     std::size_t operator()(const int32_t& value) const {
+#if defined __x86_64__
         size_t hash = _mm_crc32_u32(CRC_SEED, value + 2);
+#else
+        size_t hash = __crc32cw(CRC_SEED, value + 2);
+#endif
         hash = (hash << 16u) | (hash >> 16u);
         return hash;
     }
