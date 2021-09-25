@@ -30,6 +30,7 @@ set -eo pipefail
 
 ROOT=`dirname "$0"`
 ROOT=`cd "$ROOT"; pwd`
+MACHINE_TYPE=$(uname -m)
 
 export STARROCKS_HOME=${ROOT}
 
@@ -99,6 +100,7 @@ WITH_HDFS=ON
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
+
 
 HELP=0
 if [ $# == 1 ] ; then
