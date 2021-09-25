@@ -1284,7 +1284,7 @@ Status SpillSorter::create_merger(int num_runs) {
         RETURN_IF_ERROR(run->prepare_read());
         // Run::get_next_batch() is used by the merger to retrieve a batch of rows to merge
         // from this run.
-        merge_runs.push_back(std::bind<Status>(std::mem_fn(&Run::get_next_batch), run, std::placeholders::_1));
+        merge_runs.emplace_back(std::bind<Status>(std::mem_fn(&Run::get_next_batch), run, std::placeholders::_1));
         _sorted_runs.pop_front();
         _merging_runs.push_back(run);
     }
