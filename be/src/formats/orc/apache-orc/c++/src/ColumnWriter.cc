@@ -842,7 +842,7 @@ size_t SortedStringDictionary::insert(const char* str, size_t len) {
     auto ret = dict.insert({DictEntry(str, len), dict.size()});
     if (ret.second) {
         // make a copy to internal storage
-        data.push_back(std::vector<char>(len));
+        data.emplace_back(len);
         memcpy(data.back().data(), str, len);
         // update dictionary entry to link pointer to internal storage
         DictEntry* entry = const_cast<DictEntry*>(&(ret.first->first));

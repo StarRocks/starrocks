@@ -102,7 +102,7 @@ BufferedTupleStream3::BufferedTupleStream3(RuntimeState* state, const RowDescrip
             }
         }
         if (!tuple_string_slots.empty()) {
-            inlined_string_slots_.push_back(make_pair(i, tuple_string_slots));
+            inlined_string_slots_.emplace_back(i, tuple_string_slots);
         }
         /*
     if (!tuple_coll_slots.empty()) {

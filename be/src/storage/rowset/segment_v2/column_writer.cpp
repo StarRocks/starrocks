@@ -490,7 +490,7 @@ Status ScalarColumnWriter::finish_current_page() {
     // build data page body : encoded values + [nullmap]
     std::vector<Slice> body;
     faststring* encoded_values = _page_builder->finish();
-    body.push_back(Slice(*encoded_values));
+    body.emplace_back(*encoded_values);
 
     OwnedSlice nullmap;
     if (is_nullable() && _curr_page_format == 1) {

@@ -378,7 +378,7 @@ void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId) {
         const proto::RowIndexEntry& entry = rowIndex->second.entry(static_cast<int32_t>(rowGroupEntryId));
 
         // copy index positions for a specific column
-        positions.push_back({});
+        positions.emplace_back();
         auto& position = positions.back();
         for (int pos = 0; pos != entry.positions_size(); ++pos) {
             position.push_back(entry.positions(pos));

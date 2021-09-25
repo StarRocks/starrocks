@@ -687,7 +687,7 @@ std::vector<std::pair<std::string, ORC_UNIQUE_PTR<Type>>> TypeImpl::parseType(co
         }
 
         std::string category = input.substr(pos, endPos - pos);
-        res.push_back(std::make_pair(fieldName, parseCategory(category, input, endPos + 1, nextPos)));
+        res.emplace_back(fieldName, parseCategory(category, input, endPos + 1, nextPos));
 
         if (nextPos < end && (input[nextPos] == ')' || input[nextPos] == '>')) {
             pos = nextPos + 2;
