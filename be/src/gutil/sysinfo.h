@@ -51,7 +51,7 @@ void SleepForNanoseconds(int64_t nanoseconds);
 void SleepForMilliseconds(int64_t milliseconds);
 
 // processor cycles per second of each processor.  Thread-safe.
-extern double CyclesPerSecond(void);
+extern double CyclesPerSecond();
 
 // Parse the maximum CPU index from 'str'. The list is in the format of the CPU lists
 // under /sys/devices/system/cpu/, e.g. /sys/devices/system/cpu/present. Returns the
