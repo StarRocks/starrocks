@@ -62,6 +62,7 @@ public:
     VersionHash version_hash = 0;
     TabletUid tablet_uid = {0, 0};
     PUniqueId load_id{};
+    bool write_tmp = false;
 
     RowsetStatePB rowset_state = PREPARED;
     RowsetTypePB rowset_type = BETA_ROWSET;

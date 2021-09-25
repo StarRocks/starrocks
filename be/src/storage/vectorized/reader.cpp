@@ -21,7 +21,9 @@
 namespace starrocks::vectorized {
 
 Reader::Reader(TabletSharedPtr tablet, const Version& version, Schema schema)
-        : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version), _mempool(&_memtracker) {}
+        : ChunkIterator(std::move(schema)), _tablet(tablet), _version(version), _mempool(&_memtracker) {
+    _delete_predicates_version = version;
+}
 
 void Reader::close() {
     if (_collect_iter != nullptr) {
@@ -44,7 +46,8 @@ Status Reader::prepare() {
 }
 
 Status Reader::open(const ReaderParams& read_params) {
-    if (read_params.reader_type != ReaderType::READER_QUERY && !is_compaction(read_params.reader_type)) {
+    if (read_params.reader_type != ReaderType::READER_QUERY &&
+        read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type)) {
         return Status::NotSupported("reader type not supported now");
     }
     Status st = _init_collector(read_params);
@@ -208,7 +211,7 @@ Status Reader::_init_delete_predicates(const ReaderParams& params, DeletePredica
     _tablet->obtain_header_rdlock();
 
     for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {
-        if (pred_pb.version() > _version.second) {
+        if (pred_pb.version() > _delete_predicates_version.second) {
             continue;
         }
 

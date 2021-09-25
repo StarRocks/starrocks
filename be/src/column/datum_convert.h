@@ -9,4 +9,6 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
 
 std::string datum_to_string(TypeInfo* type_info, const Datum& datum);
 
+Status convert_datum(TypeInfo* src_type_info, const Datum& src_datum, TypeInfo* dst_type_info, Datum& dst_datum);
+
 } // namespace starrocks::vectorized
