@@ -100,7 +100,7 @@ public:
     virtual OLAPStatus convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                     MemPool* mem_pool) const = 0;
 
-    virtual OLAPStatus convert_from(Datum& dest, const Datum& src, const TypeInfoPtr& src_type) {
+    virtual OLAPStatus convert_from(Datum& dest, const Datum& src, const TypeInfoPtr& src_type) const {
         return OLAPStatus::OLAP_ERR_FUNC_NOT_IMPLEMENTED;
     }
 

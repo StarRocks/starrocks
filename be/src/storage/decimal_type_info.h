@@ -120,7 +120,7 @@ public:
         }
     }
 
-    static inline OLAPStatus to_decimal(FieldType src_type, FieldType dst_type, const Datum& src_datum, Datum dst_datum,
+    static inline OLAPStatus to_decimal(FieldType src_type, FieldType dst_type, const Datum& src_datum, Datum& dst_datum,
                                         int src_precision, int src_scale, int dst_precision, int dst_scale) {
 #define TO_DECIMAL_MACRO(n, m)                                                                           \
                                                                                                          \

@@ -567,17 +567,22 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
                 // TODO check
             } else if (is_decimalv3_field_type(ref_type) && is_decimalv3_field_type(new_type)) {
                 TabletColumn new_column = new_tablet->tablet_meta()->tablet_schema().column(i);
-                Field new_field = ChunkHelper::convert_field(i, new_column);
+                Field new_field = ChunkHelper::convert_field_to_format_v2(i, new_column);
 
                 TabletColumn base_column = base_tablet->tablet_meta()->tablet_schema().column(ref_column);
-                Field base_filed = ChunkHelper::convert_field(ref_column, base_column);
+                Field base_field = ChunkHelper::convert_field_to_format_v2(ref_column, base_column);
                 for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
                     Datum base_datum = base_col->get(row_index);
                     Datum new_datum;
-                    if (new_field.type()->convert_from(new_datum, base_datum, base_filed.type()) != OLAP_SUCCESS) {
-                        LOG(WARNING) << "failed to convert";
-                        return false;
+                    if (base_datum.is_null()) {
+                        new_datum.set_null();
+                    } else {
+                        if (new_field.type()->convert_from(new_datum, base_datum, base_field.type()) != OLAP_SUCCESS) {
+                            LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to " << field_type_to_string(new_type);
+                            return false;
+                        }
                     }
+                    
                     new_col->append_datum(new_datum);
                 }
             } else {
