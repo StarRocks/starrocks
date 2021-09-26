@@ -276,6 +276,12 @@ TEST_F(StarRocksColumnToArrowTest, testDecimalColumn) {
     NotNullableColumnTester<TYPE_DECIMALV2, ArrowTypeId::DECIMAL>::apply(137, data, type_desc);
 }
 
+TEST_F(StarRocksColumnToArrowTest, testBooleanColumn) {
+    std::vector<uint8_t> data{0, 1, 0, 0, 1};
+    TypeDescriptor type_desc(TYPE_BOOLEAN);
+    NotNullableColumnTester<TYPE_BOOLEAN, ArrowTypeId::BOOL>::apply(201, data, type_desc);
+}
+
 TEST_F(StarRocksColumnToArrowTest, testSmallIntColumn) {
     std::vector<int16_t> data{1, 6654, -4291, 804, -1, -32768, 32767};
     TypeDescriptor type_desc(TYPE_SMALLINT);
@@ -371,6 +377,13 @@ TEST_F(StarRocksColumnToArrowTest, testNullableDecimalColumn) {
     auto type_desc = TypeDescriptor::create_decimalv2_type(27, 9);
     std::set<size_t> null_index{1, 10, 127};
     NullableColumnTester<TYPE_DECIMALV2, ArrowTypeId::DECIMAL>::apply(137, null_index, data, type_desc);
+}
+
+TEST_F(StarRocksColumnToArrowTest, testNullableBooleanColumn) {
+    std::vector<uint8_t> data{0, 1, 0, 0, 1};
+    std::set<size_t> null_index{0, 100, 110, 111, 252};
+    TypeDescriptor type_desc(TYPE_BOOLEAN);
+    NullableColumnTester<TYPE_BOOLEAN, ArrowTypeId::BOOL>::apply(253, null_index, data, type_desc);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableSmallIntColumn) {
