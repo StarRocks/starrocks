@@ -144,7 +144,7 @@ public class EtlStatus implements Writable {
 
     public synchronized void increaseTableCounter(long tableId, String key, long value) {
         Map<String, Long> cts = tableCounters.computeIfAbsent(tableId, tid -> Maps.newHashMap());
-        Long originVal = cts.computeIfAbsent(key, k -> 0l);
+        Long originVal = cts.computeIfAbsent(key, k -> 0L);
         cts.put(key, originVal + value);
     }
 

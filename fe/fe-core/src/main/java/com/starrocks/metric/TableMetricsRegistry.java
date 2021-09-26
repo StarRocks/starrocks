@@ -20,7 +20,7 @@ public final class TableMetricsRegistry {
         idToTableMetrics = Maps.newHashMap();
         // clear all metrics everyday
         timer = ThreadPoolManager.newDaemonScheduledThreadPool(1, "Table-Metrics-Cleaner", true);
-        timer.scheduleAtFixedRate(new MetricsCleaner(), 0, 1l, TimeUnit.DAYS);
+        timer.scheduleAtFixedRate(new MetricsCleaner(), 0, 1L, TimeUnit.DAYS);
     }
 
     public static TableMetricsRegistry getInstance() {

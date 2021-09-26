@@ -35,7 +35,7 @@ import java.nio.ByteBuffer;
  * mysql Channel based on nio.
  */
 public class NMysqlChannel extends MysqlChannel {
-    protected final Logger LOG = LogManager.getLogger(this.getClass());
+    protected static final Logger LOG = LogManager.getLogger(NMysqlChannel.class);
     private StreamConnection conn;
 
     public NMysqlChannel(StreamConnection connection) {

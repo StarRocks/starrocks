@@ -175,9 +175,8 @@ public class SparkLauncherMonitor {
                             default:
                                 Preconditions.checkState(false, "wrong spark app state");
                         }
-                    }
-                    // parse other values
-                    else if (line.contains(QUEUE) || line.contains(START_TIME) || line.contains(FINAL_STATUS) ||
+                        // parse other values
+                    } else if (line.contains(QUEUE) || line.contains(START_TIME) || line.contains(FINAL_STATUS) ||
                             line.contains(URL) || line.contains(USER)) {
                         String value = getValue(line);
                         if (!Strings.isNullOrEmpty(value)) {
