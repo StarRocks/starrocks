@@ -34,6 +34,7 @@
 #include "storage/olap_common.h"
 #include "storage/row_cursor.h"
 #include "storage/rowset/rowset.h"
+#include "storage/vectorized/column_predicate.h"
 
 namespace starrocks {
 
@@ -47,7 +48,7 @@ struct TabletVars {
 class PushHandler {
 public:
     PushHandler() = default;
-    ~PushHandler() = default;
+    ~PushHandler();
 
     // Load local data file into specified tablet.
     OLAPStatus process_streaming_ingestion(const TabletSharedPtr& tablet, const TPushReq& request, PushType push_type,
@@ -65,12 +66,21 @@ private:
     OLAPStatus _do_streaming_ingestion(const TabletSharedPtr& tablet, const TPushReq& request, PushType push_type,
                                        vector<TabletVars>* tablet_vars, std::vector<TTabletInfo>* tablet_info_vec);
 
+    Status _parse_delete_predicate(
+            const std::shared_ptr<Tablet>& tablet, std::queue<DeletePredicatePB>& del_preds,
+            std::unordered_map<ColumnId, std::vector<const vectorized::ColumnPredicate*>>* predicates);
+    Status _create_rowset_with_deletes(
+            const std::shared_ptr<Tablet>& tablet,
+            std::unordered_map<ColumnId, std::vector<const vectorized::ColumnPredicate*>>& predicates,
+            std::shared_ptr<Rowset>* rowset);
+
 private:
     // mainly tablet_id, version and delta file path
     TPushReq _request;
 
     int64_t _write_bytes = 0;
     int64_t _write_rows = 0;
+    std::vector<const vectorized::ColumnPredicate*> _predicate_free_list;
     DISALLOW_COPY_AND_ASSIGN(PushHandler);
 };
 

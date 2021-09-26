@@ -27,14 +27,23 @@
 #include <sstream>
 
 #include "common/status.h"
+#include "common/statusor.h"
+#include "gutil/stl_util.h"
 #include "runtime/exec_env.h"
+#include "storage/primary_key_encoder.h"
 #include "storage/row.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/rowset/rowset_meta_manager.h"
+#include "storage/rowset/vectorized/rowset_options.h"
 #include "storage/schema_change.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+#include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/column_predicate.h"
+#include "storage/vectorized/empty_iterator.h"
+#include "storage/vectorized/predicate_parser.h"
+#include "storage/vectorized/union_iterator.h"
 
 using std::list;
 using std::map;
@@ -42,6 +51,10 @@ using std::string;
 using std::vector;
 
 namespace starrocks {
+
+PushHandler::~PushHandler() {
+    STLDeleteElements(&_predicate_free_list);
+}
 
 // Process push command, the main logical is as follows:
 //    a. related tablets not exist:
@@ -229,15 +242,31 @@ OLAPStatus PushHandler::_do_streaming_ingestion(const TabletSharedPtr& tablet, c
             continue;
         }
 
-        if (push_type == PUSH_FOR_DELETE) {
-            tablet_var.rowset_to_add->rowset_meta()->set_delete_predicate(del_preds.front());
-            del_preds.pop();
-        }
-        OLAPStatus commit_status = StorageEngine::instance()->txn_manager()->commit_txn(
-                request.partition_id, tablet_var.tablet, request.transaction_id, load_id, tablet_var.rowset_to_add,
-                false);
-        if (commit_status != OLAP_SUCCESS && commit_status != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
-            res = commit_status;
+        if (tablet_var.tablet->keys_type() != KeysType::PRIMARY_KEYS) {
+            if (push_type == PUSH_FOR_DELETE) {
+                tablet_var.rowset_to_add->rowset_meta()->set_delete_predicate(del_preds.front());
+                del_preds.pop();
+            }
+            OLAPStatus commit_status = StorageEngine::instance()->txn_manager()->commit_txn(
+                    request.partition_id, tablet_var.tablet, request.transaction_id, load_id, tablet_var.rowset_to_add,
+                    false);
+            if (commit_status != OLAP_SUCCESS && commit_status != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
+                res = commit_status;
+            }
+        } else {
+            std::shared_ptr<Rowset> rowset;
+            if (push_type == PUSH_FOR_DELETE) {
+                std::unordered_map<ColumnId, std::vector<const vectorized::ColumnPredicate*>> predicates;
+                RETURN_CODE_IF_ERROR_WITH_WARN(_parse_delete_predicate(tablet_var.tablet, del_preds, &predicates),
+                                               OLAP_ERR_OTHER_ERROR, "Fail to parse delete predicate");
+                RETURN_CODE_IF_ERROR_WITH_WARN(_create_rowset_with_deletes(tablet_var.tablet, predicates, &rowset),
+                                               OLAP_ERR_OTHER_ERROR, "Fail to get rowset");
+            }
+            OLAPStatus commit_status = StorageEngine::instance()->txn_manager()->commit_txn(
+                    request.partition_id, tablet_var.tablet, request.transaction_id, load_id, rowset, false);
+            if (commit_status != OLAP_SUCCESS && commit_status != OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
+                res = commit_status;
+            }
         }
     }
     return res;
@@ -449,6 +478,148 @@ void PushHandler::_get_tablet_infos(const std::vector<TabletVars>& tablet_vars,
         (void)StorageEngine::instance()->tablet_manager()->report_tablet_info(&tablet_info);
         tablet_info_vec->push_back(tablet_info);
     }
+}
+
+Status PushHandler::_parse_delete_predicate(
+        const std::shared_ptr<Tablet>& tablet, std::queue<DeletePredicatePB>& del_preds,
+        std::unordered_map<ColumnId, std::vector<const vectorized::ColumnPredicate*>>* predicates) {
+    vectorized::PredicateParser pred_parser(tablet->tablet_schema());
+    while (!del_preds.empty()) {
+        const DeletePredicatePB& pred_pb = del_preds.front();
+        for (int i = 0; i != pred_pb.sub_predicates_size(); ++i) {
+            TCondition cond;
+            if (!DeleteHandler::parse_condition(pred_pb.sub_predicates(i), &cond)) {
+                std::stringstream ss;
+                ss << "invalid delete condition: " << pred_pb.sub_predicates(i) << "]";
+                LOG(WARNING) << ss.str();
+                return Status::InternalError(ss.str());
+            }
+            if (tablet->tablet_schema().field_index(cond.column_name) >= tablet->num_key_columns()) {
+                LOG(WARNING) << "ignore delete condition of non-key column: " << pred_pb.sub_predicates(i);
+                continue;
+            }
+            vectorized::ColumnPredicate* pred = pred_parser.parse(cond);
+            if (pred == nullptr) {
+                LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
+                             << "], condition_op[" << cond.condition_op << "], condition_values["
+                             << cond.condition_values[0] << "].";
+                continue;
+            }
+            (*predicates)[pred->column_id()].emplace_back(pred);
+            // save for memory release.
+            _predicate_free_list.emplace_back(pred);
+        }
+        for (int i = 0; i != pred_pb.in_predicates_size(); ++i) {
+            TCondition cond;
+            const InPredicatePB& in_predicate = pred_pb.in_predicates(i);
+            cond.__set_column_name(in_predicate.column_name());
+            if (in_predicate.is_not_in()) {
+                cond.__set_condition_op("!*=");
+            } else {
+                cond.__set_condition_op("*=");
+            }
+            for (const auto& value : in_predicate.values()) {
+                cond.condition_values.push_back(value);
+            }
+            vectorized::ColumnPredicate* pred = pred_parser.parse(cond);
+            if (pred == nullptr) {
+                LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
+                             << "], condition_op[" << cond.condition_op << "], condition_values["
+                             << cond.condition_values[0] << "].";
+                continue;
+            }
+            (*predicates)[pred->column_id()].emplace_back(pred);
+            // save for memory release.
+            _predicate_free_list.emplace_back(pred);
+        }
+        del_preds.pop();
+    }
+    return Status::OK();
+}
+
+Status PushHandler::_create_rowset_with_deletes(
+        const std::shared_ptr<Tablet>& tablet,
+        std::unordered_map<ColumnId, std::vector<const vectorized::ColumnPredicate*>>& predicates,
+        std::shared_ptr<Rowset>* rowset) {
+    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
+
+    std::unique_ptr<vectorized::Column> pk_column;
+    if (!PrimaryKeyEncoder::create_column(schema, &pk_column).ok()) {
+        CHECK(false) << "create column for primary key encoder failed";
+    }
+
+    RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    writer_context.rowset_id = rowset_id;
+    writer_context.tablet_id = tablet->tablet_id();
+    writer_context.tablet_schema_hash = tablet->schema_hash();
+    writer_context.partition_id = 0;
+    writer_context.rowset_type = BETA_ROWSET;
+    writer_context.rowset_path_prefix = tablet->tablet_path();
+    writer_context.rowset_state = COMMITTED;
+    writer_context.tablet_schema = &tablet->tablet_schema();
+    writer_context.version.first = 0;
+    writer_context.version.second = 0;
+    writer_context.segments_overlap = NONOVERLAPPING;
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    OLAPStatus olap_status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
+    if (olap_status != OLAPStatus::OLAP_SUCCESS) {
+        std::stringstream ss;
+        ss << "Fail to create rowset writer err=" << olap_status;
+        LOG(WARNING) << ss.str();
+        Status::InternalError(ss.str());
+    }
+
+    vectorized::RowsetReadOptions rs_opts;
+
+    rs_opts.predicates = predicates;
+    rs_opts.is_primary_keys = true;
+    rs_opts.sorted = false;
+
+    int64_t version = tablet->max_version().second;
+    rs_opts.version = version;
+
+    rs_opts.meta = tablet->data_dir()->get_meta();
+
+    static OlapReaderStatistics s_stats;
+    rs_opts.stats = &s_stats;
+
+    auto deletes = pk_column->clone();
+
+    auto seg_iters = tablet->capture_segment_iterators(Version(0, version), schema, rs_opts);
+    if (!seg_iters.ok()) {
+        std::stringstream ss;
+        ss << "read tablet failed: " << seg_iters.status().to_string();
+        LOG(ERROR) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+    std::shared_ptr<vectorized::ChunkIterator> iter;
+    if (seg_iters->empty()) {
+        iter = vectorized::new_empty_iterator(schema, DEFAULT_CHUNK_SIZE);
+    } else {
+        iter = vectorized::new_union_iterator(std::move(*seg_iters));
+    }
+
+    auto chunk = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+
+    while (true) {
+        chunk->reset();
+        auto col = pk_column->clone();
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        } else if (st.ok()) {
+            PrimaryKeyEncoder::encode(schema, *chunk.get(), 0, chunk->num_rows(), col.get());
+            deletes->append(*col.get());
+        } else {
+            return st;
+        }
+    }
+    rowset_writer->flush_chunk_with_deletes(*chunk.get(), *deletes.get());
+    *rowset = rowset_writer->build();
+
+    iter->close();
+    return Status::OK();
 }
 
 OLAPStatus PushBrokerReader::init(const Schema* schema, const TBrokerScanRange& t_scan_range,

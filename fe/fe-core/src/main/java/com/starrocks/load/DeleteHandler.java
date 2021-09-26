@@ -513,11 +513,6 @@ public class DeleteHandler implements Writable {
             }
         }
 
-        // primary key table do not support delete sql statement yet
-        if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
-            throw new DdlException("primary key tablet do not support delete statement yet");
-        }
-
         // check condition column is key column and condition value
         Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Column column : table.getBaseSchema()) {
