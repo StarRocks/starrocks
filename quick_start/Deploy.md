@@ -103,7 +103,7 @@ bin/start_fe.sh --daemon
 
 第一步: 安装mysql客户端(如果已经安装，可忽略此步)：
 
-Ubuntu：sudo apt-get install mysql
+Ubuntu：sudo apt-get install mysql-client
 
 Centos：sudo yum install mysql-client
 <br/>
