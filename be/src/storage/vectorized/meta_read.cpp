@@ -112,37 +112,6 @@ Status MetaReader::_init_params(const MetaReaderParams& read_params) {
         _seg_collecter_params.read_page.emplace_back(true);
     }
 
-    // just for debug dict
-    {
-        int32_t index = _tablet->field_index("l_shipmode");
-        if (index < 0) {
-             std::stringstream ss;
-            ss << "invalid field name: " << "l_shipmode";
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
-        }
-        // get field type
-        FieldType type = _tablet->tablet_schema().column(index).type();
-
-        // 类型
-        _seg_collecter_params.field_type.emplace_back(type);
-
-        // 采集项
-        _seg_collecter_params.fields.emplace_back("dict");
-        _collect_names.emplace_back("dict");
-        // 对应的列 id
-        _seg_collecter_params.cids.emplace_back(index);
-        _collect_col_ids.emplace_back(index);
-
-        _seg_collecter_params.max_cid = std::max(_seg_collecter_params.max_cid, index);
-
-        // 对应的 slot id
-        //_return_slot_ids.emplace_back(10);
-        // 是否需要打开 column 迭代器
-        _seg_collecter_params.read_page.emplace_back(true);
-
-    }
-
     return Status::OK();
 }
 
@@ -239,18 +208,6 @@ Status MetaReader::do_get_next(ChunkPtr* result) {
         auto slot = _params.desc_tbl->get_slot_descriptor(s_id);
         vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(slot->type(), false);
         (*result)->append_column(std::move(column), slot->id());
-    }
-
-    // just for debug dict
-    {
-        TypeDescriptor dict_item_desc;
-        dict_item_desc.type = TYPE_CHAR;
-        TypeDescriptor dict_desc;
-        dict_desc.type = TYPE_ARRAY;
-        dict_desc.children.emplace_back(dict_item_desc);
-       
-        vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(dict_desc, false);
-        (*result)->append_column(std::move(column), 30);
     }
 
     //std::cout << "chunk_start: " << chunk_start << std::endl;
