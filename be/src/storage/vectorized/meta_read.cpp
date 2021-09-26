@@ -52,6 +52,24 @@ static std::vector<std::string> split_string(const std::string &str, const char 
     }
     return res;
 }
+static std::vector<std::string> func_names = {
+    "max",
+    "min",
+    "dict_merge"
+};
+
+static int get_func_name_and_col_name(const std::string& in, std::string* func_name, std::string* col_name) {
+    for (size_t i = 0; i < func_names.size(); i++) {
+        if (in.size() <= func_names[i].size()) { continue; }
+        if (in.find(func_names[i]) != std::string::npos 
+            && in.substr(0, func_names[i].size()) == func_names[i]) {
+                *func_name = func_names[i];
+                *col_name = in.substr(func_names[i].size() + 1);
+                return 0;
+        }
+    }
+    return -1;
+}
 
 // 检查参数，判断是否需要打开 Column 迭代器（会发生 io）
 Status MetaReader::_init_params(const MetaReaderParams& read_params) {
@@ -68,18 +86,24 @@ Status MetaReader::_init_params(const MetaReaderParams& read_params) {
     for (auto it : *(read_params.id_to_names)) {
         // just for debug
         //std::cout << "name: " << it.second << " id " << it.first << std::endl;
-        // 拆分 col_name 和 collect_name, 目前用比较猥琐的写法了
-        
-        auto sub_strings = split_string(it.second , '_');
-        
-        auto& collect_name = sub_strings[0];
-        std::string col_name;
-        for (size_t i = 1; i < sub_strings.size(); i++) {
-            col_name += sub_strings[i];
-            if (i != sub_strings.size() - 1) {
-                col_name += "_";
+        // 拆分 col_name 和 collect_name, 目前用比较 trick 的写法了
+
+        /*
+            auto sub_strings = split_string(it.second , '_');  
+            auto& collect_name = sub_strings[0];
+            std::string col_name;
+            for (size_t i = 1; i < sub_strings.size(); i++) {
+                col_name += sub_strings[i];
+                if (i != sub_strings.size() - 1) {
+                    col_name += "_";
+                }
             }
-        }
+        */
+        std::string col_name = "";
+        std::string collect_name = "";
+        get_func_name_and_col_name(it.second, &collect_name, &col_name);
+     
+        
         // just for debug
         //std::cout << "max: " << collect_name << " col_name " << col_name << std::endl;
         
