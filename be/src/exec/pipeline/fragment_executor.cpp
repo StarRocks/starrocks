@@ -45,7 +45,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     if (existing_query_ctx) {
         auto&& existing_fragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_id);
         if (existing_fragment_ctx) {
-            return Status::OK();
+            return Status::DuplicateRpcInvocation("Duplicate invocations of exec_plan_fragment");
         }
     }
 
