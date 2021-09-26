@@ -110,7 +110,8 @@ public class MysqlAuthPacket extends MysqlPacket {
     }
 
     private Map<String, String> parseConnectAttrs(ByteBuffer buffer) {
-        String key = "", value = "";
+        String key = "";
+        String value = "";
         connectAttributes = Maps.newHashMap();
         try {
             long allAttrLength = MysqlProto.readVInt(buffer);

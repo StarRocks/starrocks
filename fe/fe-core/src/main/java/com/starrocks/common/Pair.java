@@ -48,7 +48,7 @@ public class Pair<F, S> {
     }
 
     @Override
-    /**
+    /*
      * A pair is equal if both parts are equal().
      */
     public boolean equals(Object o) {
