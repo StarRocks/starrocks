@@ -167,6 +167,14 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
 
   * 默认值：104857600 (100M)
 
+* **flushInterval**
+
+  * 描述：上一次StreamLoad结束至下一次开始的时间间隔（单位：ms）。
+
+  * 必选：否
+
+  * 默认值：300000 (ms)
+
 * **loadProps**
 
   * 描述：StreamLoad 的请求参数，详情参照StreamLoad介绍页面。
