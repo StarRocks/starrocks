@@ -393,7 +393,7 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
     //  TODO(lingbin): should it be a global util func?
     std::random_device rd;
     srand(rd());
-    std::random_shuffle(stores.begin(), stores.end());
+    std::shuffle(stores.begin(), stores.end(), std::mt19937(std::random_device()()));
     return stores;
 }
 
