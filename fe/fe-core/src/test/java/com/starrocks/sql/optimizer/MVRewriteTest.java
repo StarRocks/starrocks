@@ -97,6 +97,36 @@ public class MVRewriteTest {
     }
 
     @Test
+    public void testCountMV1() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select time, sum(salary) from "
+                + EMPS_TABLE_NAME + " group by time;";
+        String query = "select time, count(1) from " + EMPS_TABLE_NAME + " group by time;";
+        starRocksAssert.withMaterializedView(createMVSQL);
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+
+        query = "select count(1) from " + EMPS_TABLE_NAME + " group by time;";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+
+        query = "select count(1) from " + EMPS_TABLE_NAME ;
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+    }
+
+    @Test
+    public void testCountMV2() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select time, sum(salary) from "
+                + EMPS_TABLE_NAME + " group by time;";
+        String query = "select time, count(*) from " + EMPS_TABLE_NAME + " group by time;";
+        starRocksAssert.withMaterializedView(createMVSQL);
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+
+        query = "select count(*) from " + EMPS_TABLE_NAME + " group by time;";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+
+        query = "select count(*) from " + EMPS_TABLE_NAME ;
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+    }
+
+    @Test
     public void testProjectionMV1() throws Exception {
         String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid from "
                 + EMPS_TABLE_NAME + " order by deptno;";
@@ -860,6 +890,58 @@ public class MVRewriteTest {
                 " union all select empid from"
                 + " " + EMPS_TABLE_NAME + " where deptno < 200) a group by a.empid";
         starRocksAssert.withMaterializedView(createMVSQL).query(union).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testUnionQueryOnAggMV1() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid from " +
+                EMPS_TABLE_NAME + " group by deptno,empid;";
+        String union = "select a.cnt from (select count(1) as cnt from " + EMPS_TABLE_NAME + " where deptno > 300" +
+                " union all select count(1) as cnt from"
+                + " " + EMPS_TABLE_NAME + " where deptno < 200) a ";
+        starRocksAssert.withMaterializedView(createMVSQL).query(union).explainContains(QUERY_USE_EMPS);
+    }
+
+    @Test
+    public void testUnionQueryOnAggMV2() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid from " +
+                EMPS_TABLE_NAME + " group by deptno,empid;";
+        String union = "select a.empid, a.deptno from (select empid, deptno from " + EMPS_TABLE_NAME + " where deptno > 300 group by empid, deptno" +
+                " union all select empid, deptno from"
+                + " " + EMPS_TABLE_NAME + " where deptno < 200 group by empid, deptno) a ";
+        starRocksAssert.withMaterializedView(createMVSQL).query(union).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testUnionQueryOnAggMV3() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid from " +
+                EMPS_TABLE_NAME + " group by deptno,empid;";
+        String union = "select a.empid, count(1) from (select empid, deptno from " + EMPS_TABLE_NAME + " where deptno > 300 group by empid, deptno" +
+                " union all select empid, deptno from"
+                + " " + EMPS_TABLE_NAME + " where deptno < 200 group by empid, deptno) a group by a.empid";
+        starRocksAssert.withMaterializedView(createMVSQL).query(union).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testUnionQueryOnAggMV4() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid from " +
+                EMPS_TABLE_NAME + " group by deptno,empid;";
+        String union = "select a.empid, sum(cnt) from (select empid, deptno as cnt from " + EMPS_TABLE_NAME + " where deptno > 300 group by empid, deptno" +
+                " union all select empid, count(1) as cnt from"
+                + " " + EMPS_TABLE_NAME + " where deptno < 200 group by empid) a group by a.empid";
+        String plan = starRocksAssert.withMaterializedView(createMVSQL).query(union).explainQuery();
+        Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
+                "     TABLE: emps\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: deptno > 300\n" +
+                "     partitions=1/1\n" +
+                "     rollup: emps_mv"));
+        Assert.assertTrue(plan.contains("7:OlapScanNode\n" +
+                "     TABLE: emps\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 13: deptno < 200\n" +
+                "     partitions=1/1\n" +
+                "     rollup: emps"));
     }
 
     @Test
