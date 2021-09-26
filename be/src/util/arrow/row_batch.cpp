@@ -53,6 +53,9 @@ using strings::Substitute;
 
 Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result) {
     switch (type.type) {
+    case TYPE_BOOLEAN:
+        *result = arrow::boolean();
+        break;
     case TYPE_TINYINT:
         *result = arrow::int8();
         break;
