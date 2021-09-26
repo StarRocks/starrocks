@@ -31,6 +31,10 @@ struct MetaReaderParams {
             LOG(FATAL) << "version is not set. tablet=" << tablet->full_name();
         }
     }
+
+    const std::map<int32_t, std::string>* id_to_names = nullptr;
+    const DescriptorTbl*  desc_tbl = nullptr;
+
     int chunk_size = 1024;
 };
 
@@ -38,6 +42,8 @@ struct SegmentMetaCollecterParams {
     std::vector<std::string> fields;
     std::vector<ColumnId> cids;
     std::vector<bool> read_page;
+    std::vector<FieldType> field_type;
+    int32_t max_cid;
 };
 
 class MetaReader {
@@ -58,7 +64,7 @@ private:
     SegmentMetaCollecterParams _seg_collecter_params;
     std::vector<SegmentMetaCollecter*> _seg_collecters;
     SegmentMetaCollecter* _collecter_cursor = nullptr;
-    SegmentMetaCollecter* _end_collecter = nullptr;
+    size_t _cursor_idx = 0;
     Version _version;
     ObjectPool _obj_pool;
 
@@ -66,6 +72,10 @@ private:
     bool _has_more;
     int _chunk_size;
     MetaReaderParams _params;
+
+    std::vector<std::string> _collect_names;
+    std::vector<ColumnId> _collect_col_ids;
+    std::vector<int32_t>  _return_slot_ids;
 
     Status _init_params(const MetaReaderParams& read_params);
     Status _init_seg_meta_collecters(const MetaReaderParams& read_params);
@@ -86,15 +96,17 @@ public:
     Status collect(std::vector<vectorized::Column*>* dsts);
 private:
     Status _init_return_column_iterators();
-    Status _collect(const std::string& name, ColumnId cid, vectorized::Column*column);
-    Status _collect_dict(ColumnId cid, vectorized::Column* column);
-    Status _collect_max(ColumnId cid, vectorized::Column* column);
-    Status _collect_min(ColumnId cid, vectorized::Column* column);
+    Status _collect(const std::string& name, ColumnId cid, vectorized::Column*column, FieldType type);
+    Status _collect_dict(ColumnId cid, vectorized::Column* column, FieldType type);
+    Status _collect_max(ColumnId cid, vectorized::Column* column, FieldType type);
+    Status _collect_min(ColumnId cid, vectorized::Column* column, FieldType type);
     template<bool flag>
-    Status __collect_max_or_min(ColumnId cid, vectorized::Column* column);
+    Status __collect_max_or_min(ColumnId cid, vectorized::Column* column, FieldType type);
     segment_v2::SegmentSharedPtr _segment;
     std::vector<ColumnIterator*> _column_iterators;
     const SegmentMetaCollecterParams* _params = nullptr;
+    std::unique_ptr<fs::ReadableBlock> _rblock;
+    OlapReaderStatistics _stats;
     ObjectPool _obj_pool;
 };
 

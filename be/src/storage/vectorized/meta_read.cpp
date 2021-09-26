@@ -8,6 +8,7 @@
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/segment_v2/column_reader.h"
+#include "column/datum_convert.h"
 
 // just for debug
 #include <iostream>
@@ -24,17 +25,32 @@ MetaReader::~MetaReader() {}
 Status MetaReader::init(const MetaReaderParams& read_params) {
     RETURN_IF_ERROR(_init_params(read_params));
     RETURN_IF_ERROR(_init_seg_meta_collecters(read_params));
+
+    std::cout << "_seg_collecters size " << _seg_collecters.size() << std::endl;
     
     if (_seg_collecters.size() == 0) {
         _has_more = false;
         return Status::OK();
     }
 
-    _collecter_cursor = _seg_collecters.front();
-    _end_collecter = _seg_collecters.back();
+    _collecter_cursor = _seg_collecters[0];
+    _cursor_idx = 0;
     _is_init = true;
     _has_more = true;
     return Status::OK();
+}
+
+static std::vector<std::string> split_string(const std::string &str, const char pattern) {
+    std::vector<std::string> res;
+    std::stringstream input(str);   //读取str到字符串流中
+    std::string temp;
+    //使用getline函数从字符串流中读取,遇到分隔符时停止,和从cin中读取类似
+    //注意,getline默认是可以读取空格的
+    while(std::getline(input, temp, pattern))
+    {
+        res.push_back(temp);
+    }
+    return res;
 }
 
 // 检查参数，判断是否需要打开 Column 迭代器（会发生 io）
@@ -46,29 +62,85 @@ Status MetaReader::_init_params(const MetaReaderParams& read_params) {
     _chunk_size = read_params.chunk_size;
     _params = read_params;
 
-    for (auto& slot : *(read_params.slots)) {
-         // just for debug
-        std::cout << "col_name " << slot->col_name() << std::endl;
-        if (!slot->is_materialized()) {
+    _seg_collecter_params.max_cid = 0;
 
-            // just for debug
-            std::cout << "not is_materialized: " << slot->col_name() << std::endl;
-
-            continue;
+    // 拆分需要收集的项目
+    for (auto it : *(read_params.id_to_names)) {
+        // just for debug
+        //std::cout << "name: " << it.second << " id " << it.first << std::endl;
+        // 拆分 col_name 和 collect_name, 目前用比较猥琐的写法了
+        
+        auto sub_strings = split_string(it.second , '_');
+        
+        auto& collect_name = sub_strings[0];
+        std::string col_name;
+        for (size_t i = 1; i < sub_strings.size(); i++) {
+            col_name += sub_strings[i];
+            if (i != sub_strings.size() - 1) {
+                col_name += "_";
+            }
         }
-        // 可能需要拆分 col name, 才能得出正确的 col_name
-        int32_t index = _tablet->field_index(slot->col_name());
+        // just for debug
+        //std::cout << "max: " << collect_name << " col_name " << col_name << std::endl;
+        
+        int32_t index = _tablet->field_index(col_name);
 
         if (index < 0) {
             std::stringstream ss;
-            ss << "invalid field name: " << slot->col_name();
+            ss << "invalid field name: " << it.second;
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
 
-        _seg_collecter_params.fields.emplace_back(slot->col_name());
+        // get field type
+        FieldType type = _tablet->tablet_schema().column(index).type();
+        // 类型
+        _seg_collecter_params.field_type.emplace_back(type);
+
+        // 采集项
+        _seg_collecter_params.fields.emplace_back(collect_name);
+        _collect_names.emplace_back(collect_name);
+        // 对应的列 id
         _seg_collecter_params.cids.emplace_back(index);
+        _collect_col_ids.emplace_back(index);
+
+        _seg_collecter_params.max_cid = std::max(_seg_collecter_params.max_cid, index);
+
+        // 对应的 slot id
+        _return_slot_ids.emplace_back(it.first);
+        // 是否需要打开 column 迭代器
         _seg_collecter_params.read_page.emplace_back(true);
+    }
+
+    // just for debug dict
+    {
+        int32_t index = _tablet->field_index("l_shipmode");
+        if (index < 0) {
+             std::stringstream ss;
+            ss << "invalid field name: " << "l_shipmode";
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+        // get field type
+        FieldType type = _tablet->tablet_schema().column(index).type();
+
+        // 类型
+        _seg_collecter_params.field_type.emplace_back(type);
+
+        // 采集项
+        _seg_collecter_params.fields.emplace_back("dict");
+        _collect_names.emplace_back("dict");
+        // 对应的列 id
+        _seg_collecter_params.cids.emplace_back(index);
+        _collect_col_ids.emplace_back(index);
+
+        _seg_collecter_params.max_cid = std::max(_seg_collecter_params.max_cid, index);
+
+        // 对应的 slot id
+        //_return_slot_ids.emplace_back(10);
+        // 是否需要打开 column 迭代器
+        _seg_collecter_params.read_page.emplace_back(true);
+
     }
 
     return Status::OK();
@@ -97,8 +169,10 @@ Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& v
         return Status::OK();
     }
                                
-    std::vector<RowsetReaderSharedPtr> rs_reader;
+    //std::vector<RowsetReaderSharedPtr> rs_reader;
+    std::vector<RowsetSharedPtr> rowsets;
     tablet->obtain_header_rdlock();
+    /*
     OLAPStatus acquire_reader_st = tablet->capture_rs_readers(_version, &rs_reader);
     if (acquire_reader_st != OLAP_SUCCESS) {      
         std::stringstream ss;
@@ -108,12 +182,38 @@ Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& v
         return Status::InternalError(ss.str().c_str());
     } 
 
+    std::cout << "rs_readers: " << rs_reader.size() << std::endl;
     for (auto& rs : rs_reader) {
         auto beta_rowset = down_cast<BetaRowset*>(rs->rowset().get());
+        std::cout << "segments: " << beta_rowset->segments().size() << std::endl;
         for (auto seg : beta_rowset->segments()) {
             segments->emplace_back(seg);
         }
+        std::cout << "segments: " << segments->size() << std::endl;
     }
+    */
+    OLAPStatus acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &rowsets);
+    tablet->release_header_lock();
+     if (acquire_rowset_st != OLAP_SUCCESS) {      
+        std::stringstream ss;
+        ss << "fail to init reader. tablet=" << tablet->full_name() 
+           << "res=" << acquire_rowset_st;
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str().c_str());
+    } 
+
+    std::cout << "rowset_set: " << rowsets.size() << " version: " << _version << std::endl;
+
+    for (auto& rs : rowsets) {
+        RETURN_IF_ERROR(rs->load());
+        auto beta_rowset = down_cast<BetaRowset*>(rs.get());
+        std::cout << "segments: " << beta_rowset->segments().size() << std::endl;
+        for (auto seg : beta_rowset->segments()) {
+            segments->emplace_back(seg);
+        }
+        std::cout << "segments: " << segments->size() << std::endl;
+    }
+   
     return Status::OK();
 }
 
@@ -121,21 +221,50 @@ Status MetaReader::do_get_next(ChunkPtr* result) {
     const uint32_t chunk_capacity = _chunk_size;
     uint16_t chunk_start = 0;
 
+    //std::cout << "do_get_next: " << std::endl;
+
     *result = std::make_shared<vectorized::Chunk>();
     if (nullptr == result->get()) {
         return Status::InternalError("Failed to allocate new chunk.");
     } 
     
+    /*
     for (auto& slot : *(_params.slots)) {
         vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(slot->type(), false);
         (*result)->append_column(std::move(column), slot->id());
     }
+    */
 
-    while ((chunk_start < chunk_capacity) & _has_more) {
+    for (auto& s_id : _return_slot_ids) {
+        auto slot = _params.desc_tbl->get_slot_descriptor(s_id);
+        vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(slot->type(), false);
+        (*result)->append_column(std::move(column), slot->id());
+    }
+
+    // just for debug dict
+    {
+        TypeDescriptor dict_item_desc;
+        dict_item_desc.type = TYPE_CHAR;
+        TypeDescriptor dict_desc;
+        dict_desc.type = TYPE_ARRAY;
+        dict_desc.children.emplace_back(dict_item_desc);
+       
+        vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(dict_desc, false);
+        (*result)->append_column(std::move(column), 30);
+    }
+
+    //std::cout << "chunk_start: " << chunk_start << std::endl;
+    //std::cout << "chunk_capacity: " << chunk_capacity << std::endl;
+    //std::cout << "has_more: " << _has_more << std::endl;
+
+    while ((chunk_start < chunk_capacity) && _has_more) {
+        std::cout << "read one chunk" << std::endl;
         RETURN_IF_ERROR(_read((*result).get(), chunk_capacity - chunk_start));
         (*result)->check_or_die();
         size_t next_start = (*result)->num_rows();
         chunk_start = next_start;
+        std::cout << "chunk_start: " << chunk_start << std::endl;
+
     }
 
    return Status::OK();
@@ -144,7 +273,7 @@ Status MetaReader::do_get_next(ChunkPtr* result) {
 Status MetaReader::_read(Chunk* chunk, size_t n) {
     // prepare return coloumns;
     std::vector<vectorized::Column*> columns;
-    for (size_t i = 0; i < _params.slots->size(); ++i) {
+    for (size_t i = 0; i < _collect_names.size(); ++i) {
         const ColumnPtr& col = chunk->get_column_by_index(i);
         columns.emplace_back(col.get());
     }
@@ -164,8 +293,12 @@ Status MetaReader::_read(Chunk* chunk, size_t n) {
 }
 
 void MetaReader::_next_cursor() {
-    _collecter_cursor++;
-    if (_collecter_cursor > _end_collecter) { _collecter_cursor = nullptr; }
+    _cursor_idx++;
+    if (_cursor_idx >= _seg_collecters.size()) {
+        _collecter_cursor = nullptr;
+    } else {
+        _collecter_cursor = _seg_collecters[_cursor_idx];
+    }
 }
 
 bool MetaReader::has_more() {
@@ -188,7 +321,10 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
     DCHECK_EQ(_params->fields.size(), _params->cids.size());
     DCHECK_EQ(_params->fields.size(), _params->read_page.size());
 
-    _column_iterators.resize(_params->fields.size(), nullptr);
+    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+    RETURN_IF_ERROR(block_mgr->open_block(_segment->file_name(), &_rblock));
+    
+    _column_iterators.resize(_params->max_cid + 1, nullptr);
     for (int i = 0; i < _params->fields.size(); i++) {
         if (_params->read_page[i]) {
             auto cid = _params->cids[i];
@@ -197,7 +333,10 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
                 _obj_pool.add(_column_iterators[cid]);
 
                 ColumnIteratorOptions iter_opts;
-                RETURN_IF_ERROR(_column_iterators[i]->init(iter_opts));
+                iter_opts.check_dict_encoding = true;
+                iter_opts.rblock = _rblock.get();
+                iter_opts.stats = &_stats;
+                RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
             }
         }
     }
@@ -206,27 +345,31 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
 
 Status SegmentMetaCollecter::collect(std::vector<vectorized::Column*>* dsts) {
     DCHECK_EQ(dsts->size(), _params->fields.size());
+    std::cout << "collect one row "<< std::endl;
 
     for (size_t i = 0; i < _params->fields.size(); i++) {
-        RETURN_IF_ERROR(_collect(_params->fields[i], _params->cids[i], (*dsts)[i]));
+        RETURN_IF_ERROR(_collect(_params->fields[i], _params->cids[i], (*dsts)[i], _params->field_type[i]));
     }
     return Status::OK();
 }
 
-Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vectorized::Column*column) {
+Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vectorized::Column*column, FieldType type) {
+    //std::cout << "collect name: " << name << std::endl;
     // 目前比较 trick 的写法
     if (name == "dict") {
-        return _collect_dict(cid, column);
+        return _collect_dict(cid, column, type);
     } else if (name == "max") {
-        return _collect_max(cid, column);
+        return _collect_max(cid, column, type);
     } else if (name == "min") {
-        return _collect_min(cid, column);
+        return _collect_min(cid, column, type);
     }
     return Status::NotSupported("");
 }
 
 // collect dict
-Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* column) {
+Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* column, FieldType type) {
+    // just for debug
+    std::cout << "_collect_dict: " << cid <<  std::endl;
     if (!_column_iterators[cid]) { 
         return Status::InvalidArgument("Invalid Collet Params.");
     }
@@ -236,7 +379,12 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* col
     }
 
     std::vector<Slice> words;
-    RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));     
+    RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));    
+
+    std::cout << "Collect words size: " << words.size() << std::endl;
+    for (size_t i = 0; i <  words.size(); i++) {
+        std::cout << "word: " << words[i] << std::endl;
+    } 
 
     vectorized::ArrayColumn* array_column = nullptr;
     array_column = down_cast<vectorized::ArrayColumn*>(column);
@@ -254,34 +402,51 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* col
     return Status::OK();
 }
 
-Status SegmentMetaCollecter::_collect_max(ColumnId cid, vectorized::Column* column) {
-    return __collect_max_or_min<false>(cid, column);
+Status SegmentMetaCollecter::_collect_max(ColumnId cid, vectorized::Column* column, FieldType type) {
+    return __collect_max_or_min<false>(cid, column, type);
 }
 
-Status SegmentMetaCollecter::_collect_min(ColumnId cid, vectorized::Column* column) {
-    return __collect_max_or_min<true>(cid, column);
+Status SegmentMetaCollecter::_collect_min(ColumnId cid, vectorized::Column* column, FieldType type) {
+    return __collect_max_or_min<true>(cid, column, type);
 }
 
 template<bool flag>
-Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Column* column) {
+Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Column* column, FieldType type) {
+    std::cout << "collect max or min "<< std::endl;
+
     auto footer_pb = _segment->footer();
-    BinaryColumn* binary_column;
-    binary_column = down_cast<BinaryColumn*>(column);
+    //BinaryColumn* binary_column;
+    //binary_column = down_cast<BinaryColumn*>(column);
     for (size_t i = 0; i < footer_pb.columns_size(); i++) {
         if (footer_pb.columns(i).column_id() == cid) {
-            const ColumnIndexMetaPB& c_meta_pb = footer_pb.columns(i).indexes(0);
-            const ZoneMapIndexPB& zone_map_index_pb = c_meta_pb.zone_map_index();
-            const ZoneMapPB& segment_zone_map_pb = zone_map_index_pb.segment_zone_map();
+            for (size_t j = 0; j < footer_pb.columns(i).indexes_size(); j++) {
+                if (footer_pb.columns(i).indexes(j).type() != ZONE_MAP_INDEX) {
+                    continue;
+                }
+                const ColumnIndexMetaPB& c_meta_pb = footer_pb.columns(i).indexes(j);
+                const ZoneMapIndexPB& zone_map_index_pb = c_meta_pb.zone_map_index();
+                const ZoneMapPB& segment_zone_map_pb = zone_map_index_pb.segment_zone_map();
 
-            std::string value;
-            if (flag) {
-                value = segment_zone_map_pb.max();
-            } else {
-                value = segment_zone_map_pb.min();
+                TypeInfoPtr type_info = get_type_info(delegate_type(type));
+                vectorized::Datum min;
+                vectorized::Datum max;
+                 if (!segment_zone_map_pb.has_null()) {
+                    RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &min, segment_zone_map_pb.min(), nullptr));
+                }
+                if (segment_zone_map_pb.has_not_null()) {
+                    RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &max, segment_zone_map_pb.max(), nullptr));
+
+                }
+                if (flag) {
+                    column->append_datum(min);
+                } else {
+                    column->append_datum(max);
+                }
+
+                return Status::OK();
+
             }
-
-            binary_column->append_string(value);
-            return Status::OK();
+            break;
         }
     }
     return Status::NotFound("");

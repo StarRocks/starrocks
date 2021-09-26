@@ -11,7 +11,9 @@ OlapMetaScanNode::OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, con
         : ScanNode(pool, tnode, descs),
           _scanner_cursor(nullptr),
           _is_init(false),
-          _tuple_id(tnode.olap_scan_node.tuple_id) {}
+          _tuple_id(tnode.olap_scan_node.tuple_id),
+          _meta_scan_node(tnode.meta_scan_node),
+          _desc_tbl(descs) {}
 
 OlapMetaScanNode::~OlapMetaScanNode() {}
 
@@ -62,7 +64,7 @@ Status OlapMetaScanNode::open(RuntimeState* state) {
     for (auto& scan_range : _scan_ranges) {
         OlapMetaScannerParams scanner_params;
         scanner_params.scan_range = scan_range.get();
-        auto* scanner = _obj_pool.add(new OlapMetaScanner(this));
+        OlapMetaScanner* scanner = _obj_pool.add(new OlapMetaScanner(this));
         RETURN_IF_ERROR(scanner->init(state, scanner_params));
         _scanners.push_back(scanner);
     }
@@ -71,8 +73,12 @@ Status OlapMetaScanNode::open(RuntimeState* state) {
         return Status::InternalError("Invalid ScanRange.");
     }
 
-    _scanner_cursor = _scanners.front();
-    _end_scanner = _scanners.back();
+    _scanner_cursor = _scanners[0];
+    _cursor_idx = 0;
+
+    // just for debug 
+    std::cout << "_scanners size: " << _scanners.size() << std::endl;
+    std::cout << "_scan_ranges size() " << _scan_ranges.size() << std::endl;
 
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(ExecNode::open(state));
@@ -99,8 +105,12 @@ Status OlapMetaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eo
 }
 
 void OlapMetaScanNode::_next_cursor() {
-    _scanner_cursor++;
-    if (_scanner_cursor > _end_scanner) { _scanner_cursor = nullptr; }
+    _cursor_idx++;
+    if (_cursor_idx >= _scanners.size()) { 
+        _scanner_cursor = nullptr;
+    } else {
+        _scanner_cursor = _scanners[_cursor_idx];
+    }
 }
 
 Status OlapMetaScanNode::close(RuntimeState* state) {

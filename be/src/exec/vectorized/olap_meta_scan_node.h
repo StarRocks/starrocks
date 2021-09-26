@@ -42,10 +42,12 @@ private:
  
     std::vector<OlapMetaScanner*> _scanners;
     OlapMetaScanner* _scanner_cursor = nullptr;
-    const OlapMetaScanner* _end_scanner = nullptr;
+    size_t _cursor_idx = 0;
 
     bool _is_init;
     TupleId _tuple_id;
+    TMetaScanNode _meta_scan_node;
+    DescriptorTbl _desc_tbl;
     const TupleDescriptor* _tuple_desc = nullptr;
     ObjectPool _obj_pool;
 
