@@ -187,7 +187,7 @@ public abstract class RoutineLoadTaskInfo {
 
     abstract boolean readyToExecute() throws UserException;
 
-    abstract public boolean isProgressKeepUp(RoutineLoadProgress progress);
+    public abstract boolean isProgressKeepUp(RoutineLoadProgress progress);
 
     // begin the txn of this task
     // throw exception if unrecoverable errors happen.

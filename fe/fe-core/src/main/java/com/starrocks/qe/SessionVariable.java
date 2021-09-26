@@ -403,17 +403,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long optimizerExecuteTimeout = 3000;
 
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DUMP)
-    private boolean enable_query_dump = false;
+    private boolean enableQueryDump = false;
 
     // value should be 0~4
     // 0 represents automatic selection, and 1, 2, 3, and 4 represent forced selection of AGG of
     // corresponding stages respectively. However, stages 3 and 4 can only be generated in
     // single-column distinct scenarios
     @VariableMgr.VarAttr(name = NEW_PLANER_AGG_STAGE)
-    private int new_planner_agg_stage = 0;
+    private int newPlannerAggStage = 0;
 
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
-    private String transmission_compression_type = "LZ4";
+    private String transmissionCompressionType = "LZ4";
 
     @VariableMgr.VarAttr(name = RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT)
     private long runtimeJoinFilterPushDownLimit = 1024000;
@@ -683,11 +683,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public int getNewPlannerAggStage() {
-        return new_planner_agg_stage;
+        return newPlannerAggStage;
     }
 
     public void setNewPlanerAggStage(int stage) {
-        this.new_planner_agg_stage = stage;
+        this.newPlannerAggStage = stage;
     }
 
     public void setMaxTransformReorderJoins(int maxReorderNodeUseExhaustive) {
@@ -711,7 +711,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean getEnableQueryDump() {
-        return enable_query_dump;
+        return enableQueryDump;
     }
 
     public boolean getEnableGlobalRuntimeFilter() {
@@ -762,7 +762,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_spilling(enableSpilling);
 
         // Compression Type
-        TCompressionType compressionType = CompressionUtils.findTCompressionByName(transmission_compression_type);
+        TCompressionType compressionType = CompressionUtils.findTCompressionByName(transmissionCompressionType);
         if (compressionType != null) {
             tResult.setTransmission_compression_type(compressionType);
         }
