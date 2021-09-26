@@ -223,7 +223,7 @@ inline bool RawValue::eq(const void* v1, const void* v2, const TypeDescriptor& t
 //  seed ^= v + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 inline uint32_t RawValue::get_hash_value(const void* v, const PrimitiveType& type, uint32_t seed) {
     // Hash_combine with v = 0
-    if (v == NULL) {
+    if (v == nullptr) {
         uint32_t value = 0x9e3779b9;
         return seed ^ (value + (seed << 6) + (seed >> 2));
     }
@@ -280,7 +280,7 @@ inline uint32_t RawValue::get_hash_value(const void* v, const PrimitiveType& typ
 
 inline uint32_t RawValue::get_hash_value_fvn(const void* v, const PrimitiveType& type, uint32_t seed) {
     // Hash_combine with v = 0
-    if (v == NULL) {
+    if (v == nullptr) {
         uint32_t value = 0x9e3779b9;
         return seed ^ (value + (seed << 6) + (seed >> 2));
     }
@@ -339,7 +339,7 @@ inline uint32_t RawValue::get_hash_value_fvn(const void* v, const PrimitiveType&
 // Because crc32 hardware is not equal with zlib crc32
 inline uint32_t RawValue::zlib_crc32(const void* v, const TypeDescriptor& type, uint32_t seed) {
     // Hash_combine with v = 0
-    if (v == NULL) {
+    if (v == nullptr) {
         uint32_t value = 0x9e3779b9;
         return seed ^ (value + (seed << 6) + (seed >> 2));
     }

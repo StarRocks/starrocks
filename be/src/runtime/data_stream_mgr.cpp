@@ -23,6 +23,7 @@
 
 #include <boost/thread/thread.hpp>
 #include <iostream>
+#include <utility>
 
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/types.pb.h" // PUniqueId
@@ -56,11 +57,11 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
         RuntimeState* state, const RowDescriptor& row_desc, const TUniqueId& fragment_instance_id,
         PlanNodeId dest_node_id, int num_senders, int buffer_size, const std::shared_ptr<RuntimeProfile>& profile,
         bool is_merging, std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline) {
-    DCHECK(profile != NULL);
+    DCHECK(profile != nullptr);
     VLOG_FILE << "creating receiver for fragment=" << fragment_instance_id << ", node=" << dest_node_id;
     std::shared_ptr<DataStreamRecvr> recvr(new DataStreamRecvr(
             this, state->instance_mem_tracker(), row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging,
-            buffer_size, profile, sub_plan_query_statistics_recvr, is_pipeline));
+            buffer_size, profile, std::move(sub_plan_query_statistics_recvr), is_pipeline));
     uint32_t hash_value = get_hash_value(fragment_instance_id, dest_node_id);
     std::lock_guard<std::mutex> l(_lock);
     _fragment_stream_set.emplace(fragment_instance_id, dest_node_id);
@@ -205,7 +206,7 @@ void DataStreamMgr::cancel(const TUniqueId& fragment_instance_id) {
         FragmentStreamSet::iterator i = _fragment_stream_set.lower_bound(std::make_pair(fragment_instance_id, 0));
         while (i != _fragment_stream_set.end() && i->first == fragment_instance_id) {
             std::shared_ptr<DataStreamRecvr> recvr = find_recvr(i->first, i->second, false);
-            if (recvr == NULL) {
+            if (recvr == nullptr) {
                 // keep going but at least log it
                 std::stringstream err;
                 err << "cancel(): missing in stream_map: fragment=" << i->first << " node=" << i->second;

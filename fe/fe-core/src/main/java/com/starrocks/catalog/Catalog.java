@@ -4772,7 +4772,7 @@ public class Catalog {
     }
 
     public Collection<Partition> getPartitionsIncludeRecycleBin(OlapTable table) {
-        Collection<Partition> partitions = table.getPartitions();
+        Collection<Partition> partitions = new ArrayList<>(table.getPartitions());
         partitions.addAll(recycleBin.getPartitions(table.getId()));
         return partitions;
     }
@@ -6779,7 +6779,7 @@ public class Catalog {
             // check partitions
             for (Map.Entry<String, Long> entry : origPartitions.entrySet()) {
                 Partition partition = copiedTbl.getPartition(entry.getValue());
-                if (partition == null || !partition.getName().equals(entry.getKey())) {
+                if (partition == null || !partition.getName().equalsIgnoreCase(entry.getKey())) {
                     throw new DdlException("Partition [" + entry.getKey() + "] is changed");
                 }
             }

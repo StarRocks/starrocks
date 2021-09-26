@@ -10,7 +10,7 @@ namespace starrocks::vectorized {
 class SchemaEventsScanner : public SchemaScanner {
 public:
     SchemaEventsScanner();
-    virtual ~SchemaEventsScanner();
+    ~SchemaEventsScanner() override;
 
 private:
     static SchemaScanner::ColumnDesc _s_cols_events[];

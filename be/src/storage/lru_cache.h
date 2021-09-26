@@ -51,7 +51,7 @@ extern Cache* new_lru_cache(size_t capacity);
 
 class CacheKey {
 public:
-    CacheKey() : _data(NULL), _size(0) {}
+    CacheKey() : _data(nullptr), _size(0) {}
     // Create a slice that refers to d[0,n-1].
     CacheKey(const char* d, size_t n) : _data(d), _size(n) {}
 
@@ -81,7 +81,7 @@ public:
 
     // Change this slice to refer to an empty array
     void clear() {
-        _data = NULL;
+        _data = nullptr;
         _size = 0;
     }
 
@@ -246,7 +246,7 @@ typedef struct LRUHandle {
 
 class HandleTable {
 public:
-    HandleTable() : _length(0), _elems(0), _list(NULL) { _resize(); }
+    HandleTable() : _length(0), _elems(0), _list(nullptr) { _resize(); }
 
     ~HandleTable() { delete[] _list; }
 
@@ -325,19 +325,18 @@ static const int kNumShards = 1 << kNumShardBits;
 class ShardedLRUCache : public Cache {
 public:
     explicit ShardedLRUCache(size_t capacity);
-    virtual ~ShardedLRUCache() {}
-    virtual Handle* insert(const CacheKey& key, void* value, size_t charge,
-                           void (*deleter)(const CacheKey& key, void* value),
-                           CachePriority priority = CachePriority::NORMAL);
-    virtual Handle* lookup(const CacheKey& key);
-    virtual void release(Handle* handle);
-    virtual void erase(const CacheKey& key);
-    virtual void* value(Handle* handle);
+    ~ShardedLRUCache() override {}
+    Handle* insert(const CacheKey& key, void* value, size_t charge, void (*deleter)(const CacheKey& key, void* value),
+                   CachePriority priority = CachePriority::NORMAL) override;
+    Handle* lookup(const CacheKey& key) override;
+    void release(Handle* handle) override;
+    void erase(const CacheKey& key) override;
+    void* value(Handle* handle) override;
     Slice value_slice(Handle* handle) override;
-    virtual uint64_t new_id();
-    virtual void prune();
-    virtual size_t get_memory_usage();
-    virtual void get_cache_status(rapidjson::Document* document);
+    uint64_t new_id() override;
+    void prune() override;
+    size_t get_memory_usage() override;
+    void get_cache_status(rapidjson::Document* document) override;
 
 private:
     static inline uint32_t _hash_slice(const CacheKey& s);

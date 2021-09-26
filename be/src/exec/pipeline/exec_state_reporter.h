@@ -20,9 +20,10 @@ class ExecStateReporter {
 public:
     static TReportExecStatusParams create_report_exec_status_params(FragmentContext* fragment_ctx, const Status& status,
                                                                     bool done);
-    static Status report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env, TNetworkAddress fe_addr);
+    static Status report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
+                                     const TNetworkAddress& fe_addr);
     ExecStateReporter();
-    void submit(FragmentContext* fragment_ctx, const Status& status, bool done, bool clean);
+    void submit(std::function<void()>&& report_task);
 
 private:
     std::unique_ptr<ThreadPool> _thread_pool;

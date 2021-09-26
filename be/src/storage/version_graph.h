@@ -112,7 +112,7 @@ public:
 
     /// Add a timestamped version to timestamped_versions_container. Once a timestamped version is added,
     /// the max_create_time will compare with the version timestamp and be refreshed.
-    void add_timestamped_version(TimestampedVersionSharedPtr version);
+    void add_timestamped_version(const TimestampedVersionSharedPtr& version);
 
     /// Return the timestamped_versions_container as const type.
     std::vector<TimestampedVersionSharedPtr>& timestamped_versions();

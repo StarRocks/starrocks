@@ -42,7 +42,6 @@ import java.util.stream.Collectors;
 //   a(String)          b(int)
 //
 public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
-
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
         Function fn = call.getFunction();
@@ -54,10 +53,11 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                 }
             }
         } else {
-            Preconditions.checkArgument(
-                    fn.functionName().equalsIgnoreCase(FunctionSet.COUNT) ||
-                            Arrays.stream(fn.getArgs()).noneMatch(Type::isWildcardDecimal),
-                    String.format("Resolved function %s has wildcard decimal as argument type", fn.functionName()));
+            if (!call.isAggregate() || FunctionSet.AVG.equalsIgnoreCase(fn.functionName())) {
+                Preconditions.checkArgument(Arrays.stream(fn.getArgs()).noneMatch(Type::isWildcardDecimal),
+                        String.format("Resolved function %s has wildcard decimal as argument type", fn.functionName()));
+            }
+
             for (int i = 0; i < fn.getNumArgs(); i++) {
                 Type type = fn.getArgs()[i];
                 ScalarOperator child = call.getChild(i);

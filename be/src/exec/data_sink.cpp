@@ -41,7 +41,7 @@ namespace starrocks {
 Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink,
                                   const std::vector<TExpr>& output_exprs, const TPlanFragmentExecParams& params,
                                   const RowDescriptor& row_desc, std::unique_ptr<DataSink>* sink) {
-    DataSink* tmp_sink = NULL;
+    DataSink* tmp_sink = nullptr;
 
     switch (thrift_sink.type) {
     case TDataSinkType::DATA_STREAM_SINK: {
@@ -117,7 +117,7 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
         return Status::InternalError(error_msg.str());
     }
 
-    if (sink->get() != NULL) {
+    if (sink->get() != nullptr) {
         RETURN_IF_ERROR((*sink)->init(thrift_sink));
     }
 

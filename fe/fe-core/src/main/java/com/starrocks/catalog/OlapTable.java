@@ -1237,11 +1237,11 @@ public class OlapTable extends Table {
             return copied;
         }
 
-        Set<String> partNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        partNames.addAll(copied.getPartitionNames());
+        Set<String> reservedPartitionSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        reservedPartitionSet.addAll(reservedPartitions);
 
-        for (String partName : partNames) {
-            if (!reservedPartitions.contains(partName)) {
+        for (String partName : copied.getPartitionNames()) {
+            if (!reservedPartitionSet.contains(partName)) {
                 copied.dropPartitionAndReserveTablet(partName);
             }
         }

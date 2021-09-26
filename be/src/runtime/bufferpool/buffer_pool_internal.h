@@ -27,6 +27,7 @@
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <utility>
 
 #include "runtime/bufferpool/buffer_pool.h"
 #include "runtime/bufferpool/buffer_pool_counters.h"
@@ -117,7 +118,7 @@ public:
         return page;
     }
 
-    void iterate(std::function<bool(Page*)> fn) { list_.iterate(fn); }
+    void iterate(std::function<bool(Page*)> fn) { list_.iterate(std::move(fn)); }
     bool contains(Page* page) { return list_.contains(page); }
     Page* tail() { return list_.tail(); }
     bool empty() const { return list_.empty(); }
@@ -158,7 +159,7 @@ public:
     /// and the page's buffer will be returned.
     /// Neither the client's lock nor handle->page_->buffer_lock should be held by the
     /// caller.
-    void DestroyPageInternal(PageHandle* handle, BufferHandle* out_buffer = NULL);
+    void DestroyPageInternal(PageHandle* handle, BufferHandle* out_buffer = nullptr);
 
     /// Updates client state to reflect that 'page' is now a dirty unpinned page. May
     /// initiate writes for this or other dirty unpinned pages.

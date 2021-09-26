@@ -33,11 +33,12 @@ static constexpr int s_days_in_month[13] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 3
 static int month_to_quarter[13] = {0, 1, 1, 1, 4, 4, 4, 7, 7, 7, 10, 10, 10};
 
 static const char* s_month_name[] = {"",     "January", "February",  "March",   "April",    "May",      "June",
-                                     "July", "August",  "September", "October", "November", "December", NULL};
+                                     "July", "August",  "September", "October", "November", "December", nullptr};
 static const char* s_ab_month_name[] = {"",    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", NULL};
-static const char* s_day_name[] = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", NULL};
-static const char* s_ab_day_name[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", NULL};
+                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", nullptr};
+static const char* s_day_name[] = {"Monday", "Tuesday",  "Wednesday", "Thursday",
+                                   "Friday", "Saturday", "Sunday",    nullptr};
+static const char* s_ab_day_name[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", nullptr};
 
 bool TimestampValue::from_timestamp_literal(uint64_t timestamp) {
     uint64_t date = timestamp / 1000000;
@@ -267,7 +268,7 @@ static int find_in_lib(const char* lib[], const char* str, const char* end) {
     int pos = 0;
     int find_count = 0;
     int find_pos = 0;
-    for (; lib[pos] != NULL; ++pos) {
+    for (; lib[pos] != nullptr; ++pos) {
         const char* i = str;
         const char* j = lib[pos];
         while (i < end && *j) {
@@ -435,7 +436,7 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
         }
         // Check switch
         if (*ptr == '%' && ptr + 1 < end) {
-            const char* tmp = NULL;
+            const char* tmp = nullptr;
             int64_t int_value = 0;
             ptr++;
             switch (*ptr++) {

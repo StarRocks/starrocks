@@ -185,7 +185,7 @@ ColumnSelector::ColumnSelector(const FileContents* _contents) : contents(_conten
     buildTypeNameIdMap(contents->schema.get());
 }
 
-RowReaderImpl::RowReaderImpl(std::shared_ptr<FileContents> _contents, const RowReaderOptions& opts)
+RowReaderImpl::RowReaderImpl(const std::shared_ptr<FileContents>& _contents, const RowReaderOptions& opts)
         : localTimezone(getLocalTimezone()),
           contents(_contents),
           throwOnHive11DecimalOverflow(opts.getThrowOnHive11DecimalOverflow()),
@@ -378,7 +378,7 @@ void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId) {
         const proto::RowIndexEntry& entry = rowIndex->second.entry(static_cast<int32_t>(rowGroupEntryId));
 
         // copy index positions for a specific column
-        positions.push_back({});
+        positions.emplace_back();
         auto& position = positions.back();
         for (int pos = 0; pos != entry.positions_size(); ++pos) {
             position.push_back(entry.positions(pos));

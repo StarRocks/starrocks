@@ -71,12 +71,11 @@ public:
     explicit SplitIterator(Delimiter d) : delimiter_(std::move(d)), predicate_(), is_end_(true) {}
     SplitIterator(Delimiter d, Predicate p) : delimiter_(std::move(d)), predicate_(std::move(p)), is_end_(true) {}
     // Two constructors taking the text to iterator.
-    SplitIterator(StringPiece text, Delimiter d)
-            : text_(std::move(text)), delimiter_(std::move(d)), predicate_(), is_end_(false) {
+    SplitIterator(StringPiece text, Delimiter d) : text_(text), delimiter_(std::move(d)), predicate_(), is_end_(false) {
         ++(*this);
     }
     SplitIterator(StringPiece text, Delimiter d, Predicate p)
-            : text_(std::move(text)), delimiter_(std::move(d)), predicate_(std::move(p)), is_end_(false) {
+            : text_(text), delimiter_(std::move(d)), predicate_(std::move(p)), is_end_(false) {
         ++(*this);
     }
 
@@ -260,7 +259,7 @@ private:
         static base::big_ test(typename U::mapped_type*);
         template <typename>
         static base::small_ test(...);
-        static const bool value = (sizeof(test<T>(0)) == sizeof(base::big_));
+        static const bool value = (sizeof(test<T>(nullptr)) == sizeof(base::big_));
     };
 
     // Base template handles splitting to non-map containers

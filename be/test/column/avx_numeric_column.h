@@ -19,7 +19,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#ifdef __x86_64__
 #include <glog/logging.h>
+
 #include <immintrin.h>
 
 #include "column/fixed_length_column.h"
@@ -106,3 +108,5 @@ public:
 
 } // namespace vectorized
 } // namespace starrocks
+
+#endif

@@ -3,7 +3,6 @@
 set(EXEC_FILES
         ./test_main.cpp
         ./column/array_column_test.cpp
-        ./column/avx_numeric_column_test.cpp
         ./column/binary_column_test.cpp
         ./column/chunk_test.cpp
         ./column/column_helper_test.cpp
@@ -83,6 +82,7 @@ set(EXEC_FILES
         ./exprs/vectorized/string_fn_pad_test.cpp
         ./exprs/vectorized/string_fn_repeat_test.cpp
         ./exprs/vectorized/string_fn_reverse_test.cpp
+        ./exprs/vectorized/string_fn_sm3_test.cpp
         ./exprs/vectorized/string_fn_space_test.cpp
         ./exprs/vectorized/string_fn_substr_test.cpp
         ./exprs/vectorized/string_fn_test.cpp
@@ -250,6 +250,10 @@ set(EXEC_FILES
         ./util/bit_packing_test.cpp
         )
 
+if (USE_AVX2)
+    set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
+endif()
+
 if (WITH_HDFS)
     set(EXEC_FILES ${EXEC_FILES} ./exec/vectorized/hdfs_scan_node_test.cpp)
 endif ()
@@ -279,3 +283,7 @@ TARGET_LINK_LIBRARIES(bytes_test
         gtest
         tcmalloc
         )
+
+add_executable(starrocks_column_to_arrow_test ./util/arrow/starrocks_column_to_arrow_test.cpp)
+TARGET_LINK_LIBRARIES(starrocks_column_to_arrow_test ${TEST_LINK_LIBS})
+SET_TARGET_PROPERTIES(starrocks_column_to_arrow_test PROPERTIES COMPILE_FLAGS "-fno-access-control")

@@ -1734,13 +1734,11 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testInformationSchema() throws Exception {
         String sql = "select column_name from information_schema.columns limit 1;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  STREAM DATA SINK\n"
-                + "    EXCHANGE ID: 01\n"
-                + "    UNPARTITIONED\n"
-                + "\n"
-                + "  0:SCAN SCHEMA\n"
-                + "     limit: 1\n"
-                + "     use vectorized: true"));
+        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+                "\n" +
+                "  0:SCAN SCHEMA\n" +
+                "     limit: 1\n" +
+                "     use vectorized: true"));
     }
 
     @Test
@@ -4061,5 +4059,17 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)"));
+    }
+
+    @Test
+    public void testSchemaScan() throws Exception {
+        String sql = "select * from information_schema.columns";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  0:SCAN SCHEMA\n" +
+                "     use vectorized: true"));
     }
 }

@@ -2,7 +2,10 @@
 
 #include "function_helper.h"
 
+#ifdef __x86_64__
 #include <immintrin.h>
+#endif
+
 #include <util/raw_container.h>
 
 namespace starrocks {

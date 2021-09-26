@@ -45,7 +45,7 @@ struct StringValue {
     size_t len;
 
     StringValue(char* ptr, size_t len) : ptr(ptr), len(len) {}
-    StringValue() : ptr(NULL), len(0) {}
+    StringValue() : ptr(nullptr), len(0) {}
 
     /// Construct a StringValue from 's'.  's' must be valid for as long as
     /// this object is valid.

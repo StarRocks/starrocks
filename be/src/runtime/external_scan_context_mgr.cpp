@@ -99,7 +99,7 @@ void ExternalScanContextMgr::gc_expired_context() {
 #ifndef BE_TEST
     while (!_is_stop) {
         std::this_thread::sleep_for(std::chrono::seconds(starrocks::config::scan_context_gc_interval_min * 60));
-        time_t current_time = time(NULL);
+        time_t current_time = time(nullptr);
         std::vector<std::shared_ptr<ScanContext>> expired_contexts;
         {
             std::lock_guard<std::mutex> l(_lock);
@@ -124,7 +124,7 @@ void ExternalScanContextMgr::gc_expired_context() {
                 }
             }
         }
-        for (auto expired_context : expired_contexts) {
+        for (const auto& expired_context : expired_contexts) {
             // must cancel the fragment instance, otherwise return thrift transport TTransportException
             _exec_env->fragment_mgr()->cancel(expired_context->fragment_instance_id);
             _exec_env->result_queue_mgr()->cancel(expired_context->fragment_instance_id);

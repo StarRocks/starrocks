@@ -125,9 +125,9 @@ AgentStatus EngineBatchLoadTask::_process() {
 
     if (status == STARROCKS_SUCCESS) {
         // Load delta file
-        time_t push_begin = time(NULL);
+        time_t push_begin = time(nullptr);
         OLAPStatus push_status = _push(_push_req, _tablet_infos);
-        time_t push_finish = time(NULL);
+        time_t push_finish = time(nullptr);
         LOG(INFO) << "Push finish, cost time: " << (push_finish - push_begin);
         if (push_status == OLAPStatus::OLAP_ERR_PUSH_TRANSACTION_ALREADY_EXIST) {
             status = STARROCKS_PUSH_HAD_LOADED;

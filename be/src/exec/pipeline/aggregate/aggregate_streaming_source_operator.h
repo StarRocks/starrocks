@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "exec/pipeline/source_operator.h"
 #include "exec/vectorized/aggregator.h"
 
@@ -9,8 +11,8 @@ namespace starrocks::pipeline {
 class AggregateStreamingSourceOperator : public SourceOperator {
 public:
     AggregateStreamingSourceOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : SourceOperator(id, "aggregate_streaming_source", plan_node_id), _aggregator(aggregator) {}
-    ~AggregateStreamingSourceOperator() = default;
+            : SourceOperator(id, "aggregate_streaming_source", plan_node_id), _aggregator(std::move(aggregator)) {}
+    ~AggregateStreamingSourceOperator() override = default;
 
     bool has_output() const override;
     bool is_finished() const override;
@@ -33,7 +35,7 @@ private:
 class AggregateStreamingSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     AggregateStreamingSourceOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : SourceOperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
+            : SourceOperatorFactory(id, plan_node_id), _aggregator(std::move(aggregator)) {}
 
     ~AggregateStreamingSourceOperatorFactory() override = default;
 

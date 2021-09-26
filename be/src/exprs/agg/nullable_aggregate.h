@@ -2,7 +2,9 @@
 
 #pragma once
 
+#ifdef __x86_64__
 #include <immintrin.h>
+#endif
 
 #include <utility>
 
@@ -105,7 +107,7 @@ public:
     }
 
     void batch_finalize(FunctionContext* ctx, size_t batch_size, const Buffer<AggDataPtr>& agg_states,
-                        size_t state_offset, Column* to) const {
+                        size_t state_offset, Column* to) const override {
         for (size_t i = 0; i < batch_size; i++) {
             finalize_to_column(ctx, agg_states[i] + state_offset, to);
         }

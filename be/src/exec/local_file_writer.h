@@ -33,13 +33,13 @@ class RuntimeState;
 class LocalFileWriter : public FileWriter {
 public:
     LocalFileWriter(const std::string& path, int64_t start_offset);
-    virtual ~LocalFileWriter();
+    ~LocalFileWriter() override;
 
     Status open() override;
 
-    virtual Status write(const uint8_t* buf, size_t buf_len, size_t* written_len) override;
+    Status write(const uint8_t* buf, size_t buf_len, size_t* written_len) override;
 
-    virtual Status close() override;
+    Status close() override;
 
 private:
     std::string _path;

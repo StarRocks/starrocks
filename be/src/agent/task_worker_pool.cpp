@@ -64,7 +64,7 @@ namespace starrocks {
 const uint32_t TASK_FINISH_MAX_RETRY = 3;
 const uint32_t PUBLISH_VERSION_MAX_RETRY = 3;
 
-std::atomic_ulong TaskWorkerPool::_s_report_version(time(NULL) * 10000);
+std::atomic_ulong TaskWorkerPool::_s_report_version(time(nullptr) * 10000);
 std::mutex TaskWorkerPool::_s_task_signatures_lock;
 std::map<TTaskType::type, std::set<int64_t>> TaskWorkerPool::_s_task_signatures;
 FrontendServiceClientCache TaskWorkerPool::_master_service_client_cache;
@@ -201,17 +201,8 @@ bool TaskWorkerPool::_register_task_info(const TTaskType::type task_type, int64_
 }
 
 void TaskWorkerPool::_remove_task_info(const TTaskType::type task_type, int64_t signature) {
-    size_t queue_size;
-    {
-        std::lock_guard task_signatures_lock(_s_task_signatures_lock);
-        std::set<int64_t>& signature_set = _s_task_signatures[task_type];
-        signature_set.erase(signature);
-        queue_size = signature_set.size();
-    }
-
-    std::string type_str;
-    EnumToString(TTaskType, task_type, type_str);
-    LOG(INFO) << "remove task info. type=" << type_str << ", signature=" << signature << ", queue_size=" << queue_size;
+    std::lock_guard task_signatures_lock(_s_task_signatures_lock);
+    _s_task_signatures[task_type].erase(signature);
 }
 
 void TaskWorkerPool::_spawn_callback_worker_thread(CALLBACK_FUNCTION callback_func) {
@@ -228,7 +219,7 @@ void TaskWorkerPool::_spawn_callback_worker_thread(CALLBACK_FUNCTION callback_fu
     pthread_sigmask(SIG_SETMASK, &mask, &omask);
 
     while (true) {
-        err = pthread_create(&thread, NULL, callback_func, this);
+        err = pthread_create(&thread, nullptr, callback_func, this);
         if (err != 0) {
             LOG(WARNING) << "failed to spawn a thread. error: " << err;
 #ifndef BE_TEST
@@ -251,12 +242,12 @@ void TaskWorkerPool::_finish_task(const TFinishTaskRequest& finish_task_request)
         AgentStatus client_status = _master_client->finish_task(finish_task_request, &result);
 
         if (client_status == STARROCKS_SUCCESS) {
-            LOG(INFO) << "finish task success.";
             break;
         } else {
-            StarRocksMetrics::instance()->finish_task_requests_failed.increment(1);
-            LOG(WARNING) << "finish task failed. status_code=" << result.status.status_code;
             try_time += 1;
+            StarRocksMetrics::instance()->finish_task_requests_failed.increment(1);
+            LOG(WARNING) << "finish task failed " << try_time << "/" << TASK_FINISH_MAX_RETRY
+                         << ". status_code=" << result.status.status_code;
         }
 #ifndef BE_TEST
         sleep(config::sleep_one_second);
@@ -352,7 +343,7 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
@@ -384,7 +375,7 @@ void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
                                                                                           drop_tablet_req.schema_hash);
             if (!drop_status.ok()) {
                 LOG(WARNING) << "drop table failed! signature: " << agent_task_req.signature;
-                error_msgs.push_back("drop table failed!");
+                error_msgs.emplace_back("drop table failed!");
                 status_code = TStatusCode::RUNTIME_ERROR;
             }
             // if tablet is dropped by fe, then the related txn should also be removed
@@ -406,7 +397,7 @@ void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_alter_tablet_worker_thread_callback(void* arg_this) {
@@ -453,7 +444,7 @@ void* TaskWorkerPool::_alter_tablet_worker_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgentTaskRequest& agent_task_req,
@@ -527,7 +518,7 @@ void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgen
     } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
         LOG(WARNING) << "alter table request task type invalid. "
                      << "signature:" << signature;
-        error_msgs.push_back("alter table request new tablet id or schema count invalid.");
+        error_msgs.emplace_back("alter table request new tablet id or schema count invalid.");
         task_status.__set_status_code(TStatusCode::ANALYSIS_ERROR);
     } else {
         LOG(WARNING) << process_name << " failed. signature: " << signature;
@@ -621,7 +612,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
 
         if (status == STARROCKS_SUCCESS) {
             VLOG(3) << "push ok. signature: " << agent_task_req.signature << ", push_type: " << push_req.push_type;
-            error_msgs.push_back("push success");
+            error_msgs.emplace_back("push success");
 
             ++_s_report_version;
 
@@ -630,11 +621,11 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
         } else if (status == STARROCKS_TASK_REQUEST_ERROR) {
             LOG(WARNING) << "push request push_type invalid. type: " << push_req.push_type
                          << ", signature: " << agent_task_req.signature;
-            error_msgs.push_back("push request push_type invalid.");
+            error_msgs.emplace_back("push request push_type invalid.");
             task_status.__set_status_code(TStatusCode::ANALYSIS_ERROR);
         } else {
             LOG(WARNING) << "push failed, error_code: " << status << ", signature: " << agent_task_req.signature;
-            error_msgs.push_back("push failed");
+            error_msgs.emplace_back("push failed");
             task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
         }
         task_status.__set_error_msgs(error_msgs);
@@ -647,7 +638,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
     }
 #endif
 
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
@@ -712,7 +703,7 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_this) {
@@ -772,7 +763,7 @@ void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_t
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this) {
@@ -796,7 +787,7 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
         std::vector<std::string> error_msgs;
         TStatus task_status;
 
-        for (auto tablet_meta_info : update_tablet_meta_req.tabletMetaInfos) {
+        for (const auto& tablet_meta_info : update_tablet_meta_req.tabletMetaInfos) {
             TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(
                     tablet_meta_info.tablet_id, tablet_meta_info.schema_hash);
             if (tablet == nullptr) {
@@ -836,7 +827,7 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
         worker_pool_this->_finish_task(finish_task_request);
         worker_pool_this->_remove_task_info(agent_task_req.task_type, agent_task_req.signature);
     }
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
@@ -885,7 +876,7 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
                     status_code = TStatusCode::RUNTIME_ERROR;
                     LOG(WARNING) << "storage migrate failed. status:" << res
                                  << ", signature:" << agent_task_req.signature;
-                    error_msgs.push_back("storage migrate failed.");
+                    error_msgs.emplace_back("storage migrate failed.");
                 } else {
                     LOG(INFO) << "storage migrate success. status:" << res
                               << ", signature:" << agent_task_req.signature;
@@ -910,13 +901,13 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
             if (res != OLAP_SUCCESS) {
                 status_code = TStatusCode::RUNTIME_ERROR;
                 LOG(WARNING) << "clone failed. status:" << res << ", signature:" << agent_task_req.signature;
-                error_msgs.push_back("clone failed.");
+                error_msgs.emplace_back("clone failed.");
             } else {
                 if (status != STARROCKS_SUCCESS && status != STARROCKS_CREATE_TABLE_EXIST) {
                     StarRocksMetrics::instance()->clone_requests_failed.increment(1);
                     status_code = TStatusCode::RUNTIME_ERROR;
                     LOG(WARNING) << "clone failed. signature: " << agent_task_req.signature;
-                    error_msgs.push_back("clone failed.");
+                    error_msgs.emplace_back("clone failed.");
                 } else {
                     LOG(INFO) << "clone success, set tablet infos. status:" << status
                               << ", signature:" << agent_task_req.signature;
@@ -935,7 +926,7 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
     }
 #endif
 
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_this) {
@@ -1035,7 +1026,7 @@ void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_t
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) {
@@ -1090,7 +1081,7 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
@@ -1122,7 +1113,7 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
     }
 #endif
 
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_report_disk_state_worker_thread_callback(void* arg_this) {
@@ -1182,7 +1173,7 @@ void* TaskWorkerPool::_report_disk_state_worker_thread_callback(void* arg_this) 
     }
 #endif
 
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
@@ -1238,7 +1229,7 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
     }
 #endif
 
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_upload_worker_thread_callback(void* arg_this) {
@@ -1293,7 +1284,7 @@ void* TaskWorkerPool::_upload_worker_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_download_worker_thread_callback(void* arg_this) {
@@ -1350,7 +1341,7 @@ void* TaskWorkerPool::_download_worker_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
@@ -1425,7 +1416,7 @@ void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 void* TaskWorkerPool::_release_snapshot_thread_callback(void* arg_this) {
@@ -1478,7 +1469,7 @@ void* TaskWorkerPool::_release_snapshot_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 AgentStatus TaskWorkerPool::_get_tablet_info(const TTabletId tablet_id, const TSchemaHash schema_hash,
@@ -1548,7 +1539,7 @@ void* TaskWorkerPool::_move_dir_thread_callback(void* arg_this) {
 #ifndef BE_TEST
     }
 #endif
-    return (void*)0;
+    return (void*)nullptr;
 }
 
 AgentStatus TaskWorkerPool::_move_dir(const TTabletId tablet_id, const TSchemaHash schema_hash, const std::string& src,

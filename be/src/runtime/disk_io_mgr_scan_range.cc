@@ -52,7 +52,7 @@ bool DiskIoMgr::ScanRange::enqueue_buffer(BufferDescriptor* buffer) {
         DCHECK(!_eosr_queued);
         if (_is_cancelled) {
             // Return the buffer, this range has been cancelled
-            if (buffer->_buffer != NULL) {
+            if (buffer->_buffer != nullptr) {
                 ++_io_mgr->_num_buffers_in_readers;
                 ++_reader->_num_buffers_in_reader;
             }
@@ -79,7 +79,7 @@ bool DiskIoMgr::ScanRange::enqueue_buffer(BufferDescriptor* buffer) {
 }
 
 Status DiskIoMgr::ScanRange::get_next(BufferDescriptor** buffer) {
-    *buffer = NULL;
+    *buffer = nullptr;
 
     {
         std::unique_lock<std::mutex> scan_range_lock(_lock);
@@ -121,7 +121,7 @@ Status DiskIoMgr::ScanRange::get_next(BufferDescriptor** buffer) {
     Status status = (*buffer)->_status;
     if (!status.ok()) {
         (*buffer)->return_buffer();
-        *buffer = NULL;
+        *buffer = nullptr;
         return status;
     }
 
@@ -137,7 +137,7 @@ Status DiskIoMgr::ScanRange::get_next(BufferDescriptor** buffer) {
         _reader->_blocked_ranges.remove(this);
         cancel(_reader->_status);
         (*buffer)->return_buffer();
-        *buffer = NULL;
+        *buffer = nullptr;
         return _status;
     }
 
@@ -154,7 +154,7 @@ Status DiskIoMgr::ScanRange::get_next(BufferDescriptor** buffer) {
 
 void DiskIoMgr::ScanRange::cancel(const Status& status) {
     // Cancelling a range that was never started, ignore.
-    if (_io_mgr == NULL) {
+    if (_io_mgr == nullptr) {
         return;
     }
 
@@ -175,7 +175,7 @@ void DiskIoMgr::ScanRange::cancel(const Status& status) {
 
     // For cached buffers, we can't close the range until the cached buffer is returned.
     // close() is called from DiskIoMgr::return_buffer().
-    if (_cached_buffer == NULL) {
+    if (_cached_buffer == nullptr) {
         close();
     }
 }
@@ -218,12 +218,12 @@ bool DiskIoMgr::ScanRange::validate() {
 
 DiskIoMgr::ScanRange::ScanRange(int capacity) : _ready_buffers_capacity(capacity) {
     _request_type = RequestType::READ;
-    reset(NULL, "", -1, -1, -1, false, false, NEVER_CACHE);
+    reset(nullptr, "", -1, -1, -1, false, false, NEVER_CACHE);
 }
 
 DiskIoMgr::ScanRange::~ScanRange() {
-    DCHECK(_hdfs_file == NULL) << "File was not closed.";
-    DCHECK(_cached_buffer == NULL) << "Cached buffer was not released.";
+    DCHECK(_hdfs_file == nullptr) << "File was not closed.";
+    DCHECK(_cached_buffer == nullptr) << "Cached buffer was not released.";
 }
 
 void DiskIoMgr::ScanRange::reset(hdfsFS fs, const char* file, int64_t len, int64_t offset, int disk_id, bool try_cache,
@@ -237,19 +237,19 @@ void DiskIoMgr::ScanRange::reset(hdfsFS fs, const char* file, int64_t len, int64
     _try_cache = try_cache;
     _expected_local = expected_local;
     _meta_data = meta_data;
-    _cached_buffer = NULL;
-    _io_mgr = NULL;
-    _reader = NULL;
-    _hdfs_file = NULL;
+    _cached_buffer = nullptr;
+    _io_mgr = nullptr;
+    _reader = nullptr;
+    _hdfs_file = nullptr;
     _mtime = mtime;
 }
 
 void DiskIoMgr::ScanRange::init_internal(DiskIoMgr* io_mgr, RequestContext* reader) {
-    DCHECK(_hdfs_file == NULL);
+    DCHECK(_hdfs_file == nullptr);
     _io_mgr = io_mgr;
     _reader = reader;
-    _local_file = NULL;
-    _hdfs_file = NULL;
+    _local_file = nullptr;
+    _hdfs_file = nullptr;
     _bytes_read = 0;
     _is_cancelled = false;
     _eosr_queued = false;
@@ -286,12 +286,12 @@ Status DiskIoMgr::ScanRange::open() {
     //         return Status::InternalError(ss.str());
     //     }
     // } else {
-    if (_local_file != NULL) {
+    if (_local_file != nullptr) {
         return Status::OK();
     }
 
     _local_file = fopen(file(), "r");
-    if (_local_file == NULL) {
+    if (_local_file == nullptr) {
         string error_msg = get_str_err_msg();
         stringstream ss;
         ss << "Could not open file: " << _file << ": " << error_msg;
@@ -299,7 +299,7 @@ Status DiskIoMgr::ScanRange::open() {
     }
     if (fseek(_local_file, _offset, SEEK_SET) == -1) {
         fclose(_local_file);
-        _local_file = NULL;
+        _local_file = nullptr;
         string error_msg = get_str_err_msg();
         stringstream ss;
         ss << "Could not seek to " << _offset << " for file: " << _file << ": " << error_msg;
@@ -345,11 +345,11 @@ void DiskIoMgr::ScanRange::close() {
  *   } else {
  */
     {
-        if (_local_file == NULL) {
+        if (_local_file == nullptr) {
             return;
         }
         fclose(_local_file);
-        _local_file = NULL;
+        _local_file = nullptr;
     }
 }
 
@@ -404,7 +404,7 @@ Status DiskIoMgr::ScanRange::read(char* buffer, int64_t* bytes_read, bool* eosr)
      *     }
      * } else {
      */
-    DCHECK(_local_file != NULL);
+    DCHECK(_local_file != nullptr);
     *bytes_read = fread(buffer, 1, bytes_to_read, _local_file);
     DCHECK_GE(*bytes_read, 0);
     DCHECK_LE(*bytes_read, bytes_to_read);

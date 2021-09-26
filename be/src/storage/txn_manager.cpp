@@ -105,7 +105,7 @@ OLAPStatus TxnManager::delete_txn(TPartitionId partition_id, const TabletSharedP
 // could not distinguish rollup, schema change or base table, prepare txn successfully will allow
 // ingest retried
 OLAPStatus TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                                   SchemaHash schema_hash, TabletUid tablet_uid, const PUniqueId& load_id) {
+                                   SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id) {
     TxnKey key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     std::unique_lock txn_wrlock(_get_txn_map_lock(transaction_id));
@@ -151,7 +151,7 @@ OLAPStatus TxnManager::prepare_txn(TPartitionId partition_id, TTransactionId tra
 }
 
 OLAPStatus TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
-                                  TTabletId tablet_id, SchemaHash schema_hash, TabletUid tablet_uid,
+                                  TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                                   const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery) {
     if (partition_id < 1 || transaction_id < 1 || tablet_id < 1) {
         LOG(FATAL) << "invalid commit req "
@@ -223,17 +223,17 @@ OLAPStatus TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTra
         txn_tablet_map_t& txn_tablet_map = _get_txn_tablet_map(transaction_id);
         txn_tablet_map[key][tablet_info] = load_info;
         _insert_txn_partition_map_unlocked(transaction_id, partition_id);
-        LOG(INFO) << "commit transaction to engine successfully."
-                  << " partition_id: " << key.first << ", transaction_id: " << key.second
-                  << ", tablet: " << tablet_info.to_string() << ", rowsetid: " << rowset_ptr->rowset_id()
-                  << ", version: " << rowset_ptr->version().first;
+        LOG(INFO) << "committed transaction "
+                  << " partition_id: " << key.first << " transaction_id: " << key.second
+                  << " tablet: " << tablet_info.tablet_id << " rowsetid: " << rowset_ptr->rowset_id()
+                  << " version: " << rowset_ptr->version().first;
     }
     return OLAP_SUCCESS;
 }
 
 // remove a txn from txn manager
 OLAPStatus TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
-                                   TTabletId tablet_id, SchemaHash schema_hash, TabletUid tablet_uid,
+                                   TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                                    const Version& version, VersionHash version_hash) {
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
@@ -345,7 +345,7 @@ OLAPStatus TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId 
 // may be committed in another thread and our current thread meets errors when writing to data file
 // BE has to wait for fe call clear txn api
 OLAPStatus TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                                    SchemaHash schema_hash, TabletUid tablet_uid) {
+                                    SchemaHash schema_hash, const TabletUid& tablet_uid) {
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     std::unique_lock wrlock(_get_txn_map_lock(transaction_id));
@@ -378,7 +378,7 @@ OLAPStatus TxnManager::rollback_txn(TPartitionId partition_id, TTransactionId tr
 // fe call this api to clear unused rowsets in be
 // could not delete the rowset if it already has a valid version
 OLAPStatus TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
-                                  TTabletId tablet_id, SchemaHash schema_hash, TabletUid tablet_uid) {
+                                  TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid) {
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     std::unique_lock txn_wrlock(_get_txn_map_lock(transaction_id));
@@ -422,7 +422,7 @@ OLAPStatus TxnManager::delete_txn(KVStore* meta, TPartitionId partition_id, TTra
     return OLAP_SUCCESS;
 }
 
-void TxnManager::get_tablet_related_txns(TTabletId tablet_id, SchemaHash schema_hash, TabletUid tablet_uid,
+void TxnManager::get_tablet_related_txns(TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                                          int64_t* partition_id, std::set<int64_t>* transaction_ids) {
     if (partition_id == nullptr || transaction_ids == nullptr) {
         LOG(WARNING) << "parameter is null when get transactions by tablet";
@@ -448,7 +448,7 @@ void TxnManager::get_tablet_related_txns(TTabletId tablet_id, SchemaHash schema_
 // force drop all txns related with the tablet
 // maybe lock error, because not get txn lock before remove from meta
 void TxnManager::force_rollback_tablet_related_txns(KVStore* meta, TTabletId tablet_id, SchemaHash schema_hash,
-                                                    TabletUid tablet_uid) {
+                                                    const TabletUid& tablet_uid) {
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     for (int32_t i = 0; i < _txn_map_shard_size; i++) {
         std::unique_lock txn_wrlock(_txn_map_locks[i]);
@@ -514,7 +514,7 @@ void TxnManager::get_all_related_tablets(std::set<TabletInfo>* tablet_infos) {
 }
 
 bool TxnManager::has_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                         SchemaHash schema_hash, TabletUid tablet_uid) {
+                         SchemaHash schema_hash, const TabletUid& tablet_uid) {
     pair<int64_t, int64_t> key(partition_id, transaction_id);
     TabletInfo tablet_info(tablet_id, schema_hash, tablet_uid);
     std::shared_lock txn_rdlock(_get_txn_map_lock(transaction_id));

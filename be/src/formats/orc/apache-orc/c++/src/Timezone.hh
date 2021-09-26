@@ -113,7 +113,7 @@ class TimezoneError : public std::runtime_error {
 public:
     TimezoneError(const std::string& what);
     TimezoneError(const TimezoneError&);
-    virtual ~TimezoneError() ORC_NOEXCEPT;
+    ~TimezoneError() ORC_NOEXCEPT override;
 };
 
 /**

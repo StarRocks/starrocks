@@ -53,14 +53,14 @@ public:
                       const proto::StripeFooter& footer, uint64_t stripeStart, InputStream& input,
                       const Timezone& writerTimezone, const Timezone& readerTimezone);
 
-    virtual ~StripeStreamsImpl() override;
+    ~StripeStreamsImpl() override;
 
-    virtual const std::vector<bool> getSelectedColumns() const override;
+    const std::vector<bool> getSelectedColumns() const override;
 
-    virtual proto::ColumnEncoding getEncoding(uint64_t columnId) const override;
+    proto::ColumnEncoding getEncoding(uint64_t columnId) const override;
 
-    virtual std::unique_ptr<SeekableInputStream> getStream(uint64_t columnId, proto::Stream_Kind kind,
-                                                           bool shouldStream) const override;
+    std::unique_ptr<SeekableInputStream> getStream(uint64_t columnId, proto::Stream_Kind kind,
+                                                   bool shouldStream) const override;
 
     MemoryPool& getMemoryPool() const override;
 
@@ -143,7 +143,7 @@ public:
         // PASS
     }
 
-    virtual ~StripeInformationImpl() override {
+    ~StripeInformationImpl() override {
         // PASS
     }
 

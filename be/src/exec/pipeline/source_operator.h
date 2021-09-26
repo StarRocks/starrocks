@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "exec/pipeline/chunk_source.h"
 #include "exec/pipeline/operator.h"
 

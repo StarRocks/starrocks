@@ -82,7 +82,7 @@ public:
 
 private:
     // execute the task
-    void exec_task(StreamLoadContext* ctx, DataConsumerPool* pool, ExecFinishCallback cb);
+    void exec_task(StreamLoadContext* ctx, DataConsumerPool* pool, const ExecFinishCallback& cb);
 
     void err_handler(StreamLoadContext* ctx, const Status& st, const std::string& err_msg);
 

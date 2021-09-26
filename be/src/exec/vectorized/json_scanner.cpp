@@ -203,7 +203,7 @@ Status JsonScanner::_open_next_reader() {
     return Status::OK();
 }
 
-ChunkPtr JsonScanner::_cast_chunk(starrocks::vectorized::ChunkPtr src_chunk) {
+ChunkPtr JsonScanner::_cast_chunk(const starrocks::vectorized::ChunkPtr& src_chunk) {
     SCOPED_RAW_TIMER(&_counter->cast_chunk_ns);
     ChunkPtr cast_chunk = std::make_shared<Chunk>();
 

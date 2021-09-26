@@ -29,7 +29,7 @@ namespace starrocks {
 std::unique_ptr<MetricRegistry> TestEnv::_s_static_metrics;
 
 TestEnv::TestEnv() {
-    if (_s_static_metrics == NULL) {
+    if (_s_static_metrics == nullptr) {
         _s_static_metrics.reset(new MetricRegistry("test_env"));
     }
     _exec_env.reset(new ExecEnv());
@@ -72,7 +72,7 @@ RuntimeState* TestEnv::create_runtime_state(int64_t query_id) {
 
 Status TestEnv::create_query_state(int64_t query_id, int max_buffers, int block_size, RuntimeState** runtime_state) {
     *runtime_state = create_runtime_state(query_id);
-    if (*runtime_state == NULL) {
+    if (*runtime_state == nullptr) {
         return Status::InternalError("Unexpected error creating RuntimeState");
     }
 
@@ -90,7 +90,7 @@ Status TestEnv::create_query_state(int64_t query_id, int max_buffers, int block_
 Status TestEnv::create_query_states(int64_t start_query_id, int num_mgrs, int buffers_per_mgr, int block_size,
                                     std::vector<RuntimeState*>* runtime_states) {
     for (int i = 0; i < num_mgrs; ++i) {
-        RuntimeState* runtime_state = NULL;
+        RuntimeState* runtime_state = nullptr;
         RETURN_IF_ERROR(create_query_state(start_query_id + i, buffers_per_mgr, block_size, &runtime_state));
         runtime_states->push_back(runtime_state);
     }

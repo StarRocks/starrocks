@@ -18,7 +18,7 @@ void SimdBlockFilter::init(size_t nums) {
     memset(_directory, 0, alloc_size);
 }
 
-SimdBlockFilter::SimdBlockFilter(SimdBlockFilter&& bf) {
+SimdBlockFilter::SimdBlockFilter(SimdBlockFilter&& bf) noexcept {
     _log_num_buckets = bf._log_num_buckets;
     _directory_mask = bf._directory_mask;
     _directory = bf._directory;

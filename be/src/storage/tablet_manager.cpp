@@ -273,7 +273,6 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(const AlterTable
 
     // should remove the tablet's pending_id no matter create-tablet success or not
     DataDir* data_dir = tablet->data_dir();
-    SCOPED_CLEANUP({ data_dir->remove_pending_ids(StrCat(TABLET_ID_PREFIX, new_tablet_id)); });
 
     // TODO(yiguolei)
     // the following code is very difficult to understand because it mixed alter tablet v2
@@ -343,15 +342,6 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(const AlterTable
             break;
         }
         is_tablet_added = true;
-
-        // TODO(lingbin): The following logic seems useless, can be removed?
-        // Because if _add_tablet_unlocked() return OK, we must can get it from map.
-        TabletSharedPtr tablet_ptr = _get_tablet_unlocked(new_tablet_id, new_schema_hash);
-        if (tablet_ptr == nullptr) {
-            LOG(WARNING) << "Fail to get tablet. tablet_id=" << new_tablet_id;
-            status = Status::NotFound("tablet not found");
-            break;
-        }
     } while (0);
 
     if (status.ok()) {
@@ -380,18 +370,8 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
                                                                     const bool is_schema_change,
                                                                     const Tablet* base_tablet,
                                                                     const std::vector<DataDir*>& data_dirs) {
-    std::string pending_id = StrCat(TABLET_ID_PREFIX, request.tablet_id);
-    // Many attempts are made here in the hope that even if a disk fails, it can still continue.
-    DataDir* last_dir = nullptr;
     for (const auto& data_dir : data_dirs) {
-        if (last_dir != nullptr) {
-            // If last_dir != null, it means the last attempt to create a tablet failed
-            last_dir->remove_pending_ids(pending_id);
-        }
-        last_dir = data_dir;
-
         TabletMetaSharedPtr tablet_meta;
-        // if create meta faild, do not need to clean dir, because it is only in memory
         Status st = _create_tablet_meta_unlocked(request, data_dir, is_schema_change, base_tablet, &tablet_meta);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to create tablet meta. root=" << data_dir->path() << " status=" << st.to_string();
@@ -402,18 +382,10 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
         std::string schema_hash_dir =
                 path_util::join_path_segments(tablet_dir, std::to_string(request.tablet_schema.schema_hash));
 
-        // Because the tablet is removed asynchronously, so that the dir may still exist when BE
-        // receive create-tablet request again, For example retried schema-change request
-        if (FileUtils::check_exist(schema_hash_dir)) {
-            LOG(WARNING) << "Skip create already exist path=" << schema_hash_dir;
+        st = FileUtils::create_dir(schema_hash_dir);
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to create " << schema_hash_dir << ": " << st.to_string();
             continue;
-        } else {
-            data_dir->add_pending_ids(pending_id);
-            st = FileUtils::create_dir(schema_hash_dir);
-            if (!st.ok()) {
-                LOG(WARNING) << "Fail to create path=" << schema_hash_dir << " error=" << st.to_string();
-                continue;
-            }
         }
 
         TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, data_dir);
@@ -591,7 +563,7 @@ TabletSharedPtr TabletManager::_get_tablet_unlocked(TTabletId tablet_id, SchemaH
     return tablet;
 }
 
-TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, SchemaHash schema_hash, TabletUid tablet_uid,
+TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                                           bool include_deleted, std::string* err) {
     std::shared_lock rlock(_get_tablets_shard_lock(tablet_id));
     TabletSharedPtr tablet = _get_tablet_unlocked(tablet_id, schema_hash, include_deleted, err);
@@ -603,7 +575,7 @@ TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, SchemaHash schema
 
 bool TabletManager::get_tablet_id_and_schema_hash_from_path(const std::string& path, TTabletId* tablet_id,
                                                             TSchemaHash* schema_hash) {
-    static re2::RE2 normal_re("/data/\\d+/(\\d+)/(\\d+)($|/)");
+    static re2::RE2 normal_re(R"(/data/\d+/(\d+)/(\d+)($|/))");
     // match tablet schema hash data path, for example, the path is /data/1/16791/29998
     // 1 is shard id , 16791 is tablet id, 29998 is schema hash
     if (RE2::PartialMatch(path, normal_re, tablet_id, schema_hash)) {
@@ -622,7 +594,7 @@ bool TabletManager::get_tablet_id_and_schema_hash_from_path(const std::string& p
 }
 
 bool TabletManager::get_rowset_id_from_path(const std::string& path, RowsetId* rowset_id) {
-    static re2::RE2 re("/data/\\d+/\\d+/\\d+/([A-Fa-f0-9]+)_.*");
+    static re2::RE2 re(R"(/data/\d+/\d+/\d+/([A-Fa-f0-9]+)_.*)");
     std::string id_str;
     bool ret = RE2::PartialMatch(path, re, &id_str);
     if (ret) {

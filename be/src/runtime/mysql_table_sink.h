@@ -43,23 +43,23 @@ class MysqlTableSink : public DataSink {
 public:
     MysqlTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs);
 
-    virtual ~MysqlTableSink();
+    ~MysqlTableSink() override;
 
-    virtual Status init(const TDataSink& thrift_sink);
+    Status init(const TDataSink& thrift_sink) override;
 
-    virtual Status prepare(RuntimeState* state);
+    Status prepare(RuntimeState* state) override;
 
-    virtual Status open(RuntimeState* state);
+    Status open(RuntimeState* state) override;
 
     // send data in 'batch' to this backend stream mgr
     // Blocks until all rows in batch are placed in the buffer
-    virtual Status send(RuntimeState* state, RowBatch* batch);
+    Status send(RuntimeState* state, RowBatch* batch) override;
 
     // Flush all buffered data and close all existing channels to destination
     // hosts. Further send() calls are illegal after calling close().
-    virtual Status close(RuntimeState* state, Status exec_status);
+    Status close(RuntimeState* state, Status exec_status) override;
 
-    virtual RuntimeProfile* profile() { return _profile; }
+    RuntimeProfile* profile() override { return _profile; }
 
 private:
     // owned by RuntimeState

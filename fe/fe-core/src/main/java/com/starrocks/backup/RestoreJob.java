@@ -61,6 +61,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -1246,6 +1247,23 @@ public class RestoreJob extends AbstractJob {
             state = RestoreJobState.FINISHED;
 
             catalog.getEditLog().logRestoreJob(this);
+
+            // register table in DynamicPartitionScheduler after restore job finished
+            db.readLock();
+            try {
+                for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
+                    Table tbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
+                    if (tbl == null) {
+                        continue;
+                    }
+                    if (tbl.getType() != TableType.OLAP) {
+                        continue;
+                    }
+                    DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), (OlapTable) tbl);
+                }
+            } finally {
+                db.readUnlock();
+            }
         }
 
         LOG.info("job is finished. is replay: {}. {}", isReplay, this);

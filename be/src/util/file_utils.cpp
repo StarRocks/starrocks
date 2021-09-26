@@ -262,7 +262,7 @@ Status FileUtils::md5sum(const std::string& file, std::string* md5sum) {
         return Status::InternalError("failed to stat file");
     }
     size_t file_len = statbuf.st_size;
-    void* buf = mmap(0, file_len, PROT_READ, MAP_SHARED, fd, 0);
+    void* buf = mmap(nullptr, file_len, PROT_READ, MAP_SHARED, fd, 0);
     if (buf == MAP_FAILED) {
         PLOG(WARNING) << "mmap failed";
         return Status::InternalError("mmap failed");

@@ -148,7 +148,7 @@ struct or_ : public integral_constant<bool, (A::value || B::value)> {};
 // is_class type_trait implementation.
 struct IsClassHelper {
     template <typename C>
-    static YesType Test(void (C::*)(void));
+    static YesType Test(void (C::*)());
 
     template <typename C>
     static NoType Test(...);

@@ -57,7 +57,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
         const PStringPair& pair = request.kafka_info().properties(i);
         properties.emplace(pair.key(), pair.val());
     }
-    t_info.__set_properties(std::move(properties));
+    t_info.__set_properties(properties);
 
     ctx.kafka_info.reset(new KafkaLoadInfo(t_info));
     ctx.need_rollback = false;
@@ -92,7 +92,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetPro
         const PStringPair& pair = request.kafka_info().properties(i);
         properties.emplace(pair.key(), pair.val());
     }
-    t_info.__set_properties(std::move(properties));
+    t_info.__set_properties(properties);
 
     ctx.kafka_info.reset(new KafkaLoadInfo(t_info));
     ctx.need_rollback = false;
@@ -156,9 +156,9 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     TStatus tstatus;
     tstatus.status_code = TStatusCode::OK;
     put_result.status = tstatus;
-    put_result.params = std::move(task.params);
+    put_result.params = task.params;
     put_result.__isset.params = true;
-    ctx->put_result = std::move(put_result);
+    ctx->put_result = put_result;
     if (task.__isset.format) {
         ctx->format = task.format;
     }
@@ -209,7 +209,7 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
 }
 
 void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool* consumer_pool,
-                                        ExecFinishCallback cb) {
+                                        const ExecFinishCallback& cb) {
 #define HANDLE_ERROR(stmt, err_msg)                                                        \
     do {                                                                                   \
         Status _status_ = (stmt);                                                          \

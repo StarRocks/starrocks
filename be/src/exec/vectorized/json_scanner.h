@@ -28,7 +28,7 @@ class JsonScanner : public FileScanner {
 public:
     JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                 ScannerCounter* counter);
-    ~JsonScanner();
+    ~JsonScanner() override;
 
     // Open this scanner, will initialize information needed
     Status open() override;
@@ -44,7 +44,7 @@ private:
     Status _parse_json_paths(const std::string& jsonpath, std::vector<std::vector<JsonPath>>* path_vecs);
     Status _create_src_chunk(ChunkPtr* chunk);
     Status _open_next_reader();
-    ChunkPtr _cast_chunk(ChunkPtr src_chunk);
+    ChunkPtr _cast_chunk(const ChunkPtr& src_chunk);
 
     friend class JsonReader;
 

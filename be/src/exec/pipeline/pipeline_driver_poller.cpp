@@ -2,8 +2,6 @@
 
 #include "pipeline_driver_poller.h"
 
-#include <emmintrin.h>
-
 #include <chrono>
 namespace starrocks {
 namespace pipeline {
@@ -91,16 +89,21 @@ void PipelineDriverPoller::run_internal() {
             spin_count = 0;
         }
         if (spin_count != 0 && spin_count % 64 == 0) {
+#ifdef __x86_64__
             _mm_pause();
+#else
+            // TODO: Maybe there's a better intrinsic like _mm_pause on non-x86_64 architecture.
+            sched_yield();
+#endif
         }
-        if (spin_count != 0 && spin_count == 640) {
+        if (spin_count == 640) {
             spin_count = 0;
             sched_yield();
         }
     }
 }
 
-void PipelineDriverPoller::add_blocked_driver(DriverPtr driver) {
+void PipelineDriverPoller::add_blocked_driver(const DriverPtr& driver) {
     std::unique_lock<std::mutex> lock(this->_mutex);
     this->_blocked_drivers.push_back(driver);
     this->_cond.notify_one();

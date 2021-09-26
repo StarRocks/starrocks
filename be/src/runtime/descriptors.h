@@ -214,14 +214,14 @@ private:
 class OlapTableDescriptor : public TableDescriptor {
 public:
     OlapTableDescriptor(const TTableDescriptor& tdesc);
-    virtual std::string debug_string() const;
+    std::string debug_string() const override;
 };
 
 class SchemaTableDescriptor : public TableDescriptor {
 public:
     SchemaTableDescriptor(const TTableDescriptor& tdesc);
-    virtual ~SchemaTableDescriptor();
-    virtual std::string debug_string() const;
+    ~SchemaTableDescriptor() override;
+    std::string debug_string() const override;
     TSchemaTableType::type schema_table_type() const { return _schema_table_type; }
 
 private:
@@ -231,8 +231,8 @@ private:
 class BrokerTableDescriptor : public TableDescriptor {
 public:
     BrokerTableDescriptor(const TTableDescriptor& tdesc);
-    virtual ~BrokerTableDescriptor();
-    virtual std::string debug_string() const;
+    ~BrokerTableDescriptor() override;
+    std::string debug_string() const override;
 
 private:
 };
@@ -240,8 +240,8 @@ private:
 class EsTableDescriptor : public TableDescriptor {
 public:
     EsTableDescriptor(const TTableDescriptor& tdesc);
-    virtual ~EsTableDescriptor();
-    virtual std::string debug_string() const;
+    ~EsTableDescriptor() override;
+    std::string debug_string() const override;
 
 private:
 };
@@ -249,7 +249,7 @@ private:
 class MySQLTableDescriptor : public TableDescriptor {
 public:
     MySQLTableDescriptor(const TTableDescriptor& tdesc);
-    virtual std::string debug_string() const;
+    std::string debug_string() const override;
     const std::string mysql_db() const { return _mysql_db; }
     const std::string mysql_table() const { return _mysql_table; }
     const std::string host() const { return _host; }

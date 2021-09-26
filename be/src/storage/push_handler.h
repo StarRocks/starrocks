@@ -50,19 +50,19 @@ public:
     ~PushHandler() = default;
 
     // Load local data file into specified tablet.
-    OLAPStatus process_streaming_ingestion(TabletSharedPtr tablet, const TPushReq& request, PushType push_type,
+    OLAPStatus process_streaming_ingestion(const TabletSharedPtr& tablet, const TPushReq& request, PushType push_type,
                                            std::vector<TTabletInfo>* tablet_info_vec);
 
     int64_t write_bytes() const { return _write_bytes; }
     int64_t write_rows() const { return _write_rows; }
 
 private:
-    OLAPStatus _convert(TabletSharedPtr cur_tablet, RowsetSharedPtr* cur_rowset);
-    OLAPStatus _convert_v2(TabletSharedPtr cur_tablet, RowsetSharedPtr* cur_rowset);
+    OLAPStatus _convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset);
+    OLAPStatus _convert_v2(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset);
 
     void _get_tablet_infos(const std::vector<TabletVars>& tablet_infos, std::vector<TTabletInfo>* tablet_info_vec);
 
-    OLAPStatus _do_streaming_ingestion(TabletSharedPtr tablet, const TPushReq& request, PushType push_type,
+    OLAPStatus _do_streaming_ingestion(const TabletSharedPtr& tablet, const TPushReq& request, PushType push_type,
                                        vector<TabletVars>* tablet_vars, std::vector<TTabletInfo>* tablet_info_vec);
 
 private:

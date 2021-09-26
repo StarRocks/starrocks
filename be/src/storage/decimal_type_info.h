@@ -162,7 +162,7 @@ public:
     std::string to_zone_map_string(const void* src) { return _delegate->to_string(src); }
 
 protected:
-    int _datum_cmp_impl(const Datum& left, const Datum& right) const {
+    int _datum_cmp_impl(const Datum& left, const Datum& right) const override {
         const CppType& lhs = left.get<CppType>();
         const CppType& rhs = right.get<CppType>();
         return (lhs < rhs) ? -1 : (lhs > rhs) ? 1 : 0;

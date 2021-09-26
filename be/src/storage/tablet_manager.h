@@ -73,7 +73,7 @@ public:
     TabletSharedPtr get_tablet(TTabletId tablet_id, SchemaHash schema_hash, bool include_deleted = false,
                                std::string* err = nullptr);
 
-    TabletSharedPtr get_tablet(TTabletId tablet_id, SchemaHash schema_hash, TabletUid tablet_uid,
+    TabletSharedPtr get_tablet(TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                                bool include_deleted = false, std::string* err = nullptr);
 
     // Extract tablet_id and schema_hash from given path.

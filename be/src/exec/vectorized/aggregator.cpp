@@ -266,7 +266,7 @@ vectorized::ChunkPtr Aggregator::poll_chunk_buffer() {
 
 void Aggregator::offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk) {
     std::lock_guard<std::mutex> l(_buffer_mutex);
-    _buffer.push(std::move(chunk));
+    _buffer.push(chunk);
 }
 
 bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
@@ -684,16 +684,16 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
                                          : HashVariantType::Type::phase2_null_##VALUE; \
         break;                                                                         \
     }
-                CHECK_AGGR_PHASE(TYPE_BOOLEAN, int8);
+                CHECK_AGGR_PHASE(TYPE_BOOLEAN, uint8);
                 CHECK_AGGR_PHASE(TYPE_TINYINT, int8);
                 CHECK_AGGR_PHASE(TYPE_SMALLINT, int16);
                 CHECK_AGGR_PHASE(TYPE_INT, int32);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL32, int32);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL32, decimal32);
                 CHECK_AGGR_PHASE(TYPE_BIGINT, int64);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL64, int64);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL64, decimal64);
                 CHECK_AGGR_PHASE(TYPE_DATE, date);
                 CHECK_AGGR_PHASE(TYPE_DATETIME, timestamp);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL128, int128);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL128, decimal128);
                 CHECK_AGGR_PHASE(TYPE_LARGEINT, int128);
                 CHECK_AGGR_PHASE(TYPE_CHAR, string);
                 CHECK_AGGR_PHASE(TYPE_VARCHAR, string);
@@ -719,17 +719,17 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
                                          : HashVariantType::Type::phase2_##VALUE; \
         break;                                                                    \
     }
-                CHECK_AGGR_PHASE(TYPE_BOOLEAN, int8);
+                CHECK_AGGR_PHASE(TYPE_BOOLEAN, uint8);
                 CHECK_AGGR_PHASE(TYPE_TINYINT, int8);
                 CHECK_AGGR_PHASE(TYPE_SMALLINT, int16);
                 CHECK_AGGR_PHASE(TYPE_INT, int32);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL32, int32);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL32, decimal32);
                 CHECK_AGGR_PHASE(TYPE_BIGINT, int64);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL64, int64);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL64, decimal64);
                 CHECK_AGGR_PHASE(TYPE_DATE, date);
                 CHECK_AGGR_PHASE(TYPE_DATETIME, timestamp);
-                CHECK_AGGR_PHASE(TYPE_DECIMAL128, int128);
                 CHECK_AGGR_PHASE(TYPE_LARGEINT, int128);
+                CHECK_AGGR_PHASE(TYPE_DECIMAL128, decimal128);
                 CHECK_AGGR_PHASE(TYPE_CHAR, string);
                 CHECK_AGGR_PHASE(TYPE_VARCHAR, string);
 

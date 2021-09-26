@@ -74,7 +74,7 @@ public:
         this->data(state).sum += input_column->get_data()[row_num];
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
         ResultType result = this->data(state).sum;
         ResultColumnType* column = down_cast<ResultColumnType*>(dst);

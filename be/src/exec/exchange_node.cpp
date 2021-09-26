@@ -43,7 +43,7 @@ namespace starrocks {
 ExchangeNode::ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
           _num_senders(0),
-          _stream_recvr(NULL),
+          _stream_recvr(nullptr),
           _input_row_desc(
                   descs, tnode.exchange_node.input_row_tuples,
                   std::vector<bool>(tnode.nullable_tuples.begin(),
@@ -120,7 +120,7 @@ Status ExchangeNode::close(RuntimeState* state) {
     if (_is_merging) {
         _sort_exec_exprs.close(state);
     }
-    if (_stream_recvr != NULL) {
+    if (_stream_recvr != nullptr) {
         _stream_recvr->close();
     }
     // _stream_recvr.reset();
@@ -134,8 +134,8 @@ Status ExchangeNode::fill_input_row_batch(RuntimeState* state) {
         // SCOPED_TIMER(state->total_network_receive_timer());
         ret_status = _stream_recvr->get_batch(&_input_batch);
     }
-    VLOG_FILE << "exch: has batch=" << (_input_batch == NULL ? "false" : "true")
-              << " #rows=" << (_input_batch != NULL ? _input_batch->num_rows() : 0)
+    VLOG_FILE << "exch: has batch=" << (_input_batch == nullptr ? "false" : "true")
+              << " #rows=" << (_input_batch != nullptr ? _input_batch->num_rows() : 0)
               << " is_cancelled=" << (ret_status.is_cancelled() ? "true" : "false")
               << " instance_id=" << state->fragment_instance_id();
     return ret_status;

@@ -126,7 +126,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     RETURN_IF_ERROR(_runtime_state->create_block_mgr());
 
     // set up desc tbl
-    DescriptorTbl* desc_tbl = NULL;
+    DescriptorTbl* desc_tbl = nullptr;
     DCHECK(request.__isset.desc_tbl);
     RETURN_IF_ERROR(DescriptorTbl::create(obj_pool(), request.desc_tbl, &desc_tbl));
     _runtime_state->set_desc_tbl(desc_tbl);
@@ -188,8 +188,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
         RuntimeProfile* sink_profile = _sink->profile();
 
-        if (sink_profile != NULL) {
-            profile()->add_child(sink_profile, true, NULL);
+        if (sink_profile != nullptr) {
+            profile()->add_child(sink_profile, true, nullptr);
         }
 
         _collect_query_statistics_with_every_batch = params.__isset.send_query_statistics_with_every_batch
@@ -197,11 +197,11 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
                                                              : false;
     } else {
         // _sink is set to NULL
-        _sink.reset(NULL);
+        _sink.reset(nullptr);
     }
 
     // set up profile counters
-    profile()->add_child(_plan->runtime_profile(), true, NULL);
+    profile()->add_child(_plan->runtime_profile(), true, nullptr);
     _rows_produced_counter = ADD_COUNTER(profile(), "RowsProduced", TUnit::UNIT);
 
     VLOG(3) << "plan_root=\n" << _plan->debug_string();
@@ -209,7 +209,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     _prepared = true;
 
     _query_statistics.reset(new QueryStatistics());
-    if (_sink.get() != NULL) {
+    if (_sink.get() != nullptr) {
         _sink->set_query_statistics(_query_statistics);
     }
 

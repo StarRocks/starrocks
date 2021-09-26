@@ -27,7 +27,9 @@ using std::chrono::duration_cast;
 class QueryContext {
 public:
     QueryContext();
-    RuntimeState* get_runtime_state() { return _runtime_state.get(); }
+    void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
+    TUniqueId query_id() { return _query_id; }
+    RuntimeState* runtime_state() { return _runtime_state.get(); }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
 
     void increment_num_fragments() {
@@ -35,7 +37,9 @@ public:
         _num_active_fragments.fetch_add(1);
     }
 
-    bool count_down_fragment() { return _num_active_fragments.fetch_sub(1) == 1; }
+    bool count_down_fragments() { return _num_active_fragments.fetch_sub(1) == 1; }
+
+    bool is_finished() { return _num_active_fragments.load() == 0; }
 
     void set_expire_seconds(int expire_seconds) { _expire_seconds = seconds(expire_seconds); }
 
@@ -74,7 +78,7 @@ class QueryContextManager {
 public:
     QueryContext* get_or_register(const TUniqueId& query_id);
     QueryContextPtr get(const TUniqueId& query_id);
-    void unregister(const TUniqueId& query_id);
+    QueryContextPtr remove(const TUniqueId& query_id);
 
 private:
     //TODO(by satanson)
@@ -82,5 +86,6 @@ private:
     std::mutex _lock;
     std::unordered_map<TUniqueId, QueryContextPtr> _contexts;
 };
+
 } // namespace pipeline
 } // namespace starrocks

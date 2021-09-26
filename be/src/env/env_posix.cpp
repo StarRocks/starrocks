@@ -409,9 +409,9 @@ public:
     PosixRandomRWFile(string fname, int fd, bool sync_on_close)
             : _filename(std::move(fname)), _fd(fd), _sync_on_close(sync_on_close), _closed(false) {}
 
-    ~PosixRandomRWFile() { WARN_IF_ERROR(close(), "Failed to close " + _filename); }
+    ~PosixRandomRWFile() override { WARN_IF_ERROR(close(), "Failed to close " + _filename); }
 
-    virtual Status read_at(uint64_t offset, const Slice& result) const override {
+    Status read_at(uint64_t offset, const Slice& result) const override {
         return do_readv_at(_fd, _filename, offset, &result, 1, nullptr);
     }
 

@@ -223,7 +223,7 @@ class scoped_refptr {
 public:
     typedef T element_type;
 
-    scoped_refptr() : ptr_(NULL) {}
+    scoped_refptr() : ptr_(nullptr) {}
 
     scoped_refptr(T* p) : ptr_(p) {
         if (ptr_) ptr_->AddRef();
@@ -267,7 +267,7 @@ public:
     operator T*() const { return ptr_; }
 #else
     typedef T* scoped_refptr::*Testable;
-    operator Testable() const { return ptr_ ? &scoped_refptr::ptr_ : NULL; }
+    operator Testable() const { return ptr_ ? &scoped_refptr::ptr_ : nullptr; }
 #endif
 
     T* operator->() const {
@@ -291,7 +291,7 @@ public:
         return *this = r.get();
     }
 
-    scoped_refptr<T>& operator=(scoped_refptr<T>&& r) {
+    scoped_refptr<T>& operator=(scoped_refptr<T>&& r) noexcept {
         scoped_refptr<T>(std::move(r)).swap(*this);
         return *this;
     }
@@ -312,7 +312,7 @@ public:
 
     // Like gscoped_ptr::reset(), drops a reference on the currently held object
     // (if any), and adds a reference to the passed-in object (if not NULL).
-    void reset(T* p = NULL) { *this = p; }
+    void reset(T* p = nullptr) { *this = p; }
 
 protected:
     T* ptr_;

@@ -143,7 +143,7 @@ public:
               _real_version(real_version),
               _deltas(std::move(deltas)) {}
 
-    const void* get(const uint32_t rid) const {
+    const void* get(const uint32_t rid) const override {
         return TypedColumnGet<TypedColumnReader<T, Nullable, ST>, T, Nullable, ST>(*this, rid);
     }
 
@@ -153,7 +153,7 @@ public:
     // if the block is not the last block, nrows should be less or equal to 64K if the block
     // is the last block, and since Column object doesn't store information about number of
     // rows(it is stored in MemSubTablet), so it needs to be provided by caller.
-    Status get_block(size_t nrows, size_t bid, ColumnBlockHolder* cbh) const {
+    Status get_block(size_t nrows, size_t bid, ColumnBlockHolder* cbh) const override {
         // Check if this block has any updates in delta
         bool base_only = true;
         for (size_t i = 0; i < _deltas.size(); ++i) {
@@ -216,13 +216,15 @@ public:
         return Status::OK();
     }
 
-    uint64_t hashcode(const void* rhs, size_t rhs_idx) const { return TypedColumnHashcode<T, ST>(rhs, rhs_idx); }
+    uint64_t hashcode(const void* rhs, size_t rhs_idx) const override {
+        return TypedColumnHashcode<T, ST>(rhs, rhs_idx);
+    }
 
-    bool equals(const uint32_t rid, const void* rhs, size_t rhs_idx) const {
+    bool equals(const uint32_t rid, const void* rhs, size_t rhs_idx) const override {
         return TypedColumnEquals<TypedColumnReader<T, Nullable, ST>, T, Nullable, ST>(*this, rid, rhs, rhs_idx);
     }
 
-    string debug_string() const {
+    string debug_string() const override {
         return StringPrintf("%s version=%zu(real=%zu) ndelta=%zu", _column->debug_string().c_str(), _version,
                             _real_version, _deltas.size());
     }

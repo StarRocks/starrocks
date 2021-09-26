@@ -30,7 +30,7 @@ public:
               _has_null(rhs._has_null) {}
 
     // Move constructor
-    NullableColumn(NullableColumn&& rhs)
+    NullableColumn(NullableColumn&& rhs) noexcept
             : _data_column(std::move(rhs._data_column)),
               _null_column(std::move(rhs._null_column)),
               _has_null(rhs._has_null) {}

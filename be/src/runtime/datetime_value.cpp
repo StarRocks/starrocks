@@ -38,11 +38,12 @@ const uint64_t log_10_int[] = {1,         10,         100,         1000,        
 
 static int s_days_in_month[13] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 static const char* s_month_name[] = {"",     "January", "February",  "March",   "April",    "May",      "June",
-                                     "July", "August",  "September", "October", "November", "December", NULL};
+                                     "July", "August",  "September", "October", "November", "December", nullptr};
 static const char* s_ab_month_name[] = {"",    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", NULL};
-static const char* s_day_name[] = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", NULL};
-static const char* s_ab_day_name[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", NULL};
+                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", nullptr};
+static const char* s_day_name[] = {"Monday", "Tuesday",  "Wednesday", "Thursday",
+                                   "Friday", "Saturday", "Sunday",    nullptr};
+static const char* s_ab_day_name[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", nullptr};
 
 uint8_t mysql_week_mode(uint32_t mode) {
     mode &= 7;
@@ -62,7 +63,7 @@ static uint32_t calc_days_in_year(uint32_t year) {
 
 DateTimeValue DateTimeValue::_s_min_datetime_value(0, TIME_DATETIME, 0, 0, 0, 0, 0, 1, 1);
 DateTimeValue DateTimeValue::_s_max_datetime_value(0, TIME_DATETIME, 23, 59, 59, 0, 9999, 12, 31);
-RE2 DateTimeValue::time_zone_offset_format_reg("^[+-]{1}\\d{2}\\:\\d{2}$");
+RE2 DateTimeValue::time_zone_offset_format_reg(R"(^[+-]{1}\d{2}\:\d{2}$)");
 
 bool DateTimeValue::check_range() const {
     return _year > 9999 || _month > 12 || _day > 31 || _hour > (_type == TIME_TIME ? TIME_MAX_HOUR : 23) ||
@@ -656,7 +657,7 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
     constexpr int buffer_size = 127;
     const char* buffer_start = to;
     char buf[64];
-    char* pos = NULL;
+    char* pos = nullptr;
     const char* ptr = format;
     const char* end = format + len;
     char ch = '\0';
@@ -1063,7 +1064,7 @@ static int find_in_lib(const char* lib[], const char* str, const char* end) {
     int pos = 0;
     int find_count = 0;
     int find_pos = 0;
-    for (; lib[pos] != NULL; ++pos) {
+    for (; lib[pos] != nullptr; ++pos) {
         const char* i = str;
         const char* j = lib[pos];
         while (i < end && *j) {
@@ -1129,7 +1130,7 @@ bool DateTimeValue::from_date_format_str(const char* format, int format_len, con
         }
         // Check switch
         if (*ptr == '%' && ptr + 1 < end) {
-            const char* tmp = NULL;
+            const char* tmp = nullptr;
             int64_t int_value = 0;
             ptr++;
             switch (*ptr++) {
@@ -1582,7 +1583,7 @@ bool DateTimeValue::from_unixtime(int64_t timestamp, const cctz::time_zone& ctz)
 
 const char* DateTimeValue::month_name() const {
     if (_month < 1 || _month > 12) {
-        return NULL;
+        return nullptr;
     }
     return s_month_name[_month];
 }
@@ -1590,14 +1591,14 @@ const char* DateTimeValue::month_name() const {
 const char* DateTimeValue::day_name() const {
     int day = weekday();
     if (day < 0 || day >= 7) {
-        return NULL;
+        return nullptr;
     }
     return s_day_name[day];
 }
 
 DateTimeValue DateTimeValue::local_time() {
     DateTimeValue value;
-    value.from_unixtime(time(NULL), TimezoneUtils::default_time_zone);
+    value.from_unixtime(time(nullptr), TimezoneUtils::default_time_zone);
     return value;
 }
 

@@ -10,10 +10,10 @@ namespace starrocks::vectorized {
 class SchemaTablesScanner : public SchemaScanner {
 public:
     SchemaTablesScanner();
-    virtual ~SchemaTablesScanner();
+    ~SchemaTablesScanner() override;
 
-    virtual Status start(RuntimeState* state);
-    virtual Status get_next(ChunkPtr* chunk, bool* eos);
+    Status start(RuntimeState* state) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
     Status get_new_table();
