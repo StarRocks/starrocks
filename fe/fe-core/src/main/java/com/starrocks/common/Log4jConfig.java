@@ -263,7 +263,7 @@ public class Log4jConfig extends XmlConfiguration {
         super(LoggerContext.getContext(), configSource);
     }
 
-    public synchronized static void initLogging() throws IOException {
+    public static synchronized void initLogging() throws IOException {
         sysLogLevel = Config.sys_log_level;
         verboseModules = Config.sys_log_verbose_modules;
         auditModules = Config.audit_log_modules;
@@ -271,7 +271,7 @@ public class Log4jConfig extends XmlConfiguration {
         reconfig();
     }
 
-    public synchronized static Tuple<String, String[], String[]> updateLogging(
+    public static synchronized Tuple<String, String[], String[]> updateLogging(
             String level, String[] verboseNames, String[] auditNames) throws IOException {
         boolean toReconfig = false;
         if (level != null) {

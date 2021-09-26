@@ -78,11 +78,11 @@ import java.util.Random;
 public class MysqlPassword {
     private static final Logger LOG = LogManager.getLogger(MysqlPassword.class);
     // TODO(zhaochun): this is duplicated with handshake packet.
-    public static final byte EMPTY_PASSWORD[] = new byte[0];
+    public static final byte[] EMPTY_PASSWORD = new byte[0];
     public static final int SCRAMBLE_LENGTH = 20;
     public static final int SCRAMBLE_LENGTH_HEX_LENGTH = 2 * SCRAMBLE_LENGTH + 1;
     public static final byte PVERSION41_CHAR = '*';
-    private static final byte DIG_VEC_UPPER[] = {'0', '1', '2', '3', '4', '5', '6', '7',
+    private static final byte[] DIG_VEC_UPPER = {'0', '1', '2', '3', '4', '5', '6', '7',
             '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
     private static Random random = new Random(System.currentTimeMillis());
 
@@ -91,8 +91,8 @@ public class MysqlPassword {
         random.nextBytes(bytes);
         // NOTE: MySQL challenge string can't contain 0.
         for (int i = 0; i < len; ++i) {
-            if ((bytes[i] >= 'a' && bytes[i] <= 'z')
-                    || (bytes[i] >= 'A' && bytes[i] <= 'Z')) {
+            if ((bytes[i] >= 'a' && bytes[i] <= 'z') || (bytes[i] >= 'A' && bytes[i] <= 'Z')) {
+                // pass
             } else {
                 bytes[i] = (byte) ('a' + (bytes[i] % 26));
             }

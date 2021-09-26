@@ -69,13 +69,13 @@ public class ScheduleRule {
                 long current = System.currentTimeMillis();
                 if (current - jobRoutine.firstResumeTimestamp < Config.period_of_auto_resume_min * 60000) {
                     if (jobRoutine.autoResumeCount >= 3) {
-                        jobRoutine.autoResumeLock = true;// locked Auto Resume RoutineLoadJob
+                        jobRoutine.autoResumeLock = true; // locked Auto Resume RoutineLoadJob
                         return false;
                     }
                     jobRoutine.autoResumeCount++;
                     return true;
                 } else {
-                    /**
+                    /*
                      * for example:
                      *       the first resume time at 10:01
                      *       the second resume time at 10:03
