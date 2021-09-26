@@ -65,7 +65,7 @@ struct RowsetReaderContext {
     RuntimeState* runtime_state = nullptr;
     bool use_page_cache = false;
     vectorized::SchemaPtr schema = nullptr;
-    int chunk_size = DEFAULT_CHUNK_SIZE;
+    int chunk_size = 100;
 };
 
 } // namespace starrocks

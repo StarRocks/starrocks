@@ -269,7 +269,7 @@ ConvertTypeResolver::ConvertTypeResolver() {
 
 ConvertTypeResolver::~ConvertTypeResolver() {}
 
-bool to_bitmap(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, int field_idx, int ref_field_idx) {
+bool to_bitmap(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col, int ref_field_idx) {
     BitmapValue bitmap;
     if (!base_datum.is_null()) {
         uint64_t origin_value;
@@ -328,12 +328,17 @@ bool to_bitmap(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_colu
             return false;
         }
         bitmap.add(origin_value);
+    } else {
+        dst_datum.set_null();
+        new_col->append_datum(dst_datum);
+        return true;
     }
     dst_datum.set_bitmap(&bitmap);
+    new_col->append_datum(dst_datum);
     return true;
 }
 
-bool hll_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, int field_idx, int ref_field_idx) {
+bool hll_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col, int ref_field_idx) {
     HyperLogLog hll;
     if (!base_datum.is_null()) {
         uint64_t hash_value;
@@ -361,6 +366,7 @@ bool hll_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_colum
             std::string ref_column_string = datum_to_string(f.type().get(), base_datum);
             hash_value = HashUtil::murmur_hash64A(ref_column_string.c_str(), ref_column_string.length(),
                                                   HashUtil::MURMUR_SEED);
+            break;
         }
         default:
             LOG(WARNING) << "fail to hll hash type : " << ref_column.type();
@@ -368,20 +374,24 @@ bool hll_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_colum
         }
 
         hll.update(hash_value);
+    } else {
+        dst_datum.set_null();
+        new_col->append_datum(dst_datum);
+        return true;
     }
     dst_datum.set_hyperloglog(&hll);
+    new_col->append_datum(dst_datum);
     return true;
 }
 
-bool count_field(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, int field_idx,
-                 int ref_field_idx) {
+bool count_field(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col, int ref_field_idx) {
     int64_t count = base_datum.is_null() ? 0 : 1;
     dst_datum.set_int64(count);
+    new_col->append_datum(dst_datum);
     return true;
 }
 
-bool percentile_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, int field_idx,
-                     int ref_field_idx) {
+bool percentile_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col, int ref_field_idx) {
     PercentileValue percentile;
     if (!base_datum.is_null()) {
         double origin_value;
@@ -432,14 +442,14 @@ bool percentile_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& re
         }
         case OLAP_FIELD_TYPE_DECIMAL64: {
             auto v = base_datum.get_int64();
-            auto scale_factor = get_scale_factor<int32_t>(ref_column.scale());
-            DecimalV3Cast::to_float<int32_t, double>(v, scale_factor, &origin_value);
+            auto scale_factor = get_scale_factor<int64_t>(ref_column.scale());
+            DecimalV3Cast::to_float<int64_t, double>(v, scale_factor, &origin_value);
             break;
         }
         case OLAP_FIELD_TYPE_DECIMAL128: {
             auto v = base_datum.get_int128();
-            auto scale_factor = get_scale_factor<int32_t>(ref_column.scale());
-            DecimalV3Cast::to_float<int32_t, double>(v, scale_factor, &origin_value);
+            auto scale_factor = get_scale_factor<int128_t>(ref_column.scale());
+            DecimalV3Cast::to_float<int128_t, double>(v, scale_factor, &origin_value);
             break;
         }
         default:
@@ -448,8 +458,13 @@ bool percentile_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& re
             return false;
         }
         percentile.add(origin_value);
+    } else {
+        dst_datum.set_null();
+        new_col->append_datum(dst_datum);
+        return true;
     }
     dst_datum.set_percentile(&percentile);
+    new_col->append_datum(dst_datum);
     return true;
 }
 
@@ -467,7 +482,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
         int ref_column = _schema_mapping[i].ref_column;
         if (_schema_mapping[i].ref_column >= 0) {
             if (!_schema_mapping[i].materialized_function.empty()) {
-                bool (*_do_materialized_transform)(Datum&, Datum&, const TabletColumn&, int, int);
+                bool (*_do_materialized_transform)(Datum&, Datum&, const TabletColumn&, ColumnPtr, int);
                 if (_schema_mapping[i].materialized_function == "to_bitmap") {
                     _do_materialized_transform = to_bitmap;
                 } else if (_schema_mapping[i].materialized_function == "hll_hash") {
@@ -485,16 +500,16 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
 
                 ColumnPtr& base_col = base_chunk->get_column_by_index(ref_column);
                 ColumnPtr& new_col = new_chunk->get_column_by_index(i);
+                
                 for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
                     Datum base_datum = base_col->get(row_index);
                     Datum dst_datum;
 
                     if (!_do_materialized_transform(base_datum, dst_datum,
-                                                    base_tablet->tablet_meta()->tablet_schema().column(ref_column), i,
+                                                    base_tablet->tablet_meta()->tablet_schema().column(ref_column), new_col,
                                                     _schema_mapping[i].ref_column)) {
                         return false;
                     }
-                    new_col->append_datum(dst_datum);
                 }
                 continue;
             }
@@ -867,8 +882,8 @@ bool SchemaChangeDirectly::process(vectorized::Reader* reader, RowsetWriter* new
     vectorized::Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
-    MemTracker* mem_tracker = new MemTracker(-1);
-    MemPool* mem_pool = new MemPool(mem_tracker);
+    std::unique_ptr<MemTracker> mem_tracker(new MemTracker(-1));
+    std::unique_ptr<MemPool> mem_pool(new MemPool(mem_tracker.get()));
     do {
         Status status = reader->do_get_next(base_chunk.get());
 
@@ -881,7 +896,7 @@ bool SchemaChangeDirectly::process(vectorized::Reader* reader, RowsetWriter* new
                 break;
             }
         }
-        if (!_chunk_changer.change_chunk(base_chunk, new_chunk, base_tablet, new_tablet, mem_pool)) {
+        if (!_chunk_changer.change_chunk(base_chunk, new_chunk, base_tablet, new_tablet, mem_pool.get())) {
             LOG(WARNING) << "failed to change data in chunk";
             result = false;
             goto DIRECTLY_PROCESS_ERR;
@@ -900,7 +915,7 @@ bool SchemaChangeDirectly::process(vectorized::Reader* reader, RowsetWriter* new
     } while (base_chunk->num_rows() == 0);
 
     if (base_chunk->num_rows() != 0) {
-        if (!_chunk_changer.change_chunk(base_chunk, new_chunk, base_tablet, new_tablet, mem_pool)) {
+        if (!_chunk_changer.change_chunk(base_chunk, new_chunk, base_tablet, new_tablet, mem_pool.get())) {
             LOG(WARNING) << "failed to change data in chunk";
             result = false;
             goto DIRECTLY_PROCESS_ERR;
@@ -922,8 +937,6 @@ bool SchemaChangeDirectly::process(vectorized::Reader* reader, RowsetWriter* new
 DIRECTLY_PROCESS_ERR:
 
     mem_pool->clear();
-    delete mem_tracker;
-    delete mem_pool;
     return result;
 }
 
