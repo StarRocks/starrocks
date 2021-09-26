@@ -382,10 +382,10 @@ public class Utils {
             long visibleVersion = partition.getVisibleVersion();
             long visibleVersionHash = partition.getVisibleVersionHash();
             MaterializedIndex materializedIndex = partition.getIndex(selectedIndexId);
+            // TODO(kks): improve this for loop
             for (Long id : selectedTabletId) {
                 Tablet tablet = materializedIndex.getTablet(id);
-                Preconditions.checkNotNull(tablet);
-                if (tablet.getQueryableReplicasSize(visibleVersion, visibleVersionHash, schemaHash)
+                if (tablet != null && tablet.getQueryableReplicasSize(visibleVersion, visibleVersionHash, schemaHash)
                         != aliveBackendSize) {
                     return false;
                 }

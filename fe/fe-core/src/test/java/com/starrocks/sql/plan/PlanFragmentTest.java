@@ -4000,6 +4000,18 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testReplicationJoinWithPartitionTable() throws Exception {
+        connectContext.getSessionVariable().setEnableReplicationJoin(true);
+        boolean oldValue = FeConstants.runningUnitTest;
+        FeConstants.runningUnitTest = true;
+        String sql = "select * from join1 join pushdown_test on join1.id = pushdown_test.k1;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("INNER JOIN (BROADCAST)"));
+        FeConstants.runningUnitTest = oldValue;
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
+    }
+
+    @Test
     public void testOuterJoinBucketShuffle() throws Exception {
         String sql = "SELECT DISTINCT t0.v1 FROM t0 RIGHT JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
         String plan = getFragmentPlan(sql);
