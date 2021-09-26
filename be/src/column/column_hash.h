@@ -2,7 +2,9 @@
 
 #pragma once
 
+#if defined(__x86_64__)
 #include <nmmintrin.h>
+#endif
 
 #include "util/hash_util.hpp"
 #include "util/slice.h"
