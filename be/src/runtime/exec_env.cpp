@@ -94,14 +94,21 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _thread_mgr = new ThreadResourceMgr();
     _thread_pool = new PriorityThreadPool(config::doris_scanner_thread_pool_thread_num,
                                           config::doris_scanner_thread_pool_queue_size);
-    _pipeline_io_thread_pool = new PriorityThreadPool(4, config::doris_scanner_thread_pool_queue_size);
+    LOG(INFO) << strings::Substitute("[PIPELINE] IO thread pool: thread_num=$0, queue_size=$1",
+                                     config::pipeline_io_thread_pool_thread_num,
+                                     config::pipeline_io_thread_pool_queue_size);
+    _pipeline_io_thread_pool = new PriorityThreadPool(config::pipeline_io_thread_pool_thread_num,
+                                                      config::pipeline_io_thread_pool_queue_size);
     _num_scan_operators = 0;
     _etl_thread_pool = new PriorityThreadPool(config::etl_thread_pool_size, config::etl_thread_pool_queue_size);
     _fragment_mgr = new FragmentMgr(this);
 
     std::unique_ptr<ThreadPool> driver_dispatcher_thread_pool;
-    // auto thread_num_max = std::thread::hardware_concurrency();
-    auto max_thread_num = 3;
+    auto max_thread_num = std::thread::hardware_concurrency();
+    if (config::pipeline_exec_thread_pool_thread_num > 0) {
+        max_thread_num = config::pipeline_exec_thread_pool_thread_num;
+    }
+    LOG(INFO) << strings::Substitute("[PIPELINE] Exec thread pool: thread_num=$0", max_thread_num);
     RETURN_IF_ERROR(ThreadPoolBuilder("driver_dispatcher_thread_pool")
                             .set_min_threads(0)
                             .set_max_threads(max_thread_num)
