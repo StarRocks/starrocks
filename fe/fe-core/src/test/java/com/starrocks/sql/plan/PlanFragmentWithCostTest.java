@@ -467,7 +467,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testMV() throws Exception {
         String sql = "select count(distinct k7), count(distinct k8) from duplicate_table_with_null;";
         String planFragment = getFragmentPlan(sql);
-        System.out.println("FIXME : " + planFragment);
         Assert.assertTrue(planFragment.contains("OUTPUT EXPRS:16: count(distinct 7: k7) | 17: count(distinct 8: k8)"));
         Assert.assertTrue(planFragment.contains("14: mv_bitmap_union_k7"));
         Assert.assertTrue(planFragment.contains("15: mv_bitmap_union_k8"));

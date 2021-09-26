@@ -45,6 +45,8 @@ public class PruneScanColumnRule extends TransformationRule {
         LogicalScanOperator scanOperator = (LogicalScanOperator) input.getOp();
         ColumnRefSet requiredOutputColumns = context.getTaskContext().get(0).getRequiredColumns();
 
+        // The `outputColumns`s are some columns required but not specified by `requiredOutputColumns`.
+        // including columns in predicate or some specialized columns defined by scan operator.
         Set<ColumnRefOperator> outputColumns =
                 scanOperator.getColRefToColumnMetaMap().keySet().stream().filter(requiredOutputColumns::contains)
                         .collect(Collectors.toSet());
@@ -81,18 +83,18 @@ public class PruneScanColumnRule extends TransformationRule {
             if (scanOperator instanceof LogicalOlapScanOperator) {
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
                 LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
-                        ((LogicalOlapScanOperator) scanOperator).getOlapTable(),
+                        olapScanOperator.getTable(),
                         new ArrayList<>(outputColumns),
                         newColumnRefMap,
-                        scanOperator.getColumnMetaToColRefMap(),
-                        ((LogicalOlapScanOperator) scanOperator).getDistributionSpec(),
-                        scanOperator.getLimit(),
-                        scanOperator.getPredicate());
-                newScanOperator.setSelectedIndexId(olapScanOperator.getSelectedIndexId());
-                newScanOperator.setSelectedPartitionId(olapScanOperator.getSelectedPartitionId());
-                newScanOperator.setSelectedTabletId(Lists.newArrayList(olapScanOperator.getSelectedTabletId()));
-                newScanOperator.setPartitionNames(olapScanOperator.getPartitionNames());
-                newScanOperator.setHintsTabletIds(olapScanOperator.getHintsTabletIds());
+                        olapScanOperator.getColumnMetaToColRefMap(),
+                        olapScanOperator.getDistributionSpec(),
+                        olapScanOperator.getLimit(),
+                        olapScanOperator.getPredicate(),
+                        olapScanOperator.getSelectedIndexId(),
+                        olapScanOperator.getSelectedPartitionId(),
+                        olapScanOperator.getPartitionNames(),
+                        olapScanOperator.getSelectedTabletId(),
+                        olapScanOperator.getHintsTabletIds());
 
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             } else {

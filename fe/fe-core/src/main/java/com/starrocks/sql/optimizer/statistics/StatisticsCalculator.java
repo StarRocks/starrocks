@@ -157,7 +157,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalOlapScan(LogicalOlapScanOperator node, ExpressionContext context) {
-        return computeOlapScanNode(node, context, node.getOlapTable(), node.getSelectedPartitionId(),
+        return computeOlapScanNode(node, context, node.getTable(), node.getSelectedPartitionId(),
                 node.getColRefToColumnMetaMap());
     }
 

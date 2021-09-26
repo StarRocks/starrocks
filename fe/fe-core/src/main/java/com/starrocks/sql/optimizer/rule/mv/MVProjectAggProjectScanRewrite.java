@@ -56,8 +56,7 @@ public class MVProjectAggProjectScanRewrite extends MVAggRewrite {
                     input.inputAt(0).inputAt(0).inputAt(0).getOp();
             if (factory.getRelationId(scanOperator.getOutputColumns().get(0).getId()) == relationId) {
                 for (MaterializedViewRule.RewriteContext context : rewriteContexts) {
-                    rewriteOlapScanOperator(input.inputAt(0).inputAt(0), scanOperator, context.mvColumn,
-                            context.queryColumnRef, context.mvColumnRef);
+                    rewriteOlapScanOperator(input.inputAt(0).inputAt(0), scanOperator, context);
                     ColumnRefOperator projectColumn = rewriteProjectOperator(bellowProject,
                             context.queryColumnRef,
                             context.mvColumnRef);

@@ -133,9 +133,8 @@ public class DistributionPrunerRuleTest {
                 Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2, inPredicateOperator1,
                         inPredicateOperator2, inPredicateOperator3, inPredicateOperator4);
         LogicalOlapScanOperator operator = new LogicalOlapScanOperator(olapTable,
-                new ArrayList<>(scanColumnMap.keySet()), scanColumnMap, Maps.newHashMap(), null, -1, predicate);
-        operator.setSelectedPartitionId(Lists.newArrayList(1L));
-        operator.setSelectedIndexId(1);
+                new ArrayList<>(scanColumnMap.keySet()), scanColumnMap, Maps.newHashMap(), null, -1, predicate,
+                1, Lists.newArrayList(1L), null, Lists.newArrayList(), null);
         operator.setPredicate(null);
 
         new Expectations() {
@@ -166,8 +165,8 @@ public class DistributionPrunerRuleTest {
         DistributionPruneRule rule = new DistributionPruneRule();
 
         assertEquals(0, operator.getSelectedTabletId().size());
-        rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), new ColumnRefFactory()));
+        OptExpression optExpression = rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), new ColumnRefFactory())).get(0);
 
-        assertEquals(20, operator.getSelectedTabletId().size());
+        assertEquals(20, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedTabletId().size());
     }
 }

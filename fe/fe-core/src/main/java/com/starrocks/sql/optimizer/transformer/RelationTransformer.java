@@ -256,9 +256,12 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
                     columnMetaToColRefMap,
                     DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
                     -1,
-                    null);
-            olapScanOperator.setPartitionNames(node.getPartitionNames());
-            olapScanOperator.setHintsTabletIds(node.getTabletIds());
+                    null,
+                    ((OlapTable) node.getTable()).getBaseIndexId(),
+                    null,
+                    node.getPartitionNames(),
+                    Lists.newArrayList(),
+                    node.getTabletIds());
             scanOperator = olapScanOperator;
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), node.getTable().getType(), outputVariables,
