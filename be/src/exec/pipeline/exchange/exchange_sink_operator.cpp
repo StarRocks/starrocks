@@ -474,11 +474,8 @@ OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, i
                                                       _sender_id, _dest_node_id, _partition_expr_ctxs);
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
-        // For shuffle, one ExchangeSinkOperator has one destination
-        std::vector<TPlanFragmentDestination> destination;
-        destination.emplace_back(_destinations[driver_sequence]);
-        return std::make_shared<ExchangeSinkOperator>(_id, _plan_node_id, _buffer, _part_type, destination, _sender_id,
-                                                      _dest_node_id, _partition_expr_ctxs);
+        return std::make_shared<ExchangeSinkOperator>(_id, _plan_node_id, _buffer, _part_type, _destinations,
+                                                      _sender_id, _dest_node_id, _partition_expr_ctxs);
     } else {
         DCHECK(false) << " Shouldn't reach here!";
         return nullptr;

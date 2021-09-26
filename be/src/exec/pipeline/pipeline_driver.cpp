@@ -141,6 +141,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
+    VLOG_ROW << "[Driver] finalize, driver=" << this;
     if (state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR) {
         auto num_operators = _operators.size();
         for (auto i = _first_unfinished; i < num_operators; ++i) {
