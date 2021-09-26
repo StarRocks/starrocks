@@ -42,12 +42,17 @@ public class FeServer {
         this.port = port;
     }
 
-    public void start() throws IOException {
+    public void start() {
         // setup frontend server
         TProcessor tprocessor = new FrontendService.Processor<FrontendService.Iface>(
                 new FrontendServiceImpl(ExecuteEnv.getInstance()));
         server = new ThriftServer(port, tprocessor);
-        server.start();
-        LOG.info("thrift server started.");
+        try {
+            server.start();
+            LOG.info("thrift server started.");
+        } catch (IOException e) {
+            LOG.error("thrift server start failed, will exit", e);
+            System.exit(-1);
+        }
     }
 }
