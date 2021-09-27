@@ -56,8 +56,8 @@ Minidump::Minidump() : _minidump(), _minidump_dir(config::sys_minidump_dir) {
     descriptor.set_size_limit(size_limit);
 
     // Step 1: use breakpad to generate minidump caused by crash.
-    _minidump.reset(new google_breakpad::ExceptionHandler(descriptor, Minidump::filter_callback,
-                                                          Minidump::dump_callback, nullptr, true, -1));
+    _minidump = std::make_unique<google_breakpad::ExceptionHandler>(descriptor, Minidump::filter_callback,
+                                                                    Minidump::dump_callback, nullptr, true, -1);
 
     // Step 2: write minidump as reactive to SIGUSR1.
     struct sigaction signal_action;

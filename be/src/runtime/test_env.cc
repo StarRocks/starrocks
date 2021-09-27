@@ -32,7 +32,7 @@ std::unique_ptr<MetricRegistry> TestEnv::_s_static_metrics;
 
 TestEnv::TestEnv() {
     if (_s_static_metrics == nullptr) {
-        _s_static_metrics.reset(new MetricRegistry("test_env"));
+        _s_static_metrics = std::make_unique<MetricRegistry>("test_env");
     }
     _exec_env = std::make_unique<ExecEnv>();
     // _exec_env->init_for_tests();
