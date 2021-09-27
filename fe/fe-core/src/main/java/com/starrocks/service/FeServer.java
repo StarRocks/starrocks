@@ -49,9 +49,9 @@ public class FeServer {
         server = new ThriftServer(port, tprocessor);
         try {
             server.start();
-            LOG.info("thrift server started.");
+            LOG.info("thrift server started with port {}.", port);
         } catch (IOException e) {
-            LOG.error("thrift server start failed, will exit", e);
+            LOG.error("thrift server start failed with port {} , will exit", port, e);
             System.exit(-1);
         }
     }
