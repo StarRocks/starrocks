@@ -59,6 +59,10 @@ private:
     const TupleDescriptor* _dest_tuple_desc;
     // Jni helper for scanning an schema table.
     std::unique_ptr<SchemaScanner> _schema_scanner;
+
+    // TODO(xueli): remove this when fe and be version both >= 1.19
+    // Map from index in desc slots to column of src schema table.
+    std::vector<int> _index_map;
 };
 
 } // namespace starrocks::vectorized
