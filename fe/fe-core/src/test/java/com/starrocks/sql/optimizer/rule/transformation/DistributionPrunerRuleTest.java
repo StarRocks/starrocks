@@ -14,17 +14,26 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Test;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -47,31 +56,6 @@ public class DistributionPrunerRuleTest {
                 new Column("channel", Type.CHAR, false),
                 new Column("shop_type", Type.CHAR, false)
         );
-
-        new Expectations() {
-            {
-                olapTable.getPartition(anyLong);
-                result = partition;
-
-                partition.getIndex(anyLong);
-                result = index;
-
-                partition.getDistributionInfo();
-                result = distributionInfo;
-
-                index.getTabletIdsInOrder();
-                result = tabletIds;
-
-                distributionInfo.getDistributionColumns();
-                result = columns;
-
-                distributionInfo.getType();
-                result = DistributionInfo.DistributionInfoType.HASH;
-
-                distributionInfo.getBucketNum();
-                result = tabletIds.size();
-            }
-        };
 
         // filters
         PartitionColumnFilter dealDateFilter = new PartitionColumnFilter();
@@ -111,16 +95,78 @@ public class DistributionPrunerRuleTest {
         filters.put("channel", channelFilter);
         filters.put("shop_type", shopTypeFilter);
 
-        LogicalOlapScanOperator operator = new LogicalOlapScanOperator(olapTable);
-        operator.setSelectedPartitionId(Lists.newArrayList(1L));
-        operator.setSelectedIndexId(1);
-        operator.setColumnFilters(filters);
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
+
+        ColumnRefOperator column1 = columnRefFactory.create("dealDate", ScalarType.DATE, false);
+        scanColumnMap.put(column1, new Column("dealDate", Type.DATE, false));
+        ColumnRefOperator column2 = columnRefFactory.create("main_brand_id", ScalarType.CHAR, false);
+        scanColumnMap.put(column2, new Column("main_brand_id", Type.CHAR, false));
+        ColumnRefOperator column3 = columnRefFactory.create("item_third_cate_id", ScalarType.CHAR, false);
+        scanColumnMap.put(column3, new Column("item_third_cate_id", Type.CHAR, false));
+        ColumnRefOperator column4 = columnRefFactory.create("channel", ScalarType.CHAR, false);
+        scanColumnMap.put(column4, new Column("channel", Type.CHAR, false));
+        ColumnRefOperator column5 = columnRefFactory.create("shop_type", ScalarType.CHAR, false);
+        scanColumnMap.put(column5, new Column("shop_type", Type.CHAR, false));
+
+        BinaryPredicateOperator binaryPredicateOperator1 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, column1,
+                        ConstantOperator.createDate(LocalDateTime.of(2019, 8, 22, 0, 0, 0)));
+        BinaryPredicateOperator binaryPredicateOperator2 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, column1,
+                        ConstantOperator.createDate(LocalDateTime.of(2019, 8, 22, 0, 0, 0)));
+
+        InPredicateOperator inPredicateOperator1 = new InPredicateOperator(column2,
+                ConstantOperator.createChar("1323"), ConstantOperator.createChar("2528"),
+                ConstantOperator.createChar("9610"), ConstantOperator.createChar("3893"),
+                ConstantOperator.createChar("6121"));
+
+        InPredicateOperator inPredicateOperator2 = new InPredicateOperator(column3,
+                ConstantOperator.createChar("9719"), ConstantOperator.createChar("11163"));
+
+        InPredicateOperator inPredicateOperator3 =
+                new InPredicateOperator(column4, ConstantOperator.createChar("1"), ConstantOperator.createChar("3"));
+
+        InPredicateOperator inPredicateOperator4 = new InPredicateOperator(column5, ConstantOperator.createChar("2"));
+
+        ScalarOperator predicate =
+                Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2, inPredicateOperator1,
+                        inPredicateOperator2, inPredicateOperator3, inPredicateOperator4);
+        LogicalOlapScanOperator operator = new LogicalOlapScanOperator(olapTable,
+                new ArrayList<>(scanColumnMap.keySet()), scanColumnMap, Maps.newHashMap(), null, -1, predicate,
+                1, Lists.newArrayList(1L), null, Lists.newArrayList(), null);
+        operator.setPredicate(null);
+
+        new Expectations() {
+            {
+                olapTable.getPartition(anyLong);
+                result = partition;
+
+                partition.getIndex(anyLong);
+                result = index;
+
+                partition.getDistributionInfo();
+                result = distributionInfo;
+
+                index.getTabletIdsInOrder();
+                result = tabletIds;
+
+                distributionInfo.getDistributionColumns();
+                result = columns;
+
+                distributionInfo.getType();
+                result = DistributionInfo.DistributionInfoType.HASH;
+
+                distributionInfo.getBucketNum();
+                result = tabletIds.size();
+            }
+        };
 
         DistributionPruneRule rule = new DistributionPruneRule();
 
         assertEquals(0, operator.getSelectedTabletId().size());
-        rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), new ColumnRefFactory()));
+        OptExpression optExpression = rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), new ColumnRefFactory())).get(0);
 
-        assertEquals(20, operator.getSelectedTabletId().size());
+        assertEquals(20, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedTabletId().size());
     }
 }

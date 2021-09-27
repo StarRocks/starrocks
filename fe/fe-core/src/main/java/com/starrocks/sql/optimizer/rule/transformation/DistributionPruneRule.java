@@ -39,30 +39,40 @@ public class DistributionPruneRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalOlapScanOperator operator = (LogicalOlapScanOperator) input.getOp();
+        LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) input.getOp();
 
-        OlapTable olapTable = operator.getOlapTable();
+        OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
 
         List<Long> result = Lists.newArrayList();
-        for (Long partitionId : operator.getSelectedPartitionId()) {
+        for (Long partitionId : olapScanOperator.getSelectedPartitionId()) {
             Partition partition = olapTable.getPartition(partitionId);
-            MaterializedIndex table = partition.getIndex(operator.getSelectedIndexId());
-            Collection<Long> tabletIds = distributionPrune(table, partition.getDistributionInfo(), operator);
+            MaterializedIndex table = partition.getIndex(olapScanOperator.getSelectedIndexId());
+            Collection<Long> tabletIds = distributionPrune(table, partition.getDistributionInfo(), olapScanOperator);
             result.addAll(tabletIds);
         }
 
         // prune hint tablet
-        if (null != operator.getHintsTabletIds() && !operator.getHintsTabletIds().isEmpty()) {
-            result.retainAll(operator.getHintsTabletIds());
+        if (null != olapScanOperator.getHintsTabletIds() && !olapScanOperator.getHintsTabletIds().isEmpty()) {
+            result.retainAll(olapScanOperator.getHintsTabletIds());
         }
 
-        if (result.equals(operator.getSelectedTabletId())) {
+        if (result.equals(olapScanOperator.getSelectedTabletId())) {
             return Collections.emptyList();
         }
 
-        operator.setSelectedTabletId(result);
-
-        return Lists.newArrayList(input);
+        return Lists.newArrayList(OptExpression.create(new LogicalOlapScanOperator(
+                olapScanOperator.getTable(),
+                olapScanOperator.getOutputColumns(),
+                olapScanOperator.getColRefToColumnMetaMap(),
+                olapScanOperator.getColumnMetaToColRefMap(),
+                olapScanOperator.getDistributionSpec(),
+                olapScanOperator.getLimit(),
+                olapScanOperator.getPredicate(),
+                olapScanOperator.getSelectedIndexId(),
+                olapScanOperator.getSelectedPartitionId(),
+                olapScanOperator.getPartitionNames(),
+                result,
+                olapScanOperator.getHintsTabletIds()), input.getInputs()));
     }
 
     private Collection<Long> distributionPrune(MaterializedIndex index, DistributionInfo distributionInfo,
