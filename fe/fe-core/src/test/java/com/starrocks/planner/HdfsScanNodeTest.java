@@ -94,12 +94,13 @@ public class HdfsScanNodeTest {
         partitionCols.add(partitionCol);
 
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
-        partitionKeys.put(PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols),
-                0L);
+        PartitionKey partitionKey = PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols);
+        partitionKeys.put(partitionKey, 0L);
 
         HdfsFileBlockDesc blockDesc = new HdfsFileBlockDesc(0, 100, new long[] {0}, null, client);
         HdfsFileDesc fileDesc = new HdfsFileDesc("/00000_0", "", 100, ImmutableList.of(blockDesc));
         HivePartition p0 = new HivePartition(HdfsFileFormat.PARQUET, ImmutableList.of(fileDesc), "path/part_col=1");
+        p0.setPartitionInfo(new DescriptorTable.ReferencedPartitionInfo(1, partitionKey));
 
         new Expectations() {
             {
@@ -109,8 +110,8 @@ public class HdfsScanNodeTest {
                 result = partitionCols;
                 table.getPartitionKeys();
                 result = partitionKeys;
-                table.getPartition((PartitionKey) any);
-                result = p0;
+                table.getPartitions((List< DescriptorTable.ReferencedPartitionInfo >) any);
+                result = Lists.newArrayList(p0);
                 table.getExtrapolatedRowCount(anyLong);
                 result = -1;
                 table.getPartitionStatsRowCount((List<PartitionKey>) any);
@@ -156,7 +157,9 @@ public class HdfsScanNodeTest {
         HdfsFileDesc fileDesc1 = new HdfsFileDesc("/00000_1", "", 200, ImmutableList.of(blockDesc, blockDesc1));
         HivePartition p2 = new HivePartition(HdfsFileFormat.PARQUET, ImmutableList.of(fileDesc, fileDesc1),
                 "path/part_col=2");
+        p2.setPartitionInfo(new DescriptorTable.ReferencedPartitionInfo(2, key2));
         HivePartition p3 = new HivePartition(HdfsFileFormat.PARQUET, ImmutableList.of(fileDesc), "path/part_col=3");
+        p3.setPartitionInfo(new DescriptorTable.ReferencedPartitionInfo(3, key3));
 
         SlotDescriptor partColSlotDesc = new SlotDescriptor(new SlotId(0), tupleDesc);
         partColSlotDesc.setColumn(partitionCol);
@@ -174,10 +177,8 @@ public class HdfsScanNodeTest {
                 result = partitionCols;
                 table.getPartitionKeys();
                 result = partitionKeys;
-                table.getPartition(key2);
-                result = p2;
-                table.getPartition(key3);
-                result = p3;
+                table.getPartitions((List< DescriptorTable.ReferencedPartitionInfo >) any);
+                result = Lists.newArrayList(p2, p3);
                 table.getExtrapolatedRowCount(400);
                 result = 50;
             }
@@ -208,12 +209,13 @@ public class HdfsScanNodeTest {
         partitionCols.add(partitionCol);
 
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
-        partitionKeys.put(PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols),
-                0L);
+        PartitionKey partitionKey = PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols);
+        partitionKeys.put(partitionKey, 0L);
 
         HdfsFileBlockDesc blockDesc = new HdfsFileBlockDesc(0, 100, new long[] {0}, null, client);
         HdfsFileDesc fileDesc = new HdfsFileDesc("/00000_0", "", 100, ImmutableList.of(blockDesc));
         HivePartition p0 = new HivePartition(HdfsFileFormat.PARQUET, ImmutableList.of(fileDesc), "path/part_col=1");
+        p0.setPartitionInfo(new DescriptorTable.ReferencedPartitionInfo(1, partitionKey));
 
         SlotDescriptor partColSlotDesc = new SlotDescriptor(new SlotId(0), tupleDesc);
         partColSlotDesc.setColumn(partitionCol);
@@ -238,8 +240,8 @@ public class HdfsScanNodeTest {
                 result = partitionCols;
                 table.getPartitionKeys();
                 result = partitionKeys;
-                table.getPartition((PartitionKey) any);
-                result = p0;
+                table.getPartitions((List< DescriptorTable.ReferencedPartitionInfo >) any);
+                result = Lists.newArrayList(p0);
                 table.getExtrapolatedRowCount(anyLong);
                 result = -1;
                 table.getPartitionStatsRowCount((List<PartitionKey>) any);
