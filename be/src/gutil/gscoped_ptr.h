@@ -98,11 +98,10 @@
 // implementation of the scoped_ptr class, and its closely-related brethren,
 // scoped_array, scoped_ptr_malloc.
 
-#include <assert.h>
-#include <stddef.h>
-#include <stdlib.h>
-
 #include <algorithm> // For std::swap().
+#include <cassert>
+#include <cstddef>
+#include <cstdlib>
 
 #include "gutil/basictypes.h"
 #include "gutil/move.h"

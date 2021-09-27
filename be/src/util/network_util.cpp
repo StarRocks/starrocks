@@ -24,11 +24,11 @@
 #include <arpa/inet.h>
 #include <common/logging.h>
 #include <ifaddrs.h>
-#include <limits.h>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#include <climits>
 #include <sstream>
 
 namespace starrocks {

@@ -5,9 +5,9 @@
 #include "storage/lru_cache.h"
 
 #include <rapidjson/document.h>
-#include <stdio.h>
-#include <stdlib.h>
 
+#include <cstdio>
+#include <cstdlib>
 #include <sstream>
 #include <string>
 

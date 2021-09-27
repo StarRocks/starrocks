@@ -21,9 +21,8 @@
 
 #include "runtime/mem_tracker.h"
 
-#include <stdint.h>
-
 #include <boost/algorithm/string/join.hpp>
+#include <cstdint>
 #include <limits>
 #include <memory>
 

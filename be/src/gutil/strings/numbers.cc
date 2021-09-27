@@ -6,15 +6,14 @@
 
 #include "gutil/strings/numbers.h"
 
-#include <assert.h>
-#include <ctype.h>
-#include <errno.h>
-#include <float.h> // for DBL_DIG and FLT_DIG
-#include <math.h>  // for HUGE_VAL
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
+#include <cassert>
+#include <cctype>
+#include <cerrno>
+#include <cfloat> // for DBL_DIG and FLT_DIG
+#include <cmath>  // for HUGE_VAL
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <limits>
 using std::numeric_limits;
 #include <string>

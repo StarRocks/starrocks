@@ -21,9 +21,7 @@
 
 #include "storage/data_dir.h"
 
-#include <ctype.h>
 #include <mntent.h>
-#include <stdio.h>
 #include <sys/file.h>
 #include <sys/statfs.h>
 #include <utime.h>
@@ -32,6 +30,8 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/trim.hpp>
+#include <cctype>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <set>

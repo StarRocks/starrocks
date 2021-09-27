@@ -6,10 +6,9 @@
 
 #include "gutil/strings/strip.h"
 
-#include <assert.h>
-#include <string.h>
-
 #include <algorithm>
+#include <cassert>
+#include <cstring>
 using std::copy;
 using std::max;
 using std::min;

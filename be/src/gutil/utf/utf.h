@@ -1,7 +1,7 @@
 #ifndef _UTFH_
 #define _UTFH_ 1
 
-#include <stdint.h>
+#include <cstdint>
 
 typedef signed int Rune; /* Code-point values in Unicode 4.0 are 21 bits wide.*/
 

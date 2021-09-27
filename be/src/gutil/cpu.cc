@@ -4,10 +4,9 @@
 
 #include "gutil/cpu.h"
 
-#include <stdlib.h>
-#include <string.h>
-
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <streambuf>

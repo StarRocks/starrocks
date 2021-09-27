@@ -30,8 +30,7 @@
 #ifndef BASE_STRTOINT_H_
 #define BASE_STRTOINT_H_
 
-#include <stdlib.h> // For strtol* functions.
-
+#include <cstdlib> // For strtol* functions.
 #include <string>
 using std::string;
 #include "gutil/integral_types.h"

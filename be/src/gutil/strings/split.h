@@ -20,9 +20,8 @@
 #ifndef STRINGS_SPLIT_H_
 #define STRINGS_SPLIT_H_
 
-#include <stddef.h>
-
 #include <algorithm>
+#include <cstddef>
 using std::copy;
 using std::max;
 using std::min;

@@ -88,7 +88,7 @@ set(UTIL_FILES
   sm3.cpp
   frame_of_reference_coding.cpp
   minizip/ioapi.c
-  minizip/unzip.c
+  minizip/unzip.cpp
   zip_util.cpp
   utf8_check.cpp
   path_util.cpp

@@ -22,8 +22,7 @@
 #ifndef STARROCKS_BE_SRC_OLAP_IN_LIST_PREDICATE_H
 #define STARROCKS_BE_SRC_OLAP_IN_LIST_PREDICATE_H
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <roaring/roaring.hh>
 #include <set>
 

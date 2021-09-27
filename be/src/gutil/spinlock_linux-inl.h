@@ -32,10 +32,11 @@
  * This file is a Linux-specific part of spinlock_internal.cc
  */
 
-#include <errno.h>
-#include <limits.h>
 #include <sched.h>
-#include <time.h>
+
+#include <cerrno>
+#include <climits>
+#include <ctime>
 
 #include "gutil/linux_syscall_support.h"
 

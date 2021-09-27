@@ -22,9 +22,8 @@
 #ifndef STARROCKS_BE_SRC_QUERY_BE_RUNTIME_FREE_POOL_H
 #define STARROCKS_BE_SRC_QUERY_BE_RUNTIME_FREE_POOL_H
 
-#include <stdio.h>
-#include <string.h>
-
+#include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "common/logging.h"

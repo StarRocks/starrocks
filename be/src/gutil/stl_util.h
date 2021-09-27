@@ -32,10 +32,9 @@
 #ifndef UTIL_GTL_STL_UTIL_H_
 #define UTIL_GTL_STL_UTIL_H_
 
-#include <stddef.h>
-#include <string.h> // for memcpy
-
 #include <algorithm>
+#include <cstddef>
+#include <cstring> // for memcpy
 using std::copy;
 using std::max;
 using std::min;

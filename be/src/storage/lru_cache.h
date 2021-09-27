@@ -6,9 +6,9 @@
 #define STARROCKS_BE_SRC_OLAP_LRU_CACHE_H
 
 #include <rapidjson/document.h>
-#include <stdint.h>
-#include <string.h>
 
+#include <cstdint>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <vector>

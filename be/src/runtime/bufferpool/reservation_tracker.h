@@ -22,8 +22,7 @@
 #ifndef STARROCKS_BE_RUNTIME_RESERVATION_TRACKER_H
 #define STARROCKS_BE_RUNTIME_RESERVATION_TRACKER_H
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <string>
 
 #include "common/status.h"

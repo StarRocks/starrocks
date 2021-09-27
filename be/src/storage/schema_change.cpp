@@ -21,10 +21,10 @@
 
 #include "storage/schema_change.h"
 
-#include <signal.h>
 #include <util/defer_op.h>
 
 #include <algorithm>
+#include <csignal>
 #include <memory>
 #include <utility>
 #include <vector>
