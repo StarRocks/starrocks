@@ -325,10 +325,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
 }
 
 FragmentMgr::FragmentMgr(ExecEnv* exec_env)
-        : _exec_env(exec_env),
-          _fragment_map(),
-          _stop(false),
-          _cancel_thread(std::bind<void>(&FragmentMgr::cancel_worker, this)) {
+        : _exec_env(exec_env), _fragment_map(), _stop(false), _cancel_thread([this] { cancel_worker(); }) {
     REGISTER_GAUGE_STARROCKS_METRIC(plan_fragment_count, [this]() {
         std::lock_guard<std::mutex> lock(_lock);
         return _fragment_map.size();
@@ -379,7 +376,7 @@ void FragmentMgr::exec_actual(const std::shared_ptr<FragmentExecState>& exec_sta
 }
 
 Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params) {
-    return exec_plan_fragment(params, std::bind<void>(&empty_function, std::placeholders::_1));
+    return exec_plan_fragment(params, [](auto&& PH1) { return empty_function(std::forward<decltype(PH1)>(PH1)); });
 }
 
 Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb) {
@@ -408,7 +405,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
         _fragment_map.insert(std::make_pair(fragment_instance_id, exec_state));
     }
 
-    auto st = _thread_pool->submit_func(std::bind<void>(&FragmentMgr::exec_actual, this, exec_state, cb));
+    auto st = _thread_pool->submit_func([this, exec_state, cb] { exec_actual(exec_state, cb); });
     if (!st.ok()) {
         {
             // Remove the exec state added
