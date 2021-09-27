@@ -213,7 +213,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL(18,2)) + CAST(2: v2 AS DECIMAL(18,3))\n" +
+                "  |  <slot 4> : CAST(1: v1 AS DECIMAL64(18,2)) + CAST(2: v2 AS DECIMAL64(18,3))\n" +
                 "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
@@ -224,7 +224,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL(38,2)) - CAST(2: v2 AS DECIMAL(38,3))\n" +
+                "  |  <slot 4> : CAST(1: v1 AS DECIMAL128(38,2)) - CAST(2: v2 AS DECIMAL128(38,3))\n" +
                 "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
@@ -235,7 +235,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL(38,5)) * CAST(2: v2 AS DECIMAL(38,7))\n" +
+                "  |  <slot 4> : CAST(1: v1 AS DECIMAL128(38,5)) * CAST(2: v2 AS DECIMAL128(38,7))\n" +
                 "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
@@ -246,9 +246,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL(38,5)) / CAST(CAST(2: v2 AS DECIMAL(9,7)) AS DECIMAL"
-                + "(38,7))\n"
-                +
+                "  |  <slot 4> : CAST(1: v1 AS DECIMAL128(38,5)) / CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL128(38,7))\n" +
                 "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
@@ -259,9 +257,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL(18,5)) % CAST(CAST(2: v2 AS DECIMAL(9,7)) AS DECIMAL"
-                + "(18,7))\n"
-                +
+                "  |  <slot 4> : CAST(1: v1 AS DECIMAL64(18,5)) % CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL64(18,7))\n" +
                 "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
@@ -1078,7 +1074,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 " arg_types:[TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL64," +
                 " precision:10, scale:2))])], ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
                 "scalar_type:TScalarType(type:DECIMAL64, precision:10, scale:2))]), has_var_args:false, " +
-                "signature:lag(DECIMAL(10,2))";
+                "signature:lag(DECIMAL64(10,2))";
         Assert.assertTrue(plan.contains(expectSlice));
 
         sql = "select lag(null, 1,1) OVER () from t0";
@@ -3749,7 +3745,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select avg(t1c), count(distinct id_decimal) from test_all_type;";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains(
-                "multi_distinct_count[([10: id_decimal, DECIMAL(10,2), true]); args: DECIMAL64; result: BIGINT; args nullable: true; result nullable: false]"));
+                "multi_distinct_count[([10: id_decimal, DECIMAL64(10,2), true]); args: DECIMAL64; result: BIGINT; args nullable: true; result nullable: false]"));
     }
 
     @Test
