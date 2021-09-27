@@ -12,8 +12,8 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import jersey.repackaged.com.google.common.collect.Lists;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -40,16 +40,9 @@ public class PruneProjectColumnsRule extends TransformationRule {
             }
         }));
 
-        // If all columns have been pruned, remove this project node
-        if (newMap.isEmpty()) {
-            return input.getInputs();
-        }
-
-        projectOperator.setColumnRefMap(newMap);
-
         // Change the requiredOutputColumns in context
         requiredOutputColumns.union(requiredInputColumns);
 
-        return Collections.emptyList();
+        return Lists.newArrayList(OptExpression.create(new LogicalProjectOperator(newMap), input.getInputs()));
     }
 }

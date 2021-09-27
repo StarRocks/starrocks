@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.logical;
 
-import com.google.common.collect.Maps;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -15,15 +15,20 @@ import java.util.Map;
 import java.util.Objects;
 
 public final class LogicalProjectOperator extends LogicalOperator {
-    private Map<ColumnRefOperator, ScalarOperator> columnRefMap;
+    private final ImmutableMap<ColumnRefOperator, ScalarOperator> columnRefMap;
     // Used for common operator compute result reuse, we need to compute
     // common sub operators firstly in BE
-    private final Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap =
-            Maps.newHashMap();
+    private final ImmutableMap<ColumnRefOperator, ScalarOperator> commonSubOperatorMap;
 
     public LogicalProjectOperator(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
+        this(ImmutableMap.copyOf(columnRefMap), ImmutableMap.of());
+    }
+
+    public LogicalProjectOperator(Map<ColumnRefOperator, ScalarOperator> newMap,
+                                  Map<ColumnRefOperator, ScalarOperator> commonSubOperators) {
         super(OperatorType.LOGICAL_PROJECT);
-        this.columnRefMap = columnRefMap;
+        this.columnRefMap = ImmutableMap.copyOf(newMap);
+        this.commonSubOperatorMap = ImmutableMap.copyOf(commonSubOperators);
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
@@ -32,11 +37,6 @@ public final class LogicalProjectOperator extends LogicalOperator {
 
     public Map<ColumnRefOperator, ScalarOperator> getCommonSubOperatorMap() {
         return commonSubOperatorMap;
-    }
-
-    // Could only use when rewrite
-    public void setColumnRefMap(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
-        this.columnRefMap = columnRefMap;
     }
 
     @Override

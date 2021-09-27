@@ -38,10 +38,6 @@ public class PruneWindowColumnsRule extends TransformationRule {
             }
         });
 
-        if (newWindowCall.isEmpty()) {
-            return input.getInputs();
-        }
-
         windowOperator.getPartitionExpressions().forEach(e -> requiredOutputColumns.union(e.getUsedColumns()));
         windowOperator.getOrderByElements().stream().map(Ordering::getColumnRef).forEach(
                 e -> requiredOutputColumns.union(e.getUsedColumns()));
