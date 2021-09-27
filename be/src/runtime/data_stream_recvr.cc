@@ -25,6 +25,7 @@
 
 #include <condition_variable>
 #include <deque>
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -594,7 +595,7 @@ Status DataStreamRecvr::create_merger(const TupleRowComparator& less_than) {
     input_batch_suppliers.reserve(_sender_queues.size());
 
     // Create the merger that will a single stream of sorted rows.
-    _merger.reset(new SortedRunMerger(less_than, &_row_desc, _profile.get(), false));
+    _merger = std::make_unique<SortedRunMerger>(less_than, &_row_desc, _profile.get(), false);
 
     for (SenderQueue* q : _sender_queues) {
         auto f = [q](RowBatch** batch) -> Status { return q->get_batch(batch); };
@@ -688,7 +689,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_t
     (void)parent_tracker;
     // TODO: Now the parent tracker may cause problem when we need spill to disk, so we
     // replace parent_tracker with nullptr, fix future
-    _mem_tracker.reset(new MemTracker(_profile.get(), -1, "DataStreamRecvr", nullptr));
+    _mem_tracker = std::make_unique<MemTracker>(_profile.get(), -1, "DataStreamRecvr", nullptr);
     // _mem_tracker.reset(new MemTracker(_profile.get(), -1, "DataStreamRecvr", parent_tracker));
 
     // Create one queue per sender if is_merging is true.

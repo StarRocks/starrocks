@@ -3,6 +3,7 @@
 #include "exprs/vectorized/string_functions.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -2488,7 +2489,7 @@ Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
     StringFunctionsState* state = new StringFunctionsState();
     context->set_function_state(scope, state);
 
-    state->options.reset(new re2::RE2::Options());
+    state->options = std::make_unique<re2::RE2::Options>();
     state->options->set_log_errors(false);
     state->options->set_longest_match(true);
     state->options->set_dot_nl(true);
@@ -2506,7 +2507,7 @@ Status StringFunctions::regexp_prepare(starrocks_udf::FunctionContext* context,
     state->const_pattern = true;
     auto pattern = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
     std::string pattern_str = pattern.to_string();
-    state->regex.reset(new re2::RE2(pattern_str, *(state->options)));
+    state->regex = std::make_unique<re2::RE2>(pattern_str, *(state->options));
 
     if (!state->regex->ok()) {
         std::stringstream error;

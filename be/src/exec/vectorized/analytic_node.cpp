@@ -232,7 +232,7 @@ Status AnalyticNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::prepare(state));
     DCHECK(child(0)->row_desc().is_prefix_of(row_desc()));
-    _mem_pool.reset(new MemPool(mem_tracker()));
+    _mem_pool = std::make_unique<MemPool>(mem_tracker());
 
     _compute_timer = ADD_TIMER(runtime_profile(), "ComputeTime");
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());

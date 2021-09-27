@@ -1170,7 +1170,7 @@ std::unique_ptr<proto::Footer> readFooter(InputStream* stream, const DataBuffer<
 }
 
 std::unique_ptr<Reader> createReader(std::unique_ptr<InputStream> stream, const ReaderOptions& options) {
-    std::shared_ptr<FileContents> contents = std::shared_ptr<FileContents>(new FileContents());
+    std::shared_ptr<FileContents> contents = std::make_shared<FileContents>();
     contents->pool = options.getMemoryPool();
     contents->errorStream = options.getErrorStream();
     std::string serializedFooter = options.getSerializedFileTail();

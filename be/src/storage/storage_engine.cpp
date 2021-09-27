@@ -31,6 +31,7 @@
 #include <boost/algorithm/string/split.hpp>
 #include <cstdio>
 #include <filesystem>
+#include <memory>
 #include <new>
 #include <queue>
 #include <random>
@@ -162,7 +163,7 @@ Status StorageEngine::_open() {
     fs::BlockManagerOptions bm_opts;
     bm_opts.read_only = false;
     // |_block_manager| depend on |_file_cache|.
-    _block_manager.reset(new fs::FileBlockManager(Env::Default(), std::move(bm_opts)));
+    _block_manager = std::make_unique<fs::FileBlockManager>(Env::Default(), std::move(bm_opts));
 
     // |_update_manager| depend on |_block_manager|.
     // |fs::fs_util::block_manager| depends on ExecEnv's storage engine
@@ -173,7 +174,7 @@ Status StorageEngine::_open() {
     // `load_data_dirs` depend on |_update_manager|.
     load_data_dirs(dirs);
 
-    _memtable_flush_executor.reset(new MemTableFlushExecutor());
+    _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init memtable_flush_executor failed");
 
     return Status::OK();

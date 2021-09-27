@@ -1128,7 +1128,7 @@ void BufferedBlockMgr2::init(DiskIoMgr* io_mgr, RuntimeProfile* parent_profile, 
 
     io_mgr->register_context(&_io_request_context);
 
-    _profile.reset(new RuntimeProfile("BlockMgr"));
+    _profile = std::make_unique<RuntimeProfile>("BlockMgr");
     parent_profile->add_child(_profile.get(), true, nullptr);
 
     _block_size_counter = ADD_COUNTER(_profile.get(), "MaxBlockSize", TUnit::BYTES);

@@ -24,6 +24,7 @@
 #include <boost/thread/thread.hpp>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <utility>
 
 #include "common/config.h"
@@ -649,8 +650,8 @@ void RuntimeProfile::add_bucketing_counters(const std::string& name, const std::
     std::lock_guard<std::mutex> l(_s_periodic_counter_update_state.lock);
 
     if (_s_periodic_counter_update_state.update_thread.get() == nullptr) {
-        _s_periodic_counter_update_state.update_thread.reset(
-                new boost::thread(&RuntimeProfile::periodic_counter_update_loop));
+        _s_periodic_counter_update_state.update_thread =
+                std::make_unique<boost::thread>(&RuntimeProfile::periodic_counter_update_loop);
     }
 
     BucketCountersInfo info{.src_counter = src_counter, .num_sampled = 0};
@@ -677,8 +678,8 @@ void RuntimeProfile::register_periodic_counter(Counter* src_counter, SampleFn sa
     std::lock_guard<std::mutex> l(_s_periodic_counter_update_state.lock);
 
     if (_s_periodic_counter_update_state.update_thread.get() == nullptr) {
-        _s_periodic_counter_update_state.update_thread.reset(
-                new boost::thread(&RuntimeProfile::periodic_counter_update_loop));
+        _s_periodic_counter_update_state.update_thread =
+                std::make_unique<boost::thread>(&RuntimeProfile::periodic_counter_update_loop);
     }
 
     switch (type) {

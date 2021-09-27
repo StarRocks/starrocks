@@ -20,8 +20,8 @@ public:
 
         ColumnChunkReaderOptions opts;
         opts.stats = _opts.stats;
-        _reader.reset(new ColumnChunkReader(_field->max_def_level(), _field->max_rep_level(), _field->type_length,
-                                            chunk_metadata, file, opts));
+        _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
+                                                      _field->type_length, chunk_metadata, file, opts);
         RETURN_IF_ERROR(_reader->init());
         _num_values_left_in_cur_page = _reader->num_values();
         return Status::OK();
@@ -75,8 +75,8 @@ public:
 
         ColumnChunkReaderOptions opts;
         opts.stats = _opts.stats;
-        _reader.reset(new ColumnChunkReader(_field->max_def_level(), _field->max_rep_level(), _field->type_length,
-                                            chunk_metadata, file, opts));
+        _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
+                                                      _field->type_length, chunk_metadata, file, opts);
         RETURN_IF_ERROR(_reader->init());
         _num_values_left_in_cur_page = _reader->num_values();
         return Status::OK();
@@ -140,8 +140,8 @@ public:
 
         ColumnChunkReaderOptions opts;
         opts.stats = _opts.stats;
-        _reader.reset(new ColumnChunkReader(_field->max_def_level(), _field->max_rep_level(), _field->type_length,
-                                            chunk_metadata, file, opts));
+        _reader = std::make_unique<ColumnChunkReader>(_field->max_def_level(), _field->max_rep_level(),
+                                                      _field->type_length, chunk_metadata, file, opts);
         RETURN_IF_ERROR(_reader->init());
         return Status::OK();
     }
