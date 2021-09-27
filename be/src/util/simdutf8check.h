@@ -21,11 +21,12 @@
 
 #ifndef SIMDUTF8CHECK_H
 #define SIMDUTF8CHECK_H
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
+
 #include <x86intrin.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 
 /*
  * These functions are used for validating utf8 string.

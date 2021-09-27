@@ -21,10 +21,10 @@
 
 #include "storage/delete_handler.h"
 
-#include <errno.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include <boost/regex.hpp>
+#include <cerrno>
 #include <limits>
 #include <sstream>
 #include <string>

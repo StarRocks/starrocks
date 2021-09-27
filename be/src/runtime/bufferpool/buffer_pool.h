@@ -22,9 +22,8 @@
 #ifndef STARROCKS_BE_RUNTIME_BUFFER_POOL_H
 #define STARROCKS_BE_RUNTIME_BUFFER_POOL_H
 
-#include <stdint.h>
-
 #include <atomic>
+#include <cstdint>
 #include <string>
 #include <vector>
 

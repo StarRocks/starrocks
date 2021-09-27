@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 
 namespace orc {
 void bit_unpack(const uint8_t* in, int fb, int64_t* data, int nums);

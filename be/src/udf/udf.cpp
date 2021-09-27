@@ -21,8 +21,7 @@
 
 #include "udf/udf.h"
 
-#include <assert.h>
-
+#include <cassert>
 #include <iostream>
 #include <sstream>
 

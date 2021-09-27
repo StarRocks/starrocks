@@ -6,7 +6,7 @@
 
 #include "gutil/strtoint.h"
 
-#include <errno.h>
+#include <cerrno>
 
 #include "gutil/port.h"
 

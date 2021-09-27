@@ -22,7 +22,7 @@
 #ifndef STARROCKS_BE_SRC_OLAP_BHP_LIB_H
 #define STARROCKS_BE_SRC_OLAP_BHP_LIB_H
 
-#include <stddef.h>
+#include <cstddef>
 
 namespace starrocks {
 

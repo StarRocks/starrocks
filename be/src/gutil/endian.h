@@ -34,7 +34,7 @@
 #ifndef UTIL_ENDIAN_ENDIAN_H_
 #define UTIL_ENDIAN_ENDIAN_H_
 
-#include <assert.h>
+#include <cassert>
 
 #include "gutil/int128.h"
 #include "gutil/integral_types.h"

@@ -22,8 +22,7 @@
 
 #include "orc/ColumnPrinter.hh"
 
-#include <time.h>
-
+#include <ctime>
 #include <limits>
 #include <sstream>
 #include <stdexcept>

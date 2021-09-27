@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <math.h>
+#include <cmath>
 
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"

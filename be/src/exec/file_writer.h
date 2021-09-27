@@ -22,7 +22,7 @@
 #ifndef STARROCKS_BE_SRC_EXEC_FILE_WRITER_H
 #define STARROCKS_BE_SRC_EXEC_FILE_WRITER_H
 
-#include <stdint.h>
+#include <cstdint>
 
 #include "common/status.h"
 

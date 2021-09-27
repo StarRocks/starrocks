@@ -2,8 +2,7 @@
 
 #pragma once
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <vector>
 
 #include "util/raw_container.h"

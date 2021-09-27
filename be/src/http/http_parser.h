@@ -22,8 +22,7 @@
 #ifndef STARROCKS_BE_SRC_COMMON_UTIL_HTTP_PARSER_H
 #define STARROCKS_BE_SRC_COMMON_UTIL_HTTP_PARSER_H
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <ostream>
 
 namespace starrocks {

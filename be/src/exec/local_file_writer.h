@@ -22,7 +22,7 @@
 #ifndef STARROCKS_BE_SRC_EXEC_LOCAL_FILE_WRITER_H
 #define STARROCKS_BE_SRC_EXEC_LOCAL_FILE_WRITER_H
 
-#include <stdio.h>
+#include <cstdio>
 
 #include "exec/file_writer.h"
 

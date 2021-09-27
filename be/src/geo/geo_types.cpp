@@ -35,8 +35,8 @@ DIAGNOSTIC_POP
 #include <s2/s2polyline.h>
 #include <s2/util/coding/coder.h>
 #include <s2/util/units/length-units.h>
-#include <stdio.h>
 
+#include <cstdio>
 #include <iomanip>
 #include <memory>
 #include <sstream>

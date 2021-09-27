@@ -51,7 +51,7 @@
 #ifndef THREAD_ATOMICOPS_H_
 #define THREAD_ATOMICOPS_H_
 
-#include <stdint.h>
+#include <cstdint>
 
 // ------------------------------------------------------------------------
 // Include the platform specific implementations of the types

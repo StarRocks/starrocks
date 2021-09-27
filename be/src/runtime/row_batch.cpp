@@ -22,8 +22,8 @@
 #include "runtime/row_batch.h"
 
 #include <snappy/snappy.h>
-#include <stdint.h> // for intptr_t
 
+#include <cstdint> // for intptr_t
 #include <memory>
 
 #include "runtime/buffered_tuple_stream2.inline.h"

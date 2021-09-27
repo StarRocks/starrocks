@@ -2,9 +2,8 @@
 
 #include "storage/tablet_updates.h"
 
-#include <time.h>
-
 #include <algorithm>
+#include <ctime>
 #include <memory>
 
 #include "common/status.h"

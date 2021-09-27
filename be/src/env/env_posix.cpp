@@ -9,12 +9,12 @@
 
 #include <dirent.h>
 #include <fcntl.h>
-#include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
 
+#include <cstdio>
 #include <memory>
 
 #include "common/logging.h"
