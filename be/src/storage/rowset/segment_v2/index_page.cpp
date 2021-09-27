@@ -120,7 +120,7 @@ Status IndexPageIterator::seek_at_or_after(const Slice& search_key) {
     int32_t right = num_entries - 1;
     int32_t mid = 0;
     while (left <= right) {
-        mid = left + (right - left) / 2;
+        mid = (right + left) / 2;
         int cmp = search_key.compare(_reader->get_key(mid));
         if (cmp > 0) {
             left = mid + 1;
@@ -133,7 +133,7 @@ Status IndexPageIterator::seek_at_or_after(const Slice& search_key) {
     }
 
     // index entry records the first key of the indexed page,
-    // so can't user left as the final result
+    // so can't use left as the final result
     // TODO: add page index entry for the end key of last page
     _pos = mid;
     return Status::OK();
