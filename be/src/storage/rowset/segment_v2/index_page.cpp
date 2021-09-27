@@ -132,11 +132,9 @@ Status IndexPageIterator::seek_at_or_after(const Slice& search_key) {
         }
     }
 
-    if (left == num_entries) {
-        return Status::NotFound("no page contains the given key");
-    }
     // index entry records the first key of the indexed page,
     // so can't user left as the final result
+    // TODO: add page index for the last row of last page
     _pos = mid;
     return Status::OK();
 }
