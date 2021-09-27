@@ -13,8 +13,30 @@
 // just for debug
 #include <iostream>
 
-namespace starrocks {
-namespace vectorized { 
+namespace starrocks::vectorized {
+
+std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {
+    "max",
+    "min",
+    "dict_merge"
+};
+
+Status SegmentMetaCollecter::trait_field_and_col_name(const std::string& item, std::string* field, 
+                                                       std::string* col_name) {
+    for (size_t i = 0; i < support_collect_fields.size(); i++) {
+        if (item.size() <= support_collect_fields[i].size()) { 
+            continue; 
+        }
+
+        if (item.find(support_collect_fields[i]) != std::string::npos 
+            && item.substr(0, support_collect_fields[i].size()) == support_collect_fields[i]) {
+                *field = support_collect_fields[i];
+                *col_name = item.substr(support_collect_fields[i].size() + 1);
+                return Status::OK();
+        }
+    }
+    return Status::InvalidArgument(item);
+}
 
 MetaReader::MetaReader() 
     : _is_init(false),
@@ -26,7 +48,7 @@ Status MetaReader::init(const MetaReaderParams& read_params) {
     RETURN_IF_ERROR(_init_params(read_params));
     RETURN_IF_ERROR(_init_seg_meta_collecters(read_params));
 
-    std::cout << "_seg_collecters size " << _seg_collecters.size() << std::endl;
+    //std::cout << "_seg_collecters size " << _seg_collecters.size() << std::endl;
     
     if (_seg_collecters.size() == 0) {
         _has_more = false;
@@ -38,37 +60,6 @@ Status MetaReader::init(const MetaReaderParams& read_params) {
     _is_init = true;
     _has_more = true;
     return Status::OK();
-}
-
-static std::vector<std::string> split_string(const std::string &str, const char pattern) {
-    std::vector<std::string> res;
-    std::stringstream input(str);   //读取str到字符串流中
-    std::string temp;
-    //使用getline函数从字符串流中读取,遇到分隔符时停止,和从cin中读取类似
-    //注意,getline默认是可以读取空格的
-    while(std::getline(input, temp, pattern))
-    {
-        res.push_back(temp);
-    }
-    return res;
-}
-static std::vector<std::string> func_names = {
-    "max",
-    "min",
-    "dict_merge"
-};
-
-static int get_func_name_and_col_name(const std::string& in, std::string* func_name, std::string* col_name) {
-    for (size_t i = 0; i < func_names.size(); i++) {
-        if (in.size() <= func_names[i].size()) { continue; }
-        if (in.find(func_names[i]) != std::string::npos 
-            && in.substr(0, func_names[i].size()) == func_names[i]) {
-                *func_name = func_names[i];
-                *col_name = in.substr(func_names[i].size() + 1);
-                return 0;
-        }
-    }
-    return -1;
 }
 
 // 检查参数，判断是否需要打开 Column 迭代器（会发生 io）
@@ -84,31 +75,13 @@ Status MetaReader::_init_params(const MetaReaderParams& read_params) {
 
     // 拆分需要收集的项目
     for (auto it : *(read_params.id_to_names)) {
-        // just for debug
-        //std::cout << "name: " << it.second << " id " << it.first << std::endl;
-        // 拆分 col_name 和 collect_name, 目前用比较 trick 的写法了
-
-        /*
-            auto sub_strings = split_string(it.second , '_');  
-            auto& collect_name = sub_strings[0];
-            std::string col_name;
-            for (size_t i = 1; i < sub_strings.size(); i++) {
-                col_name += sub_strings[i];
-                if (i != sub_strings.size() - 1) {
-                    col_name += "_";
-                }
-            }
-        */
+     
         std::string col_name = "";
         std::string collect_name = "";
-        get_func_name_and_col_name(it.second, &collect_name, &col_name);
-     
-        
-        // just for debug
-        //std::cout << "max: " << collect_name << " col_name " << col_name << std::endl;
-        
-        int32_t index = _tablet->field_index(col_name);
 
+        RETURN_IF_ERROR(SegmentMetaCollecter::trait_field_and_col_name(it.second, &collect_name, &col_name));
+     
+        int32_t index = _tablet->field_index(col_name);
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << it.second;
@@ -133,7 +106,11 @@ Status MetaReader::_init_params(const MetaReaderParams& read_params) {
         // 对应的 slot id
         _return_slot_ids.emplace_back(it.first);
         // 是否需要打开 column 迭代器
-        _seg_collecter_params.read_page.emplace_back(true);
+        if (collect_name == "dict_merge") {
+            _seg_collecter_params.read_page.emplace_back(true);
+        } else {
+             _seg_collecter_params.read_page.emplace_back(false);
+        }
     }
 
     return Status::OK();
@@ -162,31 +139,11 @@ Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& v
         return Status::OK();
     }
                                
-    //std::vector<RowsetReaderSharedPtr> rs_reader;
     std::vector<RowsetSharedPtr> rowsets;
     tablet->obtain_header_rdlock();
-    /*
-    OLAPStatus acquire_reader_st = tablet->capture_rs_readers(_version, &rs_reader);
-    if (acquire_reader_st != OLAP_SUCCESS) {      
-        std::stringstream ss;
-        ss << "fail to init reader. tablet=" << tablet->full_name() 
-           << "res=" << acquire_reader_st;
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str().c_str());
-    } 
-
-    std::cout << "rs_readers: " << rs_reader.size() << std::endl;
-    for (auto& rs : rs_reader) {
-        auto beta_rowset = down_cast<BetaRowset*>(rs->rowset().get());
-        std::cout << "segments: " << beta_rowset->segments().size() << std::endl;
-        for (auto seg : beta_rowset->segments()) {
-            segments->emplace_back(seg);
-        }
-        std::cout << "segments: " << segments->size() << std::endl;
-    }
-    */
     OLAPStatus acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &rowsets);
     tablet->release_header_lock();
+
      if (acquire_rowset_st != OLAP_SUCCESS) {      
         std::stringstream ss;
         ss << "fail to init reader. tablet=" << tablet->full_name() 
@@ -195,16 +152,12 @@ Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& v
         return Status::InternalError(ss.str().c_str());
     } 
 
-    std::cout << "rowset_set: " << rowsets.size() << " version: " << _version << std::endl;
-
     for (auto& rs : rowsets) {
         RETURN_IF_ERROR(rs->load());
         auto beta_rowset = down_cast<BetaRowset*>(rs.get());
-        std::cout << "segments: " << beta_rowset->segments().size() << std::endl;
         for (auto seg : beta_rowset->segments()) {
             segments->emplace_back(seg);
         }
-        std::cout << "segments: " << segments->size() << std::endl;
     }
    
     return Status::OK();
@@ -214,38 +167,33 @@ Status MetaReader::do_get_next(ChunkPtr* result) {
     const uint32_t chunk_capacity = _chunk_size;
     uint16_t chunk_start = 0;
 
-    //std::cout << "do_get_next: " << std::endl;
-
     *result = std::make_shared<vectorized::Chunk>();
     if (nullptr == result->get()) {
         return Status::InternalError("Failed to allocate new chunk.");
     } 
     
-    /*
-    for (auto& slot : *(_params.slots)) {
-        vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(slot->type(), false);
-        (*result)->append_column(std::move(column), slot->id());
-    }
-    */
-
-    for (auto& s_id : _return_slot_ids) {
+    for (size_t i = 0; i < _return_slot_ids.size(); i++) {
+        auto s_id = _return_slot_ids[i];
         auto slot = _params.desc_tbl->get_slot_descriptor(s_id);
-        vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(slot->type(), false);
-        (*result)->append_column(std::move(column), slot->id());
+        if (_collect_names[i] == "dict_merge") {
+            TypeDescriptor item_desc;
+            item_desc = slot->type();
+            TypeDescriptor desc;
+            desc.type = TYPE_ARRAY;
+            desc.children.emplace_back(item_desc);
+            vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(desc, false);
+            (*result)->append_column(std::move(column), slot->id());
+        } else {
+            vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(slot->type(), false);
+            (*result)->append_column(std::move(column), slot->id());
+        }
     }
-
-    //std::cout << "chunk_start: " << chunk_start << std::endl;
-    //std::cout << "chunk_capacity: " << chunk_capacity << std::endl;
-    //std::cout << "has_more: " << _has_more << std::endl;
 
     while ((chunk_start < chunk_capacity) && _has_more) {
-        std::cout << "read one chunk" << std::endl;
         RETURN_IF_ERROR(_read((*result).get(), chunk_capacity - chunk_start));
         (*result)->check_or_die();
         size_t next_start = (*result)->num_rows();
         chunk_start = next_start;
-        std::cout << "chunk_start: " << chunk_start << std::endl;
-
     }
 
    return Status::OK();
@@ -326,7 +274,6 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
 
 Status SegmentMetaCollecter::collect(std::vector<vectorized::Column*>* dsts) {
     DCHECK_EQ(dsts->size(), _params->fields.size());
-    std::cout << "collect one row "<< std::endl;
 
     for (size_t i = 0; i < _params->fields.size(); i++) {
         RETURN_IF_ERROR(_collect(_params->fields[i], _params->cids[i], (*dsts)[i], _params->field_type[i]));
@@ -335,9 +282,8 @@ Status SegmentMetaCollecter::collect(std::vector<vectorized::Column*>* dsts) {
 }
 
 Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vectorized::Column*column, FieldType type) {
-    //std::cout << "collect name: " << name << std::endl;
     // 目前比较 trick 的写法
-    if (name == "dict") {
+    if (name == "dict_merge") {
         return _collect_dict(cid, column, type);
     } else if (name == "max") {
         return _collect_max(cid, column, type);
@@ -349,8 +295,6 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vec
 
 // collect dict
 Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* column, FieldType type) {
-    // just for debug
-    std::cout << "_collect_dict: " << cid <<  std::endl;
     if (!_column_iterators[cid]) { 
         return Status::InvalidArgument("Invalid Collet Params.");
     }
@@ -361,11 +305,6 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* col
 
     std::vector<Slice> words;
     RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));    
-
-    std::cout << "Collect words size: " << words.size() << std::endl;
-    for (size_t i = 0; i <  words.size(); i++) {
-        std::cout << "word: " << words[i] << std::endl;
-    } 
 
     vectorized::ArrayColumn* array_column = nullptr;
     array_column = down_cast<vectorized::ArrayColumn*>(column);
@@ -393,8 +332,6 @@ Status SegmentMetaCollecter::_collect_min(ColumnId cid, vectorized::Column* colu
 
 template<bool flag>
 Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Column* column, FieldType type) {
-    std::cout << "collect max or min "<< std::endl;
-
     auto footer_pb = _segment->footer();
     //BinaryColumn* binary_column;
     //binary_column = down_cast<BinaryColumn*>(column);
@@ -433,9 +370,7 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Colu
     return Status::NotFound("");
 }
 
-} // namespace vectorized
-
-} // namespace starrocks
+} // namespace starrocks::vectorized
 
 
 

@@ -61,7 +61,6 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     _reader_params.version = Version(0, _version);
     _reader_params.runtime_state = _runtime_state;
     _reader_params.chunk_size = config::vector_chunk_size;
-    //_reader_params.slots = &_parent->_tuple_desc->slots();
     _reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
     _reader_params.desc_tbl = &_parent->_desc_tbl;
 
@@ -95,9 +94,6 @@ Status OlapMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
     TTabletId tablet_id = scan_range->tablet_id;
     SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
-
-    // just for debug
-    std::cout << "tablet_id: " << tablet_id << " witch schema_hash" << schema_hash << " version: " << _version << std::endl;
 
     std::string err;
     _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash, true, &err);

@@ -1,9 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 #include "exec/vectorized/olap_meta_scan_node.h"
 
-// just for debug
-#include <iostream>
-
 namespace starrocks {
 namespace vectorized {
 
@@ -31,8 +28,6 @@ Status OlapMetaScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& sc
     for (auto& scan_range : scan_ranges) {
         _scan_ranges.emplace_back(new TInternalScanRange(scan_range.scan_range.internal_scan_range));
     }
-    // just for debug
-    std::cout << "set scan ranges" << std::endl;
     return Status::OK();
 }
 
@@ -45,9 +40,6 @@ Status OlapMetaScanNode::prepare(RuntimeState* state) {
 
     // get desc tuple desc
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
-
-    // just for debug
-    std::cout << "tuple_id: " << _tuple_id << std::endl;
 
     if (nullptr == _tuple_desc) {
         return Status::InternalError("Failed to get tuple descriptor.");
@@ -75,10 +67,6 @@ Status OlapMetaScanNode::open(RuntimeState* state) {
 
     _scanner_cursor = _scanners[0];
     _cursor_idx = 0;
-
-    // just for debug 
-    std::cout << "_scanners size: " << _scanners.size() << std::endl;
-    std::cout << "_scan_ranges size() " << _scan_ranges.size() << std::endl;
 
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(ExecNode::open(state));

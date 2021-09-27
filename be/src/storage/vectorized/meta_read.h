@@ -12,8 +12,12 @@
 #include "runtime/descriptors.h"
 
 namespace starrocks {
+
 class RuntimeState;
-namespace vectorized {
+
+} // namespace starrocks
+
+namespace starrocks::vectorized {
 
 class Tablet;
 class SegmentMetaCollecter;
@@ -94,6 +98,12 @@ public:
     ~SegmentMetaCollecter();
     Status init(const SegmentMetaCollecterParams* params);
     Status collect(std::vector<vectorized::Column*>* dsts);
+
+public:
+
+static std::vector<std::string> support_collect_fields;
+static Status trait_field_and_col_name(const std::string& item, std::string* field, std::string* col_name);
+
 private:
     Status _init_return_column_iterators();
     Status _collect(const std::string& name, ColumnId cid, vectorized::Column*column, FieldType type);
@@ -108,7 +118,8 @@ private:
     std::unique_ptr<fs::ReadableBlock> _rblock;
     OlapReaderStatistics _stats;
     ObjectPool _obj_pool;
+
+    
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
