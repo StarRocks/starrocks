@@ -697,8 +697,12 @@ build_hadoop() {
 
 #jdk
 build_jdk() {
-    check_if_source_exist $JDK_SOURCE
-    cp -r $TP_SOURCE_DIR/$JDK_SOURCE $TP_INSTALL_DIR/
+    JDK_TARGET=$JDK_SOURCE
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        JDK_TARGET=$JDK_AARCH64_SOURCE
+    fi
+    check_if_source_exist $JDK_TARGET
+    cp -r $TP_SOURCE_DIR/$JDK_TARGET $TP_INSTALL_DIR/open_jdk
 }
 
 # ragel

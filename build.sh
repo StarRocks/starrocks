@@ -168,7 +168,11 @@ make
 cd ${STARROCKS_HOME}
 
 if [ "${WITH_HDFS}" == "ON" ]; then
-   export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        export LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
+    else
+        export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
+    fi
 fi
 
 # Clean and build Backend
@@ -265,7 +269,11 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop-3.3.0/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop-3.3.0/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
     # note: do not use oracle jdk to avoid commercial dispute
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/java-se-8u41-ri/jre/lib/amd64 ${STARROCKS_OUTPUT}/be/lib/jvm/
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/open_jdk/jre/lib/aarch64 ${STARROCKS_OUTPUT}/be/lib/jvm/
+    else
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/open_jdk/jre/lib/amd64 ${STARROCKS_OUTPUT}/be/lib/jvm/
+    fi
 fi
 
 cp -r -p "${STARROCKS_HOME}/LICENSE.txt" "${STARROCKS_OUTPUT}/LICENSE.txt"
