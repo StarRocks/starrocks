@@ -175,6 +175,7 @@ SUFFIX_TGZ="\.(tar\.gz|tgz)$"
 SUFFIX_XZ="\.tar\.xz$"
 SUFFIX_ZIP="\.zip$"
 # temporary directory for unpacking
+# package is unpacked in tmp_dir and then renamed.
 mkdir -p $TP_SOURCE_DIR/tmp_dir
 for TP_ARCH in ${TP_ARCHIVES[*]}
 do
