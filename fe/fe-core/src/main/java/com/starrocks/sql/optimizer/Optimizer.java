@@ -67,6 +67,7 @@ public class Optimizer {
         // directly from memo.
         context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
                 memo.getRootGroup(), RuleSetType.MULTI_DISTINCT_REWRITE));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
 
         context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
                 memo.getRootGroup(), RuleSetType.SUBQUERY_REWRITE));

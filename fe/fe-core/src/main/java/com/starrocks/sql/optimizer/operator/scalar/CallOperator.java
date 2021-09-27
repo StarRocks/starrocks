@@ -140,7 +140,7 @@ public class CallOperator extends ScalarOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(fnName, arguments);
+        return Objects.hash(fnName, arguments, isDistinct);
     }
 
     @Override
@@ -152,7 +152,9 @@ public class CallOperator extends ScalarOperator {
             return false;
         }
         CallOperator other = (CallOperator) obj;
-        return Objects.equals(this.fnName, other.fnName) && Objects.equals(this.arguments, other.arguments);
+        return isDistinct == other.isDistinct &&
+                Objects.equals(fnName, other.fnName) &&
+                Objects.equals(arguments, other.arguments);
     }
 
     @Override

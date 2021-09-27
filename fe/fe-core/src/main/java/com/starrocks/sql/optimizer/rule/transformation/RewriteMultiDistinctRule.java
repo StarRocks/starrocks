@@ -45,7 +45,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
 
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
-                .filter(call -> call.isDistinct()).collect(Collectors.toList());
+                .filter(CallOperator::isDistinct).collect(Collectors.toList());
 
         boolean hasMultiColumns = false;
         for (CallOperator callOperator : distinctAggOperatorList) {
