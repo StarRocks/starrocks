@@ -14,22 +14,30 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
-import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Test;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 public class PartitionPruneRuleTest {
     @Test
@@ -71,6 +79,22 @@ public class PartitionPruneRuleTest {
         keyRange.put(4L, Range.closed(p4, p5));
         keyRange.put(5L, Range.closed(p5, p6));
 
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        ColumnRefOperator column1 = columnRefFactory.create("dealDate", ScalarType.DATE, false);
+        Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
+        scanColumnMap.put(column1, new Column("dealDate", Type.DATE, false));
+
+        BinaryPredicateOperator binaryPredicateOperator1 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, column1,
+                        ConstantOperator.createDate(LocalDateTime.of(2020, 6, 1, 0, 0, 0)));
+        BinaryPredicateOperator binaryPredicateOperator2 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, column1,
+                        ConstantOperator.createDate(LocalDateTime.of(2020, 12, 1, 0, 0, 0)));
+        ScalarOperator predicate = Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2);
+        LogicalOlapScanOperator operator = new LogicalOlapScanOperator(olapTable,
+                new ArrayList<>(scanColumnMap.keySet()), scanColumnMap, Maps.newHashMap(), null, -1, predicate);
+        operator.setPredicate(null);
+
         new Expectations() {
             {
                 olapTable.getPartitionInfo();
@@ -97,30 +121,23 @@ public class PartitionPruneRuleTest {
                 minTimes = 0;
                 olapTable.getPartition(3);
                 result = part3;
+                minTimes = 0;
                 olapTable.getPartition(4);
                 result = part4;
+                minTimes = 0;
                 olapTable.getPartition(5);
                 result = part5;
+                minTimes = 0;
             }
         };
 
-        // filters
-        PartitionColumnFilter dealDateFilter = new PartitionColumnFilter();
-        dealDateFilter.setLowerBound(new DateLiteral(2020, 6, 1), true);
-        dealDateFilter.setUpperBound(new DateLiteral(2020, 12, 1), true);
-
-        Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
-        filters.put("dealDate", dealDateFilter);
-
-        LogicalOlapScanOperator operator = new LogicalOlapScanOperator(olapTable);
-        operator.setColumnFilters(filters);
-
         PartitionPruneRule rule = new PartitionPruneRule();
 
-        assertEquals(0, operator.getSelectedPartitionId().size());
-        rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), new ColumnRefFactory()));
+        assertNull(operator.getSelectedPartitionId());
+        OptExpression optExpression =
+                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
 
-        assertEquals(3, operator.getSelectedPartitionId().size());
+        assertEquals(3, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId().size());
     }
 
     @Test
@@ -169,6 +186,31 @@ public class PartitionPruneRuleTest {
         keyRange.put(4L, Range.closed(p4, p5));
         keyRange.put(5L, Range.closed(p5, p6));
 
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        ColumnRefOperator column1 = columnRefFactory.create("dealDate", ScalarType.DATE, false);
+        ColumnRefOperator column2 = columnRefFactory.create("main_brand_id", ScalarType.INT, false);
+        Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
+        scanColumnMap.put(column1, new Column("dealDate", Type.DATE, false));
+        scanColumnMap.put(column2, new Column("main_brand_id", Type.INT, false));
+
+        BinaryPredicateOperator binaryPredicateOperator1 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, column1,
+                        ConstantOperator.createDate(LocalDateTime.of(2020, 8, 1, 0, 0, 0)));
+        BinaryPredicateOperator binaryPredicateOperator2 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, column1,
+                        ConstantOperator.createDate(LocalDateTime.of(2020, 12, 1, 0, 0, 0)));
+        BinaryPredicateOperator binaryPredicateOperator3 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, column2,
+                        ConstantOperator.createInt(150));
+        BinaryPredicateOperator binaryPredicateOperator4 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, column2,
+                        ConstantOperator.createInt(150));
+        ScalarOperator predicate =
+                Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2, binaryPredicateOperator3,
+                        binaryPredicateOperator4);
+        LogicalOlapScanOperator operator = new LogicalOlapScanOperator(olapTable,
+                new ArrayList<>(scanColumnMap.keySet()), scanColumnMap, Maps.newHashMap(), null, -1, predicate);
+
         new Expectations() {
             {
                 olapTable.getPartitionInfo();
@@ -209,27 +251,12 @@ public class PartitionPruneRuleTest {
             }
         };
 
-        // filters
-        PartitionColumnFilter dealDateFilter = new PartitionColumnFilter();
-        dealDateFilter.setLowerBound(new DateLiteral(2020, 8, 1), true);
-        dealDateFilter.setUpperBound(new DateLiteral(2020, 12, 1), true);
-
-        PartitionColumnFilter mainBrandFilter = new PartitionColumnFilter();
-        mainBrandFilter.setLowerBound(new IntLiteral(150), true);
-        mainBrandFilter.setUpperBound(new IntLiteral(150), true);
-
-        Map<String, PartitionColumnFilter> filters = Maps.newHashMap();
-        filters.put("dealDate", dealDateFilter);
-        filters.put("main_brand_id", mainBrandFilter);
-
-        LogicalOlapScanOperator operator = new LogicalOlapScanOperator(olapTable);
-        operator.setColumnFilters(filters);
-
         PartitionPruneRule rule = new PartitionPruneRule();
 
-        assertEquals(0, operator.getSelectedPartitionId().size());
-        rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), new ColumnRefFactory()));
+        assertNull(operator.getSelectedPartitionId());
+        OptExpression optExpression =
+                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
 
-        assertEquals(3, operator.getSelectedPartitionId().size());
+        assertEquals(3, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId().size());
     }
 }

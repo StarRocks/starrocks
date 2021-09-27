@@ -39,7 +39,7 @@ import com.starrocks.common.AnalysisException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collection;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -130,7 +130,7 @@ public class ListPartitionPruner implements PartitionPruner {
      * An empty set is returned if no match partitions.
      */
     @Override
-    public Collection<Long> prune() throws AnalysisException {
+    public List<Long> prune() throws AnalysisException {
         Preconditions.checkNotNull(columnToPartitionValuesMap);
         Preconditions.checkNotNull(columnToNullPartitions);
         Preconditions.checkArgument(columnToPartitionValuesMap.size() == columnToNullPartitions.size());
@@ -164,7 +164,7 @@ public class ListPartitionPruner implements PartitionPruner {
                 noEvalConjuncts.add(expr);
             }
         }
-        return matches;
+        return new ArrayList<>(matches);
     }
 
     public List<Expr> getNoEvalConjuncts() {

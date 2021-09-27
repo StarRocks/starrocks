@@ -105,7 +105,8 @@ public class Optimizer {
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
 
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
-        new MaterializedViewRule().transform(tree, context);
+        tree = new MaterializedViewRule().transform(tree, context).get(0);
+        memo.replaceRewriteExpression(memo.getRootGroup(), tree);
 
         context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
                 memo.getRootGroup(), RuleSetType.PARTITION_PRUNE));
