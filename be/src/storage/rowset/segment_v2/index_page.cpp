@@ -118,8 +118,9 @@ Status IndexPageIterator::seek_at_or_after(const Slice& search_key) {
     size_t num_entries = _reader->count();
     int32_t left = 0;
     int32_t right = num_entries - 1;
+    int32_t mid = 0;
     while (left <= right) {
-        int32_t mid = left + (right - left) / 2;
+        mid = (right + left) / 2;
         int cmp = search_key.compare(_reader->get_key(mid));
         if (cmp > 0) {
             left = mid + 1;
@@ -131,10 +132,10 @@ Status IndexPageIterator::seek_at_or_after(const Slice& search_key) {
         }
     }
 
-    if (left == num_entries) {
-        return Status::NotFound("no page contains the given key");
-    }
-    _pos = left;
+    // index entry records the first key of the indexed page,
+    // so can't use left as the final result
+    // TODO: add page index entry for the end key of last page
+    _pos = mid;
     return Status::OK();
 }
 
