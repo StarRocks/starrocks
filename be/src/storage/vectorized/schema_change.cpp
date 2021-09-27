@@ -141,7 +141,6 @@ ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
             Datum base_datum = base_col->get(row);   \
             Datum new_datum;                         \
             if (base_datum.is_null()) {              \
-                LOG(INFO) << "base datum is null";   \
                 new_datum.set_null();                \
                 new_col->append_datum(new_datum);    \
                 continue;                            \
@@ -152,7 +151,6 @@ ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
             new_datum.set(dst);                      \
             new_col->append_datum(new_datum);        \
         }                                            \
-        LOG(INFO) << "convert type success";         \
         break;                                       \
     }
 
@@ -176,7 +174,6 @@ ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
         case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:                                       \
             TYPE_REINTERPRET_CAST(from_type, uint64_t);                             \
         case OLAP_FIELD_TYPE_LARGEINT:                                              \
-            LOG(INFO) << "change to int128_t";                                      \
             TYPE_REINTERPRET_CAST(from_type, int128_t);                             \
         case OLAP_FIELD_TYPE_DOUBLE:                                                \
             TYPE_REINTERPRET_CAST(from_type, double);                               \
@@ -269,7 +266,8 @@ ConvertTypeResolver::ConvertTypeResolver() {
 
 ConvertTypeResolver::~ConvertTypeResolver() {}
 
-bool to_bitmap(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col, int ref_field_idx) {
+bool to_bitmap(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col,
+               int ref_field_idx) {
     BitmapValue bitmap;
     if (!base_datum.is_null()) {
         uint64_t origin_value;
@@ -338,7 +336,8 @@ bool to_bitmap(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_colu
     return true;
 }
 
-bool hll_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col, int ref_field_idx) {
+bool hll_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col,
+              int ref_field_idx) {
     HyperLogLog hll;
     if (!base_datum.is_null()) {
         uint64_t hash_value;
@@ -384,14 +383,16 @@ bool hll_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_colum
     return true;
 }
 
-bool count_field(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col, int ref_field_idx) {
+bool count_field(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col,
+                 int ref_field_idx) {
     int64_t count = base_datum.is_null() ? 0 : 1;
     dst_datum.set_int64(count);
     new_col->append_datum(dst_datum);
     return true;
 }
 
-bool percentile_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col, int ref_field_idx) {
+bool percentile_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col,
+                     int ref_field_idx) {
     PercentileValue percentile;
     if (!base_datum.is_null()) {
         double origin_value;
@@ -470,7 +471,6 @@ bool percentile_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& re
 
 bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, TabletSharedPtr& base_tablet,
                                 TabletSharedPtr& new_tablet, MemPool* mem_pool) {
-    LOG(INFO) << "do change chunk";
     if (new_chunk->num_columns() != _schema_mapping.size()) {
         LOG(WARNING) << "new chunk does not match with schema mapping rules. "
                      << "chunk_schema_size=" << new_chunk->num_columns()
@@ -500,14 +500,14 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
 
                 ColumnPtr& base_col = base_chunk->get_column_by_index(ref_column);
                 ColumnPtr& new_col = new_chunk->get_column_by_index(i);
-                
+
                 for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
                     Datum base_datum = base_col->get(row_index);
                     Datum dst_datum;
 
                     if (!_do_materialized_transform(base_datum, dst_datum,
-                                                    base_tablet->tablet_meta()->tablet_schema().column(ref_column), new_col,
-                                                    _schema_mapping[i].ref_column)) {
+                                                    base_tablet->tablet_meta()->tablet_schema().column(ref_column),
+                                                    new_col, _schema_mapping[i].ref_column)) {
                         return false;
                     }
                 }
@@ -547,7 +547,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
                         new_col->append_datum(new_datum);
                     }
                 } else {
-                    new_col->append(*base_col);
+                    new_col = base_col;
                 }
             } else if (ConvertTypeResolver::instance()->get_convert_type_info(ref_type, new_type)) {
                 for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
@@ -559,7 +559,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
                     Datum new_datum;
                     Status st = convert_datum(f.type().get(), base_datum, f2.type().get(), new_datum);
                     if (!st.ok()) {
-                        LOG(WARNING) << "failed to convert";
+                        LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
+                                     << field_type_to_string(new_type);
                         return false;
                     }
                     new_col->append_datum(new_datum);
@@ -578,11 +579,12 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
                         new_datum.set_null();
                     } else {
                         if (new_field.type()->convert_from(new_datum, base_datum, base_field.type()) != OLAP_SUCCESS) {
-                            LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to " << field_type_to_string(new_type);
+                            LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
+                                         << field_type_to_string(new_type);
                             return false;
                         }
                     }
-                    
+
                     new_col->append_datum(new_datum);
                 }
             } else {
@@ -657,8 +659,6 @@ ChunkSorter::~ChunkSorter() {
 }
 
 bool ChunkSorter::sort(ChunkPtr& chunk, TabletSharedPtr new_tablet) {
-    MonotonicStopWatch timer;
-    timer.start();
     vectorized::Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
     if (_swap_chunk == nullptr || _max_allocated_rows < chunk->num_rows()) {
         _chunk_allocator->release(_swap_chunk, _max_allocated_rows);
@@ -677,8 +677,6 @@ bool ChunkSorter::sort(ChunkPtr& chunk, TabletSharedPtr new_tablet) {
     }
 
     std::stable_sort(chunk_rows.begin(), chunk_rows.end(), _chunk_comparator);
-    LOG(INFO) << "finished sort for chunk,"
-              << " duration: " << timer.elapsed_time() / 1000000 << "ms";
     // TODO
     // check chunk is need to be sort or not
     for (size_t i = 0; i < chunk->num_columns(); ++i) {
@@ -754,15 +752,16 @@ ChunkMerger::~ChunkMerger() {
 }
 
 void ChunkMerger::aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, RowsetWriter* rowset_writer) {
-    _mem_tracker->release(aggregator.memory_usage());
     aggregator.aggregate();
     while (aggregator.is_finish()) {
         _mem_tracker->release(aggregator.memory_usage());
         rowset_writer->add_chunk(*aggregator.aggregate_result());
         aggregator.aggregate_reset();
         aggregator.aggregate();
+        _mem_tracker->consume(aggregator.memory_usage());
     }
 
+    _mem_tracker->release(aggregator.memory_usage());
     DCHECK(aggregator.source_exhausted());
     aggregator.update_source(chunk);
     aggregator.aggregate();
@@ -773,6 +772,7 @@ void ChunkMerger::aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, 
         rowset_writer->add_chunk(*aggregator.aggregate_result());
         aggregator.aggregate_reset();
         aggregator.aggregate();
+        _mem_tracker->consume(aggregator.memory_usage());
     }
 
     return;
@@ -790,7 +790,7 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
     size_t total_size;
     vectorized::Schema new_schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ChunkPtr tmp_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
-
+    _mem_tracker->consume(tmp_chunk->memory_usage());
     if (_tablet->keys_type() == KeysType::AGG_KEYS) {
         _aggregator = new ChunkAggregator(&new_schema, config::vector_chunk_size, 0);
     }
@@ -798,18 +798,14 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
     while (!_heap.empty()) {
         if (tmp_chunk->reach_capacity_limit()) {
             if (_tablet->keys_type() == KeysType::AGG_KEYS) {
-                _mem_tracker->consume(tmp_chunk->memory_usage());
                 aggregate_chunk(*_aggregator, tmp_chunk, rowset_writer);
-                _mem_tracker->release(tmp_chunk->memory_usage());
             } else {
                 rowset_writer->add_chunk(*tmp_chunk);
             }
-            //rowset_writer->add_chunk(*tmp_chunk);
             tmp_chunk->reset();
         }
 
         tmp_chunk->append(*(_heap.top().chunk), _heap.top().row_index, 1);
-        //LOG(INFO) << "tmp chunk size is:" << tmp_chunk->num_rows();
         total_size += 1;
         if (!_pop_heap()) {
             process_err();
@@ -970,7 +966,6 @@ bool SchemaChangeWithSorting::process(vectorized::Reader* reader, RowsetWriter* 
     }
     std::vector<ChunkPtr> chunk_arr;
     vectorized::Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
-    ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
     vectorized::Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
 
     ChunkSorter chunk_sorter(_chunk_allocator);
@@ -978,32 +973,20 @@ bool SchemaChangeWithSorting::process(vectorized::Reader* reader, RowsetWriter* 
     std::unique_ptr<MemPool> mem_pool(new MemPool(mem_tracker.get()));
 
     while (true) {
+        ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
         ChunkPtr new_chunk = nullptr;
-        if (base_chunk->num_rows() == 0) {
-            Status status = reader->do_get_next(base_chunk.get());
-            if (!status.ok()) {
-                LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
-                if (!status.is_end_of_file()) {
-                    result = false;
-                    goto SORTING_PROCESS_ERR;
-                } else if (base_chunk->num_rows() <= 0) {
-                    break;
-                }
+        Status status = reader->do_get_next(base_chunk.get());
+        if (!status.ok()) {
+            LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
+            if (!status.is_end_of_file()) {
+                result = false;
+                goto SORTING_PROCESS_ERR;
+            } else if (base_chunk->num_rows() <= 0) {
+                break;
             }
         }
 
-        if (!_chunk_allocator->allocate(new_chunk, base_chunk->num_rows(), new_schema).ok()) {
-            LOG(WARNING) << "failed to allocate chunk";
-            result = false;
-            goto SORTING_PROCESS_ERR;
-        } else if (!_chunk_allocator->is_memory_enough_to_sort(base_chunk->num_rows(), chunk_sorter.allocated_rows())) {
-            if (new_chunk != nullptr) {
-                _chunk_allocator->release(new_chunk, base_chunk->num_rows());
-                new_chunk = nullptr;
-            }
-        }
-
-        if (new_chunk == nullptr) {
+        if (!_chunk_allocator->is_memory_enough_to_sort(2 * base_chunk->num_rows(), chunk_sorter.allocated_rows())) {
             LOG(INFO) << "do internal sorting because of memory limit";
             if (chunk_arr.size() < 1) {
                 LOG(WARNING) << "Memory limitation is too small for Schema Change."
@@ -1022,7 +1005,12 @@ bool SchemaChangeWithSorting::process(vectorized::Reader* reader, RowsetWriter* 
             }
 
             chunk_arr.clear();
-            continue;
+        }
+
+        if (!_chunk_allocator->allocate(new_chunk, base_chunk->num_rows(), new_schema).ok()) {
+            LOG(WARNING) << "failed to allocate chunk";
+            result = false;
+            goto SORTING_PROCESS_ERR;
         }
 
         if (!_chunk_changer.change_chunk(base_chunk, new_chunk, base_tablet, new_tablet, mem_pool.get())) {
@@ -1038,8 +1026,6 @@ bool SchemaChangeWithSorting::process(vectorized::Reader* reader, RowsetWriter* 
                 LOG(WARNING) << "failed to sort chunk.";
                 result = false;
                 goto SORTING_PROCESS_ERR;
-            } else {
-                base_chunk->reset();
             }
         }
 
@@ -1073,20 +1059,12 @@ SORTING_PROCESS_ERR:
 
 bool SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
                                                 TabletSharedPtr tablet) {
-    //TODO
-    LOG(INFO) << "start to do _internal_sorting";
-
-    MonotonicStopWatch timer;
-    timer.start();
-
     if (chunk_arr.size() == 1) {
         new_rowset_writer->add_chunk(*(chunk_arr[0]));
         if (new_rowset_writer->flush() != OLAP_SUCCESS) {
             LOG(WARNING) << "failed to finalizing writer.";
             return false;
         } else {
-            LOG(INFO) << "finished _internal_sorting for chunk_arr,"
-                      << " duration: " << timer.elapsed_time() / 1000000 << "ms";
             return true;
         }
     }
@@ -1096,8 +1074,6 @@ bool SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_arr
         LOG(WARNING) << "failed to merger";
         return false;
     }
-    LOG(INFO) << "finished _internal_sorting,"
-              << " duration: " << timer.elapsed_time() / 1000000 << "ms";
 
     return true;
 }
