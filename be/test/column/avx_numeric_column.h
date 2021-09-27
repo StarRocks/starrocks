@@ -21,7 +21,6 @@
 
 #ifdef __x86_64__
 #include <glog/logging.h>
-
 #include <immintrin.h>
 
 #include "column/fixed_length_column.h"
