@@ -22,9 +22,9 @@
 #include "exec/es/es_predicate.h"
 
 #include <gutil/strings/substitute.h>
-#include <stdint.h>
 
 #include <boost/algorithm/string.hpp>
+#include <cstdint>
 #include <map>
 #include <sstream>
 

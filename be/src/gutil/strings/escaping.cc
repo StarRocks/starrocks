@@ -3,10 +3,9 @@
 
 #include "gutil/strings/escaping.h"
 
-#include <assert.h>
-#include <stdio.h>
-#include <string.h>
-
+#include <cassert>
+#include <cstdio>
+#include <cstring>
 #include <limits>
 using std::numeric_limits;
 #include <vector>

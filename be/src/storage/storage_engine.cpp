@@ -22,13 +22,13 @@
 #include "storage/storage_engine.h"
 
 #include <rapidjson/document.h>
-#include <signal.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
+#include <csignal>
 #include <cstdio>
 #include <filesystem>
 #include <memory>

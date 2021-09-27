@@ -21,8 +21,7 @@
 
 #include "util/url_coding.h"
 
-#include <math.h>
-
+#include <cmath>
 #include <exception>
 #include <memory>
 #include <sstream>

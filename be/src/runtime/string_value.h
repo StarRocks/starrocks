@@ -22,7 +22,7 @@
 #ifndef STARROCKS_BE_RUNTIME_STRING_VALUE_H
 #define STARROCKS_BE_RUNTIME_STRING_VALUE_H
 
-#include <string.h>
+#include <cstring>
 
 #include "udf/udf.h"
 #include "util/hash_util.hpp"

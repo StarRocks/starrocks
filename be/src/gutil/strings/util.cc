@@ -7,13 +7,12 @@
 
 #include "gutil/strings/util.h"
 
-#include <assert.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h> // for FastTimeToBuffer()
-
 #include <algorithm>
+#include <cassert>
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
+#include <ctime> // for FastTimeToBuffer()
 using std::copy;
 using std::max;
 using std::min;

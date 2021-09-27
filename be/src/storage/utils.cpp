@@ -22,18 +22,18 @@
 #include "storage/utils.h"
 
 #include <dirent.h>
-#include <errno.h>
 #include <lz4/lz4.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <unistd.h>
 
 #include <boost/regex.hpp>
+#include <cerrno>
+#include <cstdarg>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <mutex>
 #include <string>

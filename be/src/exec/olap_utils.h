@@ -22,7 +22,7 @@
 #ifndef STARROCKS_BE_SRC_QUERY_EXEC_OLAP_UTILS_H
 #define STARROCKS_BE_SRC_QUERY_EXEC_OLAP_UTILS_H
 
-#include <math.h>
+#include <cmath>
 
 #include "common/logging.h"
 #include "gen_cpp/Opcodes_types.h"

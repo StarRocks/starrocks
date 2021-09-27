@@ -1,7 +1,6 @@
 // Copyright 2008 Google Inc.  All rights reserved.
 
-#include <string.h>
-
+#include <cstring>
 #include <string>
 using std::string;
 

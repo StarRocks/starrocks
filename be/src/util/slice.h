@@ -22,11 +22,10 @@
 #ifndef STARROCKS_BE_SRC_OLAP_STRING_SLICE_H
 #define STARROCKS_BE_SRC_OLAP_STRING_SLICE_H
 
-#include <assert.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
-
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <map>
 #include <string>

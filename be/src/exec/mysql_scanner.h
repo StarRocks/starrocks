@@ -22,8 +22,7 @@
 #ifndef STARROCKS_BE_SRC_QUERY_EXEC_MYSQL_SCANNER_H
 #define STARROCKS_BE_SRC_QUERY_EXEC_MYSQL_SCANNER_H
 
-#include <stdlib.h>
-
+#include <cstdlib>
 #include <string>
 #include <vector>
 

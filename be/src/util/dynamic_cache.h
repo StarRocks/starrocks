@@ -12,7 +12,7 @@
 
 #include "runtime/mem_tracker.h"
 #include "storage/rowset_update_state.h"
-#include "time.h"
+#include "util/time.h"
 
 namespace starrocks {
 

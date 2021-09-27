@@ -21,7 +21,7 @@
 
 #include "storage/memory/hash_index.h"
 
-#include <stdio.h>
+#include <cstdio>
 
 #include "common/compiler_util.h"
 #ifdef __SSE2__

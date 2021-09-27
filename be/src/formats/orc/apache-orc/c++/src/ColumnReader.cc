@@ -23,8 +23,8 @@
 #include "ColumnReader.hh"
 
 #include <bits/endian.h>
-#include <math.h>
 
+#include <cmath>
 #include <iostream>
 
 #include "Adaptor.hh"

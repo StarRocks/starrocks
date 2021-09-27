@@ -24,8 +24,7 @@
 
 #include "primary_key_encoder.h"
 
-#include <string.h>
-
+#include <cstring>
 #include <memory>
 #include <type_traits>
 

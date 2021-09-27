@@ -22,9 +22,8 @@
 
 #include "ByteRLE.hh"
 
-#include <string.h>
-
 #include <algorithm>
+#include <cstring>
 #include <iostream>
 #include <utility>
 

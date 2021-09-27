@@ -26,9 +26,8 @@
 #include <immintrin.h>
 #endif
 
-#include <string.h>
-
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 
 #include "Adaptor.hh"

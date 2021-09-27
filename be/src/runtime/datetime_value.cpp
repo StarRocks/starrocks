@@ -21,10 +21,9 @@
 
 #include "runtime/datetime_value.h"
 
-#include <ctype.h>
-#include <string.h>
-#include <time.h>
-
+#include <cctype>
+#include <cstring>
+#include <ctime>
 #include <limits>
 #include <sstream>
 

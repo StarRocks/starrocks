@@ -22,8 +22,7 @@
 #ifndef STARROCKS_BE_SRC_OLAP_NULL_PREDICATE_H
 #define STARROCKS_BE_SRC_OLAP_NULL_PREDICATE_H
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <roaring/roaring.hh>
 
 #include "storage/column_predicate.h"

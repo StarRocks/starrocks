@@ -21,8 +21,7 @@
 
 #include "runtime/snapshot_loader.h"
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <filesystem>
 
 #include "common/logging.h"

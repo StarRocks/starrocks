@@ -22,8 +22,7 @@
 #ifndef STARROCKS_BE_SRC_EXEC_BROKER_WRITER_H
 #define STARROCKS_BE_SRC_EXEC_BROKER_WRITER_H
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <map>
 #include <string>
 

@@ -23,10 +23,10 @@
 #define STARROCKS_BE_RUNTIME_DATETIME_VALUE_H
 
 #include <re2/re2.h>
-#include <stdint.h>
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 
 #include "cctz/civil_time.h"

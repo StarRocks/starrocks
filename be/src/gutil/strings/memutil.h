@@ -53,8 +53,8 @@
 #ifndef STRINGS_MEMUTIL_H_
 #define STRINGS_MEMUTIL_H_
 
-#include <stddef.h>
-#include <string.h> // to get the POSIX mem*() routines
+#include <cstddef>
+#include <cstring> // to get the POSIX mem*() routines
 
 #include "gutil/port.h" // disable some warnings on Windows
 

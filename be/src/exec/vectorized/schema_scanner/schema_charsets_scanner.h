@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 
 #include "exec/vectorized/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"

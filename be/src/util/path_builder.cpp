@@ -21,8 +21,7 @@
 
 #include "util/path_builder.h"
 
-#include <stdlib.h>
-
+#include <cstdlib>
 #include <sstream>
 
 namespace starrocks {
