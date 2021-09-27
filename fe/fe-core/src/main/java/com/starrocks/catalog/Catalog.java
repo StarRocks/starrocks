@@ -96,6 +96,7 @@ import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.ShowAlterStmt.AlterType;
 import com.starrocks.analysis.SingleRangePartitionDesc;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
@@ -3045,13 +3046,18 @@ public class Catalog {
             } finally {
                 db.readUnlock();
             }
-            CreateTableStmt parsedCreateTableStmt =
-                    (CreateTableStmt) SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
-            parsedCreateTableStmt.setTableName(stmt.getTableName());
-            if (stmt.isSetIfNotExists()) {
-                parsedCreateTableStmt.setIfNotExists();
+            StatementBase statementBase = SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+            if (statementBase instanceof CreateTableStmt) {
+                CreateTableStmt parsedCreateTableStmt =
+                        (CreateTableStmt) SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+                parsedCreateTableStmt.setTableName(stmt.getTableName());
+                if (stmt.isSetIfNotExists()) {
+                    parsedCreateTableStmt.setIfNotExists();
+                }
+                createTable(parsedCreateTableStmt);
+            } else if (statementBase instanceof CreateViewStmt) {
+                ErrorReport.reportDdlException(ErrorCode.ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW);
             }
-            createTable(parsedCreateTableStmt);
         } catch (UserException e) {
             throw new DdlException("Failed to execute CREATE TABLE LIKE " + stmt.getExistedTableName() + ". Reason: " +
                     e.getMessage());
