@@ -82,6 +82,7 @@ public enum RuleType {
     TF_REWRITE_MULTI_DISTINCT,
     TF_REWRITE_BITMAP_COUNT_DISTINCT,
     TF_REWRITE_HLL_COUNT_DISTINCT,
+    TF_REWRITE_DUPLICATE_AGGREGATE_FN,
 
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
