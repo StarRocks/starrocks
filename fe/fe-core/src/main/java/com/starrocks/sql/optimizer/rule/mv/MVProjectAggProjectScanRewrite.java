@@ -60,10 +60,10 @@ public class MVProjectAggProjectScanRewrite extends MVAggRewrite {
                     ColumnRefOperator projectColumn = rewriteProjectOperator(bellowProject,
                             context.queryColumnRef,
                             context.mvColumnRef);
-                    rewriteAggOperator(agg, context.aggCall,
+                    rewriteAggOperator(input, agg, context.aggCall,
                             projectColumn,
                             context.mvColumn);
-                    rewriteTopProjectOperator(agg, topProject,
+                    rewriteTopProjectOperator((LogicalAggregationOperator) input.inputAt(0).getOp(), topProject,
                             projectColumn, context.aggCall);
                 }
             }

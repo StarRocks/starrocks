@@ -138,7 +138,7 @@ public class LogicalJoinOperator extends LogicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), opType, joinType, onPredicate, pruneOutputColumns);
+        return Objects.hash(super.hashCode(), opType, joinType, onPredicate);
     }
 
     @Override
