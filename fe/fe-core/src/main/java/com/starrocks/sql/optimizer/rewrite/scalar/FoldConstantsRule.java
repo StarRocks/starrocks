@@ -148,11 +148,6 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             return ConstantOperator.createNull(Type.BOOLEAN);
         }
 
-        ScalarOperator r = simplifyComparisonWithSameColumn(predicate);
-        if (r != null) {
-            return r;
-        }
-
         if (notAllConstant(predicate.getChildren())) {
             return predicate;
         }
@@ -194,30 +189,6 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             return ConstantOperator.createNull(Type.BOOLEAN);
         }
         return predicate;
-    }
-
-    //Simplify the comparison result of the same column
-    //eg a>=a with not nullable transform to true constant;
-    private ScalarOperator simplifyComparisonWithSameColumn(BinaryPredicateOperator predicate) {
-        if (predicate.getChild(0).equals(predicate.getChild(1))) {
-            if (predicate.getChild(0).isNullable()
-                    && predicate.getBinaryType().equals(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL)) {
-                return ConstantOperator.createBoolean(true);
-            } else if (!predicate.getChild(0).isNullable()) {
-                switch (predicate.getBinaryType()) {
-                    case EQ:
-                    case EQ_FOR_NULL:
-                    case GE:
-                    case LE:
-                        return ConstantOperator.createBoolean(true);
-                    case NE:
-                    case LT:
-                    case GT:
-                        return ConstantOperator.createBoolean(false);
-                }
-            }
-        }
-        return null;
     }
 
     private boolean notAllConstant(List<ScalarOperator> operators) {

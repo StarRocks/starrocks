@@ -285,9 +285,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
         String sql = "SELECT -v3 from t0 group by v3, v2 having -v3 < 63;";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  4:Project\n"
-                + "  |  <slot 4> : -1 * 3: v3"));
-        Assert.assertTrue(planFragment.contains("PREDICATES: -1 * 3: v3 < 63"));
+        Assert.assertTrue(planFragment.contains("  3:Project\n" +
+                "  |  <slot 4> : -1 * 3: v3\n"));
+        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(3: v3 AS DOUBLE) < -63.0"));
     }
 
     @Test
