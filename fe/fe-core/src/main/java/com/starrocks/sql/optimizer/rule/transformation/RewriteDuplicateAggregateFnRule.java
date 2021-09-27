@@ -20,6 +20,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+// Rewrite sql:
+// select bitmap_union_count(x), count(distinct x) from table having count(distinct x)
+// reduce one calculation count(distinct)
 public class RewriteDuplicateAggregateFnRule extends TransformationRule {
     public RewriteDuplicateAggregateFnRule() {
         super(RuleType.TF_REWRITE_DUPLICATE_AGGREGATE_FN,
