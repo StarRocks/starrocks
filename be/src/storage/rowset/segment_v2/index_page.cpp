@@ -134,7 +134,7 @@ Status IndexPageIterator::seek_at_or_after(const Slice& search_key) {
 
     // index entry records the first key of the indexed page,
     // so can't user left as the final result
-    // TODO: add page index for the last row of last page
+    // TODO: add page index entry for the end key of last page
     _pos = mid;
     return Status::OK();
 }
