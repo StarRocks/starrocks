@@ -141,7 +141,7 @@ public:
     void set_is_report_on_cancel(bool val) { _is_report_on_cancel = val; }
 
 private:
-    bool _is_vectorized = false;
+    bool _is_vectorized = true;
     ExecEnv* _exec_env;        // not owned
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     TUniqueId _query_id;

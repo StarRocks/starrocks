@@ -62,7 +62,6 @@ PlanFragmentExecutor::~PlanFragmentExecutor() {
 
 Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     const TPlanFragmentExecParams& params = request.params;
-    _is_vectorized = params.use_vectorized;
     _query_id = params.query_id;
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(_query_id)
