@@ -136,7 +136,7 @@ AgentStatus AgentUtils::rsync_from_remote(const string& remote_host, const strin
     int ret_code = 0;
     std::stringstream cmd_stream;
     cmd_stream << "rsync -r -q -e \"ssh -o StrictHostKeyChecking=no\"";
-    for (auto exclude_file_pattern : exclude_file_patterns) {
+    for (const auto& exclude_file_pattern : exclude_file_patterns) {
         cmd_stream << " --exclude=" << exclude_file_pattern;
     }
     if (transport_speed_limit_kbps != 0) {
@@ -148,10 +148,10 @@ AgentStatus AgentUtils::rsync_from_remote(const string& remote_host, const strin
     cmd_stream << " " << remote_host << ":" << remote_file_path << " " << local_file_path;
     LOG(INFO) << "rsync cmd: " << cmd_stream.str();
 
-    FILE* fp = NULL;
+    FILE* fp = nullptr;
     fp = popen(cmd_stream.str().c_str(), "r");
 
-    if (fp == NULL) {
+    if (fp == nullptr) {
         return STARROCKS_ERROR;
     }
 
@@ -219,7 +219,7 @@ bool AgentUtils::exec_cmd(const string& command, string* errmsg) {
 
     // Execute command.
     FILE* fp = popen(cmd.c_str(), "r");
-    if (fp == NULL) {
+    if (fp == nullptr) {
         std::stringstream err_stream;
         err_stream << "popen failed. " << strerror(errno) << ", with errno: " << errno << ".\n";
         *errmsg = err_stream.str();
@@ -228,7 +228,7 @@ bool AgentUtils::exec_cmd(const string& command, string* errmsg) {
 
     // Get command output.
     char result[1024] = {'\0'};
-    while (fgets(result, sizeof(result), fp) != NULL) {
+    while (fgets(result, sizeof(result), fp) != nullptr) {
         *errmsg += result;
     }
 

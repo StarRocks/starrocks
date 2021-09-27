@@ -27,12 +27,12 @@ bool FunctionContext::is_arg_constant(int i) const {
     if (i < 0 || i >= _impl->_constant_args.size()) {
         return false;
     }
-    return _impl->_constant_args[i] != NULL;
+    return _impl->_constant_args[i] != nullptr;
 }
 
 AnyVal* FunctionContext::get_constant_arg(int i) const {
     if (i < 0 || i >= _impl->_constant_args.size()) {
-        return NULL;
+        return nullptr;
     }
     return _impl->_constant_args[i];
 }

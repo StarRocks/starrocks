@@ -76,7 +76,7 @@ inline bool TextConverter::write_slot(const SlotDescriptor* slot_desc,
         str_slot->ptr = const_cast<char*>(data);
         str_slot->len = len;
         if (len != 0 && (copy_string || need_escape)) {
-            DCHECK(pool != NULL);
+            DCHECK(pool != nullptr);
             char* slot_data = reinterpret_cast<char*>(pool->allocate(len));
 
             if (need_escape) {

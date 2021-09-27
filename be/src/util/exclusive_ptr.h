@@ -25,7 +25,7 @@ public:
     constexpr exclusive_ptr(std::nullptr_t) {}
     explicit exclusive_ptr(pointer_type&& v) : _value(v.release()) {}
     exclusive_ptr(const exclusive_ptr& other) : _value(other.release()) {}
-    exclusive_ptr(exclusive_ptr&& other) : _value(other.release()) {}
+    exclusive_ptr(exclusive_ptr&& other) noexcept : _value(other.release()) {}
 
     template <typename U>
     exclusive_ptr(exclusive_ptr<U>&& other) : _value(other.release()) {}
@@ -37,7 +37,7 @@ public:
         this->reset(other.release());
         return *this;
     }
-    exclusive_ptr& operator=(exclusive_ptr&& other) {
+    exclusive_ptr& operator=(exclusive_ptr&& other) noexcept {
         this->reset(other.release());
         return *this;
     }

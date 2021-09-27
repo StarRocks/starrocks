@@ -100,7 +100,7 @@ public:
     //  - tuple_ptrs
     //  - tuple mem pool data
     //  - buffer handles from the io mgr
-    virtual ~RowBatch();
+    ~RowBatch() override;
 
     // used to c
     void clear();
@@ -153,7 +153,7 @@ public:
     // that will eventually be attached to this row batch. We need to make sure
     // the tuple pool does not accumulate excessive memory.
     bool at_capacity(MemPool* tuple_pool) {
-        DCHECK(tuple_pool != NULL);
+        DCHECK(tuple_pool != nullptr);
         return at_capacity() || tuple_pool->total_allocated_bytes() > AT_CAPACITY_MEM_USAGE;
     }
 
@@ -170,7 +170,7 @@ public:
     int total_byte_size();
 
     TupleRow* get_row(int row_idx) const {
-        DCHECK(_tuple_ptrs != NULL);
+        DCHECK(_tuple_ptrs != nullptr);
         DCHECK_GE(row_idx, 0);
         //DCHECK_LT(row_idx, _num_rows + (_has_in_flight_row ? 1 : 0));
         return reinterpret_cast<TupleRow*>(_tuple_ptrs + row_idx * _num_tuples_per_row);

@@ -108,7 +108,7 @@ void* tcmalloc_gc_thread(void* dummy) {
 #endif
     }
 
-    return NULL;
+    return nullptr;
 }
 
 void* memory_maintenance_thread(void* dummy) {
@@ -133,7 +133,7 @@ void* memory_maintenance_thread(void* dummy) {
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 /*
@@ -201,7 +201,7 @@ void* calculate_metrics(void* dummy) {
         sleep(15); // 15 seconds
     }
 
-    return NULL;
+    return nullptr;
 }
 
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
@@ -209,6 +209,7 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     std::set<std::string> disk_devices;
     std::vector<std::string> network_interfaces;
     std::vector<std::string> paths;
+    paths.reserve(store_paths.size());
     for (auto& store_path : store_paths) {
         paths.emplace_back(store_path.path);
     }
@@ -228,7 +229,7 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
 
     if (config::enable_metric_calculator) {
         pthread_t calculator_pid;
-        pthread_create(&calculator_pid, NULL, calculate_metrics, NULL);
+        pthread_create(&calculator_pid, nullptr, calculate_metrics, nullptr);
     }
 }
 
@@ -260,12 +261,16 @@ void init_signals() {
 }
 
 void init_minidump() {
+#ifdef __x86_64__
     if (config::sys_minidump_enable) {
-        LOG(INFO) << "Minidump is enable";
+        LOG(INFO) << "Minidump is enabled";
         Minidump::init();
     } else {
-        LOG(INFO) << "Minidump is disable";
+        LOG(INFO) << "Minidump is disabled";
     }
+#else
+    LOG(INFO) << "Minidump is disabled on non-x86_64 arch";
+#endif
 }
 
 void init_daemon(int argc, char** argv, const std::vector<StorePath>& paths) {
@@ -286,10 +291,10 @@ void init_daemon(int argc, char** argv, const std::vector<StorePath>& paths) {
     vectorized::date::init_date_cache();
 
     pthread_t tc_malloc_pid;
-    pthread_create(&tc_malloc_pid, NULL, tcmalloc_gc_thread, NULL);
+    pthread_create(&tc_malloc_pid, nullptr, tcmalloc_gc_thread, nullptr);
 
     pthread_t buffer_pool_pid;
-    pthread_create(&buffer_pool_pid, NULL, memory_maintenance_thread, NULL);
+    pthread_create(&buffer_pool_pid, nullptr, memory_maintenance_thread, nullptr);
 
     LOG(INFO) << CpuInfo::debug_string();
     LOG(INFO) << DiskInfo::debug_string();

@@ -467,7 +467,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testMV() throws Exception {
         String sql = "select count(distinct k7), count(distinct k8) from duplicate_table_with_null;";
         String planFragment = getFragmentPlan(sql);
-        System.out.println("FIXME : " + planFragment);
         Assert.assertTrue(planFragment.contains("OUTPUT EXPRS:16: count(distinct 7: k7) | 17: count(distinct 8: k8)"));
         Assert.assertTrue(planFragment.contains("14: mv_bitmap_union_k7"));
         Assert.assertTrue(planFragment.contains("15: mv_bitmap_union_k8"));
@@ -489,12 +488,33 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: S_NATIONKEY = 9: N_NATIONKEY"));
-        Assert.assertTrue(plan.contains("18:HASH JOIN\n" +
+        Assert.assertTrue(plan.contains("19:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: S_SUPPKEY = 15: PS_SUPPKEY"));
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
+    }
+
+    @Test
+    public void testReapNodeStatistics() throws Exception {
+        String sql = "select v1, v2, grouping_id(v1,v2), SUM(v3) from t0 group by cube(v1, v2)";
+        String plan = getCostExplain(sql);
+        // check scan node
+        Assert.assertTrue(plan.contains("cardinality: 10000"));
+        // check repeat node
+        Assert.assertTrue(plan.contains("cardinality: 40000"));
+        Assert.assertTrue(plan.contains(" * GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 4.0]\n" +
+                "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 4.0]"));
+
+        sql = "select v1, v2, grouping_id(v1,v2), SUM(v3) from t0 group by rollup(v1, v2)";
+        plan = getCostExplain(sql);
+        // check scan node
+        Assert.assertTrue(plan.contains("cardinality: 10000"));
+        // check repeat node
+        Assert.assertTrue(plan.contains("cardinality: 30000"));
+        Assert.assertTrue(plan.contains("* GROUPING_ID-->[0.0, 3.0, 0.0, 8.0, 3.0]\n" +
+                "  |  * GROUPING-->[0.0, 3.0, 0.0, 8.0, 3.0]"));
     }
 
     @Test

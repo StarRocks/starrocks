@@ -3,6 +3,7 @@
 #include "storage/update_manager.h"
 
 #include <limits>
+#include <memory>
 
 #include "gutil/endian.h"
 #include "storage/del_vector.h"
@@ -21,10 +22,10 @@ namespace starrocks {
 UpdateManager::UpdateManager(MemTracker* mem_tracker)
         : _index_cache(std::numeric_limits<size_t>::max()), _update_state_cache(std::numeric_limits<size_t>::max()) {
     _update_mem_tracker = mem_tracker;
-    _update_state_mem_tracker.reset(new MemTracker(-1, "rowset_update_state", mem_tracker));
-    _index_cache_mem_tracker.reset(new MemTracker(-1, "index_cache", mem_tracker));
-    _del_vec_cache_mem_tracker.reset(new MemTracker(-1, "del_vec_cache", mem_tracker));
-    _compaction_state_mem_tracker.reset(new MemTracker(-1, "compaction_state", mem_tracker));
+    _update_state_mem_tracker = std::make_unique<MemTracker>(-1, "rowset_update_state", mem_tracker);
+    _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "index_cache", mem_tracker);
+    _del_vec_cache_mem_tracker = std::make_unique<MemTracker>(-1, "del_vec_cache", mem_tracker);
+    _compaction_state_mem_tracker = std::make_unique<MemTracker>(-1, "compaction_state", mem_tracker);
 
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
@@ -181,7 +182,7 @@ Status UpdateManager::get_latest_del_vec(KVStore* meta, const TabletSegmentId& t
     return Status::OK();
 }
 
-Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, DelVectorPtr delvec) {
+Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelVectorPtr& delvec) {
     VLOG(1) << "set_cached_del_vec tablet:" << tsid.tablet_id << " rss:" << tsid.segment_id
             << " version:" << delvec->version() << " #del:" << delvec->cardinality();
     std::lock_guard<std::mutex> lg(_del_vec_cache_lock);

@@ -34,17 +34,17 @@ namespace starrocks {
 // TODO: Remove old query executor related codes before 2021-09-30
 
 MysqlScanner::MysqlScanner(const MysqlScannerParam& param)
-        : _my_param(param), _my_conn(NULL), _my_result(NULL), _is_open(false), _field_num(0) {}
+        : _my_param(param), _my_conn(nullptr), _my_result(nullptr), _is_open(false), _field_num(0) {}
 
 MysqlScanner::~MysqlScanner() {
     if (_my_result) {
         mysql_free_result(_my_result);
-        _my_result = NULL;
+        _my_result = nullptr;
     }
 
     if (_my_conn) {
         mysql_close(_my_conn);
-        _my_conn = NULL;
+        _my_conn = nullptr;
     }
 }
 
@@ -54,16 +54,17 @@ Status MysqlScanner::open() {
         return Status::OK();
     }
 
-    _my_conn = mysql_init(NULL);
+    _my_conn = mysql_init(nullptr);
 
-    if (NULL == _my_conn) {
+    if (nullptr == _my_conn) {
         return Status::InternalError("mysql init failed.");
     }
 
     VLOG(1) << "MysqlScanner::Connect";
 
-    if (NULL == mysql_real_connect(_my_conn, _my_param.host.c_str(), _my_param.user.c_str(), _my_param.passwd.c_str(),
-                                   _my_param.db.c_str(), atoi(_my_param.port.c_str()), NULL, _my_param.client_flag)) {
+    if (nullptr == mysql_real_connect(_my_conn, _my_param.host.c_str(), _my_param.user.c_str(),
+                                      _my_param.passwd.c_str(), _my_param.db.c_str(), atoi(_my_param.port.c_str()),
+                                      nullptr, _my_param.client_flag)) {
         LOG(WARNING) << "connect Mysql: "
                      << "Host: " << _my_param.host << " user: " << _my_param.user << " passwd: " << _my_param.passwd
                      << " db: " << _my_param.db << " port: " << _my_param.port;
@@ -150,11 +151,11 @@ Status MysqlScanner::get_next_row(char*** buf, unsigned long** lengths, bool* eo
         return Status::InternalError("GetNextRow before open.");
     }
 
-    if (NULL == buf || NULL == lengths || NULL == eos) {
+    if (nullptr == buf || nullptr == lengths || nullptr == eos) {
         return Status::InternalError("input parameter invalid.");
     }
 
-    if (NULL == _my_result) {
+    if (nullptr == _my_result) {
         return Status::InternalError("get next row before query.");
     }
 
@@ -174,7 +175,7 @@ Status MysqlScanner::get_next_row(char*** buf, unsigned long** lengths, bool* eo
 
     *lengths = mysql_fetch_lengths(_my_result);
 
-    if (NULL == *lengths) {
+    if (nullptr == *lengths) {
         return _error_status("mysql fetch row failed.");
     }
 

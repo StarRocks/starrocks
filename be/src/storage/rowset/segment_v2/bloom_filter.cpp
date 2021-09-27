@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 
 #include "gen_cpp/segment_v2.pb.h"
 #include "gutil/strings/substitute.h"
@@ -32,7 +33,7 @@ namespace segment_v2 {
 
 Status BloomFilter::create(BloomFilterAlgorithmPB algorithm, std::unique_ptr<BloomFilter>* bf) {
     if (algorithm == BLOCK_BLOOM_FILTER) {
-        bf->reset(new BlockSplitBloomFilter());
+        *bf = std::make_unique<BlockSplitBloomFilter>();
     } else {
         return Status::InternalError(strings::Substitute("invalid bloom filter algorithm:$0", algorithm));
     }

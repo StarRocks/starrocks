@@ -21,10 +21,10 @@
 
 #include "storage/rowset/beta_rowset.h"
 
-#include <stdio.h>  // for remove()
 #include <unistd.h> // for link()
 #include <util/file_utils.h>
 
+#include <cstdio> // for remove()
 #include <memory>
 #include <set>
 
@@ -234,7 +234,7 @@ StatusOr<vectorized::ChunkIteratorPtr> BetaRowset::new_iterator(const vectorized
     if (seg_iters.empty()) {
         return vectorized::new_empty_iterator(schema, options.chunk_size);
     } else if (options.sorted) {
-        return vectorized::new_merge_iterator(std::move(seg_iters));
+        return vectorized::new_merge_iterator(seg_iters);
     } else {
         return vectorized::new_union_iterator(std::move(seg_iters));
     }
@@ -322,7 +322,7 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iter
     vectorized::SegmentReadOptions seg_options;
     seg_options.block_mgr = fs::fs_util::block_manager();
     seg_options.stats = stats;
-    seg_options.is_primary_keys = meta != NULL;
+    seg_options.is_primary_keys = meta != nullptr;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
     seg_options.version = version;

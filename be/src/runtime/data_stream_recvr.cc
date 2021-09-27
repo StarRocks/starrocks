@@ -25,6 +25,7 @@
 
 #include <condition_variable>
 #include <deque>
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -171,13 +172,14 @@ Status DataStreamRecvr::SenderQueue::get_batch(RowBatch** next_batch) {
                  << " node=" << _recvr->dest_node_id();
         // Don't count time spent waiting on the sender as active time.
         CANCEL_SAFE_SCOPED_TIMER(_recvr->_data_arrival_timer, &_is_cancelled);
-        CANCEL_SAFE_SCOPED_TIMER(_received_first_batch ? NULL : _recvr->_first_batch_wait_total_timer, &_is_cancelled);
+        CANCEL_SAFE_SCOPED_TIMER(_received_first_batch ? nullptr : _recvr->_first_batch_wait_total_timer,
+                                 &_is_cancelled);
         _data_arrival_cv.wait(l);
     }
 
     // _cur_batch must be replaced with the returned batch.
     _current_batch.reset();
-    *next_batch = NULL;
+    *next_batch = nullptr;
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled SenderQueue::get_batch");
     }
@@ -335,7 +337,7 @@ void DataStreamRecvr::SenderQueue::add_batch(const PRowBatch& pb_batch, int be_n
         return;
     }
 
-    RowBatch* batch = NULL;
+    RowBatch* batch = nullptr;
     {
         SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
         // Note: if this function makes a row batch, the batch *must* be added
@@ -534,8 +536,9 @@ void DataStreamRecvr::SenderQueue::decrement_senders(int be_number) {
     _sender_eos_set.insert(be_number);
     DCHECK_GT(_num_remaining_senders, 0);
     _num_remaining_senders--;
-    VLOG_FILE << "decremented senders: fragment_instance_id=" << _recvr->fragment_instance_id()
-              << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders;
+    VLOG_FILE << "decremented senders: fragment_instance_id=" << print_id(_recvr->fragment_instance_id())
+              << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders
+              << " be_number=" << be_number;
     if (_num_remaining_senders == 0) {
         _data_arrival_cv.notify_one();
     }
@@ -592,7 +595,7 @@ Status DataStreamRecvr::create_merger(const TupleRowComparator& less_than) {
     input_batch_suppliers.reserve(_sender_queues.size());
 
     // Create the merger that will a single stream of sorted rows.
-    _merger.reset(new SortedRunMerger(less_than, &_row_desc, _profile.get(), false));
+    _merger = std::make_unique<SortedRunMerger>(less_than, &_row_desc, _profile.get(), false);
 
     for (SenderQueue* q : _sender_queues) {
         auto f = [q](RowBatch** batch) -> Status { return q->get_batch(batch); };
@@ -662,7 +665,7 @@ Status DataStreamRecvr::create_merger_for_pipeline(const SortExecExprs* exprs, c
 
 void DataStreamRecvr::transfer_all_resources(RowBatch* transfer_batch) {
     for (SenderQueue* sender_queue : _sender_queues) {
-        if (sender_queue->current_batch() != NULL) {
+        if (sender_queue->current_batch() != nullptr) {
             sender_queue->current_batch()->transfer_resource_ownership(transfer_batch);
         }
     }
@@ -686,7 +689,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_t
     (void)parent_tracker;
     // TODO: Now the parent tracker may cause problem when we need spill to disk, so we
     // replace parent_tracker with nullptr, fix future
-    _mem_tracker.reset(new MemTracker(_profile.get(), -1, "DataStreamRecvr", nullptr));
+    _mem_tracker = std::make_unique<MemTracker>(_profile.get(), -1, "DataStreamRecvr", nullptr);
     // _mem_tracker.reset(new MemTracker(_profile.get(), -1, "DataStreamRecvr", parent_tracker));
 
     // Create one queue per sender if is_merging is true.
@@ -716,17 +719,17 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_t
 }
 
 Status DataStreamRecvr::get_next(RowBatch* output_batch, bool* eos) {
-    DCHECK(_merger.get() != NULL);
+    DCHECK(_merger.get() != nullptr);
     return _merger->get_next(output_batch, eos);
 }
 
 Status DataStreamRecvr::get_next(vectorized::ChunkPtr* chunk, bool* eos) {
-    DCHECK(_chunks_merger.get() != NULL);
+    DCHECK(_chunks_merger.get() != nullptr);
     return _chunks_merger->get_next(chunk, eos);
 }
 
 Status DataStreamRecvr::get_next_for_pipeline(vectorized::ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit) {
-    DCHECK(_chunks_merger.get() != NULL);
+    DCHECK(_chunks_merger.get() != nullptr);
     return _chunks_merger->get_next_for_pipeline(chunk, eos, should_exit);
 }
 
@@ -772,7 +775,7 @@ void DataStreamRecvr::close() {
     // Remove this receiver from the DataStreamMgr that created it.
     // TODO: log error msg
     _mgr->deregister_recvr(fragment_instance_id(), dest_node_id());
-    _mgr = NULL;
+    _mgr = nullptr;
     _merger.reset();
     _chunks_merger.reset();
     _mem_tracker->close();
@@ -780,7 +783,7 @@ void DataStreamRecvr::close() {
 }
 
 DataStreamRecvr::~DataStreamRecvr() {
-    DCHECK(_mgr == NULL) << "Must call close()";
+    DCHECK(_mgr == nullptr) << "Must call close()";
 }
 
 Status DataStreamRecvr::get_batch(RowBatch** next_batch) {

@@ -252,7 +252,7 @@ TabletMeta::TabletMeta(MemTracker* mem_tracker, int64_t table_id, int64_t partit
     tablet_meta_pb.set_tablet_id(tablet_id);
     tablet_meta_pb.set_schema_hash(schema_hash);
     tablet_meta_pb.set_shard_id(shard_id);
-    tablet_meta_pb.set_creation_time(time(NULL));
+    tablet_meta_pb.set_creation_time(time(nullptr));
     tablet_meta_pb.set_cumulative_layer_point(-1);
     tablet_meta_pb.set_tablet_state(PB_RUNNING);
     *(tablet_meta_pb.mutable_tablet_uid()) = tablet_uid.to_proto();
@@ -811,7 +811,7 @@ OLAPStatus TabletMeta::set_partition_id(int64_t partition_id) {
 
 void TabletMeta::create_inital_updates_meta() {
     CHECK(!_updatesPB) << "_updates should be empty";
-    _updatesPB.reset(new TabletUpdatesPB());
+    _updatesPB = std::make_unique<TabletUpdatesPB>();
     auto vm = _updatesPB->add_versions();
     auto v = vm->mutable_version();
     v->set_major(1);

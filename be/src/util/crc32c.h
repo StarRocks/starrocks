@@ -25,9 +25,8 @@
 #ifndef STARROCKS_BE_SRC_UTIL_CRC32C_H
 #define STARROCKS_BE_SRC_UTIL_CRC32C_H
 
-#include <stddef.h>
-#include <stdint.h>
-
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "util/slice.h"

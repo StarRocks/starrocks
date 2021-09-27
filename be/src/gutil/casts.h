@@ -10,10 +10,11 @@
 #ifndef BASE_CASTS_H_
 #define BASE_CASTS_H_
 
-#include <assert.h> // for use with down_cast<>
 #include <common/logging.h>
-#include <limits.h> // for enumeration casts and tests
-#include <string.h> // for memcpy
+
+#include <cassert> // for use with down_cast<>
+#include <climits> // for enumeration casts and tests
+#include <cstring> // for memcpy
 
 #include "gutil/macros.h"
 #include "gutil/template_util.h"
@@ -72,7 +73,7 @@ inline To down_cast(From* f) {        // so we only accept pointers
 
     // TODO(user): This should use COMPILE_ASSERT.
     if (false) {
-        ::implicit_cast<const From*, To>(NULL);
+        ::implicit_cast<const From*, To>(nullptr);
     }
 
     // uses RTTI in dbg and fastbuild. asserts are disabled in opt builds.
@@ -94,7 +95,7 @@ inline To down_cast(From& f) {
     typedef typename base::remove_reference<To>::type* ToAsPointer;
     if (false) {
         // Compile-time check that To inherits from From. See above for details.
-        ::implicit_cast<From*, ToAsPointer>(NULL);
+        ::implicit_cast<From*, ToAsPointer>(nullptr);
     }
 
     assert(dynamic_cast<ToAsPointer>(&f) != NULL); // RTTI: debug mode only

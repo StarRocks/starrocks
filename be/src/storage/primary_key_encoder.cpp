@@ -24,8 +24,8 @@
 
 #include "primary_key_encoder.h"
 
-#include <string.h>
-
+#include <cstring>
+#include <memory>
 #include <type_traits>
 
 #include "column/binary_column.h"
@@ -207,7 +207,7 @@ inline Status decode_slice(Slice* src, string* dest, bool is_last) {
     } else {
         uint8_t* separator = static_cast<uint8_t*>(memmem(src->data, src->size, "\0\0", 2));
         DCHECK(separator) << "bad encoded primary key, separator not found";
-        if (PREDICT_FALSE(separator == NULL)) {
+        if (PREDICT_FALSE(separator == nullptr)) {
             LOG(WARNING) << "bad encoded primary key, separator not found";
             return Status::InvalidArgument("bad encoded primary key, separator not found");
         }
@@ -311,7 +311,7 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
             *pcolumn = vectorized::Int128Column::create_mutable();
             break;
         case OLAP_FIELD_TYPE_VARCHAR:
-            pcolumn->reset(new vectorized::BinaryColumn());
+            *pcolumn = std::make_unique<vectorized::BinaryColumn>();
             break;
         case OLAP_FIELD_TYPE_DATE_V2:
             *pcolumn = vectorized::DateColumn::create_mutable();
@@ -325,7 +325,7 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
     } else {
         // composite keys encoding to binary
         // TODO(cbl): support fixed length encoded keys, e.g. (int32, int32) => int64
-        pcolumn->reset(new vectorized::BinaryColumn());
+        *pcolumn = std::make_unique<vectorized::BinaryColumn>();
     }
     return Status::OK();
 }

@@ -21,7 +21,7 @@
 
 #include "storage/memory/hash_index.h"
 
-#include <stdio.h>
+#include <cstdio>
 
 #include "common/compiler_util.h"
 #ifdef __SSE2__
@@ -55,7 +55,7 @@ struct alignas(64) HashChunk {
 
 const uint64_t HashIndex::npos;
 
-HashIndex::HashIndex(size_t capacity) : _size(0), _max_size(0), _num_chunks(0), _chunk_mask(0), _chunks(NULL) {
+HashIndex::HashIndex(size_t capacity) : _size(0), _max_size(0), _num_chunks(0), _chunk_mask(0), _chunks(nullptr) {
     size_t min_chunk = (capacity * 14 / 12 + HashChunk::CAPACITY - 1) / HashChunk::CAPACITY;
     if (min_chunk == 0) {
         return;
@@ -79,7 +79,7 @@ HashIndex::HashIndex(size_t capacity) : _size(0), _max_size(0), _num_chunks(0), 
 HashIndex::~HashIndex() {
     if (_chunks) {
         free(_chunks);
-        _chunks = 0;
+        _chunks = nullptr;
         _size = 0;
         _max_size = 0;
         _num_chunks = 0;

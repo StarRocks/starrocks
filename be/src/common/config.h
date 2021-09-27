@@ -591,6 +591,7 @@ CONF_mInt16(storage_format_version, "2");
 // do pre-aggregate if effect great than the factor, factor range:[1-100].
 CONF_Int16(pre_aggregate_factor, "80");
 
+#ifdef __x86_64__
 // enable genearate minidump for crash
 CONF_Bool(sys_minidump_enable, "false");
 
@@ -605,6 +606,7 @@ CONF_mInt32(sys_minidump_limit, "20480");
 
 // interval(seconds) for cleaning old minidumps
 CONF_mInt32(sys_minidump_interval, "600");
+#endif
 
 // The maximum number of version per tablet. If the
 // number of version exceeds this value, new write
@@ -620,7 +622,12 @@ CONF_Int64(pipeline_yield_max_chunks_moved, "100");
 // yield PipelineDriver when maximum time in nano-seconds has spent
 // in current execution round.
 CONF_Int64(pipeline_yield_max_time_spent, "100000000");
-
+// the number of io threads pipeline engine.
+CONF_Int64(pipeline_io_thread_pool_thread_num, "3");
+// queue size of io thread pool for pipeline engine.
+CONF_Int64(pipeline_io_thread_pool_queue_size, "102400");
+// the number of execution threads for pipeline engine.
+CONF_Int64(pipeline_exec_thread_pool_thread_num, "3");
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");
 

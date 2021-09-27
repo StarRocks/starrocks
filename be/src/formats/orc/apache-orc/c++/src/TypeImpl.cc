@@ -591,7 +591,7 @@ std::unique_ptr<Type> TypeImpl::parseDecimalType(const std::string& input, size_
     return std::unique_ptr<Type>(new TypeImpl(DECIMAL, precision, scale));
 }
 
-std::unique_ptr<Type> TypeImpl::parseCategory(std::string category, const std::string& input, size_t start,
+std::unique_ptr<Type> TypeImpl::parseCategory(const std::string& category, const std::string& input, size_t start,
                                               size_t end) {
     if (category == "boolean") {
         return std::unique_ptr<Type>(new TypeImpl(BOOLEAN));
@@ -687,7 +687,7 @@ std::vector<std::pair<std::string, ORC_UNIQUE_PTR<Type>>> TypeImpl::parseType(co
         }
 
         std::string category = input.substr(pos, endPos - pos);
-        res.push_back(std::make_pair(fieldName, parseCategory(category, input, endPos + 1, nextPos)));
+        res.emplace_back(fieldName, parseCategory(category, input, endPos + 1, nextPos));
 
         if (nextPos < end && (input[nextPos] == ')' || input[nextPos] == '>')) {
             pos = nextPos + 2;

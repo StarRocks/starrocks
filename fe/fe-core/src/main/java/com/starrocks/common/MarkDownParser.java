@@ -138,9 +138,8 @@ public class MarkDownParser {
             if (!lines.get(nextToRead).startsWith("#")) {
                 sb.append(lines.get(nextToRead)).append('\n');
                 nextToRead++;
-            }
-            // Ignore headlevel greater than 2
-            else if (lines.get(nextToRead).startsWith("###")) {
+            } else if (lines.get(nextToRead).startsWith("###")) {
+                // Ignore headlevel greater than 2
                 sb.append(lines.get(nextToRead).replaceAll("#", "")).append('\n');
                 nextToRead++;
             } else {

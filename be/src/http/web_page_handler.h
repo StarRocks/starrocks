@@ -45,7 +45,7 @@ public:
     typedef std::function<void(const ArgumentMap& args, EasyJson* output)> TemplatePageHandlerCallback;
 
     WebPageHandler(EvHttpServer* http_server);
-    virtual ~WebPageHandler();
+    ~WebPageHandler() override;
 
     void handle(HttpRequest* req) override;
 

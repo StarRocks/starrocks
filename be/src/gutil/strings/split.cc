@@ -4,10 +4,9 @@
 
 #include "gutil/strings/split.h"
 
-#include <assert.h>
-#include <stdlib.h>
-#include <string.h>
-
+#include <cassert>
+#include <cstdlib>
+#include <cstring>
 #include <iterator>
 using std::back_insert_iterator;
 using std::iterator_traits;

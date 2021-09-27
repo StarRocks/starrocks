@@ -1,9 +1,9 @@
 #pragma once
 
-#include <stdint.h>
-#include <string.h>
 #include <unistd.h>
 
+#include <cstdint>
+#include <cstring>
 #include <memory>
 #include <type_traits>
 
@@ -26,6 +26,8 @@ struct StringSearcherBase {
     bool pageSafe(const void* const ptr) const {
         return ((page_size - 1) & reinterpret_cast<std::uintptr_t>(ptr)) <= page_size - SSE2_WIDTH;
     }
+#else
+    static constexpr size_t SSE2_WIDTH = sizeof(__int128_t);
 #endif
 };
 

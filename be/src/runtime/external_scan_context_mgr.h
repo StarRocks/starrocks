@@ -21,8 +21,7 @@
 
 #pragma once
 
-#include <time.h>
-
+#include <ctime>
 #include <map>
 #include <memory>
 #include <mutex>

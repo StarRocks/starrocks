@@ -89,6 +89,16 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    public void testCountDistinctWithoutGroupBy() throws Exception {
+        String sql = "SELECT COUNT (DISTINCT l_partkey) FROM lineitem";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("3:AGGREGATE (merge finalize)\n" +
+                "  |  output: multi_distinct_count(18: count(distinct 2: L_PARTKEY))"));
+        Assert.assertTrue(planFragment.contains("1:AGGREGATE (update serialize)\n" +
+                "  |  output: multi_distinct_count(2: L_PARTKEY)"));
+    }
+
+    @Test
     public void testJoinDateAndDateTime() throws Exception {
         String sql = "select count(a.id_date) from test_all_type a " +
                 "join test_all_type b on a.id_date = b.id_datetime ;";

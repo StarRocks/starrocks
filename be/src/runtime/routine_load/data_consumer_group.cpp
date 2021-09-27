@@ -196,9 +196,9 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     return Status::OK();
 }
 
-void KafkaDataConsumerGroup::actual_consume(std::shared_ptr<DataConsumer> consumer,
+void KafkaDataConsumerGroup::actual_consume(const std::shared_ptr<DataConsumer>& consumer,
                                             TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms,
-                                            ConsumeFinishCallback cb) {
+                                            const ConsumeFinishCallback& cb) {
     Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->group_consume(queue, max_running_time_ms);
     cb(st);
 }

@@ -8,9 +8,9 @@
 #ifndef BASE_PORT_H_
 #define BASE_PORT_H_
 
-#include <limits.h> // So we can set the bounds of our types
-#include <stdlib.h> // for free()
-#include <string.h> // for memcpy()
+#include <climits> // So we can set the bounds of our types
+#include <cstdlib> // for free()
+#include <cstring> // for memcpy()
 
 #if defined(__APPLE__)
 #include <unistd.h> // for getpagesize() on mac
@@ -329,6 +329,10 @@ inline void* memrchr(const void* bytes, int find_char, size_t len) {
 #elif defined(__ARM_ARCH_7A__)
 #define CACHELINE_SIZE 64
 #endif
+#elif defined(__aarch64__)
+// Cache line sizes for aarch64(huawei kunpeng):
+// https://support.huaweicloud.com/tuningtip-kunpenggrf/kunpengtuning_12_0052.html
+#define CACHELINE_SIZE 128
 #endif
 
 // This is a NOP if CACHELINE_SIZE is not defined.
@@ -621,9 +625,9 @@ inline void* aligned_malloc(size_t size, int minimum_alignment) {
 #elif defined(OS_CYGWIN)
     return memalign(minimum_alignment, size);
 #else // !__APPLE__ && !OS_CYGWIN
-    void* ptr = NULL;
+    void* ptr = nullptr;
     if (posix_memalign(&ptr, minimum_alignment, size) != 0)
-        return NULL;
+        return nullptr;
     else
         return ptr;
 #endif

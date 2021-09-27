@@ -24,7 +24,7 @@ public:
 
     // FixMe(kks): currenly, join runtime filter need this method
     // we should find a way remove this method
-    bool is_bound(const std::vector<TupleId>& tuple_ids) const;
+    bool is_bound(const std::vector<TupleId>& tuple_ids) const override;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ColumnRef(*this)); }
 

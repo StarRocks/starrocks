@@ -4,7 +4,7 @@
 
 #include "gutil/bits.h"
 
-#include <assert.h>
+#include <cassert>
 
 // this array gives the number of bits for any number from 0 to 255
 // (We could make these ints.  The tradeoff is size (eg does it overwhelm

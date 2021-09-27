@@ -37,7 +37,7 @@ static const re2::RE2 LIKE_EQUALS_RE(R"((((\\%)|(\\_)|([^%_]))+))");
 Status LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, LikePredicateState* state,
                                                    starrocks_udf::FunctionContext* context, const Slice& slice) {
     if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SINGLEMATCH,
-                   HS_MODE_BLOCK, NULL, &state->database, &state->compile_err) != HS_SUCCESS) {
+                   HS_MODE_BLOCK, nullptr, &state->database, &state->compile_err) != HS_SUCCESS) {
         std::stringstream error;
         error << "Invalid regex expression: " << slice.data << ": " << state->compile_err->message;
         context->set_error(error.str().c_str());

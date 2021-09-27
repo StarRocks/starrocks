@@ -40,7 +40,7 @@ Column::Filter& ColumnHelper::merge_nullable_filter(Column* column) {
     }
 }
 
-void ColumnHelper::merge_two_filters(const ColumnPtr column, Column::Filter* __restrict filter, bool* all_zero) {
+void ColumnHelper::merge_two_filters(const ColumnPtr& column, Column::Filter* __restrict filter, bool* all_zero) {
     if (column->is_nullable()) {
         auto* nullable_column = as_raw_column<NullableColumn>(column);
 

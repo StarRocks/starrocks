@@ -488,10 +488,7 @@ public class MVRewriteTest {
                 EMPS_TABLE_NAME + " order by empid, deptno;";
         String query = "select empid, deptno from " + EMPS_TABLE_NAME + " where empid >1 union all select empid,"
                 + " deptno from " + EMPS_TABLE_NAME + " where empid <0;";
-        starRocksAssert.withMaterializedView(createEmpsMVSQL);
-        //.query(query).explainContains(QUERY_USE_EMPS_MV, 2);
-
-        System.out.println("FIXME : " + starRocksAssert.query(query).explainQuery());
+        starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS_MV, 2);
     }
 
     @Test
@@ -958,7 +955,8 @@ public class MVRewriteTest {
     @Test
     public void testJoinProjectRewrite() throws Exception {
         String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME +
-                " as select time, empid, bitmap_union(to_bitmap(deptno)),hll_union(hll_hash(salary)) from " + EMPS_TABLE_NAME + " group by time, empid";
+                " as select time, empid, bitmap_union(to_bitmap(deptno)),hll_union(hll_hash(salary)) from " +
+                EMPS_TABLE_NAME + " group by time, empid";
         starRocksAssert.withMaterializedView(createEmpsMVSQL);
         String query = "select count(distinct emps.deptno) from emps, depts";
         starRocksAssert.query(query).explainContains("emps_mv", "bitmap_union_count(7: mv_bitmap_union_deptno)");
@@ -973,7 +971,8 @@ public class MVRewriteTest {
         query = "select count(distinct emps.deptno) from emps left outer join depts on emps.time = depts.time";
         starRocksAssert.query(query).explainContains("emps_mv");
 
-        query = "select emps.time, count(distinct emps.deptno) from emps, depts where emps.time = depts.time group by emps.time";
+        query =
+                "select emps.time, count(distinct emps.deptno) from emps, depts where emps.time = depts.time group by emps.time";
         starRocksAssert.query(query).explainContains("emps_mv");
 
         query = "select unnest, count(distinct deptno) from " +
@@ -983,14 +982,5 @@ public class MVRewriteTest {
 
         query = "select approx_count_distinct(salary) from emps left outer join depts on emps.time = depts.time";
         starRocksAssert.query(query).explainContains("emps_mv");
-    }
-
-    @Test
-    public void test1() throws Exception {
-        String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME +
-                " as select time, empid, bitmap_union(to_bitmap(deptno)),hll_union(hll_hash(salary)) from " + EMPS_TABLE_NAME + " group by time, empid";
-        starRocksAssert.withMaterializedView(createEmpsMVSQL);
-        String query = "select count(distinct emps.deptno) from emps, depts where emps.time = depts.time";
-        starRocksAssert.query(query).explainContains(EMPS_MV_NAME);
     }
 }

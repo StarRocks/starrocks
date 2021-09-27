@@ -22,13 +22,15 @@
 #ifndef STARROCKS_BE_PLUGIN_PLUGIN_ZIP_H
 #define STARROCKS_BE_PLUGIN_PLUGIN_ZIP_H
 
+#include <utility>
+
 #include "common/status.h"
 
 namespace starrocks {
 
 class PluginZip {
 public:
-    PluginZip(std::string source) : _source(source) {}
+    PluginZip(std::string source) : _source(std::move(source)) {}
 
     ~PluginZip();
 

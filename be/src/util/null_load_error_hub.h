@@ -38,15 +38,15 @@ class NullLoadErrorHub : public LoadErrorHub {
 public:
     NullLoadErrorHub();
 
-    virtual ~NullLoadErrorHub();
+    ~NullLoadErrorHub() override;
 
-    virtual Status prepare();
+    Status prepare() override;
 
-    virtual Status export_error(const ErrorMsg& error_msg);
+    Status export_error(const ErrorMsg& error_msg) override;
 
-    virtual Status close();
+    Status close() override;
 
-    virtual std::string debug_string() const;
+    std::string debug_string() const override;
 
 private:
     std::mutex _mtx;

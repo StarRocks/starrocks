@@ -46,20 +46,20 @@ void writeCustomOrcFile(const std::string& filename, const orc::proto::Metadata&
         exit(1);
     }
     orc::proto::PostScript ps;
-    ps.set_footerlength(static_cast<uint64_t>(footer.ByteSize()));
+    ps.set_footerlength(static_cast<uint64_t>(footer.ByteSizeLong()));
     ps.set_compression(orc::proto::NONE);
     ps.set_compressionblocksize(64 * 1024);
     for (size_t i = 0; i < version.size(); ++i) {
         ps.add_version(version[i]);
     }
-    ps.set_metadatalength(static_cast<uint64_t>(metadata.ByteSize()));
+    ps.set_metadatalength(static_cast<uint64_t>(metadata.ByteSizeLong()));
     ps.set_writerversion(writerVersion);
     ps.set_magic("ORC");
     if (!ps.SerializeToOstream(&output)) {
         std::cerr << "Failed to write postscript for " << filename << "\n";
         exit(1);
     }
-    output.put(static_cast<char>(ps.ByteSize()));
+    output.put(static_cast<char>(ps.ByteSizeLong()));
 }
 
 /**

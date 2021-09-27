@@ -30,31 +30,30 @@ public abstract class MVAggRewrite {
     // Use mv column instead of query column
     protected static void rewriteOlapScanOperator(
             OptExpression optExpression,
-            LogicalOlapScanOperator scanOperator,
-            Column mvColumn,
-            ColumnRefOperator baseColumnRef,
-            ColumnRefOperator mvColumnRef) {
-        List<ColumnRefOperator> outputColumns = new ArrayList<>(scanOperator.getOutputColumns());
-        outputColumns.remove(baseColumnRef);
-        outputColumns.add(mvColumnRef);
+            LogicalOlapScanOperator olapScanOperator,
+            MaterializedViewRule.RewriteContext rewriteContext) {
+        List<ColumnRefOperator> outputColumns = new ArrayList<>(olapScanOperator.getOutputColumns());
+        outputColumns.remove(rewriteContext.queryColumnRef);
+        outputColumns.add(rewriteContext.mvColumnRef);
 
-        Map<ColumnRefOperator, Column> columnRefOperatorColumnMap = new HashMap<>(scanOperator.getColRefToColumnMetaMap());
-        columnRefOperatorColumnMap.remove(baseColumnRef);
-        columnRefOperatorColumnMap.put(mvColumnRef, mvColumn);
+        Map<ColumnRefOperator, Column> columnRefOperatorColumnMap =
+                new HashMap<>(olapScanOperator.getColRefToColumnMetaMap());
+        columnRefOperatorColumnMap.remove(rewriteContext.queryColumnRef);
+        columnRefOperatorColumnMap.put(rewriteContext.mvColumnRef, rewriteContext.mvColumn);
 
         LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
-                scanOperator.getTable(),
+                olapScanOperator.getTable(),
                 outputColumns,
                 columnRefOperatorColumnMap,
-                scanOperator.getColumnMetaToColRefMap(),
-                scanOperator.getDistributionSpec(),
-                scanOperator.getLimit(),
-                scanOperator.getPredicate());
-        newScanOperator.setSelectedIndexId(scanOperator.getSelectedIndexId());
-        newScanOperator.setSelectedPartitionId(scanOperator.getSelectedPartitionId());
-        newScanOperator.setSelectedTabletId(Lists.newArrayList(scanOperator.getSelectedTabletId()));
-        newScanOperator.setPartitionNames(scanOperator.getPartitionNames());
-        newScanOperator.setHintsTabletIds(scanOperator.getHintsTabletIds());
+                olapScanOperator.getColumnMetaToColRefMap(),
+                olapScanOperator.getDistributionSpec(),
+                olapScanOperator.getLimit(),
+                olapScanOperator.getPredicate(),
+                olapScanOperator.getSelectedIndexId(),
+                olapScanOperator.getSelectedPartitionId(),
+                olapScanOperator.getPartitionNames(),
+                olapScanOperator.getSelectedTabletId(),
+                olapScanOperator.getHintsTabletIds());
 
         optExpression.setChild(0, OptExpression.create(newScanOperator));
     }

@@ -31,8 +31,8 @@
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
-#include <stdint.h>
 
+#include <cstdint>
 #include <map>
 #include <string>
 
@@ -54,7 +54,7 @@ class RowBatch;
 class ParquetOutputStream : public arrow::io::OutputStream {
 public:
     ParquetOutputStream(FileWriter* file_writer);
-    virtual ~ParquetOutputStream();
+    ~ParquetOutputStream() override;
 
     arrow::Status Write(const void* data, int64_t nbytes) override;
     // return the current write position of the stream

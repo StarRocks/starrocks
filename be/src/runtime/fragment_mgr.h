@@ -56,13 +56,13 @@ public:
     typedef std::function<void(PlanFragmentExecutor*)> FinishCallback;
 
     FragmentMgr(ExecEnv* exec_env);
-    virtual ~FragmentMgr();
+    ~FragmentMgr() override;
 
     // execute one plan fragment
     Status exec_plan_fragment(const TExecPlanFragmentParams& params);
 
     // TODO(zc): report this is over
-    Status exec_plan_fragment(const TExecPlanFragmentParams& params, FinishCallback cb);
+    Status exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb);
 
     Status cancel(const TUniqueId& fragment_id) {
         return cancel(fragment_id, PPlanFragmentCancelReason::INTERNAL_ERROR);
@@ -75,7 +75,7 @@ public:
 
     void cancel_worker();
 
-    virtual void debug(std::stringstream& ss);
+    void debug(std::stringstream& ss) override;
 
     Status trigger_profile_report(const PTriggerProfileReportRequest* request);
 
@@ -86,7 +86,7 @@ public:
                                        std::vector<TScanColumnDesc>* selected_columns);
 
 private:
-    void exec_actual(std::shared_ptr<FragmentExecState> exec_state, FinishCallback cb);
+    void exec_actual(const std::shared_ptr<FragmentExecState>& exec_state, const FinishCallback& cb);
 
     // This is input params
     ExecEnv* _exec_env;

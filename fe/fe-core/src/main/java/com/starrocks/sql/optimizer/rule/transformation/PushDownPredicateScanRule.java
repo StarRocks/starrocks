@@ -55,12 +55,12 @@ public class PushDownPredicateScanRule extends TransformationRule {
                     olapScanOperator.getColumnMetaToColRefMap(),
                     olapScanOperator.getDistributionSpec(),
                     olapScanOperator.getLimit(),
-                    predicates);
-            newScanOperator.setSelectedIndexId(olapScanOperator.getSelectedIndexId());
-            newScanOperator.setSelectedPartitionId(olapScanOperator.getSelectedPartitionId());
-            newScanOperator.setSelectedTabletId(Lists.newArrayList(olapScanOperator.getSelectedTabletId()));
-            newScanOperator.setPartitionNames(olapScanOperator.getPartitionNames());
-            newScanOperator.setHintsTabletIds(olapScanOperator.getHintsTabletIds());
+                    predicates,
+                    olapScanOperator.getSelectedIndexId(),
+                    olapScanOperator.getSelectedPartitionId(),
+                    olapScanOperator.getPartitionNames(),
+                    olapScanOperator.getSelectedTabletId(),
+                    olapScanOperator.getHintsTabletIds());
 
             Map<ColumnRefOperator, ScalarOperator> projectMap =
                     newScanOperator.getOutputColumns().stream()

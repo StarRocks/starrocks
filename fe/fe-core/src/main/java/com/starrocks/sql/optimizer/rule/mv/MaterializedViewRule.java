@@ -14,6 +14,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -37,7 +38,6 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -89,6 +89,9 @@ public class MaterializedViewRule extends Rule {
                         selectValidIndexes(scan, relationId);
                 if (!candidateIndexIdToSchema.isEmpty()) {
                     long bestIndex = selectBestIndexes(scan, candidateIndexIdToSchema, relationId);
+                    BestIndexRewriter bestIndexRewriter = new BestIndexRewriter(scan);
+                    optExpression = bestIndexRewriter.rewrite(optExpression, bestIndex);
+
                     if (rewriteContexts.containsKey(bestIndex)) {
                         List<RewriteContext> rewriteContext = rewriteContexts.get(bestIndex);
                         List<RewriteContext> percentileContexts = rewriteContext.stream().
@@ -121,14 +124,14 @@ public class MaterializedViewRule extends Rule {
         Operator operator = root.getOp();
         if (operator instanceof LogicalOlapScanOperator) {
             LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) operator;
-            OlapTable olapTable = scanOperator.getOlapTable();
+            OlapTable olapTable = (OlapTable) scanOperator.getTable();
             return olapTable.hasMaterializedView();
         }
         return false;
     }
 
     private Map<Long, List<Column>> selectValidIndexes(LogicalOlapScanOperator scanOperator, int tableId) {
-        OlapTable table = scanOperator.getOlapTable();
+        OlapTable table = (OlapTable) scanOperator.getTable();
         Map<Long, MaterializedIndexMeta> candidateIndexIdToMeta = table.getVisibleIndexIdToMeta();
         // Step2: check all columns in compensating predicates are available in the view output
         checkCompensatingPredicates(columnNameToIds.get(tableId), columnIdsInPredicates.get(tableId),
@@ -182,11 +185,7 @@ public class MaterializedViewRule extends Rule {
                         candidateIndexIdToSchema, equivalenceColumns, unequivalenceColumns);
 
         // Step2: the best index that satisfies the least number of rows
-        long bestIndex = selectBestRowCountIndex(indexesMatchingBestPrefixIndex,
-                scanOperator.getOlapTable(),
-                scanOperator.getSelectedPartitionId());
-        scanOperator.setSelectedIndexId(bestIndex);
-        return bestIndex;
+        return selectBestRowCountIndex(indexesMatchingBestPrefixIndex, (OlapTable) scanOperator.getTable());
     }
 
     private void collectAllPredicates(OptExpression root) {
@@ -335,14 +334,13 @@ public class MaterializedViewRule extends Rule {
         }
     }
 
-    private long selectBestRowCountIndex(Set<Long> indexesMatchingBestPrefixIndex, OlapTable olapTable,
-                                         Collection<Long> partitionIds) {
+    private long selectBestRowCountIndex(Set<Long> indexesMatchingBestPrefixIndex, OlapTable olapTable) {
         long minRowCount = Long.MAX_VALUE;
         long selectedIndexId = 0;
         for (Long indexId : indexesMatchingBestPrefixIndex) {
             long rowCount = 0;
-            for (Long partitionId : partitionIds) {
-                rowCount += olapTable.getPartition(partitionId).getIndex(indexId).getRowCount();
+            for (Partition partition : olapTable.getPartitions()) {
+                rowCount += partition.getIndex(indexId).getRowCount();
             }
             if (rowCount < minRowCount) {
                 minRowCount = rowCount;
@@ -569,7 +567,8 @@ public class MaterializedViewRule extends Rule {
             FunctionSet.MULTI_DISTINCT_COUNT
     );
 
-    private void keyColumnsToExprList(Map<String, Integer> columnToIds, MaterializedIndexMeta mvMeta, List<CallOperator> result) {
+    private void keyColumnsToExprList(Map<String, Integer> columnToIds, MaterializedIndexMeta mvMeta,
+                                      List<CallOperator> result) {
         for (Column column : mvMeta.getSchema()) {
             if (!column.isAggregated()) {
                 ColumnRefOperator columnRef = factory.getColumnRef(columnToIds.get(column.getName()));

@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 public class PartitionPruneRuleTest {
     @Test
@@ -132,10 +133,11 @@ public class PartitionPruneRuleTest {
 
         PartitionPruneRule rule = new PartitionPruneRule();
 
-        assertEquals(0, operator.getSelectedPartitionId().size());
-        rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory));
+        assertNull(operator.getSelectedPartitionId());
+        OptExpression optExpression =
+                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
 
-        assertEquals(3, operator.getSelectedPartitionId().size());
+        assertEquals(3, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId().size());
     }
 
     @Test
@@ -251,9 +253,10 @@ public class PartitionPruneRuleTest {
 
         PartitionPruneRule rule = new PartitionPruneRule();
 
-        assertEquals(0, operator.getSelectedPartitionId().size());
-        rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), new ColumnRefFactory()));
+        assertNull(operator.getSelectedPartitionId());
+        OptExpression optExpression =
+                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
 
-        assertEquals(3, operator.getSelectedPartitionId().size());
+        assertEquals(3, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId().size());
     }
 }

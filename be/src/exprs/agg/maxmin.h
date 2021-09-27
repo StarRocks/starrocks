@@ -207,7 +207,7 @@ public:
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
-        *dst = std::move(src[0]);
+        *dst = src[0];
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
@@ -215,7 +215,7 @@ public:
         down_cast<InputColumnType*>(to)->append(this->data(state).result);
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
         InputColumnType* column = down_cast<InputColumnType*>(dst);
         for (size_t i = start; i < end; ++i) {
@@ -261,7 +261,7 @@ public:
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
-        *dst = std::move(src[0]);
+        *dst = src[0];
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
@@ -270,7 +270,7 @@ public:
         column->append(this->data(state).slice());
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
         BinaryColumn* column = down_cast<BinaryColumn*>(dst);
         for (size_t i = start; i < end; ++i) {

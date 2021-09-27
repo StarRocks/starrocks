@@ -23,7 +23,8 @@
 
 #include <arrow/array.h>
 #include <arrow/status.h>
-#include <time.h>
+
+#include <ctime>
 
 #include "common/logging.h"
 #include "exec/file_writer.h"

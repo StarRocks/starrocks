@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include <stddef.h>
-#include <stdint.h>
+#include <cstddef>
+#include <cstdint>
 
 // This namespace has wrappers for the Bitshuffle library which do runtime dispatch to
 // either AVX2-accelerated or regular SSE2 implementations based on the available CPU.

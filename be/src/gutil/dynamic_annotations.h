@@ -534,7 +534,7 @@ void __asan_unpoison_memory_region(void const volatile* addr, size_t size);
 
 // Sets the callback to be called right before death on error.
 // Passing 0 will unset the callback.
-void __asan_set_death_callback(void (*callback)(void));
+void __asan_set_death_callback(void (*callback)());
 
 #if defined(__SANITIZE_ADDRESS__) || defined(ADDRESS_SANITIZER)
 #define ASAN_SET_DEATH_CALLBACK(cb) __asan_set_death_callback((cb))

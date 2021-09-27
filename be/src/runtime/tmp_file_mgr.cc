@@ -26,6 +26,7 @@
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <filesystem>
+#include <memory>
 // #include <gutil/strings/substitute.h>
 // #include <gutil/strings/join.h>
 
@@ -111,8 +112,8 @@ Status TmpFileMgr::init_custom(const vector<string>& tmp_dirs, bool one_dir_per_
         }
     }
 
-    DCHECK(metrics != NULL);
-    _num_active_scratch_dirs_metric.reset(new IntGauge(MetricUnit::NOUNIT));
+    DCHECK(metrics != nullptr);
+    _num_active_scratch_dirs_metric = std::make_unique<IntGauge>(MetricUnit::NOUNIT);
     metrics->register_metric("active_scratch_dirs", _num_active_scratch_dirs_metric.get());
     //_active_scratch_dirs_metric = metrics->register_metric(new SetMetric<std::string>(
     //        TMP_FILE_MGR_ACTIVE_SCRATCH_DIRS_LIST,

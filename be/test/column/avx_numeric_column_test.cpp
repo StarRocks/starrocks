@@ -19,6 +19,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#ifdef __AVX2__
+
 #include "column/avx_numeric_column.h"
 
 #include "butil/time.h"
@@ -262,3 +264,5 @@ TEST(AvxTest, simd) {
 
 } // namespace vectorized
 } // namespace starrocks
+
+#endif

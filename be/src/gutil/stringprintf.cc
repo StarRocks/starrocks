@@ -2,10 +2,9 @@
 
 #include "gutil/stringprintf.h"
 
-#include <errno.h>
-#include <stdarg.h> // For va_list and related operations
-#include <stdio.h>  // MSVC requires this for _vsnprintf
-
+#include <cerrno>
+#include <cstdarg> // For va_list and related operations
+#include <cstdio>  // MSVC requires this for _vsnprintf
 #include <vector>
 using std::vector;
 #include <common/logging.h>

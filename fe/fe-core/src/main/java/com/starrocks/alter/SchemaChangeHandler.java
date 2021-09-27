@@ -1194,7 +1194,8 @@ public class SchemaChangeHandler extends AlterHandler {
                                 || originReplica.getState() == Replica.ReplicaState.DECOMMISSION
                                 || originReplica.getLastFailedVersion() > 0) {
                             LOG.info(
-                                    "origin replica {} of tablet {} state is {}, and last failed version is {}, skip creating shadow replica",
+                                    "origin replica {} of tablet {} state is {}, and last failed version is {}, " +
+                                            "skip creating shadow replica",
                                     originReplica.getId(), originReplica, originReplica.getState(),
                                     originReplica.getLastFailedVersion());
                             continue;
@@ -1212,8 +1213,8 @@ public class SchemaChangeHandler extends AlterHandler {
                     if (healthyReplicaNum < replicationNum / 2 + 1) {
                         /*
                          * TODO(cmy): This is a bad design.
-                         * Because in the schema change job, we will only send tasks to the shadow replicas that have been created,
-                         * without checking whether the quorum of replica number are satisfied.
+                         * Because in the schema change job, we will only send tasks to the shadow replicas that
+                         * have been created, without checking whether the quorum of replica number are satisfied.
                          * This will cause the job to fail until we find that the quorum of replica number
                          * is not satisfied until the entire job is done.
                          * So here we check the replica number strictly and do not allow to submit the job

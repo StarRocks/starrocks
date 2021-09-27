@@ -31,12 +31,12 @@
 #define RADIXSORT_H_
 
 #include <malloc.h>
-#include <string.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <type_traits>
 
 #include "common/compiler_util.h"

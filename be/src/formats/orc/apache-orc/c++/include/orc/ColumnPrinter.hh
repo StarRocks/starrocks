@@ -23,8 +23,7 @@
 #ifndef ORC_COLUMN_PRINTER_HH
 #define ORC_COLUMN_PRINTER_HH
 
-#include <stdio.h>
-
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <vector>

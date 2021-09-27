@@ -19,6 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include <memory>
 #include <queue>
 
 #include "storage/iterators.h"
@@ -247,8 +248,8 @@ Status MergeIterator::init(const StorageReadOptions& opts) {
     if (_origin_iters.empty()) {
         return Status::OK();
     }
-    _schema.reset(new Schema(_origin_iters[0]->schema()));
-    _merge_heap.reset(new MergeHeap);
+    _schema = std::make_unique<Schema>(_origin_iters[0]->schema());
+    _merge_heap = std::make_unique<MergeHeap>();
 
     for (auto iter : _origin_iters) {
         std::unique_ptr<MergeIteratorContext> ctx(new MergeIteratorContext(iter));

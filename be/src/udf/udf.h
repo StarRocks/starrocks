@@ -22,9 +22,8 @@
 #ifndef STARROCKS_BE_UDF_UDF_H
 #define STARROCKS_BE_UDF_UDF_H
 
-#include <string.h>
-
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -605,7 +604,7 @@ struct StringVal : public AnyVal {
 
     // Construct a StringVal from ptr/len. Note: this does not make a copy of ptr
     // so the buffer must exist as long as this StringVal does.
-    StringVal() : len(0), ptr(NULL) {}
+    StringVal() : len(0), ptr(nullptr) {}
 
     // Construct a StringVal from ptr/len. Note: this does not make a copy of ptr
     // so the buffer must exist as long as this StringVal does.

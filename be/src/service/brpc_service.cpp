@@ -21,7 +21,7 @@
 
 #include "service/brpc_service.h"
 
-#include <string.h>
+#include <cstring>
 
 #include "common/logging.h"
 #include "service/brpc.h"

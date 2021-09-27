@@ -73,7 +73,7 @@ public:
     //  - num_worker_threads: the number of worker threads to use in any thread pool
     //  - server_type: the type of IO strategy this server should employ
     ThriftServer(const std::string& name, const std::shared_ptr<apache::thrift::TProcessor>& processor, int port,
-                 MetricRegistry* metrics = NULL, int num_worker_threads = DEFAULT_WORKER_THREADS,
+                 MetricRegistry* metrics = nullptr, int num_worker_threads = DEFAULT_WORKER_THREADS,
                  ServerType server_type = THREADED);
 
     ~ThriftServer() {}

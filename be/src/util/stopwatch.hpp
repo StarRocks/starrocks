@@ -23,7 +23,7 @@
 #define STARROCKS_BE_SRC_COMMON_UTIL_STOPWATCH_HPP
 
 #include <boost/cstdint.hpp>
-#include <time.h>
+#include <ctime>
 
 namespace starrocks {
 

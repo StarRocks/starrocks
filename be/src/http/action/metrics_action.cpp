@@ -39,7 +39,7 @@ namespace starrocks {
 
 class PrometheusMetricsVisitor : public MetricsVisitor {
 public:
-    virtual ~PrometheusMetricsVisitor() {}
+    ~PrometheusMetricsVisitor() override {}
     void visit(const std::string& prefix, const std::string& name, MetricCollector* collector) override;
     std::string to_string() const { return _ss.str(); }
 
@@ -55,7 +55,7 @@ private:
 // starrocks_be_process_thread_num LONG 240
 class SimpleCoreMetricsVisitor : public MetricsVisitor {
 public:
-    virtual ~SimpleCoreMetricsVisitor() {}
+    ~SimpleCoreMetricsVisitor() override {}
     void visit(const std::string& prefix, const std::string& name, MetricCollector* collector) override;
     std::string to_string() const { return _ss.str(); }
 
@@ -146,7 +146,7 @@ void SimpleCoreMetricsVisitor::visit(const std::string& prefix, const std::strin
 class JsonMetricsVisitor : public MetricsVisitor {
 public:
     JsonMetricsVisitor() {}
-    virtual ~JsonMetricsVisitor() {}
+    ~JsonMetricsVisitor() override {}
     void visit(const std::string& prefix, const std::string& name, MetricCollector* collector) override;
     std::string to_string() {
         rapidjson::StringBuffer strBuf;

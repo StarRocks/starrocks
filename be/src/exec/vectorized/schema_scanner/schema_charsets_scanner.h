@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 
 #include "exec/vectorized/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -12,9 +12,9 @@ namespace starrocks::vectorized {
 class SchemaCharsetsScanner : public SchemaScanner {
 public:
     SchemaCharsetsScanner();
-    virtual ~SchemaCharsetsScanner();
+    ~SchemaCharsetsScanner() override;
 
-    virtual Status get_next(ChunkPtr* chunk, bool* eos);
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
     struct CharsetStruct {

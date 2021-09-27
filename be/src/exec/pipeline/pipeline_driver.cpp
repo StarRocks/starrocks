@@ -79,7 +79,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                     if (pulled_chunk.value() && pulled_chunk.value()->num_rows() > 0) {
                         VLOG_ROW << "[Driver] transfer chunk(" << pulled_chunk.value()->num_rows() << ") from "
                                  << curr_op->get_name() << " to " << next_op->get_name() << ", driver=" << this;
-                        next_op->push_chunk(runtime_state, std::move(pulled_chunk.value()));
+                        next_op->push_chunk(runtime_state, pulled_chunk.value());
                     }
                     num_chunk_moved += 1;
                     total_chunks_moved += 1;
@@ -141,6 +141,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
+    VLOG_ROW << "[Driver] finalize, driver=" << this;
     if (state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR) {
         auto num_operators = _operators.size();
         for (auto i = _first_unfinished; i < num_operators; ++i) {

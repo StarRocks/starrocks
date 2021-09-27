@@ -32,7 +32,7 @@ public:
     OlapTuple(const std::vector<std::string>& values) : _values(values), _nulls(values.size(), false) {}
 
     void add_null() {
-        _values.push_back("");
+        _values.emplace_back("");
         _nulls.push_back(true);
     }
 

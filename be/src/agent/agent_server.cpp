@@ -110,7 +110,7 @@ void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAg
         return;
     }
 
-    for (auto task : tasks) {
+    for (const auto& task : tasks) {
         VLOG_RPC << "submit one task: " << apache::thrift::ThriftDebugString(task).c_str();
         TTaskType::type task_type = task.task_type;
         int64_t signature = task.signature;

@@ -39,11 +39,11 @@ public:
     PlainTextLineReader(RuntimeProfile* profile, FileReader* file_reader, Decompressor* decompressor, size_t length,
                         uint8_t row_delimiter);
 
-    virtual ~PlainTextLineReader();
+    ~PlainTextLineReader() override;
 
-    virtual Status read_line(const uint8_t** ptr, size_t* size, bool* eof) override;
+    Status read_line(const uint8_t** ptr, size_t* size, bool* eof) override;
 
-    virtual void close() override;
+    void close() override;
 
 private:
     bool update_eof();

@@ -10,6 +10,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <random>
 
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exprs/expr.h"
@@ -251,7 +252,7 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     if (_part_type == TPartitionType::UNPARTITIONED || _part_type == TPartitionType::RANDOM) {
         // Randomize the order we open/transmit to channels to avoid thundering herd problems.
         srand(reinterpret_cast<uint64_t>(this));
-        std::random_shuffle(_channels.begin(), _channels.end());
+        std::shuffle(_channels.begin(), _channels.end(), std::mt19937(std::random_device()()));
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
         _partitions_columns.resize(_partition_expr_ctxs.size());
@@ -314,7 +315,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         if (_current_request_bytes > _request_bytes_threshold) {
             butil::IOBuf attachment;
             // construct_brpc_attachment(&_chunk_request, &attachment);
-            for (auto channel : _channels) {
+            for (const auto& channel : _channels) {
                 RETURN_IF_ERROR(channel->send_chunk_request(&_chunk_request, attachment));
             }
             _current_request_bytes = 0;
@@ -474,11 +475,8 @@ OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, i
                                                       _sender_id, _dest_node_id, _partition_expr_ctxs);
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
-        // For shuffle, one ExchangeSinkOperator has one destination
-        std::vector<TPlanFragmentDestination> destination;
-        destination.emplace_back(_destinations[driver_sequence]);
-        return std::make_shared<ExchangeSinkOperator>(_id, _plan_node_id, _buffer, _part_type, destination, _sender_id,
-                                                      _dest_node_id, _partition_expr_ctxs);
+        return std::make_shared<ExchangeSinkOperator>(_id, _plan_node_id, _buffer, _part_type, _destinations,
+                                                      _sender_id, _dest_node_id, _partition_expr_ctxs);
     } else {
         DCHECK(false) << " Shouldn't reach here!";
         return nullptr;

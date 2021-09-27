@@ -39,13 +39,13 @@
 #endif
 
 #include <sched.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/sysinfo.h>
 #include <unistd.h>
 
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>

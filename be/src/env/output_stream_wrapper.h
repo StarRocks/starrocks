@@ -34,7 +34,7 @@ class OutputStreamWrapper final : public WritableFileWrapper, public std::ostrea
 public:
     // If |ownership| is kDontTakeOwnership, |file| must outlive this OutputStreamWrapper.
     explicit OutputStreamWrapper(WritableFile* file, Ownership ownership = kDontTakeOwnership)
-            : WritableFileWrapper(file, ownership), std::ostream(NULL), _stream_buf(this) {
+            : WritableFileWrapper(file, ownership), std::ostream(nullptr), _stream_buf(this) {
         rdbuf(&_stream_buf);
     }
 

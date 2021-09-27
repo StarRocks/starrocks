@@ -148,20 +148,21 @@ extern "C" {
 #endif
 
 #include <endian.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <linux/unistd.h>
-#include <signal.h>
-#include <stdarg.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
 #include <sys/ptrace.h>
 #include <sys/resource.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <syscall.h>
 #include <unistd.h>
+
+#include <cerrno>
+#include <csignal>
+#include <cstdarg>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 
 #ifdef __mips__
 /* Include definitions of the ABI currently in use.                          */
@@ -301,7 +302,7 @@ struct kernel_sigaction {
         void (*sa_sigaction_)(int, siginfo_t*, void*);
     };
     unsigned long sa_flags;
-    void (*sa_restorer)(void);
+    void (*sa_restorer)();
     struct kernel_sigset_t sa_mask;
 #endif
 };
@@ -1445,7 +1446,7 @@ LSS_INLINE int LSS_NAME(clone)(int (*fn)(void*), void* child_stack, int flags, v
     LSS_RETURN(int, __res);
 }
 
-LSS_INLINE void (*LSS_NAME(restore_rt)(void))(void) {
+LSS_INLINE void (*LSS_NAME(restore_rt)())() {
     /* On x86-64, the kernel does not know how to return from
        * a signal handler. Instead, it relies on user space to provide a
        * restorer function that calls the rt_sigreturn() system call.
@@ -1462,7 +1463,7 @@ LSS_INLINE void (*LSS_NAME(restore_rt)(void))(void) {
             "addq   $(1b-0b),%0\n"
             : "=a"(res)
             : "i"(__NR_rt_sigreturn));
-    return (void (*)(void))(uintptr_t)res;
+    return (void (*)())(uintptr_t)res;
 }
 #elif defined(__arm__)
 /* Most definitions of _syscallX() neglect to mark "memory" as being
@@ -2439,7 +2440,7 @@ LSS_INLINE _syscall3(int, socket, int, d, int, t, int, p)
        * This function must have a "magic" signature that the "gdb"
        * (and maybe the kernel?) can recognize.
        */
-    if (act != NULL && !(act->sa_flags & SA_RESTORER)) {
+    if (act != nullptr && !(act->sa_flags & SA_RESTORER)) {
         struct kernel_sigaction a = *act;
         a.sa_flags |= SA_RESTORER;
         a.sa_restorer = LSS_NAME(restore_rt)();
@@ -2464,7 +2465,7 @@ LSS_INLINE int LSS_NAME(sigprocmask)(int how, const struct kernel_sigset_t* set,
 #ifdef __NR_wait4
 LSS_INLINE _syscall4(pid_t, wait4, pid_t, p, int*, s, int, o, struct kernel_rusage*, r) LSS_INLINE pid_t
         LSS_NAME(waitpid)(pid_t pid, int* status, int options) {
-    return LSS_NAME(wait4)(pid, status, options, 0);
+    return LSS_NAME(wait4)(pid, status, options, nullptr);
 }
 #else
                         LSS_INLINE _syscall3(pid_t, waitpid, pid_t, p, int*, s, int, o)
@@ -2708,7 +2709,7 @@ LSS_INLINE int LSS_NAME(ptrace_detach)(pid_t pid) {
      */
     int rc, err;
     LSS_NAME(sched_yield)();
-    rc = LSS_NAME(ptrace)(PTRACE_DETACH, pid, (void*)0, (void*)0);
+    rc = LSS_NAME(ptrace)(PTRACE_DETACH, pid, (void*)nullptr, (void*)nullptr);
     err = LSS_ERRNO;
     LSS_NAME(kill)(pid, SIGCONT);
     LSS_ERRNO = err;

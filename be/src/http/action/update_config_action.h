@@ -29,7 +29,7 @@ namespace starrocks {
 class UpdateConfigAction : public HttpHandler {
 public:
     UpdateConfigAction() {}
-    virtual ~UpdateConfigAction() {}
+    ~UpdateConfigAction() override {}
 
     void handle(HttpRequest* req) override;
 };

@@ -53,7 +53,7 @@ public:
     template <class T>
     Status serialize(T* obj, std::vector<uint8_t>* result) {
         uint32_t len = 0;
-        uint8_t* buffer = NULL;
+        uint8_t* buffer = nullptr;
         RETURN_IF_ERROR(serialize<T>(obj, &len, &buffer));
         result->resize(len);
         memcpy(&((*result)[0]), buffer, len);
@@ -125,7 +125,7 @@ private:
 
 // Utility to create a protocol (deserialization) object for 'mem'.
 std::shared_ptr<apache::thrift::protocol::TProtocol> create_deserialize_protocol(
-        std::shared_ptr<apache::thrift::transport::TMemoryBuffer> mem, bool compact);
+        const std::shared_ptr<apache::thrift::transport::TMemoryBuffer>& mem, bool compact);
 
 // Deserialize a thrift message from buf/len.  buf/len must at least contain
 // all the bytes needed to store the thrift message.  On return, len will be

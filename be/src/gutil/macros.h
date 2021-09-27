@@ -10,7 +10,7 @@
 #ifndef BASE_MACROS_H_
 #define BASE_MACROS_H_
 
-#include <stddef.h> // For size_t
+#include <cstddef> // For size_t
 
 #include "butil/macros.h"
 #include "gutil/port.h"

@@ -24,7 +24,7 @@ std::string to_load_error_http_path(const std::string& file_name) {
     return url.str();
 }
 
-std::string to_http_path(const std::string token, const std::string& file_name) {
+std::string to_http_path(const std::string& token, const std::string& file_name) {
     std::stringstream url;
     url << "http://" << BackendOptions::get_localhost() << ":" << config::webserver_port << "/api/_download_load?"
         << "token=" << token << "&file=" << file_name;
@@ -108,7 +108,7 @@ using apache::thrift::transport::TTransportException;
 
 // including the final status when execution finishes.
 Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
-                                             TNetworkAddress fe_addr) {
+                                             const TNetworkAddress& fe_addr) {
     Status fe_status;
     FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, &fe_status);
     if (!fe_status.ok()) {
