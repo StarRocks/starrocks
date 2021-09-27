@@ -22,6 +22,7 @@
 #include "runtime/disk_io_mgr.h"
 
 #include <boost/algorithm/string.hpp>
+#include <memory>
 #include <utility>
 
 #include "runtime/disk_io_mgr_internal.h"
@@ -381,7 +382,7 @@ Status DiskIoMgr::init(MemTracker* process_mem_tracker) {
             _disk_thread_group.add_thread(new boost::thread(std::bind(&DiskIoMgr::work_loop, this, _disk_queues[i])));
         }
     }
-    _request_context_cache.reset(new RequestContextCache(this));
+    _request_context_cache = std::make_unique<RequestContextCache>(this);
 
     // _cached_read_options = hadoopRzOptionsAlloc();
     // DCHECK(_cached_read_options != NULL);

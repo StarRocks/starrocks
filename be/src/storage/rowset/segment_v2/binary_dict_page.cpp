@@ -179,7 +179,7 @@ Status BinaryDictPageDecoder<Type>::init() {
         const TypeInfoPtr& type_info = get_type_info(OLAP_FIELD_TYPE_INT);
 
         RETURN_IF_ERROR(ColumnVectorBatch::create(0, false, type_info, nullptr, &_batch));
-        _data_page_decoder.reset(new BitShufflePageDecoder<OLAP_FIELD_TYPE_INT>(_data, _options));
+        _data_page_decoder = std::make_unique<BitShufflePageDecoder<OLAP_FIELD_TYPE_INT>>(_data, _options);
     } else if (_encoding_type == PLAIN_ENCODING) {
         DCHECK_EQ(_encoding_type, PLAIN_ENCODING);
         _data_page_decoder.reset(new BinaryPlainPageDecoder<Type>(_data, _options));

@@ -21,6 +21,8 @@
 
 #include "runtime/result_buffer_mgr.h"
 
+#include <memory>
+
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/types.pb.h"
 #include "runtime/buffer_control_block.h"
@@ -51,7 +53,8 @@ ResultBufferMgr::~ResultBufferMgr() {
 }
 
 Status ResultBufferMgr::init() {
-    _cancel_thread.reset(new boost::thread(std::bind<void>(std::mem_fn(&ResultBufferMgr::cancel_thread), this)));
+    _cancel_thread =
+            std::make_unique<boost::thread>(std::bind<void>(std::mem_fn(&ResultBufferMgr::cancel_thread), this));
     return Status::OK();
 }
 

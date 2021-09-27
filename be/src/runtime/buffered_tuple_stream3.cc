@@ -21,6 +21,8 @@
 
 #include <gutil/strings/substitute.h>
 
+#include <memory>
+
 #include "runtime/buffered_tuple_stream3.inline.h"
 #include "runtime/bufferpool/reservation_tracker.h"
 //#include "runtime/collection_value.h"
@@ -689,7 +691,7 @@ Status BufferedTupleStream3::GetRows(MemTracker* tracker, std::unique_ptr<RowBat
     // TODO chenhao
     // capacity in RowBatch use int, but _num_rows is int64_t
     // it may be precision loss
-    batch->reset(new RowBatch(*desc_, num_rows(), tracker));
+    *batch = std::make_unique<RowBatch>(*desc_, num_rows(), tracker);
     bool eos = false;
     // Loop until GetNext fills the entire batch. Each call can stop at page
     // boundaries. We generally want it to stop, so that pages can be freed

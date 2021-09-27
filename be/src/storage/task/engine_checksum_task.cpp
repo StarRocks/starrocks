@@ -21,6 +21,8 @@
 
 #include "storage/task/engine_checksum_task.h"
 
+#include <memory>
+
 #include "storage/reader.h"
 #include "storage/row.h"
 #include "util/defer_op.h"
@@ -125,7 +127,7 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
         // the memory allocate by mem pool has been copied,
         // so we should release memory immediately
         mem_pool->clear();
-        agg_object_pool.reset(new ObjectPool());
+        agg_object_pool = std::make_unique<ObjectPool>();
     }
 
     LOG(INFO) << "success to finish compute checksum. checksum=" << row_checksum;

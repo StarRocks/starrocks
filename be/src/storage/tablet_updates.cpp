@@ -5,6 +5,7 @@
 #include <time.h>
 
 #include <algorithm>
+#include <memory>
 
 #include "common/status.h"
 #include "gen_cpp/MasterService_types.h"
@@ -365,7 +366,7 @@ void TabletUpdates::_redo_edit_version_log(const EditVersionMetaPB& v) {
     }
     tmp->deltas.assign(v.deltas().begin(), v.deltas().end());
     if (v.has_compaction()) {
-        tmp->compaction.reset(new CompactionInfo());
+        tmp->compaction = std::make_unique<CompactionInfo>();
         auto& cpb = v.compaction();
         tmp->compaction->start_version = EditVersion(cpb.start_version().major(), cpb.start_version().minor());
         tmp->compaction->inputs.assign(cpb.inputs().begin(), cpb.inputs().end());
@@ -980,7 +981,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, Mem
 
 Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo, const RowsetSharedPtr& rowset,
                                          EditVersion* commit_version) {
-    _compaction_state.reset(new vectorized::CompactionState());
+    _compaction_state = std::make_unique<vectorized::CompactionState>();
     RETURN_IF_ERROR(_compaction_state->load(rowset.get()));
     std::lock_guard wl(_lock);
     EditVersionMetaPB edit;

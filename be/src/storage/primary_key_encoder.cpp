@@ -26,6 +26,7 @@
 
 #include <string.h>
 
+#include <memory>
 #include <type_traits>
 
 #include "column/binary_column.h"
@@ -311,7 +312,7 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
             *pcolumn = vectorized::Int128Column::create_mutable();
             break;
         case OLAP_FIELD_TYPE_VARCHAR:
-            pcolumn->reset(new vectorized::BinaryColumn());
+            *pcolumn = std::make_unique<vectorized::BinaryColumn>();
             break;
         case OLAP_FIELD_TYPE_DATE_V2:
             *pcolumn = vectorized::DateColumn::create_mutable();
@@ -325,7 +326,7 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
     } else {
         // composite keys encoding to binary
         // TODO(cbl): support fixed length encoded keys, e.g. (int32, int32) => int64
-        pcolumn->reset(new vectorized::BinaryColumn());
+        *pcolumn = std::make_unique<vectorized::BinaryColumn>();
     }
     return Status::OK();
 }

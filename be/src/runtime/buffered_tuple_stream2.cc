@@ -21,6 +21,8 @@
 
 #include "runtime/buffered_tuple_stream2.h"
 
+#include <memory>
+
 #include "runtime/descriptors.h"
 #include "runtime/row_batch.h"
 #include "runtime/tuple_row.h"
@@ -473,7 +475,7 @@ Status BufferedTupleStream2::get_rows(std::unique_ptr<RowBatch>* batch, bool* go
         return Status::OK();
     }
     RETURN_IF_ERROR(prepare_for_read(false));
-    batch->reset(new RowBatch(_desc, num_rows(), _block_mgr->get_tracker(_block_mgr_client)));
+    *batch = std::make_unique<RowBatch>(_desc, num_rows(), _block_mgr->get_tracker(_block_mgr_client));
     bool eos = false;
     // Loop until get_next fills the entire batch. Each call can stop at block
     // boundaries. We generally want it to stop, so that blocks can be freed

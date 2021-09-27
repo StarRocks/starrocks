@@ -24,6 +24,8 @@
 #include <snappy/snappy.h>
 #include <stdint.h> // for intptr_t
 
+#include <memory>
+
 #include "runtime/buffered_tuple_stream2.inline.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -272,7 +274,7 @@ void RowBatch::clear() {
     }
 
     _tuple_data_pool->free_all();
-    _agg_object_pool.reset(new ObjectPool());
+    _agg_object_pool = std::make_unique<ObjectPool>();
     for (int i = 0; i < _io_buffers.size(); ++i) {
         _io_buffers[i]->return_buffer();
     }
@@ -474,7 +476,7 @@ void RowBatch::reset() {
 
     // TODO: Change this to Clear() and investigate the repercussions.
     _tuple_data_pool->free_all();
-    _agg_object_pool.reset(new ObjectPool());
+    _agg_object_pool = std::make_unique<ObjectPool>();
     for (int i = 0; i < _io_buffers.size(); ++i) {
         _io_buffers[i]->return_buffer();
     }
