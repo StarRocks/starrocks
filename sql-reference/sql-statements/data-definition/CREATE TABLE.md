@@ -267,7 +267,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     ```
 
     说明：
-    使用指定的 key 列进行哈希分桶。默认分区数为10
+    使用指定的 key 列进行哈希分桶。默认分桶数为10
 
     建议:建议使用Hash分桶方式
 
