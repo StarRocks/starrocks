@@ -937,8 +937,8 @@ OrcScannerAdapter::OrcScannerAdapter(const std::vector<SlotDescriptor*>& src_slo
           _tzinfo(cctz::utc_time_zone()),
           _tzoffset_in_seconds(0),
           _drop_nanoseconds_in_datetime(false),
-          _broker_load_mode(false),
-          _strict_mode(false),
+          _broker_load_mode(true),
+          _strict_mode(true),
           _broker_load_filter(nullptr),
           _num_rows_filtered(0),
           _error_message_counter(0) {
@@ -1195,6 +1195,15 @@ Status OrcScannerAdapter::_init_cast_exprs() {
         if (starrocks_type.is_assignable(orc_type)) {
             _cast_exprs[column_pos] = slot;
             continue;
+        }
+        // we don't support implicit cast column in query external hive table case.
+        // if we query external table, we heavily rely on type match to do optimization.
+        // For example, if we assume column A is a integer column, but it's stored as string in orc file
+        // then min/max of A is almost unusable. Think that there are values [10, 11, 10000, 100001]
+        // min/max will be "10" and "11", and we expect min/max is 10/100001
+        if (!_broker_load_mode) {
+            return Status::NotSupported(strings::Substitute("Type mismatch: orc $0 to native $1",
+                                                            orc_type.debug_string(), starrocks_type.debug_string()));
         }
         Expr* cast = VectorizedCastExprFactory::from_type(orc_type, starrocks_type, slot, &_pool);
         if (cast == nullptr) {
