@@ -29,7 +29,7 @@ TEST_F(StringFunctionSm3Test, abcA2Test) {
     auto str = BinaryColumn::create();
     columns.emplace_back(str);
     str->append("abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd");
-    
+
     ColumnPtr result = StringFunctions::sm3(ctx.get(), columns);
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 

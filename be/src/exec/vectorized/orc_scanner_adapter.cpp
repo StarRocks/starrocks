@@ -1196,6 +1196,15 @@ Status OrcScannerAdapter::_init_cast_exprs() {
             _cast_exprs[column_pos] = slot;
             continue;
         }
+        // we don't suppot cast column in query external hive table case.
+        // if we query external table, we heavily rely on type match to do optimization.
+        // For example, if we assume column A is a integer column, but it's stored as string in orc file
+        // then min/max of A is almost unusable. Think that there are values [10, 11, 10000, 100001]
+        // min/max will be "10" and "11", and we expect min/max is 10/100001
+        if (!_broker_load_mode) {
+            return Status::NotSupported(strings::Substitute("Type mismatch: orc $0 to native $1",
+                                                            orc_type.debug_string(), starrocks_type.debug_string()));
+        }
         Expr* cast = VectorizedCastExprFactory::from_type(orc_type, starrocks_type, slot, &_pool);
         if (cast == nullptr) {
             return Status::InternalError(strings::Substitute("Not support cast $0 to $1.", orc_type.debug_string(),
