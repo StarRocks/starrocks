@@ -64,8 +64,8 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
                 _aggregator->compute_single_agg_state(chunk->num_rows());
             } else {
                 if (_limit != -1) {
-                    size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());
-                    if (zero_count == _aggregator->streaming_selection().size()) {
+                    size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection().data(), chunk->num_rows());
+                    if (zero_count == chunk->num_rows()) {
                         _aggregator->compute_batch_agg_states(chunk->num_rows());
                     } else {
                         _aggregator->compute_batch_agg_states_with_limit(chunk->num_rows());
