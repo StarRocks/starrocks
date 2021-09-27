@@ -508,7 +508,7 @@ OLAPStatus BetaRowsetWriter::add_chunk_with_rssid(const vectorized::Chunk& chunk
     }
     auto s = _segment_writer->append_chunk(chunk);
     if (!_src_rssids) {
-        _src_rssids.reset(new vector<uint32_t>());
+        _src_rssids = std::make_unique<vector<uint32_t>>();
     }
     _src_rssids->insert(_src_rssids->end(), rssid.begin(), rssid.end());
     if (!s.ok()) {

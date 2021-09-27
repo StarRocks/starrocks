@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <utility>
 
 #include "storage/olap_common.h"
@@ -75,7 +76,7 @@ Tablet::~Tablet() {
 OLAPStatus Tablet::_init_once_action() {
     VLOG(3) << "begin to load tablet. tablet=" << full_name() << ", version_size=" << _tablet_meta->version_count();
     if (keys_type() == PRIMARY_KEYS) {
-        _updates.reset(new TabletUpdates(*this));
+        _updates = std::make_unique<TabletUpdates>(*this);
         Status st = _updates->init();
         LOG_IF(WARNING, !st.ok()) << "Fail to init updates: " << st;
         return st.ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;

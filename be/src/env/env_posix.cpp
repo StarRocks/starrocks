@@ -497,7 +497,7 @@ public:
         if (f == nullptr) {
             return io_error(fname, errno);
         }
-        result->reset(new PosixSequentialFile(fname, f));
+        *result = std::make_unique<PosixSequentialFile>(fname, f);
         return Status::OK();
     }
 
@@ -513,7 +513,7 @@ public:
         if (fd < 0) {
             return io_error(fname, errno);
         }
-        result->reset(new PosixRandomAccessFile(fname, fd));
+        *result = std::make_unique<PosixRandomAccessFile>(fname, fd);
         return Status::OK();
     }
 
@@ -530,7 +530,7 @@ public:
         if (opts.mode == MUST_EXIST) {
             RETURN_IF_ERROR(get_file_size(fname, &file_size));
         }
-        result->reset(new PosixWritableFile(fname, fd, file_size, opts.sync_on_close));
+        *result = std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close);
         return Status::OK();
     }
 
@@ -542,7 +542,7 @@ public:
                               std::unique_ptr<RandomRWFile>* result) override {
         int fd;
         RETURN_IF_ERROR(do_open(fname, opts.mode, &fd));
-        result->reset(new PosixRandomRWFile(fname, fd, opts.sync_on_close));
+        *result = std::make_unique<PosixRandomRWFile>(fname, fd, opts.sync_on_close);
         return Status::OK();
     }
 

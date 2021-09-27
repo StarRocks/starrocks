@@ -811,7 +811,7 @@ OLAPStatus TabletMeta::set_partition_id(int64_t partition_id) {
 
 void TabletMeta::create_inital_updates_meta() {
     CHECK(!_updatesPB) << "_updates should be empty";
-    _updatesPB.reset(new TabletUpdatesPB());
+    _updatesPB = std::make_unique<TabletUpdatesPB>();
     auto vm = _updatesPB->add_versions();
     auto v = vm->mutable_version();
     v->set_major(1);

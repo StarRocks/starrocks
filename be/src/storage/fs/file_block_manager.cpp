@@ -368,13 +368,14 @@ FileBlockManager::FileBlockManager(Env* env, BlockManagerOptions opts)
           _opts(std::move(opts)),
           _mem_tracker(new MemTracker(-1, "file_block_manager", _opts.parent_mem_tracker.get())) {
     if (_opts.enable_metric) {
-        _metrics.reset(new internal::BlockManagerMetrics());
+        _metrics = std::make_unique<internal::BlockManagerMetrics>();
     }
 
 #ifdef BE_TEST
     _file_cache.reset(new FileCache<RandomAccessFile>("Readable file cache", config::file_descriptor_cache_capacity));
 #else
-    _file_cache.reset(new FileCache<RandomAccessFile>("Readable file cache", StorageEngine::instance()->file_cache()));
+    _file_cache = std::make_unique<FileCache<RandomAccessFile>>("Readable file cache",
+                                                                StorageEngine::instance()->file_cache());
 #endif
 }
 
@@ -394,7 +395,7 @@ Status FileBlockManager::create_block(const CreateBlockOptions& opts, std::uniqu
     RETURN_IF_ERROR(env_util::open_file_for_write(wr_opts, _env, opts.path, &writer));
 
     VLOG(1) << "Creating new block at " << opts.path;
-    block->reset(new internal::FileWritableBlock(this, opts.path, writer));
+    *block = std::make_unique<internal::FileWritableBlock>(this, opts.path, writer);
     return Status::OK();
 }
 
@@ -408,7 +409,7 @@ Status FileBlockManager::open_block(const std::string& path, std::unique_ptr<Rea
         _file_cache->insert(path, file.release(), file_handle.get());
     }
 
-    block->reset(new internal::FileReadableBlock(this, path, file_handle));
+    *block = std::make_unique<internal::FileReadableBlock>(this, path, file_handle);
     return Status::OK();
 }
 

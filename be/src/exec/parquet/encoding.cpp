@@ -2,6 +2,8 @@
 
 #include "exec/parquet/encoding.h"
 
+#include <memory>
+
 #include "exec/parquet/encoding_dict.h"
 #include "exec/parquet/encoding_plain.h"
 #include "exec/parquet/types.h"
@@ -45,11 +47,11 @@ struct TypeEncodingTraits<type, tparquet::Encoding::RLE_DICTIONARY> {
 template <>
 struct TypeEncodingTraits<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encoding::PLAIN> {
     static Status create_decoder(std::unique_ptr<Decoder>* decoder) {
-        decoder->reset(new FLBAPlainDecoder());
+        *decoder = std::make_unique<FLBAPlainDecoder>();
         return Status::OK();
     }
     static Status create_encoder(std::unique_ptr<Encoder>* encoder) {
-        encoder->reset(new FLBAPlainEncoder());
+        *encoder = std::make_unique<FLBAPlainEncoder>();
         return Status::OK();
     }
 };

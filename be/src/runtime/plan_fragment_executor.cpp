@@ -21,6 +21,8 @@
 
 #include "runtime/plan_fragment_executor.h"
 
+#include <memory>
+
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "exec/data_sink.h"
@@ -69,7 +71,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
               << " fragment_instance_id=" << print_id(params.fragment_instance_id)
               << " backend_num=" << request.backend_num;
 
-    _runtime_state.reset(new RuntimeState(request, request.query_options, request.query_globals, _exec_env));
+    _runtime_state = std::make_unique<RuntimeState>(request, request.query_options, request.query_globals, _exec_env);
 
     if (_is_vectorized) {
         _runtime_state->set_batch_size(config::vector_chunk_size);

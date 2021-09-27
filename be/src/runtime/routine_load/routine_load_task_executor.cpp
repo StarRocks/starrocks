@@ -22,6 +22,7 @@
 #include "runtime/routine_load/routine_load_task_executor.h"
 
 #include <functional>
+#include <memory>
 #include <thread>
 
 #include "common/status.h"
@@ -59,7 +60,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
     }
     t_info.__set_properties(properties);
 
-    ctx.kafka_info.reset(new KafkaLoadInfo(t_info));
+    ctx.kafka_info = std::make_unique<KafkaLoadInfo>(t_info);
     ctx.need_rollback = false;
 
     std::shared_ptr<DataConsumer> consumer;
@@ -94,7 +95,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetPro
     }
     t_info.__set_properties(properties);
 
-    ctx.kafka_info.reset(new KafkaLoadInfo(t_info));
+    ctx.kafka_info = std::make_unique<KafkaLoadInfo>(t_info);
     ctx.need_rollback = false;
 
     // convert pb repeated value to vector
@@ -170,7 +171,7 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     // set source related params
     switch (task.type) {
     case TLoadSourceType::KAFKA:
-        ctx->kafka_info.reset(new KafkaLoadInfo(task.kafka_load_info));
+        ctx->kafka_info = std::make_unique<KafkaLoadInfo>(task.kafka_load_info);
         break;
     default:
         LOG(WARNING) << "unknown load source type: " << task.type;

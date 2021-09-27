@@ -22,6 +22,7 @@
 #include "runtime/spill_sorter.h"
 
 #include <functional>
+#include <memory>
 #include <sstream>
 #include <string>
 
@@ -629,8 +630,8 @@ Status SpillSorter::Run::prepare_read() {
 
     // _buffered_batch.reset(new RowBatch(*_sorter->_output_row_desc,
     //         _sorter->_state->batch_size(), _sorter->_mem_tracker));
-    _buffered_batch.reset(
-            new RowBatch(*_sorter->_output_row_desc, _sorter->_state->batch_size(), _sorter->_mem_tracker));
+    _buffered_batch = std::make_unique<RowBatch>(*_sorter->_output_row_desc, _sorter->_state->batch_size(),
+                                                 _sorter->_mem_tracker);
 
     // If the run is pinned, merge is not invoked, so _buffered_batch is not needed
     // and the individual blocks do not need to be pinned.
@@ -1041,8 +1042,8 @@ Status SpillSorter::init() {
     DCHECK(_unsorted_run == nullptr) << "Already initialized";
     TupleDescriptor* sort_tuple_desc = _output_row_desc->tuple_descriptors()[0];
     _has_var_len_slots = sort_tuple_desc->has_varlen_slots();
-    _in_mem_tuple_sorter.reset(
-            new TupleSorter(_compare_less_than, _block_mgr->max_block_size(), sort_tuple_desc->byte_size(), _state));
+    _in_mem_tuple_sorter = std::make_unique<TupleSorter>(_compare_less_than, _block_mgr->max_block_size(),
+                                                         sort_tuple_desc->byte_size(), _state);
     _unsorted_run = _obj_pool.add(new Run(this, sort_tuple_desc, true));
 
     _initial_runs_counter = ADD_COUNTER(_profile, "InitialRunsCreated", TUnit::UNIT);
@@ -1275,7 +1276,7 @@ Status SpillSorter::create_merger(int num_runs) {
         (*it)->delete_all_blocks();
     }
     _merging_runs.clear();
-    _merger.reset(new SortedRunMerger(_compare_less_than, _output_row_desc, _profile, true));
+    _merger = std::make_unique<SortedRunMerger>(_compare_less_than, _output_row_desc, _profile, true);
 
     vector<std::function<Status(RowBatch**)> > merge_runs;
     merge_runs.reserve(num_runs);
