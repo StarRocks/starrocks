@@ -2,6 +2,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
@@ -16,7 +17,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,10 +43,10 @@ public class RewriteBitmapCountDistinctRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) input.getOp();
+        Map<ColumnRefOperator, CallOperator> newAggMap = Maps.newHashMap();
 
-        Map<ColumnRefOperator, CallOperator> newAggMap = new HashMap<>();
-        for (Map.Entry<ColumnRefOperator, CallOperator> aggMap : aggregationOperator.getAggregations().entrySet()) {
-            CallOperator oldFunctionCall = aggMap.getValue();
+        for (Map.Entry<ColumnRefOperator, CallOperator> aggEntry : aggregationOperator.getAggregations().entrySet()) {
+            CallOperator oldFunctionCall = aggEntry.getValue();
             if (oldFunctionCall.isDistinct() &&
                     oldFunctionCall.getFunction().getFunctionName().getFunction().equals(FunctionSet.COUNT) &&
                     oldFunctionCall.getChildren().size() == 1 &&
@@ -58,9 +58,9 @@ public class RewriteBitmapCountDistinctRule extends TransformationRule {
 
                 CallOperator c = new CallOperator(FunctionSet.BITMAP_UNION_COUNT,
                         oldFunctionCall.getType(), oldFunctionCall.getChildren(), fn);
-                newAggMap.put(aggMap.getKey(), c);
+                newAggMap.put(aggEntry.getKey(), c);
             } else {
-                newAggMap.put(aggMap.getKey(), aggMap.getValue());
+                newAggMap.put(aggEntry.getKey(), aggEntry.getValue());
             }
         }
         return Lists.newArrayList(OptExpression.create(

@@ -2957,7 +2957,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     PREAGGREGATION: ON"));
 
         // check multi tables only one agg table can pre-aggregation
-        sql = "select t1.k2, sum(t1.k9) from baseall t1 join join2 t2 on t1.k1 = t2.id join baseall t3 on t1.k1 = t3.k1 group by t1.k2";
+        sql =
+                "select t1.k2, sum(t1.k9) from baseall t1 join join2 t2 on t1.k1 = t2.id join baseall t3 on t1.k1 = t3.k1 group by t1.k2";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("5:OlapScanNode\n" +
                 "  |       TABLE: baseall\n" +
@@ -2966,7 +2967,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: baseall\n" +
                 "     PREAGGREGATION: ON"));
 
-        sql = "select t3.k2, sum(t3.k9) from baseall t1 join [broadcast] join2 t2 on t1.k1 = t2.id join [broadcast] baseall t3 on t1.k1 = t3.k1 group by t3.k2";
+        sql =
+                "select t3.k2, sum(t3.k9) from baseall t1 join [broadcast] join2 t2 on t1.k1 = t2.id join [broadcast] baseall t3 on t1.k1 = t3.k1 group by t3.k2";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: baseall\n" +
@@ -2982,7 +2984,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: baseall\n" +
                 "     PREAGGREGATION: OFF. Reason: Predicates include the value column"));
 
-        sql = "select t1.k2, sum(t1.k9) from baseall t1 join baseall t2 on t1.k1 = t2.k1 where t1.k9 + t2.k9 = 1 group by t1.k2";
+        sql =
+                "select t1.k2, sum(t1.k9) from baseall t1 join baseall t2 on t1.k1 = t2.k1 where t1.k9 + t2.k9 = 1 group by t1.k2";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: baseall\n" +
@@ -2996,7 +2999,8 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     PREAGGREGATION: ON"));
 
         // check aggregate two table columns
-        sql = "select t1.k2, t2.k2, sum(t1.k9), sum(t2.k9) from baseall t1 join baseall t2 on t1.k1 = t2.k1 group by t1.k2, t2.k2";
+        sql =
+                "select t1.k2, t2.k2, sum(t1.k9), sum(t2.k9) from baseall t1 join baseall t2 on t1.k1 = t2.k1 group by t1.k2, t2.k2";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: baseall\n" +
@@ -4083,5 +4087,33 @@ public class PlanFragmentTest extends PlanTestBase {
                 "\n" +
                 "  0:SCAN SCHEMA\n" +
                 "     use vectorized: true"));
+    }
+
+    @Test
+    public void testDuplicateAggregateFn() throws Exception {
+        String sql = "select bitmap_union_count(b1) from test_object having count(distinct b1) > 2;";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains(" OUTPUT EXPRS:13: bitmap_union_count(5: b1)\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: bitmap_union_count(5: b1)\n" +
+                "  |  group by: \n" +
+                "  |  having: 13: bitmap_union_count(5: b1) > 2"));
+    }
+
+    @Test
+    public void testDuplicateAggregateFn2() throws Exception {
+        String sql = "select bitmap_union_count(b1), count(distinct b1) from test_object;";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("  2:Project\n" +
+                "  |  <slot 13> : 13: bitmap_union_count(5: b1)\n" +
+                "  |  <slot 14> : 13: bitmap_union_count(5: b1)\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: bitmap_union_count(5: b1)"));
     }
 }
