@@ -255,7 +255,7 @@ HADOOP_MD5SUM="c4ba5155ec44abcb63d183d2dbe38df9"
 # HADOOP_AARCH64
 HADOOP_AARCH64_DOWNLOAD="https://cdn-thirdparty.starrocks.com/hadoop-3.3.0-aarch64.tar.gz"
 HADOOP_AARCH64_NAME="hadoop-3.3.0-aarch64.tar.gz"
-HADOOP_AARCH64_SOURCE="hadoop-3.3.0"
+HADOOP_AARCH64_SOURCE="hadoop-3.3.0-aarch64"
 HADOOP_AARCH64_MD5SUM="4e2e3e0dc8a1d80e1940565bbf6199a4"
 
 # OPEN JDK

@@ -501,7 +501,6 @@ build_arrow() {
     export ARROW_ZLIB_URL=${TP_SOURCE_DIR}/${ZLIB_NAME}
     export ARROW_FLATBUFFERS_URL=${TP_SOURCE_DIR}/${FLATBUFFERS_NAME}
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
-    export ARROW_JEMALLOC_URL=${TP_SOURCE_DIR}/${JEMALLOC_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
 
     ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_SHARED=OFF \
@@ -689,7 +688,7 @@ build_hadoop() {
         HADOOP_TARGET=$HADOOP_AARCH64_SOURCE
     fi
     check_if_source_exist $HADOOP_TARGET
-    cp -r $TP_SOURCE_DIR/$HADOOP_TARGET $TP_INSTALL_DIR/
+    cp -r $TP_SOURCE_DIR/$HADOOP_TARGET $TP_INSTALL_DIR/hadoop
     mkdir -p $TP_INSTALL_DIR/include/hdfs
     cp $TP_SOURCE_DIR/$HADOOP_TARGET/include/hdfs.h $TP_INSTALL_DIR/include/hdfs
     cp $TP_SOURCE_DIR/$HADOOP_TARGET/lib/native/libhdfs.a $TP_INSTALL_DIR/lib
