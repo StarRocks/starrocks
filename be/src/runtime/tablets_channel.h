@@ -140,7 +140,7 @@ private:
 
     static std::atomic<uint64_t> _s_tablet_writer_count;
 
-    bool _is_vectorized = false;
+    bool _is_vectorized = true;
     vectorized::RuntimeChunkMeta _chunk_meta;
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     // tablet_id -> TabletChannel
