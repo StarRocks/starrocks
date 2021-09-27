@@ -248,19 +248,19 @@ BREAK_PAD_SOURCE="breakpad-d6a6f52606529111b9f0ade9a0e0d9040fa97c1f"
 BREAK_PAD_MD5SUM="53e8e9ee2d5e4f842a0cb4d651e74af6"
 
 # HADOOP
-HADOOP_DOWNLOAD="http://dorisdb-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/hadoop-3.3.0.tar.gz"
+HADOOP_DOWNLOAD="https://cdn-thirdparty.starrocks.com/hadoop-3.3.0.tar.gz"
 HADOOP_NAME="hadoop-3.3.0.tar.gz"
 HADOOP_SOURCE="hadoop-3.3.0"
 HADOOP_MD5SUM="c4ba5155ec44abcb63d183d2dbe38df9"
 
 # HADOOP_AARCH64
-HADOOP_AARCH64_DOWNLOAD="http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/hadoop-3.3.0-aarch64.tar.gz"
+HADOOP_AARCH64_DOWNLOAD="https://cdn-thirdparty.starrocks.com/hadoop-3.3.0-aarch64.tar.gz"
 HADOOP_AARCH64_NAME="hadoop-3.3.0-aarch64.tar.gz"
 HADOOP_AARCH64_SOURCE="hadoop-3.3.0"
 HADOOP_AARCH64_MD5SUM="4e2e3e0dc8a1d80e1940565bbf6199a4"
 
 # OPEN JDK
-JDK_DOWNLOAD="http://dorisdb-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/java-se-8u41-ri.tar.gz"
+JDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/java-se-8u41-ri.tar.gz"
 JDK_NAME="java-se-8u41-ri.tar.gz"
 JDK_SOURCE="java-se-8u41-ri"
 JDK_MD5SUM="7295b5a3fb90e7aaf80df23d5eac222d"
