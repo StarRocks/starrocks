@@ -444,9 +444,9 @@ public class HiveMetaClient {
     private List<HdfsFileDesc> getHdfsFileDescs(String dirPath) throws Exception {
         URI uri = new URI(dirPath);
         FileSystem fileSystem = getFileSystem(uri);
-        // fileSystem.listLocatedStatus is a batch api include fileSystem.listStatus
-        // and fileSystem.getFileBlockLocations two api's information.
-        // the performance is well in get many file located information scenario.
+        // fileSystem.listLocatedStatus is an api to list all statuses and
+        // block locations of the files in the given path in one operation.
+        // The performance is better than getting status and block location one by one.
         RemoteIterator<LocatedFileStatus> blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
 
