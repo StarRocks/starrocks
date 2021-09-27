@@ -74,7 +74,15 @@ bool SortedChunksMerger::is_data_ready() {
             if (_wait_for_data) {
                 return _cursor->has_next() || _cursor->chunk_has_supplier();
             } else {
-                return !_min_heap.empty();
+                // when _wait_for_data is false, min heap is ready to produce output.
+                // case 1: min heap is empty, EOS has arrived.
+                // case 2: min heap is not emtpy, each cursor in min heap must satisfy one of properties following:
+                //     property 1: the current chunk is the cursor is not exhausted, or
+                //     property 2: the SenderQueue of the cursor has chunks ready for processing, or
+                //     property 3: the SenderQueue of the cursor has received the EOS.
+                //
+                // so in conclusion, in such situations, min_heap is always ready.
+                return true;
             }
         }
     }
