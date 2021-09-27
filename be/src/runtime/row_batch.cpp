@@ -24,7 +24,6 @@
 #include <snappy/snappy.h>
 
 #include <cstdint> // for intptr_t
-
 #include <memory>
 
 #include "runtime/buffered_tuple_stream2.inline.h"

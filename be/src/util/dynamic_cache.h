@@ -5,7 +5,6 @@
 #include <glog/logging.h>
 
 #include <atomic>
-#include <ctime>
 #include <iostream>
 #include <list>
 #include <mutex>
@@ -13,6 +12,7 @@
 
 #include "runtime/mem_tracker.h"
 #include "storage/rowset_update_state.h"
+#include "util/time.h"
 
 namespace starrocks {
 

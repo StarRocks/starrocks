@@ -3,7 +3,8 @@
 #pragma once
 
 #include <memory.h>
-#include <stdio.h>
+
+#include <cstdio>
 
 namespace starrocks {
 // SM3 Cryptographic Hash Algorithm is define by http://www.oscca.gov.cn/sca/xxgk/2010-12/17/content_1002389.shtml .
