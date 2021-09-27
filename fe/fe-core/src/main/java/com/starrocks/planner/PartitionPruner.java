@@ -23,9 +23,9 @@ package com.starrocks.planner;
 
 import com.starrocks.common.AnalysisException;
 
-import java.util.Collection;
+import java.util.List;
 
 public interface PartitionPruner {
     // return partition after prunning
-    public Collection<Long> prune() throws AnalysisException;
+    List<Long> prune() throws AnalysisException;
 };

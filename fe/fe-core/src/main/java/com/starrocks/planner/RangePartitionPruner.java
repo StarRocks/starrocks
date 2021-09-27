@@ -36,6 +36,7 @@ import com.starrocks.common.AnalysisException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -56,7 +57,7 @@ public class RangePartitionPruner implements PartitionPruner {
         partitionColumnFilters = filters;
     }
 
-    private Collection<Long> prune(RangeMap<PartitionKey, Long> rangeMap,
+    private List<Long> prune(RangeMap<PartitionKey, Long> rangeMap,
                                    int columnIdx,
                                    PartitionKey minKey,
                                    PartitionKey maxKey,
@@ -79,7 +80,7 @@ public class RangePartitionPruner implements PartitionPruner {
                     keyColumn.getPrimitiveType());
             maxKey.pushColumn(LiteralExpr.createInfinity(Type.fromPrimitiveType(keyColumn.getPrimitiveType()), true),
                     keyColumn.getPrimitiveType());
-            Collection<Long> result = null;
+            List<Long> result;
             try {
                 result = Lists.newArrayList(
                         rangeMap.subRangeMap(Range.closed(minKey, maxKey)).asMapOfRanges().values());
@@ -107,7 +108,7 @@ public class RangePartitionPruner implements PartitionPruner {
                     minKey.pushColumn(filter.lowerBound, keyColumn.getPrimitiveType());
                     maxKey.pushColumn(filter.upperBound, keyColumn.getPrimitiveType());
                 }
-                Collection<Long> result = prune(rangeMap, columnIdx + 1, minKey, maxKey, complex);
+                List<Long> result = prune(rangeMap, columnIdx + 1, minKey, maxKey, complex);
                 minKey.popColumn();
                 maxKey.popColumn();
                 return result;
@@ -150,7 +151,7 @@ public class RangePartitionPruner implements PartitionPruner {
                 pushMaxCount++;
             }
 
-            Collection<Long> result = null;
+            List<Long> result;
             try {
                 result = Lists.newArrayList(rangeMap.subRangeMap(
                         Range.range(minKey, lowerType, maxKey, upperType)).asMapOfRanges().values());
@@ -172,17 +173,15 @@ public class RangePartitionPruner implements PartitionPruner {
             minKey.pushColumn(expr, keyColumn.getPrimitiveType());
             maxKey.pushColumn(expr, keyColumn.getPrimitiveType());
             Collection<Long> subList = prune(rangeMap, columnIdx + 1, minKey, maxKey, newComplex);
-            for (long partId : subList) {
-                resultSet.add(partId);
-            }
+            resultSet.addAll(subList);
             minKey.popColumn();
             maxKey.popColumn();
         }
 
-        return resultSet;
+        return new ArrayList<>(resultSet);
     }
 
-    public Collection<Long> prune() throws AnalysisException {
+    public List<Long> prune() throws AnalysisException {
         PartitionKey minKey = new PartitionKey();
         PartitionKey maxKey = new PartitionKey();
         // Map to RangeMapTree

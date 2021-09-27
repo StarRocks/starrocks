@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -22,11 +23,11 @@ public class OlapScanImplementationRuleTest {
 
     @Test
     public void transform(@Mocked OlapTable table) {
-        LogicalOlapScanOperator logical = new LogicalOlapScanOperator(table);
-        logical.setSelectedIndexId(1);
-        logical.setSelectedPartitionId(Lists.newArrayList(1L, 2L, 3L));
-        logical.setSelectedTabletId(Lists.newArrayList(4L));
-        logical.setPredicate(ConstantOperator.createBoolean(true));
+        LogicalOlapScanOperator logical = new LogicalOlapScanOperator(table,
+                Lists.newArrayList(), Maps.newHashMap(), Maps.newHashMap(),
+                null, -1, ConstantOperator.createBoolean(true),
+                1, Lists.newArrayList(1L, 2L, 3L), null,
+                Lists.newArrayList(4L), null);
 
         List<OptExpression> output =
                 new OlapScanImplementationRule().transform(new OptExpression(logical), new OptimizerContext(

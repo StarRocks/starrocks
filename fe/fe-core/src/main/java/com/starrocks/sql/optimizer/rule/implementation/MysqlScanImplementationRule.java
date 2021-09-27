@@ -21,7 +21,8 @@ public class MysqlScanImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalMysqlScanOperator logical = (LogicalMysqlScanOperator) input.getOp();
-        PhysicalMysqlScanOperator physical = new PhysicalMysqlScanOperator(logical.getTable(), logical.getColumnRefMap());
+        PhysicalMysqlScanOperator physical = new PhysicalMysqlScanOperator(logical.getTable(),
+                logical.getOutputColumns(), logical.getColRefToColumnMetaMap());
 
         physical.setPredicate(logical.getPredicate());
         physical.setLimit(logical.getLimit());

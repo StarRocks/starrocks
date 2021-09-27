@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
@@ -11,6 +10,7 @@ import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -38,19 +38,20 @@ public class PushDownScanRuleTest {
         ));
 
         OptExpression scan =
-                new OptExpression(new LogicalOlapScanOperator(
-                        table, Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of()));
+                new OptExpression(new LogicalOlapScanOperator(table, Lists.newArrayList(), Maps.newHashMap(), Maps.newHashMap(), null, -1, null));
         optExpression.getInputs().add(scan);
 
         assertNull(((LogicalOlapScanOperator) scan.getOp()).getPredicate());
         List<OptExpression> result =
                 rule.transform(optExpression, new OptimizerContext(new Memo(), new ColumnRefFactory()));
 
-        assertEquals(OperatorType.BINARY, ((LogicalOlapScanOperator) scan.getOp()).getPredicate().getOpType());
+        Operator scanOperator = result.get(0).inputAt(0).getOp();
+
+        assertEquals(OperatorType.BINARY, scanOperator.getPredicate().getOpType());
 
         assertEquals(OperatorType.VARIABLE,
-                ((LogicalOlapScanOperator) scan.getOp()).getPredicate().getChild(0).getOpType());
+                scanOperator.getPredicate().getChild(0).getOpType());
         assertEquals(OperatorType.CONSTANT,
-                ((LogicalOlapScanOperator) scan.getOp()).getPredicate().getChild(1).getOpType());
+                scanOperator.getPredicate().getChild(1).getOpType());
     }
 }
