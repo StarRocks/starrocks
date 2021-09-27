@@ -253,10 +253,10 @@ HADOOP_SOURCE="hadoop-3.3.0"
 HADOOP_MD5SUM="c4ba5155ec44abcb63d183d2dbe38df9"
 
 # HADOOP_AARCH64
-HADOOP_AARCH64_DOWNLOAD="http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/hadoop-3.3.1-aarch64.tar.gz"
-HADOOP_AARCH64_NAME="hadoop-3.3.1-aarch64.tar.gz"
-HADOOP_AARCH64_SOURCE="hadoop-3.3.1"
-HADOOP_AARCH64_MD5SUM="a99ced28839608d351f9cd8686e33012"
+HADOOP_AARCH64_DOWNLOAD="http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/hadoop-3.3.0-aarch64.tar.gz"
+HADOOP_AARCH64_NAME="hadoop-3.3.0-aarch64.tar.gz"
+HADOOP_AARCH64_SOURCE="hadoop-3.3.0"
+HADOOP_AARCH64_MD5SUM="4e2e3e0dc8a1d80e1940565bbf6199a4"
 
 # OPEN JDK
 JDK_DOWNLOAD="http://dorisdb-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/java-se-8u41-ri.tar.gz"
