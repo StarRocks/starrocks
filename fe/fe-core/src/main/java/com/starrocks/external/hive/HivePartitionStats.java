@@ -2,12 +2,18 @@
 
 package com.starrocks.external.hive;
 
+import com.starrocks.analysis.LiteralExpr;
+
+import java.util.List;
+
 public class HivePartitionStats {
     // -1: unknown
     // from partition parameters
     private long numRows;
     // the size (in bytes) of all the files inside this partition
     private long totalFileBytes;
+    // the key for this hive partition;
+    private List<LiteralExpr> key;
 
     public HivePartitionStats(long numRows) {
         this.numRows = numRows;
@@ -23,5 +29,13 @@ public class HivePartitionStats {
 
     public long getTotalFileBytes() {
         return totalFileBytes;
+    }
+
+    public List<LiteralExpr> getKey() {
+        return key;
+    }
+
+    public void setKey(List<LiteralExpr> key) {
+        this.key = key;
     }
 }

@@ -3,11 +3,13 @@
 package com.starrocks.external.hive;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.analysis.DescriptorTable;
 
 public class HivePartition {
     private HdfsFileFormat format;
     private ImmutableList<HdfsFileDesc> files;
     private String fullPath;
+    private DescriptorTable.ReferencedPartitionInfo partitionInfo;
 
     public HivePartition(HdfsFileFormat format, ImmutableList<HdfsFileDesc> files, String fullPath) {
         this.format = format;
@@ -30,4 +32,13 @@ public class HivePartition {
     public String getFullPath() {
         return fullPath;
     }
+
+    public DescriptorTable.ReferencedPartitionInfo getPartitionInfo() {
+        return partitionInfo;
+    }
+
+    public void setPartitionInfo(DescriptorTable.ReferencedPartitionInfo partitionInfo) {
+        this.partitionInfo = partitionInfo;
+    }
+
 }
