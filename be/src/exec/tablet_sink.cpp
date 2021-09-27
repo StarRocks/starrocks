@@ -570,7 +570,7 @@ bool IndexChannel::has_intolerable_failure() {
 
 OlapTableSink::OlapTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& texprs,
                              Status* status, bool is_vectorized)
-        : _pool(pool), _input_row_desc(row_desc), _filter_bitmap(1024), _is_vectorized(is_vectorized) {
+        : _pool(pool), _input_row_desc(row_desc), _filter_bitmap(1024), _is_vectorized(true) {
     if (!texprs.empty()) {
         *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs);
     }
