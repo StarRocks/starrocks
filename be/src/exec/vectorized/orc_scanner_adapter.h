@@ -68,6 +68,7 @@ public:
         _broker_load_mode = true;
         _strict_mode = strict_mode;
     }
+    void disable_broker_load_mode() { _broker_load_mode = false; }
     size_t get_num_rows_filtered() const { return _num_rows_filtered; }
     bool get_broker_load_mode() const { return _broker_load_mode; }
     bool get_strict_mode() const { return _strict_mode; }
