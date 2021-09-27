@@ -271,7 +271,6 @@ JDK_AARCH64_NAME="bisheng-jdk-8u262-linux-aarch64.tar.gz"
 JDK_AARCH64_SOURCE="bisheng-jdk1.8.0_262"
 JDK_AARCH64_MD5SUM="a1254dea3728e0a86e53a55d8debfbeb"
 
-
 # RAGEL
 # ragel-6.9+ is used by hyperscan, so we build it first
 RAGEL_DOWNLOAD="https://www.colm.net/files/ragel/ragel-6.10.tar.gz"
