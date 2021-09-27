@@ -7258,5 +7258,7 @@ public class Catalog {
         }
     }
 
+    public long getMetaLogCount() {
+        return editLog.getMaxJournalId() - Storage.getImageSeq(this.imageDir);
+    }
 }
-

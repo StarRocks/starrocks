@@ -87,10 +87,6 @@ public class MetaCleaner {
                 if (filename.startsWith(Storage.IMAGE)) {
                     type = Storage.IMAGE;
                 }
-
-                if (filename.startsWith(Storage.EDITS)) {
-                    type = Storage.EDITS;
-                }
             }
         }
 

@@ -23,6 +23,7 @@ package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob.JobType;
@@ -71,6 +72,7 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_ERR;
     public static LongCounterMetric COUNTER_QUERY_TIMEOUT;
     public static LongCounterMetric COUNTER_QUERY_SUCCESS;
+    public static LongCounterMetric COUNTER_SLOW_QUERY;
     public static LongCounterMetric COUNTER_LOAD_ADD;
     public static LongCounterMetric COUNTER_LOAD_FINISHED;
     public static LongCounterMetric COUNTER_EDIT_LOG_WRITE;
@@ -179,7 +181,7 @@ public final class MetricRepo {
 
         // journal id
         GaugeMetric<Long> maxJournalId = (GaugeMetric<Long>) new GaugeMetric<Long>(
-                "max_journal_id", MetricUnit.NOUNIT, "max journal id of this frontends") {
+                "max_journal_id", MetricUnit.NOUNIT, "max journal id of this frontend") {
             @Override
             public Long getValue() {
                 EditLog editLog = Catalog.getCurrentCatalog().getEditLog();
@@ -190,6 +192,16 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(maxJournalId);
+
+        // meta log total count
+        GaugeMetric<Long> metaLogCount = new GaugeMetric<Long>(
+                "meta_log_count", MetricUnit.NOUNIT, "meta log total count") {
+            @Override
+            public Long getValue() {
+                return Catalog.getCurrentCatalog().getMetaLogCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
 
         // scheduled tablet num
         GaugeMetric<Long> scheduledTabletNum = (GaugeMetric<Long>) new GaugeMetric<Long>(
@@ -293,6 +305,8 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_TIMEOUT);
         COUNTER_QUERY_SUCCESS = new LongCounterMetric("query_success", MetricUnit.REQUESTS, "total success query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_SUCCESS);
+        COUNTER_SLOW_QUERY = new LongCounterMetric("slow_query", MetricUnit.REQUESTS, "total slow query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SLOW_QUERY);
         COUNTER_LOAD_ADD = new LongCounterMetric("load_add", MetricUnit.REQUESTS, "total load submit");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LOAD_ADD);
         COUNTER_ROUTINE_LOAD_PAUSED =

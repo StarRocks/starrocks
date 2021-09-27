@@ -28,15 +28,13 @@ package com.starrocks.persist;
 public class StorageInfo {
     private int clusterID;
     private long imageSeq;
-    private long editsSeq;
 
     public StorageInfo() {
-        this(-1, 0, 0);
+        this(-1, 0);
     }
 
-    public StorageInfo(int clusterID, long imageSeq, long editsSeq) {
+    public StorageInfo(int clusterID, long imageSeq) {
         this.clusterID = clusterID;
-        this.editsSeq = editsSeq;
         this.imageSeq = imageSeq;
     }
 
@@ -46,14 +44,6 @@ public class StorageInfo {
 
     public void setClusterID(int clusterID) {
         this.clusterID = clusterID;
-    }
-
-    public long getEditsSeq() {
-        return editsSeq;
-    }
-
-    public void setEditsSeq(long editsSeq) {
-        this.editsSeq = editsSeq;
     }
 
     public long getImageSeq() {
