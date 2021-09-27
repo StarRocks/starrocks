@@ -213,8 +213,8 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL64(18,2)) + CAST(2: v2 AS DECIMAL64(18,3))\n" +
-                "  |  use vectorized: true"));
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL64(7,2)) AS DECIMAL64(18,2)) + CAST(CAST(2: v2 AS DECIMAL64(9,3)) AS DECIMAL64(18,3))\n" +
+                "  |  use vectorized: true\n"));
         Config.enable_decimal_v3 = false;
     }
 
@@ -224,7 +224,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL128(38,2)) - CAST(2: v2 AS DECIMAL128(38,3))\n" +
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(27,2)) AS DECIMAL128(38,2)) - CAST(CAST(2: v2 AS DECIMAL64(10,3)) AS DECIMAL128(38,3))\n" +
                 "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
@@ -235,7 +235,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL128(38,5)) * CAST(2: v2 AS DECIMAL128(38,7))\n" +
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(10,5)) AS DECIMAL128(38,5)) * CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(38,7))\n" +
                 "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
@@ -246,7 +246,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL128(38,5)) / CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL128(38,7))\n" +
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(18,5)) AS DECIMAL128(38,5)) / CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL128(38,7))\n" +
                 "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
