@@ -513,7 +513,7 @@ Decimal::Decimal(const std::string& str) {
     }
 }
 
-Decimal::Decimal() : value(0), scale(0) {
+Decimal::Decimal() : value(0) {
     // PASS
 }
 

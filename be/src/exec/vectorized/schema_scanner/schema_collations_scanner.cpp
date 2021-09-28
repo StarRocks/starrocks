@@ -25,7 +25,7 @@ SchemaCollationsScanner::CollationStruct SchemaCollationsScanner::_s_collations[
 };
 
 SchemaCollationsScanner::SchemaCollationsScanner()
-        : SchemaScanner(_s_cols_columns, sizeof(_s_cols_columns) / sizeof(SchemaScanner::ColumnDesc)), _index(0) {}
+        : SchemaScanner(_s_cols_columns, sizeof(_s_cols_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 SchemaCollationsScanner::~SchemaCollationsScanner() = default;
 

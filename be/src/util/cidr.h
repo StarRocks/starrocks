@@ -38,8 +38,8 @@ private:
     bool ip_to_int(const std::string& ip_str, uint32_t* value);
     bool contains(uint32_t ip_int);
 
-    uint32_t _address;
-    uint32_t _netmask;
+    uint32_t _address{0};
+    uint32_t _netmask{0xffffffff};
 };
 
 } // end namespace starrocks

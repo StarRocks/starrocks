@@ -29,7 +29,7 @@
 
 namespace starrocks {
 
-CIDR::CIDR() : _address(0), _netmask(0xffffffff) {}
+CIDR::CIDR() {}
 
 void CIDR::reset() {
     _address = 0;

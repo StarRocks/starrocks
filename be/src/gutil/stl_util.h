@@ -759,7 +759,7 @@ public:
     typedef typename Alloc::pointer pointer;
     typedef typename Alloc::size_type size_type;
 
-    STLCountingAllocator() : bytes_used_(nullptr) {}
+    STLCountingAllocator() {}
     STLCountingAllocator(int64* b) : bytes_used_(b) {} // TODO(user): explicit?
 
     // Constructor used for rebinding
@@ -787,7 +787,7 @@ public:
     int64* bytes_used() const { return bytes_used_; }
 
 private:
-    int64* bytes_used_;
+    int64* bytes_used_{nullptr};
 };
 
 // Even though a struct has no data members, it cannot have zero size

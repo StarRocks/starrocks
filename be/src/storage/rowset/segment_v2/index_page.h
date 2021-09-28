@@ -84,7 +84,7 @@ private:
 class IndexPageIterator;
 class IndexPageReader {
 public:
-    IndexPageReader() : _parsed(false) {}
+    IndexPageReader() {}
 
     Status parse(const Slice& body, const IndexPageFooterPB& footer);
 
@@ -119,7 +119,7 @@ public:
     }
 
 private:
-    bool _parsed;
+    bool _parsed{false};
 
     IndexPageFooterPB _footer;
     std::vector<Slice> _keys;

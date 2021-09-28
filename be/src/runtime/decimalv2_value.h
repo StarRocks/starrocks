@@ -60,7 +60,7 @@ public:
     static const int128_t MAX_DECIMAL_VALUE = static_cast<int128_t>(MAX_INT64) * ONE_BILLION + MAX_FRAC_VALUE;
     static const int128_t MIN_DECIMAL_VALUE = -MAX_DECIMAL_VALUE;
 
-    DecimalV2Value() : _value(0) {}
+    DecimalV2Value() {}
     inline const int128_t& value() const { return _value; }
     inline int128_t& value() { return _value; }
 
@@ -266,7 +266,7 @@ public:
     static DecimalV2Value ONE;
 
 private:
-    int128_t _value;
+    int128_t _value{0};
 };
 
 DecimalV2Value operator+(const DecimalV2Value& v1, const DecimalV2Value& v2);

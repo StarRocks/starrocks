@@ -189,7 +189,7 @@ private:
 
 class PartitionInfo {
 public:
-    PartitionInfo() : _id(-1), _distributed_bucket(0) {}
+    PartitionInfo() {}
 
     static Status from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition);
 
@@ -208,12 +208,12 @@ public:
     const PartRange& range() const { return _range; }
 
 private:
-    int64_t _id;
+    int64_t _id{-1};
     PartRange _range;
     // Information used to distribute data
     // distribute exprs
     std::vector<ExprContext*> _distributed_expr_ctxs;
-    int32_t _distributed_bucket;
+    int32_t _distributed_bucket{0};
 };
 
 // which tablet this batch belong to

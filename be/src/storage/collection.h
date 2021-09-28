@@ -28,15 +28,15 @@ namespace starrocks {
 // cpp type for ARRAY
 struct Collection {
     // child column data
-    void* data;
-    uint32_t length;
+    void* data{nullptr};
+    uint32_t length{0};
     // item has no null value if has_null is false.
     // item ```may``` has null value if has_null is true.
-    bool has_null;
+    bool has_null{false};
     // null bitmap
-    uint8_t* null_signs;
+    uint8_t* null_signs{nullptr};
 
-    Collection() : data(nullptr), length(0), has_null(false), null_signs(nullptr) {}
+    Collection() {}
 
     explicit Collection(uint32_t length) : data(nullptr), length(length), has_null(false), null_signs(nullptr) {}
 

@@ -34,7 +34,7 @@ class DataConsumerGroup {
 public:
     typedef std::function<void(const Status&)> ConsumeFinishCallback;
 
-    DataConsumerGroup() : _grp_id(UniqueId::gen_uid()), _thread_pool(3, 10), _counter(0) {}
+    DataConsumerGroup() : _grp_id(UniqueId::gen_uid()), _thread_pool(3, 10) {}
 
     virtual ~DataConsumerGroup() { _consumers.clear(); }
 
@@ -61,7 +61,7 @@ protected:
     // once a consumer is done, decrease the counter.
     // when the counter becomes zero, shutdown the queue to finish
     std::mutex _mutex;
-    int _counter;
+    int _counter{0};
 };
 
 // for kafka

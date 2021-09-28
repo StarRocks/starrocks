@@ -37,7 +37,7 @@ class Env;
 template <class FileType>
 class OpenedFileHandle {
 public:
-    OpenedFileHandle() : _cache(nullptr), _handle(nullptr) {}
+    OpenedFileHandle() {}
 
     // A opened file handle
     explicit OpenedFileHandle(Cache* cache, Cache::Handle* handle) : _cache(cache), _handle(handle) {}
@@ -66,8 +66,8 @@ public:
     }
 
 private:
-    Cache* _cache;
-    Cache::Handle* _handle;
+    Cache* _cache{nullptr};
+    Cache::Handle* _handle{nullptr};
 };
 
 // Cache of open files.

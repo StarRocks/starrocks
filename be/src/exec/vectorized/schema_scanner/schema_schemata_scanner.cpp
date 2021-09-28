@@ -19,7 +19,7 @@ SchemaScanner::ColumnDesc SchemaSchemataScanner::_s_columns[] = {
 };
 
 SchemaSchemataScanner::SchemaSchemataScanner()
-        : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)), _db_index(0) {}
+        : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 SchemaSchemataScanner::~SchemaSchemataScanner() = default;
 

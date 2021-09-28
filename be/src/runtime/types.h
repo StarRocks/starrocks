@@ -37,16 +37,16 @@ namespace starrocks {
 // Describes a type. Includes the enum, children types, and any type-specific metadata
 // (e.g. precision and scale for decimals).
 struct TypeDescriptor {
-    PrimitiveType type;
+    PrimitiveType type{INVALID_TYPE};
     /// Only meaningful for type TYPE_CHAR/TYPE_VARCHAR/TYPE_HLL
-    int len;
+    int len{-1};
     static constexpr int MAX_VARCHAR_LENGTH = 65533;
     static constexpr int MAX_CHAR_LENGTH = 255;
     static constexpr int MAX_CHAR_INLINE_LENGTH = 128;
 
     /// Only set if type == TYPE_DECIMAL
-    int precision;
-    int scale;
+    int precision{-1};
+    int scale{-1};
 
     /// Must be kept in sync with FE's max precision/scale.
     static const int MAX_PRECISION = 38;
@@ -63,7 +63,7 @@ struct TypeDescriptor {
     /// Only set if type == TYPE_STRUCT. The field name of each child.
     std::vector<std::string> field_names;
 
-    TypeDescriptor() : type(INVALID_TYPE), len(-1), precision(-1), scale(-1) {}
+    TypeDescriptor() {}
 
     explicit TypeDescriptor(PrimitiveType type) : type(type), len(-1), precision(-1), scale(-1) {}
 

@@ -264,7 +264,7 @@ struct Decimal {
 
     std::string toString(bool trimTrailingZeros = false) const;
     Int128 value;
-    int32_t scale;
+    int32_t scale{0};
 };
 
 struct Decimal64VectorBatch : public ColumnVectorBatch {
