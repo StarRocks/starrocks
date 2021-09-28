@@ -6,7 +6,7 @@
 
 Bloom Filter（布隆过滤器）是用于判断某个元素是否在一个集合中的数据结构，优点是空间效率和时间效率都比较高，缺点是有一定的误判率。
 
-![bloomfilter](../assets/3.7.1-1.jfif)
+![bloomfilter](../assets/3.7.1.png)
 
 布隆过滤器是由一个Bit数组和n个哈希函数构成。Bit数组初始全部为0，当插入一个元素时，n个Hash函数对元素进行计算, 得到n个slot，然后将Bit数组中n个slot的Bit置1。
 
