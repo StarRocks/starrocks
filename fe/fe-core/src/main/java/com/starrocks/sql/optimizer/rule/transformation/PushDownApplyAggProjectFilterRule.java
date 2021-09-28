@@ -110,7 +110,7 @@ public class PushDownApplyAggProjectFilterRule extends TransformationRule {
         OptExpression newApplyOptExpression = OptExpression
                 .create(new LogicalApplyOperator(apply.getOutput(), apply.getSubqueryOperator(),
                                 apply.getCorrelationColumnRefs(), apply.getCorrelationConjuncts(), apply.getPredicate(),
-                                apply.isNeedCheckMaxRows(), apply.isFromAndScope()),
+                                apply.isNeedCheckMaxRows(), apply.isUseSemiAnti()),
                         input.getInputs().get(0), newAggOptExpression);
 
         return Lists.newArrayList(newApplyOptExpression);
