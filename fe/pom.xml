@@ -230,7 +230,9 @@ under the License.
             <dependency>
                 <groupId>com.sleepycat</groupId>
                 <artifactId>je</artifactId>
+                <scope>system</scope>
                 <version>7.3.7</version>
+                <systemPath>${basedir}/lib/je-7.3.7.jar</systemPath>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.mortbay.jetty/jetty -->
