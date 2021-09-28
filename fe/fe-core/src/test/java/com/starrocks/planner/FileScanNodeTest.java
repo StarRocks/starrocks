@@ -5,6 +5,7 @@ package com.starrocks.planner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DataDescription;
@@ -37,6 +38,7 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class FileScanNodeTest {
     private long jobId;
@@ -112,8 +114,8 @@ public class FileScanNodeTest {
         };
 
         // case 0
-        // 2 csv files: file1 512M, file2 256M
-        // result: 3 ranges. file1 2 ranges, file2 1 range
+        // 2 csv files: file1 512M+, file2 256M-
+        // result: 3 ranges. file1 3 ranges, file2 1 range
 
         // file groups
         List<BrokerFileGroup> fileGroups = Lists.newArrayList();
@@ -128,8 +130,8 @@ public class FileScanNodeTest {
         // file status
         List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
         List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
-        fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 536870912, true));
-        fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file2", false, 268435456, true));
+        fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 536870968, true));
+        fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file2", false, 268435400, true));
         fileStatusesList.add(fileStatusList);
 
         Analyzer analyzer = new Analyzer(Catalog.getCurrentCatalog(), new ConnectContext());
@@ -143,19 +145,30 @@ public class FileScanNodeTest {
 
         // check
         List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
+        System.out.println(locationsList);
         Assert.assertEquals(3, locationsList.size());
         int file1RangesNum = 0;
         int file2RangesNum = 0;
+        Set<Long> file1StartOffsetResult = Sets.newHashSet();
+        Set<Long> file1RangeSizeResult = Sets.newHashSet();
         for (TScanRangeLocations locations : locationsList) {
-            TBrokerRangeDesc rangeDesc = locations.scan_range.broker_scan_range.ranges.get(0);
-            Assert.assertEquals(268435456, rangeDesc.size);
-            if (rangeDesc.path.endsWith("file1")) {
-                ++file1RangesNum;
-            } else if (rangeDesc.path.endsWith("file2")) {
-                ++file2RangesNum;
+            for (TBrokerRangeDesc rangeDesc : locations.scan_range.broker_scan_range.ranges) {
+                long start = rangeDesc.start_offset;
+                long size = rangeDesc.size;
+                if (rangeDesc.path.endsWith("file1")) {
+                    ++file1RangesNum;
+                    file1StartOffsetResult.add(start);
+                    file1RangeSizeResult.add(size);
+                } else if (rangeDesc.path.endsWith("file2")) {
+                    ++file2RangesNum;
+                    Assert.assertTrue(start == 0);
+                    Assert.assertTrue(size == 268435400);
+                }
             }
         }
-        Assert.assertEquals(2, file1RangesNum);
+        Assert.assertEquals(Sets.newHashSet(0L, 268435456L, 536870912L), file1StartOffsetResult);
+        Assert.assertEquals(Sets.newHashSet(56L, 268435456L), file1RangeSizeResult);
+        Assert.assertEquals(3, file1RangesNum);
         Assert.assertEquals(1, file2RangesNum);
 
         // case 1
