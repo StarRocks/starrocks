@@ -10,7 +10,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
 import java.util.List;
@@ -18,8 +17,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
-    private static final EliminateNegationsRewriter ELIMINATE_NEGATIONS_REWRITER = new EliminateNegationsRewriter();
-
     //
     // Simplified Case When Predicate
     // @Fixme: improve it:
@@ -173,13 +170,18 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
                 return predicate;
             }
             case NOT: {
-                ScalarOperator child = predicate.getChild(0);
-                ScalarOperator result = child.accept(ELIMINATE_NEGATIONS_REWRITER, null);
-                if (null == result) {
+                if (constantChildren.size() == 0) {
+                    // !xxx
                     return predicate;
                 }
 
-                return result;
+                // !null
+                if (constantChildren.get(0).isNull()) {
+                    return ConstantOperator.createNull(Type.BOOLEAN);
+                }
+
+                // !true or !false
+                return ConstantOperator.createBoolean(!constantChildren.get(0).getBoolean());
             }
         }
 
@@ -203,31 +205,5 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         } else {
             return new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, predicate.getChildren());
         }
-    }
-
-    //Simplify the comparison result of the same column
-    //eg a>=a with not nullable transform to true constant;
-    @Override
-    public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
-                                               ScalarOperatorRewriteContext context) {
-        if (predicate.getChild(0).isVariable() && predicate.getChild(0).equals(predicate.getChild(1))) {
-            if (predicate.getChild(0).isNullable() &&
-                    predicate.getBinaryType().equals(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL)) {
-                return ConstantOperator.createBoolean(true);
-            } else if (!predicate.getChild(0).isNullable()) {
-                switch (predicate.getBinaryType()) {
-                    case EQ:
-                    case EQ_FOR_NULL:
-                    case GE:
-                    case LE:
-                        return ConstantOperator.createBoolean(true);
-                    case NE:
-                    case LT:
-                    case GT:
-                        return ConstantOperator.createBoolean(false);
-                }
-            }
-        }
-        return predicate;
     }
 }
