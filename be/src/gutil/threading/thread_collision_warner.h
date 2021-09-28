@@ -130,12 +130,12 @@ namespace base {
 // used. During the unit tests is used another class that doesn't "DCHECK"
 // in case of collision (check thread_collision_warner_unittests.cc)
 struct BASE_EXPORT AsserterBase {
-    virtual ~AsserterBase() {}
+    virtual ~AsserterBase() = default;
     virtual void warn(int64_t previous_thread_id, int64_t current_thread_id) = 0;
 };
 
 struct BASE_EXPORT DCheckAsserter : public AsserterBase {
-    ~DCheckAsserter() override {}
+    ~DCheckAsserter() override = default;
     void warn(int64_t previous_thread_id, int64_t current_thread_id) override;
 };
 
@@ -156,7 +156,7 @@ public:
     public:
         explicit Check(ThreadCollisionWarner* warner) : warner_(warner) { warner_->EnterSelf(); }
 
-        ~Check() {}
+        ~Check() = default;
 
     private:
         ThreadCollisionWarner* warner_;

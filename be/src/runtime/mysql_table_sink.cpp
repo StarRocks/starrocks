@@ -35,7 +35,7 @@ namespace starrocks {
 MysqlTableSink::MysqlTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs)
         : _pool(pool), _row_desc(row_desc), _t_output_expr(t_exprs) {}
 
-MysqlTableSink::~MysqlTableSink() {}
+MysqlTableSink::~MysqlTableSink() = default;
 
 Status MysqlTableSink::init(const TDataSink& t_sink) {
     RETURN_IF_ERROR(DataSink::init(t_sink));

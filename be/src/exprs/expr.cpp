@@ -260,7 +260,7 @@ Expr::Expr(const TExprNode& node, bool is_slotref)
     }
 }
 
-Expr::~Expr() {}
+Expr::~Expr() = default;
 
 Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx) {
     // input is empty

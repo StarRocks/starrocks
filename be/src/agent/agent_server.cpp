@@ -96,7 +96,7 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
 #undef CREATE_AND_START_POOL
 }
 
-AgentServer::~AgentServer() {}
+AgentServer::~AgentServer() = default;
 
 // TODO(lingbin): each task in the batch may have it own status or FE must check and
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.

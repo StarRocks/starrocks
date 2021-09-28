@@ -42,7 +42,7 @@ SchemaTablesScanner::SchemaTablesScanner()
           _db_index(0),
           _table_index(0) {}
 
-SchemaTablesScanner::~SchemaTablesScanner() {}
+SchemaTablesScanner::~SchemaTablesScanner() = default;
 
 Status SchemaTablesScanner::start(RuntimeState* state) {
     if (!_is_init) {

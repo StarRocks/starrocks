@@ -512,7 +512,7 @@ void NodeChannel::clear_all_batches() {
     }
 }
 
-IndexChannel::~IndexChannel() {}
+IndexChannel::~IndexChannel() = default;
 
 Status IndexChannel::init(RuntimeState* state, const std::vector<TTabletWithPartition>& tablets) {
     for (const auto& tablet : tablets) {

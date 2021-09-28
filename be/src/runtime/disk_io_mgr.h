@@ -235,7 +235,7 @@ public:
     class BufferDescriptor {
     public:
         // a null dtor to pass codestyle check
-        ~BufferDescriptor() {}
+        ~BufferDescriptor() = default;
 
         ScanRange* scan_range() { return _scan_range; }
         char* buffer() { return _buffer; }
@@ -504,7 +504,7 @@ public:
     class WriteRange : public RequestRange {
     public:
         // a null dtor to pass codestyle check
-        ~WriteRange() override {}
+        ~WriteRange() override = default;
 
         // This callback is invoked on each WriteRange after the write is complete or the
         // context is cancelled. The status returned by the callback parameter indicates

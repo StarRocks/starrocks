@@ -95,7 +95,7 @@ template <typename T>
 class AtomicMetric : public Metric {
 public:
     AtomicMetric(MetricType type, MetricUnit unit) : Metric(type, unit), _value(T()) {}
-    ~AtomicMetric() override {}
+    ~AtomicMetric() override = default;
 
     std::string to_string() const override { return std::to_string(value()); }
 
@@ -117,7 +117,7 @@ template <typename T>
 class LockSimpleMetric : public Metric {
 public:
     LockSimpleMetric(MetricType type, MetricUnit unit) : Metric(type, unit), _value(T()) {}
-    ~LockSimpleMetric() override {}
+    ~LockSimpleMetric() override = default;
 
     std::string to_string() const override { return std::to_string(value()); }
 
@@ -156,7 +156,7 @@ class CoreLocalCounter : public Metric {
 public:
     CoreLocalCounter(MetricUnit unit) : Metric(MetricType::COUNTER, unit), _value() {}
 
-    ~CoreLocalCounter() override {}
+    ~CoreLocalCounter() override = default;
 
     std::string to_string() const override {
         std::stringstream ss;
@@ -186,21 +186,21 @@ template <typename T>
 class AtomicCounter : public AtomicMetric<T> {
 public:
     AtomicCounter(MetricUnit unit) : AtomicMetric<T>(MetricType::COUNTER, unit) {}
-    ~AtomicCounter() override {}
+    ~AtomicCounter() override = default;
 };
 
 template <typename T>
 class AtomicGauge : public AtomicMetric<T> {
 public:
     AtomicGauge(MetricUnit unit) : AtomicMetric<T>(MetricType::GAUGE, unit) {}
-    ~AtomicGauge() override {}
+    ~AtomicGauge() override = default;
 };
 
 template <typename T>
 class LockCounter : public LockSimpleMetric<T> {
 public:
     LockCounter(MetricUnit unit) : LockSimpleMetric<T>(MetricType::COUNTER, unit) {}
-    virtual ~LockCounter() {}
+    virtual ~LockCounter() = default;
 };
 
 // This can only used for trival type
@@ -208,7 +208,7 @@ template <typename T>
 class LockGauge : public LockSimpleMetric<T> {
 public:
     LockGauge(MetricUnit unit) : LockSimpleMetric<T>(MetricType::GAUGE, unit) {}
-    virtual ~LockGauge() {}
+    virtual ~LockGauge() = default;
 };
 
 // one key-value pair used to
@@ -216,7 +216,7 @@ struct MetricLabel {
     std::string name;
     std::string value;
 
-    MetricLabel() {}
+    MetricLabel() = default;
     MetricLabel(std::string name_, std::string value_) : name(std::move(name_)), value(std::move(value_)) {}
 
     bool operator==(const MetricLabel& other) const { return name == other.name && value == other.value; }
@@ -304,7 +304,7 @@ class MetricCollector;
 
 class MetricsVisitor {
 public:
-    virtual ~MetricsVisitor() {}
+    virtual ~MetricsVisitor() = default;
 
     // visit a collector, you can implement collector visitor, or only implement
     // metric visitor

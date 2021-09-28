@@ -83,7 +83,7 @@ private:
     // TODO: Track fragment ID.
     class ThreadDescriptor {
     public:
-        ThreadDescriptor() {}
+        ThreadDescriptor() = default;
         ThreadDescriptor(std::string category, std::string name, int64_t thread_id)
                 : _name(std::move(name)), _category(std::move(category)), _thread_id(thread_id) {}
 

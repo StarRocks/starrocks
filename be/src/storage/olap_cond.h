@@ -138,7 +138,7 @@ public:
     // Value: CondColumn object
     typedef std::map<int32_t, CondColumn*> CondColumns;
 
-    Conditions() {}
+    Conditions() = default;
     ~Conditions() { finalize(); }
 
     void finalize() {

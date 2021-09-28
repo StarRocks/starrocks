@@ -76,7 +76,7 @@ public:
     TimestampedVersion(const Version& version, int64_t create_time)
             : _version(version.first, version.second), _create_time(create_time) {}
 
-    ~TimestampedVersion() {}
+    ~TimestampedVersion() = default;
 
     /// Return the rowset version of TimestampedVersion record.
     Version version() const { return _version; }

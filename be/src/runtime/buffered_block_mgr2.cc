@@ -64,7 +64,7 @@ public:
     }
 
     // A null dtor to pass codestyle check
-    ~Client() {}
+    ~Client() = default;
 
     // Unowned.
     BufferedBlockMgr2* _mgr;

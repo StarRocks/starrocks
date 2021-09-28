@@ -92,7 +92,7 @@ ESScanReader::ESScanReader(const std::string& target, const std::map<std::string
     _eos = false;
 }
 
-ESScanReader::~ESScanReader() {}
+ESScanReader::~ESScanReader() = default;
 
 Status ESScanReader::open() {
     _is_first = true;

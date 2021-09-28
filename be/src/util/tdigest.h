@@ -110,7 +110,7 @@ struct CentroidList {
 
 class CentroidListComparator {
 public:
-    CentroidListComparator() {}
+    CentroidListComparator() = default;
 
     bool operator()(const CentroidList& left, const CentroidList& right) const {
         return left.iter->mean() > right.iter->mean();
@@ -140,7 +140,7 @@ class TDigest {
 
     class TDigestComparator {
     public:
-        TDigestComparator() {}
+        TDigestComparator() = default;
 
         bool operator()(const TDigest* left, const TDigest* right) const {
             return left->totalSize() > right->totalSize();

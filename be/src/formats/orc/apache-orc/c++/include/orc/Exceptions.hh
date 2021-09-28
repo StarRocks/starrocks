@@ -38,7 +38,7 @@ public:
     NotImplementedYet(const NotImplementedYet&);
 
 private:
-    NotImplementedYet& operator=(const NotImplementedYet&);
+    NotImplementedYet& operator=(const NotImplementedYet&) = delete;
 };
 
 class ParseError : public std::runtime_error {
@@ -49,7 +49,7 @@ public:
     ParseError(const ParseError&);
 
 private:
-    ParseError& operator=(const ParseError&);
+    ParseError& operator=(const ParseError&) = delete;
 };
 
 class InvalidArgument : public std::runtime_error {
@@ -60,7 +60,7 @@ public:
     InvalidArgument(const InvalidArgument&);
 
 private:
-    InvalidArgument& operator=(const InvalidArgument&);
+    InvalidArgument& operator=(const InvalidArgument&) = delete;
 };
 } // namespace orc
 

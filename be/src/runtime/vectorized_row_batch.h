@@ -39,8 +39,8 @@ class RowBlock;
 
 class ColumnVector {
 public:
-    ColumnVector() {}
-    ~ColumnVector() {}
+    ColumnVector() = default;
+    ~ColumnVector() = default;
 
     bool* is_null() const { return _is_null; }
 

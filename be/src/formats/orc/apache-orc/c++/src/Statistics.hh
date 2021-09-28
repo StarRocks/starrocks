@@ -75,7 +75,7 @@ public:
         _valueCount = 0;
     }
 
-    ~InternalStatisticsImpl() {}
+    ~InternalStatisticsImpl() = default;
 
     // GET / SET _totalLength
     bool hasTotalLength() const { return _hasTotalLength; }
@@ -1296,8 +1296,8 @@ private:
     std::vector<ColumnStatistics*> colStats;
 
     // DELIBERATELY NOT IMPLEMENTED
-    StatisticsImpl(const StatisticsImpl&);
-    StatisticsImpl& operator=(const StatisticsImpl&);
+    StatisticsImpl(const StatisticsImpl&) = delete;
+    StatisticsImpl& operator=(const StatisticsImpl&) = delete;
 
 public:
     StatisticsImpl(const proto::StripeStatistics& stripeStats, const StatContext& statContext);
@@ -1317,8 +1317,8 @@ private:
     std::vector<std::vector<std::shared_ptr<const ColumnStatistics> > > rowIndexStats;
 
     // DELIBERATELY NOT IMPLEMENTED
-    StripeStatisticsImpl(const StripeStatisticsImpl&);
-    StripeStatisticsImpl& operator=(const StripeStatisticsImpl&);
+    StripeStatisticsImpl(const StripeStatisticsImpl&) = delete;
+    StripeStatisticsImpl& operator=(const StripeStatisticsImpl&) = delete;
 
 public:
     StripeStatisticsImpl(const proto::StripeStatistics& stripeStats,

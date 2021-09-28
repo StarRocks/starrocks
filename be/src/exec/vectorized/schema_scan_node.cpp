@@ -23,7 +23,7 @@ SchemaScanNode::SchemaScanNode(ObjectPool* pool, const TPlanNode& tnode, const D
           _dest_tuple_desc(nullptr),
           _schema_scanner(nullptr) {}
 
-SchemaScanNode::~SchemaScanNode() {}
+SchemaScanNode::~SchemaScanNode() = default;
 
 Status SchemaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode));

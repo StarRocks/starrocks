@@ -47,7 +47,7 @@ SchemaColumnsScanner::SchemaColumnsScanner()
           _table_index(0),
           _column_index(0) {}
 
-SchemaColumnsScanner::~SchemaColumnsScanner() {}
+SchemaColumnsScanner::~SchemaColumnsScanner() = default;
 
 Status SchemaColumnsScanner::start(RuntimeState* state) {
     if (!_is_init) {

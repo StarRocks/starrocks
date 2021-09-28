@@ -24,7 +24,7 @@ using DriverDispatcherPtr = std::shared_ptr<DriverDispatcher>;
 class DriverDispatcher {
 public:
     DriverDispatcher() = default;
-    virtual ~DriverDispatcher() {}
+    virtual ~DriverDispatcher() = default;
     virtual void initialize(int32_t num_threads) {}
     virtual void change_num_threads(int32_t num_threads) {}
     virtual void dispatch(DriverPtr driver){};
@@ -40,7 +40,7 @@ public:
 class GlobalDriverDispatcher final : public FactoryMethod<DriverDispatcher, GlobalDriverDispatcher> {
 public:
     explicit GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool);
-    ~GlobalDriverDispatcher() override {}
+    ~GlobalDriverDispatcher() override = default;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
     void dispatch(DriverPtr driver) override;

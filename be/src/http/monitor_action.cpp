@@ -34,7 +34,7 @@ namespace starrocks {
 
 const std::string MODULE_KEY = "module";
 
-MonitorAction::MonitorAction() {}
+MonitorAction::MonitorAction() = default;
 
 void MonitorAction::register_module(const std::string& name, RestMonitorIface* module) {
     _module_by_name.insert(std::make_pair(name, module));

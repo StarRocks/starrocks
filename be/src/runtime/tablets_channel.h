@@ -46,7 +46,7 @@ struct TabletsChannelKey {
 
     TabletsChannelKey(const PUniqueId& pid, int64_t index_id_) : id(pid), index_id(index_id_) {}
 
-    ~TabletsChannelKey() noexcept {}
+    ~TabletsChannelKey() noexcept = default;
 
     bool operator==(const TabletsChannelKey& rhs) const noexcept { return index_id == rhs.index_id && id == rhs.id; }
 

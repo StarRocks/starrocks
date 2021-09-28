@@ -31,7 +31,7 @@ namespace debug {
 // While this object is alive, calls to "new" will not be checked for leaks.
 class ScopedLeakCheckDisabler {
 public:
-    ScopedLeakCheckDisabler() {}
+    ScopedLeakCheckDisabler() = default;
 
 private:
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)

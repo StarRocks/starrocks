@@ -51,7 +51,7 @@ public:
     // 'mem_pool'.
     FreePool(MemPool* mem_pool) : _mem_pool(mem_pool) { memset(&_lists, 0, sizeof(_lists)); }
 
-    virtual ~FreePool() {}
+    virtual ~FreePool() = default;
 
     // Allocates a buffer of size.
     uint8_t* allocate(int64_t size) {

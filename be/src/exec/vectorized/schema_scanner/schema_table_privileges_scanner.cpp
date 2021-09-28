@@ -23,7 +23,7 @@ SchemaTablePrivilegesScanner::SchemaTablePrivilegesScanner()
         : SchemaScanner(_s_table_privs_columns, sizeof(_s_table_privs_columns) / sizeof(SchemaScanner::ColumnDesc)),
           _table_priv_index(0) {}
 
-SchemaTablePrivilegesScanner::~SchemaTablePrivilegesScanner() {}
+SchemaTablePrivilegesScanner::~SchemaTablePrivilegesScanner() = default;
 
 Status SchemaTablePrivilegesScanner::start(RuntimeState* state) {
     if (!_is_init) {
