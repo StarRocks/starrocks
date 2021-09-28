@@ -29,8 +29,8 @@ typedef std::vector<ChunkHasSupplier> ChunkHasSuppliers;
 // A cursor refers to a record in a Chunk, and can compare to a cursor referring a record in another Chunk.
 class ChunkCursor {
 public:
-    ChunkCursor(const ChunkSupplier& chunk_supplier, const ChunkProbeSupplier& chunk_probe_supplier,
-                const ChunkHasSupplier& chunk_has_supplier, const std::vector<ExprContext*>* sort_exprs,
+    ChunkCursor(ChunkSupplier chunk_supplier, ChunkProbeSupplier chunk_probe_supplier,
+                ChunkHasSupplier chunk_has_supplier, const std::vector<ExprContext*>* sort_exprs,
                 const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first, bool is_pipeline);
     ~ChunkCursor();
 

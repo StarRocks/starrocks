@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "common/status.h"
 #include "util/byte_buffer.h"
 
@@ -40,7 +42,7 @@ public:
 // write message to a local file
 class MessageBodyFileSink : public MessageBodySink {
 public:
-    MessageBodyFileSink(const std::string& path) : _path(path) {}
+    MessageBodyFileSink(std::string path) : _path(std::move(path)) {}
     ~MessageBodyFileSink() override;
 
     Status open();

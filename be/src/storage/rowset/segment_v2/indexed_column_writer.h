@@ -75,7 +75,7 @@ struct IndexedColumnWriterOptions {
 // TODO test with empty input
 class IndexedColumnWriter {
 public:
-    explicit IndexedColumnWriter(const IndexedColumnWriterOptions& options, const TypeInfoPtr& typeinfo,
+    explicit IndexedColumnWriter(const IndexedColumnWriterOptions& options, TypeInfoPtr typeinfo,
                                  fs::WritableBlock* wblock);
 
     ~IndexedColumnWriter();

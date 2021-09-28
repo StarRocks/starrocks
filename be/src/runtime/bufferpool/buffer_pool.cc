@@ -22,6 +22,7 @@
 #include <limits>
 #include <memory>
 #include <sstream>
+#include <utility>
 
 #include "gutil/strings/substitute.h"
 #include "runtime/bufferpool/buffer_allocator.h"
@@ -366,11 +367,11 @@ void BufferPool::SubReservation::Close() {
 }
 
 BufferPool::Client::Client(BufferPool* pool, //TmpFileMgr::FileGroup* file_group,
-                           const string& name, ReservationTracker* parent_reservation, MemTracker* mem_tracker,
+                           string name, ReservationTracker* parent_reservation, MemTracker* mem_tracker,
                            int64_t reservation_limit, RuntimeProfile* profile)
         : pool_(pool),
           //file_group_(file_group),
-          name_(name),
+          name_(std::move(name)),
           debug_write_delay_ms_(0),
           num_pages_(0),
           buffers_allocated_bytes_(0) {

@@ -40,7 +40,7 @@ public:
     // label - label that is printed with each update.
     // max - maximum number of work items
     // update_period - how often the progress is spewed expressed as a percentage
-    ProgressUpdater(const std::string& label, int64_t max, int update_period);
+    ProgressUpdater(std::string label, int64_t max, int update_period);
 
     ProgressUpdater();
 

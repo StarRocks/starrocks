@@ -41,7 +41,7 @@ class TNetworkAddress;
 class BrokerWriter : public FileWriter {
 public:
     BrokerWriter(ExecEnv* env, const std::vector<TNetworkAddress>& broker_addresses,
-                 const std::map<std::string, std::string>& properties, const std::string& path, int64_t start_offset);
+                 const std::map<std::string, std::string>& properties, std::string path, int64_t start_offset);
     ~BrokerWriter() override;
 
     Status open() override;

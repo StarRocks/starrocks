@@ -21,6 +21,7 @@
 
 #include "runtime/sorted_run_merger.h"
 
+#include <utility>
 #include <vector>
 
 #include "exprs/expr.h"
@@ -43,8 +44,11 @@ namespace starrocks {
 class SortedRunMerger::BatchedRowSupplier {
 public:
     // Construct an instance from a sorted input run.
-    BatchedRowSupplier(SortedRunMerger* parent, const RunBatchSupplier& sorted_run)
-            : _sorted_run(sorted_run), _input_row_batch(nullptr), _input_row_batch_index(-1), _parent(parent) {}
+    BatchedRowSupplier(SortedRunMerger* parent, RunBatchSupplier sorted_run)
+            : _sorted_run(std::move(sorted_run)),
+              _input_row_batch(nullptr),
+              _input_row_batch_index(-1),
+              _parent(parent) {}
 
     ~BatchedRowSupplier() {}
 
@@ -122,9 +126,11 @@ void SortedRunMerger::heapify(int parent_index) {
     }
 }
 
-SortedRunMerger::SortedRunMerger(const TupleRowComparator& compare_less_than, RowDescriptor* row_desc,
-                                 RuntimeProfile* profile, bool deep_copy_input)
-        : _compare_less_than(compare_less_than), _input_row_desc(row_desc), _deep_copy_input(deep_copy_input) {
+SortedRunMerger::SortedRunMerger(TupleRowComparator compare_less_than, RowDescriptor* row_desc, RuntimeProfile* profile,
+                                 bool deep_copy_input)
+        : _compare_less_than(std::move(compare_less_than)),
+          _input_row_desc(row_desc),
+          _deep_copy_input(deep_copy_input) {
     _get_next_timer = ADD_TIMER(profile, "MergeGetNext");
     _get_next_batch_timer = ADD_TIMER(profile, "MergeGetNextBatch");
 }

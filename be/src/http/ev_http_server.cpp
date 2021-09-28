@@ -30,6 +30,7 @@
 
 #include <memory>
 #include <sstream>
+#include <utility>
 
 #include "common/logging.h"
 #include "http/http_channel.h"
@@ -80,8 +81,8 @@ EvHttpServer::EvHttpServer(int port, int num_workers)
     DCHECK_EQ(res, 0);
 }
 
-EvHttpServer::EvHttpServer(const std::string& host, int port, int num_workers)
-        : _host(host), _port(port), _num_workers(num_workers), _real_port(0) {
+EvHttpServer::EvHttpServer(std::string host, int port, int num_workers)
+        : _host(std::move(host)), _port(port), _num_workers(num_workers), _real_port(0) {
     DCHECK_GT(_num_workers, 0);
     auto res = pthread_rwlock_init(&_rw_lock, nullptr);
     DCHECK_EQ(res, 0);

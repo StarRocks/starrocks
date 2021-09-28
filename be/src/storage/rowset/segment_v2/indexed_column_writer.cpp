@@ -23,6 +23,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "common/logging.h"
 #include "env/env.h"
@@ -41,10 +42,10 @@
 namespace starrocks {
 namespace segment_v2 {
 
-IndexedColumnWriter::IndexedColumnWriter(const IndexedColumnWriterOptions& options, const TypeInfoPtr& typeinfo,
+IndexedColumnWriter::IndexedColumnWriter(const IndexedColumnWriterOptions& options, TypeInfoPtr typeinfo,
                                          fs::WritableBlock* wblock)
         : _options(options),
-          _typeinfo(typeinfo),
+          _typeinfo(std::move(typeinfo)),
           _wblock(wblock),
           _mem_tracker(-1),
           _mem_pool(&_mem_tracker),

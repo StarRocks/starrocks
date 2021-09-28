@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "exec/pipeline/operator.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/mysql_result_writer.h"
@@ -53,8 +55,8 @@ private:
 class ResultSinkOperatorFactory final : public OperatorFactory {
 public:
     ResultSinkOperatorFactory(int32_t id, int32_t plan_node_id, TResultSinkType::type sink_type,
-                              const std::vector<TExpr>& t_output_expr)
-            : OperatorFactory(id, plan_node_id), _sink_type(sink_type), _t_output_expr(t_output_expr) {}
+                              std::vector<TExpr> t_output_expr)
+            : OperatorFactory(id, plan_node_id), _sink_type(sink_type), _t_output_expr(std::move(t_output_expr)) {}
 
     ~ResultSinkOperatorFactory() override = default;
 

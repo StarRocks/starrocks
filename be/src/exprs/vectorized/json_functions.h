@@ -6,6 +6,8 @@
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <rapidjson/document.h>
+
+#include <utility>
 DIAGNOSTIC_POP
 
 #include "column/column_builder.h"
@@ -45,7 +47,7 @@ struct JsonPath {
     int idx;         // array index of a json array, -1 means not set, -2 means *
     bool is_valid;   // true if the path is successfully parsed
 
-    JsonPath(const std::string& key_, int idx_, bool is_valid_) : key(key_), idx(idx_), is_valid(is_valid_) {}
+    JsonPath(std::string key_, int idx_, bool is_valid_) : key(std::move(key_)), idx(idx_), is_valid(is_valid_) {}
 
     std::string to_string() const {
         std::stringstream ss;

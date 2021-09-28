@@ -48,7 +48,7 @@ struct CacheEntry {
  */
 class SmallFileMgr {
 public:
-    SmallFileMgr(ExecEnv* env, const std::string& local_path);
+    SmallFileMgr(ExecEnv* env, std::string local_path);
 
     ~SmallFileMgr();
 

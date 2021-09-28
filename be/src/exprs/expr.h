@@ -336,7 +336,7 @@ protected:
 
     explicit Expr(TypeDescriptor type);
     explicit Expr(const TExprNode& node);
-    Expr(const TypeDescriptor& type, bool is_slotref);
+    Expr(TypeDescriptor type, bool is_slotref);
     Expr(const TExprNode& node, bool is_slotref);
 
     /// Initializes this expr instance for execution. This does not include initializing
