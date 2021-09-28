@@ -39,9 +39,9 @@ public class HiveRepository {
 
     Executor executor = Executors.newFixedThreadPool(100);
     private static final Logger LOG = LogManager.getLogger(HiveRepository.class);
-    private ExecutorService partitionDaemonExecutor =
+    private final ExecutorService partitionDaemonExecutor =
             ThreadPoolManager.newDaemonFixedThreadPool(Config.hive_meta_load_concurrency,
-                    10000, "hive-meta-concurrency-pool", true);
+                    Integer.MAX_VALUE, "hive-meta-concurrency-pool", true);
 
     public HiveMetaClient getClient(String resourceName) throws DdlException {
         HiveMetaClient client;
