@@ -29,7 +29,7 @@ namespace starrocks {
 
 MysqlLoadErrorHub::MysqlLoadErrorHub(const TMysqlErrorHubInfo& info) : _info(info) {}
 
-MysqlLoadErrorHub::~MysqlLoadErrorHub() {}
+MysqlLoadErrorHub::~MysqlLoadErrorHub() = default;
 
 Status MysqlLoadErrorHub::prepare() {
     _is_valid = true;

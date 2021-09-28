@@ -213,7 +213,7 @@ static Status get_float_value(const rapidjson::Value& col, PrimitiveType type, v
 ScrollParser::ScrollParser(bool doc_value_mode)
         : _scroll_id(""), _size(0), _line_index(0), _doc_value_mode(doc_value_mode) {}
 
-ScrollParser::~ScrollParser() {}
+ScrollParser::~ScrollParser() = default;
 
 Status ScrollParser::parse(const std::string& scroll_result, bool exactly_once) {
     // rely on `_size !=0 ` to determine whether scroll ends

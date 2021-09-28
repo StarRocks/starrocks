@@ -30,7 +30,7 @@ namespace starrocks {
 
 class MessageBodySink {
 public:
-    virtual ~MessageBodySink() {}
+    virtual ~MessageBodySink() = default;
     virtual Status append(const char* data, size_t size) = 0;
     virtual Status append(const ByteBufferPtr& buf) { return append(buf->ptr, buf->remaining()); }
     // called when all data has been append

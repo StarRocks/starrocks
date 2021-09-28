@@ -41,7 +41,7 @@ ResultQueueMgr::ResultQueueMgr() {
     });
 }
 
-ResultQueueMgr::~ResultQueueMgr() {}
+ResultQueueMgr::~ResultQueueMgr() = default;
 
 Status ResultQueueMgr::fetch_result(const TUniqueId& fragment_instance_id, std::shared_ptr<arrow::RecordBatch>* result,
                                     bool* eos) {

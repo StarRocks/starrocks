@@ -60,7 +60,7 @@ public:
             const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size,
             bool debug);
 
-    ~FunctionContextImpl() {}
+    ~FunctionContextImpl() = default;
 
     FunctionContextImpl(starrocks_udf::FunctionContext* parent);
 

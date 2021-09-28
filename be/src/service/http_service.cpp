@@ -49,7 +49,7 @@ HttpService::HttpService(ExecEnv* env, int port, int num_threads)
           _ev_http_server(new EvHttpServer(port, num_threads)),
           _web_page_handler(new WebPageHandler(_ev_http_server.get())) {}
 
-HttpService::~HttpService() {}
+HttpService::~HttpService() = default;
 
 Status HttpService::start() {
     add_default_path_handlers(_web_page_handler.get(), _env->process_mem_tracker());

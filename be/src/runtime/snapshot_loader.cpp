@@ -65,7 +65,7 @@ inline const std::string& client_id(ExecEnv* env, const TNetworkAddress& addr) {
 SnapshotLoader::SnapshotLoader(ExecEnv* env, int64_t job_id, int64_t task_id)
         : _env(env), _job_id(job_id), _task_id(task_id) {}
 
-SnapshotLoader::~SnapshotLoader() {}
+SnapshotLoader::~SnapshotLoader() = default;
 
 Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_dest_path,
                               const TNetworkAddress& broker_addr, const std::map<std::string, std::string>& broker_prop,

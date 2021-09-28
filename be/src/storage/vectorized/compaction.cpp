@@ -28,7 +28,7 @@ Compaction::Compaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
     _mem_tracker = std::make_unique<MemTracker>(config::compaction_mem_limit, "", mem_tracker, true);
 }
 
-Compaction::~Compaction() {}
+Compaction::~Compaction() = default;
 
 Status Compaction::init(int concurreny) {
     _concurrency_sem.set_count(concurreny);

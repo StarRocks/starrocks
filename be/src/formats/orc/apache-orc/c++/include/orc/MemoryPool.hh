@@ -50,8 +50,8 @@ private:
     uint64_t currentCapacity;
 
     // not implemented
-    DataBuffer(DataBuffer& buffer);
-    DataBuffer& operator=(DataBuffer& buffer);
+    DataBuffer(DataBuffer& buffer) = delete;
+    DataBuffer& operator=(DataBuffer& buffer) = delete;
 
 public:
     DataBuffer(MemoryPool& pool, uint64_t _size = 0);

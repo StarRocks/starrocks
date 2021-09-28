@@ -138,7 +138,7 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
     return res;
 }
 
-SExtLiteral::~SExtLiteral() {}
+SExtLiteral::~SExtLiteral() = default;
 
 int8_t SExtLiteral::get_byte() {
     DCHECK(_type == TYPE_TINYINT);

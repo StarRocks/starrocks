@@ -56,8 +56,8 @@ struct OlapTableIndexSchema {
 
 class OlapTableSchemaParam {
 public:
-    OlapTableSchemaParam() {}
-    ~OlapTableSchemaParam() noexcept {}
+    OlapTableSchemaParam() = default;
+    ~OlapTableSchemaParam() noexcept = default;
 
     Status init(const TOlapTableSchemaParam& tschema);
     Status init(const POlapTableSchemaParam& pschema);

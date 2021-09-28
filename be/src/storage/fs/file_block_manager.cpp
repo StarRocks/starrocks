@@ -379,7 +379,7 @@ FileBlockManager::FileBlockManager(Env* env, BlockManagerOptions opts)
 #endif
 }
 
-FileBlockManager::~FileBlockManager() {}
+FileBlockManager::~FileBlockManager() = default;
 
 Status FileBlockManager::open() {
     // TODO(lingbin)

@@ -185,7 +185,7 @@ public:
         _time_zone = buf;
     }
 
-    ~FromRowBatchConverter() override {}
+    ~FromRowBatchConverter() override = default;
 
     // Use base class function
     using arrow::TypeVisitor::Visit;

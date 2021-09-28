@@ -52,8 +52,8 @@ static std::mutex kPprofActionMutex;
 
 class HeapAction : public HttpHandler {
 public:
-    HeapAction() {}
-    ~HeapAction() override {}
+    HeapAction() = default;
+    ~HeapAction() override = default;
 
     void handle(HttpRequest* req) override;
 };
@@ -92,8 +92,8 @@ void HeapAction::handle(HttpRequest* req) {
 
 class GrowthAction : public HttpHandler {
 public:
-    GrowthAction() {}
-    ~GrowthAction() override {}
+    GrowthAction() = default;
+    ~GrowthAction() override = default;
 
     void handle(HttpRequest* req) override;
 };
@@ -114,8 +114,8 @@ void GrowthAction::handle(HttpRequest* req) {
 
 class ProfileAction : public HttpHandler {
 public:
-    ProfileAction() {}
-    ~ProfileAction() override {}
+    ProfileAction() = default;
+    ~ProfileAction() override = default;
 
     void handle(HttpRequest* req) override;
 };
@@ -157,23 +157,23 @@ void ProfileAction::handle(HttpRequest* req) {
 
 class PmuProfileAction : public HttpHandler {
 public:
-    PmuProfileAction() {}
-    ~PmuProfileAction() override {}
+    PmuProfileAction() = default;
+    ~PmuProfileAction() override = default;
     void handle(HttpRequest* req) override {}
 };
 
 class ContentionAction : public HttpHandler {
 public:
-    ContentionAction() {}
-    ~ContentionAction() override {}
+    ContentionAction() = default;
+    ~ContentionAction() override = default;
 
     void handle(HttpRequest* req) override {}
 };
 
 class CmdlineAction : public HttpHandler {
 public:
-    CmdlineAction() {}
-    ~CmdlineAction() override {}
+    CmdlineAction() = default;
+    ~CmdlineAction() override = default;
     void handle(HttpRequest* req) override;
 };
 
@@ -196,7 +196,7 @@ void CmdlineAction::handle(HttpRequest* req) {
 class SymbolAction : public HttpHandler {
 public:
     SymbolAction(BfdParser* parser) : _parser(parser) {}
-    ~SymbolAction() override {}
+    ~SymbolAction() override = default;
 
     void handle(HttpRequest* req) override;
 

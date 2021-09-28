@@ -44,9 +44,9 @@ class TRangePartition;
 
 class PartRangeKey {
 public:
-    PartRangeKey() {}
+    PartRangeKey() = default;
 
-    ~PartRangeKey() {}
+    ~PartRangeKey() = default;
 
     static const PartRangeKey& pos_infinite() { return _s_pos_infinite; }
 
@@ -112,14 +112,14 @@ private:
 
 class PartRange {
 public:
-    PartRange() {}
+    PartRange() = default;
     PartRange(const PartRangeKey& start_key, const PartRangeKey& end_key, bool include_start, bool include_end)
             : _start_key(start_key),
               _end_key(end_key),
               _include_start_key(include_start),
               _include_end_key(include_end) {}
 
-    ~PartRange() {}
+    ~PartRange() = default;
 
     static const PartRange& all() { return _s_all_range; }
 

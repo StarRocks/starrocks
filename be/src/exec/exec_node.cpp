@@ -141,7 +141,7 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
     init_runtime_profile(print_plan_node_type(tnode.node_type));
 }
 
-ExecNode::~ExecNode() {}
+ExecNode::~ExecNode() = default;
 
 void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) {
     if (_type != TPlanNodeType::AGGREGATION_NODE) {

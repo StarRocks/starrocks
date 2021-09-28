@@ -28,7 +28,7 @@ namespace starrocks {
 
 class OlapTuple {
 public:
-    OlapTuple() {}
+    OlapTuple() = default;
     OlapTuple(const std::vector<std::string>& values) : _values(values), _nulls(values.size(), false) {}
 
     void add_null() {

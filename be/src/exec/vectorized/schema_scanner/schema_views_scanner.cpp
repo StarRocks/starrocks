@@ -29,7 +29,7 @@ SchemaViewsScanner::SchemaViewsScanner()
           _db_index(0),
           _table_index(0) {}
 
-SchemaViewsScanner::~SchemaViewsScanner() {}
+SchemaViewsScanner::~SchemaViewsScanner() = default;
 
 Status SchemaViewsScanner::start(RuntimeState* state) {
     if (!_is_init) {

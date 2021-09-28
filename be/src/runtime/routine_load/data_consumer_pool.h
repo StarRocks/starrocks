@@ -41,7 +41,7 @@ class DataConsumerPool {
 public:
     DataConsumerPool(int64_t max_pool_size) : _max_pool_size(max_pool_size) {}
 
-    ~DataConsumerPool() {}
+    ~DataConsumerPool() = default;
 
     // get a already initialized consumer from cache,
     // if not found in cache, create a new one.

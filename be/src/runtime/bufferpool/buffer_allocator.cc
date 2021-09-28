@@ -114,7 +114,7 @@ private:
     /// The data structures for each power-of-two size of buffers/pages.
     /// All members are protected by FreeBufferArena::lock_ unless otherwise mentioned.
     struct PerSizeLists {
-        PerSizeLists() {}
+        PerSizeLists() = default;
 
         /// Helper to add a free buffer and increment the counter.
         /// FreeBufferArena::lock_ must be held by the caller.

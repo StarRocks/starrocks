@@ -116,7 +116,7 @@ BufferPool::BufferPool(int64_t min_buffer_len, int64_t buffer_bytes_limit, int64
     DCHECK_EQ(min_buffer_len, BitUtil::RoundUpToPowerOfTwo(min_buffer_len));
 }
 
-BufferPool::~BufferPool() {}
+BufferPool::~BufferPool() = default;
 
 Status BufferPool::RegisterClient(const string& name, //TmpFileMgr::FileGroup* file_group,
                                   ReservationTracker* parent_reservation, MemTracker* mem_tracker,
@@ -351,7 +351,7 @@ BufferPool::SubReservation::SubReservation(ClientHandle* client) {
     tracker_->InitChildTracker(nullptr, client->impl_->reservation(), nullptr, numeric_limits<int64_t>::max());
 }
 
-BufferPool::SubReservation::~SubReservation() {}
+BufferPool::SubReservation::~SubReservation() = default;
 
 int64_t BufferPool::SubReservation::GetReservation() const {
     return tracker_->GetReservation();

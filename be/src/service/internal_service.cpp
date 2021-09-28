@@ -45,7 +45,7 @@ PInternalServiceImpl<T>::PInternalServiceImpl(ExecEnv* exec_env)
         : _exec_env(exec_env), _tablet_worker_pool(config::number_tablet_writer_threads, 10240) {}
 
 template <typename T>
-PInternalServiceImpl<T>::~PInternalServiceImpl() {}
+PInternalServiceImpl<T>::~PInternalServiceImpl() = default;
 
 template <typename T>
 void PInternalServiceImpl<T>::transmit_data(google::protobuf::RpcController* cntl_base,

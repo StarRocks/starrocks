@@ -39,10 +39,7 @@ struct PackedInt128 {
         DIAGNOSTIC_POP
         return *this;
     }
-    PackedInt128& operator=(const PackedInt128& rhs) {
-        value = rhs.value;
-        return *this;
-    }
+    PackedInt128& operator=(const PackedInt128& rhs) = default;
     __int128 value;
 } __attribute__((packed));
 

@@ -50,7 +50,7 @@ public:
               _input_row_batch_index(-1),
               _parent(parent) {}
 
-    ~BatchedRowSupplier() {}
+    ~BatchedRowSupplier() = default;
 
     // Retrieves the first batch of sorted rows from the run.
     Status init(bool* done) {

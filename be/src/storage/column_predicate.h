@@ -39,7 +39,7 @@ class ColumnPredicate {
 public:
     explicit ColumnPredicate(uint32_t column_id) : _column_id(column_id) {}
 
-    virtual ~ColumnPredicate() {}
+    virtual ~ColumnPredicate() = default;
 
     //evaluate predicate on VectorizedRowBatch
     virtual void evaluate(VectorizedRowBatch* batch) const = 0;

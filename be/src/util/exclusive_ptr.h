@@ -21,7 +21,7 @@ class exclusive_ptr {
     using pointer_type = std::unique_ptr<type>;
 
 public:
-    constexpr exclusive_ptr() {}
+    constexpr exclusive_ptr() = default;
     constexpr exclusive_ptr(std::nullptr_t) {}
     explicit exclusive_ptr(pointer_type&& v) : _value(v.release()) {}
     exclusive_ptr(const exclusive_ptr& other) : _value(other.release()) {}

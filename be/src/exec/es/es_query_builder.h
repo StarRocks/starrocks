@@ -37,7 +37,7 @@ namespace starrocks {
 class QueryBuilder {
 public:
     virtual void to_json(rapidjson::Document* document, rapidjson::Value* query) = 0;
-    virtual ~QueryBuilder() {}
+    virtual ~QueryBuilder() = default;
 };
 
 // process esquery(fieldA, json dsl) function

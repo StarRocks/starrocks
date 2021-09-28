@@ -38,6 +38,6 @@ SchemaScanner::ColumnDesc SchemaEventsScanner::_s_cols_events[] = {
 SchemaEventsScanner::SchemaEventsScanner()
         : SchemaScanner(_s_cols_events, sizeof(_s_cols_events) / sizeof(SchemaScanner::ColumnDesc)) {}
 
-SchemaEventsScanner::~SchemaEventsScanner() {}
+SchemaEventsScanner::~SchemaEventsScanner() = default;
 
 } // namespace starrocks::vectorized

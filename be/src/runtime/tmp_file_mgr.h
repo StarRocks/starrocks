@@ -115,7 +115,7 @@ public:
     };
 
     TmpFileMgr(ExecEnv* exec_env);
-    TmpFileMgr() {}
+    TmpFileMgr() = default;
 
     ~TmpFileMgr() {
         // do nothing.

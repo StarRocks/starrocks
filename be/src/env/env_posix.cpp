@@ -489,7 +489,7 @@ private:
 
 class PosixEnv : public Env {
 public:
-    ~PosixEnv() override {}
+    ~PosixEnv() override = default;
 
     Status new_sequential_file(const string& fname, std::unique_ptr<SequentialFile>* result) override {
         FILE* f;

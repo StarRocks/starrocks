@@ -34,7 +34,7 @@ class Schema;
 
 struct EditVersion {
     uint128_t value = 0;
-    EditVersion() {}
+    EditVersion() = default;
     EditVersion(int64_t major, int64_t minor) { value = (((uint128_t)major) << 64) | minor; }
     int64_t major() const { return value >> 64; }
     int64_t minor() const { return (int64_t)(value & 0xffffffffUL); }
