@@ -140,6 +140,7 @@ public class HiveRepository {
                 result.add(future.get());
             } catch (InterruptedException | ExecutionException e) {
                 LOG.warn("get table {}.{} partition meta info failed.", dbName, tableName,  e);
+                throw new DdlException("get table " + dbName + "." + tableName + " partition meta info failed.", e);
             }
         }
         return result;
@@ -162,11 +163,7 @@ public class HiveRepository {
         List<Future<HivePartitionStats>> futures = Lists.newArrayList();
         for (PartitionKey partitionKey : partitionKeys) {
             Future<HivePartitionStats> future = partitionDaemonExecutor.
-                    submit(() -> {
-                        HivePartitionStats partitionStats = metaCache.getPartitionStats(dbName, tableName, partitionKey);
-                        partitionStats.setKey(partitionKey.getKeys());
-                        return partitionStats;
-                    });
+                    submit(() -> metaCache.getPartitionStats(dbName, tableName, partitionKey));
             futures.add(future);
         }
         List<HivePartitionStats> result = Lists.newArrayList();
@@ -175,6 +172,7 @@ public class HiveRepository {
                 result.add(future.get());
             } catch (InterruptedException | ExecutionException e) {
                 LOG.warn("get table {}.{} partition stats meta info failed.", dbName, tableName,  e);
+                throw new DdlException("get table " + dbName + "." + tableName + " partition meta info failed.", e);
             }
         }
         return result;

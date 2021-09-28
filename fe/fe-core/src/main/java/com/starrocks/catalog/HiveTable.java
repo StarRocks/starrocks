@@ -156,10 +156,10 @@ public class HiveTable extends Table {
                 .getPartition(resourceName, hiveDb, hiveTable, partitionKey);
     }
 
-    public List<HivePartition> getPartitions(List<PartitionKey> partitionInfos)
+    public List<HivePartition> getPartitions(List<PartitionKey> partitionKeys)
             throws DdlException {
         return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartitions(resourceName, hiveDb, hiveTable, partitionInfos);
+                .getPartitions(resourceName, hiveDb, hiveTable, partitionKeys);
     }
 
     public HiveTableStats getTableStats() throws DdlException {
@@ -281,6 +281,7 @@ public class HiveTable extends Table {
             LOG.warn("table {} gets partitions stats failed.", name, e);
         }
 
+        int i = 0;
         for (HivePartitionStats partitionStats : partitionsStats) {
             long partNumRows = partitionStats.getNumRows();
             long partTotalFileBytes = partitionStats.getTotalFileBytes();
@@ -292,8 +293,9 @@ public class HiveTable extends Table {
                 numRows += partNumRows;
             } else {
                 LOG.debug("table {} partition {} stats abnormal. num rows: {}, total file bytes: {}",
-                        name, partitionStats.getKey(), partNumRows, partTotalFileBytes);
+                        name, partitions.get(i), partNumRows, partTotalFileBytes);
             }
+            i++;
         }
         return numRows;
     }
