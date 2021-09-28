@@ -13,10 +13,8 @@ namespace starrocks {
 namespace subtle {
 
 RefCountedBase::RefCountedBase()
-        : ref_count_(0)
 #ifndef NDEBUG
-          ,
-          in_dtor_(false)
+        : in_dtor_(false)
 #endif
 {
 }
@@ -57,7 +55,7 @@ bool RefCountedThreadSafeBase::HasOneRef() const {
     return base::RefCountIsOne(&const_cast<RefCountedThreadSafeBase*>(this)->ref_count_);
 }
 
-RefCountedThreadSafeBase::RefCountedThreadSafeBase() : ref_count_(0) {
+RefCountedThreadSafeBase::RefCountedThreadSafeBase() {
 #ifndef NDEBUG
     in_dtor_ = false;
 #endif

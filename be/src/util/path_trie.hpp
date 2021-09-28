@@ -35,8 +35,8 @@ class PathTrie {
 public:
     PathTrie() :
             _root("/", "*"),
-            _root_value(nullptr),
-            _separator('/') {
+            _root_value(nullptr)
+            {
     };
 
     ~PathTrie() {
@@ -285,7 +285,7 @@ private:
 
     TrieNode _root;
     T* _root_value;
-    char _separator;
+    char _separator{'/'};
     std::allocator<T> _allocator;
 };
 

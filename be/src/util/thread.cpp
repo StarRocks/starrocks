@@ -61,7 +61,7 @@ static GoogleOnceType once = GOOGLE_ONCE_INIT;
 // auditing. Used only by Thread.
 class ThreadMgr {
 public:
-    ThreadMgr() : _threads_started_metric(0), _threads_running_metric(0) {}
+    ThreadMgr() {}
 
     ~ThreadMgr() {
         std::lock_guard lock(_lock);
@@ -113,8 +113,8 @@ private:
 
     // Counters to track all-time total number of threads, and the
     // current number of running threads.
-    uint64_t _threads_started_metric;
-    uint64_t _threads_running_metric;
+    uint64_t _threads_started_metric{0};
+    uint64_t _threads_running_metric{0};
 
     DISALLOW_COPY_AND_ASSIGN(ThreadMgr);
 };

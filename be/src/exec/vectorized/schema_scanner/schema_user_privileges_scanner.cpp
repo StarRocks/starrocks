@@ -18,8 +18,7 @@ SchemaScanner::ColumnDesc SchemaUserPrivilegesScanner::_s_user_privs_columns[] =
 };
 
 SchemaUserPrivilegesScanner::SchemaUserPrivilegesScanner()
-        : SchemaScanner(_s_user_privs_columns, sizeof(_s_user_privs_columns) / sizeof(SchemaScanner::ColumnDesc)),
-          _user_priv_index(0) {}
+        : SchemaScanner(_s_user_privs_columns, sizeof(_s_user_privs_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 SchemaUserPrivilegesScanner::~SchemaUserPrivilegesScanner() = default;
 

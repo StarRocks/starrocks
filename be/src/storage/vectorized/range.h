@@ -18,7 +18,7 @@ class Range {
     using rowid_t = starrocks::segment_v2::rowid_t;
 
 public:
-    Range() : _begin(0), _end(0) {}
+    Range() {}
 
     Range(rowid_t begin, rowid_t end);
 
@@ -43,8 +43,8 @@ public:
     std::string to_string() const;
 
 private:
-    rowid_t _begin;
-    rowid_t _end;
+    rowid_t _begin{0};
+    rowid_t _end{0};
 };
 
 inline Range::Range(rowid_t begin, rowid_t end) : _begin(begin), _end(end) {
@@ -86,7 +86,7 @@ class SparseRangeIterator {
     using rowid_t = starrocks::segment_v2::rowid_t;
 
 public:
-    SparseRangeIterator() : _range(nullptr), _index(0), _next_rowid(0) {}
+    SparseRangeIterator() {}
     explicit SparseRangeIterator(const SparseRange* r);
 
     rowid_t begin() const { return _next_rowid; }
@@ -105,9 +105,9 @@ public:
     void skip(size_t size);
 
 private:
-    const SparseRange* _range;
-    size_t _index;
-    rowid_t _next_rowid;
+    const SparseRange* _range{nullptr};
+    size_t _index{0};
+    rowid_t _next_rowid{0};
 };
 
 // SparseRange represent a set of non-intersected contiguous ranges, or, in other words, represent

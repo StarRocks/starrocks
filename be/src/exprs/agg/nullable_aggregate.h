@@ -28,13 +28,13 @@ template <typename T>
 struct NullableAggregateFunctionState {
     using NestedState = T;
 
-    NullableAggregateFunctionState() : is_null(true), _nested_state() {}
+    NullableAggregateFunctionState() : _nested_state() {}
 
     AggDataPtr mutable_nest_state() { return reinterpret_cast<AggDataPtr>(&_nested_state); }
 
     ConstAggDataPtr nested_state() const { return reinterpret_cast<ConstAggDataPtr>(&_nested_state); }
 
-    bool is_null;
+    bool is_null{true};
     T _nested_state;
 };
 

@@ -407,7 +407,7 @@ private:
 class PosixRandomRWFile : public RandomRWFile {
 public:
     PosixRandomRWFile(string fname, int fd, bool sync_on_close)
-            : _filename(std::move(fname)), _fd(fd), _sync_on_close(sync_on_close), _closed(false) {}
+            : _filename(std::move(fname)), _fd(fd), _sync_on_close(sync_on_close) {}
 
     ~PosixRandomRWFile() override { WARN_IF_ERROR(close(), "Failed to close " + _filename); }
 

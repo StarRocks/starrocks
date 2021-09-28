@@ -45,7 +45,7 @@ class PagePointer;
 
 class ParsedPage {
 public:
-    ParsedPage() : _page_index(0), _num_rows(0), _first_ordinal(0), _offset_in_page(0) {}
+    ParsedPage() {}
 
     virtual ~ParsedPage() = default;
 
@@ -107,10 +107,10 @@ public:
     virtual Status read_dict_codes(vectorized::Column* column, size_t* count) = 0;
 
 protected:
-    uint32_t _page_index;
-    uint64_t _num_rows;
-    ordinal_t _first_ordinal;
-    ordinal_t _offset_in_page;
+    uint32_t _page_index{0};
+    uint64_t _num_rows{0};
+    ordinal_t _first_ordinal{0};
+    ordinal_t _offset_in_page{0};
 
     // ArrayColumn is made up of (offset, element)
     // On disk, it will change to (array_size, element)

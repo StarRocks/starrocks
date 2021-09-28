@@ -215,9 +215,9 @@ private:
     // Lock protecting the entries linked list.
     mutable SpinLock lock_;
     // The head of the linked list of entries (allocated inside arena_)
-    TraceEntry* entries_head_;
+    TraceEntry* entries_head_{nullptr};
     // The tail of the linked list of entries (allocated inside arena_)
-    TraceEntry* entries_tail_;
+    TraceEntry* entries_tail_{nullptr};
 
     std::vector<std::pair<StringPiece, scoped_refptr<Trace>>> child_traces_;
 

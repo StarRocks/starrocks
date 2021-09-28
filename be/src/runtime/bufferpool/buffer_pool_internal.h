@@ -82,7 +82,7 @@ public:
 /// Wrapper around InternalList<Page> that tracks the # of bytes in the list.
 class BufferPool::PageList {
 public:
-    PageList() : bytes_(0) {}
+    PageList() {}
     ~PageList() {
         // Clients always empty out their list before destruction.
         DCHECK(list_.empty());
@@ -132,7 +132,7 @@ public:
 
 private:
     InternalList<Page> list_;
-    int64_t bytes_;
+    int64_t bytes_{0};
 };
 
 /// The internal state for the client.

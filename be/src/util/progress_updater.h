@@ -60,11 +60,11 @@ public:
 
 private:
     std::string _label;
-    int _logging_level;
-    int64_t _total;
-    int _update_period;
-    int64_t _num_complete;
-    int _last_output_percentage;
+    int _logging_level{2};
+    int64_t _total{0};
+    int _update_period{0};
+    int64_t _num_complete{0};
+    int _last_output_percentage{0};
 };
 
 } // namespace starrocks

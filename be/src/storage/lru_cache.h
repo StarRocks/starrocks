@@ -51,7 +51,7 @@ extern Cache* new_lru_cache(size_t capacity);
 
 class CacheKey {
 public:
-    CacheKey() : _data(nullptr), _size(0) {}
+    CacheKey() {}
     // Create a slice that refers to d[0,n-1].
     CacheKey(const char* d, size_t n) : _data(d), _size(n) {}
 
@@ -127,8 +127,8 @@ private:
         return result;
     }
 
-    const char* _data;
-    size_t _size;
+    const char* _data{nullptr};
+    size_t _size{0};
 };
 
 // The entry with smaller CachePriority will evict firstly
@@ -246,7 +246,7 @@ typedef struct LRUHandle {
 
 class HandleTable {
 public:
-    HandleTable() : _length(0), _elems(0), _list(nullptr) { _resize(); }
+    HandleTable() { _resize(); }
 
     ~HandleTable() { delete[] _list; }
 
@@ -259,9 +259,9 @@ public:
 private:
     // The tablet consists of an array of buckets where each bucket is
     // a linked list of cache entries that hash into the bucket.
-    uint32_t _length;
-    uint32_t _elems;
-    LRUHandle** _list;
+    uint32_t _length{0};
+    uint32_t _elems{0};
+    LRUHandle** _list{nullptr};
 
     // Return a pointer to slot that points to a cache entry that
     // matches key/hash.  If there is no such cache entry, return a
@@ -305,8 +305,8 @@ private:
 
     // _mutex protects the following state.
     std::mutex _mutex;
-    size_t _usage;
-    uint64_t _last_id;
+    size_t _usage{0};
+    uint64_t _last_id{0};
 
     // Dummy head of LRU list.
     // lru.prev is newest entry, lru.next is oldest entry.
@@ -315,8 +315,8 @@ private:
 
     HandleTable _table;
 
-    uint64_t _lookup_count;
-    uint64_t _hit_count;
+    uint64_t _lookup_count{0};
+    uint64_t _hit_count{0};
 };
 
 static const int kNumShardBits = 4;

@@ -154,7 +154,7 @@ bool HandleTable::_resize() {
     return true;
 }
 
-LRUCache::LRUCache() : _usage(0), _last_id(0), _lookup_count(0), _hit_count(0) {
+LRUCache::LRUCache() {
     // Make empty circular linked list
     _lru.next = &_lru;
     _lru.prev = &_lru;
