@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <sstream>
+#include <utility>
 
 #include "common/status.h"
 #include "env/env.h"
@@ -40,7 +41,7 @@
 
 namespace starrocks {
 
-SmallFileMgr::SmallFileMgr(ExecEnv* env, const std::string& local_path) : _exec_env(env), _local_path(local_path) {
+SmallFileMgr::SmallFileMgr(ExecEnv* env, std::string local_path) : _exec_env(env), _local_path(std::move(local_path)) {
     REGISTER_GAUGE_STARROCKS_METRIC(small_file_cache_count, [this]() {
         std::lock_guard<std::mutex> l(_lock);
         return _file_cache.size();

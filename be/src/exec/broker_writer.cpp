@@ -22,6 +22,7 @@
 #include "exec/broker_writer.h"
 
 #include <sstream>
+#include <utility>
 
 #include "common/logging.h"
 #include "gen_cpp/FileBrokerService_types.h"
@@ -34,12 +35,11 @@
 namespace starrocks {
 
 BrokerWriter::BrokerWriter(ExecEnv* env, const std::vector<TNetworkAddress>& broker_addresses,
-                           const std::map<std::string, std::string>& properties, const std::string& path,
-                           int64_t start_offset)
+                           const std::map<std::string, std::string>& properties, std::string path, int64_t start_offset)
         : _env(env),
           _addresses(broker_addresses),
           _properties(properties),
-          _path(path),
+          _path(std::move(path)),
           _cur_offset(start_offset),
           _is_closed(false),
           _addr_idx(0) {}

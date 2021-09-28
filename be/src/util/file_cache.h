@@ -107,7 +107,7 @@ public:
     // the number of files open at any given time.
     // for this constructor, _is_cache_own is set to true, indicating that _cache
     // is only owned by this.
-    FileCache(const std::string& cache_name, int max_open_files);
+    FileCache(std::string cache_name, int max_open_files);
 
     // Creates a new file cache with given cache.
     //
@@ -116,7 +116,7 @@ public:
     // with other.
     // for this constructor, _is_cache_own is set to false, indicating that _cache
     // is sharing with other (In most case, sharing _cache with storage engine).
-    FileCache(const std::string& cache_name, std::shared_ptr<Cache> cache);
+    FileCache(std::string cache_name, std::shared_ptr<Cache> cache);
 
     // Destroys the file cache.
     ~FileCache() {

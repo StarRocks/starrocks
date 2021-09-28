@@ -45,7 +45,7 @@ namespace orc {
    */
 class SearchArgumentImpl : public SearchArgument {
 public:
-    SearchArgumentImpl(TreeNode root, const std::vector<PredicateLeaf>& leaves);
+    SearchArgumentImpl(TreeNode root, std::vector<PredicateLeaf> leaves);
 
     /**
      * Get the leaf predicates that are required to evaluate the predicate. The

@@ -78,7 +78,7 @@ public:
 
     // if report_status_cb is not empty, is used to report the accumulated profile
     // information periodically during execution (open() or get_next()).
-    PlanFragmentExecutor(ExecEnv* exec_env, const report_status_callback& report_status_cb);
+    PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb);
 
     // Closes the underlying plan fragment and frees up all resources allocated
     // in open()/get_next().

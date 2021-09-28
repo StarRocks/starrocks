@@ -37,7 +37,7 @@ class HttpRequest;
 class EvHttpServer {
 public:
     EvHttpServer(int port, int num_workers = 1);
-    EvHttpServer(const std::string& host, int port, int num_workers = 1);
+    EvHttpServer(std::string host, int port, int num_workers = 1);
     ~EvHttpServer();
 
     // register handler for an a path-method pair

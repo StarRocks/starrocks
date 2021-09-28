@@ -24,6 +24,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace starrocks {
@@ -47,17 +48,17 @@ public:
 
     class TrieNode {
     public:
-        TrieNode(const std::string& key, const std::string& wildcard) :
+        TrieNode(const std::string& key, std::string  wildcard) :
                 _value(nullptr), 
-                _wildcard(wildcard) {
+                _wildcard(std::move(wildcard)) {
             if (is_named_wildcard(key)) {
                 _named_wildcard = extract_template(key);
             }
         }
 
-        TrieNode(const std::string& key, const T& value, const std::string& wildcard) :
+        TrieNode(const std::string& key, const T& value, std::string  wildcard) :
                 _value(nullptr),
-                _wildcard(wildcard) {
+                _wildcard(std::move(wildcard)) {
             _value = _allocator.allocate(1);
             _allocator.construct(_value, value);
             if (is_named_wildcard(key)) {
