@@ -223,7 +223,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     // step 0: construct pipeline end with sort operator.
     // get operators before sort operator
     OpFactories operators_sink_with_sort = _children[0]->decompose_to_pipeline(context);
-    context->maybe_interpolate_local_exchange(operators_sink_with_sort);
+    operators_sink_with_sort = context->maybe_interpolate_local_exchange(operators_sink_with_sort);
 
     static const uint SIZE_OF_CHUNK_FOR_TOPN = 3000;
     static const uint SIZE_OF_CHUNK_FOR_FULL_SORT = 5000;
