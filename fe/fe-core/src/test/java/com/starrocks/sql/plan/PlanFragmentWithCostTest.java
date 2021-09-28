@@ -274,7 +274,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testPredicateRewrittenByProjectWithLowCardinality(
-            @Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
+            @Mocked MockTpchStatisticStorage mockedStatisticStorage)
+            throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((Table) any, ImmutableList.of(V2, V3));
@@ -284,8 +285,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
         String sql = "SELECT -v3 from t0 group by v3, v2 having -v3 < 63;";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  4:Project\n" +
-                "  |  <slot 4> : -1 * 3: v3"));
+        Assert.assertTrue(planFragment.contains("  4:Project\n"
+                + "  |  <slot 4> : -1 * 3: v3"));
         Assert.assertTrue(planFragment.contains("PREDICATES: -1 * 3: v3 < 63"));
     }
 

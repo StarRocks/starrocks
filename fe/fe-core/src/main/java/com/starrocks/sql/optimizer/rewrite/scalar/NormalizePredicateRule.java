@@ -40,7 +40,7 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
             return predicate;
         }
 
-        return predicate.commutative();
+        return predicate.negative();
     }
 
     //
