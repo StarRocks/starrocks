@@ -33,10 +33,6 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
     </module>
 
     <module name="SuppressWarningsFilter"/>
-    <module name="TreeWalker">
-        <module name="AvoidStarImport"/>
-        <module name="UnusedImports"/>
-    </module>
 
     <module name="BeforeExecutionExclusionFileFilter">
         <property name="fileNamePattern"
@@ -54,6 +50,8 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
     </module>
 
     <module name="TreeWalker">
+        <module name="AvoidStarImport"/>
+        <module name="UnusedImports"/>
         <module name="OuterTypeFilename"/>
         <module name="AvoidEscapedUnicodeCharacters">
             <property name="allowEscapesForControlCharacters" value="true"/>
