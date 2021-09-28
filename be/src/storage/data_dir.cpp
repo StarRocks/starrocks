@@ -74,8 +74,7 @@ DataDir::DataDir(std::string path, int64_t capacity_bytes, TStorageMedium::type 
           _txn_manager(txn_manager),
           _cluster_id(-1),
           _to_be_deleted(false),
-          _current_shard(0),
-          _kv_store(nullptr) {}
+          _current_shard(0) {}
 
 DataDir::~DataDir() {
     delete _id_generator;

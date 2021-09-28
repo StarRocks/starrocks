@@ -34,7 +34,7 @@ FileCache<FileType>::FileCache(std::string cache_name, int max_open_files)
 
 template <class FileType>
 FileCache<FileType>::FileCache(std::string cache_name, std::shared_ptr<Cache> cache)
-        : _cache_name(std::move(cache_name)), _cache(std::move(cache)), _is_cache_own(false) {}
+        : _cache_name(std::move(cache_name)), _cache(std::move(cache)) {}
 
 template <class FileType>
 bool FileCache<FileType>::lookup(const std::string& file_name, OpenedFileHandle<FileType>* file_handle) {

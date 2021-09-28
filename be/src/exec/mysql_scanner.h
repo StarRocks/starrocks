@@ -48,8 +48,8 @@ struct MysqlScannerParam {
     std::string user;
     std::string passwd;
     std::string db;
-    unsigned long client_flag;
-    MysqlScannerParam() : client_flag(0) {}
+    unsigned long client_flag{0};
+    MysqlScannerParam() {}
 };
 
 // Mysql Scanner for scan data from mysql

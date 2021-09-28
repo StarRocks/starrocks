@@ -38,7 +38,7 @@ namespace starrocks {
 //    return value;
 //}
 
-ResultBufferMgr::ResultBufferMgr() : _is_stop(false) {
+ResultBufferMgr::ResultBufferMgr() {
     // Each BufferControlBlock has a limited queue size of 1024, it's not needed to count the
     // actual size of all BufferControlBlock.
     REGISTER_GAUGE_STARROCKS_METRIC(result_buffer_block_count, [this]() {

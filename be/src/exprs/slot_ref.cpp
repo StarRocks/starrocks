@@ -53,7 +53,7 @@ SlotRef::SlotRef(const SlotDescriptor* desc, const TypeDescriptor& type)
 }
 
 SlotRef::SlotRef(const TypeDescriptor& type, int offset, SlotId slot)
-        : Expr(type, true), _tuple_idx(0), _slot_offset(offset), _null_indicator_offset(0, -1), _slot_id(slot) {}
+        : Expr(type, true), _slot_offset(offset), _null_indicator_offset(0, -1), _slot_id(slot) {}
 
 Status SlotRef::prepare(const SlotDescriptor* slot_desc, const RowDescriptor& row_desc) {
     if (!slot_desc->is_materialized()) {

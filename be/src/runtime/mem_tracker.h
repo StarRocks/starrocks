@@ -391,7 +391,7 @@ private:
     /// Lock to protect GcMemory(). This prevents many GCs from occurring at once.
     std::mutex _gc_lock;
 
-    Type _type;
+    Type _type{NO_SET};
 
     int64_t _limit; // in bytes
 

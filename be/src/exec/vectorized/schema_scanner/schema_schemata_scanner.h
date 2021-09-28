@@ -18,7 +18,7 @@ public:
 private:
     Status fill_chunk(ChunkPtr* chunk);
 
-    int _db_index;
+    int _db_index{0};
     TGetDbsResult _db_result;
     static SchemaScanner::ColumnDesc _s_columns[];
 };

@@ -4471,7 +4471,7 @@ public:
     public:
         using mutex_type = MutexType;
 
-        WriteLock() : m_(nullptr), locked_(false) {}
+        WriteLock() : m_(nullptr) {}
 
         explicit WriteLock(mutex_type& m) : m_(&m) {
             m_->lock();
@@ -4530,7 +4530,7 @@ public:
 
     private:
         mutex_type* m_;
-        bool locked_;
+        bool locked_{false};
     };
 
     // ----------------------------------------------------
@@ -4538,7 +4538,7 @@ public:
     public:
         using mutex_type = MutexType;
 
-        ReadLock() : m_(nullptr), locked_(false) {}
+        ReadLock() : m_(nullptr) {}
 
         explicit ReadLock(mutex_type& m) : m_(&m) {
             m_->lock_shared();
@@ -4597,7 +4597,7 @@ public:
 
     private:
         mutex_type* m_;
-        bool locked_;
+        bool locked_{false};
     };
 
     // ----------------------------------------------------

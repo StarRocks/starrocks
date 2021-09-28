@@ -315,7 +315,7 @@ private:
 /// Client methods or BufferPool methods with the Client as an argument is not supported.
 class BufferPool::ClientHandle {
 public:
-    ClientHandle() : impl_(nullptr) {}
+    ClientHandle() {}
     /// Client must be deregistered.
     ~ClientHandle() { DCHECK(!is_registered()); }
 
@@ -377,7 +377,7 @@ private:
 
     /// Internal state for the client. NULL means the client isn't registered.
     /// Owned by BufferPool.
-    Client* impl_;
+    Client* impl_{nullptr};
 };
 
 /// Helper class that allows dividing up a client's reservation into separate buckets.

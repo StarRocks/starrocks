@@ -738,7 +738,7 @@ void RuntimeProfile::stop_bucketing_counters_updates(std::vector<Counter*>* buck
     }
 }
 
-RuntimeProfile::PeriodicCounterUpdateState::PeriodicCounterUpdateState() : _done(false) {}
+RuntimeProfile::PeriodicCounterUpdateState::PeriodicCounterUpdateState() {}
 
 RuntimeProfile::PeriodicCounterUpdateState::~PeriodicCounterUpdateState() {
     if (_s_periodic_counter_update_state.update_thread.get() != nullptr) {

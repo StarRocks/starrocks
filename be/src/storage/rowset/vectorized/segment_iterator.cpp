@@ -138,7 +138,7 @@ protected:
 
 private:
     struct ScanContext {
-        ScanContext() : _next(nullptr), _has_dict_column(false), _late_materialize(false) {}
+        ScanContext() {}
 
         ~ScanContext() = default;
 
@@ -179,7 +179,7 @@ private:
         Schema _dict_decode_schema;
         std::vector<bool> _is_dict_column;
         std::vector<ColumnIterator*> _column_iterators;
-        ScanContext* _next;
+        ScanContext* _next{nullptr};
 
         std::shared_ptr<Chunk> _read_chunk;
         std::shared_ptr<Chunk> _dict_chunk;
@@ -187,11 +187,11 @@ private:
 
         // true iff |_is_dict_column| contains at least one `true`, i.e,
         // |_column_iterators| contains at least one `DictCodeColumnIterator`.
-        bool _has_dict_column;
+        bool _has_dict_column{false};
 
         // if true, the last item of |_column_iterators| is a `RowIdColumnIterator` and
         // the last item of |_read_schema| and |_dict_decode_schema| is a row id field.
-        bool _late_materialize;
+        bool _late_materialize{false};
     };
 
     Status _init();

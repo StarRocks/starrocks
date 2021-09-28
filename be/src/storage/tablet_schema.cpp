@@ -230,7 +230,7 @@ uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_
     return 0;
 }
 
-TabletColumn::TabletColumn() : _aggregation(OLAP_FIELD_AGGREGATION_NONE) {}
+TabletColumn::TabletColumn() {}
 
 TabletColumn::TabletColumn(FieldAggregationMethod agg, FieldType type) {
     _aggregation = agg;
