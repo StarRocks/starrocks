@@ -221,7 +221,7 @@ public:
         // is evicted.
         static void release(HdfsCachedFileHandle** h);
 
-        bool ok() const { return _hdfs_file != NULL; }
+        bool ok() const { return _hdfs_file != nullptr; }
 
     private:
         hdfsFS _fs;
@@ -235,7 +235,7 @@ public:
     class BufferDescriptor {
     public:
         // a null dtor to pass codestyle check
-        ~BufferDescriptor() {}
+        ~BufferDescriptor() = default;
 
         ScanRange* scan_range() { return _scan_range; }
         char* buffer() { return _buffer; }
@@ -345,13 +345,13 @@ public:
         ScanRange() : ScanRange(-1) {}
         ScanRange(int initial_capacity);
 
-        virtual ~ScanRange();
+        ~ScanRange() override;
 
         // Resets this scan range object with the scan range description.  The scan range
         // must fall within the file bounds (offset >= 0 and offset + len <= file_length).
         // Resets this scan range object with the scan range description.
         void reset(hdfsFS fs, const char* file, int64_t len, int64_t offset, int disk_id, bool try_cache,
-                   bool expected_local, int64_t mtime, void* metadata = NULL);
+                   bool expected_local, int64_t mtime, void* metadata = nullptr);
 
         void* meta_data() const { return _meta_data; }
         // bool try_cache() const { return _try_cache; }
@@ -504,7 +504,7 @@ public:
     class WriteRange : public RequestRange {
     public:
         // a null dtor to pass codestyle check
-        ~WriteRange() {}
+        ~WriteRange() override = default;
 
         // This callback is invoked on each WriteRange after the write is complete or the
         // context is cancelled. The status returned by the callback parameter indicates
@@ -561,7 +561,7 @@ public:
     //    get_next().
     // Status register_context(RequestContext** request_context,
     //         MemTracker* reader_mem_tracker = NULL);
-    Status register_context(RequestContext** request_context, MemTracker* reader_mem_tracker = NULL);
+    Status register_context(RequestContext** request_context, MemTracker* reader_mem_tracker = nullptr);
 
     // Unregisters context from the disk IoMgr. This must be called for every
     // register_context() regardless of cancellation and must be called in the

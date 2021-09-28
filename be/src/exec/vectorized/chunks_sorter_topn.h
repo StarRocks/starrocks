@@ -51,8 +51,9 @@ private:
     void _merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, size_t sort_row_number, size_t sorted_size,
                             size_t permutation_size, Permutation& new_permutation);
 
-    static void _sort_data_by_row_cmp(Permutation& permutation, size_t rows_to_sort, size_t rows_size,
-                                      std::function<bool(const PermutationItem& l, const PermutationItem& r)> cmp_fn);
+    static void _sort_data_by_row_cmp(
+            Permutation& permutation, size_t rows_to_sort, size_t rows_size,
+            const std::function<bool(const PermutationItem& l, const PermutationItem& r)>& cmp_fn);
 
     static void _set_permutation_before(Permutation&, size_t size, std::vector<std::vector<uint8_t>>& filter_array);
 

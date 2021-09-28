@@ -107,8 +107,8 @@ static inline const char* skip_trailing_utf8(const char* p, const char* begin, s
 static int utf8_len(const char* begin, const char* end) {
     int len = 0;
     const char* p = begin;
-    size_t str_size = end - begin;
 #if defined(__AVX2__)
+    size_t str_size = end - begin;
     constexpr auto bytes_avx2 = sizeof(__m256i);
     // Bytes processed by SIMD operations must be mutiples of bytes_avx2, so:
     // src_end_avx2 = p + str_size / bytes_avx2 * bytes_avx2;
@@ -124,6 +124,7 @@ static int utf8_len(const char* begin, const char* end) {
         len += __builtin_popcount(_mm256_movemask_epi8(
                 _mm256_cmpgt_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(p)), threshold)));
 #elif defined(__SSE2__)
+    size_t str_size = end - begin;
     constexpr auto bytes_sse2 = sizeof(__m128i);
     const auto src_end_sse2 = p + (str_size & ~(bytes_sse2 - 1));
     const auto threshold = _mm_set1_epi8(0xBF);

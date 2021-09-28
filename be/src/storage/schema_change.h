@@ -83,6 +83,7 @@ public:
 
     OLAPStatus allocate(RowBlock** row_block, size_t num_rows, bool null_supported);
     void release(RowBlock* row_block);
+    bool is_memory_enough_to_sort(size_t num_rows, size_t allocated_rows);
 
 private:
     const TabletSchema& _tablet_schema;
@@ -96,7 +97,7 @@ public:
     SchemaChange(MemTracker* mem_tracker) : _filtered_rows(0), _merged_rows(0) {
         _mem_tracker = std::make_unique<MemTracker>(-1, "", mem_tracker, true);
     }
-    virtual ~SchemaChange() {}
+    virtual ~SchemaChange() = default;
 
     virtual bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_builder, TabletSharedPtr tablet,
                          TabletSharedPtr base_tablet) = 0;
@@ -125,7 +126,7 @@ class LinkedSchemaChange : public SchemaChange {
 public:
     explicit LinkedSchemaChange(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer)
             : SchemaChange(mem_tracker), _row_block_changer(row_block_changer) {}
-    ~LinkedSchemaChange() { _mem_tracker->release(_mem_tracker->consumption()); }
+    ~LinkedSchemaChange() override { _mem_tracker->release(_mem_tracker->consumption()); }
 
     bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                  TabletSharedPtr base_tablet) override;
@@ -141,10 +142,10 @@ public:
     // @params tablet           the instance of tablet which has new schema.
     // @params row_block_changer    changer to modifiy the data of RowBlock
     explicit SchemaChangeDirectly(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer);
-    virtual ~SchemaChangeDirectly();
+    ~SchemaChangeDirectly() override;
 
-    virtual bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer,
-                         TabletSharedPtr new_tablet, TabletSharedPtr base_tablet) override;
+    bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                 TabletSharedPtr base_tablet) override;
 
 private:
     const RowBlockChanger& _row_block_changer;
@@ -161,18 +162,18 @@ class SchemaChangeWithSorting : public SchemaChange {
 public:
     explicit SchemaChangeWithSorting(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer,
                                      size_t memory_limitation);
-    virtual ~SchemaChangeWithSorting();
+    ~SchemaChangeWithSorting() override;
 
-    virtual bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_builder,
-                         TabletSharedPtr new_tablet, TabletSharedPtr base_tablet) override;
+    bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_builder, TabletSharedPtr new_tablet,
+                 TabletSharedPtr base_tablet) override;
 
 private:
     bool _internal_sorting(const std::vector<RowBlock*>& row_block_arr, const Version& temp_delta_versions,
-                           const VersionHash version_hash, TabletSharedPtr new_tablet, RowsetTypePB new_rowset_type,
-                           SegmentsOverlapPB segments_overlap, RowsetSharedPtr* rowset);
+                           const VersionHash version_hash, const TabletSharedPtr& new_tablet,
+                           RowsetTypePB new_rowset_type, SegmentsOverlapPB segments_overlap, RowsetSharedPtr* rowset);
 
     bool _external_sorting(std::vector<RowsetSharedPtr>& src_rowsets, RowsetWriter* rowset_writer,
-                           TabletSharedPtr new_tablet);
+                           const TabletSharedPtr& new_tablet);
 
     const RowBlockChanger& _row_block_changer;
     size_t _memory_limitation;
@@ -184,14 +185,15 @@ private:
 
 class SchemaChangeHandler {
 public:
-    SchemaChangeHandler() {}
-    virtual ~SchemaChangeHandler() {}
+    SchemaChangeHandler() = default;
+    virtual ~SchemaChangeHandler() = default;
 
     // schema change v2, it will not set alter task in base tablet
     OLAPStatus process_alter_tablet_v2(const TAlterTabletReqV2& request);
 
 private:
-    OLAPStatus _get_versions_to_be_changed(TabletSharedPtr base_tablet, std::vector<Version>* versions_to_be_changed);
+    OLAPStatus _get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
+                                           std::vector<Version>* versions_to_be_changed);
 
     struct AlterMaterializedViewParam {
         std::string column_name;
@@ -213,13 +215,13 @@ private:
     OLAPStatus _do_process_alter_tablet_v2_normal(const TAlterTabletReqV2& request, const TabletSharedPtr& base_tablet,
                                                   const TabletSharedPtr& new_tablet);
 
-    OLAPStatus _validate_alter_result(TabletSharedPtr new_tablet, const TAlterTabletReqV2& request);
+    OLAPStatus _validate_alter_result(const TabletSharedPtr& new_tablet, const TAlterTabletReqV2& request);
 
     static OLAPStatus _convert_historical_rowsets(const SchemaChangeParams& sc_params);
 
     static OLAPStatus _parse_request(
-            TabletSharedPtr base_tablet, TabletSharedPtr new_tablet, RowBlockChanger* rb_changer, bool* sc_sorting,
-            bool* sc_directly,
+            const TabletSharedPtr& base_tablet, const TabletSharedPtr& new_tablet, RowBlockChanger* rb_changer,
+            bool* sc_sorting, bool* sc_directly,
             const std::unordered_map<std::string, AlterMaterializedViewParam>& materialized_function_map);
 
     // default_value for new column is needed

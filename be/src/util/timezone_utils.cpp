@@ -24,7 +24,7 @@
 
 namespace starrocks {
 
-RE2 TimezoneUtils::time_zone_offset_format_reg("^[+-]{1}\\d{2}\\:\\d{2}$");
+RE2 TimezoneUtils::time_zone_offset_format_reg(R"(^[+-]{1}\d{2}\:\d{2}$)");
 
 const std::string TimezoneUtils::default_time_zone = "+08:00";
 

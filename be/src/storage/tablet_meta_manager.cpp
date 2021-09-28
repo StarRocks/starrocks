@@ -295,7 +295,7 @@ Status TabletMetaManager::get_primary_meta(KVStore* meta, TTabletId tablet_id, T
 // there are some rowset meta in local meta store and in in-memory tablet meta
 // but not in tablet meta in local meta store
 Status TabletMetaManager::get_tablet_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
-                                          TabletMetaSharedPtr tablet_meta) {
+                                          const TabletMetaSharedPtr& tablet_meta) {
     std::string key = encode_tablet_meta_key(tablet_id, schema_hash);
     std::string value;
     RETURN_IF_ERROR(store->get_meta()->get(META_COLUMN_FAMILY_INDEX, key, &value));
@@ -363,7 +363,7 @@ Status TabletMetaManager::get_json_meta(DataDir* store, TTabletId tablet_id, std
 // 1. if term > 0 then save to remote meta store first using term
 // 2. save to local meta store
 Status TabletMetaManager::save(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
-                               TabletMetaSharedPtr tablet_meta) {
+                               const TabletMetaSharedPtr& tablet_meta) {
     TabletMetaPB tablet_meta_pb;
     tablet_meta->to_meta_pb(&tablet_meta_pb);
     if (tablet_meta_pb.schema().keys_type() == KeysType::PRIMARY_KEYS) {

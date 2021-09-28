@@ -34,33 +34,33 @@ class NotImplementedYet : public std::logic_error {
 public:
     explicit NotImplementedYet(const std::string& what_arg);
     explicit NotImplementedYet(const char* what_arg);
-    virtual ~NotImplementedYet() ORC_NOEXCEPT;
+    ~NotImplementedYet() ORC_NOEXCEPT override;
     NotImplementedYet(const NotImplementedYet&);
 
 private:
-    NotImplementedYet& operator=(const NotImplementedYet&);
+    NotImplementedYet& operator=(const NotImplementedYet&) = delete;
 };
 
 class ParseError : public std::runtime_error {
 public:
     explicit ParseError(const std::string& what_arg);
     explicit ParseError(const char* what_arg);
-    virtual ~ParseError() ORC_NOEXCEPT;
+    ~ParseError() ORC_NOEXCEPT override;
     ParseError(const ParseError&);
 
 private:
-    ParseError& operator=(const ParseError&);
+    ParseError& operator=(const ParseError&) = delete;
 };
 
 class InvalidArgument : public std::runtime_error {
 public:
     explicit InvalidArgument(const std::string& what_arg);
     explicit InvalidArgument(const char* what_arg);
-    virtual ~InvalidArgument() ORC_NOEXCEPT;
+    ~InvalidArgument() ORC_NOEXCEPT override;
     InvalidArgument(const InvalidArgument&);
 
 private:
-    InvalidArgument& operator=(const InvalidArgument&);
+    InvalidArgument& operator=(const InvalidArgument&) = delete;
 };
 } // namespace orc
 

@@ -42,7 +42,7 @@ public:
     // for load error
     DownloadAction(ExecEnv* exec_env, const std::string& error_log_root_dir);
 
-    virtual ~DownloadAction() {}
+    ~DownloadAction() override = default;
 
     void handle(HttpRequest* req) override;
 

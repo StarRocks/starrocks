@@ -27,7 +27,8 @@ import org.apache.logging.log4j.Logger;
    eg:
         POST  /api/query_dump?db=test  post_data=query
  return:
-        {"statement": "...", "table_meta" : {..}, "table_row_count" : {...}, "session_variables" : "...", "column_statistics" : {...}}
+        {"statement": "...", "table_meta" : {..}, "table_row_count" : {...}, "session_variables" : "...",
+         "column_statistics" : {...}}
  */
 
 public class QueryDumpAction extends RestBaseAction {

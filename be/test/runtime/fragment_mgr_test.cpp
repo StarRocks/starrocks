@@ -34,7 +34,7 @@ namespace starrocks {
 static Status s_prepare_status;
 static Status s_open_status;
 // Mock used for this unittest
-PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, const report_status_callback& report_status_cb)
+PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb)
         : _exec_env(exec_env), _report_status_cb(report_status_cb) {}
 
 PlanFragmentExecutor::~PlanFragmentExecutor() {}

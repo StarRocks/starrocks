@@ -5,15 +5,20 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import avro.shaded.com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
@@ -40,21 +45,24 @@ public class PruneScanColumnRule extends TransformationRule {
         LogicalScanOperator scanOperator = (LogicalScanOperator) input.getOp();
         ColumnRefSet requiredOutputColumns = context.getTaskContext().get(0).getRequiredColumns();
 
-        Set<ColumnRefOperator> scanColumns =
-                scanOperator.getOutputColumns().stream().filter(requiredOutputColumns::contains)
+        // The `outputColumns`s are some columns required but not specified by `requiredOutputColumns`.
+        // including columns in predicate or some specialized columns defined by scan operator.
+        Set<ColumnRefOperator> outputColumns =
+                scanOperator.getColRefToColumnMetaMap().keySet().stream().filter(requiredOutputColumns::contains)
                         .collect(Collectors.toSet());
-        scanColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
+        outputColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
 
-        if (scanColumns.size() == 0) {
-            List<ColumnRefOperator> outputColumns = new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet());
+        if (outputColumns.size() == 0) {
+            List<ColumnRefOperator> columnRefOperatorList =
+                    new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet());
 
             int smallestIndex = -1;
             int smallestColumnLength = Integer.MAX_VALUE;
-            for (int index = 0; index < outputColumns.size(); ++index) {
+            for (int index = 0; index < columnRefOperatorList.size(); ++index) {
                 if (smallestIndex == -1) {
                     smallestIndex = index;
                 }
-                Type columnType = outputColumns.get(index).getType();
+                Type columnType = columnRefOperatorList.get(index).getType();
                 if (columnType.isScalarType()) {
                     int columnLength = columnType.getSlotSize();
                     if (columnLength < smallestColumnLength) {
@@ -64,16 +72,48 @@ public class PruneScanColumnRule extends TransformationRule {
                 }
             }
             Preconditions.checkArgument(smallestIndex != -1);
-            scanColumns.add(outputColumns.get(smallestIndex));
+            outputColumns.add(columnRefOperatorList.get(smallestIndex));
         }
 
-        if (scanOperator.getOutputColumns().equals(new ArrayList<>(scanColumns))) {
+        if (scanOperator.getColRefToColumnMetaMap().keySet().equals(outputColumns)) {
             return Collections.emptyList();
         } else {
-            Map<ColumnRefOperator, Column> newColumnRefMap = scanColumns.stream()
+            Map<ColumnRefOperator, Column> newColumnRefMap = outputColumns.stream()
                     .collect(Collectors.toMap(identity(), scanOperator.getColRefToColumnMetaMap()::get));
-            scanOperator.setColRefToColumnMetaMap(newColumnRefMap);
-            return Lists.newArrayList(new OptExpression(scanOperator));
+            if (scanOperator instanceof LogicalOlapScanOperator) {
+                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
+                LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
+                        olapScanOperator.getTable(),
+                        new ArrayList<>(outputColumns),
+                        newColumnRefMap,
+                        olapScanOperator.getColumnMetaToColRefMap(),
+                        olapScanOperator.getDistributionSpec(),
+                        olapScanOperator.getLimit(),
+                        olapScanOperator.getPredicate(),
+                        olapScanOperator.getSelectedIndexId(),
+                        olapScanOperator.getSelectedPartitionId(),
+                        olapScanOperator.getPartitionNames(),
+                        olapScanOperator.getSelectedTabletId(),
+                        olapScanOperator.getHintsTabletIds());
+
+                return Lists.newArrayList(new OptExpression(newScanOperator));
+            } else {
+                try {
+                    Class<? extends LogicalScanOperator> classType = scanOperator.getClass();
+                    LogicalScanOperator newScanOperator =
+                            classType.getConstructor(Table.class, List.class, Map.class, Map.class, long.class,
+                                    ScalarOperator.class).newInstance(
+                                    scanOperator.getTable(), new ArrayList<>(outputColumns),
+                                    newColumnRefMap,
+                                    scanOperator.getColumnMetaToColRefMap(),
+                                    scanOperator.getLimit(),
+                                    scanOperator.getPredicate());
+
+                    return Lists.newArrayList(new OptExpression(newScanOperator));
+                } catch (Exception e) {
+                    throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
+                }
+            }
         }
     }
 }

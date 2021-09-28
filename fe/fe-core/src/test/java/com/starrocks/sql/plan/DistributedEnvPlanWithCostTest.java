@@ -89,6 +89,16 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    public void testCountDistinctWithoutGroupBy() throws Exception {
+        String sql = "SELECT COUNT (DISTINCT l_partkey) FROM lineitem";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("3:AGGREGATE (merge finalize)\n" +
+                "  |  output: multi_distinct_count(18: count(distinct 2: L_PARTKEY))"));
+        Assert.assertTrue(planFragment.contains("1:AGGREGATE (update serialize)\n" +
+                "  |  output: multi_distinct_count(2: L_PARTKEY)"));
+    }
+
+    @Test
     public void testJoinDateAndDateTime() throws Exception {
         String sql = "select count(a.id_date) from test_all_type a " +
                 "join test_all_type b on a.id_date = b.id_datetime ;";
@@ -306,9 +316,9 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().disableJoinReorder();
 
         // Left outer join
-        String sql = "select distinct join1.id from join1 left join [shuffle] join2 on join1.id = join2.id;";
+        String sql = "select distinct join1.id from join1 left join join2 on join1.id = join2.id;";
         String plan = getFragmentPlan(sql);
-        checkTwoPhaseAgg(plan);
+        checkOnePhaseAgg(plan);
 
         sql = "select distinct join2.id from join1 left join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
@@ -325,7 +335,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
         sql = "select distinct join1.id from join1 right join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
-        checkOnePhaseAgg(plan);
+        checkTwoPhaseAgg(plan);
 
         // Full outer join
         sql = "select distinct join2.id from join1 full join join2 on join1.id = join2.id;";
@@ -334,16 +344,16 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
         sql = "select distinct join1.id from join1 full join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
-        checkOnePhaseAgg(plan);
+        checkTwoPhaseAgg(plan);
 
         // Inner join
         sql = "select distinct join2.id from join1 join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
         checkTwoPhaseAgg(plan);
 
-        sql = "select distinct join1.id from join1 join [shuffle] join2 on join1.id = join2.id;";
+        sql = "select distinct join1.id from join1 join join2 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
-        checkTwoPhaseAgg(plan);
+        checkOnePhaseAgg(plan);
 
         // cross join
         sql = "select distinct join2.id from join1 join join2 on join1.id = join2.id, baseall;";
@@ -418,5 +428,102 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("equal join conjunct: [29: multiply, BIGINT, true] = [30: add, BIGINT, true]\n" +
                 "  |  cardinality: 600000000"));
+    }
+
+    @Test
+    public void testNotEvalStringTypePredicateCardinality() throws Exception {
+        String sql = "select\n" +
+                "            n1.n_name as supp_nation,\n" +
+                "            n2.n_name as cust_nation\n" +
+                "        from\n" +
+                "            supplier,\n" +
+                "            customer,\n" +
+                "            nation n1,\n" +
+                "            nation n2\n" +
+                "        where \n" +
+                "          s_nationkey = n1.n_nationkey\n" +
+                "          and c_nationkey = n2.n_nationkey\n" +
+                "          and (\n" +
+                "                (n1.n_name = 'CANADA' and n2.n_name = 'IRAN')\n" +
+                "                or (n1.n_name = 'IRAN' and n2.n_name = 'CANADA')\n" +
+                "            )";
+        String plan = getCostExplain(sql);
+        // not eval char/varchar type predicate cardinality in scan node
+        Assert.assertTrue(plan.contains("Predicates: 24: N_NAME IN ('IRAN', 'CANADA')"));
+        Assert.assertTrue(plan.contains("cardinality: 25"));
+        // eval char/varchar type predicate cardinality in join node
+        Assert.assertTrue(plan.contains(" 5:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: ((19: N_NAME = 'CANADA') AND (24: N_NAME = 'IRAN')) OR ((19: N_NAME = 'IRAN') AND (24: N_NAME = 'CANADA'))\n" +
+                "  |  cardinality: 2"));
+    }
+
+    @Test
+    public void testEvalPredicateCardinality() throws Exception {
+        String sql = "select\n" +
+                "            n1.n_name as supp_nation,\n" +
+                "            n2.n_name as cust_nation\n" +
+                "        from\n" +
+                "            supplier,\n" +
+                "            customer,\n" +
+                "            nation n1,\n" +
+                "            nation n2\n" +
+                "        where \n" +
+                "          s_nationkey = n1.n_nationkey\n" +
+                "          and c_nationkey = n2.n_nationkey\n" +
+                "          and (\n" +
+                "                (n1.n_nationkey = 1 and n2.n_nationkey = 2)\n" +
+                "                or (n1.n_nationkey = 2 and n2.n_nationkey = 1)\n" +
+                "            )";
+        String plan = getCostExplain(sql);
+        // eval predicate cardinality in scan node
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     table: nation, rollup: nation\n" +
+                "     preAggregation: on\n" +
+                "     Predicates: 23: N_NATIONKEY IN (2, 1)\n" +
+                "     partitionsRatio=1/1, tabletsRatio=1/1\n" +
+                "     tabletList=10185\n" +
+                "     actualRows=0, avgRowSize=29.0\n" +
+                "     cardinality: 2"));
+        // eval predicate cardinality in join node
+        Assert.assertTrue(plan.contains("3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
+                "  |  cardinality: 2"));
+    }
+
+    @Test
+    public void testOneAggUponBroadcastJoinWithoutExchange() throws Exception {
+        String sql = "select \n" +
+                "  sum(p1) \n" +
+                "from \n" +
+                "  (\n" +
+                "    select \n" +
+                "      t0.p1 \n" +
+                "    from \n" +
+                "      (\n" +
+                "        select \n" +
+                "          count(n1.P_PARTKEY) as p1 \n" +
+                "        from \n" +
+                "          part n1\n" +
+                "      ) t0 \n" +
+                "      join (\n" +
+                "        select \n" +
+                "          count(n2.P_PARTKEY) as p2 \n" +
+                "        from \n" +
+                "          part n2\n" +
+                "      ) t1\n" +
+                "  ) t2;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 11:AGGREGATE (update finalize)"));
+        Assert.assertTrue(plan.contains("10:Project"));
+    }
+
+    @Test
+    public void testGroupByDistributedColumnWithMultiPartitions() throws Exception {
+        String sql = "select k1, sum(k2) from pushdown_test group by k1";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)"));
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
     }
 }

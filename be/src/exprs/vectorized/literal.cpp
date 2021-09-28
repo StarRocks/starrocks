@@ -131,7 +131,7 @@ std::string VectorizedLiteral::debug_string() const {
     return out.str();
 }
 
-VectorizedLiteral::~VectorizedLiteral() {}
+VectorizedLiteral::~VectorizedLiteral() = default;
 
 } // namespace vectorized
 } // namespace starrocks

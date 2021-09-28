@@ -512,4 +512,9 @@ public abstract class SetOperationNode extends PlanNode {
             node.setUseVectorized(flag);
         }
     }
+
+    @Override
+    public boolean canDoReplicatedJoin() {
+        return false;
+    }
 }

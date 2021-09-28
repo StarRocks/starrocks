@@ -32,10 +32,9 @@
 #ifndef UTIL_GTL_STL_UTIL_H_
 #define UTIL_GTL_STL_UTIL_H_
 
-#include <stddef.h>
-#include <string.h> // for memcpy
-
 #include <algorithm>
+#include <cstddef>
+#include <cstring> // for memcpy
 using std::copy;
 using std::max;
 using std::min;
@@ -345,7 +344,7 @@ inline const T* vector_as_array(const vector<T, Allocator>* v) {
 // implementations.
 inline char* string_as_array(string* str) {
     // DO NOT USE const_cast<char*>(str->data())! See the unittest for why.
-    return str->empty() ? NULL : &*str->begin();
+    return str->empty() ? nullptr : &*str->begin();
 }
 
 // These are methods that test two hash maps/sets for equality.  These exist
@@ -420,10 +419,10 @@ void STLDeleteValues(T* v) {
 // directly.
 class BaseDeleter {
 public:
-    virtual ~BaseDeleter() {}
+    virtual ~BaseDeleter() = default;
 
 protected:
-    BaseDeleter() {}
+    BaseDeleter() = default;
 
 private:
     DISALLOW_EVIL_CONSTRUCTORS(BaseDeleter);
@@ -437,7 +436,7 @@ class TemplatedElementDeleter : public BaseDeleter {
 public:
     explicit TemplatedElementDeleter<STLContainer>(STLContainer* ptr) : container_ptr_(ptr) {}
 
-    virtual ~TemplatedElementDeleter<STLContainer>() { STLDeleteElements(container_ptr_); }
+    ~TemplatedElementDeleter<STLContainer>() override { STLDeleteElements(container_ptr_); }
 
 private:
     STLContainer* container_ptr_;
@@ -469,7 +468,7 @@ class TemplatedValueDeleter : public BaseDeleter {
 public:
     explicit TemplatedValueDeleter<STLContainer>(STLContainer* ptr) : container_ptr_(ptr) {}
 
-    virtual ~TemplatedValueDeleter<STLContainer>() { STLDeleteValues(container_ptr_); }
+    ~TemplatedValueDeleter<STLContainer>() override { STLDeleteValues(container_ptr_); }
 
 private:
     STLContainer* container_ptr_;
@@ -637,7 +636,7 @@ bool STLIncludes(const SortedSTLContainerA& a, const SortedSTLContainerB& b) {
 template <typename Pair, typename UnaryOp>
 class UnaryOperateOnFirst : public std::unary_function<Pair, typename UnaryOp::result_type> {
 public:
-    UnaryOperateOnFirst() {}
+    UnaryOperateOnFirst() = default;
 
     UnaryOperateOnFirst(const UnaryOp& f) : f_(f) { // TODO(user): explicit?
     }
@@ -656,7 +655,7 @@ UnaryOperateOnFirst<Pair, UnaryOp> UnaryOperate1st(const UnaryOp& f) {
 template <typename Pair, typename UnaryOp>
 class UnaryOperateOnSecond : public std::unary_function<Pair, typename UnaryOp::result_type> {
 public:
-    UnaryOperateOnSecond() {}
+    UnaryOperateOnSecond() = default;
 
     UnaryOperateOnSecond(const UnaryOp& f) : f_(f) { // TODO(user): explicit?
     }
@@ -675,7 +674,7 @@ UnaryOperateOnSecond<Pair, UnaryOp> UnaryOperate2nd(const UnaryOp& f) {
 template <typename Pair, typename BinaryOp>
 class BinaryOperateOnFirst : public std::binary_function<Pair, Pair, typename BinaryOp::result_type> {
 public:
-    BinaryOperateOnFirst() {}
+    BinaryOperateOnFirst() = default;
 
     BinaryOperateOnFirst(const BinaryOp& f) : f_(f) { // TODO(user): explicit?
     }
@@ -695,7 +694,7 @@ BinaryOperateOnFirst<Pair, BinaryOp> BinaryOperate1st(const BinaryOp& f) {
 template <typename Pair, typename BinaryOp>
 class BinaryOperateOnSecond : public std::binary_function<Pair, Pair, typename BinaryOp::result_type> {
 public:
-    BinaryOperateOnSecond() {}
+    BinaryOperateOnSecond() = default;
 
     BinaryOperateOnSecond(const BinaryOp& f) : f_(f) {}
 
@@ -760,14 +759,14 @@ public:
     typedef typename Alloc::pointer pointer;
     typedef typename Alloc::size_type size_type;
 
-    STLCountingAllocator() : bytes_used_(NULL) {}
+    STLCountingAllocator() : bytes_used_(nullptr) {}
     STLCountingAllocator(int64* b) : bytes_used_(b) {} // TODO(user): explicit?
 
     // Constructor used for rebinding
     template <class U>
     STLCountingAllocator(const STLCountingAllocator<U>& x) : Alloc(x), bytes_used_(x.bytes_used()) {}
 
-    pointer allocate(size_type n, std::allocator<void>::const_pointer hint = 0) {
+    pointer allocate(size_type n, std::allocator<void>::const_pointer hint = nullptr) {
         assert(bytes_used_ != NULL);
         *bytes_used_ += n * sizeof(T);
         return Alloc::allocate(n, hint);

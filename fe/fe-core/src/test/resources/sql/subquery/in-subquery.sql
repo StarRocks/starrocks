@@ -64,11 +64,10 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 = 6: v3] post
 [sql]
 select t0.v1 from t0 where t0.v2 in (select t3.v2 from t3 where t0.v3 > t3.v3) and t0.v2 = 3
 [result]
-RIGHT SEMI JOIN (join-predicate [5: v2 = 2: v2 AND 3: v3 > 6: v3] post-join-predicate [null])
-    EXCHANGE SHUFFLE[5]
-        SCAN (columns[5: v2, 6: v3] predicate[null])
-    EXCHANGE SHUFFLE[2]
-        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
+LEFT SEMI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 > 6: v3] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
+    EXCHANGE BROADCAST
+        SCAN (columns[5: v2, 6: v3] predicate[5: v2 = 3])
 [end]
 
 [sql]
@@ -92,10 +91,10 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 > 6: v3] post
 [sql]
 select t0.v1 from t0 where t0.v2 not in (select t3.v2 from t3 where t0.v3 = t3.v3 and t3.v1 > 2) and t0.v2 = 3
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 = 6: v3 AND 4: v1 > 2] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 = 6: v3] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v1, 5: v2, 6: v3] predicate[null])
+        SCAN (columns[4: v1, 5: v2, 6: v3] predicate[4: v1 > 2])
 [end]
 
 [sql]
@@ -104,7 +103,7 @@ select t0.v1 from t0 where t0.v2 in (select t3.v2 from t3 where t0.v3 = t3.v3 an
 LEFT SEMI JOIN (join-predicate [2: v2 = 5: v2 AND 3: v3 = 6: v3] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v1, 5: v2, 6: v3] predicate[4: v1 > 2])
+        SCAN (columns[4: v1, 5: v2, 6: v3] predicate[4: v1 > 2 AND 5: v2 = 3])
 [end]
 
 [sql]
@@ -122,7 +121,7 @@ select t0.v1 from t0 where t0.v2 in (select t3.v2 from t3 where t3.v1 > 2) and t
 LEFT SEMI JOIN (join-predicate [2: v2 = 5: v2] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[2: v2 = 3])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v1, 5: v2] predicate[4: v1 > 2])
+        SCAN (columns[4: v1, 5: v2] predicate[5: v2 = 3 AND 4: v1 > 2])
 [end]
 
 [sql]

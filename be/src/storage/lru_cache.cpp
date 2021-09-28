@@ -5,9 +5,9 @@
 #include "storage/lru_cache.h"
 
 #include <rapidjson/document.h>
-#include <stdio.h>
-#include <stdlib.h>
 
+#include <cstdio>
+#include <cstdlib>
 #include <sstream>
 #include <string>
 
@@ -60,7 +60,7 @@ uint32_t CacheKey::hash(const char* data, size_t n, uint32_t seed) const {
     return h;
 }
 
-Cache::~Cache() {}
+Cache::~Cache() = default;
 
 // LRU cache implementation
 LRUHandle* HandleTable::lookup(const CacheKey& key, uint32_t hash) {
@@ -70,17 +70,17 @@ LRUHandle* HandleTable::lookup(const CacheKey& key, uint32_t hash) {
 LRUHandle* HandleTable::insert(LRUHandle* h) {
     LRUHandle** ptr = _find_pointer(h->key(), h->hash);
     LRUHandle* old = *ptr;
-    h->next_hash = (old == NULL ? NULL : old->next_hash);
+    h->next_hash = (old == nullptr ? nullptr : old->next_hash);
     *ptr = h;
 
-    if (old == NULL) {
+    if (old == nullptr) {
         ++_elems;
 
         if (_elems > _length) {
             // Since each cache entry is fairly large, we aim for a small
             // average linked list length (<= 1).
             if (!_resize()) {
-                return NULL;
+                return nullptr;
             }
         }
     }
@@ -92,7 +92,7 @@ LRUHandle* HandleTable::remove(const CacheKey& key, uint32_t hash) {
     LRUHandle** ptr = _find_pointer(key, hash);
     LRUHandle* result = *ptr;
 
-    if (result != NULL) {
+    if (result != nullptr) {
         *ptr = result->next_hash;
         --_elems;
     }
@@ -103,7 +103,7 @@ LRUHandle* HandleTable::remove(const CacheKey& key, uint32_t hash) {
 LRUHandle** HandleTable::_find_pointer(const CacheKey& key, uint32_t hash) {
     LRUHandle** ptr = &_list[hash & (_length - 1)];
 
-    while (*ptr != NULL && ((*ptr)->hash != hash || key != (*ptr)->key())) {
+    while (*ptr != nullptr && ((*ptr)->hash != hash || key != (*ptr)->key())) {
         ptr = &(*ptr)->next_hash;
     }
 
@@ -119,7 +119,7 @@ bool HandleTable::_resize() {
 
     LRUHandle** new_list = new (std::nothrow) LRUHandle*[new_length];
 
-    if (NULL == new_list) {
+    if (nullptr == new_list) {
         LOG(FATAL) << "failed to malloc new hash list. new_length=" << new_length;
         return false;
     }
@@ -130,7 +130,7 @@ bool HandleTable::_resize() {
     for (uint32_t i = 0; i < _length; i++) {
         LRUHandle* h = _list[i];
 
-        while (h != NULL) {
+        while (h != nullptr) {
             LRUHandle* next = h->next_hash;
             CacheKey key = h->key();
             uint32_t hash = h->hash;

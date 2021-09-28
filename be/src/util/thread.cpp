@@ -45,7 +45,7 @@ namespace starrocks {
 
 class ThreadMgr;
 
-__thread Thread* Thread::_tls = NULL;
+__thread Thread* Thread::_tls = nullptr;
 
 // Singleton instance of ThreadMgr. Only visible in this file, used only by Thread.
 // // The Thread class adds a reference to thread_manager while it is supervising a thread so
@@ -83,7 +83,7 @@ private:
     // TODO: Track fragment ID.
     class ThreadDescriptor {
     public:
-        ThreadDescriptor() {}
+        ThreadDescriptor() = default;
         ThreadDescriptor(std::string category, std::string name, int64_t thread_id)
                 : _name(std::move(name)), _category(std::move(category)), _thread_id(thread_id) {}
 
@@ -201,7 +201,7 @@ const std::string& Thread::category() const {
 }
 
 std::string Thread::to_string() const {
-    return strings::Substitute("Thread $0 (name: \"$1\", category: \"$2\")", tid(), _name, _category);
+    return strings::Substitute(R"(Thread $0 (name: "$1", category: "$2"))", tid(), _name, _category);
 }
 
 Thread* Thread::current_thread() {
@@ -254,7 +254,7 @@ Status Thread::start_thread(const std::string& category, const std::string& name
         t->Release();
     });
 
-    int ret = pthread_create(&t->_thread, NULL, &Thread::supervise_thread, t.get());
+    int ret = pthread_create(&t->_thread, nullptr, &Thread::supervise_thread, t.get());
     if (ret) {
         return Status::RuntimeError("Could not create thread", ret, strerror(ret));
     }
@@ -303,7 +303,7 @@ void* Thread::supervise_thread(void* arg) {
     t->_functor();
     pthread_cleanup_pop(true);
 
-    return NULL;
+    return nullptr;
 }
 
 void Thread::finish_thread(void* arg) {
@@ -388,7 +388,7 @@ Status ThreadJoiner::join() {
             // Unconditionally join before returning, to guarantee that any TLS
             // has been destroyed (pthread_key_create() destructors only run
             // after a pthread's user method has returned).
-            int ret = pthread_join(_thread->_thread, NULL);
+            int ret = pthread_join(_thread->_thread, nullptr);
             CHECK_EQ(ret, 0);
             _thread->_joinable = false;
             return Status::OK();

@@ -319,4 +319,9 @@ public class AnalyticEvalNode extends PlanNode {
     public void setSubstitutedPartitionExprs(List<Expr> substitutedPartitionExprs) {
         this.substitutedPartitionExprs = substitutedPartitionExprs;
     }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
 }

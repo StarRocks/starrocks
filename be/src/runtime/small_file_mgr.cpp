@@ -21,12 +21,12 @@
 
 #include "runtime/small_file_mgr.h"
 
-#include <stdint.h>
-#include <stdio.h>
-
 #include <boost/algorithm/string/classification.hpp> // boost::is_any_of
 #include <boost/algorithm/string/predicate.hpp>      // boost::algorithm::starts_with
+#include <cstdint>
+#include <cstdio>
 #include <sstream>
+#include <utility>
 
 #include "common/status.h"
 #include "env/env.h"
@@ -41,14 +41,14 @@
 
 namespace starrocks {
 
-SmallFileMgr::SmallFileMgr(ExecEnv* env, const std::string& local_path) : _exec_env(env), _local_path(local_path) {
+SmallFileMgr::SmallFileMgr(ExecEnv* env, std::string local_path) : _exec_env(env), _local_path(std::move(local_path)) {
     REGISTER_GAUGE_STARROCKS_METRIC(small_file_cache_count, [this]() {
         std::lock_guard<std::mutex> l(_lock);
         return _file_cache.size();
     });
 }
 
-SmallFileMgr::~SmallFileMgr() {}
+SmallFileMgr::~SmallFileMgr() = default;
 
 Status SmallFileMgr::init() {
     RETURN_IF_ERROR(_load_local_files());

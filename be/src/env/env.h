@@ -163,7 +163,7 @@ public:
 };
 
 struct RandomAccessFileOptions {
-    RandomAccessFileOptions() {}
+    RandomAccessFileOptions() = default;
 };
 
 // Creation-time options for WritableFile
@@ -306,8 +306,8 @@ public:
 
 private:
     // No copying allowed
-    WritableFile(const WritableFile&);
-    void operator=(const WritableFile&);
+    WritableFile(const WritableFile&) = delete;
+    void operator=(const WritableFile&) = delete;
 };
 
 // A file abstraction for random reading and writing.

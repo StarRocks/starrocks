@@ -28,7 +28,7 @@ class WrapperField;
 
 struct ColumnMapping {
     ColumnMapping() : ref_column(-1), default_value(nullptr) {}
-    virtual ~ColumnMapping() {}
+    virtual ~ColumnMapping() = default;
 
     // <0: use default value
     // >=0: use origin column

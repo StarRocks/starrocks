@@ -18,8 +18,8 @@
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
 #include <runtime/types.h>
-#include <stdint.h>
 
+#include <cstdint>
 #include <map>
 #include <string>
 
@@ -32,13 +32,13 @@ using RecordBatchPtr = std::shared_ptr<RecordBatch>;
 class ParquetChunkFile : public arrow::io::RandomAccessFile {
 public:
     ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos);
-    virtual ~ParquetChunkFile();
-    arrow::Status Read(int64_t nbytes, int64_t* bytes_read, void* buffer) override;
-    arrow::Status ReadAt(int64_t position, int64_t nbytes, int64_t* bytes_read, void* out) override;
-    arrow::Status GetSize(int64_t* size) override;
+    ~ParquetChunkFile() override;
+    arrow::Result<int64_t> Read(int64_t nbytes, void* buffer) override;
+    arrow::Result<int64_t> ReadAt(int64_t position, int64_t nbytes, void* out) override;
+    arrow::Result<int64_t> GetSize() override;
     arrow::Status Seek(int64_t position) override;
-    arrow::Status Read(int64_t nbytes, std::shared_ptr<arrow::Buffer>* out) override;
-    arrow::Status Tell(int64_t* position) const override;
+    arrow::Result<std::shared_ptr<arrow::Buffer>> Read(int64_t nbytes) override;
+    arrow::Result<int64_t> Tell() const override;
     arrow::Status Close() override;
     bool closed() const override;
 
@@ -53,7 +53,7 @@ public:
     enum State { UNINITIALIZED, INITIALIZED, END_OF_FILE };
 
     ParquetChunkReader(std::shared_ptr<ParquetReaderWrap>&& parquet_reader,
-                       const std::vector<SlotDescriptor*>& src_slot_descs, const std::string& time_zone);
+                       const std::vector<SlotDescriptor*>& src_slot_descs, std::string time_zone);
     ~ParquetChunkReader();
     Status next_batch(RecordBatchPtr* batch);
 

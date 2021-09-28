@@ -46,7 +46,7 @@ public:
               _cancelled(false),
               _last_visit_time(0) {}
 
-    virtual ~DataConsumer() {}
+    virtual ~DataConsumer() = default;
 
     // init the consumer with the given parameters
     virtual Status init(StreamLoadContext* ctx) = 0;
@@ -83,7 +83,7 @@ protected:
 
 class KafkaEventCb : public RdKafka::EventCb {
 public:
-    void event_cb(RdKafka::Event& event) {
+    void event_cb(RdKafka::Event& event) override {
         switch (event.type()) {
         case RdKafka::Event::EVENT_ERROR:
             LOG(INFO) << "kafka error: " << RdKafka::err2str(event.err()) << ", event: " << event.str();
@@ -114,7 +114,7 @@ public:
     KafkaDataConsumer(StreamLoadContext* ctx)
             : DataConsumer(ctx), _brokers(ctx->kafka_info->brokers), _topic(ctx->kafka_info->topic) {}
 
-    virtual ~KafkaDataConsumer() {
+    ~KafkaDataConsumer() override {
         VLOG(3) << "deconstruct consumer";
         if (_k_consumer) {
             _k_consumer->close();
@@ -123,13 +123,13 @@ public:
         }
     }
 
-    virtual Status init(StreamLoadContext* ctx) override;
+    Status init(StreamLoadContext* ctx) override;
     // TODO(cmy): currently do not implement single consumer start method, using group_consume
-    virtual Status consume(StreamLoadContext* ctx) override { return Status::OK(); }
-    virtual Status cancel(StreamLoadContext* ctx) override;
+    Status consume(StreamLoadContext* ctx) override { return Status::OK(); }
+    Status cancel(StreamLoadContext* ctx) override;
     // reassign partition topics
-    virtual Status reset() override;
-    virtual bool match(StreamLoadContext* ctx) override;
+    Status reset() override;
+    bool match(StreamLoadContext* ctx) override;
     // commit kafka offset
     Status commit(std::vector<RdKafka::TopicPartition*>& offset);
 

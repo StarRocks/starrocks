@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <math.h>
+#include <cmath>
 
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
@@ -89,8 +89,8 @@ public:
         DCHECK(column->is_binary());
         Slice slice = column->get(row_num).get_slice();
 
-        TResult mean = *reinterpret_cast<TResult*>(slice.data);
-        TResult m2 = *reinterpret_cast<TResult*>(slice.data + sizeof(TResult));
+        TResult mean = unaligned_load<TResult>(slice.data);
+        TResult m2 = unaligned_load<TResult>(slice.data + sizeof(TResult));
         int64_t count = *reinterpret_cast<int64_t*>(slice.data + sizeof(TResult) * 2);
 
         TResult delta = this->data(state).mean - mean;
@@ -233,7 +233,7 @@ public:
         }
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
 
         TResult result;
@@ -359,7 +359,7 @@ public:
         }
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
 
         TResult result;

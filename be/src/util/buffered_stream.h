@@ -15,7 +15,7 @@ class RandomAccessFile;
 class BufferedInputStream {
 public:
     BufferedInputStream(RandomAccessFile* file, uint64_t offset, uint64_t length);
-    ~BufferedInputStream() {}
+    ~BufferedInputStream() = default;
 
     void seek_to(uint64_t offset) {
         uint64_t current_file_offset = tell();

@@ -36,7 +36,7 @@ public:
 
     // Move constructor
     // NOTE: do *NOT* copy |_slices|
-    BinaryColumn(BinaryColumn&& rhs) : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)) {}
+    BinaryColumn(BinaryColumn&& rhs) noexcept : _bytes(std::move(rhs._bytes)), _offsets(std::move(rhs._offsets)) {}
 
     // Copy assignment
     BinaryColumn& operator=(const BinaryColumn& rhs) {
@@ -46,7 +46,7 @@ public:
     }
 
     // Move assignment
-    BinaryColumn& operator=(BinaryColumn&& rhs) {
+    BinaryColumn& operator=(BinaryColumn&& rhs) noexcept {
         BinaryColumn tmp(std::move(rhs));
         this->swap_column(tmp);
         return *this;
@@ -200,9 +200,9 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
-    void fvn_hash(uint32_t* hashes, uint16_t from, uint16_t to) const override;
+    void fnv_hash(uint32_t* hashes, uint32_t from, uint32_t to) const override;
 
-    void crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) const override;
+    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
@@ -270,6 +270,11 @@ public:
         }
         ss << debug_item(size() - 1) << "]";
         return ss.str();
+    }
+
+    bool reach_capacity_limit() const override {
+        return _bytes.size() >= Column::MAX_CAPACITY_LIMIT || _offsets.size() >= Column::MAX_CAPACITY_LIMIT ||
+               _slices.size() >= Column::MAX_CAPACITY_LIMIT;
     }
 
 private:

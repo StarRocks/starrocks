@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 
 #include "common/status.h"
 #include "exec/file_reader.h"
@@ -37,19 +37,19 @@ public:
     // If the reader need the file size, set it when construct FileReader.
     // There is no other way to set the file size.
     BufferedReader(FileReader* reader, int64_t = 1024 * 1024);
-    virtual ~BufferedReader();
+    ~BufferedReader() override;
 
-    virtual Status open() override;
+    Status open() override;
 
     // Read
-    virtual Status read(uint8_t* buf, size_t* buf_len, bool* eof) override;
-    virtual Status readat(int64_t position, int64_t nbytes, int64_t* bytes_read, void* out) override;
-    virtual Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length) override;
-    virtual int64_t size() override;
-    virtual Status seek(int64_t position) override;
-    virtual Status tell(int64_t* position) override;
-    virtual void close() override;
-    virtual bool closed() override;
+    Status read(uint8_t* buf, size_t* buf_len, bool* eof) override;
+    Status readat(int64_t position, int64_t nbytes, int64_t* bytes_read, void* out) override;
+    Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length) override;
+    int64_t size() override;
+    Status seek(int64_t position) override;
+    Status tell(int64_t* position) override;
+    void close() override;
+    bool closed() override;
 
 private:
     Status _fill();

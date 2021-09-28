@@ -72,7 +72,7 @@ class TraceAlloc {
 public:
     using value_type = T;
 
-    TraceAlloc() noexcept {}
+    TraceAlloc() noexcept = default;
     template <class U>
     TraceAlloc(TraceAlloc<U> const&) noexcept {}
 
@@ -251,7 +251,7 @@ public:
         return _map.capacity() * (1 + (sizeof(Key) + 3) / 4 * 4 + sizeof(RowIdPack4));
     }
 
-    std::string memory_info() const {
+    std::string memory_info() const override {
         auto caps = _map.capacities();
         string caps_str;
         for (auto e : caps) {
@@ -527,7 +527,7 @@ public:
 
     std::size_t memory_usage() const final { return _map.capacity() * (1 + S * 4 + sizeof(RowIdPack4)); }
 
-    std::string memory_info() const {
+    std::string memory_info() const override {
         auto caps = _map.capacities();
         string caps_str;
         for (auto e : caps) {
@@ -745,7 +745,7 @@ public:
         return ret;
     }
 
-    std::string memory_info() const {
+    std::string memory_info() const override {
         auto caps = _map.capacities();
         string caps_str;
         for (auto e : caps) {
@@ -798,7 +798,7 @@ static std::unique_ptr<HashIndex> create_hash_index(FieldType key_type, size_t f
     }
 }
 
-PrimaryIndex::PrimaryIndex() {}
+PrimaryIndex::PrimaryIndex() = default;
 
 PrimaryIndex::~PrimaryIndex() {
     if (_tablet_id != 0) {
@@ -921,7 +921,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
         for (size_t i = 0; i < itrs.size(); i++) {
             auto itr = itrs[i].get();
-            if (itr == NULL) {
+            if (itr == nullptr) {
                 continue;
             }
             while (true) {

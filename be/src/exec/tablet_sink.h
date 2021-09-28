@@ -87,14 +87,14 @@ template <typename T>
 class ReusableClosure : public google::protobuf::Closure {
 public:
     ReusableClosure() : cid(INVALID_BTHREAD_ID) {}
-    ~ReusableClosure() {
+    ~ReusableClosure() override {
         // shouldn't delete when Run() is calling or going to be called, wait for current Run() done.
         join();
     }
 
     static ReusableClosure<T>* create() { return new ReusableClosure<T>(); }
 
-    void addFailedHandler(std::function<void()> fn) { failed_handler = fn; }
+    void addFailedHandler(std::function<void()> fn) { failed_handler = std::move(fn); }
     void addSuccessHandler(std::function<void(const T&, bool)> fn) { success_handler = fn; }
 
     void join() {
@@ -250,7 +250,7 @@ private:
     int64_t _serialize_batch_ns = 0;
 
     // vectorized
-    bool _is_vectorized = false;
+    bool _is_vectorized = true;
     std::unique_ptr<vectorized::Chunk> _cur_chunk;
     using AddChunkReq = std::pair<std::unique_ptr<vectorized::Chunk>, PTabletWriterAddChunkRequest>;
     std::queue<AddChunkReq> _pending_chunks;
@@ -413,7 +413,7 @@ private:
     std::vector<DecimalV2Value> _min_decimalv2_val;
 
     // vectorized:
-    bool _is_vectorized = false;
+    bool _is_vectorized = true;
     std::vector<vectorized::OlapTablePartition*> _partitions;
     std::vector<uint32_t> _tablet_indexes;
     // one chunk selection index for partition validation and data validation

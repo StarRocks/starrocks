@@ -165,7 +165,7 @@ public:
     BufferedTupleStream2(RuntimeState* state, const RowDescriptor& row_desc, BufferedBlockMgr2* block_mgr,
                          BufferedBlockMgr2::Client* client, bool use_initial_small_buffers, bool read_write);
     // A null dtor to pass codestyle check
-    ~BufferedTupleStream2() {}
+    ~BufferedTupleStream2() = default;
 
     // Initializes the tuple stream object on behalf of node 'node_id'. Must be called
     // once before any of the other APIs.
@@ -201,7 +201,7 @@ public:
     // If got_buffer is NULL, this function will fail (with a bad status) if no buffer
     // is available. If got_buffer is non-null, this function will not fail on OOM and
     // *got_buffer is true if a buffer was pinned.
-    Status prepare_for_read(bool delete_on_read, bool* got_buffer = NULL);
+    Status prepare_for_read(bool delete_on_read, bool* got_buffer = nullptr);
 
     // Pins all blocks in this stream and switches to pinned mode.
     // If there is not enough memory, *pinned is set to false and the stream is unmodified.
@@ -217,7 +217,7 @@ public:
     // and must be copied out by the caller.
     // If 'indices' is non-NULL, that is also populated for each returned row with the
     // index for that row.
-    Status get_next(RowBatch* batch, bool* eos, std::vector<RowIdx>* indices = NULL);
+    Status get_next(RowBatch* batch, bool* eos, std::vector<RowIdx>* indices = nullptr);
 
     // Returns all the rows in the stream in batch. This pins the entire stream
     // in the process.
@@ -244,7 +244,7 @@ public:
     int blocks_pinned() const { return _num_pinned; }
     int blocks_unpinned() const { return _blocks.size() - _num_pinned - _num_small_blocks; }
     bool has_read_block() const { return _read_block != _blocks.end(); }
-    bool has_write_block() const { return _write_block != NULL; }
+    bool has_write_block() const { return _write_block != nullptr; }
     bool using_small_buffers() const { return _use_small_buffers; }
     bool has_tuple_footprint() const { return _fixed_tuple_row_size > 0 || !_string_slots.empty() || _nullable_tuple; }
 

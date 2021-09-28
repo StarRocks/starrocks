@@ -9,8 +9,9 @@ Status AggregateStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     // _aggregator is shared by sink operator and source operator
     // we must only prepare it at sink operator
-    return _aggregator->prepare(state, state->obj_pool(), get_memtracker(), get_memtracker(), nullptr,
-                                get_runtime_profile());
+    RETURN_IF_ERROR(
+            _aggregator->prepare(state, state->obj_pool(), get_memtracker(), get_memtracker(), get_runtime_profile()));
+    return _aggregator->open(state);
 }
 
 bool AggregateStreamingSinkOperator::is_finished() const {
@@ -45,7 +46,6 @@ Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const vec
 }
 
 Status AggregateStreamingSinkOperator::_push_chunk_by_force_streaming() {
-    // force execute streaming
     SCOPED_TIMER(_aggregator->streaming_timer());
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
     _aggregator->output_chunk_by_streaming(&chunk);
@@ -79,6 +79,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const
 }
 
 Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_size) {
+    // TODO: calc the real capacity of hashtable, will add one interface in the class of habletable
     size_t real_capacity = _aggregator->hash_map_variant().capacity() - _aggregator->hash_map_variant().capacity() / 8;
     size_t remain_size = real_capacity - _aggregator->hash_map_variant().size();
     bool ht_needs_expansion = remain_size < chunk_size;

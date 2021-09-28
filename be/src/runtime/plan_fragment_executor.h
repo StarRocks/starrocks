@@ -78,7 +78,7 @@ public:
 
     // if report_status_cb is not empty, is used to report the accumulated profile
     // information periodically during execution (open() or get_next()).
-    PlanFragmentExecutor(ExecEnv* exec_env, const report_status_callback& report_status_cb);
+    PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb);
 
     // Closes the underlying plan fragment and frees up all resources allocated
     // in open()/get_next().
@@ -141,7 +141,7 @@ public:
     void set_is_report_on_cancel(bool val) { _is_report_on_cancel = val; }
 
 private:
-    bool _is_vectorized = false;
+    bool _is_vectorized = true;
     ExecEnv* _exec_env;        // not owned
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     TUniqueId _query_id;
@@ -185,7 +185,6 @@ private:
     // returned via get_next's row batch
     // Created in prepare (if required), owned by this object.
     std::unique_ptr<DataSink> _sink;
-    std::unique_ptr<RowBatch> _row_batch;
 
     vectorized::ChunkPtr _chunk;
 
@@ -222,18 +221,7 @@ private:
     // sends a final report.
     void update_status(const Status& status);
 
-    // Executes open() logic and returns resulting status. Does not set _status.
-    // If this plan fragment has no sink, open_internal() does nothing.
-    // If this plan fragment has a sink and open_internal() returns without an
-    // error condition, all rows will have been sent to the sink, the sink will
-    // have been closed, a final report will have been sent and the report thread will
-    // have been stopped. _sink will be set to NULL after successful execution.
-    Status open_internal();
-
     Status _open_internal_vectorized();
-
-    // Executes get_next() logic and returns resulting status.
-    Status get_next_internal(RowBatch** batch);
 
     Status _get_next_internal_vectorized(vectorized::ChunkPtr* chunk);
 

@@ -37,7 +37,7 @@ public:
 public:
     EngineAlterTabletTask(const TAlterTabletReqV2& alter_tablet_request, int64_t signature,
                           const TTaskType::type task_type, vector<string>* error_msgs, const string& process_name);
-    ~EngineAlterTabletTask() override {}
+    ~EngineAlterTabletTask() override = default;
 
 private:
     const TAlterTabletReqV2& _alter_tablet_req;

@@ -34,12 +34,12 @@ namespace starrocks {
 // Helper class for managing rowset meta of one root path.
 class RowsetMetaManager {
 public:
-    static bool check_rowset_meta(KVStore* meta, TabletUid tablet_uid, const RowsetId& rowset_id);
+    static bool check_rowset_meta(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id);
 
-    static Status save(KVStore* meta, TabletUid tablet_uid, const RowsetId& rowset_id,
+    static Status save(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id,
                        const RowsetMetaPB& rowset_meta_pb);
 
-    static Status remove(KVStore* meta, TabletUid tablet_uid, const RowsetId& rowset_id);
+    static Status remove(KVStore* meta, const TabletUid& tablet_uid, const RowsetId& rowset_id);
 
     static string get_rowset_meta_key(const TabletUid& tablet_uid, const RowsetId& rowset_id);
 

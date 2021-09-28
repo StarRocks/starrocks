@@ -28,29 +28,6 @@
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/minidump.h"
-#include "exprs/bitmap_function.h"
-#include "exprs/cast_functions.h"
-#include "exprs/compound_predicate.h"
-#include "exprs/decimal_operators.h"
-#include "exprs/decimalv2_operators.h"
-#include "exprs/encryption_functions.h"
-#include "exprs/es_functions.h"
-#include "exprs/grouping_sets_functions.h"
-#include "exprs/hash_functions.h"
-#include "exprs/hll_function.h"
-#include "exprs/hll_hash_function.h"
-#include "exprs/is_null_predicate.h"
-#include "exprs/json_functions.h"
-#include "exprs/like_predicate.h"
-#include "exprs/math_functions.h"
-#include "exprs/new_in_predicate.h"
-#include "exprs/operators.h"
-#include "exprs/percentile_function.h"
-#include "exprs/string_functions.h"
-#include "exprs/time_operators.h"
-#include "exprs/timestamp_functions.h"
-#include "exprs/utility_functions.h"
-#include "geo/geo_functions.h"
 #include "runtime/bufferpool/buffer_pool.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -131,7 +108,7 @@ void* tcmalloc_gc_thread(void* dummy) {
 #endif
     }
 
-    return NULL;
+    return nullptr;
 }
 
 void* memory_maintenance_thread(void* dummy) {
@@ -156,7 +133,7 @@ void* memory_maintenance_thread(void* dummy) {
         }
     }
 
-    return NULL;
+    return nullptr;
 }
 
 /*
@@ -224,7 +201,7 @@ void* calculate_metrics(void* dummy) {
         sleep(15); // 15 seconds
     }
 
-    return NULL;
+    return nullptr;
 }
 
 static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
@@ -232,6 +209,7 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
     std::set<std::string> disk_devices;
     std::vector<std::string> network_interfaces;
     std::vector<std::string> paths;
+    paths.reserve(store_paths.size());
     for (auto& store_path : store_paths) {
         paths.emplace_back(store_path.path);
     }
@@ -251,7 +229,7 @@ static void init_starrocks_metrics(const std::vector<StorePath>& store_paths) {
 
     if (config::enable_metric_calculator) {
         pthread_t calculator_pid;
-        pthread_create(&calculator_pid, NULL, calculate_metrics, NULL);
+        pthread_create(&calculator_pid, nullptr, calculate_metrics, nullptr);
     }
 }
 
@@ -283,12 +261,16 @@ void init_signals() {
 }
 
 void init_minidump() {
+#ifdef __x86_64__
     if (config::sys_minidump_enable) {
-        LOG(INFO) << "Minidump is enable";
+        LOG(INFO) << "Minidump is enabled";
         Minidump::init();
     } else {
-        LOG(INFO) << "Minidump is disable";
+        LOG(INFO) << "Minidump is disabled";
     }
+#else
+    LOG(INFO) << "Minidump is disabled on non-x86_64 arch";
+#endif
 }
 
 void init_daemon(int argc, char** argv, const std::vector<StorePath>& paths) {
@@ -304,38 +286,15 @@ void init_daemon(int argc, char** argv, const std::vector<StorePath>& paths) {
     DiskInfo::init();
     MemInfo::init();
     UserFunctionCache::instance()->init(config::user_function_dir);
-    Operators::init();
-    IsNullPredicate::init();
-    LikePredicate::init();
-    StringFunctions::init();
-    CastFunctions::init();
-    InPredicate::init();
-    MathFunctions::init();
-    EncryptionFunctions::init();
-    TimestampFunctions::init();
-    DecimalOperators::init();
-    DecimalV2Operators::init();
-    TimeOperators::init();
-    UtilityFunctions::init();
-    CompoundPredicate::init();
-    JsonFunctions::init();
-    HllHashFunctions::init();
-    ESFunctions::init();
-    GeoFunctions::init();
-    GroupingSetsFunctions::init();
-    BitmapFunctions::init();
-    HllFunctions::init();
-    HashFunctions::init();
-    PercentileFunctions::init();
 
     vectorized::ColumnHelper::init_static_variable();
     vectorized::date::init_date_cache();
 
     pthread_t tc_malloc_pid;
-    pthread_create(&tc_malloc_pid, NULL, tcmalloc_gc_thread, NULL);
+    pthread_create(&tc_malloc_pid, nullptr, tcmalloc_gc_thread, nullptr);
 
     pthread_t buffer_pool_pid;
-    pthread_create(&buffer_pool_pid, NULL, memory_maintenance_thread, NULL);
+    pthread_create(&buffer_pool_pid, nullptr, memory_maintenance_thread, nullptr);
 
     LOG(INFO) << CpuInfo::debug_string();
     LOG(INFO) << DiskInfo::debug_string();

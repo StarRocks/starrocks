@@ -34,6 +34,7 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "agent/status.h"
@@ -59,9 +60,9 @@ struct TabletTxnInfo {
     int64_t creation_time;
 
     TabletTxnInfo(PUniqueId load_id, RowsetSharedPtr rowset)
-            : load_id(load_id), rowset(rowset), creation_time(UnixSeconds()) {}
+            : load_id(std::move(load_id)), rowset(std::move(rowset)), creation_time(UnixSeconds()) {}
 
-    TabletTxnInfo() {}
+    TabletTxnInfo() = default;
 };
 
 // txn manager is used to manage mapping between tablet and txns
@@ -97,28 +98,28 @@ public:
     // add a txn to manager
     // partition id is useful in publish version stage because version is associated with partition
     OLAPStatus prepare_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                           SchemaHash schema_hash, TabletUid tablet_uid, const PUniqueId& load_id);
+                           SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id);
 
     OLAPStatus commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                          SchemaHash schema_hash, TabletUid tablet_uid, const PUniqueId& load_id,
+                          SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id,
                           const RowsetSharedPtr& rowset_ptr, bool is_recovery);
 
     // remove a txn from txn manager & persist rowset meta
     OLAPStatus publish_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                           SchemaHash schema_hash, TabletUid tablet_uid, const Version& version,
+                           SchemaHash schema_hash, const TabletUid& tablet_uid, const Version& version,
                            VersionHash version_hash);
 
     // delete the txn from manager if it is not committed(not have a valid rowset)
     OLAPStatus rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                            SchemaHash schema_hash, TabletUid tablet_uid);
+                            SchemaHash schema_hash, const TabletUid& tablet_uid);
 
     // remove the txn from txn manager
     // delete the related rowset if it is not null
     // delete rowset related data if it is not null
     OLAPStatus delete_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
-                          SchemaHash schema_hash, TabletUid tablet_uid);
+                          SchemaHash schema_hash, const TabletUid& tablet_uid);
 
-    void get_tablet_related_txns(TTabletId tablet_id, SchemaHash schema_hash, TabletUid tablet_uid,
+    void get_tablet_related_txns(TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                                  int64_t* partition_id, std::set<int64_t>* transaction_ids);
 
     void get_txn_related_tablets(const TTransactionId transaction_id, TPartitionId partition_ids,
@@ -128,14 +129,14 @@ public:
 
     // just check if the txn exists
     bool has_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id, SchemaHash schema_hash,
-                 TabletUid tablet_uid);
+                 const TabletUid& tablet_uid);
 
     // get all expired txns and save tham in expire_txn_map.
     // This is currently called before reporting all tablet info, to avoid iterating txn map for every tablets.
     void build_expire_txn_map(std::map<TabletInfo, std::vector<int64_t>>* expire_txn_map);
 
     void force_rollback_tablet_related_txns(KVStore* meta, TTabletId tablet_id, SchemaHash schema_hash,
-                                            TabletUid tablet_uid);
+                                            const TabletUid& tablet_uid);
 
     void get_partition_ids(const TTransactionId transaction_id, std::vector<TPartitionId>* partition_ids);
 

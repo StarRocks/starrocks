@@ -1587,6 +1587,9 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      * Pushes negation to the individual operands of a predicate
      * tree rooted at 'root'.
      */
+    // @Todo: Remove the dependence of CBO Optimizer on this method.
+    //    At present, we transform SubqueryExpr to ApplyNode direct(SubqueryTransformer), it's need do eliminate
+    //    negations on Expr not ScalarOperator
     public static Expr pushNegationToOperands(Expr root) {
         Preconditions.checkNotNull(root);
         if (Expr.IS_NOT_PREDICATE.apply(root)) {
@@ -1617,7 +1620,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      * Negates a boolean Expr.
      */
     public Expr negate() {
-        Preconditions.checkState(type.isBoolean());
         return new CompoundPredicate(CompoundPredicate.Operator.NOT, this, null);
     }
 

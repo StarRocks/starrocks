@@ -37,7 +37,7 @@ class RestoreTabletAction : public HttpHandler {
 public:
     RestoreTabletAction(ExecEnv* exec_env);
 
-    virtual ~RestoreTabletAction() {}
+    ~RestoreTabletAction() override = default;
 
     void handle(HttpRequest* req) override;
 

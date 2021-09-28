@@ -57,7 +57,7 @@ Status Decompressor::create_decompressor(CompressionTypePB type, Decompressor** 
     return st;
 }
 
-Decompressor::~Decompressor() {}
+Decompressor::~Decompressor() = default;
 
 std::string Decompressor::debug_info() {
     return "Decompressor";
@@ -72,7 +72,7 @@ GzipDecompressor::~GzipDecompressor() {
 }
 
 Status GzipDecompressor::init() {
-    _z_strm = {0};
+    _z_strm = {nullptr};
     _z_strm.zalloc = Z_NULL;
     _z_strm.zfree = Z_NULL;
     _z_strm.opaque = Z_NULL;
@@ -288,7 +288,7 @@ Status Lz4FrameDecompressor::decompress(uint8_t* input, size_t input_len, size_t
     // decompress
     size_t dst_size = output_len;
     ret = LZ4F_decompress(_dctx, (void*)output, &dst_size, (void*)src, &src_size,
-                          /* LZ4F_decompressOptions_t */ NULL);
+                          /* LZ4F_decompressOptions_t */ nullptr);
     if (LZ4F_isError(ret)) {
         std::stringstream ss;
         ss << "Decompression error: " << std::string(LZ4F_getErrorName(ret));

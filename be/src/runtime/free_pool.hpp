@@ -22,9 +22,8 @@
 #ifndef STARROCKS_BE_SRC_QUERY_BE_RUNTIME_FREE_POOL_H
 #define STARROCKS_BE_SRC_QUERY_BE_RUNTIME_FREE_POOL_H
 
-#include <stdio.h>
-#include <string.h>
-
+#include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "common/logging.h"
@@ -52,7 +51,7 @@ public:
     // 'mem_pool'.
     FreePool(MemPool* mem_pool) : _mem_pool(mem_pool) { memset(&_lists, 0, sizeof(_lists)); }
 
-    virtual ~FreePool() {}
+    virtual ~FreePool() = default;
 
     // Allocates a buffer of size.
     uint8_t* allocate(int64_t size) {
@@ -67,7 +66,7 @@ public:
 
         FreeListNode* allocation = _lists[free_list_idx].next;
 
-        if (allocation == NULL) {
+        if (allocation == nullptr) {
             // There wasn't an existing allocation of the right size, allocate a new one.
             size = static_cast<int64_t>(1) << free_list_idx;
             allocation = reinterpret_cast<FreeListNode*>(
@@ -77,7 +76,7 @@ public:
             _lists[free_list_idx].next = allocation->next;
         }
 
-        DCHECK(allocation != NULL);
+        DCHECK(allocation != nullptr);
         // Set the back node to point back to the list it came from so know where
         // to add it on free().
         allocation->list = &_lists[free_list_idx];
@@ -85,7 +84,7 @@ public:
     }
 
     void free(uint8_t* ptr) {
-        if (ptr == NULL || reinterpret_cast<int64_t>(ptr) == 0x1) {
+        if (ptr == nullptr || reinterpret_cast<int64_t>(ptr) == 0x1) {
             return;
         }
 
@@ -103,7 +102,7 @@ public:
     // backing 'ptr' is big enough, 'ptr' is returned. Otherwise a new one is
     // made and the contents of ptr are copied into it.
     uint8_t* reallocate(uint8_t* ptr, int64_t size) {
-        if (ptr == NULL || reinterpret_cast<int64_t>(ptr) == 0x1) {
+        if (ptr == nullptr || reinterpret_cast<int64_t>(ptr) == 0x1) {
             return allocate(size);
         }
 

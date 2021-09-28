@@ -29,7 +29,7 @@ Status OlapScanner::init(RuntimeState* runtime_state, const OlapScannerParams& p
     RETURN_IF_ERROR(_init_reader_params(params.key_ranges));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
     Schema child_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, _reader_columns);
-    _reader = std::make_shared<Reader>(std::move(child_schema));
+    _reader = std::make_shared<Reader>(_tablet, Version(0, _version), std::move(child_schema));
     if (_reader_columns.size() == _scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -40,26 +40,32 @@ Status OlapScanner::init(RuntimeState* runtime_state, const OlapScannerParams& p
     if (!_conjunct_ctxs.empty() || !_predicates.empty()) {
         _expr_filter_timer = ADD_TIMER(_parent->_runtime_profile, "ExprFilterTime");
     }
-    return Status::OK();
+
+    Status st = _reader->prepare();
+    if (!st.ok()) {
+        std::string msg = strings::Substitute("[$0] fail to prepare tablet reader $1: $2",
+                                              BackendOptions::get_localhost(), _tablet->full_name(), st.to_string());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    } else {
+        return Status::OK();
+    }
 }
 
 Status OlapScanner::open([[maybe_unused]] RuntimeState* runtime_state) {
     if (_is_open) {
         return Status::OK();
+    } else {
+        _is_open = true;
+        Status st = _reader->open(_params);
+        if (!st.ok()) {
+            auto msg = strings::Substitute("[$0] fail to open tablet reader $1: $2", BackendOptions::get_localhost(),
+                                           _tablet->full_name(), st.to_string());
+            st = Status::InternalError(msg);
+            LOG(WARNING) << st;
+        }
+        return st;
     }
-
-    SCOPED_TIMER(_parent->_reader_init_timer);
-
-    Status res = _reader->init(_params);
-    if (!res.ok()) {
-        std::stringstream ss;
-        ss << "failed to initialize storage reader. tablet=" << _params.tablet->full_name()
-           << ", res=" << res.to_string() << ", backend=" << BackendOptions::get_localhost();
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str().c_str());
-    }
-    _is_open = true;
-    return Status::OK();
 }
 
 Status OlapScanner::close(RuntimeState* state) {
@@ -94,10 +100,8 @@ Status OlapScanner::_get_tablet(const TInternalScanRange* scan_range) {
 }
 
 Status OlapScanner::_init_reader_params(const std::vector<OlapScanRange*>* key_ranges) {
-    _params.tablet = _tablet;
     _params.reader_type = READER_QUERY;
     _params.skip_aggregation = _skip_aggregation;
-    _params.version = Version(0, _version);
     _params.profile = _parent->_scan_profile;
     _params.runtime_state = _runtime_state;
     // If a agg node is this scan node direct parent
@@ -238,7 +242,7 @@ void OlapScanner::update_counter() {
     if (_has_update_counter) {
         return;
     }
-    COUNTER_UPDATE(_parent->_capture_rowset_timer, _reader->stats().capture_rowset_ns);
+    COUNTER_UPDATE(_parent->_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);
     COUNTER_UPDATE(_parent->_rows_read_counter, _num_rows_read);
 
     COUNTER_UPDATE(_parent->_io_timer, _reader->stats().io_ns);

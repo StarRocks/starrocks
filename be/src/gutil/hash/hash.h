@@ -73,11 +73,10 @@
 #ifndef UTIL_HASH_HASH_H_
 #define UTIL_HASH_HASH_H_
 
-#include <stddef.h>
-#include <stdint.h> // for uintptr_t
-#include <string.h>
-
 #include <algorithm>
+#include <cstddef>
+#include <cstdint> // for uintptr_t
+#include <cstring>
 #include <ext/hash_map>
 using __gnu_cxx::hash;
 using __gnu_cxx::hash_map; // hacky way to make sure we import standard hash<> fns

@@ -224,7 +224,7 @@ int ObjectColumn<T>::compare_at(size_t left, size_t right, const starrocks::vect
 }
 
 template <typename T>
-void ObjectColumn<T>::fvn_hash(uint32_t* hash, uint16_t from, uint16_t to) const {
+void ObjectColumn<T>::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     std::string s;
     for (int i = from; i < to; ++i) {
         s.resize(_pool[i].serialize_size());
@@ -234,7 +234,7 @@ void ObjectColumn<T>::fvn_hash(uint32_t* hash, uint16_t from, uint16_t to) const
 }
 
 template <typename T>
-void ObjectColumn<T>::crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) const {
+void ObjectColumn<T>::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     DCHECK(false) << "object column shouldn't call crc32_hash ";
 }
 

@@ -21,10 +21,10 @@
 
 #include "storage/rowset/beta_rowset.h"
 
-#include <stdio.h>  // for remove()
 #include <unistd.h> // for link()
 #include <util/file_utils.h>
 
+#include <cstdio> // for remove()
 #include <memory>
 #include <set>
 
@@ -72,19 +72,21 @@ OLAPStatus BetaRowset::init() {
 }
 
 Status BetaRowset::do_load() {
-    // Open all segments under the current rowset
+    // TODO: `BlockManager` should be passed in as an argument.
+    fs::BlockManager* block_mgr = fs::fs_util::block_manager();
+    MemTracker* mem_tracker = _mem_tracker.get();
+
+    _segments.clear();
+    size_t footer_size_hint = 4096;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        std::shared_ptr<segment_v2::Segment> segment;
-        // TODO: `BlockManager` should be passed in as an argument.
-        fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-        auto s = segment_v2::Segment::open(_mem_tracker.get(), block_mgr, seg_path, seg_id, _schema, &segment);
-        if (!s.ok()) {
-            LOG(WARNING) << "Fail to open segment=" << seg_path << " of rowset=" << unique_id() << ", "
-                         << s.to_string();
-            return s;
+        auto res = segment_v2::Segment::open(mem_tracker, block_mgr, seg_path, seg_id, _schema, &footer_size_hint);
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
+            _segments.clear();
+            return res.status();
         }
-        _segments.push_back(std::move(segment));
+        _segments.push_back(std::move(res).value());
     }
     return Status::OK();
 }
@@ -232,7 +234,7 @@ StatusOr<vectorized::ChunkIteratorPtr> BetaRowset::new_iterator(const vectorized
     if (seg_iters.empty()) {
         return vectorized::new_empty_iterator(schema, options.chunk_size);
     } else if (options.sorted) {
-        return vectorized::new_merge_iterator(std::move(seg_iters));
+        return vectorized::new_merge_iterator(seg_iters);
     } else {
         return vectorized::new_union_iterator(std::move(seg_iters));
     }
@@ -320,7 +322,7 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iter
     vectorized::SegmentReadOptions seg_options;
     seg_options.block_mgr = fs::fs_util::block_manager();
     seg_options.stats = stats;
-    seg_options.is_primary_keys = meta != NULL;
+    seg_options.is_primary_keys = meta != nullptr;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
     seg_options.version = version;

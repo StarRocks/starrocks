@@ -55,14 +55,14 @@ public:
     CompressionStreamBase(OutputStream* outStream, int compressionLevel, uint64_t capacity, uint64_t blockSize,
                           MemoryPool& pool);
 
-    virtual bool Next(void** data, int* size) override = 0;
-    virtual void BackUp(int count) override;
+    bool Next(void** data, int* size) override = 0;
+    void BackUp(int count) override;
 
-    virtual std::string getName() const override = 0;
-    virtual uint64_t flush() override;
+    std::string getName() const override = 0;
+    uint64_t flush() override;
 
-    virtual bool isCompressed() const override { return true; }
-    virtual uint64_t getSize() const override;
+    bool isCompressed() const override { return true; }
+    uint64_t getSize() const override;
 
 protected:
     void writeHeader(char* buffer, size_t compressedSize, bool original) {
@@ -148,8 +148,8 @@ public:
     CompressionStream(OutputStream* outStream, int compressionLevel, uint64_t capacity, uint64_t blockSize,
                       MemoryPool& pool);
 
-    virtual bool Next(void** data, int* size) override;
-    virtual std::string getName() const override = 0;
+    bool Next(void** data, int* size) override;
+    std::string getName() const override = 0;
 
 protected:
     // return total compressed size
@@ -194,12 +194,12 @@ public:
     ZlibCompressionStream(OutputStream* outStream, int compressionLevel, uint64_t capacity, uint64_t blockSize,
                           MemoryPool& pool);
 
-    virtual ~ZlibCompressionStream() override { end(); }
+    ~ZlibCompressionStream() override { end(); }
 
-    virtual std::string getName() const override;
+    std::string getName() const override;
 
 protected:
-    virtual uint64_t doStreamingCompression() override;
+    uint64_t doStreamingCompression() override;
 
 private:
     void init();
@@ -278,13 +278,13 @@ enum DecompressState { DECOMPRESS_HEADER, DECOMPRESS_START, DECOMPRESS_CONTINUE,
 class DecompressionStream : public SeekableInputStream {
 public:
     DecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t bufferSize, MemoryPool& pool);
-    virtual ~DecompressionStream() override {}
-    virtual bool Next(const void** data, int* size) override;
-    virtual void BackUp(int count) override;
-    virtual bool Skip(int count) override;
-    virtual int64_t ByteCount() const override;
-    virtual void seek(PositionProvider& position) override;
-    virtual std::string getName() const override = 0;
+    ~DecompressionStream() override = default;
+    bool Next(const void** data, int* size) override;
+    void BackUp(int count) override;
+    bool Skip(int count) override;
+    int64_t ByteCount() const override;
+    void seek(PositionProvider& position) override;
+    std::string getName() const override = 0;
 
 protected:
     virtual void NextDecompress(const void** data, int* size, size_t availableSize) = 0;
@@ -522,11 +522,11 @@ void DecompressionStream::seek(PositionProvider& position) {
 class ZlibDecompressionStream : public DecompressionStream {
 public:
     ZlibDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& pool);
-    virtual ~ZlibDecompressionStream() override;
-    virtual std::string getName() const override;
+    ~ZlibDecompressionStream() override;
+    std::string getName() const override;
 
 protected:
-    virtual void NextDecompress(const void** data, int* size, size_t availableSize) override;
+    void NextDecompress(const void** data, int* size, size_t availableSize) override;
 
 private:
     z_stream zstream;
@@ -634,11 +634,11 @@ class BlockDecompressionStream : public DecompressionStream {
 public:
     BlockDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& pool);
 
-    virtual ~BlockDecompressionStream() override {}
-    virtual std::string getName() const override = 0;
+    ~BlockDecompressionStream() override = default;
+    std::string getName() const override = 0;
 
 protected:
-    virtual void NextDecompress(const void** data, int* size, size_t availableSize) override;
+    void NextDecompress(const void** data, int* size, size_t availableSize) override;
 
     virtual uint64_t decompress(const char* input, uint64_t length, char* output, size_t maxOutputLength) = 0;
 
@@ -697,7 +697,7 @@ public:
     }
 
 protected:
-    virtual uint64_t decompress(const char* input, uint64_t length, char* output, size_t maxOutputLength) override;
+    uint64_t decompress(const char* input, uint64_t length, char* output, size_t maxOutputLength) override;
 };
 
 uint64_t SnappyDecompressionStream::decompress(const char* _input, uint64_t length, char* output,
@@ -731,7 +731,7 @@ public:
     }
 
 protected:
-    virtual uint64_t decompress(const char* input, uint64_t length, char* output, size_t maxOutputLength) override;
+    uint64_t decompress(const char* input, uint64_t length, char* output, size_t maxOutputLength) override;
 };
 
 uint64_t LzoDecompressionStream::decompress(const char* inputPtr, uint64_t length, char* output,
@@ -753,7 +753,7 @@ public:
     }
 
 protected:
-    virtual uint64_t decompress(const char* input, uint64_t length, char* output, size_t maxOutputLength) override;
+    uint64_t decompress(const char* input, uint64_t length, char* output, size_t maxOutputLength) override;
 };
 
 uint64_t Lz4DecompressionStream::decompress(const char* inputPtr, uint64_t length, char* output,
@@ -776,8 +776,8 @@ public:
         // PASS
     }
 
-    virtual bool Next(void** data, int* size) override;
-    virtual std::string getName() const override = 0;
+    bool Next(void** data, int* size) override;
+    std::string getName() const override = 0;
 
 protected:
     // compresses a block and returns the compressed size
@@ -854,16 +854,14 @@ public:
         this->init();
     }
 
-    virtual std::string getName() const override { return "Lz4CompressionStream"; }
+    std::string getName() const override { return "Lz4CompressionStream"; }
 
-    virtual ~Lz4CompressionSteam() override { this->end(); }
+    ~Lz4CompressionSteam() override { this->end(); }
 
 protected:
-    virtual uint64_t doBlockCompression() override;
+    uint64_t doBlockCompression() override;
 
-    virtual uint64_t estimateMaxCompressionSize() override {
-        return static_cast<uint64_t>(LZ4_compressBound(bufferSize));
-    }
+    uint64_t estimateMaxCompressionSize() override { return static_cast<uint64_t>(LZ4_compressBound(bufferSize)); }
 
 private:
     void init();
@@ -905,16 +903,14 @@ public:
         this->init();
     }
 
-    virtual std::string getName() const override { return "ZstdCompressionStream"; }
+    std::string getName() const override { return "ZstdCompressionStream"; }
 
-    virtual ~ZSTDCompressionStream() override { this->end(); }
+    ~ZSTDCompressionStream() override { this->end(); }
 
 protected:
-    virtual uint64_t doBlockCompression() override;
+    uint64_t doBlockCompression() override;
 
-    virtual uint64_t estimateMaxCompressionSize() override {
-        return ZSTD_compressBound(static_cast<size_t>(bufferSize));
-    }
+    uint64_t estimateMaxCompressionSize() override { return ZSTD_compressBound(static_cast<size_t>(bufferSize)); }
 
 private:
     void init();
@@ -957,7 +953,7 @@ public:
         this->init();
     }
 
-    virtual ~ZSTDDecompressionStream() override { this->end(); }
+    ~ZSTDDecompressionStream() override { this->end(); }
 
     std::string getName() const override {
         std::ostringstream result;
@@ -966,7 +962,7 @@ public:
     }
 
 protected:
-    virtual uint64_t decompress(const char* input, uint64_t length, char* output, size_t maxOutputLength) override;
+    uint64_t decompress(const char* input, uint64_t length, char* output, size_t maxOutputLength) override;
 
 private:
     void init();

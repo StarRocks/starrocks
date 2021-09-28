@@ -365,8 +365,7 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
 
     _scan_profile = _runtime_profile->create_child("SCAN", true, false);
 
-    _reader_init_timer = ADD_TIMER(_scan_profile, "ReaderInit");
-    _capture_rowset_timer = ADD_CHILD_TIMER(_scan_profile, "CaptureRowset", "ReaderInit");
+    _create_seg_iter_timer = ADD_TIMER(_scan_profile, "CreateSegmentIter");
 
     _read_compressed_counter = ADD_COUNTER(_scan_profile, "CompressedBytesRead", TUnit::BYTES);
     _read_uncompressed_counter = ADD_COUNTER(_scan_profile, "UncompressedBytesRead", TUnit::BYTES);
@@ -551,9 +550,19 @@ void OlapScanNode::_close_pending_scanners() {
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators;
-    operators.emplace_back(std::make_shared<ScanOperatorFactory>(context->next_operator_id(), id(), _olap_scan_node,
-                                                                 std::move(_conjunct_ctxs),
-                                                                 std::move(_runtime_filter_collector)));
+    auto scan_operator =
+            std::make_shared<ScanOperatorFactory>(context->next_operator_id(), id(), _olap_scan_node,
+                                                  std::move(_conjunct_ctxs), std::move(_runtime_filter_collector));
+    auto& morsel_queues = context->fragment_context()->morsel_queues();
+    auto source_id = scan_operator->plan_node_id();
+    DCHECK(morsel_queues.count(source_id));
+    auto& morsel_queue = morsel_queues[source_id];
+    // ScanOperator's degree_of_parallelism is not more than the number of morsels
+    // If table is empty, then morsel size is zero and we still set degree of parallelism to 1
+    const auto degree_of_parallelism =
+            std::min<size_t>(std::max<size_t>(1, morsel_queue->num_morsels()), context->degree_of_parallelism());
+    scan_operator->set_degree_of_parallelism(degree_of_parallelism);
+    operators.emplace_back(std::move(scan_operator));
     if (limit() != -1) {
         operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }

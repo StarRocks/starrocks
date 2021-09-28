@@ -22,7 +22,7 @@
 #ifndef STARROCKS_BE_RUNTIME_BUFFERPOOL_RESERVATION_UTIL_H_
 #define STARROCKS_BE_RUNTIME_BUFFERPOOL_RESERVATION_UTIL_H_
 
-#include <stdint.h>
+#include <cstdint>
 
 namespace starrocks {
 

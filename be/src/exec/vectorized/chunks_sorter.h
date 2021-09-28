@@ -115,7 +115,7 @@ struct DataSegment {
     Status get_filter_array(std::vector<DataSegment>& data_segments, size_t number_of_rows_to_sort,
                             std::vector<std::vector<uint8_t>>& filter_array, const std::vector<int>& sort_order_flags,
                             const std::vector<int>& null_first_flags, uint32_t& least_num, uint32_t& middle_num,
-                            std::function<Status(size_t bytes)> consume_and_check_memory_limit) {
+                            const std::function<Status(size_t bytes)>& consume_and_check_memory_limit) {
         size_t dats_segment_size = data_segments.size();
 
         std::vector<std::vector<int8_t>> compare_results_array;

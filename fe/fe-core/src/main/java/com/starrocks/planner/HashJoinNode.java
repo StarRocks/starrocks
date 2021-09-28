@@ -70,9 +70,12 @@ public class HashJoinNode extends PlanNode {
     private boolean isPushDown;
     private DistributionMode distrMode;
     private String colocateReason = ""; // if can not do colocate join, set reason here
-    private boolean isBucketShuffle = false; // the flag for bucket shuffle join
+    // the flag for local bucket shuffle join
+    private boolean isLocalHashBucket = false;
+    // the flag for runtime bucket shuffle join
+    private boolean isShuffleHashBucket = false;
 
-    private List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
+    private final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
@@ -160,7 +163,7 @@ public class HashJoinNode extends PlanNode {
             return;
         }
 
-        if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.BUCKET_SHUFFLE)) {
+        if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.LOCAL_HASH_BUCKET)) {
             // if it's partitioned join and we can not get correct ndv
             // then it's hard to estimate right bloom filter size or it's too big
             // so we'd better to skip this global runtime filter.
@@ -219,8 +222,12 @@ public class HashJoinNode extends PlanNode {
         this.distrMode = distrMode;
     }
 
-    public boolean isBucketShuffle() {
-        return isBucketShuffle;
+    public boolean isLocalHashBucket() {
+        return isLocalHashBucket;
+    }
+
+    public boolean isShuffleHashBucket() {
+        return isShuffleHashBucket;
     }
 
     public void setColocate(boolean colocate, String reason) {
@@ -228,8 +235,12 @@ public class HashJoinNode extends PlanNode {
         colocateReason = reason;
     }
 
-    public void setBucketShuffle(boolean bucketShuffle) {
-        isBucketShuffle = bucketShuffle;
+    public void setLocalHashBucket(boolean localHashBucket) {
+        isLocalHashBucket = localHashBucket;
+    }
+
+    public void setShuffleHashBucket(boolean runtimeBucketShuffle) {
+        isShuffleHashBucket = runtimeBucketShuffle;
     }
 
     @Override
@@ -240,7 +251,6 @@ public class HashJoinNode extends PlanNode {
         createDefaultSmap(analyzer);
 
         computeStats(analyzer);
-        //assignedConjuncts = analyzr.getAssignedConjuncts();
 
         ExprSubstitutionMap combinedChildSmap = getCombinedChildWithoutTupleIsNullSmap();
         List<Expr> newEqJoinConjuncts =
@@ -297,15 +307,6 @@ public class HashJoinNode extends PlanNode {
                 continue;
             }
             long numDistinct = stats.getNumDistinctValues();
-            // TODO rownum
-            //Table rhsTbl = slotDesc.getParent().getTableFamilyGroup().getBaseTable();
-            // if (rhsTbl != null && rhsTbl.getNumRows() != -1) {
-            // we can't have more distinct values than rows in the table, even though
-            // the metastore stats may think so
-            // LOG.info(
-            //   "#distinct=" + numDistinct + " #rows=" + Long.toString(rhsTbl.getNumRows()));
-            // numDistinct = Math.min(numDistinct, rhsTbl.getNumRows());
-            // }
             maxNumDistinct = Math.max(maxNumDistinct, numDistinct);
             LOG.debug("min slotref: {}, #distinct: {}", rhsSlotRef.toSql(), numDistinct);
         }
@@ -519,13 +520,16 @@ public class HashJoinNode extends PlanNode {
         NONE("NONE"),
         BROADCAST("BROADCAST"),
         PARTITIONED("PARTITIONED"),
-        BUCKET_SHUFFLE("BUCKET_SHUFFLE"),
-        COLOCATE("COLOCATE");
+        // The hash algorithms of the two bucket shuffle ways are different
+        LOCAL_HASH_BUCKET("BUCKET_SHUFFLE"),
+        SHUFFLE_HASH_BUCKET("BUCKET_SHUFFLE(S)"),
+        COLOCATE("COLOCATE"),
+        REPLICATED("REPLICATED");
 
         private final String description;
 
-        private DistributionMode(String descr) {
-            this.description = descr;
+        DistributionMode(String desc) {
+            this.description = desc;
         }
 
         @Override

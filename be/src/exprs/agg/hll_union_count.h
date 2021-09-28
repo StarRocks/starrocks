@@ -1,23 +1,4 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/exprs/agg/hll_union_count.h
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
 #pragma once
 
@@ -62,7 +43,7 @@ public:
         this->data(state).merge(*(hll_column->get_object(row_num)));
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
         Int64Column* column = down_cast<Int64Column*>(dst);
         int64_t result = this->data(state).estimate_cardinality();
@@ -76,12 +57,12 @@ public:
                              Column* to) const override {
         DCHECK(to->is_object());
         auto* column = down_cast<HyperLogLogColumn*>(to);
-
-        column->append(&this->data(state));
+        auto& hll_value = const_cast<HyperLogLog&>(this->data(state));
+        column->append(std::move(hll_value));
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
-        *dst = std::move(src[0]);
+        *dst = src[0];
     }
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr state,

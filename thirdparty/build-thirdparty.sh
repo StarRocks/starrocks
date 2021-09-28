@@ -123,7 +123,8 @@ check_prerequest "libtoolize --version" "libtool"
 # Name of cmake build directory in each thirdpary project.
 # Do not use `build`, because many projects contained a file named `BUILD`
 # and if the filesystem is not case sensitive, `mkdir` will fail.
-BUILD_DIR=starocks_build
+BUILD_DIR=starrocks_build
+MACHINE_TYPE=$(uname -m)
 
 check_if_source_exist() {
     if [ -z $1 ]; then
@@ -165,7 +166,6 @@ build_libevent() {
 }
 
 build_openssl() {
-    MACHINE_TYPE=$(uname -m)
     OPENSSL_PLATFORM="linux-x86_64"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         OPENSSL_PLATFORM="linux-aarch64"
@@ -228,7 +228,6 @@ build_thrift() {
 
 # llvm
 build_llvm() {
-    MACHINE_TYPE=$(uname -m)
     LLVM_TARGET="X86"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         LLVM_TARGET="AArch64"
@@ -259,14 +258,11 @@ build_protobuf() {
     check_if_source_exist $PROTOBUF_SOURCE
     cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE
     rm -fr gmock
-    mkdir gmock && cd gmock && tar xf ${TP_SOURCE_DIR}/googletest-release-1.8.0.tar.gz \
-    && mv googletest-release-1.8.0 gtest && cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE && ./autogen.sh
+    mkdir gmock && cd gmock && tar xf ${TP_SOURCE_DIR}/$GTEST_NAME \
+    && mv $GTEST_SOURCE gtest && cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE && ./autogen.sh
     CXXFLAGS="-fPIC -O2 -I ${TP_INCLUDE_DIR}" \
-    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    ./configure --prefix=${TP_INSTALL_DIR} --disable-shared --enable-static --with-zlib=${TP_INSTALL_DIR}/include
-    cd src
-    sed -i 's/^AM_LDFLAGS\(.*\)$/AM_LDFLAGS\1 -all-static/' Makefile
-    cd -
+    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc -pthread -Wl,--whole-archive -lpthread -Wl,--no-whole-archive" \
+    ./configure --prefix=${TP_INSTALL_DIR} --disable-shared --enable-static --with-zlib --with-zlib-include=${TP_INSTALL_DIR}/include
     make -j$PARALLEL && make install
 }
 
@@ -305,7 +301,7 @@ build_gtest() {
     cd $TP_SOURCE_DIR/$GTEST_SOURCE
     mkdir -p $BUILD_DIR && cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
-    $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+    $CMAKE_CMD -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_POSITION_INDEPENDENT_CODE=On ../
     make -j$PARALLEL && make install
 }
@@ -333,7 +329,6 @@ build_snappy() {
     make -j$PARALLEL && make install
     if [ -f $TP_INSTALL_DIR/lib64/libsnappy.a ]; then
         mkdir -p $TP_INSTALL_DIR/lib && cp $TP_INSTALL_DIR/lib64/libsnappy.a $TP_INSTALL_DIR/lib/libsnappy.a
-
     fi
 
     #build for libarrow.a
@@ -381,7 +376,7 @@ build_lz4() {
     cd $TP_SOURCE_DIR/$LZ4_SOURCE
 
     make -j$PARALLEL install PREFIX=$TP_INSTALL_DIR \
-    INCLUDEDIR=$TP_INCLUDE_DIR/lz4/
+    INCLUDEDIR=$TP_INCLUDE_DIR/lz4/ BUILD_SHARED=no
 }
 
 # bzip
@@ -391,18 +386,6 @@ build_bzip() {
 
     CFLAGS="-fPIC"
     make -j$PARALLEL install PREFIX=$TP_INSTALL_DIR
-}
-
-# lzo2
-build_lzo2() {
-    check_if_source_exist $LZO2_SOURCE
-    cd $TP_SOURCE_DIR/$LZO2_SOURCE
-
-    CPPFLAGS="-I${TP_INCLUDE_DIR} -fPIC" \
-    LDFLAGS="-L${TP_LIB_DIR}" \
-    CFLAGS="-fPIC" \
-    ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static
-    make -j$PARALLEL && make install
 }
 
 # curl
@@ -436,38 +419,6 @@ build_boost() {
     ./b2 link=static runtime-link=static -j $PARALLEL --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR" install
 }
 
-# mysql
-build_mysql() {
-    check_if_source_exist $MYSQL_SOURCE
-    check_if_source_exist $BOOST_FOR_MYSQL_SOURCE
-
-    cd $TP_SOURCE_DIR/$MYSQL_SOURCE
-
-    mkdir -p $BUILD_DIR && cd $BUILD_DIR
-    rm -rf CMakeCache.txt CMakeFiles/
-    if [ ! -d $BOOST_FOR_MYSQL_SOURCE ]; then
-        cp -rf $TP_SOURCE_DIR/$BOOST_FOR_MYSQL_SOURCE ./
-    fi
-
-    $CMAKE_CMD ../ -DWITH_BOOST=`pwd`/$BOOST_FOR_MYSQL_SOURCE -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/mysql/ \
-    -DCMAKE_INCLUDE_PATH=$TP_INCLUDE_DIR -DCMAKE_LIBRARY_PATH=$TP_LIB_DIR -DWITHOUT_SERVER=1 \
-    -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O3 -g -fabi-version=2 -fno-omit-frame-pointer -fno-strict-aliasing -std=gnu++11" \
-    -DDISABLE_SHARED=1 -DBUILD_SHARED_LIBS=0
-    make -j$PARALLEL mysqlclient
-
-    # copy headers manually
-    rm -rf ../../../installed/include/mysql/
-    mkdir ../../../installed/include/mysql/ -p
-    cp -R ./include/* ../../../installed/include/mysql/
-    cp -R ../include/* ../../../installed/include/mysql/
-    cp ../libbinlogevents/export/binary_log_types.h ../../../installed/include/mysql/
-    echo "mysql headers are installed."
-
-    # copy libmysqlclient.a
-    cp libmysql/libmysqlclient.a ../../../installed/lib/
-    echo "mysql client lib is installed."
-}
-
 #leveldb
 build_leveldb() {
     check_if_source_exist $LEVELDB_SOURCE
@@ -487,10 +438,10 @@ build_brpc() {
     mkdir -p $BUILD_DIR && cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    $CMAKE_CMD -v -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+    $CMAKE_CMD -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DBRPC_WITH_GLOG=ON -DWITH_GLOG=ON -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" \
-    -DPROTOBUF_PROTOC_EXECUTABLE=$TP_INSTALL_DIR/bin/protoc ..
+    -DProtobuf_PROTOC_EXECUTABLE=$TP_INSTALL_DIR/bin/protoc ..
     make -j$PARALLEL && make install
     if [ -f $TP_INSTALL_DIR/lib/libbrpc.a ]; then
         mkdir -p $TP_INSTALL_DIR/lib64 && cp $TP_INSTALL_DIR/lib/libbrpc.a $TP_INSTALL_DIR/lib64/libbrpc.a
@@ -544,15 +495,18 @@ build_arrow() {
     check_if_source_exist $ARROW_SOURCE
     cd $TP_SOURCE_DIR/$ARROW_SOURCE/cpp && mkdir -p release && cd release
     export ARROW_BROTLI_URL=${TP_SOURCE_DIR}/${BROTLI_NAME}
-    export ARROW_DOUBLE_CONVERSION_URL=${TP_SOURCE_DIR}/${DOUBLE_CONVERSION_NAME}
     export ARROW_GLOG_URL=${TP_SOURCE_DIR}/${GLOG_NAME}
     export ARROW_LZ4_URL=${TP_SOURCE_DIR}/${LZ4_NAME}
+    export ARROW_SNAPPY_URL=${TP_SOURCE_DIR}/${SNAPPY_NAME}
+    export ARROW_ZLIB_URL=${TP_SOURCE_DIR}/${ZLIB_NAME}
     export ARROW_FLATBUFFERS_URL=${TP_SOURCE_DIR}/${FLATBUFFERS_NAME}
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
     export ARROW_JEMALLOC_URL=${TP_SOURCE_DIR}/${JEMALLOC_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
 
-    ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_IPC=ON -DARROW_USE_GLOG=off -DARROW_BUILD_SHARED=OFF \
+    ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_SHARED=OFF \
+    -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
+    -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DARROW_BOOST_USE_SHARED=OFF -DARROW_GFLAGS_USE_SHARED=OFF -DBoost_NO_BOOST_CMAKE=ON -DBOOST_ROOT=$TP_INSTALL_DIR \
@@ -575,7 +529,6 @@ build_arrow() {
     fi
     # copy zstd headers
     mkdir -p ${TP_INSTALL_DIR}/include/zstd && cp ./zstd_ep-install/include/* ${TP_INSTALL_DIR}/include/zstd
-    cp -rf ./double-conversion_ep/src/double-conversion_ep/lib/libdouble-conversion.a $TP_INSTALL_DIR/lib64/libdouble-conversion.a
 }
 
 # s2
@@ -586,7 +539,7 @@ build_s2() {
     rm -rf CMakeCache.txt CMakeFiles/
     CXXFLAGS="-O3" \
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    $CMAKE_CMD -v -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+    $CMAKE_CMD -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
     -DBUILD_SHARED_LIBS=OFF \
     -DGFLAGS_ROOT_DIR="$TP_INSTALL_DIR/include" \
@@ -608,7 +561,6 @@ build_bitshuffle() {
     # once with the flag and once without, and use some linker tricks to
     # suffix the AVX2 symbols with '_avx2'.
     arches="default avx2"
-    MACHINE_TYPE=$(uname -m)
     # Becuase aarch64 don't support avx2, disable it.
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         arches="default"
@@ -637,7 +589,7 @@ build_bitshuffle() {
             objcopy --redefine-syms=renames.txt $tmp_obj $dst_obj
         else
             mv $tmp_obj $dst_obj
-        fi  
+        fi
         to_link="$to_link $dst_obj"
     done
     rm -f libbitshuffle.a
@@ -650,17 +602,22 @@ build_bitshuffle() {
 
 # croaring bitmap
 build_croaringbitmap() {
+    FORCE_AVX=ON
+    # avx2 is not supported by aarch64.
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        FORCE_AVX=FALSE
+    fi
     check_if_source_exist $CROARINGBITMAP_SOURCE
     cd $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE
     mkdir -p $BUILD_DIR && cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     CXXFLAGS="-O3" \
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    $CMAKE_CMD -v -DROARING_BUILD_STATIC=ON -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+    $CMAKE_CMD -DROARING_BUILD_STATIC=ON -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
     -DENABLE_ROARING_TESTS=OFF \
     -DROARING_DISABLE_NATIVE=ON \
-    -DFORCE_AVX=ON \
+    -DFORCE_AVX=$FORCE_AVX \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
     make -j$PARALLEL && make install
 }
@@ -680,7 +637,7 @@ build_orc() {
     -DZLIB_HOME=$TP_INSTALL_DIR\
     -DBUILD_LIBHDFSPP=OFF \
     -DBUILD_CPP_TESTS=OFF \
-    -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR 
+    -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR
 
     make -j$PARALLEL && make install
 }
@@ -693,21 +650,13 @@ build_cctz() {
     make -j$PARALLEL && PREFIX=${TP_INSTALL_DIR} make install
 }
 
-#benchmark
-build_benchmark() {
-    check_if_source_exist $BENCHMARK_SOURCE
-    cd $TP_SOURCE_DIR/$BENCHMARK_SOURCE
-    mkdir -p build && cd build
-    cmake -DCMAKE_BUILD_TYPE=Release -DBENCHMARK_DOWNLOAD_DEPENDENCIES=OFF -DBENCHMARK_ENABLE_GTEST_TESTS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../
-    make -j$PARALLEL && make install
-}
-
 #fmt
 build_fmt() {
     check_if_source_exist $FMT_SOURCE
     cd $TP_SOURCE_DIR/$FMT_SOURCE
     mkdir -p build && cd build
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../
+    $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
+            -DCMAKE_INSTALL_LIBDIR=lib64
     make -j$PARALLEL && make install
 }
 
@@ -748,21 +697,34 @@ build_jdk() {
 }
 
 # ragel
-# ragel-6.9+ is used by hypercan, so we build it first. 
+# ragel-6.9+ is used by hypercan, so we build it first.
 build_ragel() {
     check_if_source_exist $RAGEL_SOURCE
     cd $TP_SOURCE_DIR/$RAGEL_SOURCE
     ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static
-    make -j$PARALLEL && make install    
+    make -j$PARALLEL && make install
 }
 
 #hyperscan
 build_hyperscan() {
-    check_if_source_exist $HYPERSCAN_SOURCE
-    cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
+    HYPERSCAN_TARGET=$HYPERSCAN_SOURCE
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        HYPERSCAN_TARGET=$HYPERSCAN_AARCH64_SOURCE
+    fi
+    check_if_source_exist $HYPERSCAN_TARGET
+    cd $TP_SOURCE_DIR/$HYPERSCAN_TARGET
     export PATH=$TP_INSTALL_DIR/bin:$PATH
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
+    $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
           -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc  -DCMAKE_INSTALL_LIBDIR=lib
+    make -j$PARALLEL && make install
+}
+
+#mariadb-connector-c
+build_mariadb() {
+    check_if_source_exist $MARIADB_SOURCE
+    cd $TP_SOURCE_DIR/$MARIADB_SOURCE
+    mkdir -p build && cd build
+    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}
     make -j$PARALLEL && make install
 }
 
@@ -770,7 +732,6 @@ build_libevent
 build_zlib
 build_lz4
 build_bzip
-build_lzo2
 build_openssl
 build_boost # must before thrift
 build_protobuf
@@ -782,7 +743,6 @@ build_snappy
 build_gperftools
 build_curl
 build_re2
-build_mysql
 build_thrift
 build_leveldb
 build_brpc
@@ -794,13 +754,17 @@ build_s2
 build_bitshuffle
 build_croaringbitmap
 build_cctz
-build_benchmark
 build_fmt
 build_ryu
-build_breakpad
 build_hadoop
 build_jdk
 build_ragel
 build_hyperscan
+build_mariadb
+
+if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
+    build_breakpad
+fi
+
 echo "Finihsed to build all thirdparties"
 

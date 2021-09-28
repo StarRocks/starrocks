@@ -31,7 +31,7 @@ namespace starrocks {
 class EnginePublishVersionTask : public EngineTask {
 public:
     EnginePublishVersionTask(TPublishVersionRequest& publish_version_req, vector<TTabletId>* error_tablet_ids);
-    virtual ~EnginePublishVersionTask() override {}
+    ~EnginePublishVersionTask() override = default;
 
     OLAPStatus finish() override;
 

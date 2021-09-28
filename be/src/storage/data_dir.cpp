@@ -21,9 +21,7 @@
 
 #include "storage/data_dir.h"
 
-#include <ctype.h>
 #include <mntent.h>
-#include <stdio.h>
 #include <sys/file.h>
 #include <sys/statfs.h>
 #include <utime.h>
@@ -32,10 +30,13 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/trim.hpp>
+#include <cctype>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <set>
 #include <sstream>
+#include <utility>
 
 #include "env/env.h"
 #include "gen_cpp/version.h"
@@ -61,9 +62,9 @@ namespace starrocks {
 static const char* const kMtabPath = "/etc/mtab";
 static const char* const kTestFilePath = "/.testfile";
 
-DataDir::DataDir(const std::string& path, int64_t capacity_bytes, TStorageMedium::type storage_medium,
+DataDir::DataDir(std::string path, int64_t capacity_bytes, TStorageMedium::type storage_medium,
                  TabletManager* tablet_manager, TxnManager* txn_manager)
-        : _path(path),
+        : _path(std::move(path)),
           _capacity_bytes(capacity_bytes),
           _available_bytes(0),
           _disk_capacity_bytes(0),
@@ -119,9 +120,9 @@ Status DataDir::_init_cluster_id() {
     }
 
     // obtain lock of all cluster id paths
-    FILE* fp = NULL;
+    FILE* fp = nullptr;
     fp = fopen(cluster_id_path.c_str(), "r+b");
-    if (fp == NULL) {
+    if (fp == nullptr) {
         RETURN_IF_ERROR_WITH_WARN(
                 Status::IOError(strings::Substitute("failed to open cluster id file $0", cluster_id_path)),
                 "open file failed");
@@ -130,7 +131,7 @@ Status DataDir::_init_cluster_id() {
     int lock_res = flock(fp->_fileno, LOCK_EX | LOCK_NB);
     if (lock_res < 0) {
         fclose(fp);
-        fp = NULL;
+        fp = nullptr;
         RETURN_IF_ERROR_WITH_WARN(
                 Status::IOError(strings::Substitute("failed to flock cluster id file $0", cluster_id_path)),
                 "flock file failed");
@@ -156,7 +157,7 @@ Status DataDir::_read_cluster_id(const std::string& path, int32_t* cluster_id) {
     fs.close();
     int32_t tmp_cluster_id = -1;
     if (!cluster_id_str.empty()) {
-        size_t pos = cluster_id_str.find("-");
+        size_t pos = cluster_id_str.find('-');
         if (pos != std::string::npos) {
             tmp_cluster_id = std::stoi(cluster_id_str.substr(0, pos).c_str());
         } else {
@@ -214,17 +215,17 @@ Status DataDir::_init_file_system() {
     }
 
     FILE* mount_tablet = nullptr;
-    if ((mount_tablet = setmntent(kMtabPath, "r")) == NULL) {
+    if ((mount_tablet = setmntent(kMtabPath, "r")) == nullptr) {
         RETURN_IF_ERROR_WITH_WARN(
                 Status::IOError(strings::Substitute("setmntent file $0 failed, err=$1", _path, errno_to_string(errno))),
                 "setmntent file failed");
     }
 
     bool is_find = false;
-    struct mntent* mount_entry = NULL;
+    struct mntent* mount_entry = nullptr;
     struct mntent ent;
     char buf[1024];
-    while ((mount_entry = getmntent_r(mount_tablet, &ent, buf, sizeof(buf))) != NULL) {
+    while ((mount_entry = getmntent_r(mount_tablet, &ent, buf, sizeof(buf))) != nullptr) {
         if (strcmp(_path.c_str(), mount_entry->mnt_dir) == 0 || strcmp(_path.c_str(), mount_entry->mnt_fsname) == 0) {
             is_find = true;
             break;
@@ -339,7 +340,6 @@ void DataDir::health_check() {
 OLAPStatus DataDir::_read_and_write_test_file() {
     std::string test_file = _path + kTestFilePath;
     return read_write_test_file(test_file);
-    ;
 }
 
 OLAPStatus DataDir::get_shard(uint64_t* shard) {
@@ -423,7 +423,7 @@ OLAPStatus DataDir::load() {
     // if one rowset load failed, then the total data dir will not be loaded
     std::vector<RowsetMetaSharedPtr> dir_rowset_metas;
     LOG(INFO) << "begin loading rowset from meta";
-    auto load_rowset_func = [&dir_rowset_metas](TabletUid tablet_uid, RowsetId rowset_id,
+    auto load_rowset_func = [&dir_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
                                                 const std::string& meta_str) -> bool {
         RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
         bool parsed = rowset_meta->init(meta_str);
@@ -546,16 +546,6 @@ OLAPStatus DataDir::load() {
         }
     }
     return OLAP_SUCCESS;
-}
-
-void DataDir::add_pending_ids(const std::string& id) {
-    std::unique_lock wr_lock(_pending_path_mutex);
-    _pending_path_ids.insert(id);
-}
-
-void DataDir::remove_pending_ids(const std::string& id) {
-    std::unique_lock wr_lock(_pending_path_mutex);
-    _pending_path_ids.erase(id);
 }
 
 // gc unused tablet schemahash dir

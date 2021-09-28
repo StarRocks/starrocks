@@ -37,7 +37,6 @@
 #include "storage/field.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
-#include "storage/push_handler.h"
 #include "storage/snapshot_meta.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
@@ -48,7 +47,7 @@ namespace starrocks {
 
 class SnapshotManager {
 public:
-    ~SnapshotManager() {}
+    ~SnapshotManager() = default;
 
     Status make_snapshot(const TSnapshotRequest& request, std::string* snapshot_path);
 

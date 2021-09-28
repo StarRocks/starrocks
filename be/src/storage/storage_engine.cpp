@@ -22,15 +22,16 @@
 #include "storage/storage_engine.h"
 
 #include <rapidjson/document.h>
-#include <signal.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
+#include <csignal>
 #include <cstdio>
 #include <filesystem>
+#include <memory>
 #include <new>
 #include <queue>
 #include <random>
@@ -43,7 +44,6 @@
 #include "storage/fs/file_block_manager.h"
 #include "storage/lru_cache.h"
 #include "storage/memtable_flush_executor.h"
-#include "storage/push_handler.h"
 #include "storage/reader.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -130,6 +130,7 @@ StorageEngine::~StorageEngine() {
 
 void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     std::vector<std::thread> threads;
+    threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
         threads.emplace_back([data_dir] {
             auto res = data_dir->load();
@@ -162,7 +163,7 @@ Status StorageEngine::_open() {
     fs::BlockManagerOptions bm_opts;
     bm_opts.read_only = false;
     // |_block_manager| depend on |_file_cache|.
-    _block_manager.reset(new fs::FileBlockManager(Env::Default(), std::move(bm_opts)));
+    _block_manager = std::make_unique<fs::FileBlockManager>(Env::Default(), std::move(bm_opts));
 
     // |_update_manager| depend on |_block_manager|.
     // |fs::fs_util::block_manager| depends on ExecEnv's storage engine
@@ -173,7 +174,7 @@ Status StorageEngine::_open() {
     // `load_data_dirs` depend on |_update_manager|.
     load_data_dirs(dirs);
 
-    _memtable_flush_executor.reset(new MemTableFlushExecutor());
+    _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init memtable_flush_executor failed");
 
     return Status::OK();
@@ -393,7 +394,7 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
     //  TODO(lingbin): should it be a global util func?
     std::random_device rd;
     srand(rd());
-    std::random_shuffle(stores.begin(), stores.end());
+    std::shuffle(stores.begin(), stores.end(), std::mt19937(std::random_device()()));
     return stores;
 }
 
@@ -406,6 +407,16 @@ DataDir* StorageEngine::get_store(const std::string& path) {
     return it->second;
 }
 
+DataDir* StorageEngine::get_store(int64_t path_hash) {
+    std::lock_guard<std::mutex> l(_store_lock);
+    for (auto& it : _store_map) {
+        if (it.second->path_hash() == path_hash) {
+            return it.second;
+        }
+    }
+    return nullptr;
+}
+
 static bool too_many_disks_are_failed(uint32_t unused_num, uint32_t total_num) {
     return ((total_num == 0) || (unused_num * 100 / total_num > config::max_percentage_of_error_disk));
 }
@@ -415,18 +426,20 @@ bool StorageEngine::_delete_tablets_on_unused_root_path() {
     uint32_t unused_root_path_num = 0;
     uint32_t total_root_path_num = 0;
 
-    std::lock_guard<std::mutex> l(_store_lock);
-    if (_store_map.size() == 0) {
-        return false;
-    }
-
-    for (auto& it : _store_map) {
-        ++total_root_path_num;
-        if (it.second->is_used()) {
-            continue;
+    {
+        std::lock_guard<std::mutex> l(_store_lock);
+        if (_store_map.size() == 0) {
+            return false;
         }
-        it.second->clear_tablets(&tablet_info_vec);
-        ++unused_root_path_num;
+
+        for (auto& it : _store_map) {
+            ++total_root_path_num;
+            if (it.second->is_used()) {
+                continue;
+            }
+            it.second->clear_tablets(&tablet_info_vec);
+            ++unused_root_path_num;
+        }
     }
 
     if (too_many_disks_are_failed(unused_root_path_num, total_root_path_num)) {
@@ -586,7 +599,7 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     if (best_tablet == nullptr) {
         return Status::NotFound("there are no suitable tablets");
     }
-    if (best_tablet->updates() == NULL) {
+    if (best_tablet->updates() == nullptr) {
         return Status::InternalError("not an updatable tablet");
     }
     TRACE("found best tablet $0", best_tablet->tablet_id());
@@ -664,7 +677,7 @@ OLAPStatus StorageEngine::_start_trash_sweep(double* usage) {
 
 void StorageEngine::_clean_unused_rowset_metas() {
     std::vector<RowsetMetaSharedPtr> invalid_rowset_metas;
-    auto clean_rowset_func = [this, &invalid_rowset_metas](TabletUid tablet_uid, RowsetId rowset_id,
+    auto clean_rowset_func = [this, &invalid_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
                                                            const std::string& meta_str) -> bool {
         RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
         bool parsed = rowset_meta->init(meta_str);
@@ -780,7 +793,7 @@ void StorageEngine::start_delete_unused_rowset() {
     }
 }
 
-void StorageEngine::add_unused_rowset(RowsetSharedPtr rowset) {
+void StorageEngine::add_unused_rowset(const RowsetSharedPtr& rowset) {
     if (rowset == nullptr) {
         return;
     }
@@ -814,7 +827,7 @@ Status StorageEngine::create_tablet(const TCreateTabletReq& request) {
 
 OLAPStatus StorageEngine::obtain_shard_path(TStorageMedium::type storage_medium, std::string* shard_path,
                                             DataDir** store) {
-    if (shard_path == NULL) {
+    if (shard_path == nullptr) {
         LOG(WARNING) << "invalid output parameter which is null pointer.";
         return OLAP_ERR_CE_CMD_PARAMS_ERROR;
     }

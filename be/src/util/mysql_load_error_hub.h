@@ -26,6 +26,7 @@
 #include <queue>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include "gen_cpp/InternalService_types.h"
 #include "util/load_error_hub.h"
@@ -50,9 +51,13 @@ public:
         std::string db;
         std::string table;
 
-        MysqlInfo(const std::string& h, int32_t p, const std::string& u, const std::string& pwd, const std::string& d,
-                  const std::string& t)
-                : host(h), port(p), user(u), passwd(pwd), db(d), table(t) {}
+        MysqlInfo(std::string h, int32_t p, std::string u, std::string pwd, std::string d, std::string t)
+                : host(std::move(h)),
+                  port(p),
+                  user(std::move(u)),
+                  passwd(std::move(pwd)),
+                  db(std::move(d)),
+                  table(std::move(t)) {}
 
         MysqlInfo(const TMysqlErrorHubInfo& t_info)
                 : host(t_info.host),
@@ -65,15 +70,15 @@ public:
 
     MysqlLoadErrorHub(const TMysqlErrorHubInfo& info);
 
-    virtual ~MysqlLoadErrorHub();
+    ~MysqlLoadErrorHub() override;
 
-    virtual Status prepare();
+    Status prepare() override;
 
-    virtual Status export_error(const ErrorMsg& error_msg);
+    Status export_error(const ErrorMsg& error_msg) override;
 
-    virtual Status close();
+    Status close() override;
 
-    virtual std::string debug_string() const;
+    std::string debug_string() const override;
 
 private:
     Status open_mysql_conn(__StarRocksMysql** my_conn);

@@ -21,6 +21,8 @@
 
 #include "runtime/result_buffer_mgr.h"
 
+#include <memory>
+
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/types.pb.h"
 #include "runtime/buffer_control_block.h"
@@ -51,7 +53,8 @@ ResultBufferMgr::~ResultBufferMgr() {
 }
 
 Status ResultBufferMgr::init() {
-    _cancel_thread.reset(new boost::thread(std::bind<void>(std::mem_fn(&ResultBufferMgr::cancel_thread), this)));
+    _cancel_thread =
+            std::make_unique<boost::thread>(std::bind<void>(std::mem_fn(&ResultBufferMgr::cancel_thread), this));
     return Status::OK();
 }
 
@@ -87,7 +90,7 @@ std::shared_ptr<BufferControlBlock> ResultBufferMgr::find_control_block(const TU
 Status ResultBufferMgr::fetch_data(const TUniqueId& query_id, TFetchDataResult* result) {
     std::shared_ptr<BufferControlBlock> cb = find_control_block(query_id);
 
-    if (NULL == cb) {
+    if (nullptr == cb) {
         // the sender tear down its buffer block
         return Status::InternalError("no result for this query.");
     }
@@ -139,7 +142,7 @@ void ResultBufferMgr::cancel_thread() {
     while (!_is_stop) {
         // get query
         std::vector<TUniqueId> query_to_cancel;
-        time_t now_time = time(NULL);
+        time_t now_time = time(nullptr);
         {
             std::lock_guard<std::mutex> l(_timeout_lock);
             TimeoutMap::iterator end = _timeout_map.upper_bound(now_time + 1);

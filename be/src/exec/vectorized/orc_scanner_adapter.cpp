@@ -8,6 +8,7 @@
 #include <limits>
 #include <set>
 #include <unordered_map>
+#include <utility>
 
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
@@ -936,8 +937,8 @@ OrcScannerAdapter::OrcScannerAdapter(const std::vector<SlotDescriptor*>& src_slo
           _tzinfo(cctz::utc_time_zone()),
           _tzoffset_in_seconds(0),
           _drop_nanoseconds_in_datetime(false),
-          _broker_load_mode(false),
-          _strict_mode(false),
+          _broker_load_mode(true),
+          _strict_mode(true),
           _broker_load_filter(nullptr),
           _num_rows_filtered(0),
           _error_message_counter(0) {
@@ -1195,6 +1196,15 @@ Status OrcScannerAdapter::_init_cast_exprs() {
             _cast_exprs[column_pos] = slot;
             continue;
         }
+        // we don't support implicit cast column in query external hive table case.
+        // if we query external table, we heavily rely on type match to do optimization.
+        // For example, if we assume column A is a integer column, but it's stored as string in orc file
+        // then min/max of A is almost unusable. Think that there are values [10, 11, 10000, 100001]
+        // min/max will be "10" and "11", and we expect min/max is 10/100001
+        if (!_broker_load_mode) {
+            return Status::NotSupported(strings::Substitute("Type mismatch: orc $0 to native $1",
+                                                            orc_type.debug_string(), starrocks_type.debug_string()));
+        }
         Expr* cast = VectorizedCastExprFactory::from_type(orc_type, starrocks_type, slot, &_pool);
         if (cast == nullptr) {
             return Status::InternalError(strings::Substitute("Not support cast $0 to $1.", orc_type.debug_string(),
@@ -1337,7 +1347,7 @@ ChunkPtr OrcScannerAdapter::cast_chunk(ChunkPtr* chunk) {
 }
 
 void OrcScannerAdapter::set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter) {
-    _row_reader_options.rowReaderFilter(filter);
+    _row_reader_options.rowReaderFilter(std::move(filter));
 }
 
 static std::unordered_set<TExprOpcode::type> _supported_binary_ops = {
@@ -1755,8 +1765,8 @@ void OrcScannerAdapter::set_conjuncts_and_runtime_filters(const std::vector<Expr
         return Status::OK();                                   \
     } while (0)
 
-static Status decode_int_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats, ColumnPtr min_col,
-                                 ColumnPtr max_col) {
+static Status decode_int_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats,
+                                 const ColumnPtr& min_col, const ColumnPtr& max_col) {
     if (colStats.has_intstatistics() && colStats.intstatistics().has_minimum() &&
         colStats.intstatistics().has_maximum()) {
         const auto& stats = colStats.intstatistics();
@@ -1780,7 +1790,7 @@ static Status decode_int_min_max(PrimitiveType ptype, const orc::proto::ColumnSt
 }
 
 static Status decode_double_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats,
-                                    ColumnPtr min_col, ColumnPtr max_col) {
+                                    const ColumnPtr& min_col, const ColumnPtr& max_col) {
     if (colStats.has_doublestatistics() && colStats.doublestatistics().has_minimum() &&
         colStats.doublestatistics().has_maximum()) {
         const auto& stats = colStats.doublestatistics();
@@ -1798,7 +1808,7 @@ static Status decode_double_min_max(PrimitiveType ptype, const orc::proto::Colum
     return Status::NotFound("double column stats not found");
 }
 static Status decode_string_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats,
-                                    ColumnPtr min_col, ColumnPtr max_col) {
+                                    const ColumnPtr& min_col, const ColumnPtr& max_col) {
     if (colStats.has_stringstatistics() && colStats.stringstatistics().has_minimum() &&
         colStats.stringstatistics().has_maximum()) {
         const auto& stats = colStats.stringstatistics();
@@ -1816,8 +1826,8 @@ static Status decode_string_min_max(PrimitiveType ptype, const orc::proto::Colum
     return Status::NotFound("string column stats not found");
 }
 
-static Status decode_date_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats, ColumnPtr min_col,
-                                  ColumnPtr max_col) {
+static Status decode_date_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats,
+                                  const ColumnPtr& min_col, const ColumnPtr& max_col) {
     if (colStats.has_datestatistics() && colStats.datestatistics().has_minimum() &&
         colStats.datestatistics().has_maximum()) {
         const auto& stats = colStats.datestatistics();
@@ -1833,7 +1843,7 @@ static Status decode_date_min_max(PrimitiveType ptype, const orc::proto::ColumnS
 // but timestamp column vector batch stores seconds since unix epoch time.
 // https://orc.apache.org/specification/ORCv1/
 static Status decode_datetime_min_max(PrimitiveType ptype, const orc::proto::ColumnStatistics& colStats,
-                                      ColumnPtr min_col, ColumnPtr max_col) {
+                                      const ColumnPtr& min_col, const ColumnPtr& max_col) {
     if (colStats.has_timestampstatistics() && colStats.timestampstatistics().has_minimumutc() &&
         colStats.timestampstatistics().has_maximumutc()) {
         const auto& stats = colStats.timestampstatistics();

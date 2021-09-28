@@ -117,7 +117,7 @@ public class AggTableTest extends PlanTestBase {
     @Test
     public void testSingleAgg16() throws Exception {
         String sql = getFragmentPlan("select SUM(v3) from test_agg, t1 group by k1");
-        assertTestAggOFF(sql, "Has Join");
+        assertTestAggOFF(sql, "Has can not pre-aggregation Join");
     }
 
     @Test

@@ -34,7 +34,7 @@ class ChecksumAction : public HttpHandler {
 public:
     explicit ChecksumAction(ExecEnv* exec_env);
 
-    virtual ~ChecksumAction() {}
+    ~ChecksumAction() override = default;
 
     void handle(HttpRequest* req) override;
 

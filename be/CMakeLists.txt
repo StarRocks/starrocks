@@ -68,7 +68,6 @@ else()
 endif()
 message(STATUS "make test: ${MAKE_TEST}")
 
-option(WITH_MYSQL "Support access MySQL" ON)
 option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
 # Check gcc
@@ -118,15 +117,16 @@ endif()
 # Set Boost
 set(Boost_DEBUG FALSE)
 set(Boost_USE_MULTITHREADED ON)
+set(Boost_NO_BOOST_CMAKE ON)
 set(BOOST_ROOT ${THIRDPARTY_DIR})
 # boost suppress warning is supported on cmake 3.20
 # https://cmake.org/cmake/help/latest/module/FindBoost.html
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 
 if (NOT APPLE)
-    find_package(Boost 1.55.0 REQUIRED COMPONENTS thread regex filesystem system date_time program_options)
+    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex filesystem system date_time program_options)
 else()
-    find_package(Boost 1.55.0 COMPONENTS thread regex filesystem system date_time program_options)
+    find_package(Boost 1.75.0 COMPONENTS thread regex filesystem system date_time program_options)
 endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
@@ -178,10 +178,8 @@ set_target_properties(thrift PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 add_library(thriftnb STATIC IMPORTED)
 set_target_properties(thriftnb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libthriftnb.a)
 
-if (WITH_MYSQL)
-    add_library(mysql STATIC IMPORTED)
-    set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libmysqlclient.a)
-endif()
+add_library(mysql STATIC IMPORTED)
+set_target_properties(mysql PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/mariadb/libmariadbclient.a)
 
 if (WITH_HDFS)
     add_library(hdfs STATIC IMPORTED)
@@ -217,9 +215,6 @@ set_target_properties(zstd PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/
 
 add_library(arrow STATIC IMPORTED)
 set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libarrow.a)
-
-add_library(double-conversion STATIC IMPORTED)
-set_target_properties(double-conversion PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libdouble-conversion.a)
 
 add_library(parquet STATIC IMPORTED)
 set_target_properties(parquet PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libparquet.a)
@@ -260,8 +255,11 @@ set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/l
 add_library(ryu STATIC IMPORTED)
 set_target_properties(ryu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libryu.a)
 
-add_library(breakpad STATIC IMPORTED)
-set_target_properties(breakpad PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbreakpad_client.a)
+# Disable minidump on aarch64, hence breakpad is not needed.
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    add_library(breakpad STATIC IMPORTED)
+    set_target_properties(breakpad PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbreakpad_client.a)
+endif()
 
 add_library(hyperscan STATIC IMPORTED)
 set_target_properties(hyperscan PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libhs.a)
@@ -309,16 +307,17 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 endif()
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -msse4.2 -mavx2")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -msse4.2")
+    if (USE_AVX2)
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx2")
+    endif()
+elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc")
 endif()
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS}  -Wno-attributes -DS2_USE_GFLAGS -DS2_USE_GLOG")
 
 if (WITH_HDFS)
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_WITH_HDFS")
-endif()
-
-if (WITH_MYSQL)
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DSTARROCKS_WITH_MYSQL")
 endif()
 
 if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER 7.0)
@@ -404,8 +403,12 @@ include_directories(
     ${GPERFTOOLS_HOME}/include
     ${THIRDPARTY_DIR}/include/thrift/
     ${THIRDPARTY_DIR}/include/event/
-    ${THIRDPARTY_DIR}/include/breakpad/
 )
+
+
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    include_directories(${THIRDPARTY_DIR}/include/breakpad/)
+endif()
 
 set(WL_START_GROUP "-Wl,--start-group")
 set(WL_END_GROUP "-Wl,--end-group")
@@ -438,6 +441,17 @@ set(STARROCKS_LINK_LIBS
     ${WL_END_GROUP}
 )
 
+set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
+    mysql
+)
+
+if (WITH_HDFS)
+    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
+        hdfs
+        jvm
+        )
+endif()
+
 # Set thirdparty libraries
 set(STARROCKS_DEPENDENCIES
     ${STARROCKS_DEPENDENCIES}
@@ -466,7 +480,6 @@ set(STARROCKS_DEPENDENCIES
     leveldb
     bitshuffle
     roaring
-    double-conversion
     jemalloc
     brotlicommon
     brotlidec
@@ -478,22 +491,15 @@ set(STARROCKS_DEPENDENCIES
     cctz
     fmt
     ryu
-    breakpad
     hyperscan
     ${WL_END_GROUP}
 )
 
-if (WITH_MYSQL)
-    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-        mysql
-        )
-endif()
-
-if (WITH_HDFS)
-    set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
-        hdfs
-        jvm
-        )
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
+    set(STARROCKS_DEPENDENCIES
+        ${STARROCKS_DEPENDENCIES}
+        breakpad
+    )
 endif()
 
 # Add all external dependencies. They should come after the starrocks libs.
@@ -504,14 +510,8 @@ set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     -static-libgcc
 )
 
-if ("${CMAKE_BUILD_TYPE}" STREQUAL "BCC")
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-        -Wl,--dynamic-linker=/lib64/ld-linux-x86-64.so.2
-    )
-endif()
-
 # Add sanitize static link flags or tcmalloc
-if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE" OR "${CMAKE_BUILD_TYPE}" STREQUAL "BCC")
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RELEASE")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} tcmalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
@@ -546,8 +546,7 @@ set (TEST_LINK_LIBS ${STARROCKS_LINK_LIBS}
 set(BUILD_SHARED_LIBS OFF)
 
 if (${MAKE_TEST} STREQUAL "ON")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fprofile-arcs -ftest-coverage -DGTEST_USE_OWN_TR1_TUPLE=0")
-    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage -lgcov")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGTEST_USE_OWN_TR1_TUPLE=0")
     add_definitions(-DBE_TEST)
 else()
     # output *.a, *.so, *.dylib to output/tmp
@@ -648,4 +647,5 @@ install(FILES
 install(DIRECTORY
     ${BASE_DIR}/../webroot/be/
     DESTINATION ${OUTPUT_DIR}/www)
+
 

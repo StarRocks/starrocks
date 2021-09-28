@@ -1,23 +1,4 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/exprs/agg/maxmin.h
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
 #pragma once
 
@@ -28,6 +9,7 @@
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
+#include "util/raw_container.h"
 
 namespace starrocks::vectorized {
 
@@ -80,7 +62,7 @@ struct MaxAggregateData<TYPE_DATE, guard::Guard> {
 template <PrimitiveType PT>
 struct MaxAggregateData<PT, BinaryPTGuard<PT>> {
     int32_t size = -1;
-    Buffer<uint8_t> buffer;
+    raw::RawVector<uint8_t> buffer;
 
     bool has_value() const { return buffer.size() > 0; }
 
@@ -169,7 +151,6 @@ template <PrimitiveType PT>
 struct MaxElement<PT, MaxAggregateData<PT>, BinaryPTGuard<PT>> {
     void operator()(MaxAggregateData<PT>& state, const Slice& right) const {
         if (!state.has_value() || state.slice().compare(right) < 0) {
-            // TODO(kks): resize don't initialize
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
             state.size = right.size;
@@ -181,7 +162,6 @@ template <PrimitiveType PT>
 struct MinElement<PT, MinAggregateData<PT>, BinaryPTGuard<PT>> {
     void operator()(MinAggregateData<PT>& state, const Slice& right) const {
         if (!state.has_value() || state.slice().compare(right) > 0) {
-            // TODO(kks): resize don't initialize
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
             state.size = right.size;
@@ -227,7 +207,7 @@ public:
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
-        *dst = std::move(src[0]);
+        *dst = src[0];
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
@@ -235,7 +215,7 @@ public:
         down_cast<InputColumnType*>(to)->append(this->data(state).result);
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
         InputColumnType* column = down_cast<InputColumnType*>(dst);
         for (size_t i = start; i < end; ++i) {
@@ -281,7 +261,7 @@ public:
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
-        *dst = std::move(src[0]);
+        *dst = src[0];
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
@@ -290,7 +270,7 @@ public:
         column->append(this->data(state).slice());
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
         BinaryColumn* column = down_cast<BinaryColumn*>(dst);
         for (size_t i = start; i < end; ++i) {

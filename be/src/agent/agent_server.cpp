@@ -96,7 +96,7 @@ AgentServer::AgentServer(ExecEnv* exec_env, const TMasterInfo& master_info)
 #undef CREATE_AND_START_POOL
 }
 
-AgentServer::~AgentServer() {}
+AgentServer::~AgentServer() = default;
 
 // TODO(lingbin): each task in the batch may have it own status or FE must check and
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.
@@ -110,7 +110,7 @@ void AgentServer::submit_tasks(TAgentResult& agent_result, const std::vector<TAg
         return;
     }
 
-    for (auto task : tasks) {
+    for (const auto& task : tasks) {
         VLOG_RPC << "submit one task: " << apache::thrift::ThriftDebugString(task).c_str();
         TTaskType::type task_type = task.task_type;
         int64_t signature = task.signature;

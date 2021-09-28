@@ -37,7 +37,7 @@ class MonitorAction : public HttpHandler {
 public:
     MonitorAction();
 
-    virtual ~MonitorAction() {}
+    ~MonitorAction() override = default;
 
     void register_module(const std::string& name, RestMonitorIface* module);
 

@@ -7,109 +7,131 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.PartitionNames;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.sql.optimizer.base.DistributionSpec;
-import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.catalog.Table;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public final class LogicalOlapScanOperator extends LogicalScanOperator {
-    private long selectedIndexId;
-    private Collection<Long> selectedPartitionId;
-    private Collection<Long> selectedTabletId;
-
-    private PartitionNames partitionNames;
-    private List<Long> hintsTabletIds;
-
-    private HashDistributionSpec hashDistributionSpec;
+    private final HashDistributionSpec hashDistributionSpec;
+    private final long selectedIndexId;
+    private final List<Long> selectedPartitionId;
+    private final PartitionNames partitionNames;
+    private final List<Long> selectedTabletId;
+    private final List<Long> hintsTabletIds;
 
     // Only for UT
-    public LogicalOlapScanOperator(OlapTable table) {
-        super(OperatorType.LOGICAL_OLAP_SCAN, table, Maps.newHashMap());
-        selectedPartitionId = Lists.newArrayList();
-        selectedIndexId = table.getBaseIndexId();
-        selectedTabletId = Lists.newArrayList();
+    public LogicalOlapScanOperator(Table table) {
+        this(table, Lists.newArrayList(), Maps.newHashMap(), Maps.newHashMap(), null, -1, null);
     }
 
-    public LogicalOlapScanOperator(OlapTable table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        super(OperatorType.LOGICAL_OLAP_SCAN, table, colRefToColumnMetaMap);
-        selectedPartitionId = Lists.newArrayList();
-        selectedIndexId = table.getBaseIndexId();
-        selectedTabletId = Lists.newArrayList();
-
-        DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
-        Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
-        HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-        List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
-        List<Integer> hashDistributeColumns = new ArrayList<>();
-        for (Column distributedColumn : distributedColumns) {
-            hashDistributeColumns.add(getColumnReference(distributedColumn).getId());
-        }
-
-        HashDistributionDesc leftHashDesc =
-                new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
-        hashDistributionSpec = DistributionSpec.createHashDistributionSpec(leftHashDesc);
+    public LogicalOlapScanOperator(
+            Table table,
+            List<ColumnRefOperator> outputColumns,
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+            HashDistributionSpec hashDistributionSpec,
+            long limit,
+            ScalarOperator predicate) {
+        this(table, outputColumns, colRefToColumnMetaMap, columnMetaToColRefMap, hashDistributionSpec, limit, predicate,
+                ((OlapTable) table).getBaseIndexId(),
+                null,
+                null,
+                Lists.newArrayList(),
+                Lists.newArrayList());
     }
 
-    public OlapTable getOlapTable() {
-        return (OlapTable) table;
-    }
+    public LogicalOlapScanOperator(
+            Table table,
+            List<ColumnRefOperator> outputColumns,
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+            HashDistributionSpec hashDistributionSpec,
+            long limit,
+            ScalarOperator predicate,
+            long selectedIndexId,
+            List<Long> selectedPartitionId,
+            PartitionNames partitionNames,
+            List<Long> selectedTabletId,
+            List<Long> hintsTabletIds
+    ) {
+        super(OperatorType.LOGICAL_OLAP_SCAN, table, outputColumns,
+                colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate);
 
-    public Collection<Long> getSelectedPartitionId() {
-        return selectedPartitionId;
-    }
-
-    public void setSelectedPartitionId(Collection<Long> selectedPartitionId) {
-        this.selectedPartitionId = selectedPartitionId;
-    }
-
-    public List<Long> getHintsTabletIds() {
-        return hintsTabletIds;
-    }
-
-    public void setHintsTabletIds(List<Long> hintsTabletIds) {
-        this.hintsTabletIds = hintsTabletIds;
-    }
-
-    public PartitionNames getPartitionNames() {
-        return partitionNames;
-    }
-
-    public void setPartitionNames(PartitionNames partitionNames) {
-        this.partitionNames = partitionNames;
-    }
-
-    public long getSelectedIndexId() {
-        return selectedIndexId;
-    }
-
-    public void setSelectedIndexId(long selectedIndexId) {
+        Preconditions.checkState(table instanceof OlapTable);
+        this.hashDistributionSpec = hashDistributionSpec;
         this.selectedIndexId = selectedIndexId;
-    }
-
-    public Collection<Long> getSelectedTabletId() {
-        return selectedTabletId;
-    }
-
-    public void setSelectedTabletId(List<Long> selectedTabletId) {
+        this.selectedPartitionId = selectedPartitionId;
+        this.partitionNames = partitionNames;
         this.selectedTabletId = selectedTabletId;
+        this.hintsTabletIds = hintsTabletIds;
     }
 
     public HashDistributionSpec getDistributionSpec() {
         return hashDistributionSpec;
     }
 
+    public long getSelectedIndexId() {
+        return selectedIndexId;
+    }
+
+    public List<Long> getSelectedPartitionId() {
+        return selectedPartitionId;
+    }
+
+    public PartitionNames getPartitionNames() {
+        return partitionNames;
+    }
+
+    public List<Long> getSelectedTabletId() {
+        return selectedTabletId;
+    }
+
+    public List<Long> getHintsTabletIds() {
+        return hintsTabletIds;
+    }
+
+    public boolean canDoReplicatedJoin() {
+        return Utils.canDoReplicatedJoin((OlapTable) table, selectedIndexId, selectedPartitionId, selectedTabletId);
+    }
+
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalOlapScan(this, context);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        LogicalOlapScanOperator that = (LogicalOlapScanOperator) o;
+        return selectedIndexId == that.selectedIndexId &&
+                Objects.equals(hashDistributionSpec, that.hashDistributionSpec) &&
+                Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
+                Objects.equals(partitionNames, that.partitionNames) &&
+                Objects.equals(selectedTabletId, that.selectedTabletId) &&
+                Objects.equals(hintsTabletIds, that.hintsTabletIds);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), hashDistributionSpec, selectedIndexId, selectedPartitionId,
+                partitionNames,
+                selectedTabletId, hintsTabletIds);
     }
 }

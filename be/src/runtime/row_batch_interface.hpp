@@ -26,7 +26,7 @@ namespace starrocks {
 
 class RowBatchInterface {
 public:
-    virtual ~RowBatchInterface() {}
+    virtual ~RowBatchInterface() = default;
 };
 
 }

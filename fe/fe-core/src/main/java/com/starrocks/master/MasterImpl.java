@@ -22,6 +22,8 @@
 package com.starrocks.master;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJobV2.JobType;
 import com.starrocks.alter.MaterializedViewHandler;
@@ -29,22 +31,36 @@ import com.starrocks.alter.RollupJob;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SchemaChangeJob;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.UserException;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
@@ -61,73 +77,52 @@ import com.starrocks.task.SchemaChangeTask;
 import com.starrocks.task.SnapshotTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.task.UploadTask;
-import com.starrocks.thrift.TBackend;
-import com.starrocks.thrift.TBackendMeta;
-import com.starrocks.thrift.TFetchResourceResult;
-import com.starrocks.thrift.TFinishTaskRequest;
-import com.starrocks.thrift.TMasterResult;
-import com.starrocks.thrift.TPushType;
-import com.starrocks.thrift.TReportRequest;
-import com.starrocks.thrift.TStatus;
-import com.starrocks.thrift.TStatusCode;
-import com.starrocks.thrift.TTabletInfo;
-import com.starrocks.thrift.TTaskType;
-import com.starrocks.thrift.TGetTableMetaRequest;
-import com.starrocks.thrift.TGetTableMetaResponse;
-import com.starrocks.thrift.TReplicaMeta;
-import com.starrocks.thrift.TTabletMeta;
-import com.starrocks.thrift.TIndexMeta;
-import com.starrocks.thrift.TIndexInfo;
-import com.starrocks.thrift.TSchemaMeta;
-import com.starrocks.thrift.TColumnDef;
-import com.starrocks.thrift.TColumnDesc;
-import com.starrocks.thrift.THashDistributionInfo;
-import com.starrocks.thrift.TRandomDistributionInfo;
-
-import com.starrocks.catalog.MaterializedIndex.IndexExtState;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
-import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.RandomDistributionInfo;
-import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Index;
-import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.thrift.TPartitionMeta;
-import com.starrocks.thrift.TPartitionInfo;
-import com.starrocks.thrift.TTableMeta;
-import com.starrocks.thrift.TDistributionDesc;
-import com.starrocks.thrift.TBeginRemoteTxnRequest;
-import com.starrocks.thrift.TBeginRemoteTxnResponse;
-import com.starrocks.thrift.TCommitRemoteTxnRequest;
-import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
+import com.starrocks.thrift.TBackend;
+import com.starrocks.thrift.TBackendMeta;
+import com.starrocks.thrift.TBeginRemoteTxnRequest;
+import com.starrocks.thrift.TBeginRemoteTxnResponse;
+import com.starrocks.thrift.TColumnDef;
+import com.starrocks.thrift.TColumnDesc;
+import com.starrocks.thrift.TCommitRemoteTxnRequest;
+import com.starrocks.thrift.TCommitRemoteTxnResponse;
+import com.starrocks.thrift.TDistributionDesc;
+import com.starrocks.thrift.TFetchResourceResult;
+import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TGetTableMetaRequest;
+import com.starrocks.thrift.TGetTableMetaResponse;
+import com.starrocks.thrift.THashDistributionInfo;
+import com.starrocks.thrift.TIndexInfo;
+import com.starrocks.thrift.TIndexMeta;
+import com.starrocks.thrift.TMasterResult;
+import com.starrocks.thrift.TPartitionInfo;
+import com.starrocks.thrift.TPartitionMeta;
+import com.starrocks.thrift.TPushType;
+import com.starrocks.thrift.TRandomDistributionInfo;
+import com.starrocks.thrift.TReplicaMeta;
+import com.starrocks.thrift.TReportRequest;
+import com.starrocks.thrift.TSchemaMeta;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTableMeta;
+import com.starrocks.thrift.TTabletInfo;
+import com.starrocks.thrift.TTabletMeta;
+import com.starrocks.thrift.TTaskType;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TransactionState.LoadJobSourceType;
+import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
-import com.starrocks.transaction.TabletCommitInfo;
-import com.starrocks.common.UserException;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
-
-import com.starrocks.transaction.TransactionState.TxnCoordinator;
-import com.starrocks.transaction.TransactionState.TxnSourceType;
-import com.starrocks.transaction.TransactionState.LoadJobSourceType;
-
-import com.starrocks.service.FrontendOptions;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-
-import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 
 public class MasterImpl {
     private static final Logger LOG = LogManager.getLogger(MasterImpl.class);
@@ -180,7 +175,9 @@ public class MasterImpl {
                 errorMsgs.add(errMsg);
                 tStatus.setError_msgs(errorMsgs);
             }
-            return result;
+            if (taskType != TTaskType.STORAGE_MEDIUM_MIGRATE) {
+                return result;
+            }
         } else {
             if (taskStatus.getStatus_code() != TStatusCode.OK) {
                 task.failed();
@@ -236,6 +233,9 @@ public class MasterImpl {
                     break;
                 case CLONE:
                     finishClone(task, request);
+                    break;
+                case STORAGE_MEDIUM_MIGRATE:
+                    finishStorageMigration(backendId, request);
                     break;
                 case CHECK_CONSISTENCY:
                     finishConsistenctCheck(task, request);
@@ -304,7 +304,7 @@ public class MasterImpl {
                     replica.setPathHash(request.getFinish_tablet_infos().get(0).getPath_hash());
 
                     if (createReplicaTask.isRecoverTask()) {
-                        /**
+                        /*
                          * This create replica task may be generated by recovery(See comment of Config.recover_with_empty_tablet)
                          * So we set replica back to good.
                          */
@@ -803,6 +803,46 @@ public class MasterImpl {
         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.CLONE, task.getSignature());
     }
 
+    private void finishStorageMigration(long backendId, TFinishTaskRequest request) {
+        // check if task success
+        if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
+            LOG.warn("tablet migrate failed. signature: {}, error msg: {}", request.getSignature(),
+                    request.getTask_status().error_msgs);
+            return;
+        }
+
+        // check tablet info is set
+        if (!request.isSetFinish_tablet_infos() || request.getFinish_tablet_infos().isEmpty()) {
+            LOG.warn("migration finish tablet infos not set. signature: {}", request.getSignature());
+            return;
+        }
+
+        TTabletInfo reportedTablet = request.getFinish_tablet_infos().get(0);
+        long tabletId = reportedTablet.getTablet_id();
+        TabletMeta tabletMeta = Catalog.getCurrentInvertedIndex().getTabletMeta(tabletId);
+        if (tabletMeta == null) {
+            LOG.warn("tablet meta does not exist. tablet id: {}", tabletId);
+            return;
+        }
+
+        long dbId = tabletMeta.getDbId();
+        Database db = Catalog.getCurrentCatalog().getDb(dbId);
+        if (db == null) {
+            LOG.warn("db does not exist. db id: {}", dbId);
+            return;
+        }
+
+        db.writeLock();
+        try {
+            // local migration just set path hash
+            Replica replica = Catalog.getCurrentInvertedIndex().getReplica(tabletId, backendId);
+            Preconditions.checkArgument(reportedTablet.isSetPath_hash());
+            replica.setPathHash(reportedTablet.getPath_hash());
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
     private void finishConsistenctCheck(AgentTask task, TFinishTaskRequest request) {
         CheckConsistencyTask checkConsistencyTask = (CheckConsistencyTask) task;
 
@@ -938,7 +978,7 @@ public class MasterImpl {
             distributionDesc.setDistribution_type(distributionInfo.getType().name());
             if (distributionInfo.getType() == DistributionInfoType.HASH) {
                 THashDistributionInfo tHashDistributionInfo = new THashDistributionInfo();
-                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo)distributionInfo;
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
                 tHashDistributionInfo.setBucket_num(hashDistributionInfo.getBucketNum());
                 for (Column column : hashDistributionInfo.getDistributionColumns()) {
                     tHashDistributionInfo.addToDistribution_columns(column.getName());
@@ -946,7 +986,7 @@ public class MasterImpl {
                 distributionDesc.setHash_distribution(tHashDistributionInfo);
             } else {
                 TRandomDistributionInfo tRandomDistributionInfo = new TRandomDistributionInfo();
-                RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo)distributionInfo;
+                RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo) distributionInfo;
                 tRandomDistributionInfo.setBucket_num(randomDistributionInfo.getBucketNum());
                 distributionDesc.setRandom_distribution(tRandomDistributionInfo);
             }
@@ -1068,7 +1108,8 @@ public class MasterImpl {
             }
 
             List<TBackendMeta> backends = new ArrayList<>();
-            for (Backend backend : Catalog.getCurrentCatalog().getCurrentSystemInfo().getClusterBackends(db.getClusterName())) {
+            for (Backend backend : Catalog.getCurrentCatalog().getCurrentSystemInfo()
+                    .getClusterBackends(db.getClusterName())) {
                 TBackendMeta backendMeta = new TBackendMeta();
                 backendMeta.setBackend_id(backend.getId());
                 backendMeta.setHost(backend.getHost());
@@ -1119,9 +1160,9 @@ public class MasterImpl {
         long txnId;
         try {
             txnId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
-                tableIds, request.getLabel(),
-                new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
+                    tableIds, request.getLabel(),
+                    new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                    LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
         } catch (Exception e) {
             LOG.info("begin remote txn error, label {}, msg {}", request.getLabel(), e.getStackTrace());
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
@@ -1158,9 +1199,9 @@ public class MasterImpl {
             // It will results as error like "call frontend service failed"
             timeoutMs = timeoutMs * 3 / 4;
             boolean ret = Catalog.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
-                            db, request.getTxn_id(),
-                            TabletCommitInfo.fromThrift(request.getCommit_infos()),
-                            timeoutMs, attachment);
+                    db, request.getTxn_id(),
+                    TabletCommitInfo.fromThrift(request.getCommit_infos()),
+                    timeoutMs, attachment);
             if (!ret) {
                 TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
                 status.setError_msgs(Lists.newArrayList("commit and publish txn failed"));
@@ -1193,7 +1234,7 @@ public class MasterImpl {
 
         try {
             Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
-                request.getDb_id(), request.getTxn_id(), request.getError_msg());
+                    request.getDb_id(), request.getTxn_id(), request.getError_msg());
         } catch (Exception e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));

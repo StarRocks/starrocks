@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/column_helper.h"
 #include "util/raw_container.h"
 
@@ -39,7 +41,7 @@ public:
     }
 
     ColumnBuilder(DataColumnPtr column, NullColumnPtr null_column, bool has_null)
-            : _column(column), _null_column(null_column), _has_null(has_null) {}
+            : _column(std::move(column)), _null_column(std::move(null_column)), _has_null(has_null) {}
     //do nothing ctor, members are initialized by its offsprings.
     explicit ColumnBuilder<Type>(void*) {}
 

@@ -10,7 +10,6 @@
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/expr.h"
-#include "exprs/in_predicate.h"
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
@@ -350,6 +349,17 @@ bool HashJoinNode::_has_null(const ColumnPtr& column) {
 Status HashJoinNode::_build(RuntimeState* state) {
     {
         SCOPED_TIMER(_build_conjunct_evaluate_timer);
+        // Currently, in order to implement simplicity, HashJoinNode uses BigChunk,
+        // Splice the Chunks from Scan on the right table into a big Chunk
+        // In some scenarios, such as when the left and right tables are selected incorrectly
+        // or when the large table is joined, the (BinaryColumn) in the Chunk exceeds the range of uint32_t,
+        // which will cause the output of wrong data.
+        // Currently, a defense needs to be added.
+        // After a better solution is available, the BigChunk mechanism can be removed.
+        if (_ht.get_build_chunk()->reach_capacity_limit()) {
+            return Status::InternalError("Total size of single column exceed the limit of hash join");
+        }
+
         for (auto& _build_expr_ctx : _build_expr_ctxs) {
             const TypeDescriptor& data_type = _build_expr_ctx->root()->type();
             ColumnPtr column_ptr = _build_expr_ctx->evaluate(_ht.get_build_chunk().get());

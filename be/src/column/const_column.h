@@ -28,7 +28,7 @@ public:
     }
 
     // Move assignment
-    ConstColumn& operator=(ConstColumn&& rhs) {
+    ConstColumn& operator=(ConstColumn&& rhs) noexcept {
         ConstColumn tmp(std::move(rhs));
         this->swap_column(tmp);
         return *this;
@@ -165,9 +165,9 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
-    void fvn_hash(uint32_t* hash, uint16_t from, uint16_t to) const override;
+    void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
-    void crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) const override;
+    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override { _data->put_mysql_row_buffer(buf, 0); }
 
@@ -216,6 +216,8 @@ public:
         ss << "CONST: " << _data->debug_item(0) << " Size : " << _size;
         return ss.str();
     }
+
+    bool reach_capacity_limit() const override { return _data->reach_capacity_limit(); }
 
 private:
     ColumnPtr _data;

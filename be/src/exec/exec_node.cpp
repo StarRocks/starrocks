@@ -29,29 +29,9 @@
 #include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "common/status.h"
-#include "exec/aggregation_node.h"
-#include "exec/analytic_eval_node.h"
-#include "exec/assert_num_rows_node.h"
-#include "exec/cross_join_node.h"
 #include "exec/empty_set_node.h"
-#include "exec/es_http_scan_node.h"
-#include "exec/except_node.h"
 #include "exec/exchange_node.h"
-#include "exec/file_scan_node.h"
-#include "exec/hash_join_node.h"
-#include "exec/intersect_node.h"
-#include "exec/merge_join_node.h"
-#include "exec/merge_node.h"
-#include "exec/mysql_scan_node.h"
-#include "exec/olap_scan_node.h"
-#include "exec/partitioned_aggregation_node.h"
-#include "exec/pipeline/pipeline_builder.h"
-#include "exec/repeat_node.h"
-#include "exec/schema_scan_node.h"
 #include "exec/select_node.h"
-#include "exec/spill_sort_node.h"
-#include "exec/topn_node.h"
-#include "exec/union_node.h"
 #include "exec/vectorized/adapter_node.h"
 #include "exec/vectorized/aggregate/aggregate_blocking_node.h"
 #include "exec/vectorized/aggregate/aggregate_streaming_node.h"
@@ -70,6 +50,7 @@
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/project_node.h"
 #include "exec/vectorized/repeat_node.h"
+#include "exec/vectorized/schema_scan_node.h"
 #include "exec/vectorized/table_function_node.h"
 #include "exec/vectorized/topn_node.h"
 #include "exec/vectorized/union_node.h"
@@ -118,9 +99,9 @@ bool ExecNode::RowBatchQueue::AddBatchWithTimeout(RowBatch* batch, int64_t timeo
 }
 
 RowBatch* ExecNode::RowBatchQueue::GetBatch() {
-    RowBatch* result = NULL;
+    RowBatch* result = nullptr;
     if (blocking_get(&result)) return result;
-    return NULL;
+    return nullptr;
 }
 
 int ExecNode::RowBatchQueue::Cleanup() {
@@ -152,15 +133,15 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _debug_action(TDebugAction::WAIT),
           _limit(tnode.limit),
           _num_rows_returned(0),
-          _rows_returned_counter(NULL),
-          _rows_returned_rate(NULL),
-          _memory_used_counter(NULL),
+          _rows_returned_counter(nullptr),
+          _rows_returned_rate(nullptr),
+          _memory_used_counter(nullptr),
           _use_vectorized(tnode.use_vectorized),
           _is_closed(false) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
 }
 
-ExecNode::~ExecNode() {}
+ExecNode::~ExecNode() = default;
 
 void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) {
     if (_type != TPlanNodeType::AGGREGATION_NODE) {
@@ -233,7 +214,7 @@ Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 Status ExecNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::PREPARE));
-    DCHECK(_runtime_profile.get() != NULL);
+    DCHECK(_runtime_profile.get() != nullptr);
     _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
     _rows_returned_rate = runtime_profile()->add_derived_counter(
             ROW_THROUGHPUT_COUNTER, TUnit::UNIT_PER_SECOND,
@@ -280,7 +261,7 @@ pipeline::OpFactories ExecNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 // if pre chunk is not nullptr and pre chunk size + cur chunk size <= 4096, merge the two chunk
 // if pre chunk is not nullptr and pre chunk size + cur chunk size > 4096, return pre chunk
 Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* eos, ChunkPtr& pre_output_chunk,
-                                    std::function<Status(RuntimeState*, ChunkPtr*, bool*)> specific_get_next) {
+                                    const std::function<Status(RuntimeState*, ChunkPtr*, bool*)>& specific_get_next) {
     size_t batch_size = state->batch_size();
 
     while (true) {
@@ -357,7 +338,7 @@ Status ExecNode::close(RuntimeState* state) {
     _is_closed = true;
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::CLOSE));
 
-    if (_rows_returned_counter != NULL) {
+    if (_rows_returned_counter != nullptr) {
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     }
 
@@ -409,12 +390,12 @@ void ExecNode::add_runtime_exec_option(const std::string& str) {
 Status ExecNode::create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan, const DescriptorTbl& descs,
                              ExecNode** root) {
     if (plan.nodes.size() == 0) {
-        *root = NULL;
+        *root = nullptr;
         return Status::OK();
     }
 
     int node_idx = 0;
-    RETURN_IF_ERROR(create_tree_helper(state, pool, plan.nodes, descs, NULL, &node_idx, root));
+    RETURN_IF_ERROR(create_tree_helper(state, pool, plan.nodes, descs, nullptr, &node_idx, root));
 
     if (node_idx + 1 != plan.nodes.size()) {
         // TODO: print thrift msg for diagnostic purposes.
@@ -434,11 +415,11 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
     const TPlanNode& tnode = tnodes[*node_idx];
 
     int num_children = tnodes[*node_idx].num_children;
-    ExecNode* node = NULL;
-    RETURN_IF_ERROR(create_node(state, pool, tnodes[*node_idx], descs, &node));
+    ExecNode* node = nullptr;
+    RETURN_IF_ERROR(create_vectorized_node(state, pool, tnodes[*node_idx], descs, &node));
 
     // assert(parent != NULL || (node_idx == 0 && root_expr != NULL));
-    if (parent != NULL) {
+    if (parent != nullptr) {
         parent->_children.push_back(node);
     } else {
         *root = node;
@@ -446,7 +427,7 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
 
     for (int i = 0; i < num_children; i++) {
         ++*node_idx;
-        RETURN_IF_ERROR(create_tree_helper(state, pool, tnodes, descs, node, node_idx, NULL));
+        RETURN_IF_ERROR(create_tree_helper(state, pool, tnodes, descs, node, node_idx, nullptr));
 
         // we are expecting a child, but have used all nodes
         // this means we have been given a bad tree and must fail
@@ -461,11 +442,11 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
     // build up tree of profiles; add children >0 first, so that when we print
     // the profile, child 0 is printed last (makes the output more readable)
     for (int i = 1; i < node->_children.size(); ++i) {
-        node->runtime_profile()->add_child(node->_children[i]->runtime_profile(), true, NULL);
+        node->runtime_profile()->add_child(node->_children[i]->runtime_profile(), true, nullptr);
     }
 
     if (!node->_children.empty()) {
-        node->runtime_profile()->add_child(node->_children[0]->runtime_profile(), true, NULL);
+        node->runtime_profile()->add_child(node->_children[0]->runtime_profile(), true, nullptr);
     }
 
     return Status::OK();
@@ -546,142 +527,17 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         return Status::InternalError("Don't support HDFS table, you should rebuild StarRocks with WITH_HDFS option ON");
 #endif
     case TPlanNodeType::MYSQL_SCAN_NODE:
-#ifdef STARROCKS_WITH_MYSQL
         *node = pool->add(new vectorized::MysqlScanNode(pool, tnode, descs));
         return Status::OK();
-#else
-        return Status::InternalError(
-                "Don't support MySQL table, you should rebuild StarRocks with WITH_MYSQL option ON");
-#endif
     case TPlanNodeType::ES_HTTP_SCAN_NODE:
         *node = pool->add(new vectorized::EsHttpScanNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::SCHEMA_SCAN_NODE:
-        *node = pool->add(new SchemaScanNode(pool, tnode, descs));
+        *node = pool->add(new vectorized::SchemaScanNode(pool, tnode, descs));
         return Status::OK();
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
     }
-}
-
-Status ExecNode::create_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs,
-                             ExecNode** node) {
-    std::stringstream error_msg;
-
-    VLOG(2) << "tnode:\n" << apache::thrift::ThriftDebugString(tnode);
-
-    if (tnode.use_vectorized) {
-        return create_vectorized_node(state, pool, tnode, descs, node);
-    }
-
-    switch (tnode.node_type) {
-    case TPlanNodeType::MYSQL_SCAN_NODE:
-#ifdef STARROCKS_WITH_MYSQL
-        *node = pool->add(new MysqlScanNode(pool, tnode, descs));
-        return Status::OK();
-#else
-        return Status::InternalError(
-                "Don't support MySQL table, you should rebuild StarRocks with WITH_MYSQL option ON");
-#endif
-
-    case TPlanNodeType::ES_HTTP_SCAN_NODE:
-        *node = pool->add(new EsHttpScanNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::SCHEMA_SCAN_NODE:
-        *node = pool->add(new SchemaScanNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::OLAP_SCAN_NODE:
-        *node = pool->add(new OlapScanNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::AGGREGATION_NODE:
-        if (config::enable_partitioned_aggregation) {
-            *node = pool->add(new PartitionedAggregationNode(pool, tnode, descs));
-        } else {
-            *node = pool->add(new AggregationNode(pool, tnode, descs));
-        }
-        return Status::OK();
-    case TPlanNodeType::HASH_JOIN_NODE:
-        *node = pool->add(new HashJoinNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::CROSS_JOIN_NODE:
-        *node = pool->add(new CrossJoinNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::MERGE_JOIN_NODE:
-        *node = pool->add(new MergeJoinNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::EMPTY_SET_NODE:
-        *node = pool->add(new EmptySetNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::EXCHANGE_NODE:
-        *node = pool->add(new ExchangeNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::SELECT_NODE:
-        *node = pool->add(new SelectNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::SORT_NODE:
-        if (tnode.sort_node.use_top_n) {
-            *node = pool->add(new TopNNode(pool, tnode, descs));
-        } else {
-            *node = pool->add(new SpillSortNode(pool, tnode, descs));
-        }
-
-        return Status::OK();
-    case TPlanNodeType::ANALYTIC_EVAL_NODE:
-        *node = pool->add(new AnalyticEvalNode(pool, tnode, descs));
-        break;
-
-    case TPlanNodeType::MERGE_NODE:
-        *node = pool->add(new MergeNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::UNION_NODE:
-        *node = pool->add(new UnionNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::INTERSECT_NODE:
-        *node = pool->add(new IntersectNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::EXCEPT_NODE:
-        *node = pool->add(new ExceptNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::FILE_SCAN_NODE:
-        *node = pool->add(new FileScanNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::REPEAT_NODE:
-        *node = pool->add(new RepeatNode(pool, tnode, descs));
-        return Status::OK();
-
-    case TPlanNodeType::ASSERT_NUM_ROWS_NODE:
-        *node = pool->add(new AssertNumRowsNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::ADAPTER_NODE:
-        *node = pool->add(new vectorized::AdapterNode(pool, tnode, descs));
-        return Status::OK();
-    default:
-        map<int, const char*>::const_iterator i = _TPlanNodeType_VALUES_TO_NAMES.find(tnode.node_type);
-        const char* str = "unknown node type";
-
-        if (i != _TPlanNodeType_VALUES_TO_NAMES.end()) {
-            str = i->second;
-        }
-
-        error_msg << str << " not implemented";
-        return Status::InternalError(error_msg.str());
-    }
-
-    return Status::OK();
 }
 
 void ExecNode::set_debug_options(int node_id, TExecNodePhase::type phase, TDebugAction::type action, ExecNode* root) {
@@ -872,30 +728,6 @@ bool ExecNode::_check_has_vectorized_scan_child() {
     }
 
     return false;
-}
-
-void ExecNode::try_do_aggregate_serde_improve() {
-    std::vector<ExecNode*> agg_node;
-    collect_nodes(TPlanNodeType::AGGREGATION_NODE, &agg_node);
-    if (agg_node.size() != 1) {
-        return;
-    }
-
-    if (agg_node[0]->_children.size() != 1) {
-        return;
-    }
-
-    if (agg_node[0]->_children[0]->type() != TPlanNodeType::OLAP_SCAN_NODE) {
-        return;
-    }
-
-    // Vector query engine don't support aggregate serde improve
-    if (agg_node[0]->_children[0]->_use_vectorized) {
-        return;
-    }
-
-    OlapScanNode* scan_node = down_cast<OlapScanNode*>(agg_node[0]->_children[0]);
-    scan_node->set_no_agg_finalize();
 }
 
 void ExecNode::init_runtime_profile(const std::string& name) {

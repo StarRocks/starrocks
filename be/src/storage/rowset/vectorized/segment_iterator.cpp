@@ -317,8 +317,6 @@ Status SegmentIterator::_init() {
         }
     }
 
-    RETURN_IF_ERROR(_segment->_load_index());
-
     _selection.resize(_opts.chunk_size);
     _selected_idx.resize(_opts.chunk_size);
     CurrentMemTracker::consume(_selection.capacity() * sizeof(_selection[0]));
@@ -405,6 +403,7 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
         return Status::OK();
     }
     DCHECK_EQ(0, _scan_range.span_size());
+    RETURN_IF_ERROR(_segment->_load_index());
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -682,13 +681,13 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
             need_switch_context = true;
         }
     } else if (_context->_next != nullptr && _context_switch_count < 3 &&
-               (chunk_start * 1000) <= total_read * _late_materialization_ratio) {
+               chunk_start * 1000 <= total_read * _late_materialization_ratio) {
         need_switch_context = true;
         _context_switch_count++;
     }
 
     // remove (logical) deleted rows.
-    if ((chunk->num_rows() > 0) && (chunk->delete_state() != DEL_NOT_SATISFIED) && !_opts.delete_predicates.empty()) {
+    if (chunk->num_rows() > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty()) {
         SCOPED_RAW_TIMER(&_opts.stats->del_filter_ns);
         size_t old_sz = chunk->num_rows();
         _opts.delete_predicates.evaluate(chunk, _selection.data());

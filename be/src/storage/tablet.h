@@ -64,12 +64,12 @@ using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
 
 class Tablet : public BaseTablet {
 public:
-    static TabletSharedPtr create_tablet_from_meta(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta,
+    static TabletSharedPtr create_tablet_from_meta(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta,
                                                    DataDir* data_dir = nullptr);
 
     Tablet(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta, DataDir* data_dir);
 
-    ~Tablet();
+    ~Tablet() override;
 
     OLAPStatus init();
     inline bool init_succeeded();
@@ -104,7 +104,7 @@ public:
     inline size_t field_index(const string& field_name) const;
 
     // operation in rowsets
-    OLAPStatus add_rowset(RowsetSharedPtr rowset, bool need_persist = true);
+    OLAPStatus add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
     void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete);
 
     // _rs_version_map and _inc_rs_version_map should be protected by _meta_lock
@@ -127,6 +127,7 @@ public:
     bool check_version_exist(const Version& version) const;
     void list_versions(std::vector<Version>* versions) const;
 
+    // REQUIRE: `obtain_header_rdlock()`ed
     OLAPStatus capture_consistent_rowsets(const Version& spec_version, vector<RowsetSharedPtr>* rowsets) const;
     OLAPStatus capture_rs_readers(const Version& spec_version, vector<RowsetReaderSharedPtr>* rs_readers) const;
     OLAPStatus capture_rs_readers(const vector<Version>& version_path, vector<RowsetReaderSharedPtr>* rs_readers) const;
@@ -170,6 +171,15 @@ public:
     inline std::mutex& get_cumulative_lock() { return _cumulative_lock; }
 
     inline std::shared_mutex& get_migration_lock() { return _migration_lock; }
+    // should use with migration lock.
+    bool is_migrating() const { return _is_migrating; }
+    // should use with migration lock.
+    void set_is_migrating(bool is_migrating) { _is_migrating = is_migrating; }
+
+    // check tablet is migrating or has been migrated.
+    // if tablet is migrating or has been migrated, return true.
+    // should use with migration lock.
+    static bool check_migrate(const TabletSharedPtr& tablet);
 
     // operation for compaction
     bool can_do_compaction();
@@ -225,13 +235,13 @@ public:
 
     void do_tablet_meta_checkpoint();
 
-    bool rowset_meta_is_useful(RowsetMetaSharedPtr rowset_meta);
+    bool rowset_meta_is_useful(const RowsetMetaSharedPtr& rowset_meta);
 
     void build_tablet_report_info(TTabletInfo* tablet_info);
 
-    void generate_tablet_meta_copy(TabletMetaSharedPtr new_tablet_meta) const;
+    void generate_tablet_meta_copy(const TabletMetaSharedPtr& new_tablet_meta) const;
     // caller should hold the _meta_lock before calling this method
-    void generate_tablet_meta_copy_unlocked(TabletMetaSharedPtr new_tablet_meta) const;
+    void generate_tablet_meta_copy_unlocked(const TabletMetaSharedPtr& new_tablet_meta) const;
 
     // return a json string to show the compaction status of this tablet
     void get_compaction_status(std::string* json_result);
@@ -270,7 +280,10 @@ private:
     std::mutex _ingest_lock;
     std::mutex _base_lock;
     std::mutex _cumulative_lock;
+
     std::shared_mutex _migration_lock;
+    // should use with migration lock.
+    std::atomic<bool> _is_migrating{false};
 
     // TODO(lingbin): There is a _meta_lock TabletMeta too, there should be a comment to
     // explain how these two locks work together.

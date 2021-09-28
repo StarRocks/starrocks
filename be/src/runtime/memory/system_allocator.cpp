@@ -21,9 +21,10 @@
 
 #include "runtime/memory/system_allocator.h"
 
-#include <stdlib.h>
-#include <string.h>
 #include <sys/mman.h>
+
+#include <cstdlib>
+#include <cstring>
 
 #include "common/config.h"
 #include "common/logging.h"

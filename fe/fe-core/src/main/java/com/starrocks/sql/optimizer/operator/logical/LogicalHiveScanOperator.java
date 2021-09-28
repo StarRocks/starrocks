@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -38,17 +39,33 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
     private final Map<ColumnRefOperator, Column> minMaxColumnRefMap = Maps.newHashMap();
     private final Set<String> partitionColumns = Sets.newHashSet();
 
-    public LogicalHiveScanOperator(Table table, Table.TableType tableType,
-                                   Map<ColumnRefOperator, Column> columnRefMap) {
-        super(OperatorType.LOGICAL_HIVE_SCAN, table, columnRefMap);
-        this.tableType = tableType;
+    public LogicalHiveScanOperator(Table table,
+                                   Table.TableType tableType,
+                                   List<ColumnRefOperator> outputColumns,
+                                   Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                   Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+                                   long limit,
+                                   ScalarOperator predicate) {
+        super(OperatorType.LOGICAL_HIVE_SCAN,
+                table,
+                outputColumns,
+                colRefToColumnMetaMap,
+                columnMetaToColRefMap,
+                limit,
+                predicate);
 
+        Preconditions.checkState(table instanceof HiveTable);
+        this.tableType = tableType;
         HiveTable hiveTable = (HiveTable) table;
         partitionColumns.addAll(hiveTable.getPartitionColumnNames());
     }
 
     public Table.TableType getTableType() {
         return tableType;
+    }
+
+    public Set<String> getPartitionColumns() {
+        return partitionColumns;
     }
 
     public Map<Long, PartitionKey> getIdToPartitionKey() {
@@ -69,10 +86,6 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
 
     public Collection<Long> getSelectedPartitionIds() {
         return selectedPartitionIds;
-    }
-
-    public Set<String> getPartitionColumns() {
-        return partitionColumns;
     }
 
     public void setSelectedPartitionIds(Collection<Long> selectedPartitionIds) {

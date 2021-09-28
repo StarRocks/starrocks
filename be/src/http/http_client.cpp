@@ -25,7 +25,7 @@
 
 namespace starrocks {
 
-HttpClient::HttpClient() {}
+HttpClient::HttpClient() = default;
 
 HttpClient::~HttpClient() {
     if (_curl != nullptr) {

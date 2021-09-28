@@ -15,15 +15,13 @@ public:
     ~AggregateBaseNode() override;
 
     Status prepare(RuntimeState* state) override;
-    // Only for compatibility
-    Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     Status close(RuntimeState* state) override;
     void push_down_join_runtime_filter(RuntimeState* state,
                                        vectorized::RuntimeFilterProbeCollector* collector) override;
 
 protected:
     const TPlanNode _tnode;
-    AggregatorPtr _aggregator;
+    AggregatorPtr _aggregator = nullptr;
     bool _child_eos = false;
 };
 

@@ -22,7 +22,7 @@
 #ifndef STARROCKS_BE_SRC_COMMON_UTIL_DEFAULT_PATH_HANDLERS_H
 #define STARROCKS_BE_SRC_COMMON_UTIL_DEFAULT_PATH_HANDLERS_H
 
-#include <stdio.h>
+#include <cstdio>
 
 namespace starrocks {
 

@@ -39,12 +39,17 @@ public class PruneHiveScanColumnRule extends TransformationRule {
                         .collect(Collectors.toSet());
         scanColumns.addAll(Utils.extractColumnRef(scanOperator.getPredicate()));
 
-        if (scanColumns.size() == 0 || scanOperator.getPartitionColumns().containsAll(scanColumns)) {
+        // make sure there is at least one materialized column in new output columns.
+        // if not, we have to choose one materialized column from scan operator output columns
+        // with the minimal cost.
+        if (scanColumns.size() == 0 || scanOperator.getPartitionColumns().containsAll(
+                scanColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()))) {
             List<ColumnRefOperator> outputColumns = new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet());
 
             int smallestIndex = -1;
             int smallestColumnLength = Integer.MAX_VALUE;
             for (int index = 0; index < outputColumns.size(); ++index) {
+                //Hive partition columns is not materialized column, so except partition columns
                 if (scanOperator.getPartitionColumns().contains(outputColumns.get(index).getName())) {
                     continue;
                 }
@@ -70,8 +75,25 @@ public class PruneHiveScanColumnRule extends TransformationRule {
         } else {
             Map<ColumnRefOperator, Column> newColumnRefMap = scanColumns.stream()
                     .collect(Collectors.toMap(identity(), scanOperator.getColRefToColumnMetaMap()::get));
-            scanOperator.setColRefToColumnMetaMap(newColumnRefMap);
-            return Lists.newArrayList(new OptExpression(scanOperator));
+
+            LogicalHiveScanOperator hiveScanOperator = new LogicalHiveScanOperator(
+                    scanOperator.getTable(),
+                    scanOperator.getTableType(),
+                    new ArrayList<>(scanColumns),
+                    newColumnRefMap,
+                    scanOperator.getColumnMetaToColRefMap(),
+                    scanOperator.getLimit(),
+                    scanOperator.getPredicate());
+
+            hiveScanOperator.getIdToPartitionKey().putAll(scanOperator.getIdToPartitionKey());
+            hiveScanOperator.setSelectedPartitionIds(scanOperator.getSelectedPartitionIds());
+            hiveScanOperator.getPartitionConjuncts().addAll(scanOperator.getPartitionConjuncts());
+            hiveScanOperator.getNoEvalPartitionConjuncts().addAll(scanOperator.getNoEvalPartitionConjuncts());
+            hiveScanOperator.getNonPartitionConjuncts().addAll(scanOperator.getNonPartitionConjuncts());
+            hiveScanOperator.getMinMaxConjuncts().addAll(scanOperator.getMinMaxConjuncts());
+            hiveScanOperator.getMinMaxColumnRefMap().putAll(scanOperator.getMinMaxColumnRefMap());
+
+            return Lists.newArrayList(new OptExpression(hiveScanOperator));
         }
     }
 }

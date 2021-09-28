@@ -21,6 +21,9 @@
 
 #include "runtime/plan_fragment_executor.h"
 
+#include <memory>
+#include <utility>
+
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "exec/data_sink.h"
@@ -44,9 +47,9 @@
 
 namespace starrocks {
 
-PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, const report_status_callback& report_status_cb)
+PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb)
         : _exec_env(exec_env),
-          _report_status_cb(report_status_cb),
+          _report_status_cb(std::move(report_status_cb)),
           _done(false),
           _prepared(false),
           _closed(false),
@@ -62,14 +65,13 @@ PlanFragmentExecutor::~PlanFragmentExecutor() {
 
 Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     const TPlanFragmentExecParams& params = request.params;
-    _is_vectorized = params.use_vectorized;
     _query_id = params.query_id;
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(_query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id)
               << " backend_num=" << request.backend_num;
 
-    _runtime_state.reset(new RuntimeState(request, request.query_options, request.query_globals, _exec_env));
+    _runtime_state = std::make_unique<RuntimeState>(request, request.query_options, request.query_globals, _exec_env);
 
     if (_is_vectorized) {
         _runtime_state->set_batch_size(config::vector_chunk_size);
@@ -126,7 +128,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     RETURN_IF_ERROR(_runtime_state->create_block_mgr());
 
     // set up desc tbl
-    DescriptorTbl* desc_tbl = NULL;
+    DescriptorTbl* desc_tbl = nullptr;
     DCHECK(request.__isset.desc_tbl);
     RETURN_IF_ERROR(DescriptorTbl::create(obj_pool(), request.desc_tbl, &desc_tbl));
     _runtime_state->set_desc_tbl(desc_tbl);
@@ -169,8 +171,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     VLOG(1) << "scan_nodes.size()=" << scan_nodes.size();
     VLOG(1) << "params.per_node_scan_ranges.size()=" << params.per_node_scan_ranges.size();
 
-    _plan->try_do_aggregate_serde_improve();
-
     for (int i = 0; i < scan_nodes.size(); ++i) {
         ScanNode* scan_node = down_cast<ScanNode*>(scan_nodes[i]);
         const std::vector<TScanRangeParams>& scan_ranges =
@@ -190,8 +190,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
         RuntimeProfile* sink_profile = _sink->profile();
 
-        if (sink_profile != NULL) {
-            profile()->add_child(sink_profile, true, NULL);
+        if (sink_profile != nullptr) {
+            profile()->add_child(sink_profile, true, nullptr);
         }
 
         _collect_query_statistics_with_every_batch = params.__isset.send_query_statistics_with_every_batch
@@ -199,21 +199,19 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
                                                              : false;
     } else {
         // _sink is set to NULL
-        _sink.reset(NULL);
+        _sink.reset(nullptr);
     }
 
     // set up profile counters
-    profile()->add_child(_plan->runtime_profile(), true, NULL);
+    profile()->add_child(_plan->runtime_profile(), true, nullptr);
     _rows_produced_counter = ADD_COUNTER(profile(), "RowsProduced", TUnit::UNIT);
 
-    _row_batch.reset(
-            new RowBatch(_plan->row_desc(), _runtime_state->batch_size(), _runtime_state->instance_mem_tracker()));
     VLOG(3) << "plan_root=\n" << _plan->debug_string();
     _chunk = std::make_shared<vectorized::Chunk>();
     _prepared = true;
 
     _query_statistics.reset(new QueryStatistics());
-    if (_sink.get() != NULL) {
+    if (_sink.get() != nullptr) {
         _sink->set_query_statistics(_query_statistics);
     }
 
@@ -228,14 +226,7 @@ Status PlanFragmentExecutor::open() {
     LOG(INFO) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
     CurrentThread::set_query_id(_runtime_state->query_id());
 
-    Status status = Status::OK();
-
-    if (_is_vectorized) {
-        status = _open_internal_vectorized();
-    } else {
-        status = open_internal();
-    }
-
+    Status status = _open_internal_vectorized();
     if (!status.ok() && !status.is_cancelled() && _runtime_state->log_has_space()) {
         LOG(WARNING) << "fail to open fragment, instance_id=" << print_id(_runtime_state->fragment_instance_id())
                      << ", status=" << status.to_string();
@@ -247,80 +238,6 @@ Status PlanFragmentExecutor::open() {
 
     update_status(status);
     return status;
-}
-
-Status PlanFragmentExecutor::open_internal() {
-    {
-        SCOPED_TIMER(profile()->total_time_counter());
-        RETURN_IF_ERROR(_plan->open(_runtime_state.get()));
-    }
-
-    if (_sink.get() == NULL) {
-        return Status::OK();
-    }
-    RETURN_IF_ERROR(_sink->open(runtime_state()));
-
-    // If there is a sink, do all the work of driving it here, so that
-    // when this returns the query has actually finished
-    RowBatch* batch = NULL;
-
-    while (true) {
-        RETURN_IF_ERROR(get_next_internal(&batch));
-
-        if (batch == NULL) {
-            break;
-        }
-
-        if (VLOG_ROW_IS_ON) {
-            VLOG_ROW << "open_internal: #rows=" << batch->num_rows() << " desc=" << row_desc().debug_string();
-
-            for (int i = 0; i < batch->num_rows(); ++i) {
-                TupleRow* row = batch->get_row(i);
-                VLOG_ROW << row->to_string(row_desc());
-            }
-        }
-
-        SCOPED_TIMER(profile()->total_time_counter());
-        // Collect this plan and sub plan statisticss, and send to parent plan.
-        if (_collect_query_statistics_with_every_batch) {
-            collect_query_statistics();
-        }
-        RETURN_IF_ERROR(_sink->send(runtime_state(), batch));
-    }
-
-    // Close the sink *before* stopping the report thread. Close may
-    // need to add some important information to the last report that
-    // gets sent. (e.g. table sinks record the files they have written
-    // to in this method)
-    // The coordinator report channel waits until all backends are
-    // either in error or have returned a status report with done =
-    // true, so tearing down any data stream state (a separate
-    // channel) in Close is safe.
-
-    // TODO: If this returns an error, the d'tor will call Close again. We should
-    // audit the sinks to check that this is ok, or change that behaviour.
-    Status close_status;
-    {
-        SCOPED_TIMER(profile()->total_time_counter());
-        collect_query_statistics();
-        Status status;
-        {
-            std::lock_guard<std::mutex> l(_status_lock);
-            status = _status;
-        }
-        close_status = _sink->close(runtime_state(), status);
-    }
-    update_status(close_status);
-
-    // Setting to NULL ensures that the d'tor won't double-close the sink.
-    _sink.reset(NULL);
-    _done = true;
-
-    release_thread_token();
-
-    send_report(true);
-
-    return close_status;
 }
 
 Status PlanFragmentExecutor::_open_internal_vectorized() {
@@ -429,22 +346,6 @@ void PlanFragmentExecutor::send_report(bool done) {
     _report_status_cb(status, profile(), done || !status.ok());
 }
 
-Status PlanFragmentExecutor::get_next(RowBatch** batch) {
-    VLOG_FILE << "GetNext(): instance_id=" << _runtime_state->fragment_instance_id();
-    Status status = get_next_internal(batch);
-    update_status(status);
-
-    if (_done) {
-        LOG(INFO) << "Finished executing fragment query_id=" << print_id(_query_id)
-                  << " instance_id=" << print_id(_runtime_state->fragment_instance_id());
-        // Query is done, return the thread token
-        release_thread_token();
-        send_report(true);
-    }
-
-    return status;
-}
-
 Status PlanFragmentExecutor::get_next(vectorized::ChunkPtr* chunk) {
     VLOG_FILE << "GetNext(): instance_id=" << _runtime_state->fragment_instance_id();
     Status status = _get_next_internal_vectorized(chunk);
@@ -459,29 +360,6 @@ Status PlanFragmentExecutor::get_next(vectorized::ChunkPtr* chunk) {
     }
 
     return status;
-}
-
-Status PlanFragmentExecutor::get_next_internal(RowBatch** batch) {
-    if (_done) {
-        *batch = NULL;
-        return Status::OK();
-    }
-
-    while (!_done) {
-        _row_batch->reset();
-        SCOPED_TIMER(profile()->total_time_counter());
-        RETURN_IF_ERROR(_plan->get_next(_runtime_state.get(), _row_batch.get(), &_done));
-
-        if (_row_batch->num_rows() > 0) {
-            COUNTER_UPDATE(_rows_produced_counter, _row_batch->num_rows());
-            *batch = _row_batch.get();
-            break;
-        }
-
-        *batch = NULL;
-    }
-
-    return Status::OK();
 }
 
 Status PlanFragmentExecutor::_get_next_internal_vectorized(vectorized::ChunkPtr* chunk) {
@@ -573,7 +451,6 @@ void PlanFragmentExecutor::close() {
         return;
     }
 
-    _row_batch.reset();
     _chunk.reset();
 
     if (_is_runtime_filter_merge_node) {

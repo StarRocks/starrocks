@@ -117,7 +117,7 @@ partitions=1/1
 rollup: orders
 tabletRatio=10/10
 tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
-cardinality=5675675
+cardinality=5675676
 avgRowSize=27.0
 numNodes=0
 use vectorized: true

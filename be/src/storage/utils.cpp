@@ -22,18 +22,18 @@
 #include "storage/utils.h"
 
 #include <dirent.h>
-#include <errno.h>
 #include <lz4/lz4.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <unistd.h>
 
 #include <boost/regex.hpp>
+#include <cerrno>
+#include <cstdarg>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <mutex>
 #include <string>
@@ -59,7 +59,7 @@ uint32_t olap_adler32(uint32_t adler, const char* buf, size_t len) {
 }
 
 OLAPStatus gen_timestamp_string(string* out_string) {
-    time_t now = time(NULL);
+    time_t now = time(nullptr);
     tm local_tm;
 
     if (localtime_r(&now, &local_tm) == nullptr) {
@@ -222,7 +222,7 @@ OLAPStatus read_write_test_file(const string& test_file_path) {
     }
     std::unique_ptr<char, decltype(&std::free)> read_buff(read_test_buff, &std::free);
     // generate random numbers
-    uint32_t rand_seed = static_cast<uint32_t>(time(NULL));
+    uint32_t rand_seed = static_cast<uint32_t>(time(nullptr));
     for (size_t i = 0; i < TEST_FILE_BUF_SIZE; ++i) {
         int32_t tmp_value = rand_r(&rand_seed);
         write_test_buff[i] = static_cast<char>(tmp_value);
@@ -299,7 +299,7 @@ OLAPStatus copy_dir(const string& src_dir, const string& dst_dir) {
     // Iterate through the source directory
     for (const auto& file : std::filesystem::directory_iterator(src_path)) {
         try {
-            std::filesystem::path current(file.path());
+            const std::filesystem::path& current(file.path());
             if (std::filesystem::is_directory(current)) {
                 // Found directory: Recursion
                 OLAPStatus res = OLAP_SUCCESS;
@@ -327,7 +327,7 @@ const char* Errno::str() {
 }
 
 const char* Errno::str(int no) {
-    if (0 != strerror_r(no, _buf, BUF_SIZE)) {
+    if (nullptr != strerror_r(no, _buf, BUF_SIZE)) {
         LOG(WARNING) << "fail to get errno string. no=" << no << " errno=" << errno;
         snprintf(_buf, BUF_SIZE, "unknown errno");
     }
@@ -341,7 +341,7 @@ int Errno::no() {
 
 template <>
 bool valid_signed_number<int128_t>(const std::string& value_str) {
-    char* endptr = NULL;
+    char* endptr = nullptr;
     const char* value_string = value_str.c_str();
     int64_t value = strtol(value_string, &endptr, 10);
     if (*endptr != 0) {
@@ -422,32 +422,32 @@ bool valid_datetime(const string& value_str) {
             return false;
         }
 
-        int month = strtol(what[2].str().c_str(), NULL, 10);
+        int month = strtol(what[2].str().c_str(), nullptr, 10);
         if (month < 1 || month > 12) {
             LOG(WARNING) << "invalid month " << month;
             return false;
         }
 
-        int day = strtol(what[3].str().c_str(), NULL, 10);
+        int day = strtol(what[3].str().c_str(), nullptr, 10);
         if (day < 1 || day > 31) {
             LOG(WARNING) << "invalid day " << day;
             return false;
         }
 
         if (what[4].length()) {
-            int hour = strtol(what[5].str().c_str(), NULL, 10);
+            int hour = strtol(what[5].str().c_str(), nullptr, 10);
             if (hour < 0 || hour > 23) {
                 LOG(WARNING) << "invalid hour " << hour;
                 return false;
             }
 
-            int minute = strtol(what[6].str().c_str(), NULL, 10);
+            int minute = strtol(what[6].str().c_str(), nullptr, 10);
             if (minute < 0 || minute > 59) {
                 LOG(WARNING) << "invalid minute " << minute;
                 return false;
             }
 
-            int second = strtol(what[7].str().c_str(), NULL, 10);
+            int second = strtol(what[7].str().c_str(), nullptr, 10);
             if (second < 0 || second > 59) {
                 LOG(WARNING) << "invalid second " << second;
                 return false;

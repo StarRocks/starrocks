@@ -150,8 +150,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // --------  New planner session variables start --------
     public static final String ENABLE_CBO = "enable_cbo";
     public static final String ENABLE_CBO_META = "enable_cbo_meta";
-    public static final String NEW_PLANNER_TPCH_SCALE = "new_planner_tpch_scale";
-    public static final String ENABLE_MOCK_TPCH = "enable_new_planner_mock_tpch_statistic";
     public static final String ENABLE_NEW_PLANNER_PUSH_DOWN_JOIN_TO_AGG =
             "enable_new_planner_push_down_join_to_agg";
     public static final String NEW_PLANER_AGG_STAGE = "new_planner_agg_stage";
@@ -164,6 +162,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
     public static final String CBO_MAX_REORDER_NODE_USE_DP = "cbo_max_reorder_node_use_dp";
     public static final String CBO_ENABLE_GREEDY_JOIN_REORDER = "cbo_enable_greedy_join_reorder";
+    public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -305,6 +304,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DISABLE_COLOCATE_JOIN)
     private boolean disableColocateJoin = false;
 
+    @VariableMgr.VarAttr(name = CBO_ENABLE_REPLICATED_JOIN)
+    private boolean enableReplicationJoin = true;
+
     @VariableMgr.VarAttr(name = PREFER_JOIN_METHOD)
     private String preferJoinMethod = "broadcast";
 
@@ -394,12 +396,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_NEW_PLANNER_PUSH_DOWN_JOIN_TO_AGG)
     private boolean enableNewPlannerPushDownJoinToAgg = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_MOCK_TPCH)
-    private boolean enableNewPlannerMockTpch = false;
-
-    @VariableMgr.VarAttr(name = NEW_PLANNER_TPCH_SCALE)
-    private int tpchScale = 1;
-
     @VariableMgr.VarAttr(name = BROADCAST_ROW_LIMIT)
     private long broadcastRowCountLimit = 15000000;
 
@@ -407,17 +403,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long optimizerExecuteTimeout = 3000;
 
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DUMP)
-    private boolean enable_query_dump = false;
+    private boolean enableQueryDump = false;
 
     // value should be 0~4
     // 0 represents automatic selection, and 1, 2, 3, and 4 represent forced selection of AGG of
     // corresponding stages respectively. However, stages 3 and 4 can only be generated in
     // single-column distinct scenarios
     @VariableMgr.VarAttr(name = NEW_PLANER_AGG_STAGE)
-    private int new_planner_agg_stage = 0;
+    private int newPlannerAggStage = 0;
 
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
-    private String transmission_compression_type = "LZ4";
+    private String transmissionCompressionType = "LZ4";
 
     @VariableMgr.VarAttr(name = RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT)
     private long runtimeJoinFilterPushDownLimit = 1024000;
@@ -682,32 +678,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableNewPlannerPushDownJoinToAgg = enableNewPlannerPushDownJoinToAgg;
     }
 
-    public int getTpchScale() {
-        return tpchScale;
-    }
-
-    public void setTpchScale(int tpchScale) {
-        this.tpchScale = tpchScale;
-    }
-
-    public boolean getEnableMockTpch() {
-        return enableNewPlannerMockTpch;
-    }
-
-    public void setEnableMockTpch(boolean enableNewPlannerMockTpch) {
-        this.enableNewPlannerMockTpch = enableNewPlannerMockTpch;
-    }
-
     public int getCboMaxReorderNodeUseExhaustive() {
         return cboMaxReorderNodeUseExhaustive;
     }
 
     public int getNewPlannerAggStage() {
-        return new_planner_agg_stage;
+        return newPlannerAggStage;
     }
 
     public void setNewPlanerAggStage(int stage) {
-        this.new_planner_agg_stage = stage;
+        this.newPlannerAggStage = stage;
     }
 
     public void setMaxTransformReorderJoins(int maxReorderNodeUseExhaustive) {
@@ -731,7 +711,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean getEnableQueryDump() {
-        return enable_query_dump;
+        return enableQueryDump;
     }
 
     public boolean getEnableGlobalRuntimeFilter() {
@@ -744,6 +724,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnablePipelineEngine() {
         return enablePipelineEngine;
+    }
+
+    public boolean isEnableReplicationJoin() {
+        return enableReplicationJoin;
+    }
+
+    public void setEnableReplicationJoin(boolean enableReplicationJoin) {
+        this.enableReplicationJoin = enableReplicationJoin;
     }
 
     // Serialize to thrift object
@@ -774,7 +762,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_spilling(enableSpilling);
 
         // Compression Type
-        TCompressionType compressionType = CompressionUtils.findTCompressionByName(transmission_compression_type);
+        TCompressionType compressionType = CompressionUtils.findTCompressionByName(transmissionCompressionType);
         if (compressionType != null) {
             tResult.setTransmission_compression_type(compressionType);
         }

@@ -24,7 +24,8 @@ namespace starrocks::vectorized {
 class AssertNumRowsNode : public ExecNode {
 public:
     AssertNumRowsNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    virtual ~AssertNumRowsNode(){};
+    ~AssertNumRowsNode() override = default;
+    ;
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState* state) override;

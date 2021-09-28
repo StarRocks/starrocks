@@ -32,7 +32,7 @@ public:
     ParquetScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                    ScannerCounter* counter);
 
-    ~ParquetScanner();
+    ~ParquetScanner() override;
 
     Status open() override;
 
@@ -50,7 +50,7 @@ private:
     bool batch_is_exhausted();
     Status finalize_src_chunk(ChunkPtr* chunk);
     Status convert_array_to_column(ConvertFunc func, size_t num_elements, const arrow::Array* array,
-                                   const TypeDescriptor* type_desc, ColumnPtr column);
+                                   const TypeDescriptor* type_desc, const ColumnPtr& column);
 
     Status new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc, ColumnPtr* column,
                       ConvertFunc* conv_func, Expr** expr);

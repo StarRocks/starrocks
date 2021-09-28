@@ -151,9 +151,9 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
-    void fvn_hash(uint32_t* hash, uint16_t from, uint16_t to) const override;
+    void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
-    void crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) const override;
+    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
@@ -182,6 +182,8 @@ public:
         Column::reset_column();
         _data.clear();
     }
+
+    bool reach_capacity_limit() const override { return _data.size() >= Column::MAX_CAPACITY_LIMIT; }
 
 protected:
     Container _data;

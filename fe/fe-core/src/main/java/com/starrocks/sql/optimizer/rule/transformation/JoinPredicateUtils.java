@@ -132,7 +132,7 @@ public class JoinPredicateUtils {
                     rightPushDown.add(predicate);
                 }
             }
-        } else if (join.getJoinType().isSemiAntiJoin()) {
+        } else if (join.getJoinType().isSemiJoin() || join.getJoinType().isAntiJoin()) {
             for (ScalarOperator predicate : conjunctList) {
                 ColumnRefSet usedColumns = predicate.getUsedColumns();
                 if (leftColumns.contains(usedColumns)) {
@@ -206,7 +206,7 @@ public class JoinPredicateUtils {
                     BinaryPredicateOperator bpo = (BinaryPredicateOperator) so;
 
                     // avoid repeat predicate, like a = b, b = a
-                    if (!allPredicate.contains(bpo) && !allPredicate.contains(bpo.negative())) {
+                    if (!allPredicate.contains(bpo) && !allPredicate.contains(bpo.commutative())) {
                         allPredicate.add(bpo);
                     }
                     continue;

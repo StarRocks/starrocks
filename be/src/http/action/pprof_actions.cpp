@@ -52,10 +52,10 @@ static std::mutex kPprofActionMutex;
 
 class HeapAction : public HttpHandler {
 public:
-    HeapAction() {}
-    virtual ~HeapAction() {}
+    HeapAction() = default;
+    ~HeapAction() override = default;
 
-    virtual void handle(HttpRequest* req) override;
+    void handle(HttpRequest* req) override;
 };
 
 void HeapAction::handle(HttpRequest* req) {
@@ -92,10 +92,10 @@ void HeapAction::handle(HttpRequest* req) {
 
 class GrowthAction : public HttpHandler {
 public:
-    GrowthAction() {}
-    virtual ~GrowthAction() {}
+    GrowthAction() = default;
+    ~GrowthAction() override = default;
 
-    virtual void handle(HttpRequest* req) override;
+    void handle(HttpRequest* req) override;
 };
 
 void GrowthAction::handle(HttpRequest* req) {
@@ -114,10 +114,10 @@ void GrowthAction::handle(HttpRequest* req) {
 
 class ProfileAction : public HttpHandler {
 public:
-    ProfileAction() {}
-    virtual ~ProfileAction() {}
+    ProfileAction() = default;
+    ~ProfileAction() override = default;
 
-    virtual void handle(HttpRequest* req) override;
+    void handle(HttpRequest* req) override;
 };
 
 void ProfileAction::handle(HttpRequest* req) {
@@ -157,24 +157,24 @@ void ProfileAction::handle(HttpRequest* req) {
 
 class PmuProfileAction : public HttpHandler {
 public:
-    PmuProfileAction() {}
-    virtual ~PmuProfileAction() {}
-    virtual void handle(HttpRequest* req) override {}
+    PmuProfileAction() = default;
+    ~PmuProfileAction() override = default;
+    void handle(HttpRequest* req) override {}
 };
 
 class ContentionAction : public HttpHandler {
 public:
-    ContentionAction() {}
-    virtual ~ContentionAction() {}
+    ContentionAction() = default;
+    ~ContentionAction() override = default;
 
-    virtual void handle(HttpRequest* req) override {}
+    void handle(HttpRequest* req) override {}
 };
 
 class CmdlineAction : public HttpHandler {
 public:
-    CmdlineAction() {}
-    virtual ~CmdlineAction() {}
-    virtual void handle(HttpRequest* req) override;
+    CmdlineAction() = default;
+    ~CmdlineAction() override = default;
+    void handle(HttpRequest* req) override;
 };
 
 void CmdlineAction::handle(HttpRequest* req) {
@@ -196,9 +196,9 @@ void CmdlineAction::handle(HttpRequest* req) {
 class SymbolAction : public HttpHandler {
 public:
     SymbolAction(BfdParser* parser) : _parser(parser) {}
-    virtual ~SymbolAction() {}
+    ~SymbolAction() override = default;
 
-    virtual void handle(HttpRequest* req) override;
+    void handle(HttpRequest* req) override;
 
 private:
     BfdParser* _parser;

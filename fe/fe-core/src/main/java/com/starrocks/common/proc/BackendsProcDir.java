@@ -57,7 +57,6 @@ public class BackendsProcDir implements ProcDirInterface {
             .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status")
             .build();
 
-    public static final int IP_INDEX = 2;
     public static final int HOSTNAME_INDEX = 3;
 
     private SystemInfoService clusterInfoService;
@@ -116,7 +115,7 @@ public class BackendsProcDir implements ProcDirInterface {
             }
 
             watch.start();
-            Integer tabletNum = Catalog.getCurrentInvertedIndex().getTabletNumByBackendId(backendId);
+            long tabletNum = Catalog.getCurrentInvertedIndex().getTabletNumByBackendId(backendId);
             watch.stop();
             List<Comparable> backendInfo = Lists.newArrayList();
             backendInfo.add(String.valueOf(backendId));
@@ -143,7 +142,7 @@ public class BackendsProcDir implements ProcDirInterface {
                 backendInfo.add("false");
                 backendInfo.add("false");
             }
-            backendInfo.add(tabletNum.toString());
+            backendInfo.add(tabletNum);
 
             // capacity
             // data used

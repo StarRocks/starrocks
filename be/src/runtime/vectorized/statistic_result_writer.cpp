@@ -21,7 +21,7 @@ StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              starrocks::RuntimeProfile* parent_profile)
         : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {}
 
-StatisticResultWriter::~StatisticResultWriter() {}
+StatisticResultWriter::~StatisticResultWriter() = default;
 
 Status StatisticResultWriter::init(RuntimeState* state) {
     _init_profile();

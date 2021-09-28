@@ -119,19 +119,19 @@ public class CoordinatorTest extends Coordinator {
         Deencapsulation.setField(coordinator, "fragmentIdBucketSeqToScanRangeMap", fragmentIdBucketSeqToScanRangeMap);
 
         FragmentExecParams params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeColocateJoinInstanceParam", planFragmentId, 1, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 1, params);
         Assert.assertEquals(1, params.instanceExecParams.size());
 
         params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeColocateJoinInstanceParam", planFragmentId, 2, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 2, params);
         Assert.assertEquals(2, params.instanceExecParams.size());
 
         params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeColocateJoinInstanceParam", planFragmentId, 3, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 3, params);
         Assert.assertEquals(3, params.instanceExecParams.size());
 
         params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeColocateJoinInstanceParam", planFragmentId, 5, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 5, params);
         Assert.assertEquals(3, params.instanceExecParams.size());
     }
 
@@ -160,13 +160,13 @@ public class CoordinatorTest extends Coordinator {
         // the fragment id is different from hash join node
         hashJoinNode.setFragment(new PlanFragment(new PlanFragmentId(-2), hashJoinNode,
                 new DataPartition(TPartitionType.BUCKET_SHFFULE_HASH_PARTITIONED, testJoinexprs)));
-        hashJoinNode.setDistributionMode(HashJoinNode.DistributionMode.BUCKET_SHUFFLE);
+        hashJoinNode.setDistributionMode(HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET);
         Assert.assertEquals(false,
                 Deencapsulation.invoke(coordinator, "isBucketShuffleJoin", -1, hashJoinNode));
 
         hashJoinNode.setFragment(new PlanFragment(new PlanFragmentId(-1), hashJoinNode,
                 new DataPartition(TPartitionType.BUCKET_SHFFULE_HASH_PARTITIONED, testJoinexprs)));
-        Deencapsulation.setField(hashJoinNode, "isBucketShuffle", true);
+        Deencapsulation.setField(hashJoinNode, "isLocalHashBucket", true);
         Assert.assertEquals(true,
                 Deencapsulation.invoke(coordinator, "isBucketShuffleJoin", -1, hashJoinNode));
 
@@ -203,19 +203,19 @@ public class CoordinatorTest extends Coordinator {
         Deencapsulation.setField(coordinator, "fragmentIdBucketSeqToScanRangeMap", fragmentIdBucketSeqToScanRangeMap);
 
         FragmentExecParams params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeBucketShuffleJoinInstanceParam", planFragmentId, 1, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 1, params);
         Assert.assertEquals(1, params.instanceExecParams.size());
 
         params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeBucketShuffleJoinInstanceParam", planFragmentId, 2, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 2, params);
         Assert.assertEquals(2, params.instanceExecParams.size());
 
         params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeBucketShuffleJoinInstanceParam", planFragmentId, 3, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 3, params);
         Assert.assertEquals(3, params.instanceExecParams.size());
 
         params = new FragmentExecParams(null);
-        Deencapsulation.invoke(coordinator, "computeBucketShuffleJoinInstanceParam", planFragmentId, 5, params);
+        Deencapsulation.invoke(coordinator, "computeColocatedJoinInstanceParam", planFragmentId, 5, params);
         Assert.assertEquals(3, params.instanceExecParams.size());
     }
 

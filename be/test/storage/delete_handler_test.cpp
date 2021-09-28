@@ -241,7 +241,6 @@ void set_create_duplicate_tablet_request(TCreateTabletReq* request) {
 class TestDeleteConditionHandler : public testing::Test {
 protected:
     void SetUp() {
-        // Create local data dir for StorageEngine.
         config::storage_root_path = std::filesystem::current_path().string() + "/data_delete_condition";
         FileUtils::remove_all(config::storage_root_path);
         ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
@@ -266,7 +265,6 @@ protected:
     }
 
     void TearDown() {
-        // Remove all dir.
         tablet.reset();
         dup_tablet.reset();
         (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id,
@@ -356,7 +354,6 @@ TEST_F(TestDeleteConditionHandler, StoreCondInvalidParameters) {
     DeletePredicatePB del_pred;
     OLAPStatus failed_res =
             _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred);
-    ;
     ASSERT_EQ(OLAP_ERR_DELETE_INVALID_PARAMETERS, failed_res);
 }
 
@@ -372,7 +369,6 @@ TEST_F(TestDeleteConditionHandler, StoreCondNonexistentColumn) {
     DeletePredicatePB del_pred;
     OLAPStatus failed_res =
             _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred);
-    ;
     ASSERT_EQ(OLAP_ERR_DELETE_INVALID_CONDITION, failed_res);
 
     // 'v' is a value column
@@ -396,7 +392,6 @@ TEST_F(TestDeleteConditionHandler, StoreCondNonexistentColumn) {
 
     OLAPStatus success_res =
             _delete_condition_handler.generate_delete_predicate(dup_tablet->tablet_schema(), conditions, &del_pred);
-    ;
     ASSERT_EQ(OLAP_SUCCESS, success_res);
 }
 
@@ -404,7 +399,6 @@ TEST_F(TestDeleteConditionHandler, StoreCondNonexistentColumn) {
 class TestDeleteConditionHandler2 : public testing::Test {
 protected:
     void SetUp() {
-        // Create local data dir for StorageEngine.
         config::storage_root_path = std::filesystem::current_path().string() + "/data_delete_condition";
         FileUtils::remove_all(config::storage_root_path);
         ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
@@ -421,7 +415,6 @@ protected:
     }
 
     void TearDown() {
-        // Remove all dir.
         tablet.reset();
         (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id,
                                                                        _create_tablet.tablet_schema.schema_hash);
@@ -737,7 +730,6 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
 class TestDeleteHandler : public testing::Test {
 protected:
     void SetUp() {
-        // Create local data dir for StorageEngine.
         config::storage_root_path = std::filesystem::current_path().string() + "/data_delete_condition";
         FileUtils::remove_all(config::storage_root_path);
         ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
@@ -757,7 +749,6 @@ protected:
     }
 
     void TearDown() {
-        // Remove all dir.
         tablet.reset();
         _delete_handler.finalize();
         (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id,

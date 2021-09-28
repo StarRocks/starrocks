@@ -44,7 +44,7 @@ public:
     static BfdParser* create();
     static BfdParser* create(const std::string& file_name);
 
-    BfdParser(const std::string& file_name);
+    BfdParser(std::string file_name);
     ~BfdParser();
     int parse();
 

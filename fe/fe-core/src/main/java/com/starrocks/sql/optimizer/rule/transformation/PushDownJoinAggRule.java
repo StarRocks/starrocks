@@ -178,7 +178,7 @@ public class PushDownJoinAggRule extends TransformationRule {
             LogicalOlapScanOperator loso = (LogicalOlapScanOperator) groupExpression.getOp();
             Map<ColumnRefOperator, Column> askColumnsMap = loso.getColRefToColumnMetaMap();
 
-            List<String> keyColumns = getTpchMockPrimaryKeys(loso.getOlapTable().getName());
+            List<String> keyColumns = getTpchMockPrimaryKeys(loso.getTable().getName());
 
             if (keyColumns.isEmpty()) {
                 return false;

@@ -143,7 +143,7 @@ public:
     class Block : public InternalQueue<Block>::Node {
     public:
         // A null dtor to pass codestyle check
-        ~Block() {}
+        ~Block() override = default;
 
         // Pins a block in memory--assigns a free buffer to a block and reads it from disk if
         // necessary. If there are no free blocks and no unpinned blocks, '*pinned' is set to
@@ -152,7 +152,7 @@ public:
         // If 'unpin' is true, 'release_block' will be unpinned (regardless of whether or not
         // the buffer was used for this block). If 'unpin' is false, 'release_block' is
         // deleted. 'release_block' must be pinned.
-        Status pin(bool* pinned, Block* release_block = NULL, bool unpin = true);
+        Status pin(bool* pinned, Block* release_block = nullptr, bool unpin = true);
 
         // Unpins a block by adding it to the list of unpinned blocks maintained by the block
         // manager. An unpinned block must be flushed before its buffer is released or
@@ -177,7 +177,7 @@ public:
 
         // Return the number of remaining bytes that can be allocated in this block.
         int bytes_remaining() const {
-            DCHECK(_buffer_desc != NULL);
+            DCHECK(_buffer_desc != nullptr);
             return _buffer_desc->len - _valid_data_len;
         }
 
@@ -190,7 +190,7 @@ public:
         // Pointer to start of the block data in memory. Only guaranteed to be valid if the
         // block is pinned.
         uint8_t* buffer() const {
-            DCHECK(_buffer_desc != NULL);
+            DCHECK(_buffer_desc != nullptr);
             return _buffer_desc->buffer;
         }
 
@@ -345,7 +345,7 @@ public:
     bool is_cancelled();
 
     // Dumps block mgr state. Grabs lock. If client is not NULL, also dumps its state.
-    std::string debug_string(Client* client = NULL);
+    std::string debug_string(Client* client = nullptr);
 
     // The number of buffers available for client. That is, if all other clients were
     // stopped, the number of buffers this client could get.
@@ -388,7 +388,7 @@ private:
         // Iterator into _all_io_buffers for this buffer.
         std::list<BufferDescriptor*>::iterator all_buffers_it;
 
-        BufferDescriptor(uint8_t* buf, int64_t len) : buffer(buf), len(len), block(NULL) {}
+        BufferDescriptor(uint8_t* buf, int64_t len) : buffer(buf), len(len), block(nullptr) {}
     };
 
     BufferedBlockMgr2(RuntimeState* state, TmpFileMgr* tmp_file_mgr, int64_t block_size);

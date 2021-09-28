@@ -33,7 +33,8 @@ class HealthAction : public HttpHandler {
 public:
     HealthAction(ExecEnv* exec_env);
 
-    virtual ~HealthAction(){};
+    ~HealthAction() override = default;
+    ;
 
     void handle(HttpRequest* req) override;
 

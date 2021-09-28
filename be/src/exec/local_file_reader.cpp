@@ -23,12 +23,14 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <utility>
+
 #include "common/logging.h"
 
 namespace starrocks {
 
-LocalFileReader::LocalFileReader(const std::string& path, int64_t start_offset)
-        : _path(path), _current_offset(start_offset), _file_size(-1), _fp(nullptr) {}
+LocalFileReader::LocalFileReader(std::string path, int64_t start_offset)
+        : _path(std::move(path)), _current_offset(start_offset), _file_size(-1), _fp(nullptr) {}
 
 LocalFileReader::~LocalFileReader() {
     close();

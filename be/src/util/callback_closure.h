@@ -24,6 +24,7 @@
 #include <google/protobuf/stubs/common.h>
 
 #include <atomic>
+#include <utility>
 
 #include "service/brpc.h"
 
@@ -34,7 +35,7 @@ template <typename T>
 class CallBackClosure : public google::protobuf::Closure {
 public:
     CallBackClosure() : _refs(0) {}
-    ~CallBackClosure() {}
+    ~CallBackClosure() override = default;
 
     // Disallow copy and assignment.
     CallBackClosure(const CallBackClosure& other) = delete;
@@ -47,7 +48,7 @@ public:
 
     bool has_in_flight_rpc() { return _refs > 1; }
 
-    void addFailedHandler(std::function<void()> fn) { _failed_handler = fn; }
+    void addFailedHandler(std::function<void()> fn) { _failed_handler = std::move(fn); }
     void addSuccessHandler(std::function<void(const T&)> fn) { _success_handler = fn; }
 
     void Run() override {

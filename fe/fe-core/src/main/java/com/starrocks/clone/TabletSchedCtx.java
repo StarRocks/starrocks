@@ -750,12 +750,13 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 tabletId, schemaHash, Lists.newArrayList(tSrcBe), storageMedium,
                 visibleVersion, visibleVersionHash, (int) (taskTimeoutMs / 1000));
         cloneTask.setPathHash(srcPathHash, destPathHash);
+        cloneTask.setIsLocal(srcReplica.getBackendId() == destBackendId);
 
         // if this is a balance task, or this is a repair task with REPLICA_MISSING/REPLICA_RELOCATING or REPLICA_MISSING_IN_CLUSTER,
         // we create a new replica with state CLONE
         if (tabletStatus == TabletStatus.REPLICA_MISSING || tabletStatus == TabletStatus.REPLICA_MISSING_IN_CLUSTER
-                || tabletStatus == TabletStatus.REPLICA_RELOCATING || type == Type.BALANCE
-                || tabletStatus == TabletStatus.COLOCATE_MISMATCH) {
+                || tabletStatus == TabletStatus.REPLICA_RELOCATING || tabletStatus == TabletStatus.COLOCATE_MISMATCH
+                || (type == Type.BALANCE && !cloneTask.isLocal())) {
             Replica cloneReplica = new Replica(
                     Catalog.getCurrentCatalog().getNextId(), destBackendId,
                     -1 /* version */, 0 /* version hash */, schemaHash,
@@ -777,6 +778,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             if (replica.getPathHash() != destPathHash) {
                 throw new SchedException(Status.SCHEDULE_FAILED, "dest replica's path hash is changed. "
                         + "current: " + replica.getPathHash() + ", scheduled: " + destPathHash);
+            }
+        } else if (type == Type.BALANCE && cloneTask.isLocal()) {
+            if (tabletStatus != TabletStatus.HEALTHY) {
+                throw new SchedException(Status.SCHEDULE_FAILED, "tablet " + tabletId + " is not healthy");
             }
         }
 
@@ -813,6 +818,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             throw new SchedException(Status.RUNNING_FAILED, request.getTask_status().getError_msgs().get(0));
         }
 
+        // check tablet info is set
         if (!request.isSetFinish_tablet_infos() || request.getFinish_tablet_infos().isEmpty()) {
             throw new SchedException(Status.RUNNING_FAILED, "tablet info is not set in task report request");
         }
@@ -869,72 +875,10 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 throw new SchedException(Status.UNRECOVERABLE, "tablet does not exist");
             }
 
-            List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(db.getClusterName(), true);
-            Pair<TabletStatus, TabletSchedCtx.Priority> pair = tablet.getHealthStatusWithPriority(
-                    infoService, db.getClusterName(), visibleVersion, visibleVersionHash, replicationNum,
-                    aliveBeIdsInCluster);
-            if (pair.first == TabletStatus.HEALTHY) {
-                throw new SchedException(Status.FINISHED, "tablet is healthy");
-            }
-
-            // tablet is unhealthy, go on
-
-            // Here we do not check if the clone version is equal to the partition's visible version.
-            // Because in case of high frequency loading, clone version always lags behind the visible version,
-            // But we will check if the clone replica's version is larger than or equal to the task's visible version.
-            // (which is 'visibleVersion[Hash]' saved)
-            // We should discard the clone replica with stale version.
-            TTabletInfo reportedTablet = request.getFinish_tablet_infos().get(0);
-            if (reportedTablet.getVersion() < visibleVersion) {
-                String msg = String.format("the clone replica's version is stale. %d-%d, task visible version: %d-%d",
-                        reportedTablet.getVersion(), reportedTablet.getVersion_hash(),
-                        visibleVersion, visibleVersionHash);
-                throw new SchedException(Status.RUNNING_FAILED, msg);
-            }
-
-            // check if replica exist
-            Replica replica = tablet.getReplicaByBackendId(destBackendId);
-            if (replica == null) {
-                throw new SchedException(Status.UNRECOVERABLE,
-                        "replica does not exist. backend id: " + destBackendId);
-            }
-
-            replica.updateVersionInfo(reportedTablet.getVersion(), reportedTablet.getVersion_hash(),
-                    reportedTablet.getData_size(), reportedTablet.getRow_count());
-            if (reportedTablet.isSetPath_hash()) {
-                replica.setPathHash(reportedTablet.getPath_hash());
-            }
-
-            if (this.type == Type.BALANCE) {
-                long partitionVisibleVersion = partition.getVisibleVersion();
-                if (replica.getVersion() < partitionVisibleVersion) {
-                    // see comment 'needFurtherRepair' of Replica for explanation.
-                    // no need to persist this info. If FE restart, just do it again.
-                    replica.setNeedFurtherRepair(true);
-                }
+            if (cloneTask.isLocal()) {
+                unprotectedFinishLocalMigration(request);
             } else {
-                replica.setNeedFurtherRepair(false);
-            }
-
-            ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(dbId, tblId, partitionId, indexId,
-                    tabletId, destBackendId, replica.getId(),
-                    reportedTablet.getVersion(),
-                    reportedTablet.getVersion_hash(),
-                    reportedTablet.getSchema_hash(),
-                    reportedTablet.getData_size(),
-                    reportedTablet.getRow_count(),
-                    replica.getLastFailedVersion(),
-                    replica.getLastFailedVersionHash(),
-                    replica.getLastSuccessVersion(),
-                    replica.getLastSuccessVersionHash());
-
-            if (replica.getState() == ReplicaState.CLONE) {
-                replica.setState(ReplicaState.NORMAL);
-                Catalog.getCurrentCatalog().getEditLog().logAddReplica(info);
-            } else {
-                // if in VERSION_INCOMPLETE, replica is not newly created, thus the state is not CLONE
-                // so we keep it state unchanged, and log update replica
-                Catalog.getCurrentCatalog().getEditLog().logUpdateReplica(info);
+                unprotectedFinishClone(request, db, partition, replicationNum);
             }
 
             state = State.FINISHED;
@@ -956,6 +900,90 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
         if (request.isSetCopy_time_ms()) {
             this.copyTimeMs = request.getCopy_time_ms();
+        }
+    }
+
+    private void unprotectedFinishLocalMigration(TFinishTaskRequest request) throws SchedException {
+        Replica replica = tablet.getReplicaByBackendId(destBackendId);
+        if (replica == null) {
+            throw new SchedException(Status.UNRECOVERABLE,
+                    "replica does not exist. backend id: " + destBackendId);
+        }
+
+        // local migration only needs set path hash
+        TTabletInfo reportedTablet = request.getFinish_tablet_infos().get(0);
+        Preconditions.checkArgument(reportedTablet.isSetPath_hash());
+        replica.setPathHash(reportedTablet.getPath_hash());
+    }
+
+    private void unprotectedFinishClone(TFinishTaskRequest request, Database db, Partition partition,
+                                        short replicationNum) throws SchedException {
+        List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(db.getClusterName(), true);
+        Pair<TabletStatus, TabletSchedCtx.Priority> pair = tablet.getHealthStatusWithPriority(
+                infoService, db.getClusterName(), visibleVersion, visibleVersionHash, replicationNum,
+                aliveBeIdsInCluster);
+        if (pair.first == TabletStatus.HEALTHY) {
+            throw new SchedException(Status.FINISHED, "tablet is healthy");
+        }
+
+        // tablet is unhealthy, go on
+
+        // Here we do not check if the clone version is equal to the partition's visible version.
+        // Because in case of high frequency loading, clone version always lags behind the visible version,
+        // But we will check if the clone replica's version is larger than or equal to the task's visible version.
+        // (which is 'visibleVersion[Hash]' saved)
+        // We should discard the clone replica with stale version.
+        TTabletInfo reportedTablet = request.getFinish_tablet_infos().get(0);
+        if (reportedTablet.getVersion() < visibleVersion) {
+            String msg = String.format("the clone replica's version is stale. %d-%d, task visible version: %d-%d",
+                    reportedTablet.getVersion(), reportedTablet.getVersion_hash(),
+                    visibleVersion, visibleVersionHash);
+            throw new SchedException(Status.RUNNING_FAILED, msg);
+        }
+
+        // check if replica exist
+        Replica replica = tablet.getReplicaByBackendId(destBackendId);
+        if (replica == null) {
+            throw new SchedException(Status.UNRECOVERABLE,
+                    "replica does not exist. backend id: " + destBackendId);
+        }
+
+        replica.updateVersionInfo(reportedTablet.getVersion(), reportedTablet.getVersion_hash(),
+                reportedTablet.getData_size(), reportedTablet.getRow_count());
+        if (reportedTablet.isSetPath_hash()) {
+            replica.setPathHash(reportedTablet.getPath_hash());
+        }
+
+        if (this.type == Type.BALANCE) {
+            long partitionVisibleVersion = partition.getVisibleVersion();
+            if (replica.getVersion() < partitionVisibleVersion) {
+                // see comment 'needFurtherRepair' of Replica for explanation.
+                // no need to persist this info. If FE restart, just do it again.
+                replica.setNeedFurtherRepair(true);
+            }
+        } else {
+            replica.setNeedFurtherRepair(false);
+        }
+
+        ReplicaPersistInfo info = ReplicaPersistInfo.createForClone(dbId, tblId, partitionId, indexId,
+                tabletId, destBackendId, replica.getId(),
+                reportedTablet.getVersion(),
+                reportedTablet.getVersion_hash(),
+                reportedTablet.getSchema_hash(),
+                reportedTablet.getData_size(),
+                reportedTablet.getRow_count(),
+                replica.getLastFailedVersion(),
+                replica.getLastFailedVersionHash(),
+                replica.getLastSuccessVersion(),
+                replica.getLastSuccessVersionHash());
+
+        if (replica.getState() == ReplicaState.CLONE) {
+            replica.setState(ReplicaState.NORMAL);
+            Catalog.getCurrentCatalog().getEditLog().logAddReplica(info);
+        } else {
+            // if in VERSION_INCOMPLETE, replica is not newly created, thus the state is not CLONE
+            // so we keep it state unchanged, and log update replica
+            Catalog.getCurrentCatalog().getEditLog().logUpdateReplica(info);
         }
     }
 

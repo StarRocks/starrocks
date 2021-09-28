@@ -86,7 +86,7 @@ void DiskInfo::get_device_names() {
         if (it == _s_disk_name_to_disk_id.end()) {
             // First time seeing this disk
             disk_id = _s_disks.size();
-            _s_disks.push_back(Disk(name, disk_id));
+            _s_disks.emplace_back(name, disk_id);
             _s_disk_name_to_disk_id[name] = disk_id;
         } else {
             disk_id = it->second;
@@ -102,7 +102,7 @@ void DiskInfo::get_device_names() {
     if (_s_disks.empty()) {
         // If all else fails, return 1
         LOG(WARNING) << "Could not determine number of disks on this machine.";
-        _s_disks.push_back(Disk("sda", 0));
+        _s_disks.emplace_back("sda", 0);
     }
 
     // Determine if the disk is rotational or not.
@@ -180,7 +180,7 @@ Status DiskInfo::get_disk_devices(const std::vector<std::string>& paths, std::se
     }
 
     Status status;
-    char* line_ptr = 0;
+    char* line_ptr = nullptr;
     size_t line_buf_size = 0;
     for (auto& path : real_paths) {
         size_t max_mount_size = 0;

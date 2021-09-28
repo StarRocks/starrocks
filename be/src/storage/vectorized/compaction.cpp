@@ -2,6 +2,8 @@
 
 #include "storage/vectorized/compaction.h"
 
+#include <utility>
+
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "storage/rowset/rowset_factory.h"
@@ -18,7 +20,7 @@ namespace starrocks::vectorized {
 Semaphore Compaction::_concurrency_sem;
 
 Compaction::Compaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
-        : _tablet(tablet),
+        : _tablet(std::move(tablet)),
           _input_rowsets_size(0),
           _input_row_num(0),
           _state(CompactionState::INITED),
@@ -26,7 +28,7 @@ Compaction::Compaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
     _mem_tracker = std::make_unique<MemTracker>(config::compaction_mem_limit, "", mem_tracker, true);
 }
 
-Compaction::~Compaction() {}
+Compaction::~Compaction() = default;
 
 Status Compaction::init(int concurreny) {
     _concurrency_sem.set_count(concurreny);
@@ -110,6 +112,14 @@ Status Compaction::do_compaction_impl() {
               << ", output_version=" << _output_version.first << "-" << _output_version.second
               << ", segments=" << segments_num << ". elapsed time=" << watch.get_elapse_second() << "s.";
 
+    // warm-up this rowset
+    auto st = _output_rowset->load();
+    if (!st.ok()) {
+        // only log load failure
+        LOG(WARNING) << "ignore load rowset error tablet:" << _tablet->tablet_id()
+                     << " rowset:" << _output_rowset->rowset_id() << " " << st;
+    }
+
     return Status::OK();
 }
 
@@ -141,11 +151,9 @@ Status Compaction::construct_output_rowset_writer() {
 Status Compaction::merge_rowsets(MemTracker* mem_tracker, Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
-    Reader reader(schema);
+    Reader reader(_tablet, _output_rs_writer->version(), schema);
     ReaderParams reader_params;
-    reader_params.tablet = _tablet;
     reader_params.reader_type = compaction_type();
-    reader_params.version = _output_rs_writer->version();
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
 
     int64_t num_rows = 0;
@@ -164,7 +172,8 @@ Status Compaction::merge_rowsets(MemTracker* mem_tracker, Statistics* stats_outp
         chunk_size = config::vector_chunk_size;
     }
     reader_params.chunk_size = chunk_size;
-    RETURN_IF_ERROR(reader.init(reader_params));
+    RETURN_IF_ERROR(reader.prepare());
+    RETURN_IF_ERROR(reader.open(reader_params));
 
     int64_t output_rows = 0;
 

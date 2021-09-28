@@ -868,36 +868,10 @@ public class SelectStmtWithDecimalTypesTest {
     }
 
     @Test
-    public void testSelectDecimalLiteral() throws Exception {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        Config.enable_decimal_v3 = true;
-        ctx.getSessionVariable().enableNewPlanner();
-        String sql = "" +
-                "select\n" +
-                "   1.2E308,\n" +
-                "   0.99E38,\n" +
-                "   1.99E38,\n" +
-                "   1.99," +
-                "   0.0\n";
-
-        {
-            SelectStmt stmt = (SelectStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
-            stmt.rewriteExprs(new Analyzer(ctx.getCatalog(), ctx).getExprRewriter());
-            List<SelectListItem> items = stmt.selectList.getItems();
-            Assert.assertEquals(items.get(0).getExpr().getType(), ScalarType.DOUBLE);
-            Assert.assertEquals(items.get(1).getExpr().getType(),
-                    ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0));
-            Assert.assertEquals(items.get(2).getExpr().getType(), ScalarType.DOUBLE);
-            Assert.assertEquals(items.get(3).getExpr().getType(), ScalarType.createDecimalV3NarrowestType(3, 2));
-            Assert.assertEquals(items.get(4).getExpr().getType(), ScalarType.createDecimalV3TypeForZero());
-        }
-    }
-
-    @Test
     public void testWindowDecimalV3() throws Exception {
         String sql = "select key0, " +
                 "first_value(col0_decimal_p9s2) over( partition by key0) from db1.decimal_table";
-        String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        String thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         Assert.assertTrue(thrift.contains("ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
                 "scalar_type:TScalarType(type:DECIMAL32, precision:9, scale:2))"));
     }
@@ -971,23 +945,23 @@ public class SelectStmtWithDecimalTypesTest {
     @Test
     public void testDecimalV3LiteralCast() throws Exception {
         String sql = "select * from db1.decimal_table WHERE CAST(IF(true, 0.38542880072101215, '-Inf')  AS BOOLEAN )";
-        String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        String thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         Assert.assertTrue(thrift.contains("string_literal:TStringLiteral(value:0.38542880072101215)"));
 
         sql = "select * from db1.decimal_table WHERE CAST(ifnull(0.38542880072101215, '-Inf')  AS BOOLEAN )";
-        thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         Assert.assertTrue(thrift.contains("string_literal:TStringLiteral(value:0.38542880072101215)"));
 
         sql = "select * from db1.decimal_table WHERE CAST(COALESCE(0.38542880072101215, '-Inf', 0.38542)  AS BOOLEAN )";
-        thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         Assert.assertTrue(thrift.contains("string_literal:TStringLiteral(value:0.38542880072101215)"));
 
         sql = "select * from db1.decimal_table WHERE CAST(greatest(0.38542880072101215, '-Inf', 0.38542)  AS BOOLEAN )";
-        thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         Assert.assertTrue(thrift.contains("string_literal:TStringLiteral(value:0.38542880072101215)"));
 
         sql = "select * from db1.decimal_table WHERE CAST(least(0.38542880072101215, '-Inf', 0.38542)  AS BOOLEAN )";
-        thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
+        thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         Assert.assertTrue(thrift.contains("string_literal:TStringLiteral(value:0.38542880072101215)"));
     }
 

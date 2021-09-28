@@ -30,7 +30,7 @@ uint64_t timestamp_from_datetime(const std::string& datetime_str) {
     char* res = strptime(datetime_str.c_str(), "%Y-%m-%d %H:%M:%S", &time_tm);
 
     uint64_t value = 0;
-    if (NULL != res) {
+    if (nullptr != res) {
         value = ((time_tm.tm_year + 1900) * 10000L + (time_tm.tm_mon + 1) * 100L + time_tm.tm_mday) * 1000000L +
                 time_tm.tm_hour * 10000L + time_tm.tm_min * 100L + time_tm.tm_sec;
     } else {
@@ -46,7 +46,7 @@ uint24_t timestamp_from_date(const std::string& date_str) {
     char* res = strptime(date_str.c_str(), "%Y-%m-%d", &time_tm);
 
     int value = 0;
-    if (NULL != res) {
+    if (nullptr != res) {
         value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
     } else {
         // 1400 - 01 - 01

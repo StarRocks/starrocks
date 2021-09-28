@@ -22,9 +22,8 @@
 #ifndef STARROCKS_BE_UDF_UDF_INTERNAL_H
 #define STARROCKS_BE_UDF_UDF_INTERNAL_H
 
-#include <string.h>
-
 #include <cstdint>
+#include <cstring>
 #include <map>
 #include <string>
 #include <vector>
@@ -61,7 +60,7 @@ public:
             const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size,
             bool debug);
 
-    ~FunctionContextImpl() {}
+    ~FunctionContextImpl() = default;
 
     FunctionContextImpl(starrocks_udf::FunctionContext* parent);
 

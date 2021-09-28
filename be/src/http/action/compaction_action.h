@@ -34,7 +34,7 @@ class CompactionAction : public HttpHandler {
 public:
     CompactionAction(CompactionActionType type) : _type(type) {}
 
-    virtual ~CompactionAction() {}
+    ~CompactionAction() override = default;
 
     void handle(HttpRequest* req) override;
 

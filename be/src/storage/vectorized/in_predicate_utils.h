@@ -8,9 +8,24 @@
 
 namespace starrocks::vectorized {
 
+namespace in_pred_utils_detail {
 template <typename T>
-struct ItemHashSet : public PhSet<T> {
-    bool contains(const T& v) const { return PhSet<T>::contains(v); }
+struct PHashSetTraits {
+    using SetType = HashSet<T>;
+};
+
+template <>
+struct PHashSetTraits<Slice> {
+    using SetType = SliceNormalHashSet;
+};
+
+template <typename T>
+using PHashSet = typename PHashSetTraits<T>::SetType;
+} // namespace in_pred_utils_detail
+
+template <typename T>
+struct ItemHashSet : public in_pred_utils_detail::PHashSet<T> {
+    bool contains(const T& v) const { return in_pred_utils_detail::PHashSet<T>::contains(v); }
 };
 
 template <typename T, size_t N>
@@ -103,13 +118,13 @@ inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_set(con
 
 template <FieldType field_type>
 inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_decimal_set(
-        int precision, int scale, const std::vector<std::string>& strings) {
+        int scale, const std::vector<std::string>& strings) {
     using CppType = typename CppTypeTraits<field_type>::CppType;
     Converter<CppType> result;
     for (const auto& s : strings) {
         CppType v;
-        auto st = DecimalV3Cast::from_string<CppType>(&v, precision, scale, s.data(), s.size());
-        CHECK_EQ(OLAP_SUCCESS, st);
+        auto st = DecimalV3Cast::from_string_with_overflow_allowed<CppType>(&v, scale, s.data(), s.size());
+        CHECK_EQ(false, st);
         result.push_back(v);
     }
     return result;

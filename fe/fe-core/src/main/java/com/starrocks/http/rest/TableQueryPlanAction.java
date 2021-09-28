@@ -43,7 +43,6 @@ import com.starrocks.planner.Planner;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
@@ -62,6 +61,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
+import org.apache.thrift.transport.TTransportException;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -159,6 +159,9 @@ public class TableQueryPlanAction extends RestBaseAction {
             // status code  should conforms to HTTP semantic
             resultMap.put("status", e.getCode().code());
             resultMap.put("exception", e.getMessage());
+        } catch (TTransportException e) {
+            resultMap.put("status", "-1");
+            resultMap.put("exception", e.getMessage());
         }
         ObjectMapper mapper = new ObjectMapper();
         try {
@@ -185,15 +188,11 @@ public class TableQueryPlanAction extends RestBaseAction {
      * @throws StarRocksHttpException
      */
     private void handleQuery(ConnectContext context, String requestDb, String requestTable, String sql,
-                             Map<String, Object> result) throws StarRocksHttpException {
+                             Map<String, Object> result) throws StarRocksHttpException, TTransportException {
         // use SE to resolve sql
         StmtExecutor stmtExecutor = new StmtExecutor(context, new OriginStatement(sql, 0), false);
         try {
-            SessionVariable sessionVariable = context.getSessionVariable();
-            // MemoryScratchSink does not implement send_chunk interface and TPlanFragmentExecParams
-            // use_vectorized is not set, so set vectorized_engine_enable false in query.
-            sessionVariable.setVectorizedEngineEnable(false);
-            TQueryOptions tQueryOptions = sessionVariable.toThrift();
+            TQueryOptions tQueryOptions = context.getSessionVariable().toThrift();
             // Conduct Planner create SingleNodePlan#createPlanFragments
             tQueryOptions.num_nodes = 1;
             // analyze sql
@@ -268,27 +267,27 @@ public class TableQueryPlanAction extends RestBaseAction {
         UUID uuid = UUID.randomUUID();
         tQueryPlanInfo.query_id = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
 
-        Map<Long, TTabletVersionInfo> tablet_info = new HashMap<>();
+        Map<Long, TTabletVersionInfo> tabletInfo = new HashMap<>();
         // acquire resolved tablet distribution
         Map<String, Node> tabletRoutings = assemblePrunedPartitions(scanRangeLocations);
         tabletRoutings.forEach((tabletId, node) -> {
             long tablet = Long.parseLong(tabletId);
-            tablet_info.put(tablet, new TTabletVersionInfo(tablet, node.version, node.versionHash, node.schemaHash));
+            tabletInfo.put(tablet, new TTabletVersionInfo(tablet, node.version, node.versionHash, node.schemaHash));
         });
-        tQueryPlanInfo.tablet_info = tablet_info;
+        tQueryPlanInfo.tablet_info = tabletInfo;
 
         // serialize TQueryPlanInfo and encode plan with Base64 to string in order to translate by json format
         TSerializer serializer = new TSerializer();
-        String opaqued_query_plan;
+        String opaquedQueryPlan;
         try {
-            byte[] query_plan_stream = serializer.serialize(tQueryPlanInfo);
-            opaqued_query_plan = Base64.getEncoder().encodeToString(query_plan_stream);
+            byte[] queryPlanStream = serializer.serialize(tQueryPlanInfo);
+            opaquedQueryPlan = Base64.getEncoder().encodeToString(queryPlanStream);
         } catch (TException e) {
             throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     "TSerializer failed to serialize PlanFragment, reason [ " + e.getMessage() + " ]");
         }
         result.put("partitions", tabletRoutings);
-        result.put("opaqued_query_plan", opaqued_query_plan);
+        result.put("opaqued_query_plan", opaquedQueryPlan);
         result.put("status", 200);
     }
 

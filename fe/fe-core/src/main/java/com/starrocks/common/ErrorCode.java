@@ -164,8 +164,7 @@ public enum ErrorCode {
     ERR_CLUSTER_BE_NOT_ENOUGH(5036, new byte[] {'H', 'Y', '0', '0', '0'}, "BE is not enough"),
     ERR_CLUSTER_DELETE_DB_EXIST(5037, new byte[] {'H', 'Y', '0', '0', '0'},
             "All databases in cluster must be dropped before dropping cluster"),
-    ERR_CLUSTER_DELETE_BE_ID_ERROR(5037, new byte[] {'H', 'Y', '0', '0', '0'}, "There is no BE's id in the System"),
-    ERR_CLUSTER_NO_CLUSTER_NAME(5038, new byte[] {'H', 'Y', '0', '0', '0'}, "There is no cluster name"),
+    ERR_CLUSTER_DELETE_BE_ID_ERROR(5038, new byte[] {'H', 'Y', '0', '0', '0'}, "There is no BE's id in the System"),
     ERR_CLUSTER_UNKNOWN_ERROR(5040, new byte[] {'4', '2', '0', '0', '0'}, "Unknown cluster '%s'"),
     ERR_CLUSTER_NAME_NULL(5041, new byte[] {'4', '2', '0', '0', '0'}, "No cluster name"),
     ERR_CLUSTER_NO_PERMISSIONS(5042, new byte[] {'4', '2', '0', '0', '0'}, "No permissions"),
@@ -250,7 +249,9 @@ public enum ErrorCode {
     ERROR_CREATE_TABLE_LIKE_EMPTY(5073, new byte[] {'4', '2', '0', '0', '0'},
             "Origin create table stmt is empty"),
     ERROR_REFRESH_EXTERNAL_TABLE_FAILED(5074, new byte[] {'4', '2', '0', '0', '0'},
-            "refresh external table failed: %s");
+            "refresh external table failed: %s"),
+    ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW(5075, new byte[] {'4', '2', '0', '0', '0'},
+            "Create table like does not support create view.");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

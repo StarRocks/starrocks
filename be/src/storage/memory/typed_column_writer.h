@@ -44,7 +44,7 @@ private:
 template <class T>
 class UpdateType {
 public:
-    bool& isnull() { return *static_cast<bool*>(0); /*unused*/ }
+    bool& isnull() { return *static_cast<bool*>(nullptr); /*unused*/ }
     T& value() { return _value; }
 
 private:
@@ -71,23 +71,25 @@ public:
               _real_version(real_version),
               _deltas(std::move(deltas)) {}
 
-    const void* get(const uint32_t rid) const {
+    const void* get(const uint32_t rid) const override {
         return TypedColumnGet<TypedColumnWriter<T, Nullable, ST, UT>, T, Nullable, ST>(*this, rid);
     }
 
-    uint64_t hashcode(const void* rhs, size_t rhs_idx) const { return TypedColumnHashcode<T, ST>(rhs, rhs_idx); }
+    uint64_t hashcode(const void* rhs, size_t rhs_idx) const override {
+        return TypedColumnHashcode<T, ST>(rhs, rhs_idx);
+    }
 
-    bool equals(const uint32_t rid, const void* rhs, size_t rhs_idx) const {
+    bool equals(const uint32_t rid, const void* rhs, size_t rhs_idx) const override {
         return TypedColumnEquals<TypedColumnWriter<T, Nullable, ST, UT>, T, Nullable, ST>(*this, rid, rhs, rhs_idx);
     }
 
-    string debug_string() const {
+    string debug_string() const override {
         return StringPrintf("%s version=%zu(real=%zu) ndelta=%zu insert:%zu update:%zu",
                             _column->debug_string().c_str(), _version, _real_version, _deltas.size(), _num_insert,
                             _num_update);
     }
 
-    Status insert(uint32_t rid, const void* value) {
+    Status insert(uint32_t rid, const void* value) override {
         uint32_t bid = Column::block_id(rid);
         if (bid >= _base->size()) {
             RETURN_IF_ERROR(add_block());
@@ -122,7 +124,7 @@ public:
         return Status::OK();
     }
 
-    Status update(uint32_t rid, const void* value) {
+    Status update(uint32_t rid, const void* value) override {
         DCHECK_LT(rid, _base->size() * Column::BLOCK_SIZE);
         if (Nullable) {
             auto& uv = _updates[rid];
@@ -155,7 +157,7 @@ public:
         return Status::OK();
     }
 
-    Status finalize(uint64_t version) {
+    Status finalize(uint64_t version) override {
         if (_updates.size() == 0) {
             // insert(append) only
             return Status::OK();
@@ -200,7 +202,7 @@ public:
         return Status::OK();
     }
 
-    Status get_new_column(scoped_refptr<Column>* ret) {
+    Status get_new_column(scoped_refptr<Column>* ret) override {
         if (ret->get() != _column.get()) {
             DLOG(INFO) << StringPrintf("%s switch new column", _column->debug_string().c_str());
             (*ret).swap(_column);

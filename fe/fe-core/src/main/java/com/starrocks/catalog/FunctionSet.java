@@ -95,6 +95,19 @@ public class FunctionSet {
     public static final String MULTIPLY = "multiply";
     public static final String DIVIDE = "divide";
 
+    // date functions
+    public static final String YEARS_ADD = "years_add";
+    public static final String YEARS_SUB = "years_sub";
+    public static final String MONTHS_ADD = "months_add";
+    public static final String MONTHS_SUB = "months_sub";
+    public static final String DAYS_ADD = "days_add";
+    public static final String DAYS_SUB = "days_sub";
+    public static final String ADDDATE = "adddate";
+    public static final String SUBDATE = "subdate";
+    public static final String DATE_ADD = "date_add";
+    public static final String DATE_SUB = "date_sub";
+
+
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
     private static final Map<Type, String> MIN_UPDATE_SYMBOL =
             ImmutableMap.<Type, String>builder()

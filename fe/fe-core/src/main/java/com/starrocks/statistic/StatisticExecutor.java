@@ -228,7 +228,7 @@ public class StatisticExecutor {
             parsedStmt = parseSQL(sql.toString(), context);
             ((QueryStmt) parsedStmt).getDbs(context, dbs);
         } catch (Exception e) {
-            LOG.warn("Parse statistic table query fail.", e);
+            LOG.warn("Parse statistic table query fail. SQL: " + sql, e);
             throw e;
         }
 
@@ -459,7 +459,9 @@ public class StatisticExecutor {
             if (lowerDistributeColumns.size() == 1 && lowerDistributeColumns.contains(name.toLowerCase())) {
                 context.put("countDistinctFunction", "COUNT(1) * " + ratio);
             } else {
-                // From PostgreSQL and paper: ESTIMATING THE NUMBER OF CLASSES IN A FINITE POPULATION
+                // From PostgreSQL: n*d / (n - f1 + f1*n/N)
+                // (https://github.com/postgres/postgres/blob/master/src/backend/commands/analyze.c)
+                // and paper: ESTIMATING THE NUMBER OF CLASSES IN A FINITE POPULATION
                 // (http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.93.8637&rep=rep1&type=pdf)
                 // sample_row * count_distinct / ( sample_row - once_count + once_count * sample_row / total_row)
                 String sampleRows = "SUM(t1.count)";

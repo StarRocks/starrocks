@@ -2,6 +2,8 @@
 
 #include "storage/vectorized/rowset_merger.h"
 
+#include <memory>
+
 #include "gutil/stl_util.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset_writer.h"
@@ -17,9 +19,9 @@ namespace vectorized {
 
 class RowsetMerger {
 public:
-    RowsetMerger() {}
+    RowsetMerger() = default;
 
-    virtual ~RowsetMerger() {}
+    virtual ~RowsetMerger() = default;
 
     virtual Status do_merge(Tablet& tablet, int64_t version, const Schema& schema,
                             const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg) = 0;
@@ -39,7 +41,7 @@ struct MergeEntry {
     // set |encode_schema| if require encode chunk pk columns
     const vectorized::Schema* encode_schema = nullptr;
 
-    MergeEntry() {}
+    MergeEntry() = default;
     ~MergeEntry() { close(); }
 
     string debug_string() {
@@ -140,9 +142,9 @@ struct MergeEntryCmp {
 template <class T>
 class RowsetMergerImpl : public RowsetMerger {
 public:
-    RowsetMergerImpl() {}
+    RowsetMergerImpl() = default;
 
-    ~RowsetMergerImpl() override {}
+    ~RowsetMergerImpl() override = default;
 
     Status _fill_heap(MergeEntry<T>* entry) {
         auto st = entry->next();
@@ -221,7 +223,7 @@ public:
     }
 
     Status do_merge(Tablet& tablet, int64_t version, const Schema& schema, const vector<RowsetSharedPtr>& rowsets,
-                    RowsetWriter* writer, const MergeConfig& cfg) {
+                    RowsetWriter* writer, const MergeConfig& cfg) override {
         MonotonicStopWatch timer;
         timer.start();
         _chunk_size = cfg.chunk_size;
@@ -336,31 +338,31 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
     auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema);
     switch (key_type) {
     case OLAP_FIELD_TYPE_BOOL:
-        merger.reset(new RowsetMergerImpl<uint8_t>());
+        merger = std::make_unique<RowsetMergerImpl<uint8_t>>();
         break;
     case OLAP_FIELD_TYPE_TINYINT:
-        merger.reset(new RowsetMergerImpl<int8_t>());
+        merger = std::make_unique<RowsetMergerImpl<int8_t>>();
         break;
     case OLAP_FIELD_TYPE_SMALLINT:
-        merger.reset(new RowsetMergerImpl<int16_t>());
+        merger = std::make_unique<RowsetMergerImpl<int16_t>>();
         break;
     case OLAP_FIELD_TYPE_INT:
-        merger.reset(new RowsetMergerImpl<int32_t>());
+        merger = std::make_unique<RowsetMergerImpl<int32_t>>();
         break;
     case OLAP_FIELD_TYPE_BIGINT:
-        merger.reset(new RowsetMergerImpl<int64_t>());
+        merger = std::make_unique<RowsetMergerImpl<int64_t>>();
         break;
     case OLAP_FIELD_TYPE_LARGEINT:
-        merger.reset(new RowsetMergerImpl<int128_t>());
+        merger = std::make_unique<RowsetMergerImpl<int128_t>>();
         break;
     case OLAP_FIELD_TYPE_VARCHAR:
-        merger.reset(new RowsetMergerImpl<Slice>());
+        merger = std::make_unique<RowsetMergerImpl<Slice>>();
         break;
     case OLAP_FIELD_TYPE_DATE_V2:
-        merger.reset(new RowsetMergerImpl<int32_t>());
+        merger = std::make_unique<RowsetMergerImpl<int32_t>>();
         break;
     case OLAP_FIELD_TYPE_TIMESTAMP:
-        merger.reset(new RowsetMergerImpl<int64_t>());
+        merger = std::make_unique<RowsetMergerImpl<int64_t>>();
         break;
     default:
         return Status::NotSupported(StringPrintf("primary key type not support: %s", field_type_to_string(key_type)));

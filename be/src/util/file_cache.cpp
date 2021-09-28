@@ -21,18 +21,20 @@
 
 #include "util/file_cache.h"
 
+#include <utility>
+
 #include "env/env.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
 
 template <class FileType>
-FileCache<FileType>::FileCache(const std::string& cache_name, int max_open_files)
-        : _cache_name(cache_name), _cache(new_lru_cache(max_open_files)), _is_cache_own(true) {}
+FileCache<FileType>::FileCache(std::string cache_name, int max_open_files)
+        : _cache_name(std::move(cache_name)), _cache(new_lru_cache(max_open_files)), _is_cache_own(true) {}
 
 template <class FileType>
-FileCache<FileType>::FileCache(const std::string& cache_name, std::shared_ptr<Cache> cache)
-        : _cache_name(cache_name), _cache(cache), _is_cache_own(false) {}
+FileCache<FileType>::FileCache(std::string cache_name, std::shared_ptr<Cache> cache)
+        : _cache_name(std::move(cache_name)), _cache(std::move(cache)), _is_cache_own(false) {}
 
 template <class FileType>
 bool FileCache<FileType>::lookup(const std::string& file_name, OpenedFileHandle<FileType>* file_handle) {

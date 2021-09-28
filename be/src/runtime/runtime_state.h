@@ -131,7 +131,7 @@ public:
     RuntimeProfile* runtime_profile() { return &_profile; }
 
     BufferedBlockMgr2* block_mgr2() {
-        DCHECK(_block_mgr2.get() != NULL);
+        DCHECK(_block_mgr2.get() != nullptr);
         return _block_mgr2.get();
     }
 
@@ -142,7 +142,7 @@ public:
 
     // Sets the fragment memory limit and adds it to _mem_trackers
     void set_fragment_mem_tracker(MemTracker* limit) {
-        DCHECK(_fragment_mem_tracker == NULL);
+        DCHECK(_fragment_mem_tracker == nullptr);
         _fragment_mem_tracker = limit;
         _mem_trackers.push_back(limit);
     }
@@ -199,10 +199,10 @@ public:
     // This value and tracker are only used for error reporting.
     // If 'msg' is non-NULL, it will be appended to query_status_ in addition to the
     // generic "Memory limit exceeded" error.
-    Status set_mem_limit_exceeded(MemTracker* tracker = NULL, int64_t failed_allocation_size = 0,
-                                  const std::string* msg = NULL);
+    Status set_mem_limit_exceeded(MemTracker* tracker = nullptr, int64_t failed_allocation_size = 0,
+                                  const std::string* msg = nullptr);
 
-    Status set_mem_limit_exceeded(const std::string& msg) { return set_mem_limit_exceeded(NULL, 0, &msg); }
+    Status set_mem_limit_exceeded(const std::string& msg) { return set_mem_limit_exceeded(nullptr, 0, &msg); }
 
     // Returns a non-OK status if query execution should stop (e.g., the query was cancelled
     // or a mem limit was exceeded). Exec nodes should check this periodically so execution
@@ -426,7 +426,7 @@ private:
     std::atomic<int32_t> _initial_reservation_refcnt{0};
 
     // prohibit copies
-    RuntimeState(const RuntimeState&);
+    RuntimeState(const RuntimeState&) = delete;
 
     RuntimeFilterPort* _runtime_filter_port;
 };

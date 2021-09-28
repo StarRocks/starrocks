@@ -69,26 +69,26 @@ class FileWritableBlock : public WritableBlock {
 public:
     FileWritableBlock(FileBlockManager* block_manager, string path, shared_ptr<WritableFile> writer);
 
-    virtual ~FileWritableBlock();
+    ~FileWritableBlock() override;
 
-    virtual Status close() override;
+    Status close() override;
 
-    virtual Status abort() override;
+    Status abort() override;
 
-    virtual BlockManager* block_manager() const override;
+    BlockManager* block_manager() const override;
 
-    virtual const BlockId& id() const override;
-    virtual const std::string& path() const override;
+    const BlockId& id() const override;
+    const std::string& path() const override;
 
-    virtual Status append(const Slice& data) override;
+    Status append(const Slice& data) override;
 
-    virtual Status appendv(const Slice* data, size_t data_cnt) override;
+    Status appendv(const Slice* data, size_t data_cnt) override;
 
-    virtual Status finalize() override;
+    Status finalize() override;
 
-    virtual size_t bytes_appended() const override;
+    size_t bytes_appended() const override;
 
-    virtual State state() const override;
+    State state() const override;
 
     void handle_error(const Status& s) const;
 
@@ -255,20 +255,20 @@ public:
     FileReadableBlock(FileBlockManager* block_manager, string path,
                       std::shared_ptr<OpenedFileHandle<RandomAccessFile>> file_handle);
 
-    virtual ~FileReadableBlock();
+    ~FileReadableBlock() override;
 
-    virtual Status close() override;
+    Status close() override;
 
-    virtual BlockManager* block_manager() const override;
+    BlockManager* block_manager() const override;
 
-    virtual const BlockId& id() const override;
-    virtual const std::string& path() const override;
+    const BlockId& id() const override;
+    const std::string& path() const override;
 
-    virtual Status size(uint64_t* sz) const override;
+    Status size(uint64_t* sz) const override;
 
-    virtual Status read(uint64_t offset, Slice result) const override;
+    Status read(uint64_t offset, Slice result) const override;
 
-    virtual Status readv(uint64_t offset, const Slice* results, size_t res_cnt) const override;
+    Status readv(uint64_t offset, const Slice* results, size_t res_cnt) const override;
 
     void handle_error(const Status& s) const;
 
@@ -294,7 +294,7 @@ private:
 
 FileReadableBlock::FileReadableBlock(FileBlockManager* block_manager, string path,
                                      std::shared_ptr<OpenedFileHandle<RandomAccessFile>> file_handle)
-        : _block_manager(block_manager), _path(std::move(path)), _file_handle(file_handle), _closed(false) {
+        : _block_manager(block_manager), _path(std::move(path)), _file_handle(std::move(file_handle)), _closed(false) {
     if (_block_manager->_metrics) {
         _block_manager->_metrics->blocks_open_reading->increment(1);
         _block_manager->_metrics->total_readable_blocks->increment(1);
@@ -368,17 +368,18 @@ FileBlockManager::FileBlockManager(Env* env, BlockManagerOptions opts)
           _opts(std::move(opts)),
           _mem_tracker(new MemTracker(-1, "file_block_manager", _opts.parent_mem_tracker.get())) {
     if (_opts.enable_metric) {
-        _metrics.reset(new internal::BlockManagerMetrics());
+        _metrics = std::make_unique<internal::BlockManagerMetrics>();
     }
 
 #ifdef BE_TEST
     _file_cache.reset(new FileCache<RandomAccessFile>("Readable file cache", config::file_descriptor_cache_capacity));
 #else
-    _file_cache.reset(new FileCache<RandomAccessFile>("Readable file cache", StorageEngine::instance()->file_cache()));
+    _file_cache = std::make_unique<FileCache<RandomAccessFile>>("Readable file cache",
+                                                                StorageEngine::instance()->file_cache());
 #endif
 }
 
-FileBlockManager::~FileBlockManager() {}
+FileBlockManager::~FileBlockManager() = default;
 
 Status FileBlockManager::open() {
     // TODO(lingbin)
@@ -394,7 +395,7 @@ Status FileBlockManager::create_block(const CreateBlockOptions& opts, std::uniqu
     RETURN_IF_ERROR(env_util::open_file_for_write(wr_opts, _env, opts.path, &writer));
 
     VLOG(1) << "Creating new block at " << opts.path;
-    block->reset(new internal::FileWritableBlock(this, opts.path, writer));
+    *block = std::make_unique<internal::FileWritableBlock>(this, opts.path, writer);
     return Status::OK();
 }
 
@@ -408,7 +409,7 @@ Status FileBlockManager::open_block(const std::string& path, std::unique_ptr<Rea
         _file_cache->insert(path, file.release(), file_handle.get());
     }
 
-    block->reset(new internal::FileReadableBlock(this, path, file_handle));
+    *block = std::make_unique<internal::FileReadableBlock>(this, path, file_handle);
     return Status::OK();
 }
 

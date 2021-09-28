@@ -69,14 +69,14 @@ public:
     //  - name: human-readable name of this server. Should not contain spaces
     //  - processor: Thrift processor to handle RPCs
     //  - port: The port the server will listen for connections on
-    //  - metrics: if not NULL, the server will register metrics on this object
+    //  - metrics: if not nullptr, the server will register metrics on this object
     //  - num_worker_threads: the number of worker threads to use in any thread pool
     //  - server_type: the type of IO strategy this server should employ
-    ThriftServer(const std::string& name, const std::shared_ptr<apache::thrift::TProcessor>& processor, int port,
-                 MetricRegistry* metrics = NULL, int num_worker_threads = DEFAULT_WORKER_THREADS,
+    ThriftServer(const std::string& name, std::shared_ptr<apache::thrift::TProcessor> processor, int port,
+                 MetricRegistry* metrics = nullptr, int num_worker_threads = DEFAULT_WORKER_THREADS,
                  ServerType server_type = THREADED);
 
-    ~ThriftServer() {}
+    ~ThriftServer() = default;
 
     int port() const { return _port; }
 
@@ -127,7 +127,7 @@ private:
     std::unique_ptr<apache::thrift::server::TServer> _server;
     std::shared_ptr<apache::thrift::TProcessor> _processor;
 
-    // If not NULL, called when session events happen. Not owned by us.
+    // If not nullptr, called when session events happen. Not owned by us.
     SessionHandlerIf* _session_handler;
 
     // Protects _session_keys

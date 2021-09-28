@@ -53,6 +53,9 @@ using strings::Substitute;
 
 Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result) {
     switch (type.type) {
+    case TYPE_BOOLEAN:
+        *result = arrow::boolean();
+        break;
     case TYPE_TINYINT:
         *result = arrow::int8();
         break;
@@ -85,6 +88,11 @@ Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::
         break;
     case TYPE_DECIMALV2:
         *result = std::make_shared<arrow::Decimal128Type>(27, 9);
+        break;
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
+        *result = std::make_shared<arrow::Decimal128Type>(type.precision, type.scale);
         break;
     default:
         return Status::InvalidArgument(strings::Substitute("Unknown primitive type($0)", type.type));
@@ -148,7 +156,7 @@ Status convert_to_row_desc(ObjectPool* pool, const arrow::Schema& schema, RowDes
     TDescriptorTableBuilder builder;
     TTupleDescriptorBuilder tuple_builder;
     for (int i = 0; i < schema.num_fields(); ++i) {
-        auto field = schema.field(i);
+        const auto& field = schema.field(i);
         TSlotDescriptorBuilder slot_builder;
         RETURN_IF_ERROR(convert_to_slot_desc(*field, i, &slot_builder));
         tuple_builder.add_slot(slot_builder.build());
@@ -177,7 +185,7 @@ public:
         _time_zone = buf;
     }
 
-    ~FromRowBatchConverter() override {}
+    ~FromRowBatchConverter() override = default;
 
     // Use base class function
     using arrow::TypeVisitor::Visit;
@@ -234,13 +242,13 @@ public:
                 int len = 48;
                 char* v = LargeIntValue::to_string(reinterpret_cast<const PackedInt128*>(cell_ptr)->value, buf, &len);
                 std::string temp(v, len);
-                ARROW_RETURN_NOT_OK(builder.Append(std::move(temp)));
+                ARROW_RETURN_NOT_OK(builder.Append(temp));
                 break;
             }
             case TYPE_DECIMAL: {
                 const DecimalValue* decimal_val = reinterpret_cast<const DecimalValue*>(cell_ptr);
                 std::string decimal_str = decimal_val->to_string();
-                ARROW_RETURN_NOT_OK(builder.Append(std::move(decimal_str)));
+                ARROW_RETURN_NOT_OK(builder.Append(decimal_str));
                 break;
             }
             default: {
@@ -325,7 +333,7 @@ Status FromRowBatchConverter::convert(std::shared_ptr<arrow::RecordBatch>* out) 
 
     for (size_t idx = 0; idx < num_fields; ++idx) {
         _cur_field_idx = idx;
-        _cur_slot_ref.reset(new SlotRef(slot_descs[idx]));
+        _cur_slot_ref = std::make_unique<SlotRef>(slot_descs[idx]);
         RETURN_IF_ERROR(_cur_slot_ref->prepare(slot_descs[idx], _batch.row_desc()));
         auto arrow_st = arrow::VisitTypeInline(*_schema->field(idx)->type(), this);
         if (!arrow_st.ok()) {
@@ -419,7 +427,7 @@ Status ToRowBatchConverter::convert(std::shared_ptr<RowBatch>* result) {
         }
     }
     for (size_t idx = 0; idx < num_fields; ++idx) {
-        _cur_slot_ref.reset(new SlotRef(slot_descs[idx]));
+        _cur_slot_ref = std::make_unique<SlotRef>(slot_descs[idx]);
         RETURN_IF_ERROR(_cur_slot_ref->prepare(slot_descs[idx], _row_desc));
         auto arrow_st = arrow::VisitArrayInline(*_batch.column(idx), this);
         if (!arrow_st.ok()) {
@@ -439,7 +447,6 @@ Status convert_to_row_batch(const arrow::RecordBatch& batch, const RowDescriptor
 }
 
 Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::string* result) {
-    std::shared_ptr<arrow::io::BufferOutputStream> sink;
     // create sink memory buffer outputstream with the computed capacity
     int64_t capacity;
     arrow::Status a_st = arrow::ipc::GetRecordBatchSize(record_batch, &capacity);
@@ -448,20 +455,21 @@ Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::strin
         msg << "GetRecordBatchSize failure, reason: " << a_st.ToString();
         return Status::InternalError(msg.str());
     }
-    a_st = arrow::io::BufferOutputStream::Create(capacity, arrow::default_memory_pool(), &sink);
-    if (!a_st.ok()) {
+    auto sink_res = arrow::io::BufferOutputStream::Create(capacity, arrow::default_memory_pool());
+    if (!sink_res.ok()) {
         std::stringstream msg;
-        msg << "create BufferOutputStream failure, reason: " << a_st.ToString();
+        msg << "create BufferOutputStream failure, reason: " << sink_res.status().ToString();
         return Status::InternalError(msg.str());
     }
-    std::shared_ptr<arrow::ipc::RecordBatchWriter> record_batch_writer;
+    std::shared_ptr<arrow::io::BufferOutputStream> sink = sink_res.ValueOrDie();
     // create RecordBatch Writer
-    a_st = arrow::ipc::RecordBatchStreamWriter::Open(sink.get(), record_batch.schema(), &record_batch_writer);
-    if (!a_st.ok()) {
+    auto writer_res = arrow::ipc::MakeStreamWriter(sink.get(), record_batch.schema());
+    if (!writer_res.ok()) {
         std::stringstream msg;
-        msg << "open RecordBatchStreamWriter failure, reason: " << a_st.ToString();
+        msg << "open RecordBatchStreamWriter failure, reason: " << writer_res.status().ToString();
         return Status::InternalError(msg.str());
     }
+    std::shared_ptr<arrow::ipc::RecordBatchWriter> record_batch_writer = writer_res.ValueOrDie();
     // write RecordBatch to memory buffer outputstream
     a_st = record_batch_writer->WriteRecordBatch(record_batch);
     if (!a_st.ok()) {
@@ -470,13 +478,13 @@ Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::strin
         return Status::InternalError(msg.str());
     }
     record_batch_writer->Close();
-    std::shared_ptr<arrow::Buffer> buffer;
-    sink->Finish(&buffer);
-    if (!a_st.ok()) {
+    auto finish_res = sink->Finish();
+    if (!finish_res.ok()) {
         std::stringstream msg;
-        msg << "allocate result buffer failure, reason: " << a_st.ToString();
+        msg << "allocate result buffer failure, reason: " << finish_res.status().ToString();
         return Status::InternalError(msg.str());
     }
+    std::shared_ptr<arrow::Buffer> buffer = finish_res.ValueOrDie();
     *result = buffer->ToString();
     // close the sink
     sink->Close();

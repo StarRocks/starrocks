@@ -21,6 +21,7 @@
 
 #include "runtime/sorted_run_merger.h"
 
+#include <utility>
 #include <vector>
 
 #include "exprs/expr.h"
@@ -43,39 +44,42 @@ namespace starrocks {
 class SortedRunMerger::BatchedRowSupplier {
 public:
     // Construct an instance from a sorted input run.
-    BatchedRowSupplier(SortedRunMerger* parent, const RunBatchSupplier& sorted_run)
-            : _sorted_run(sorted_run), _input_row_batch(NULL), _input_row_batch_index(-1), _parent(parent) {}
+    BatchedRowSupplier(SortedRunMerger* parent, RunBatchSupplier sorted_run)
+            : _sorted_run(std::move(sorted_run)),
+              _input_row_batch(nullptr),
+              _input_row_batch_index(-1),
+              _parent(parent) {}
 
-    ~BatchedRowSupplier() {}
+    ~BatchedRowSupplier() = default;
 
     // Retrieves the first batch of sorted rows from the run.
     Status init(bool* done) {
         *done = false;
         RETURN_IF_ERROR(_sorted_run(&_input_row_batch));
-        if (_input_row_batch == NULL) {
+        if (_input_row_batch == nullptr) {
             *done = true;
             return Status::OK();
         }
-        RETURN_IF_ERROR(next(NULL, done));
+        RETURN_IF_ERROR(next(nullptr, done));
         return Status::OK();
     }
 
     // Increment the current row index. If the current input batch is exhausted fetch the
     // next one from the sorted run. Transfer ownership to transfer_batch if not NULL.
     Status next(RowBatch* transfer_batch, bool* done) {
-        DCHECK(_input_row_batch != NULL);
+        DCHECK(_input_row_batch != nullptr);
         ++_input_row_batch_index;
         if (_input_row_batch_index < _input_row_batch->num_rows()) {
             *done = false;
         } else {
             ScopedTimer<MonotonicStopWatch> timer(_parent->_get_next_batch_timer);
-            if (transfer_batch != NULL) {
+            if (transfer_batch != nullptr) {
                 _input_row_batch->transfer_resource_ownership(transfer_batch);
             }
 
             RETURN_IF_ERROR(_sorted_run(&_input_row_batch));
-            DCHECK(_input_row_batch == NULL || _input_row_batch->num_rows() > 0);
-            *done = _input_row_batch == NULL;
+            DCHECK(_input_row_batch == nullptr || _input_row_batch->num_rows() > 0);
+            *done = _input_row_batch == nullptr;
             _input_row_batch_index = 0;
         }
         return Status::OK();
@@ -122,9 +126,11 @@ void SortedRunMerger::heapify(int parent_index) {
     }
 }
 
-SortedRunMerger::SortedRunMerger(const TupleRowComparator& compare_less_than, RowDescriptor* row_desc,
-                                 RuntimeProfile* profile, bool deep_copy_input)
-        : _compare_less_than(compare_less_than), _input_row_desc(row_desc), _deep_copy_input(deep_copy_input) {
+SortedRunMerger::SortedRunMerger(TupleRowComparator compare_less_than, RowDescriptor* row_desc, RuntimeProfile* profile,
+                                 bool deep_copy_input)
+        : _compare_less_than(std::move(compare_less_than)),
+          _input_row_desc(row_desc),
+          _deep_copy_input(deep_copy_input) {
     _get_next_timer = ADD_TIMER(profile, "MergeGetNext");
     _get_next_batch_timer = ADD_TIMER(profile, "MergeGetNextBatch");
 }
@@ -134,7 +140,7 @@ Status SortedRunMerger::prepare(const vector<RunBatchSupplier>& input_runs) {
     _min_heap.reserve(input_runs.size());
     for (const auto& input_run : input_runs) {
         BatchedRowSupplier* new_elem = _pool.add(new BatchedRowSupplier(this, input_run));
-        DCHECK(new_elem != NULL);
+        DCHECK(new_elem != nullptr);
         bool empty = false;
         RETURN_IF_ERROR(new_elem->init(&empty));
         if (!empty) {
@@ -174,7 +180,7 @@ Status SortedRunMerger::get_next(RowBatch* output_batch, bool* eos) {
         bool min_run_complete = false;
         // Advance to the next element in min. output_batch is supplied to transfer
         // resource ownership if the input batch in min is exhausted.
-        RETURN_IF_ERROR(min->next(_deep_copy_input ? NULL : output_batch, &min_run_complete));
+        RETURN_IF_ERROR(min->next(_deep_copy_input ? nullptr : output_batch, &min_run_complete));
         if (min_run_complete) {
             // Remove the element from the heap.
             iter_swap(_min_heap.begin(), _min_heap.end() - 1);

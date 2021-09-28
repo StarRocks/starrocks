@@ -21,10 +21,10 @@
 
 #include "util/mem_info.h"
 
-#include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <sstream>

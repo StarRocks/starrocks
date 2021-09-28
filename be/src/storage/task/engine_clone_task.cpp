@@ -74,6 +74,9 @@ OLAPStatus EngineCloneTask::execute() {
         if (!rlock.owns_lock()) {
             return OLAP_ERR_RWLOCK_ERROR;
         }
+        if (Tablet::check_migrate(tablet)) {
+            return OLAP_ERR_OTHER_ERROR;
+        }
         auto st = _do_clone(tablet.get());
         _set_tablet_info(st, false);
     } else {
@@ -108,7 +111,7 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
             LOG(INFO) << "Fail to do incremental clone: " << status
                       << ". switched to fully clone. tablet_id=" << tablet->tablet_id();
             incremental_clone = false;
-            status = _clone_copy(*(tablet->data_dir()), download_path, _error_msgs, NULL);
+            status = _clone_copy(*(tablet->data_dir()), download_path, _error_msgs, nullptr);
         }
 
         if (status.ok()) {
@@ -452,7 +455,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
         (void)FileUtils::remove(header_file);
 
         std::set<std::string> clone_files;
-        res = FileUtils::list_dirs_files(clone_dir, NULL, &clone_files, Env::Default());
+        res = FileUtils::list_dirs_files(clone_dir, nullptr, &clone_files, Env::Default());
         if (!res.ok()) {
             LOG(WARNING) << "Fail to list directory " << clone_dir << ": " << res;
             break;
@@ -460,7 +463,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 
         std::set<string> local_files;
         std::string tablet_dir = tablet->tablet_path();
-        res = FileUtils::list_dirs_files(tablet_dir, NULL, &local_files, Env::Default());
+        res = FileUtils::list_dirs_files(tablet_dir, nullptr, &local_files, Env::Default());
         if (!res.ok()) {
             LOG(WARNING) << "Fail to list tablet directory " << tablet_dir << ": " << res;
             break;
@@ -648,12 +651,12 @@ Status EngineCloneTask::_finish_clone_updatable(Tablet* tablet, const std::strin
 
     // check all files in /clone and /tablet
     std::set<std::string> clone_files;
-    RETURN_IF_ERROR(FileUtils::list_dirs_files(clone_dir, NULL, &clone_files, Env::Default()));
+    RETURN_IF_ERROR(FileUtils::list_dirs_files(clone_dir, nullptr, &clone_files, Env::Default()));
     clone_files.erase("meta");
 
     std::set<std::string> local_files;
     const std::string& tablet_dir = tablet->tablet_path();
-    RETURN_IF_ERROR(FileUtils::list_dirs_files(tablet_dir, NULL, &local_files, Env::Default()));
+    RETURN_IF_ERROR(FileUtils::list_dirs_files(tablet_dir, nullptr, &local_files, Env::Default()));
 
     // Files that are found in both |clone_files| and |local_files|.
     std::vector<std::string> duplicate_files;
@@ -682,7 +685,7 @@ Status EngineCloneTask::_finish_clone_updatable(Tablet* tablet, const std::strin
     // Note that |snapshot_meta| may be modified by `load_snapshot`.
     RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta));
     if (snapshot_meta.snapshot_type() == SNAPSHOT_TYPE_FULL) {
-        tablet->updates()->remove_expired_versions(time(NULL));
+        tablet->updates()->remove_expired_versions(time(nullptr));
     }
     LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << ", removing directory " << clone_dir;
     auto st = FileUtils::remove_all(clone_dir);

@@ -32,9 +32,9 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "gen_cpp/DorisExternalService_types.h"
 #include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/TDorisExternalService.h"
+#include "gen_cpp/StarrocksExternalService_types.h"
+#include "gen_cpp/TStarrocksExternalService.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/data_stream_mgr.h"
@@ -156,7 +156,7 @@ void BackendService::open_scanner(TScanOpenResult& result_, const TScanOpenParam
     _exec_env->external_scan_context_mgr()->create_scan_context(&p_context);
     p_context->fragment_instance_id = fragment_instance_id;
     p_context->offset = 0;
-    p_context->last_access_time = time(NULL);
+    p_context->last_access_time = time(nullptr);
     if (params.__isset.keep_alive_min) {
         p_context->keep_alive_min = params.keep_alive_min;
     } else {
@@ -223,7 +223,7 @@ void BackendService::get_next(TScanBatchResult& result_, const TScanNextBatchPar
             result_.status = t_status;
         }
     }
-    context->last_access_time = time(NULL);
+    context->last_access_time = time(nullptr);
 }
 
 void BackendService::close_scanner(TScanCloseResult& result_, const TScanCloseParams& params) {

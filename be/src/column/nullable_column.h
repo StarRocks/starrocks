@@ -30,7 +30,7 @@ public:
               _has_null(rhs._has_null) {}
 
     // Move constructor
-    NullableColumn(NullableColumn&& rhs)
+    NullableColumn(NullableColumn&& rhs) noexcept
             : _data_column(std::move(rhs._data_column)),
               _null_column(std::move(rhs._null_column)),
               _has_null(rhs._has_null) {}
@@ -178,9 +178,9 @@ public:
 
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
-    void fvn_hash(uint32_t* hash, uint16_t from, uint16_t to) const override;
+    void fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
-    void crc32_hash(uint32_t* hash, uint16_t from, uint16_t to) const override;
+    void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
 
@@ -271,6 +271,10 @@ public:
         }
         ss << "]";
         return ss.str();
+    }
+
+    bool reach_capacity_limit() const override {
+        return _data_column->reach_capacity_limit() || _null_column->reach_capacity_limit();
     }
 
 private:

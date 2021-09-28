@@ -125,7 +125,7 @@ public:
     std::string debug_string() const;
 
 private:
-    Schema() {}
+    Schema() = default;
 
     void _init(const std::vector<TabletColumn>& cols, const std::vector<ColumnId>& col_ids, size_t num_key_columns);
     void _init(const std::vector<const Field*>& cols, const std::vector<ColumnId>& col_ids, size_t num_key_columns);

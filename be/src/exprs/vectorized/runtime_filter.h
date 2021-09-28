@@ -27,7 +27,7 @@ public:
     ~SimdBlockFilter() noexcept { free(_directory); }
 
     SimdBlockFilter(const SimdBlockFilter& bf) = delete;
-    SimdBlockFilter(SimdBlockFilter&& bf);
+    SimdBlockFilter(SimdBlockFilter&& bf) noexcept;
 
     void init(size_t nums);
 
@@ -68,9 +68,11 @@ public:
 #endif
     }
 
+#ifdef __AVX2__
     void insert_hash_in_same_bucket(const uint64_t* hash_values, size_t n) {
         if (n == 0) return;
         const uint32_t bucket_idx = hash_values[0] & _directory_mask;
+#ifdef __AVX2__
         __m256i* addr = reinterpret_cast<__m256i*>(_directory + bucket_idx);
         __m256i now = _mm256_load_si256(addr);
         for (size_t i = 0; i < n; i++) {
@@ -78,7 +80,19 @@ public:
             now = _mm256_or_si256(now, mask);
         }
         _mm256_store_si256(addr, now);
+#else
+        uint32_t masks[BITS_SET_PER_BLOCK];
+        for (size_t i = 0; i < n; i++) {
+            auto hash = hash_values[i];
+
+            make_mask(hash >> _log_num_buckets, masks);
+            for (int j = 0; j < BITS_SET_PER_BLOCK; ++j) {
+                _directory[bucket_idx][j] |= masks[j];
+            }
+        }
+#endif
     }
+#endif
 
     size_t max_serialized_size() const;
     size_t serialize(uint8_t* data) const;
@@ -93,6 +107,7 @@ private:
     // For scalar version:
     void make_mask(uint32_t key, uint32_t* masks) const;
 
+#ifdef __AVX2__
     // For simd version:
     __m256i make_mask(const uint32_t hash) const noexcept {
         // Load hash into a YMM register, repeated eight times
@@ -107,6 +122,7 @@ private:
         // Use these 5 bits to shift a single bit to a location in each 32-bit lane
         return _mm256_sllv_epi32(ones, hash_data);
     }
+#endif
     // log2(number of bytes in a bucket):
     static constexpr int LOG_BUCKET_BYTE_SIZE = 5;
 
@@ -231,9 +247,9 @@ public:
     using ColumnType = RunTimeColumnType<Type>;
 
     RuntimeBloomFilter() = default;
-    ~RuntimeBloomFilter() = default;
+    ~RuntimeBloomFilter() override = default;
 
-    virtual RuntimeBloomFilter* create_empty(ObjectPool* pool) override { return pool->add(new RuntimeBloomFilter()); };
+    RuntimeBloomFilter* create_empty(ObjectPool* pool) override { return pool->add(new RuntimeBloomFilter()); };
 
     void init_min_max() {
         _has_min_max = false;
@@ -346,7 +362,7 @@ public:
                 _hash_values.assign(size, 0);
             } else if (_join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED) {
                 _hash_values.assign(size, HashUtil::FNV_SEED);
-                input_column->fvn_hash(_hash_values.data(), 0, size);
+                input_column->fnv_hash(_hash_values.data(), 0, size);
                 for (size_t i = 0; i < size; i++) {
                     _hash_values[i] %= _hash_partition_number;
                 }
@@ -566,7 +582,7 @@ public:
         return offset;
     }
 
-    virtual bool check_equal(const JoinRuntimeFilter& base_rf) const override {
+    bool check_equal(const JoinRuntimeFilter& base_rf) const override {
         if (!JoinRuntimeFilter::check_equal(base_rf)) return false;
         const auto& rf = static_cast<const RuntimeBloomFilter<Type>&>(base_rf);
         if constexpr (!IsSlice<CppType>) {

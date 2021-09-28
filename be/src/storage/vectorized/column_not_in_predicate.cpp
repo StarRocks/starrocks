@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
 #include <type_traits>
+#include <utility>
 
 #include "column/binary_column.h"
 #include "column/column.h"
@@ -153,8 +154,8 @@ private:
 template <FieldType field_type>
 class BinaryColumnNotInPredicate : public ColumnPredicate {
 public:
-    BinaryColumnNotInPredicate(const TypeInfoPtr& type_info, ColumnId id, const std::vector<std::string>& strings)
-            : ColumnPredicate(type_info, id), _zero_padded_strs(strings) {
+    BinaryColumnNotInPredicate(const TypeInfoPtr& type_info, ColumnId id, std::vector<std::string> strings)
+            : ColumnPredicate(type_info, id), _zero_padded_strs(std::move(strings)) {
         for (const std::string& s : _zero_padded_strs) {
             _slices.emplace(Slice(s));
         }
@@ -328,24 +329,21 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
     case OLAP_FIELD_TYPE_DECIMAL_V2:
         return new ColumnNotInPredicate<OLAP_FIELD_TYPE_DECIMAL_V2>(type_info, id, strs);
     case OLAP_FIELD_TYPE_DECIMAL32: {
-        const auto precision = type_info->precision();
         const auto scale = type_info->scale();
         using SetType = ItemHashSet<CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL32>::CppType>;
-        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL32>(precision, scale, strs);
+        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL32>(scale, strs);
         return new ColumnNotInPredicate<OLAP_FIELD_TYPE_DECIMAL32>(type_info, id, std::move(values));
     }
     case OLAP_FIELD_TYPE_DECIMAL64: {
-        const auto precision = type_info->precision();
         const auto scale = type_info->scale();
         using SetType = ItemHashSet<CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL64>::CppType>;
-        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL64>(precision, scale, strs);
+        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL64>(scale, strs);
         return new ColumnNotInPredicate<OLAP_FIELD_TYPE_DECIMAL64>(type_info, id, std::move(values));
     }
     case OLAP_FIELD_TYPE_DECIMAL128: {
-        const auto precision = type_info->precision();
         const auto scale = type_info->scale();
         using SetType = ItemHashSet<CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL128>::CppType>;
-        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL128>(precision, scale, strs);
+        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL128>(scale, strs);
         return new ColumnNotInPredicate<OLAP_FIELD_TYPE_DECIMAL128>(type_info, id, std::move(values));
     }
     case OLAP_FIELD_TYPE_CHAR:

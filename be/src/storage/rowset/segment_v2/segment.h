@@ -73,9 +73,16 @@ using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
 // is changed, this segment can not be used any more. For example, after a schema
 // change finished, client should disable all cached Segment for old TabletSchema.
 class Segment : public std::enable_shared_from_this<Segment> {
+    struct private_type;
+
 public:
-    static Status open(MemTracker* mem_tracker, fs::BlockManager* blk_mgr, std::string filename, uint32_t segment_id,
-                       const TabletSchema* tablet_schema, std::shared_ptr<Segment>* output);
+    static StatusOr<std::shared_ptr<Segment>> open(MemTracker* mem_tracker, fs::BlockManager* blk_mgr,
+                                                   const std::string& filename, uint32_t segment_id,
+                                                   const TabletSchema* tablet_schema,
+                                                   size_t* footer_length_hint = nullptr);
+
+    Segment(const private_type&, MemTracker* mem_tracker, fs::BlockManager* blk_mgr, std::string fname,
+            uint32_t segment_id, const TabletSchema* tablet_schema);
 
     ~Segment();
 
@@ -128,11 +135,14 @@ public:
 
 private:
     DISALLOW_COPY_AND_ASSIGN(Segment);
-    Segment(MemTracker* mem_tracker, fs::BlockManager* blk_mgr, std::string fname, uint32_t segment_id,
-            const TabletSchema* tablet_schema);
+
+    struct private_type {
+        explicit private_type(int) {}
+    };
+
     // open segment file and read the minimum amount of necessary information (footer)
-    Status _open();
-    Status _parse_footer();
+    Status _open(size_t* footer_length_hint);
+    Status _parse_footer(size_t* footer_length_hint);
     Status _create_column_readers();
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.

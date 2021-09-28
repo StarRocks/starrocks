@@ -21,8 +21,7 @@
 
 #pragma once
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -39,7 +38,7 @@ public:
     KafkaConsumerPipe(size_t max_buffered_bytes = 1024 * 1024, size_t min_chunk_size = 64 * 1024)
             : StreamLoadPipe(max_buffered_bytes, min_chunk_size) {}
 
-    virtual ~KafkaConsumerPipe() {}
+    ~KafkaConsumerPipe() override = default;
 
     Status append_with_row_delimiter(const char* data, size_t size, char row_delimiter) {
         Status st = append(data, size);

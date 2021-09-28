@@ -2,7 +2,9 @@
 
 #include "column/binary_column.h"
 
+#ifdef __x86_64__
 #include <immintrin.h>
+#endif
 
 #include "column/bytes.h"
 #include "common/logging.h"
@@ -405,15 +407,15 @@ const uint8_t* BinaryColumn::deserialize_column(const uint8_t* src) {
     return src;
 }
 
-void BinaryColumn::fvn_hash(uint32_t* hashes, uint16_t from, uint16_t to) const {
-    for (uint16_t i = from; i < to; ++i) {
+void BinaryColumn::fnv_hash(uint32_t* hashes, uint32_t from, uint32_t to) const {
+    for (uint32_t i = from; i < to; ++i) {
         hashes[i] = HashUtil::fnv_hash(_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i], hashes[i]);
     }
 }
 
-void BinaryColumn::crc32_hash(uint32_t* hashes, uint16_t from, uint16_t to) const {
+void BinaryColumn::crc32_hash(uint32_t* hashes, uint32_t from, uint32_t to) const {
     // keep hash if _bytes is empty
-    for (uint16_t i = from; i < to && !_bytes.empty(); ++i) {
+    for (uint32_t i = from; i < to && !_bytes.empty(); ++i) {
         hashes[i] = HashUtil::zlib_crc_hash(_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i], hashes[i]);
     }
 }

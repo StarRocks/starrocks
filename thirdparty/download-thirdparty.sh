@@ -143,7 +143,7 @@ do
         URL="${REPOSITORY_URL}/${!NAME}"
         download_func ${!NAME} ${URL} $TP_SOURCE_DIR ${!MD5SUM}
         if [ "$?x" == "0x" ]; then
-            #try to download from home 
+            #try to download from home
             URL=$TP_ARCH"_DOWNLOAD"
             download_func ${!NAME} ${!URL} $TP_SOURCE_DIR ${!MD5SUM}
             if [ "$?x" == "0x" ]; then
@@ -221,12 +221,16 @@ PATCHED_MARK="patched_mark"
 
 # glog patch
 cd $TP_SOURCE_DIR/$GLOG_SOURCE
-if [ ! -f $PATCHED_MARK ]; then
+if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.3.3" ]; then
     patch -p1 < $TP_PATCH_DIR/glog-0.3.3-vlog-double-lock-bug.patch
     patch -p1 < $TP_PATCH_DIR/glog-0.3.3-for-starrocks2.patch
     patch -p1 < $TP_PATCH_DIR/glog-0.3.3-remove-unwind-dependency.patch
     # patch Makefile.am to make autoreconf work
     patch -p0 < $TP_PATCH_DIR/glog-0.3.3-makefile.patch
+    touch $PATCHED_MARK
+fi
+if [ ! -f $PATCHED_MARK ] && [ $GLOG_SOURCE == "glog-0.4.0" ]; then
+    patch -p1 < $TP_PATCH_DIR/glog-0.4.0-for-starrocks2.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -235,20 +239,11 @@ echo "Finished patching $GLOG_SOURCE"
 # re2 patch
 cd $TP_SOURCE_DIR/$RE2_SOURCE
 if [ ! -f $PATCHED_MARK ]; then
-    patch -p0 < $TP_PATCH_DIR/re2-2017-05-01.patch 
+    patch -p0 < $TP_PATCH_DIR/re2-2017-05-01.patch
     touch $PATCHED_MARK
 fi
 cd -
 echo "Finished patching $RE2_SOURCE"
-
-# mysql patch
-cd $TP_SOURCE_DIR/$MYSQL_SOURCE
-if [ ! -f $PATCHED_MARK ]; then
-    patch -p0 < $TP_PATCH_DIR/mysql-5.7.18.patch
-    touch $PATCHED_MARK
-fi
-cd -
-echo "Finished patching $MYSQL_SOURCE"
 
 # libevent patch
 cd $TP_SOURCE_DIR/$LIBEVENT_SOURCE
@@ -270,7 +265,7 @@ echo "Finished patching $LIBEVENT_SOURCE"
 
 # lz4 patch to disable shared library
 cd $TP_SOURCE_DIR/$LZ4_SOURCE
-if [ ! -f $PATCHED_MARK ]; then
+if [ ! -f $PATCHED_MARK ] && [ $LZ4_SOURCE == "lz4-1.7.5" ]; then
     patch -p0 < $TP_PATCH_DIR/lz4-1.7.5.patch
     touch $PATCHED_MARK
 fi
@@ -281,6 +276,10 @@ echo "Finished patching $LZ4_SOURCE"
 cd $TP_SOURCE_DIR/$BRPC_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "incubator-brpc-0.9.5" ]; then
     patch -p1 < $TP_PATCH_DIR/incubator-brpc-0.9.5.patch
+    touch $PATCHED_MARK
+fi
+if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "incubator-brpc-0.9.7" ]; then
+    patch -p1 < $TP_PATCH_DIR/incubator-brpc-0.9.7.patch
     touch $PATCHED_MARK
 fi
 cd -
@@ -317,7 +316,7 @@ echo "Finished patching $BOOST_SOURCE"
 
 # patch protobuf-3.5.1
 cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE
-if [ ! -f $PATCHED_MARK ]; then
+if [ ! -f $PATCHED_MARK ] && [ $PROTOBUF_SOURCE == "protobuf-3.5.1" ]; then
     patch -p1 < $TP_PATCH_DIR/protobuf-3.5.1.patch
     touch $PATCHED_MARK
 fi

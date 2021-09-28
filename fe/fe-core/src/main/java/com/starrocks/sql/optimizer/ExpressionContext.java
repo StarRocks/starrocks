@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
@@ -98,8 +99,8 @@ public class ExpressionContext {
         return childrenProperty.get(index).getLeftMostScanTabletsNum();
     }
 
-    public boolean isExecuteInOneInstance(int index) {
-        return childrenProperty.get(index).isExecuteInOneInstance();
+    public boolean isExecuteInOneTablet(int index) {
+        return childrenProperty.get(index).isExecuteInOneTablet();
     }
 
     public Operator getChildOperator(int index) {
@@ -110,12 +111,9 @@ public class ExpressionContext {
         }
     }
 
-    public ExpressionContext getChildContext(int index) {
-        if (expression != null) {
-            return new ExpressionContext(expression.getInputs().get(index));
-        } else {
-            return new ExpressionContext(groupExpression.getInputs().get(index).getFirstLogicalExpression());
-        }
+    public GroupExpression getChildGroupExpression(int index) {
+        Preconditions.checkNotNull(groupExpression);
+        return groupExpression.getInputs().get(index).getFirstLogicalExpression();
     }
 
     public Statistics getStatistics() {

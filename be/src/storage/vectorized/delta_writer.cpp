@@ -46,10 +46,6 @@ DeltaWriter::~DeltaWriter() {
         // cancel and wait all memtables in flush queue to be finished
         _flush_token->cancel();
     }
-
-    if (_tablet != nullptr) {
-        _tablet->data_dir()->remove_pending_ids(ROWSET_ID_PREFIX + _rowset_writer->rowset_id().to_string());
-    }
 }
 
 void DeltaWriter::_garbage_collection() {
@@ -93,14 +89,29 @@ Status DeltaWriter::init() {
                      << ", version count=" << _tablet->version_count() << ", limit=" << config::tablet_max_versions;
         return Status::ServiceUnavailable("too many tablet versions");
     }
-    {
-        std::shared_lock base_migration_rlock(_tablet->get_migration_lock(), std::try_to_lock);
-        if (!base_migration_rlock.owns_lock()) {
-            std::stringstream ss;
-            ss << "Fail to get lock. tablet_id=" << _req.tablet_id;
-            LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
+
+    // The tablet may have been migrated during delta writer init,
+    // and the latest tablet needs to be obtained when loading.
+    // Here, the while loop checks whether the obtained tablet has changed
+    // to get the latest tablet.
+    while (true) {
+        std::shared_lock base_migration_rlock(_tablet->get_migration_lock());
+        TabletSharedPtr new_tablet;
+        if (!_tablet->is_migrating()) {
+            // maybe migration just finish, get the tablet again
+            new_tablet = tablet_mgr->get_tablet(_req.tablet_id, _req.schema_hash);
+            if (new_tablet == nullptr) {
+                std::stringstream ss;
+                ss << "Fail to get tablet. tablet_id=" << _req.tablet_id;
+                LOG(WARNING) << ss.str();
+                return Status::InternalError(ss.str());
+            }
+            if (_tablet != new_tablet) {
+                _tablet = new_tablet;
+                continue;
+            }
         }
+
         std::lock_guard push_lock(_tablet->get_push_lock());
         OLAPStatus olap_status =
                 _storage_engine->txn_manager()->prepare_txn(_req.partition_id, _tablet, _req.txn_id, _req.load_id);
@@ -110,6 +121,7 @@ Status DeltaWriter::init() {
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
+        break;
     }
 
     RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);

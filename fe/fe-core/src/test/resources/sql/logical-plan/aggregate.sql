@@ -142,7 +142,7 @@ logical project (col,col,col)
 select v1+1 as v from t0 group by v1 having v1+1= 1;
 [result]
 logical project (col + 1)
-    logical filter (col + 1 = 1)
+    logical filter (col = 0)
         logical aggregate (col) ()
             logical project (col)
                 logical scan

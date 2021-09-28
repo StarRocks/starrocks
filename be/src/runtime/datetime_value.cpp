@@ -21,10 +21,9 @@
 
 #include "runtime/datetime_value.h"
 
-#include <ctype.h>
-#include <string.h>
-#include <time.h>
-
+#include <cctype>
+#include <cstring>
+#include <ctime>
 #include <limits>
 #include <sstream>
 
@@ -38,11 +37,12 @@ const uint64_t log_10_int[] = {1,         10,         100,         1000,        
 
 static int s_days_in_month[13] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
 static const char* s_month_name[] = {"",     "January", "February",  "March",   "April",    "May",      "June",
-                                     "July", "August",  "September", "October", "November", "December", NULL};
+                                     "July", "August",  "September", "October", "November", "December", nullptr};
 static const char* s_ab_month_name[] = {"",    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", NULL};
-static const char* s_day_name[] = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", NULL};
-static const char* s_ab_day_name[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", NULL};
+                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", nullptr};
+static const char* s_day_name[] = {"Monday", "Tuesday",  "Wednesday", "Thursday",
+                                   "Friday", "Saturday", "Sunday",    nullptr};
+static const char* s_ab_day_name[] = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", nullptr};
 
 uint8_t mysql_week_mode(uint32_t mode) {
     mode &= 7;
@@ -62,7 +62,7 @@ static uint32_t calc_days_in_year(uint32_t year) {
 
 DateTimeValue DateTimeValue::_s_min_datetime_value(0, TIME_DATETIME, 0, 0, 0, 0, 0, 1, 1);
 DateTimeValue DateTimeValue::_s_max_datetime_value(0, TIME_DATETIME, 23, 59, 59, 0, 9999, 12, 31);
-RE2 DateTimeValue::time_zone_offset_format_reg("^[+-]{1}\\d{2}\\:\\d{2}$");
+RE2 DateTimeValue::time_zone_offset_format_reg(R"(^[+-]{1}\d{2}\:\d{2}$)");
 
 bool DateTimeValue::check_range() const {
     return _year > 9999 || _month > 12 || _day > 31 || _hour > (_type == TIME_TIME ? TIME_MAX_HOUR : 23) ||
@@ -651,13 +651,20 @@ int DateTimeValue::compute_format_len(const char* format, int len) {
 }
 
 bool DateTimeValue::to_format_string(const char* format, int len, char* to) const {
+    // max buffer size is 128
+    // we need write a terminal zero
+    constexpr int buffer_size = 127;
+    const char* buffer_start = to;
     char buf[64];
-    char* pos = NULL;
+    char* pos = nullptr;
     const char* ptr = format;
     const char* end = format + len;
     char ch = '\0';
 
     while (ptr < end) {
+        int write_size = to - buffer_start;
+        if (write_size == buffer_size) return false;
+
         if (*ptr != '%' || (ptr + 1) == end) {
             *to++ = *ptr++;
             continue;
@@ -667,6 +674,7 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
         switch (ch = *ptr++) {
         case 'a':
             // Abbreviated weekday name
+            if (write_size + 3 >= buffer_size) return false;
             if (_type == TIME_TIME || (_year == 0 && _month == 0)) {
                 return false;
             }
@@ -674,6 +682,7 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
             break;
         case 'b':
             // Abbreviated month name
+            if (write_size + 3 >= buffer_size) return false;
             if (_month == 0) {
                 return false;
             }
@@ -681,16 +690,19 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
             break;
         case 'c':
             // Month, numeric (0...12)
+            if (write_size + 2 >= buffer_size) return false;
             pos = int_to_str(_month, buf);
             to = append_with_prefix(buf, pos - buf, '0', 1, to);
             break;
         case 'd':
             // Day of month (00...31)
+            if (write_size + 2 >= buffer_size) return false;
             pos = int_to_str(_day, buf);
             to = append_with_prefix(buf, pos - buf, '0', 2, to);
             break;
         case 'D':
             // Day of the month with English suffix (0th, 1st, ...)
+            if (write_size + 4 >= buffer_size) return false;
             pos = int_to_str(_day, buf);
             to = append_with_prefix(buf, pos - buf, '0', 1, to);
             if (_day >= 10 && _day <= 19) {
@@ -714,10 +726,12 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
             break;
         case 'e':
             // Day of the month, numeric (0..31)
+            if (write_size + 2 >= buffer_size) return false;
             pos = int_to_str(_day, buf);
             to = append_with_prefix(buf, pos - buf, '0', 1, to);
             break;
         case 'f':
+            if (write_size + 2 >= buffer_size) return false;
             // Microseconds (000000..999999)
             pos = int_to_str(_microsecond, buf);
             to = append_with_prefix(buf, pos - buf, '0', 6, to);
@@ -725,41 +739,49 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
         case 'h':
         case 'I':
             // Hour (01..12)
+            if (write_size + 2 >= buffer_size) return false;
             pos = int_to_str((_hour % 24 + 11) % 12 + 1, buf);
             to = append_with_prefix(buf, pos - buf, '0', 2, to);
             break;
         case 'H':
             // Hour (00..23)
+            if (write_size + 2 >= buffer_size) return false;
             pos = int_to_str(_hour, buf);
             to = append_with_prefix(buf, pos - buf, '0', 2, to);
             break;
         case 'i':
             // Minutes, numeric (00..59)
+            if (write_size + 2 >= buffer_size) return false;
             pos = int_to_str(_minute, buf);
             to = append_with_prefix(buf, pos - buf, '0', 2, to);
             break;
         case 'j':
             // Day of year (001..366)
+            if (write_size + 3 >= buffer_size) return false;
             pos = int_to_str(daynr() - calc_daynr(_year, 1, 1) + 1, buf);
             to = append_with_prefix(buf, pos - buf, '0', 3, to);
             break;
         case 'k':
             // Hour (0..23)
+            if (write_size + 2 >= buffer_size) return false;
             pos = int_to_str(_hour, buf);
             to = append_with_prefix(buf, pos - buf, '0', 1, to);
             break;
         case 'l':
             // Hour (1..12)
+            if (write_size + 2 >= buffer_size) return false;
             pos = int_to_str((_hour % 24 + 11) % 12 + 1, buf);
             to = append_with_prefix(buf, pos - buf, '0', 1, to);
             break;
         case 'm':
             // Month, numeric (00..12)
+            if (write_size + 2 >= buffer_size) return false;
             pos = int_to_str(_month, buf);
             to = append_with_prefix(buf, pos - buf, '0', 2, to);
             break;
         case 'M':
             // Month name (January..December)
+            if (write_size + 9 >= buffer_size) return false;
             if (_month == 0) {
                 return false;
             }
@@ -767,6 +789,7 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
             break;
         case 'p':
             // AM or PM
+            if (write_size + 2 >= buffer_size) return false;
             if ((_hour % 24) >= 12) {
                 to = append_string("PM", to);
             } else {
@@ -775,6 +798,7 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
             break;
         case 'r':
             // Time, 12-hour (hh:mm:ss followed by AM or PM)
+            if (write_size + 11 >= buffer_size) return false;
             *to++ = (char)('0' + (((_hour + 11) % 12 + 1) / 10));
             *to++ = (char)('0' + (((_hour + 11) % 12 + 1) % 10));
             *to++ = ':';
@@ -794,11 +818,13 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
         case 's':
         case 'S':
             // Seconds (00..59)
+            if (write_size + 2 >= buffer_size) return false;
             pos = int_to_str(_second, buf);
             to = append_with_prefix(buf, pos - buf, '0', 2, to);
             break;
         case 'T':
             // Time, 24-hour (hh:mm:ss)
+            if (write_size + 8 >= buffer_size) return false;
             *to++ = (char)('0' + ((_hour % 24) / 10));
             *to++ = (char)('0' + ((_hour % 24) % 10));
             *to++ = ':';
@@ -813,6 +839,7 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
         case 'u':
             // Week (00..53), where Monday is the first day of the week;
             // WEEK() mode 1
+            if (write_size + 2 >= buffer_size) return false;
             if (_type == TIME_TIME) {
                 return false;
             }
@@ -822,6 +849,7 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
         case 'U':
             // Week (00..53), where Sunday is the first day of the week;
             // WEEK() mode 0
+            if (write_size + 2 >= buffer_size) return false;
             if (_type == TIME_TIME) {
                 return false;
             }
@@ -831,6 +859,7 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
         case 'v':
             // Week (01..53), where Monday is the first day of the week;
             // WEEK() mode 3; used with %x
+            if (write_size + 2 >= buffer_size) return false;
             if (_type == TIME_TIME) {
                 return false;
             }
@@ -840,6 +869,7 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
         case 'V':
             // Week (01..53), where Sunday is the first day of the week;
             // WEEK() mode 2; used with %X
+            if (write_size + 2 >= buffer_size) return false;
             if (_type == TIME_TIME) {
                 return false;
             }
@@ -848,6 +878,7 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
             break;
         case 'w':
             // Day of the week (0=Sunday..6=Saturday)
+            if (write_size + 8 >= buffer_size) return false;
             if (_type == TIME_TIME || (_month == 0 && _year == 0)) {
                 return false;
             }
@@ -856,6 +887,7 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
             break;
         case 'W':
             // Weekday name (Sunday..Saturday)
+            if (write_size + 8 >= buffer_size) return false;
             to = append_string(s_day_name[weekday()], to);
             break;
         case 'x': {
@@ -873,6 +905,7 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
         case 'X': {
             // Year for the week where Sunday is the first day of the week,
             // numeric, four digits; used with %V
+            if (write_size + 4 >= buffer_size) return false;
             if (_type == TIME_TIME) {
                 return false;
             }
@@ -884,15 +917,18 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
         }
         case 'y':
             // Year, numeric (two digits)
+            if (write_size + 2 >= buffer_size) return false;
             pos = int_to_str(_year % 100, buf);
             to = append_with_prefix(buf, pos - buf, '0', 2, to);
             break;
         case 'Y':
             // Year, numeric, four digits
+            if (write_size + 4 >= buffer_size) return false;
             pos = int_to_str(_year, buf);
             to = append_with_prefix(buf, pos - buf, '0', 4, to);
             break;
         default:
+            if (write_size + 1 >= buffer_size) return false;
             *to++ = ch;
             break;
         }
@@ -1027,7 +1063,7 @@ static int find_in_lib(const char* lib[], const char* str, const char* end) {
     int pos = 0;
     int find_count = 0;
     int find_pos = 0;
-    for (; lib[pos] != NULL; ++pos) {
+    for (; lib[pos] != nullptr; ++pos) {
         const char* i = str;
         const char* j = lib[pos];
         while (i < end && *j) {
@@ -1093,7 +1129,7 @@ bool DateTimeValue::from_date_format_str(const char* format, int format_len, con
         }
         // Check switch
         if (*ptr == '%' && ptr + 1 < end) {
-            const char* tmp = NULL;
+            const char* tmp = nullptr;
             int64_t int_value = 0;
             ptr++;
             switch (*ptr++) {
@@ -1546,7 +1582,7 @@ bool DateTimeValue::from_unixtime(int64_t timestamp, const cctz::time_zone& ctz)
 
 const char* DateTimeValue::month_name() const {
     if (_month < 1 || _month > 12) {
-        return NULL;
+        return nullptr;
     }
     return s_month_name[_month];
 }
@@ -1554,14 +1590,14 @@ const char* DateTimeValue::month_name() const {
 const char* DateTimeValue::day_name() const {
     int day = weekday();
     if (day < 0 || day >= 7) {
-        return NULL;
+        return nullptr;
     }
     return s_day_name[day];
 }
 
 DateTimeValue DateTimeValue::local_time() {
     DateTimeValue value;
-    value.from_unixtime(time(NULL), TimezoneUtils::default_time_zone);
+    value.from_unixtime(time(nullptr), TimezoneUtils::default_time_zone);
     return value;
 }
 

@@ -41,7 +41,7 @@ using RowsetMetaSharedPtr = std::shared_ptr<RowsetMeta>;
 
 class RowsetMeta {
 public:
-    ~RowsetMeta() {}
+    ~RowsetMeta() = default;
 
     bool init(const std::string_view& pb_rowset_meta) {
         bool ret = _deserialize_from_pb(pb_rowset_meta);
@@ -91,7 +91,9 @@ public:
 
     TabletUid tablet_uid() const { return _rowset_meta_pb.tablet_uid(); }
 
-    void set_tablet_uid(TabletUid tablet_uid) { *(_rowset_meta_pb.mutable_tablet_uid()) = tablet_uid.to_proto(); }
+    void set_tablet_uid(const TabletUid& tablet_uid) {
+        *(_rowset_meta_pb.mutable_tablet_uid()) = tablet_uid.to_proto();
+    }
 
     int64_t txn_id() const { return _rowset_meta_pb.txn_id(); }
 
@@ -175,7 +177,7 @@ public:
 
     PUniqueId load_id() const { return _rowset_meta_pb.load_id(); }
 
-    void set_load_id(PUniqueId load_id) {
+    void set_load_id(const PUniqueId& load_id) {
         PUniqueId* new_load_id = _rowset_meta_pb.mutable_load_id();
         new_load_id->set_hi(load_id.hi());
         new_load_id->set_lo(load_id.lo());

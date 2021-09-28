@@ -41,8 +41,8 @@ namespace starrocks {
 // are plausible.
 class TraceMetrics {
 public:
-    TraceMetrics() {}
-    ~TraceMetrics() {}
+    TraceMetrics() = default;
+    ~TraceMetrics() = default;
 
     // Internalize the given string by duplicating it into a process-wide
     // pool. If this string has already been interned, returns a pointer

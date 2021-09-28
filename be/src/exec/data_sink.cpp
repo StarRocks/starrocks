@@ -41,7 +41,7 @@ namespace starrocks {
 Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink,
                                   const std::vector<TExpr>& output_exprs, const TPlanFragmentExecParams& params,
                                   const RowDescriptor& row_desc, std::unique_ptr<DataSink>* sink) {
-    DataSink* tmp_sink = NULL;
+    DataSink* tmp_sink = nullptr;
 
     switch (thrift_sink.type) {
     case TDataSinkType::DATA_STREAM_SINK: {
@@ -77,7 +77,6 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
         sink->reset(tmp_sink);
         break;
     case TDataSinkType::MYSQL_TABLE_SINK: {
-#ifdef STARROCKS_WITH_MYSQL
         if (!thrift_sink.__isset.mysql_table_sink) {
             return Status::InternalError("Missing data buffer sink.");
         }
@@ -86,10 +85,6 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
         MysqlTableSink* mysql_tbl_sink = new MysqlTableSink(pool, row_desc, output_exprs);
         sink->reset(mysql_tbl_sink);
         break;
-#else
-        return Status::InternalError(
-                "Don't support MySQL table, you should rebuild StarRocks with WITH_MYSQL option ON");
-#endif
     }
 
     case TDataSinkType::EXPORT_SINK: {
@@ -104,7 +99,8 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
     case TDataSinkType::OLAP_TABLE_SINK: {
         Status status;
         DCHECK(thrift_sink.__isset.olap_table_sink);
-        sink->reset(new stream_load::OlapTableSink(pool, row_desc, output_exprs, &status, params.use_vectorized));
+        *sink = std::make_unique<stream_load::OlapTableSink>(pool, row_desc, output_exprs, &status,
+                                                             params.use_vectorized);
         RETURN_IF_ERROR(status);
         break;
     }
@@ -122,7 +118,7 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
         return Status::InternalError(error_msg.str());
     }
 
-    if (sink->get() != NULL) {
+    if (sink->get() != nullptr) {
         RETURN_IF_ERROR((*sink)->init(thrift_sink));
     }
 
@@ -134,7 +130,7 @@ Status DataSink::init(const TDataSink& thrift_sink) {
 }
 
 Status DataSink::prepare(RuntimeState* state) {
-    _expr_mem_tracker.reset(new MemTracker(-1, "Data sink", state->instance_mem_tracker()));
+    _expr_mem_tracker = std::make_unique<MemTracker>(-1, "Data sink", state->instance_mem_tracker());
     return Status::OK();
 }
 

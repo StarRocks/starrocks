@@ -29,7 +29,7 @@
 
 #include <memory>
 
-#include "gen_cpp/DorisExternalService_types.h"
+#include "gen_cpp/StarrocksExternalService_types.h"
 #include "util/blocking_queue.hpp"
 
 namespace starrocks {

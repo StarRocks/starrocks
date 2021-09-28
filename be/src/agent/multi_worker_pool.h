@@ -14,12 +14,13 @@ class MultiWorkerPool : public TaskWorkerPool {
 public:
     MultiWorkerPool(const TaskWorkerType worker_type, ExecEnv* env, const TMasterInfo& master_info, int worker_num);
 
-    virtual ~MultiWorkerPool(){};
+    ~MultiWorkerPool() override = default;
+    ;
 
-    virtual void start();
+    void start() override;
 
     // submit task to queue and wait to be executed
-    virtual void submit_task(const TAgentTaskRequest& task);
+    void submit_task(const TAgentTaskRequest& task) override;
 
 private:
     void submit_publish_version_task(const TAgentTaskRequest& task);

@@ -42,9 +42,9 @@ public:
             return _stream_map.size();
         });
     }
-    ~LoadStreamMgr() {}
+    ~LoadStreamMgr() = default;
 
-    Status put(const UniqueId& id, std::shared_ptr<StreamLoadPipe> stream) {
+    Status put(const UniqueId& id, const std::shared_ptr<StreamLoadPipe>& stream) {
         std::lock_guard<std::mutex> l(_lock);
         auto it = _stream_map.find(id);
         if (it != std::end(_stream_map)) {

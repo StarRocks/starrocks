@@ -31,7 +31,8 @@ class DriverQueue {
 public:
     virtual void put_back(const DriverPtr& driver) = 0;
     virtual DriverPtr take(size_t* queue_index) = 0;
-    virtual ~DriverQueue(){};
+    virtual ~DriverQueue() = default;
+    ;
     virtual SubQuerySharedDriverQueue* get_sub_queue(size_t) = 0;
 };
 
@@ -49,12 +50,12 @@ public:
             factor *= RATIO_OF_ADJACENT_QUEUE;
         }
     }
-    ~QuerySharedDriverQueue() override {}
+    ~QuerySharedDriverQueue() override = default;
 
     static const size_t QUEUE_SIZE = 8;
     // maybe other value for ratio.
     static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.7;
-    void put_back(const DriverPtr& driver);
+    void put_back(const DriverPtr& driver) override;
     DriverPtr take(size_t* queue_index) override;
     SubQuerySharedDriverQueue* get_sub_queue(size_t) override;
 

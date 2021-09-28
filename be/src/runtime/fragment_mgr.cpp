@@ -96,7 +96,7 @@ public:
     const DateTimeValue& start_time() const { return _start_time; }
 
     // Update status of this fragment execute
-    Status update_status(Status status) {
+    Status update_status(const Status& status) {
         std::lock_guard<std::mutex> l(_status_lock);
         if (!status.ok() && _exec_status.ok()) {
             _exec_status = status;
@@ -163,7 +163,7 @@ FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId&
     _start_time = DateTimeValue::local_time();
 }
 
-FragmentExecState::~FragmentExecState() {}
+FragmentExecState::~FragmentExecState() = default;
 
 Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
     if (params.__isset.query_options) {
@@ -235,7 +235,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     params.__set_done(done);
 
     RuntimeState* runtime_state = _executor.runtime_state();
-    DCHECK(runtime_state != NULL);
+    DCHECK(runtime_state != nullptr);
     if (runtime_state->query_options().query_type == TQueryType::LOAD && !done && status.ok()) {
         // this is a load plan, and load is not finished, just make a brief report
         params.__set_loaded_rows(runtime_state->num_rows_load_total());
@@ -359,7 +359,7 @@ FragmentMgr::~FragmentMgr() {
 
 static void empty_function(PlanFragmentExecutor* exec) {}
 
-void FragmentMgr::exec_actual(std::shared_ptr<FragmentExecState> exec_state, FinishCallback cb) {
+void FragmentMgr::exec_actual(const std::shared_ptr<FragmentExecState>& exec_state, const FinishCallback& cb) {
     exec_state->execute();
 
     {
@@ -382,7 +382,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params) {
     return exec_plan_fragment(params, std::bind<void>(&empty_function, std::placeholders::_1));
 }
 
-Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, FinishCallback cb) {
+Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb) {
     const TUniqueId& fragment_instance_id = params.params.fragment_instance_id;
     std::shared_ptr<FragmentExecState> exec_state;
     {
@@ -561,7 +561,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     }
 
     // set up desc tbl
-    DescriptorTbl* desc_tbl = NULL;
+    DescriptorTbl* desc_tbl = nullptr;
     ObjectPool obj_pool;
     st = DescriptorTbl::create(&obj_pool, t_query_plan_info.desc_tbl, &desc_tbl);
     if (!st.ok()) {

@@ -21,11 +21,11 @@
 
 #include "runtime/mem_tracker.h"
 
-#include <stdint.h>
-
 #include <boost/algorithm/string/join.hpp>
+#include <cstdint>
 #include <limits>
 #include <memory>
+#include <utility>
 
 #include "exec/exec_node.h"
 #include "gutil/strings/substitute.h"
@@ -44,45 +44,45 @@ namespace starrocks {
 
 const std::string MemTracker::COUNTER_NAME = "PeakMemoryUsage";
 
-MemTracker::MemTracker(int64_t byte_limit, const std::string& label, MemTracker* parent, bool auto_unregister,
+MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent, bool auto_unregister,
                        bool log_usage_if_zero)
         : _type(NO_SET),
           _limit(byte_limit),
-          _label(label),
+          _label(std::move(label)),
           _parent(parent),
           _consumption(&_local_counter),
           _local_counter(TUnit::BYTES),
           _log_usage_if_zero(log_usage_if_zero),
           _auto_unregister(auto_unregister) {
-    if (parent != NULL) _parent->add_child_tracker(this);
+    if (parent != nullptr) _parent->add_child_tracker(this);
     Init();
 }
 
-MemTracker::MemTracker(Type type, int64_t byte_limit, const std::string& label, MemTracker* parent,
-                       bool auto_unregister, bool log_usage_if_zero)
+MemTracker::MemTracker(Type type, int64_t byte_limit, std::string label, MemTracker* parent, bool auto_unregister,
+                       bool log_usage_if_zero)
         : _type(type),
           _limit(byte_limit),
-          _label(label),
+          _label(std::move(label)),
           _parent(parent),
           _consumption(&_local_counter),
           _local_counter(TUnit::BYTES),
           _log_usage_if_zero(log_usage_if_zero),
           _auto_unregister(auto_unregister) {
-    if (parent != NULL) _parent->add_child_tracker(this);
+    if (parent != nullptr) _parent->add_child_tracker(this);
     Init();
 }
 
-MemTracker::MemTracker(RuntimeProfile* profile, int64_t byte_limit, const std::string& label, MemTracker* parent,
+MemTracker::MemTracker(RuntimeProfile* profile, int64_t byte_limit, std::string label, MemTracker* parent,
                        bool auto_unregister)
         : _type(NO_SET),
           _limit(byte_limit),
-          _label(label),
+          _label(std::move(label)),
           _parent(parent),
           _consumption(profile->AddHighWaterMarkCounter(COUNTER_NAME, TUnit::BYTES)),
           _local_counter(TUnit::BYTES),
           _log_usage_if_zero(true),
           _auto_unregister(auto_unregister) {
-    if (parent != NULL) _parent->add_child_tracker(this);
+    if (parent != nullptr) _parent->add_child_tracker(this);
     Init();
 }
 
@@ -90,7 +90,7 @@ void MemTracker::Init() {
     DCHECK_GE(_limit, -1);
     // populate _all_trackers and _limit_trackers
     MemTracker* tracker = this;
-    while (tracker != NULL) {
+    while (tracker != nullptr) {
         _all_trackers.push_back(tracker);
         if (tracker->has_limit()) _limit_trackers.push_back(tracker);
         tracker = tracker->_parent;
@@ -251,11 +251,11 @@ Status MemTracker::MemLimitExceeded(RuntimeState* state, const std::string& deta
 bool MemTracker::GcMemory(int64_t max_consumption) {
     if (max_consumption < 0) return true;
     std::lock_guard<std::mutex> l(_gc_lock);
-    if (_consumption_metric != NULL) RefreshConsumptionFromMetric();
+    if (_consumption_metric != nullptr) RefreshConsumptionFromMetric();
     int64_t pre_gc_consumption = consumption();
     // Check if someone gc'd before us
     if (pre_gc_consumption < max_consumption) return false;
-    if (_num_gcs_metric != NULL) _num_gcs_metric->increment(1);
+    if (_num_gcs_metric != nullptr) _num_gcs_metric->increment(1);
 
     int64_t curr_consumption = pre_gc_consumption;
     // Try to free up some memory
@@ -266,12 +266,12 @@ bool MemTracker::GcMemory(int64_t max_consumption) {
         const int64_t EXTRA_BYTES_TO_FREE = 512L * 1024L * 1024L;
         int64_t bytes_to_free = curr_consumption - max_consumption + EXTRA_BYTES_TO_FREE;
         _gc_functions[i](bytes_to_free);
-        if (_consumption_metric != NULL) RefreshConsumptionFromMetric();
+        if (_consumption_metric != nullptr) RefreshConsumptionFromMetric();
         curr_consumption = consumption();
         if (max_consumption - curr_consumption <= EXTRA_BYTES_TO_FREE) break;
     }
 
-    if (_bytes_freed_by_last_gc_metric != NULL) {
+    if (_bytes_freed_by_last_gc_metric != nullptr) {
         _bytes_freed_by_last_gc_metric->set_value(pre_gc_consumption - curr_consumption);
     }
     return curr_consumption > max_consumption;

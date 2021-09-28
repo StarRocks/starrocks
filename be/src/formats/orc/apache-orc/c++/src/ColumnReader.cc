@@ -23,8 +23,8 @@
 #include "ColumnReader.hh"
 
 #include <bits/endian.h>
-#include <math.h>
 
+#include <cmath>
 #include <iostream>
 
 #include "Adaptor.hh"
@@ -757,6 +757,8 @@ void StringDictionaryColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t nu
             } else {
                 // use largest index.
                 codes[i] = static_cast<int64_t>(dictionaryCount);
+                outputStarts[i] = nullptr;
+                outputLengths[i] = 0;
             }
         }
     } else {

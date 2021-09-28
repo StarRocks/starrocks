@@ -59,7 +59,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testScan() throws Exception {
         String sql = "select * from t0";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains(" OUTPUT EXPRS:1: v1 | 2: v2 | 3: v3\n"
                 + "  PARTITION: RANDOM"));
     }
@@ -68,7 +67,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testProject() throws Exception {
         String sql = "select v1 from t0";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n"
                 + " OUTPUT EXPRS:1: v1\n"
                 + "  PARTITION: RANDOM\n"
@@ -85,7 +83,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testLimit() throws Exception {
         String sql = "select v1 from t0 limit 1";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("PLAN FRAGMENT 0\n"
                 + " OUTPUT EXPRS:1: v1\n"
                 + "  PARTITION: RANDOM\n"
@@ -216,8 +213,8 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL(18,2)) + CAST(2: v2 AS DECIMAL(18,3))\n" +
-                "  |  use vectorized: true"));
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL64(7,2)) AS DECIMAL64(18,2)) + CAST(CAST(2: v2 AS DECIMAL64(9,3)) AS DECIMAL64(18,3))\n" +
+                "  |  use vectorized: true\n"));
         Config.enable_decimal_v3 = false;
     }
 
@@ -227,7 +224,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL(38,2)) - CAST(2: v2 AS DECIMAL(38,3))\n" +
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(27,2)) AS DECIMAL128(38,2)) - CAST(CAST(2: v2 AS DECIMAL64(10,3)) AS DECIMAL128(38,3))\n" +
                 "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
@@ -238,7 +235,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL(38,5)) * CAST(2: v2 AS DECIMAL(38,7))\n" +
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(10,5)) AS DECIMAL128(38,5)) * CAST(CAST(2: v2 AS DECIMAL64(9,7)) AS DECIMAL128(38,7))\n" +
                 "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
@@ -249,9 +246,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL(38,5)) / CAST(CAST(2: v2 AS DECIMAL(9,7)) AS DECIMAL"
-                + "(38,7))\n"
-                +
+                "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL128(18,5)) AS DECIMAL128(38,5)) / CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL128(38,7))\n" +
                 "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
@@ -262,9 +257,7 @@ public class PlanFragmentTest extends PlanTestBase {
         Config.enable_decimal_v3 = true;
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
-                "  |  <slot 4> : CAST(1: v1 AS DECIMAL(18,5)) % CAST(CAST(2: v2 AS DECIMAL(9,7)) AS DECIMAL"
-                + "(18,7))\n"
-                +
+                "  |  <slot 4> : CAST(1: v1 AS DECIMAL64(18,5)) % CAST(CAST(2: v2 AS DECIMAL32(9,7)) AS DECIMAL64(18,7))\n" +
                 "  |  use vectorized: true"));
         Config.enable_decimal_v3 = false;
     }
@@ -1081,7 +1074,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 " arg_types:[TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL64," +
                 " precision:10, scale:2))])], ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
                 "scalar_type:TScalarType(type:DECIMAL64, precision:10, scale:2))]), has_var_args:false, " +
-                "signature:lag(DECIMAL(10,2))";
+                "signature:lag(DECIMAL64(10,2))";
         Assert.assertTrue(plan.contains(expectSlice));
 
         sql = "select lag(null, 1,1) OVER () from t0";
@@ -1233,579 +1226,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  3:Project\n" +
                 "  |  <slot 1> : 1: v1"));
-    }
-
-    @Test
-    public void testOnePhaseAggregateForOneTablet() throws Exception {
-        FeConstants.runningUnitTest = true;
-        starRocksAssert.withTable("CREATE TABLE `vk_dm_9m_renew_order_da` (\n" +
-                "  `pack_order_id` bigint(20) NULL ,\n" +
-                "  `student_id` bigint(20) NULL ,\n" +
-                "  `course_type` varchar(200) NULL ,\n" +
-                "  `total_hours` bigint(20) NULL ,\n" +
-                "  `real_paid_total_price` decimal(18, 4) NULL ,\n" +
-                "  `confirm_date_time` date NULL ,\n" +
-                "  `apply_refund_date` date NULL ,\n" +
-                "  `fact_refund_price` decimal(18, 4) NULL ,\n" +
-                "  `order_type` bigint(20) NULL ,\n" +
-                "  `student_type` varchar(200) NULL ,\n" +
-                "  `staff_id` bigint(20) NULL ,\n" +
-                "  `tl` varchar(200) NULL ,\n" +
-                "  `mgr` varchar(200) NULL ,\n" +
-                "  `dbt` varchar(200) NULL \n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`pack_order_id`, `student_id`)\n" +
-                "COMMENT \"olap\"\n" +
-                "DISTRIBUTED BY HASH(`pack_order_id`, `student_id`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
-                ");");
-        starRocksAssert.withTable("CREATE TABLE `vk_dwd_9m_kpi_new_da` (\n" +
-                "  `kpi_date` varchar(50) NULL ,\n" +
-                "  `type` varchar(50) NULL ,\n" +
-                "  `kpi` varchar(50) NULL ,\n" +
-                "  `channel1` varchar(50) NULL ,\n" +
-                "  `channel2` varchar(50) NULL ,\n" +
-                "  `target` decimal(18, 4) NULL ,\n" +
-                "  `mtd_target` decimal(18, 4) NULL \n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`kpi_date`)\n" +
-                "COMMENT \"olap\"\n" +
-                "DISTRIBUTED BY HASH(`kpi_date`) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
-                ");");
-        OlapTable t0 = (OlapTable) connectContext.getCatalog().getDb("default_cluster:test").
-                getTable("vk_dm_9m_renew_order_da");
-        setTableStatistics(t0, 10000);
-        OlapTable t1 = (OlapTable) connectContext.getCatalog().getDb("default_cluster:test").
-                getTable("vk_dwd_9m_kpi_new_da");
-        setTableStatistics(t1, 10000);
-
-        String sql =
-                "select sum(worksheet_835_.`order_num`) as `mcxf-succrate` from (select  *  from (select a"
-                        +
-                        ".confirm_date_time       ,'ZONG' as course_type       ,a.order_num       ,a.mtd_order       ,b.target"
-                        +
-                        "       ,b.mtd_target from  (       select xd.confirm_date_time              ,xd.order_num         "
-                        +
-                        "     ,sum(xd.order_num) over(partition by xd.month order by xd.confirm_date_time asc) as mtd_order"
-                        + "       from (\n"
-                        +
-                        "       select to_date(confirm_date_time)as confirm_date_time                    ,substr"
-                        + "(confirm_date_time,1,7) month                    ,count(pack_order_id)order_num           "
-                        + "  from vk_dm_9m_renew_order_da             where order_type=2             and "
-                        + "confirm_date_time>='2020-09-01'             and apply_refund_date is null              "
-                        + "group by confirm_date_time,month        )xd   )a  left join  (   select\n"
-                        +
-                        "*   from vk_dwd_9m_kpi_new_da   where type='xf'   and kpi='ZONG'   and channel1='total'   and "
-                        + "channel2='total'   )b on b.kpi_date=a.confirm_date_time  union all select a"
-                        + ".confirm_date_time       ,'mc' as course_type       ,a.order_num       ,a.mtd_order       "
-                        + ",b.target       ,b.mtd_target from  (       select xd.confirm_date_time              ,xd"
-                        + ".order_num              ,sum(xd.order_num) over(partition by xd.month order by xd"
-                        + ".confirm_date_time asc) as mtd_order       from (             select to_date"
-                        + "(confirm_date_time)as confirm_date_time\n"
-                        +
-                        "           ,substr(confirm_date_time,1,7) month                    ,count(pack_order_id)"
-                        + "order_num             from vk_dm_9m_renew_order_da             where order_type=2         "
-                        + "    and course_type='mc'             and confirm_date_time>='2020-09-01'             and "
-                        + "apply_refund_date is null              group by confirm_date_time,month        )xd   )a  "
-                        + "left join  (   select *   from vk_dwd_9m_kpi_new_da   where type='xf'   and kpi='mc'   and"
-                        + " channel1='total' )b on b.kpi_date=a.confirm_date_time  union all select a"
-                        +
-                        ".confirm_date_time      ,'double-good' as course_type       ,a.order_num       ,a.mtd_order       ,"
-                        + "b.target       ,b.mtd_target from  (       select xd.confirm_date_time\n"
-                        +
-                        "        ,xd.order_num              ,sum(xd.order_num) over(partition by xd.month order by xd"
-                        + ".confirm_date_time asc) as mtd_order       from (             select to_date"
-                        + "(confirm_date_time)as confirm_date_time                    ,substr(confirm_date_time,1,7) "
-                        + "month\n"
-                        +
-                        "       ,count(pack_order_id)order_num             from vk_dm_9m_renew_order_da             "
-                        + "where order_type=2             and course_type='double-good'             and "
-                        + "confirm_date_time>='2020-09-01'             and apply_refund_date is null              "
-                        + "group by confirm_date_time,month        )xd   )a  left join  (   select *   from "
-                        +
-                        "vk_dwd_9m_kpi_new_da   where type='xf'   and kpi='double-good'   and channel1='total' )b on b"
-                        + ".kpi_date=a.confirm_date_time) as temp) as worksheet_835_ where 1=1 and worksheet_835_"
-                        + ".`course_type`  = 'mc' and worksheet_835_.`confirm_date_time`  between '2021-05-01 "
-                        + "00:00:00' and '2021-05-25 23:59:59';";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  25:AGGREGATE (merge finalize)"));
-        FeConstants.runningUnitTest = false;
-    }
-
-    @Test
-    public void testAddProjectForJoinOnPredicate() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE `vk_dm_gjh_teacher_open_book_class_day_da` (\n" +
-                "  `schedule_time` date NULL ,\n" +
-                "  `teacher_id` bigint(20) NULL ,\n" +
-                "  `show_name` varchar(100) NULL ,\n" +
-                "  `open` bigint(20) NULL ,\n" +
-                "  `majorbooked` bigint(20) NULL ,\n" +
-                "  `trialbooked` bigint(20) NULL ,\n" +
-                "  `reading_student_num` bigint(20) NULL ,\n" +
-                "  `major_teacher_cancel` bigint(20) NULL ,\n" +
-                "  `trial_teacher_cancel` bigint(20) NULL ,\n" +
-                "  `major_teacher_noshow` bigint(20) NULL ,\n" +
-                "  `trial_teacher_noshow` bigint(20) NULL ,\n" +
-                "  `open_05` bigint(20) NULL ,\n" +
-                "  `majorbooked_05` bigint(20) NULL ,\n" +
-                "  `trialbooked_05` bigint(20) NULL ,\n" +
-                "  `open_06` bigint(20) NULL ,\n" +
-                "  `majorbooked_06` bigint(20) NULL ,\n" +
-                "  `trialbooked_06` bigint(20) NULL ,\n" +
-                "  `open_07` bigint(20) NULL ,\n" +
-                "  `majorbooked_07` bigint(20) NULL ,\n" +
-                "  `trialbooked_07` bigint(20) NULL ,\n" +
-                "  `open_08` bigint(20) NULL ,\n" +
-                "  `majorbooked_08` bigint(20) NULL ,\n" +
-                "  `trialbooked_08` bigint(20) NULL ,\n" +
-                "  `open_09` bigint(20) NULL ,\n" +
-                "  `majorbooked_09` bigint(20) NULL ,\n" +
-                "  `trialbooked_09` bigint(20) NULL ,\n" +
-                "  `open_10` bigint(20) NULL ,\n" +
-                "  `majorbooked_10` bigint(20) NULL ,\n" +
-                "  `trialbooked_10` bigint(20) NULL ,\n" +
-                "  `open_11` bigint(20) NULL ,\n" +
-                "  `majorbooked_11` bigint(20) NULL ,\n" +
-                "  `trialbooked_11` bigint(20) NULL ,\n" +
-                "  `open_12` bigint(20) NULL ,\n" +
-                "  `majorbooked_12` bigint(20) NULL ,\n" +
-                "  `trialbooked_12` bigint(20) NULL ,\n" +
-                "  `open_13` bigint(20) NULL ,\n" +
-                "  `majorbooked_13` bigint(20) NULL ,\n" +
-                "  `trialbooked_13` bigint(20) NULL ,\n" +
-                "  `open_14` bigint(20) NULL ,\n" +
-                "  `majorbooked_14` bigint(20) NULL ,\n" +
-                "  `trialbooked_14` bigint(20) NULL ,\n" +
-                "  `open_15` bigint(20) NULL ,\n" +
-                "  `majorbooked_15` bigint(20) NULL ,\n" +
-                "  `trialbooked_15` bigint(20) NULL ,\n" +
-                "  `open_16` bigint(20) NULL ,\n" +
-                "  `majorbooked_16` bigint(20) NULL ,\n" +
-                "  `trialbooked_16` bigint(20) NULL ,\n" +
-                "  `open_17` bigint(20) NULL ,\n" +
-                "  `majorbooked_17` bigint(20) NULL ,\n" +
-                "  `trialbooked_17` bigint(20) NULL ,\n" +
-                "  `open_18` bigint(20) NULL ,\n" +
-                "  `majorbooked_18` bigint(20) NULL ,\n" +
-                "  `trialbooked_18` bigint(20) NULL ,\n" +
-                "  `open_19` bigint(20) NULL ,\n" +
-                "  `majorbooked_19` bigint(20) NULL ,\n" +
-                "  `trialbooked_19` bigint(20) NULL ,\n" +
-                "  `open_20` bigint(20) NULL ,\n" +
-                "  `majorbooked_20` bigint(20) NULL ,\n" +
-                "  `trialbooked_20` bigint(20) NULL ,\n" +
-                "  `open_21` bigint(20) NULL ,\n" +
-                "  `majorbooked_21` bigint(20) NULL ,\n" +
-                "  `trialbooked_21` bigint(20) NULL ,\n" +
-                "  `open_22` bigint(20) NULL ,\n" +
-                "  `majorbooked_22` bigint(20) NULL ,\n" +
-                "  `trialbooked_22` bigint(20) NULL ,\n" +
-                "  `open_23` bigint(20) NULL ,\n" +
-                "  `majorbooked_23` bigint(20) NULL ,\n" +
-                "  `trialbooked_23` bigint(20) NULL ,\n" +
-                "  `canceled_total_allday` bigint(20) NULL ,\n" +
-                "  `majorbooked_allday_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_allday_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_23_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_23_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_22_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_22_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_21_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_21_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_20_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_20_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_19_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_19_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_18_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_18_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_17_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_17_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_16_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_16_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_15_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_15_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_14_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_14_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_13_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_13_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_12_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_12_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_11_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_11_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_10_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_10_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_09_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_09_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_08_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_08_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_07_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_07_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_06_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_06_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `majorbooked_05_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `trialbooked_05_include_stu_cancel` bigint(20) NULL ,\n" +
-                "  `teacher_it_promblem` bigint(20) NULL ,\n" +
-                "  `teacher_no_show` bigint(20) NULL ,\n" +
-                "  `teacher_cancel_8h_24h` bigint(20) NULL ,\n" +
-                "  `teacher_cancel_24h` bigint(20) NULL ,\n" +
-                "  `teacher_cancel_8h` bigint(20) NULL \n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`schedule_time`, `teacher_id`)\n" +
-                "COMMENT \"olap\"\n" +
-                "DISTRIBUTED BY HASH(`schedule_time`, `teacher_id`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
-                ");");
-        starRocksAssert.withTable("CREATE TABLE `vk_dm_gjh_online_class_da` (\n" +
-                "  `online_class_id` bigint(20) NULL ,\n" +
-                "  `student_id` bigint(20) NULL ,\n" +
-                "  `teacher_id` bigint(20) NULL ,\n" +
-                "  `course_id` bigint(20) NULL ,\n" +
-                "  `course_type` varchar(100) NULL ,\n" +
-                "  `level` varchar(100) NULL ,\n" +
-                "  `schedule_time` datetime NULL ,\n" +
-                "  `code` varchar(200) NULL ,\n" +
-                "  `lesson_id` bigint(20) NULL ,\n" +
-                "  `lesson_sn` varchar(100) NULL ,\n" +
-                "  `book_time` datetime NULL ,\n" +
-                "  `class_status` varchar(100) NULL ,\n" +
-                "  `class_sub_status` varchar(100) NULL ,\n" +
-                "  `student_class_status` varchar(100) NULL ,\n" +
-                "  `teacher_class_status` varchar(100) NULL ,\n" +
-                "  `classroom_uuid` varchar(200) NULL ,\n" +
-                "  `document_uuid` varchar(1000) NULL ,\n" +
-                "  `student_enter_time` datetime NULL ,\n" +
-                "  `teacher_enter_time` datetime NULL ,\n" +
-                "  `creator_id` bigint(20) NULL ,\n" +
-                "  `class_action` varchar(100) NULL ,\n" +
-                "  `consume_inventory` bigint(20) NULL ,\n" +
-                "  `finish_time` datetime NULL ,\n" +
-                "  `is_homework` bigint(20) NULL ,\n" +
-                "  `is_preview` bigint(20) NULL ,\n" +
-                "  `is_ct` bigint(20) NULL ,\n" +
-                "  `is_class_comment` bigint(20) NULL ,\n" +
-                "  `class_submit_time` datetime NULL ,\n" +
-                "  `is_24h_class_comment` bigint(20) NULL ,\n" +
-                "  `class_comment_s` bigint(20) NULL ,\n" +
-                "  `is_unit_comment` bigint(20) NULL ,\n" +
-                "  `unit_submit_time` datetime NULL ,\n" +
-                "  `is_24h_unit_comment` bigint(20) NULL ,\n" +
-                "  `unit_comment_s` bigint(20) NULL \n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`online_class_id`, `student_id`, `teacher_id`, `course_id`, `course_type`, `level`)\n" +
-                "COMMENT \"olap\"\n" +
-                "DISTRIBUTED BY HASH(`online_class_id`, `student_id`, `teacher_id`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
-                ");");
-        String sql = "SELECT COUNT(1) as count\n" +
-                "FROM (\n" +
-                "        SELECT DATE_FORMAT(`schedule_time`, '%Y-%m') as `classtime`,\n" +
-                "            sum(majorbooked) / sum(open) as `total-mc-bookrate`,\n" +
-                "            sum(majorbooked_05) / sum(open_05) as `05-mc-bookrate`,\n" +
-                "            sum(majorbooked_06) / sum(open_06) as `06-mc-bookrate`,\n" +
-                "            sum(majorbooked_07) / sum(open_07) as `07- mc-bookrate`,\n" +
-                "            sum(majorbooked_08) / sum(open_08) as `08- mc-bookrate`,\n" +
-                "            sum(majorbooked_09) / sum(open_09) as `09- mc-bookrate`,\n" +
-                "            sum(majorbooked_10) / sum(open_10) as `10- mc-bookrate`,\n" +
-                "            sum(majorbooked_11) / sum(open_11) as `11- mc-bookrate`,\n" +
-                "            sum(majorbooked_12) / sum(open_12) as `12- mc-bookrate`,\n" +
-                "            sum(majorbooked_13) / sum(open_13) as `13- mc-bookrate`,\n" +
-                "            sum(majorbooked_14) / sum(open_14) as `14- mc-bookrate`,\n" +
-                "            sum(majorbooked_15) / sum(open_15) as `15- mc-bookrate`,\n" +
-                "            sum(majorbooked_16) / sum(open_16) as `16- mc-bookrate`,\n" +
-                "            sum(majorbooked_17) / sum(open_17) as `17- mc-bookrate`,\n" +
-                "            sum(majorbooked_18) / sum(open_18) as `18- mc-bookrate`,\n" +
-                "            sum(majorbooked_19) / sum(open_19) as `19- mc-bookrate`,\n" +
-                "            sum(majorbooked_20) / sum(open_20) as `20- mc-bookrate`,\n" +
-                "            sum(majorbooked_21) / sum(open_21) as `21- mc-bookrate`,\n" +
-                "            sum(majorbooked_22) / sum(open_22) as `22- mc-bookrate`,\n" +
-                "            sum(majorbooked_23) / sum(open_23) as `23- mc-bookrate`\n" +
-                "        FROM (\n" +
-                "                SELECT *\n" +
-                "                FROM (\n" +
-                "                        select book.*,\n" +
-                "                            class.teacher_cancel_within_24h,\n" +
-                "                            class.class_completed_except_cancel,\n" +
-                "                            class.class_booked,\n" +
-                "                            class.ppt_class_completed_except_cancel\n" +
-                "                        from (\n" +
-                "                                select schedule_time,\n" +
-                "                                    cast(month(schedule_time) as int) as month,\n" +
-                "                                    cast (year(schedule_time) as int) as year_time,\n" +
-                "                                    teacher_id,\n" +
-                "                                    show_name,\n" +
-                "                                    open,\n" +
-                "                                    majorbooked,\n" +
-                "                                    trialbooked,\n" +
-                "                                    reading_student_num,\n" +
-                "                                    major_teacher_cancel,\n" +
-                "                                    trial_teacher_cancel,\n" +
-                "                                    major_teacher_noshow,\n" +
-                "                                    trial_teacher_noshow,\n" +
-                "                                    open_05,\n" +
-                "                                    majorbooked_05,\n" +
-                "                                    trialbooked_05,\n" +
-                "                                    open_06,\n" +
-                "                                    majorbooked_06,\n" +
-                "                                    trialbooked_06,\n" +
-                "                                    open_07,\n" +
-                "                                    majorbooked_07,\n" +
-                "                                    trialbooked_07,\n" +
-                "                                    open_08,\n" +
-                "                                    majorbooked_08,\n" +
-                "                                    trialbooked_08,\n" +
-                "                                    open_09,\n" +
-                "                                    majorbooked_09,\n" +
-                "                                    trialbooked_09,\n" +
-                "                                    open_10,\n" +
-                "                                    majorbooked_10,\n" +
-                "                                    trialbooked_10,\n" +
-                "                                    open_11,\n" +
-                "                                    majorbooked_11,\n" +
-                "                                    trialbooked_11,\n" +
-                "                                    open_12,\n" +
-                "                                    majorbooked_12,\n" +
-                "                                    trialbooked_12,\n" +
-                "                                    open_13,\n" +
-                "                                    majorbooked_13,\n" +
-                "                                    trialbooked_13,\n" +
-                "                                    open_14,\n" +
-                "                                    majorbooked_14,\n" +
-                "                                    trialbooked_14,\n" +
-                "                                    open_15,\n" +
-                "                                    majorbooked_15,\n" +
-                "                                    trialbooked_15,\n" +
-                "                                    open_16,\n" +
-                "                                    majorbooked_16,\n" +
-                "                                    trialbooked_16,\n" +
-                "                                    open_17,\n" +
-                "                                    majorbooked_17,\n" +
-                "                                    trialbooked_17,\n" +
-                "                                    open_18,\n" +
-                "                                    majorbooked_18,\n" +
-                "                                    trialbooked_18,\n" +
-                "                                    open_19,\n" +
-                "                                    majorbooked_19,\n" +
-                "                                    trialbooked_19,\n" +
-                "                                    open_20,\n" +
-                "                                    majorbooked_20,\n" +
-                "                                    trialbooked_20,\n" +
-                "                                    open_21,\n" +
-                "                                    majorbooked_21,\n" +
-                "                                    trialbooked_21,\n" +
-                "                                    open_22,\n" +
-                "                                    majorbooked_22,\n" +
-                "                                    trialbooked_22,\n" +
-                "                                    open_23,\n" +
-                "                                    majorbooked_23,\n" +
-                "                                    trialbooked_23,\n" +
-                "                                    canceled_total_allday,\n" +
-                "                                    majorbooked_allday_include_stu_cancel,\n" +
-                "                                    trialbooked_allday_include_stu_cancel,\n" +
-                "                                    majorbooked_23_include_stu_cancel,\n" +
-                "                                    trialbooked_23_include_stu_cancel,\n" +
-                "                                    majorbooked_22_include_stu_cancel,\n" +
-                "                                    trialbooked_22_include_stu_cancel,\n" +
-                "                                    majorbooked_21_include_stu_cancel,\n" +
-                "                                    trialbooked_21_include_stu_cancel,\n" +
-                "                                    majorbooked_20_include_stu_cancel,\n" +
-                "                                    trialbooked_20_include_stu_cancel,\n" +
-                "                                    majorbooked_19_include_stu_cancel,\n" +
-                "                                    trialbooked_19_include_stu_cancel,\n" +
-                "                                    majorbooked_18_include_stu_cancel,\n" +
-                "                                    trialbooked_18_include_stu_cancel,\n" +
-                "                                    majorbooked_17_include_stu_cancel,\n" +
-                "                                    trialbooked_17_include_stu_cancel,\n" +
-                "                                    majorbooked_16_include_stu_cancel,\n" +
-                "                                    trialbooked_16_include_stu_cancel,\n" +
-                "                                    majorbooked_15_include_stu_cancel,\n" +
-                "                                    trialbooked_15_include_stu_cancel,\n" +
-                "                                    majorbooked_14_include_stu_cancel,\n" +
-                "                                    trialbooked_14_include_stu_cancel,\n" +
-                "                                    majorbooked_13_include_stu_cancel,\n" +
-                "                                    trialbooked_13_include_stu_cancel,\n" +
-                "                                    majorbooked_12_include_stu_cancel,\n" +
-                "                                    trialbooked_12_include_stu_cancel,\n" +
-                "                                    majorbooked_11_include_stu_cancel,\n" +
-                "                                    trialbooked_11_include_stu_cancel,\n" +
-                "                                    majorbooked_10_include_stu_cancel,\n" +
-                "                                    trialbooked_10_include_stu_cancel,\n" +
-                "                                    majorbooked_09_include_stu_cancel,\n" +
-                "                                    trialbooked_09_include_stu_cancel,\n" +
-                "                                    majorbooked_08_include_stu_cancel,\n" +
-                "                                    trialbooked_08_include_stu_cancel,\n" +
-                "                                    majorbooked_07_include_stu_cancel,\n" +
-                "                                    trialbooked_07_include_stu_cancel,\n" +
-                "                                    majorbooked_06_include_stu_cancel,\n" +
-                "                                    trialbooked_06_include_stu_cancel,\n" +
-                "                                    majorbooked_05_include_stu_cancel,\n" +
-                "                                    trialbooked_05_include_stu_cancel,\n" +
-                "                                    teacher_it_promblem,\n" +
-                "                                    teacher_no_show,\n" +
-                "                                    teacher_cancel_8h_24h,\n" +
-                "                                    teacher_cancel_24h,\n" +
-                "                                    teacher_cancel_8h,\n" +
-                "                                    open_06 + open_07 + open_08 + open_09 as open_06_10,\n" +
-                "                                    majorbooked_06 + majorbooked_07 + majorbooked_08 + "
-                + "majorbooked_09 as majorbooked_06_10,\n"
-                +
-                "                                    trialbooked_06 + trialbooked_07 + trialbooked_08 + "
-                + "trialbooked_09 as trialbooked_06_10,\n"
-                +
-                "                                    majorbooked_06_include_stu_cancel + "
-                + "majorbooked_07_include_stu_cancel + majorbooked_08_include_stu_cancel + "
-                + "majorbooked_09_include_stu_cancel as majorbooked_06_10_include_stu_cancel,\n"
-                +
-                "                                    trialbooked_06_include_stu_cancel + "
-                + "trialbooked_07_include_stu_cancel + trialbooked_08_include_stu_cancel + "
-                + "trialbooked_09_include_stu_cancel as trialbooked_06_10_include_stu_cancel,\n"
-                +
-                "                                    open_10 + open_11 + open_12 + open_13 as open_10_14,\n" +
-                "                                    majorbooked_10 + majorbooked_11 + majorbooked_12 + "
-                + "majorbooked_13 as majorbooked_10_14,\n"
-                +
-                "                                    trialbooked_10 + trialbooked_11 + trialbooked_12 + "
-                + "trialbooked_13 as trialbooked_10_14,\n"
-                +
-                "                                    majorbooked_10_include_stu_cancel + "
-                + "majorbooked_11_include_stu_cancel + majorbooked_12_include_stu_cancel + "
-                + "majorbooked_13_include_stu_cancel as majorbooked_10_14_include_stu_cancel,\n"
-                +
-                "                                    trialbooked_10_include_stu_cancel + "
-                + "trialbooked_11_include_stu_cancel + trialbooked_12_include_stu_cancel + "
-                + "trialbooked_13_include_stu_cancel as trialbooked_10_14_include_stu_cancel,\n"
-                +
-                "                                    open_14 + open_15 + open_16 as open_14_17,\n" +
-                "                                    majorbooked_14 + majorbooked_15 + majorbooked_16 as "
-                + "majorbooked_14_17,\n"
-                +
-                "                                    trialbooked_14 + trialbooked_15 + trialbooked_16 as "
-                + "trialbooked_14_17,\n"
-                +
-                "                                    majorbooked_14_include_stu_cancel + "
-                + "majorbooked_15_include_stu_cancel + majorbooked_16 as majorbooked_14_17_include_stu_cancel,\n"
-                +
-                "                                    trialbooked_14_include_stu_cancel + "
-                + "trialbooked_15_include_stu_cancel + trialbooked_16 as trialbooked_14_17_include_stu_cancel,\n"
-                +
-                "                                    open_17 + open_18 + open_19 as open_17_20,\n" +
-                "                                    majorbooked_17 + majorbooked_18 + majorbooked_19 as "
-                + "majorbooked_17_20,\n"
-                +
-                "                                    trialbooked_17 + trialbooked_18 + trialbooked_19 as "
-                + "trialbooked_17_20,\n"
-                +
-                "                                    majorbooked_17_include_stu_cancel + "
-                + "majorbooked_18_include_stu_cancel + majorbooked_19 as majorbooked_17_20_include_stu_cancel,\n"
-                +
-                "                                    trialbooked_17_include_stu_cancel + "
-                + "trialbooked_18_include_stu_cancel + trialbooked_19 as trialbooked_17_20_include_stu_cancel,\n"
-                +
-                "                                    open_20 + open_21 as open_20_22,\n" +
-                "                                    majorbooked_20 + majorbooked_21 as majorbooked_20_22,\n" +
-                "                                    trialbooked_20 + trialbooked_21 as trialbooked_20_22,\n" +
-                "                                    majorbooked_20_include_stu_cancel + majorbooked_21 as "
-                + "majorbooked_20_22_include_stu_cancel,\n"
-                +
-                "                                    trialbooked_20_include_stu_cancel + trialbooked_21 as "
-                + "trialbooked_20_22_include_stu_cancel\n"
-                +
-                "                                from vk_dm_gjh_teacher_open_book_class_day_da\n" +
-                "                            ) as book\n" +
-                "                            left join [shuffle] (\n" +
-                "                                select teacher_id,\n" +
-                "                                    substr(schedule_time, 1, 10) as schedule_time,\n" +
-                "                                    count(\n" +
-                "                                        distinct case\n" +
-                "                                            when teacher_class_status in (\n" +
-                "                                                'TEACHER_CANCEL_2H',\n" +
-                "                                                'TEACHER_CANCEL_2H_8H',\n" +
-                "                                                'TEACHER_CANCEL_8H',\n" +
-                "                                                'TEACHER_CANCEL_8H_24H'\n" +
-                "                                            ) then online_class_id\n" +
-                "                                        end\n" +
-                "                                    ) as teacher_cancel_within_24h,\n" +
-                "                                    count(\n" +
-                "                                        distinct case\n" +
-                "                                            when class_sub_status in (\n" +
-                "                                                'COMPLETED',\n" +
-                "                                                'STUDENT_NO_SHOW',\n" +
-                "                                                'TEACHER_NO_SHOW',\n" +
-                "                                                'STUDENT_IT_PROBLEM',\n" +
-                "                                                'TEACHER_IT_PROBLEM',\n" +
-                "                                                'SYSTEM_PROBLEM'\n" +
-                "                                            ) then online_class_id\n" +
-                "                                        end\n" +
-                "                                    ) as class_completed_except_cancel,\n" +
-                "                                    count(\n" +
-                "                                        distinct case\n" +
-                "                                            when student_class_status not in ('STUDENT_CANCEL_24H') "
-                + "then online_class_id\n"
-                +
-                "                                        end\n" +
-                "                                    ) as class_booked,\n" +
-                "                                    count(\n" +
-                "                                        distinct case\n" +
-                "                                            when class_sub_status in (\n" +
-                "                                                'COMPLETED',\n" +
-                "                                                'STUDENT_NO_SHOW',\n" +
-                "                                                'TEACHER_NO_SHOW',\n" +
-                "                                                'STUDENT_IT_PROBLEM',\n" +
-                "                                                'TEACHER_IT_PROBLEM',\n" +
-                "                                                'SYSTEM_PROBLEM'\n" +
-                "                                            )\n" +
-                "                                            and schedule_hour between 17 and 20 then online_class_id\n"
-                +
-                "                                        end\n" +
-                "                                    ) as ppt_class_completed_except_cancel\n" +
-                "                                from (\n" +
-                "                                        select teacher_id,\n" +
-                "                                            teacher_class_status,\n" +
-                "                                            student_class_status,\n" +
-                "                                            class_sub_status,\n" +
-                "                                            online_class_id,\n" +
-                "                                            schedule_time,\n" +
-                "                                            schedule_hour\n" +
-                "                                        from (\n" +
-                "                                                select teacher_id,\n" +
-                "                                                    teacher_class_status,\n" +
-                "                                                    class_sub_status,\n" +
-                "                                                    online_class_id,\n" +
-                "                                                    substr(schedule_time, 1, 10) as schedule_time,\n" +
-                "                                                    substr(schedule_time, 12, 2) as schedule_hour,\n" +
-                "                                                    student_class_status,\n" +
-                "                                                    row_number() over (\n" +
-                "                                                        partition by teacher_id,\n" +
-                "                                                        substr(schedule_time, 1, 19)\n" +
-                "                                                        order by substr(book_time, 1, 19) desc\n" +
-                "                                                    ) px\n" +
-                "                                                from vk_dm_gjh_online_class_da\n" +
-                "                                            ) as a\n" +
-                "                                        where px = 1\n" +
-                "                                    ) as b\n" +
-                "                                group by teacher_id,\n" +
-                "                                    schedule_time\n" +
-                "                            ) as class on book.teacher_id = class.teacher_id\n" +
-                "                            and book.schedule_time = class.schedule_time\n" +
-                "                    ) as temp\n" +
-                "            ) AS worksheet_1260_\n" +
-                "        GROUP BY DATE_FORMAT(`schedule_time`, '%Y-%m')\n" +
-                "        ORDER BY `classtime` ASC\n" +
-                "    ) as count_temp";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("<slot 223> : 223: substr"));
     }
 
     @Test
@@ -2310,13 +1730,11 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testInformationSchema() throws Exception {
         String sql = "select column_name from information_schema.columns limit 1;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  STREAM DATA SINK\n"
-                + "    EXCHANGE ID: 01\n"
-                + "    UNPARTITIONED\n"
-                + "\n"
-                + "  0:SCAN SCHEMA\n"
-                + "     limit: 1\n"
-                + "     use vectorized: true"));
+        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+                "\n" +
+                "  0:SCAN SCHEMA\n" +
+                "     limit: 1\n" +
+                "     use vectorized: true"));
     }
 
     @Test
@@ -2710,9 +2128,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "OUTPUT EXPRS:1: id | 2: id2"
         );
 
-        starRocksAssert.query("select count(id2) from test.bitmap_table;").explainContains("OUTPUT EXPRS:3: count(2: id2)",
-                "1:AGGREGATE (update finalize)", "output: count(2: id2)", "group by:", "0:OlapScanNode",
-                "PREAGGREGATION: OFF. Reason: Aggregate Operator not match: COUNT <--> BITMAP_UNION");
+        starRocksAssert.query("select count(id2) from test.bitmap_table;")
+                .explainContains("OUTPUT EXPRS:3: count(2: id2)",
+                        "1:AGGREGATE (update finalize)", "output: count(2: id2)", "group by:", "0:OlapScanNode",
+                        "PREAGGREGATION: OFF. Reason: Aggregate Operator not match: COUNT <--> BITMAP_UNION");
 
         starRocksAssert.query("select group_concat(id2) from test.bitmap_table;")
                 .analysisError(
@@ -2787,7 +2206,8 @@ public class PlanFragmentTest extends PlanTestBase {
         starRocksAssert.query(sql).explainContains();
 
         sql = "select count(distinct id2) from test.bitmap_table having count(distinct id2) > 0";
-        starRocksAssert.query(sql).explainContains("bitmap_union_count(2: id2)", "having: 3: count(distinct 2: id2) > 0");
+        starRocksAssert.query(sql)
+                .explainContains("bitmap_union_count(2: id2)", "having: 3: count(distinct 2: id2) > 0");
 
         sql = "select count(distinct id2) from test.bitmap_table order by count(distinct id2)";
         starRocksAssert.query(sql).explainContains("3: count(distinct 2: id2)", "3:MERGING-EXCHANGE",
@@ -3063,6 +2483,14 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: id = 5: id\n" +
                 "  |  other join predicates: 2: id > 1"));
+        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
+                "     TABLE: join1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1"));
+        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+                "     TABLE: join2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 5: id > 1"));
 
         // test left join: right table where predicate.
         // If we eliminate outer join, we could push predicate down to join1 and join2.
@@ -3085,6 +2513,11 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 5: id > 1"));
+        Assert.assertTrue(explainString.contains("0:OlapScanNode\n" +
+                "     TABLE: join1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: join1"));
 
         // test inner join: left table where predicate, both push down left table and right table
         sql = "select *\n from join1\n" +
@@ -3232,12 +2665,13 @@ public class PlanFragmentTest extends PlanTestBase {
                 "left semi join join2 on join1.id = join2.id\n" +
                 "where join1.id > 1;";
         explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("  4:HASH JOIN\n" +
-                "  |  join op: RIGHT SEMI JOIN (PARTITIONED)\n" +
+        System.out.println(explainString);
+        Assert.assertTrue(explainString.contains("  3:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 5: id = 2: id"));
-        Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
+                "  |  equal join conjunct: 2: id = 5: id"));
+        Assert.assertTrue(explainString.contains("  0:OlapScanNode\n" +
                 "     TABLE: join1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 2: id > 1"));
@@ -3461,7 +2895,7 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
-    public void testPerAggregateForCrossJoin() throws Exception {
+    public void testPreAggregateForCrossJoin() throws Exception {
         String sql = "select join1.id from join1, join2 group by join1.id";
         String plan = getFragmentPlan(sql);
 
@@ -3480,7 +2914,93 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     PREAGGREGATION: ON"));
         Assert.assertTrue(plan.contains("  1:OlapScanNode\n" +
                 "     TABLE: baseall\n" +
-                "     PREAGGREGATION: OFF. Reason: Has Join"));
+                "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
+    }
+
+    @Test
+    public void testPreAggregationWithJoin() throws Exception {
+        // check left agg table with pre-aggregation
+        String sql = "select k2, sum(k9) from baseall join join2 on k1 = id group by k2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: ON"));
+
+        // check right agg table with pre-agg
+        sql = "select k2, sum(k9) from join2 join [broadcast] baseall on k1 = id group by k2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: ON"));
+
+        // check two agg tables only one agg table can pre-aggregation
+        sql = "select t1.k2, sum(t1.k9) from baseall t1 join baseall t2 on t1.k1 = t2.k1 group by t1.k2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: ON"));
+        Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
+                "  |       TABLE: baseall\n" +
+                "  |       PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
+
+        sql = "select t2.k2, sum(t2.k9) from baseall t1 join [broadcast] baseall t2 on t1.k1 = t2.k1 group by t2.k2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
+        Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: ON"));
+
+        // check multi tables only one agg table can pre-aggregation
+        sql =
+                "select t1.k2, sum(t1.k9) from baseall t1 join join2 t2 on t1.k1 = t2.id join baseall t3 on t1.k1 = t3.k1 group by t1.k2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("5:OlapScanNode\n" +
+                "  |       TABLE: baseall\n" +
+                "  |       PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: ON"));
+
+        sql =
+                "select t3.k2, sum(t3.k9) from baseall t1 join [broadcast] join2 t2 on t1.k1 = t2.id join [broadcast] baseall t3 on t1.k1 = t3.k1 group by t3.k2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
+        Assert.assertTrue(plan.contains("5:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: ON"));
+
+        // check join predicate with non key columns
+        sql = "select t1.k2, sum(t1.k9) from baseall t1 join baseall t2 on t1.k9 = t2.k9 group by t1.k2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: OFF. Reason: Predicates include the value column"));
+
+        sql =
+                "select t1.k2, sum(t1.k9) from baseall t1 join baseall t2 on t1.k1 = t2.k1 where t1.k9 + t2.k9 = 1 group by t1.k2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: OFF. Reason: Predicates include the value column"));
+
+        // check group by two tables columns
+        sql = "select t1.k2, t2.k2, sum(t1.k9) from baseall t1 join baseall t2 on t1.k1 = t2.k1 group by t1.k2, t2.k2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: ON"));
+
+        // check aggregate two table columns
+        sql =
+                "select t1.k2, t2.k2, sum(t1.k9), sum(t2.k9) from baseall t1 join baseall t2 on t1.k1 = t2.k1 group by t1.k2, t2.k2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
     }
 
     @Test
@@ -3590,8 +3110,8 @@ public class PlanFragmentTest extends PlanTestBase {
         // test having aggregate column
         sql = "select count(*) as count from join1 left join join2 on join1.id = join2.id\n" +
                 "having count > 1;";
-        starRocksAssert.query(sql).explainContains("6:AGGREGATE (update finalize)\n" +
-                        "  |  output: count(*)\n" +
+        starRocksAssert.query(sql).explainContains("7:AGGREGATE (merge finalize)\n" +
+                        "  |  output: count(7: count())\n" +
                         "  |  group by: \n" +
                         "  |  having: 7: count() > 1",
                 "  3:HASH JOIN\n" +
@@ -3688,24 +3208,24 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select * from join1 left join join2 as b on join1.id = b.id\n" +
                 "left join join2 as c on join1.id = c.id \n" +
                 "where b.id > 1;";
-        starRocksAssert.query(sql).explainContains("  6:HASH JOIN\n" +
-                        "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+        starRocksAssert.query(sql).explainContains("7:HASH JOIN\n" +
+                        "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
                         "  |  hash predicates:\n" +
                         "  |  colocate: false, reason: \n" +
                         "  |  equal join conjunct: 2: id = 8: id",
-                "  3:HASH JOIN\n" +
-                        "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "4:HASH JOIN\n" +
+                        "  |  join op: INNER JOIN (PARTITIONED)\n" +
                         "  |  hash predicates:\n" +
                         "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 2: id = 5: id",
-                "  0:OlapScanNode\n" +
-                        "     TABLE: join1\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 2: id > 1",
-                "  1:OlapScanNode\n" +
+                        "  |  equal join conjunct: 5: id = 2: id",
+                "0:OlapScanNode\n" +
                         "     TABLE: join2\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 5: id > 1");
+                        "     PREDICATES: 5: id > 1",
+                "2:OlapScanNode\n" +
+                        "     TABLE: join1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 2: id > 1");
 
         sql = "select * from join1 left join join2 as b on join1.id = b.id\n" +
                 "left join join2 as c on join1.id = c.id \n" +
@@ -3858,18 +3378,13 @@ public class PlanFragmentTest extends PlanTestBase {
     @Test
     public void testDistinctPushDown() throws Exception {
         String sql = "select distinct k1 from (select distinct k1 from test.pushdown_test) t where k1 > 1";
-        starRocksAssert.query(sql).explainContains("  2:AGGREGATE (update finalize)\n" +
-                "  |  group by: 1: k1\n" +
-                "  |  use vectorized: true\n" +
-                "  |  \n" +
+        starRocksAssert.query(sql).explainContains("  RESULT SINK\n" +
+                "\n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  group by: 1: k1\n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: pushdown_test\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 1: k1 > 1");
+                "  0:OlapScanNode");
     }
 
     @Test
@@ -4230,7 +3745,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select avg(t1c), count(distinct id_decimal) from test_all_type;";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains(
-                "multi_distinct_count[([10: id_decimal, DECIMAL(10,2), true]); args: DECIMAL64; result: BIGINT; args nullable: true; result nullable: false]"));
+                "multi_distinct_count[([10: id_decimal, DECIMAL64(10,2), true]); args: DECIMAL64; result: BIGINT; args nullable: true; result nullable: false]"));
     }
 
     @Test
@@ -4306,5 +3821,378 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  1:OlapScanNode\n" +
                 "     TABLE: t1"));
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testShuffleHashBucket() throws Exception {
+        String sql = "SELECT COUNT(*)\n" +
+                "FROM lineitem JOIN [shuffle] orders o1 ON l_orderkey = o1.o_orderkey\n" +
+                "JOIN [shuffle] orders o2 ON l_orderkey = o2.o_orderkey";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (BUCKET_SHUFFLE(S))"));
+    }
+
+    @Test
+    public void testShuffleHashBucket2() throws Exception {
+        String sql = "select count(1) from lineitem t1 join [shuffle] orders t2 on " +
+                "t1.l_orderkey = t2.o_orderkey and t2.O_ORDERDATE = t1.L_SHIPDATE join [shuffle] orders t3 " +
+                "on t1.l_orderkey = t3.o_orderkey and t3.O_ORDERDATE = t1.L_SHIPDATE join [shuffle] orders t4 on\n" +
+                "t1.l_orderkey = t4.o_orderkey and t4.O_ORDERDATE = t1.L_SHIPDATE;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("12:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))"));
+        Assert.assertTrue(plan.contains("8:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))"));
+        Assert.assertTrue(plan.contains("4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)"));
+    }
+
+    @Test
+    public void testSemiJoinPredicateDerive() throws Exception {
+        String sql = "select * from t0 left semi join t1 on v1 = v4 where v1 = 2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 2"));
+    }
+
+    @Test
+    public void testMergeAggregateNormal() throws Exception {
+        String sql;
+        String plan;
+
+        sql = "select distinct x1 from (select distinct v1 as x1 from t0) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  use vectorized: true"));
+
+        sql = "select sum(x1) from (select sum(v1) as x1 from t0) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true"));
+
+        sql = "select SUM(x1) from (select v2, sum(v1) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true"));
+
+        sql = "select v2, SUM(x1) from (select v2, v3, sum(v1) as x1 from t0 group by v2, v3) as q group by v2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
+
+        sql = "select SUM(x1) from (select v2, sum(distinct v1), sum(v3) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(3: v3)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
+    }
+
+    @Test
+    public void testMergeAggregateFailed() throws Exception {
+        String sql;
+        String plan;
+        sql = "select avg(x1) from (select avg(v1) as x1 from t0) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: avg(1: v1)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode"));
+
+        sql = "select SUM(v2) from (select v2, sum(v1) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: v2)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  use vectorized: true\n"));
+        sql = "select SUM(v2) from (select v2, sum(distinct v2) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: v2)\n" +
+                "  |  group by: \n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  use vectorized: true\n"));
+        sql = "select sum(distinct x1) from (select v2, sum(v2) as x1 from t0 group by v2) as q";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: v2)\n" +
+                "  |  group by: 2: v2\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n"));
+    }
+
+    @Test
+    public void testReplicatedJoin() throws Exception {
+        connectContext.getSessionVariable().setEnableReplicationJoin(true);
+
+        String sql = "select * from join1 join join2 on join1.id = join2.id;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (REPLICATED)"));
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        sql = "select * from join2 right join join1 on join1.id = join2.id;";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("join op: INNER JOIN (REPLICATED)"));
+
+        sql = "select * from join1 as a join join1 as b on a.id = b.id;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (REPLICATED)"));
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        sql = "select * from join1 as a join (select sum(id),id from join2 group by id) as b on a.id = b.id;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (REPLICATED)"));
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select * from join1 as a join (select sum(id),dt from join2 group by dt) as b on a.id = b.dt;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (BROADCAST)"));
+        Assert.assertTrue(plan.contains("EXCHANGE"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+        sql = "select a.* from join1 as a join join1 as b ;";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        sql = "select a.* from join1 as a join (select sum(id) from join1 group by dt) as b ;";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("EXCHANGE"));
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select a.* from join1 as a join (select sum(id) from join1 group by dt) as b ;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("EXCHANGE"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
+    }
+
+    @Test
+    public void testReplicationJoinWithPartitionTable() throws Exception {
+        connectContext.getSessionVariable().setEnableReplicationJoin(true);
+        boolean oldValue = FeConstants.runningUnitTest;
+        FeConstants.runningUnitTest = true;
+        String sql = "select * from join1 join pushdown_test on join1.id = pushdown_test.k1;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("INNER JOIN (BROADCAST)"));
+        FeConstants.runningUnitTest = oldValue;
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
+    }
+
+    @Test
+    public void testOuterJoinBucketShuffle() throws Exception {
+        String sql = "SELECT DISTINCT t0.v1 FROM t0 RIGHT JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  6:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:"));
+
+        sql = "SELECT DISTINCT t0.v1 FROM t0 FULL JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  4:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----3:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  1:EXCHANGE\n" +
+                "     use vectorized: true"));
+
+        sql = "SELECT DISTINCT t1.v4 FROM t0 LEFT JOIN[BUCKET] t1 ON t0.v1 = t1.v4";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  7:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 4: v4\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  6:EXCHANGE\n" +
+                "     use vectorized: true\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    HASH_PARTITIONED: 4: v4\n" +
+                "\n" +
+                "  5:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 4: v4\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  4:Project\n" +
+                "  |  <slot 4> : 4: v4\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)"));
+    }
+
+    @Test
+    public void testSchemaScan() throws Exception {
+        String sql = "select * from information_schema.columns";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  0:SCAN SCHEMA\n" +
+                "     use vectorized: true"));
+    }
+
+    @Test
+    public void testDuplicateAggregateFn() throws Exception {
+        String sql = "select bitmap_union_count(b1) from test_object having count(distinct b1) > 2;";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains(" OUTPUT EXPRS:13: bitmap_union_count(5: b1)\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: bitmap_union_count(5: b1)\n" +
+                "  |  group by: \n" +
+                "  |  having: 13: bitmap_union_count(5: b1) > 2"));
+    }
+
+    @Test
+    public void testDuplicateAggregateFn2() throws Exception {
+        String sql = "select bitmap_union_count(b1), count(distinct b1) from test_object;";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("  2:Project\n" +
+                "  |  <slot 13> : 13: bitmap_union_count(5: b1)\n" +
+                "  |  <slot 14> : 13: bitmap_union_count(5: b1)\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: bitmap_union_count(5: b1)"));
+    }
+
+    @Test
+    public void testNotExpr() throws Exception {
+        String sql = "select v1 from t0 where not (v1 in (1, 2))";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("     PREDICATES: 1: v1 NOT IN (1, 2)"));
+
+        sql = "select v1 from t0 where not (v1 > 2)";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 <= 2"));
+
+        sql = "select v1 from t0 where not (v1 > 2)";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 <= 2"));
+
+        sql = "select v1 from t0 where not (v1 > 2 and v2 < 3)";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: (1: v1 <= 2) OR (2: v2 >= 3)"));
+
+        sql = "select v1 from t0 where not (v1 > 2 and v2 is null)";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: (1: v1 <= 2) OR (2: v2 IS NOT NULL)"));
+
+        sql = "select v1 from t0 where not (v1 > 2 and v2 is null and v3 < 6)";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: ((1: v1 <= 2) OR (2: v2 IS NOT NULL)) OR (3: v3 >= 6)"));
+
+        sql = "select v1 from t0 where not (v1 > 2 and if(v2 > 2, FALSE, TRUE))";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: (1: v1 <= 2) OR (NOT if(2: v2 > 2, FALSE, TRUE))"));
+
+        sql = "select v1 from t0 where not (v1 > 2 or v2 is null or if(v3 > 2, FALSE, TRUE))";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(
+                planFragment.contains("PREDICATES: 1: v1 <= 2, 2: v2 IS NOT NULL, NOT if(3: v3 > 2, FALSE, TRUE)"));
+    }
+
+    @Test
+    public void testArithmeticCommutative() throws Exception {
+        String sql = "select v1 from t0 where v1 + 2 > 3";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 > 1"));
+
+        sql = "select v1 from t0 where  v1 / 2 <=> 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(1: v1 AS DOUBLE) <=> 6.0"));
+
+        sql = "select v1 from t0 where 2 + v1 <= 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 <= 1"));
+
+        sql = "select v1 from t0 where 2 - v1 <= 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 >= -1"));
+
+        sql = "select k5 from bigtable where k5 * 2 <= 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 5: k5 * 2 <= 3"));
+
+        sql = "select k5 from bigtable where 2 / k5 <= 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 2 / CAST(5: k5 AS DECIMAL(38,3)) <= 3"));
+
+        sql = "select t1a from test_all_type where date_add(id_datetime, 2) = '2020-12-21'";
+        planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 8: id_datetime = '2020-12-19 00:00:00'"));
+
+        sql = "select t1a from test_all_type where date_sub(id_datetime, 2) = '2020-12-21'";
+        planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 8: id_datetime = '2020-12-23 00:00:00'"));
+
+        sql = "select t1a from test_all_type where years_sub(id_datetime, 2) = '2020-12-21'";
+        planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 8: id_datetime = '2022-12-21 00:00:00'"));
+
+        sql = "select t1a from test_all_type where years_add(id_datetime, 2) = '2020-12-21'";
+        planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 8: id_datetime = '2018-12-21 00:00:00'"));
     }
 }

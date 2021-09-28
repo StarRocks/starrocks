@@ -21,6 +21,8 @@
 
 #include "storage/task/engine_checksum_task.h"
 
+#include <memory>
+
 #include "storage/reader.h"
 #include "storage/row.h"
 #include "util/defer_op.h"
@@ -45,13 +47,13 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
               << "tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash << ", version=" << _version;
     OLAPStatus res = OLAP_SUCCESS;
 
-    if (_checksum == NULL) {
+    if (_checksum == nullptr) {
         LOG(WARNING) << "invalid output parameter which is null pointer.";
         return OLAP_ERR_CE_CMD_PARAMS_ERROR;
     }
 
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, _schema_hash);
-    if (NULL == tablet.get()) {
+    if (nullptr == tablet.get()) {
         LOG(WARNING) << "can't find tablet. tablet_id=" << _tablet_id << " schema_hash=" << _schema_hash;
         return OLAP_ERR_TABLE_NOT_FOUND;
     }
@@ -71,7 +73,7 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
     {
         std::shared_lock rdlock(tablet->get_header_lock());
         const RowsetSharedPtr message = tablet->rowset_with_max_version();
-        if (message == NULL) {
+        if (message == nullptr) {
             LOG(FATAL) << "fail to get latest version. tablet_id=" << _tablet_id;
             return OLAP_ERR_VERSION_NOT_EXIST;
         }
@@ -125,7 +127,7 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
         // the memory allocate by mem pool has been copied,
         // so we should release memory immediately
         mem_pool->clear();
-        agg_object_pool.reset(new ObjectPool());
+        agg_object_pool = std::make_unique<ObjectPool>();
     }
 
     LOG(INFO) << "success to finish compute checksum. checksum=" << row_checksum;

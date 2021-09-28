@@ -96,6 +96,7 @@ import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.ShowAlterStmt.AlterType;
 import com.starrocks.analysis.SingleRangePartitionDesc;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
@@ -1204,7 +1205,8 @@ public class Catalog {
         // Log meta_version
         int communityMetaVersion = MetaContext.get().getMetaVersion();
         int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
-        if (communityMetaVersion < FeConstants.meta_version || starrocksMetaVersion < FeConstants.starrocks_meta_version) {
+        if (communityMetaVersion < FeConstants.meta_version ||
+                starrocksMetaVersion < FeConstants.starrocks_meta_version) {
             editLog.logMetaVersion(new MetaVersion(FeConstants.meta_version, FeConstants.starrocks_meta_version));
             MetaContext.get().setMetaVersion(FeConstants.meta_version);
             MetaContext.get().setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
@@ -3044,13 +3046,18 @@ public class Catalog {
             } finally {
                 db.readUnlock();
             }
-            CreateTableStmt parsedCreateTableStmt =
-                    (CreateTableStmt) SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
-            parsedCreateTableStmt.setTableName(stmt.getTableName());
-            if (stmt.isSetIfNotExists()) {
-                parsedCreateTableStmt.setIfNotExists();
+            StatementBase statementBase = SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+            if (statementBase instanceof CreateTableStmt) {
+                CreateTableStmt parsedCreateTableStmt =
+                        (CreateTableStmt) SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+                parsedCreateTableStmt.setTableName(stmt.getTableName());
+                if (stmt.isSetIfNotExists()) {
+                    parsedCreateTableStmt.setIfNotExists();
+                }
+                createTable(parsedCreateTableStmt);
+            } else if (statementBase instanceof CreateViewStmt) {
+                ErrorReport.reportDdlException(ErrorCode.ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW);
             }
-            createTable(parsedCreateTableStmt);
         } catch (UserException e) {
             throw new DdlException("Failed to execute CREATE TABLE LIKE " + stmt.getExistedTableName() + ". Reason: " +
                     e.getMessage());
@@ -4771,7 +4778,7 @@ public class Catalog {
     }
 
     public Collection<Partition> getPartitionsIncludeRecycleBin(OlapTable table) {
-        Collection<Partition> partitions = table.getPartitions();
+        Collection<Partition> partitions = new ArrayList<>(table.getPartitions());
         partitions.addAll(recycleBin.getPartitions(table.getId()));
         return partitions;
     }
@@ -4863,8 +4870,12 @@ public class Catalog {
                         DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
                         Preconditions.checkNotNull(dataProperty,
                                 partition.getName() + ", pId:" + partitionId + ", db: " + dbId + ", tbl: " + tableId);
+                        // only normal state table can migrate.
+                        // PRIMARY_KEYS table does not support local migration.
                         if (dataProperty.getStorageMedium() == TStorageMedium.SSD
-                                && dataProperty.getCooldownTimeMs() < currentTimeMs) {
+                                && dataProperty.getCooldownTimeMs() < currentTimeMs
+                                && olapTable.getState() == OlapTableState.NORMAL
+                                && olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
                             // expire. change to HDD.
                             // record and change when holding write lock
                             Multimap<Long, Long> multimap = changedPartitionsMap.get(dbId);
@@ -6774,7 +6785,7 @@ public class Catalog {
             // check partitions
             for (Map.Entry<String, Long> entry : origPartitions.entrySet()) {
                 Partition partition = copiedTbl.getPartition(entry.getValue());
-                if (partition == null || !partition.getName().equals(entry.getKey())) {
+                if (partition == null || !partition.getName().equalsIgnoreCase(entry.getKey())) {
                     throw new DdlException("Partition [" + entry.getKey() + "] is changed");
                 }
             }

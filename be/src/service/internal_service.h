@@ -38,7 +38,7 @@ template <typename T>
 class PInternalServiceImpl : public T {
 public:
     PInternalServiceImpl(ExecEnv* exec_env);
-    virtual ~PInternalServiceImpl();
+    ~PInternalServiceImpl() override;
 
     void transmit_data(::google::protobuf::RpcController* controller, const ::starrocks::PTransmitDataParams* request,
                        ::starrocks::PTransmitDataResult* response, ::google::protobuf::Closure* done) override;

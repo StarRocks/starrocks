@@ -161,9 +161,14 @@ TEST_F(SortedChunksMergerTest, one_supplier) {
         }
         return Status::OK();
     };
+    auto probe_supplier = [](Chunk** cnk) -> bool { return false; };
+    auto has_supplier = []() -> bool { return false; };
+
     ChunkSuppliers suppliers = {supplier};
-    SortedChunksMerger merger;
-    merger.init(suppliers, &_sort_exprs, &_is_asc, &_is_null_first);
+    ChunkProbeSuppliers probe_suppliers = {probe_supplier};
+    ChunkHasSuppliers has_suppliers = {has_supplier};
+    SortedChunksMerger merger(false);
+    merger.init(suppliers, probe_suppliers, has_suppliers, &_sort_exprs, &_is_asc, &_is_null_first);
 
     bool eos = false;
     ChunkPtr page_1, page_2;
@@ -184,6 +189,8 @@ TEST_F(SortedChunksMergerTest, one_supplier) {
 
 TEST_F(SortedChunksMergerTest, two_suppliers) {
     ChunkSuppliers suppliers;
+    ChunkProbeSuppliers probe_suppliers;
+    ChunkHasSuppliers has_suppliers;
     std::vector<ChunkPtr> chunks = {_chunk_1, _chunk_2};
     for (size_t i = 0; i < chunks.size(); ++i) {
         auto supplier = [&chunks, i](Chunk** cnk) -> Status {
@@ -200,11 +207,15 @@ TEST_F(SortedChunksMergerTest, two_suppliers) {
             }
             return Status::OK();
         };
+        auto probe_supplier = [](Chunk** cnk) -> bool { return false; };
+        auto has_supplier = []() -> bool { return false; };
         suppliers.push_back(supplier);
+        probe_suppliers.push_back(probe_supplier);
+        has_suppliers.push_back(has_supplier);
     }
 
-    SortedChunksMerger merger;
-    merger.init(suppliers, &_sort_exprs, &_is_asc, &_is_null_first);
+    SortedChunksMerger merger(false);
+    merger.init(suppliers, probe_suppliers, has_suppliers, &_sort_exprs, &_is_asc, &_is_null_first);
 
     bool eos = false;
     ChunkPtr page_1, page_2;
@@ -228,6 +239,8 @@ TEST_F(SortedChunksMergerTest, two_suppliers) {
 
 TEST_F(SortedChunksMergerTest, three_suppliers) {
     ChunkSuppliers suppliers;
+    ChunkProbeSuppliers probe_suppliers;
+    ChunkHasSuppliers has_suppliers;
     std::vector<ChunkPtr> chunks = {_chunk_1, _chunk_2, _chunk_3};
     for (size_t i = 0; i < chunks.size(); ++i) {
         auto supplier = [&chunks, i](Chunk** cnk) -> Status {
@@ -244,11 +257,15 @@ TEST_F(SortedChunksMergerTest, three_suppliers) {
             }
             return Status::OK();
         };
+        auto probe_supplier = [](Chunk** cnk) -> bool { return false; };
+        auto has_supplier = []() -> bool { return false; };
         suppliers.push_back(supplier);
+        probe_suppliers.push_back(probe_supplier);
+        has_suppliers.push_back(has_supplier);
     }
 
-    SortedChunksMerger merger;
-    merger.init(suppliers, &_sort_exprs, &_is_asc, &_is_null_first);
+    SortedChunksMerger merger(false);
+    merger.init(suppliers, probe_suppliers, has_suppliers, &_sort_exprs, &_is_asc, &_is_null_first);
 
     bool eos = false;
     ChunkPtr page_1, page_2;

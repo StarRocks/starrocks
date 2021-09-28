@@ -70,7 +70,7 @@ struct DataDirInfo {
 };
 
 struct TabletInfo {
-    TabletInfo(TTabletId in_tablet_id, TSchemaHash in_schema_hash, UniqueId in_uid)
+    TabletInfo(TTabletId in_tablet_id, TSchemaHash in_schema_hash, const UniqueId& in_uid)
             : tablet_id(in_tablet_id), schema_hash(in_schema_hash), tablet_uid(in_uid) {}
 
     bool operator<(const TabletInfo& right) const {
@@ -374,7 +374,7 @@ using KeyRange = std::pair<WrapperField*, WrapperField*>;
 
 // ReaderStatistics used to collect statistics when scan data from storage
 struct OlapReaderStatistics {
-    int64_t capture_rowset_ns = 0;
+    int64_t create_segment_iter_ns = 0;
     int64_t io_ns = 0;
     int64_t compressed_bytes_read = 0;
 

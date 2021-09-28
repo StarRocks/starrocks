@@ -151,6 +151,18 @@ public class Analyzer {
     // timezone specified for some operation, such as broker load
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
 
+    // Whether to ignore cast expressions
+    // Compatibility with older versions, maybe delete in near future
+    private boolean ignoreCast = false;
+
+    public void setIgnoreCast() {
+        ignoreCast = true;
+    }
+
+    public boolean ignoreCast() {
+        return ignoreCast;
+    }
+
     public void setIsSubquery() {
         isSubquery = true;
         globalState.containsSubquery = true;
@@ -1316,7 +1328,7 @@ public class Analyzer {
                 globalState.ojClauseByConjunct.put(conjunct.getId(), rhsRef);
                 ojConjuncts.add(conjunct.getId());
             }
-            if (rhsRef.getJoinOp().isSemiJoin()) {
+            if (rhsRef.getJoinOp().isSemiAntiJoin()) {
                 globalState.sjClauseByConjunct.put(conjunct.getId(), rhsRef);
             }
             if (rhsRef.getJoinOp().isInnerJoin()) {

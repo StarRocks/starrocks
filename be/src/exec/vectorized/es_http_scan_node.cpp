@@ -4,6 +4,8 @@
 
 #include <fmt/format.h>
 
+#include <memory>
+
 #include "common/config.h"
 #include "exec/es/es_predicate.h"
 #include "exec/es/es_query_builder.h"
@@ -22,7 +24,7 @@ EsHttpScanNode::EsHttpScanNode(ObjectPool* pool, const TPlanNode& tnode, const D
           _scan_finished(false),
           _result_chunks(config::doris_scanner_queue_size) {}
 
-EsHttpScanNode::~EsHttpScanNode() {}
+EsHttpScanNode::~EsHttpScanNode() = default;
 
 Status EsHttpScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
@@ -80,10 +82,6 @@ Status EsHttpScanNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(_start_scan_thread(state));
 
     return Status::OK();
-}
-
-Status EsHttpScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("EsHttpScanNode don't support row_batch");
 }
 
 Status EsHttpScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
@@ -276,8 +274,8 @@ Status EsHttpScanNode::_create_scanner(int scanner_idx, std::unique_ptr<EsHttpSc
     properties[ESScanReader::KEY_QUERY] =
             ESScrollQueryBuilder::build(properties, _column_names, _predicates, _docvalue_context, &doc_value_mode);
 
-    res->reset(new EsHttpScanner(_runtime_state, runtime_profile(), _tuple_id, std::move(properties), scanner_expr_ctxs,
-                                 _docvalue_context, doc_value_mode));
+    *res = std::make_unique<EsHttpScanner>(_runtime_state, runtime_profile(), _tuple_id, std::move(properties),
+                                           scanner_expr_ctxs, _docvalue_context, doc_value_mode);
     return Status::OK();
 }
 

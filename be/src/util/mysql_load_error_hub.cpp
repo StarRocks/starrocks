@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include <mysql/mysql.h>
+#include <mariadb/mysql.h>
 
 #define __StarRocksMysql MYSQL
 #include "mysql_load_error_hub.h"
@@ -29,7 +29,7 @@ namespace starrocks {
 
 MysqlLoadErrorHub::MysqlLoadErrorHub(const TMysqlErrorHubInfo& info) : _info(info) {}
 
-MysqlLoadErrorHub::~MysqlLoadErrorHub() {}
+MysqlLoadErrorHub::~MysqlLoadErrorHub() = default;
 
 Status MysqlLoadErrorHub::prepare() {
     _is_valid = true;

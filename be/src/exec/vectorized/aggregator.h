@@ -52,14 +52,19 @@ static const int STREAMING_HT_MIN_REDUCTION_SIZE =
 class Aggregator;
 using AggregatorPtr = std::shared_ptr<Aggregator>;
 
+// Component used to process aggregation including bloking aggregate and streaming aggregate
+// it contains common data struct and algorithm of aggregation
+// TODO(hcf) this component is shared by multiply sink/source operators in pipeline engine
+// TODO(hcf) all the data should be protected by lightweight lock
 class Aggregator {
 public:
-    Aggregator(const TPlanNode& tnode);
+    Aggregator(const TPlanNode& tnode, const RowDescriptor& child_row_desc);
 
     ~Aggregator() = default;
 
+    Status open(RuntimeState* state);
     Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, MemTracker* expr_mem_tracker,
-                   const RowDescriptor* child_row_desc, RuntimeProfile* runtime_profile);
+                   RuntimeProfile* runtime_profile);
 
     Status close(RuntimeState* state);
 
@@ -68,12 +73,12 @@ public:
     const std::vector<ExprContext*>& group_by_expr_ctxs() { return _group_by_expr_ctxs; }
     const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
+    int64_t limit() { return _limit; }
     bool needs_finalize() { return _needs_finalize; }
     bool is_ht_eos() { return _is_ht_eos; }
     void set_ht_eos() { _is_ht_eos = true; }
     bool is_sink_complete() { return _is_sink_complete.load(std::memory_order_acquire); }
     int64_t num_input_rows() { return _num_input_rows; }
-    // TODO(hcf) not concurrent-safe
     int64_t num_rows_returned() { return _num_rows_returned; }
     void update_num_rows_returned(int64_t increment) { _num_rows_returned += increment; };
     void update_num_input_rows(int64_t increment) { _num_input_rows += increment; }
@@ -101,10 +106,6 @@ public:
 
     bool should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
                                           int64_t ht_rows) const;
-
-    // initial const columns for i'th FunctionContext.
-    // TODO(hcf) aggregate blocking/stream operator missing calling this method
-    void evaluate_const_columns(int i);
 
     // For aggregate without group by
     void compute_single_agg_state(size_t chunk_size);
@@ -146,12 +147,10 @@ public:
     static constexpr size_t memory_check_batch_size = 1;
 #endif
 
-    // TODO(hcf) the following fields were introduced due to compatibility
-    // can it be removed?
-
 private:
     // used to init
     const TPlanNode _tnode;
+    const RowDescriptor _child_row_desc;
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
@@ -164,7 +163,6 @@ private:
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
     // only used in pipeline engine
-    // TODO(hcf) replace it with lock-free queue
     std::queue<vectorized::ChunkPtr> _buffer;
     std::mutex _buffer_mutex;
 
@@ -222,12 +220,12 @@ private:
 
     // Tuple into which Update()/Merge()/Serialize() results are stored.
     TupleId _intermediate_tuple_id;
-    TupleDescriptor* _intermediate_tuple_desc;
+    TupleDescriptor* _intermediate_tuple_desc = nullptr;
 
     // Tuple into which Finalize() results are stored. Possibly the same as
     // the intermediate tuple.
     TupleId _output_tuple_id;
-    TupleDescriptor* _output_tuple_desc;
+    TupleDescriptor* _output_tuple_desc = nullptr;
 
     // used for blocking aggregate
     AggrPhase _aggr_phase = AggrPhase1;
@@ -443,6 +441,9 @@ public:
 
 private:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
+
+    // initial const columns for i'th FunctionContext.
+    void _evaluate_const_columns(int i);
 
     // Create new aggregate function result column by type
     vectorized::Columns _create_agg_result_columns();

@@ -21,12 +21,14 @@
 
 #include "util/progress_updater.h"
 
+#include <utility>
+
 #include "common/logging.h"
 
 namespace starrocks {
 
-ProgressUpdater::ProgressUpdater(const std::string& label, int64_t total, int period)
-        : _label(label),
+ProgressUpdater::ProgressUpdater(std::string label, int64_t total, int period)
+        : _label(std::move(label)),
           _logging_level(2),
           _total(total),
           _update_period(period),

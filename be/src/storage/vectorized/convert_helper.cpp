@@ -2,6 +2,8 @@
 
 #include "storage/vectorized/convert_helper.h"
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "column/decimalv3_column.h"
 #include "column/nullable_column.h"
@@ -155,7 +157,7 @@ const TypeConverter* get_type_converter(FieldType from_type, FieldType to_type) 
 
 class SameFieldConverter : public FieldConverter {
 public:
-    explicit SameFieldConverter(const TypeInfoPtr& type_info) : _type_info(type_info) {}
+    explicit SameFieldConverter(TypeInfoPtr type_info) : _type_info(std::move(type_info)) {}
 
     ~SameFieldConverter() override = default;
 

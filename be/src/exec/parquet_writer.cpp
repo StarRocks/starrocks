@@ -23,7 +23,8 @@
 
 #include <arrow/array.h>
 #include <arrow/status.h>
-#include <time.h>
+
+#include <ctime>
 
 #include "common/logging.h"
 #include "exec/file_writer.h"
@@ -63,9 +64,8 @@ arrow::Status ParquetOutputStream::Write(const void* data, int64_t nbytes) {
     return arrow::Status::OK();
 }
 
-arrow::Status ParquetOutputStream::Tell(int64_t* position) const {
-    *position = _cur_pos;
-    return arrow::Status::OK();
+arrow::Result<int64_t> ParquetOutputStream::Tell() const {
+    return _cur_pos;
 }
 
 arrow::Status ParquetOutputStream::Close() {

@@ -137,7 +137,6 @@ inline void read_from(const char** src, DateTimeValue* result) {
     value.type = *(int*)(*src);
     *src += DATETIME_TYPE_BYTE_SIZE;
     *result = DateTimeValue::from_datetime_val(value);
-    ;
 }
 
 template <>
@@ -172,7 +171,7 @@ inline void read_from(const char** src, StringValue* result) {
 template <typename T>
 struct BitmapIntersect {
 public:
-    BitmapIntersect() {}
+    BitmapIntersect() = default;
 
     explicit BitmapIntersect(const char* src) { deserialize(src); }
 
@@ -219,7 +218,6 @@ public:
         size_t size = 4;
         for (auto& kv : _bitmaps) {
             size += detail::serialize_size(kv.first);
-            ;
             size += kv.second.getSizeInBytes();
         }
         return size;

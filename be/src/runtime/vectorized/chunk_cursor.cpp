@@ -2,14 +2,22 @@
 
 #include "chunk_cursor.h"
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "exec/sort_exec_exprs.h"
 
 namespace starrocks::vectorized {
 
-ChunkCursor::ChunkCursor(const ChunkSupplier& supplier, const std::vector<ExprContext*>* exprs,
-                         const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first)
-        : _chunk_supplier(supplier), _current_pos(-1), _sort_exprs(exprs) {
+ChunkCursor::ChunkCursor(ChunkSupplier chunk_supplier, ChunkProbeSupplier chunk_probe_supplier,
+                         ChunkHasSupplier chunk_has_supplier, const std::vector<ExprContext*>* exprs,
+                         const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first, bool is_pipeline)
+        : _chunk_supplier(std::move(chunk_supplier)),
+          _chunk_probe_supplier(std::move(chunk_probe_supplier)),
+          _chunk_has_supplier(std::move(chunk_has_supplier)),
+          _current_pos(-1),
+          _sort_exprs(exprs),
+          _is_pipeline(is_pipeline) {
     DCHECK_EQ(_sort_exprs->size(), is_asc->size());
     DCHECK_EQ(is_asc->size(), is_null_first->size());
 
@@ -24,10 +32,13 @@ ChunkCursor::ChunkCursor(const ChunkSupplier& supplier, const std::vector<ExprCo
             _null_first_flag[i] = (*is_null_first)[i] ? 1 : -1;
         }
     }
-    _reset_with_next_chunk();
+
+    if (!_is_pipeline) {
+        _reset_with_next_chunk();
+    }
 }
 
-ChunkCursor::~ChunkCursor() {}
+ChunkCursor::~ChunkCursor() = default;
 
 bool ChunkCursor::operator<(const ChunkCursor& cursor) const {
     DCHECK_EQ(_current_order_by_columns.size(), cursor._current_order_by_columns.size());
@@ -69,6 +80,31 @@ void ChunkCursor::next() {
     }
 }
 
+bool ChunkCursor::has_next() {
+    if (_current_chunk == nullptr) {
+        return false;
+    }
+
+    if ((_current_pos + 1) < _current_chunk->num_rows()) {
+        return true;
+    }
+
+    return false;
+}
+
+void ChunkCursor::next_for_pipeline() {
+    if (_current_chunk == nullptr) {
+        return;
+    }
+    ++_current_pos;
+    if (_current_pos >= _current_chunk->num_rows()) {
+        reset_with_next_chunk_for_pipeline();
+        if (_current_chunk != nullptr) {
+            ++_current_pos;
+        }
+    }
+}
+
 ChunkPtr ChunkCursor::clone_empty_chunk(size_t reserved_row_number) const {
     if (_current_chunk == nullptr) {
         return nullptr;
@@ -82,6 +118,18 @@ bool ChunkCursor::copy_current_row_to(Chunk* dest) const {
     return true;
 }
 
+Status ChunkCursor::chunk_supplier(Chunk** chunk) {
+    return _chunk_supplier(chunk);
+}
+
+bool ChunkCursor::chunk_probe_supplier(Chunk** chunk) {
+    return _chunk_probe_supplier(chunk);
+}
+
+bool ChunkCursor::chunk_has_supplier() {
+    return _chunk_has_supplier();
+}
+
 void ChunkCursor::_reset_with_next_chunk() {
     _current_order_by_columns.clear();
     Chunk* tmp_chunk = nullptr;
@@ -92,6 +140,22 @@ void ChunkCursor::_reset_with_next_chunk() {
         return;
     }
 
+    // prepare order by columns
+    _current_order_by_columns.reserve(_sort_exprs->size());
+    for (ExprContext* expr_ctx : *_sort_exprs) {
+        _current_order_by_columns.push_back(expr_ctx->evaluate(_current_chunk.get()));
+    }
+}
+
+void ChunkCursor::reset_with_next_chunk_for_pipeline() {
+    _current_order_by_columns.clear();
+    Chunk* tmp_chunk = nullptr;
+    _chunk_probe_supplier(&tmp_chunk);
+    _current_chunk.reset(tmp_chunk);
+    _current_pos = -1;
+    if (_current_chunk == nullptr) {
+        return;
+    }
     // prepare order by columns
     _current_order_by_columns.reserve(_sort_exprs->size());
     for (ExprContext* expr_ctx : *_sort_exprs) {

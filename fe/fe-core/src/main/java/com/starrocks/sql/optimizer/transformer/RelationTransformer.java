@@ -1,6 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.optimizer.transformer;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -10,7 +12,9 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
@@ -39,6 +43,8 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.SetQualifier;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -66,7 +72,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -214,7 +219,9 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
 
     @Override
     public OptExprBuilder visitTable(TableRelation node, ExpressionMapping context) {
-        ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMap = ImmutableMap.builder();
+        ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
+        ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
+        ImmutableList.Builder<ColumnRefOperator> outputVariablesBuilder = ImmutableList.builder();
 
         int relationId = columnRefFactory.getNextRelationId();
         for (Map.Entry<Field, Column> column : node.getColumns().entrySet()) {
@@ -223,24 +230,56 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
                     column.getValue().isAllowNull());
             columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
             columnRefFactory.updateColumnRefToColumns(columnRef, column.getValue(), node.getTable());
-            colRefToColumnMetaMap.put(columnRef, column.getValue());
+            outputVariablesBuilder.add(columnRef);
+            colRefToColumnMetaMapBuilder.put(columnRef, column.getValue());
+            columnMetaToColRefMapBuilder.put(column.getValue(), columnRef);
         }
 
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
+        List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
         LogicalScanOperator scanOperator;
         if (node.getTable().getType().equals(Table.TableType.OLAP)) {
-            LogicalOlapScanOperator olapScanOperator =
-                    new LogicalOlapScanOperator((OlapTable) node.getTable(), colRefToColumnMetaMap.build());
-            olapScanOperator.setPartitionNames(node.getPartitionNames());
-            olapScanOperator.setHintsTabletIds(node.getTabletIds());
-            scanOperator = olapScanOperator;
+            DistributionInfo distributionInfo = ((OlapTable) node.getTable()).getDefaultDistributionInfo();
+            Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
+            HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+            List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
+            List<Integer> hashDistributeColumns = new ArrayList<>();
+            for (Column distributedColumn : distributedColumns) {
+                hashDistributeColumns.add(columnMetaToColRefMap.get(distributedColumn).getId());
+            }
+
+            HashDistributionDesc hashDistributionDesc =
+                    new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
+            scanOperator = new LogicalOlapScanOperator(node.getTable(),
+                    outputVariables,
+                    colRefToColumnMetaMapBuilder.build(),
+                    columnMetaToColRefMap,
+                    DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
+                    -1,
+                    null,
+                    ((OlapTable) node.getTable()).getBaseIndexId(),
+                    null,
+                    node.getPartitionNames(),
+                    Lists.newArrayList(),
+                    node.getTabletIds());
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
-            scanOperator = new LogicalHiveScanOperator(node.getTable(), node.getTable().getType(), colRefToColumnMetaMap.build());
+            scanOperator = new LogicalHiveScanOperator(node.getTable(), node.getTable().getType(), outputVariables,
+                    colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap, -1, null);
         } else if (Table.TableType.SCHEMA.equals(node.getTable().getType())) {
-            scanOperator = new LogicalSchemaScanOperator(node.getTable(), colRefToColumnMetaMap.build());
+            scanOperator =
+                    new LogicalSchemaScanOperator(node.getTable(), outputVariables, colRefToColumnMetaMapBuilder.build(),
+                            columnMetaToColRefMap, -1,
+                            null);
         } else if (Table.TableType.MYSQL.equals(node.getTable().getType())) {
-            scanOperator = new LogicalMysqlScanOperator(node.getTable(), colRefToColumnMetaMap.build());
+            scanOperator =
+                    new LogicalMysqlScanOperator(node.getTable(), outputVariables, colRefToColumnMetaMapBuilder.build(),
+                            columnMetaToColRefMap, -1,
+                            null);
         } else if (Table.TableType.ELASTICSEARCH.equals(node.getTable().getType())) {
-            scanOperator = new LogicalEsScanOperator(node.getTable(), colRefToColumnMetaMap.build());
+            scanOperator =
+                    new LogicalEsScanOperator(node.getTable(), outputVariables, colRefToColumnMetaMapBuilder.build(),
+                            columnMetaToColRefMap, -1,
+                            null);
             EsTablePartitions esTablePartitions = ((LogicalEsScanOperator) scanOperator).getEsTablePartitions();
             EsTable table = (EsTable) scanOperator.getTable();
             if (esTablePartitions == null) {
@@ -256,8 +295,7 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
                     ErrorType.UNSUPPORTED);
         }
         return new OptExprBuilder(scanOperator, Collections.emptyList(),
-                new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()),
-                        new ArrayList<>(colRefToColumnMetaMap.build().keySet())));
+                new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputVariables));
     }
 
     @Override
@@ -293,12 +331,8 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
                         .collect(Collectors.toList()));
 
         if (node.getOnPredicate() == null) {
-            OptExprBuilder optExprBuilder = new OptExprBuilder(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null, node.getJoinHint()),
+            return new OptExprBuilder(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null, node.getJoinHint()),
                     Lists.newArrayList(leftPlan, rightPlan), expressionMapping);
-            optExprBuilder = optExprBuilder.withNewRoot(new LogicalProjectOperator(
-                    optExprBuilder.getFieldMappings().stream().collect(Collectors.toMap(
-                            Function.identity(), Function.identity()))));
-            return optExprBuilder;
         }
 
         ScalarOperator onPredicateWithoutRewrite = SqlToScalarOperatorTranslator
@@ -342,11 +376,6 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
         } else {
             optExprBuilder = new OptExprBuilder(root, Lists.newArrayList(leftPlan, rightPlan), expressionMapping);
         }
-
-        optExprBuilder = optExprBuilder.withNewRoot(new LogicalProjectOperator(
-                optExprBuilder.getFieldMappings().stream().collect(Collectors.toMap(
-                        Function.identity(), Function.identity()))
-        ));
 
         return optExprBuilder;
     }

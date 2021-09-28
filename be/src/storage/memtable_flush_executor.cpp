@@ -22,6 +22,7 @@
 #include "storage/memtable_flush_executor.h"
 
 #include <functional>
+#include <memory>
 
 #include "storage/memtable.h"
 #include "storage/vectorized/memtable.h"
@@ -118,7 +119,7 @@ Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
 // NOTE: we use SERIAL mode here to ensure all mem-tables from one tablet are flushed in order.
 OLAPStatus MemTableFlushExecutor::create_flush_token(std::unique_ptr<FlushToken>* flush_token,
                                                      ThreadPool::ExecutionMode execution_mode) {
-    flush_token->reset(new FlushToken(_flush_pool->new_token(execution_mode)));
+    *flush_token = std::make_unique<FlushToken>(_flush_pool->new_token(execution_mode));
     return OLAP_SUCCESS;
 }
 

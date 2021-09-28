@@ -39,21 +39,94 @@ public:
     }
 };
 
+template <PhmapSeed seed>
+class TSliceWithHash : public Slice {
+public:
+    size_t hash;
+    TSliceWithHash(const Slice& src) : Slice(src.data, src.size) { hash = SliceHashWithSeed<seed>()(src); }
+    TSliceWithHash(const uint8_t* p, size_t s, size_t h) : Slice(p, s), hash(h) {}
+};
+
+template <PhmapSeed seed>
+class THashOnSliceWithHash {
+public:
+    std::size_t operator()(const TSliceWithHash<seed>& slice) const { return slice.hash; }
+};
+
+template <PhmapSeed seed>
+class TEqualOnSliceWithHash {
+public:
+    bool operator()(const TSliceWithHash<seed>& x, const TSliceWithHash<seed>& y) const {
+        // by comparing hash value first, we can avoid comparing real data
+        // which may touch another memory area and has bad cache locality.
+        return x.hash == y.hash && memequal(x.data, x.size, y.data, y.size);
+    }
+};
+
 using SliceHashSet = phmap::flat_hash_set<SliceWithHash, HashOnSliceWithHash, EqualOnSliceWithHash>;
 
 using SliceNormalHashSet = phmap::flat_hash_set<Slice, SliceHash, SliceNormalEqual>;
 
-template <typename T>
-struct PhSetTraits {
-    using SetType = HashSet<T>;
+struct SliceKey8 {
+    union U {
+        struct {
+            char data[7];
+            uint8_t size;
+        } __attribute__((packed));
+        int64_t value;
+    } u;
+    static_assert(sizeof(u) == sizeof(u.value));
+    bool operator==(const SliceKey8& k) const { return u.value == k.u.value; }
+    SliceKey8() = default;
+    SliceKey8(const SliceKey8& x) { u.value = x.u.value; }
+    SliceKey8& operator=(const SliceKey8& x) {
+        u.value = x.u.value;
+        return *this;
+    }
+    SliceKey8(SliceKey8&& x) noexcept { u.value = x.u.value; }
 };
 
-template <>
-struct PhSetTraits<Slice> {
-    using SetType = SliceNormalHashSet;
+struct SliceKey16 {
+    union U {
+        struct {
+            char data[15];
+            uint8_t size;
+        } __attribute__((packed));
+        struct {
+            uint64_t ui64[2];
+        } __attribute__((packed));
+        int128_t value;
+    } u;
+    static_assert(sizeof(u) == sizeof(u.value));
+    bool operator==(const SliceKey16& k) const { return u.value == k.u.value; }
+    SliceKey16() = default;
+    SliceKey16(const SliceKey16& x) { u.value = x.u.value; }
+    SliceKey16& operator=(const SliceKey16& x) {
+        u.value = x.u.value;
+        return *this;
+    }
+    SliceKey16(SliceKey16&& x) noexcept { u.value = x.u.value; }
 };
 
-template <typename T>
-using PhSet = typename PhSetTraits<T>::SetType;
+template <typename SliceKey, PhmapSeed seed>
+class FixedSizeSliceKeyHash {
+public:
+    std::size_t operator()(const SliceKey& s) const {
+        if constexpr (sizeof(SliceKey) == 8) {
+            if constexpr (seed == PhmapSeed1) {
+                return crc_hash_uint64(s.u.value, CRC_HASH_SEED1);
+            } else {
+                return crc_hash_uint64(s.u.value, CRC_HASH_SEED2);
+            }
+        } else {
+            static_assert(sizeof(SliceKey) == 16);
+            if constexpr (seed == PhmapSeed1) {
+                return crc_hash_uint128(s.u.ui64[0], s.u.ui64[1], CRC_HASH_SEED1);
+            } else {
+                return crc_hash_uint128(s.u.ui64[0], s.u.ui64[1], CRC_HASH_SEED2);
+            }
+        }
+    }
+};
 
 } // namespace starrocks::vectorized

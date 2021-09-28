@@ -1365,9 +1365,6 @@ public class Auth implements Writable {
             UserIdentity rootUser = new UserIdentity(ROOT_USER, "%");
             rootUser.setIsAnalyzed();
             createUserInternal(rootUser, Role.OPERATOR_ROLE, new Password(new byte[0]), true /* is replay */);
-            UserIdentity adminUser = new UserIdentity(ADMIN_USER, "%");
-            adminUser.setIsAnalyzed();
-            createUserInternal(adminUser, Role.ADMIN_ROLE, new Password(new byte[0]), true /* is replay */);
         } catch (DdlException e) {
             LOG.error("should not happend", e);
         }

@@ -7,7 +7,7 @@
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {
-Operator::Operator(int32_t id, std::string name, int32_t plan_node_id)
+Operator::Operator(int32_t id, const std::string& name, int32_t plan_node_id)
         : _id(id), _name(name), _plan_node_id(plan_node_id) {
     std::stringstream ss;
     ss << name << " (id=" << _id << ")";

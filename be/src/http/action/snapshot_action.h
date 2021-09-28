@@ -37,7 +37,7 @@ class SnapshotAction : public HttpHandler {
 public:
     explicit SnapshotAction(ExecEnv* exec_env);
 
-    virtual ~SnapshotAction() {}
+    ~SnapshotAction() override = default;
 
     void handle(HttpRequest* req) override;
 

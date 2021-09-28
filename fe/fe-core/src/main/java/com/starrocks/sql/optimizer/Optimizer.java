@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -63,6 +64,7 @@ public class Optimizer {
         // directly from memo.
         context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
                 memo.getRootGroup(), RuleSetType.MULTI_DISTINCT_REWRITE));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
 
         context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
                 memo.getRootGroup(), RuleSetType.SUBQUERY_REWRITE));
@@ -85,6 +87,10 @@ public class Optimizer {
                 memo.getRootGroup(), RuleSetType.MERGE_LIMIT));
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
 
+        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
+                memo.getRootGroup(), RuleSetType.MERGE_AGGREGATE));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+
         //After the MERGE_LIMIT, ProjectNode that can be merged may appear.
         //So we do another column cropping
         rootTaskContext.setRequiredColumns((ColumnRefSet) requiredColumns.clone());
@@ -97,7 +103,8 @@ public class Optimizer {
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
 
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
-        new MaterializedViewRule().transform(tree, context);
+        tree = new MaterializedViewRule().transform(tree, context).get(0);
+        memo.replaceRewriteExpression(memo.getRootGroup(), tree);
 
         context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
                 memo.getRootGroup(), RuleSetType.PARTITION_PRUNE));
@@ -133,6 +140,12 @@ public class Optimizer {
         if (!connectContext.getSessionVariable().isDisableJoinReorder()) {
             if (Utils.countInnerJoinNodeSize(tree) >
                     connectContext.getSessionVariable().getCboMaxReorderNodeUseExhaustive()) {
+                //If there is no statistical information, the DP and greedy reorder algorithm are disabled,
+                //and the query plan degenerates to the left deep tree
+                if (Utils.hasUnknownColumnsStats(tree) && !FeConstants.runningUnitTest) {
+                    connectContext.getSessionVariable().disableDPJoinReorder();
+                    connectContext.getSessionVariable().disableGreedyJoinReorder();
+                }
                 new ReorderJoinRule().transform(tree, context);
                 context.getRuleSet().addJoinCommutativityWithOutInnerRule();
             } else {

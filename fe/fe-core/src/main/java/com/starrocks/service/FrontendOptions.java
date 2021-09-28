@@ -67,6 +67,7 @@ public class FrontendOptions {
         }
 
         InetAddress loopBack = null;
+        boolean hasMatchedIp = false;
         for (InetAddress addr : hosts) {
             LOG.debug("check ip address: {}", addr);
             if (addr instanceof Inet4Address) {
@@ -75,15 +76,19 @@ public class FrontendOptions {
                 } else if (!priorityCidrs.isEmpty()) {
                     if (isInPriorNetwork(addr.getHostAddress())) {
                         localAddr = addr;
+                        hasMatchedIp = true;
                         break;
-                    }
+                    } 
                 } else {
                     localAddr = addr;
                     break;
                 }
             }
         }
-
+        //if all ips not match the priority_networks then print the warning log
+        if (!priorityCidrs.isEmpty() && !hasMatchedIp) {
+            LOG.warn("ip address range configured for priority_networks does not include the current IP address");
+        }
         // nothing found, use loopback addr
         if (localAddr == null) {
             localAddr = loopBack;
@@ -116,13 +121,13 @@ public class FrontendOptions {
     }
 
     private static void analyzePriorityCidrs() {
-        String prior_cidrs = Config.priority_networks;
-        if (Strings.isNullOrEmpty(prior_cidrs)) {
+        String priorCidrs = Config.priority_networks;
+        if (Strings.isNullOrEmpty(priorCidrs)) {
             return;
         }
-        LOG.info("configured prior_cidrs value: {}", prior_cidrs);
+        LOG.info("configured prior_cidrs value: {}", priorCidrs);
 
-        String[] cidrList = prior_cidrs.split(PRIORITY_CIDR_SEPARATOR);
+        String[] cidrList = priorCidrs.split(PRIORITY_CIDR_SEPARATOR);
         List<String> priorNetworks = Lists.newArrayList(cidrList);
         for (String cidrStr : priorNetworks) {
             priorityCidrs.add(new CIDR(cidrStr));

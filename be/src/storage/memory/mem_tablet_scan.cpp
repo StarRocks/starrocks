@@ -28,7 +28,7 @@
 namespace starrocks {
 namespace memory {
 
-MemTabletScan::~MemTabletScan() {}
+MemTabletScan::~MemTabletScan() = default;
 
 MemTabletScan::MemTabletScan(std::shared_ptr<MemTablet>&& tablet, std::unique_ptr<ScanSpec>* spec, size_t num_rows,
                              std::vector<std::unique_ptr<ColumnReader>>* readers)

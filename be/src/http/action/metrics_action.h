@@ -33,7 +33,7 @@ class MetricRegistry;
 class MetricsAction : public HttpHandler {
 public:
     MetricsAction(MetricRegistry* metrics) : _metrics(metrics) {}
-    virtual ~MetricsAction() {}
+    ~MetricsAction() override = default;
 
     void handle(HttpRequest* req) override;
 

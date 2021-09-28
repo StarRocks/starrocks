@@ -12,9 +12,9 @@ namespace starrocks {
 
 using vectorized::ChunkHelper;
 
-RowsetUpdateState::RowsetUpdateState() {}
+RowsetUpdateState::RowsetUpdateState() = default;
 
-RowsetUpdateState::~RowsetUpdateState() {}
+RowsetUpdateState::~RowsetUpdateState() = default;
 
 Status RowsetUpdateState::load(int64_t tablet_id, Rowset* rowset) {
     if (UNLIKELY(!_status.ok())) {
@@ -59,7 +59,7 @@ Status RowsetUpdateState::_do_load(Rowset* rowset) {
     RowsetReleaseGuard guard(rowset->shared_from_this());
     OlapReaderStatistics stats;
     auto beta_rowset = down_cast<BetaRowset*>(rowset);
-    auto res = beta_rowset->get_segment_iterators2(pkey_schema, NULL, 0, &stats);
+    auto res = beta_rowset->get_segment_iterators2(pkey_schema, nullptr, 0, &stats);
     if (!res.ok()) {
         return res.status();
     }
@@ -72,7 +72,7 @@ Status RowsetUpdateState::_do_load(Rowset* rowset) {
     auto chunk = chunk_shared_ptr.get();
     for (size_t i = 0; i < itrs.size(); i++) {
         auto itr = itrs[i].get();
-        if (itr == NULL) {
+        if (itr == nullptr) {
             continue;
         }
         auto& dest = _upserts[i];

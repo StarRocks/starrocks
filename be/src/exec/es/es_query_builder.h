@@ -37,13 +37,13 @@ namespace starrocks {
 class QueryBuilder {
 public:
     virtual void to_json(rapidjson::Document* document, rapidjson::Value* query) = 0;
-    virtual ~QueryBuilder() {}
+    virtual ~QueryBuilder() = default;
 };
 
 // process esquery(fieldA, json dsl) function
 class ESQueryBuilder : public QueryBuilder {
 public:
-    ESQueryBuilder(const std::string& es_query_str);
+    ESQueryBuilder(std::string es_query_str);
     ESQueryBuilder(const ExtFunction& es_query);
     void to_json(rapidjson::Document* document, rapidjson::Value* query) override;
 
@@ -54,7 +54,7 @@ private:
 // process field = value
 class TermQueryBuilder : public QueryBuilder {
 public:
-    TermQueryBuilder(const std::string& field, const std::string& term);
+    TermQueryBuilder(std::string field, std::string term);
     TermQueryBuilder(const ExtBinaryPredicate& binary_predicate);
     void to_json(rapidjson::Document* document, rapidjson::Value* query) override;
 
@@ -118,7 +118,7 @@ class BooleanQueryBuilder : public QueryBuilder {
 public:
     BooleanQueryBuilder(const std::vector<ExtPredicate*>& predicates);
     BooleanQueryBuilder();
-    virtual ~BooleanQueryBuilder();
+    ~BooleanQueryBuilder() override;
     // class method for transfer predicate to es query value, invoker should enclose this value with `query`
     static void to_query(const std::vector<EsPredicate*>& predicates, rapidjson::Document* root,
                          rapidjson::Value* query);

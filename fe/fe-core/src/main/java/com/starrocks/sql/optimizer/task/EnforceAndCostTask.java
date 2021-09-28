@@ -12,6 +12,7 @@ import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.cost.CostModel;
@@ -254,20 +255,39 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         }
     }
 
-    // Disable one phase Agg node with default column statistics.
+    // Disable one phase Agg node with default column statistics or output row count less than 1 (fe meta may not get real row count from be).
     // Not include one phase local Agg node
     private boolean canGenerateOneStageAgg(GroupExpression childBestExpr) {
         if (!OperatorType.PHYSICAL_HASH_AGG.equals(groupExpression.getOp().getOpType())) {
             return true;
         }
+        // respect session variable new_planner_agg_stage
+        int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
+        if (aggStage == 1) {
+            return true;
+        }
 
         PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) groupExpression.getOp();
-        return !aggregate.getType().isGlobal() || aggregate.isSplit() ||
-                !groupExpression.getGroup().getStatistics().getColumnStatistics().values().stream()
-                        .allMatch(ColumnStatistic::isUnknown) ||
-                !(childBestExpr.getOp() instanceof PhysicalDistributionOperator) ||
-                !((PhysicalDistributionOperator) childBestExpr.getOp()).getDistributionSpec().getType()
-                        .equals(DistributionSpec.DistributionType.SHUFFLE);
+        // 1. check the agg node is global aggregation without split and child expr is PhysicalDistributionOperator
+        if (aggregate.getType().isGlobal() && !aggregate.isSplit() &&
+                childBestExpr.getOp() instanceof PhysicalDistributionOperator) {
+            // 2. check default column statistics or output row count less than 1
+            if ((groupExpression.getGroup().getStatistics().getColumnStatistics().values().stream()
+                    .allMatch(ColumnStatistic::isUnknown) ||
+                    groupExpression.getGroup().getStatistics().getOutputRowCount() <= 1)) {
+                // 3. check child expr distribution, if it is shuffle or gather without limit, could disable this plan
+                PhysicalDistributionOperator distributionOperator =
+                        (PhysicalDistributionOperator) childBestExpr.getOp();
+                if (distributionOperator.getDistributionSpec().getType()
+                        .equals(DistributionSpec.DistributionType.SHUFFLE) ||
+                        (distributionOperator.getDistributionSpec().getType()
+                                .equals(DistributionSpec.DistributionType.GATHER) &&
+                                !((GatherDistributionSpec) distributionOperator.getDistributionSpec()).hasLimit())) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private boolean computeCurrentGroupStatistics() {

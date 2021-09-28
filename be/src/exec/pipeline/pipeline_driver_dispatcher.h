@@ -24,7 +24,7 @@ using DriverDispatcherPtr = std::shared_ptr<DriverDispatcher>;
 class DriverDispatcher {
 public:
     DriverDispatcher() = default;
-    virtual ~DriverDispatcher() {}
+    virtual ~DriverDispatcher() = default;
     virtual void initialize(int32_t num_threads) {}
     virtual void change_num_threads(int32_t num_threads) {}
     virtual void dispatch(DriverPtr driver){};
@@ -33,26 +33,22 @@ public:
     // just notify FE timely the completeness of fragment via invocation of report_exec_state, but
     // the FragmentContext is not unregistered until all the drivers has finished, because some
     // non-root drivers maybe has pending io task executed in io threads asynchronously has reference
-    // to objects owned by FragmentContext. so here:
-    // 1. for the first time report_exec_state, clean is false, means not unregister FragmentContext
-    // when all root drivers has finished.
-    //
-    // 2. for the second time report_exec_state, clean is true means that all the drivers has finished,
-    // so now FragmentContext can be unregistered safely.
-    virtual void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done, bool clean) = 0;
+    // to objects owned by FragmentContext.
+    virtual void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) = 0;
 };
 
 class GlobalDriverDispatcher final : public FactoryMethod<DriverDispatcher, GlobalDriverDispatcher> {
 public:
     explicit GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool);
-    ~GlobalDriverDispatcher() override {}
+    ~GlobalDriverDispatcher() override = default;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
     void dispatch(DriverPtr driver) override;
-    void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done, bool clean) override;
+    void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) override;
 
 private:
     void run();
+    void finalize_driver(DriverPtr& driver, RuntimeState* runtime_state, DriverState state);
 
 private:
     LimitSetter _num_threads_setter;

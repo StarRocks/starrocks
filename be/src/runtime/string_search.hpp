@@ -68,8 +68,8 @@ namespace starrocks {
 class StringSearch {
 
 public:
-    virtual ~StringSearch() {}
-    StringSearch() : _pattern(NULL), _mask(0) {}
+    virtual ~StringSearch() = default;
+    StringSearch() : _pattern(nullptr), _mask(0) {}
 
     // Initialize/Precompute a StringSearch object from the pattern
     StringSearch(const StringValue* pattern) : _pattern(pattern), _mask(0), _skip(0) {
@@ -113,7 +113,7 @@ public:
         if (m == 1) {
             const char* result = reinterpret_cast<const char*>(memchr(s, p[0], n));
 
-            if (result != NULL) {
+            if (result != nullptr) {
                 return result - s;
             }
 

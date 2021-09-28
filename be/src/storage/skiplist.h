@@ -160,8 +160,8 @@ private:
     Node* FindLast() const;
 
     // No copying allowed
-    SkipList(const SkipList&);
-    void operator=(const SkipList&);
+    SkipList(const SkipList&) = delete;
+    void operator=(const SkipList&) = delete;
 };
 
 // Implementation details follow
@@ -210,12 +210,12 @@ typename SkipList<Key, Comparator>::Node* SkipList<Key, Comparator>::NewNode(con
 template <typename Key, class Comparator>
 inline SkipList<Key, Comparator>::Iterator::Iterator(const SkipList* list) {
     list_ = list;
-    node_ = NULL;
+    node_ = nullptr;
 }
 
 template <typename Key, class Comparator>
 inline bool SkipList<Key, Comparator>::Iterator::Valid() const {
-    return node_ != NULL;
+    return node_ != nullptr;
 }
 
 template <typename Key, class Comparator>
@@ -275,7 +275,7 @@ int SkipList<Key, Comparator>::RandomHeight() {
 template <typename Key, class Comparator>
 bool SkipList<Key, Comparator>::KeyIsAfterNode(const Key& key, Node* n) const {
     // NULL n is considered infinite
-    return (n != NULL) && (compare_(n->key, key) < 0);
+    return (n != nullptr) && (compare_(n->key, key) < 0);
 }
 
 template <typename Key, class Comparator>
@@ -289,7 +289,7 @@ typename SkipList<Key, Comparator>::Node* SkipList<Key, Comparator>::FindGreater
             // Keep searching in this list
             x = next;
         } else {
-            if (prev != NULL) prev[level] = x;
+            if (prev != nullptr) prev[level] = x;
             if (level == 0) {
                 return next;
             } else {
@@ -348,7 +348,7 @@ SkipList<Key, Comparator>::SkipList(Comparator cmp, MemPool* mem_pool, bool can_
           max_height_(1),
           rnd_(0xdeadbeef) {
     for (int i = 0; i < kMaxHeight; i++) {
-        head_->SetNext(i, NULL);
+        head_->SetNext(i, nullptr);
     }
 }
 
@@ -450,7 +450,7 @@ template <typename Key, class Comparator>
 bool SkipList<Key, Comparator>::Find(const Key& key, Hint* hint) const {
     Node* x = FindGreaterOrEqual(key, hint->prev);
     hint->curr = x;
-    if (x != NULL && Equal(key, x->key)) {
+    if (x != nullptr && Equal(key, x->key)) {
         return true;
     } else {
         return false;

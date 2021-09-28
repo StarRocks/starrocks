@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "exec/pipeline/operator.h"
 #include "exec/vectorized/aggregator.h"
 
@@ -9,8 +11,10 @@ namespace starrocks::pipeline {
 class AggregateStreamingSinkOperator : public Operator {
 public:
     AggregateStreamingSinkOperator(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : Operator(id, "aggregate_streaming_sink_operator", plan_node_id), _aggregator(aggregator) {}
-    ~AggregateStreamingSinkOperator() = default;
+            : Operator(id, "aggregate_streaming_sink", plan_node_id), _aggregator(std::move(aggregator)) {
+        _aggregator->set_aggr_phase(AggrPhase1);
+    }
+    ~AggregateStreamingSinkOperator() override = default;
 
     bool has_output() const override { return false; }
     bool need_input() const override { return true; }
@@ -34,7 +38,7 @@ private:
 
     // It is used to perform aggregation algorithms
     // shared by AggregateStreamingSourceOperator
-    AggregatorPtr _aggregator;
+    AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
     bool _is_finished = false;
 };
@@ -42,15 +46,15 @@ private:
 class AggregateStreamingSinkOperatorFactory final : public OperatorFactory {
 public:
     AggregateStreamingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : OperatorFactory(id, plan_node_id), _aggregator(aggregator) {}
+            : OperatorFactory(id, plan_node_id), _aggregator(std::move(aggregator)) {}
 
     ~AggregateStreamingSinkOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t driver_instance_count, int32_t driver_sequence) override {
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateStreamingSinkOperator>(_id, _plan_node_id, _aggregator);
     }
 
 private:
-    AggregatorPtr _aggregator;
+    AggregatorPtr _aggregator = nullptr;
 };
 } // namespace starrocks::pipeline

@@ -38,6 +38,7 @@ DIAGNOSTIC_POP
 #include <set>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include "common/config.h"
 #include "util/core_local.h"
@@ -94,7 +95,7 @@ template <typename T>
 class AtomicMetric : public Metric {
 public:
     AtomicMetric(MetricType type, MetricUnit unit) : Metric(type, unit), _value(T()) {}
-    virtual ~AtomicMetric() {}
+    ~AtomicMetric() override = default;
 
     std::string to_string() const override { return std::to_string(value()); }
 
@@ -116,7 +117,7 @@ template <typename T>
 class LockSimpleMetric : public Metric {
 public:
     LockSimpleMetric(MetricType type, MetricUnit unit) : Metric(type, unit), _value(T()) {}
-    virtual ~LockSimpleMetric() {}
+    ~LockSimpleMetric() override = default;
 
     std::string to_string() const override { return std::to_string(value()); }
 
@@ -155,7 +156,7 @@ class CoreLocalCounter : public Metric {
 public:
     CoreLocalCounter(MetricUnit unit) : Metric(MetricType::COUNTER, unit), _value() {}
 
-    virtual ~CoreLocalCounter() {}
+    ~CoreLocalCounter() override = default;
 
     std::string to_string() const override {
         std::stringstream ss;
@@ -185,21 +186,21 @@ template <typename T>
 class AtomicCounter : public AtomicMetric<T> {
 public:
     AtomicCounter(MetricUnit unit) : AtomicMetric<T>(MetricType::COUNTER, unit) {}
-    virtual ~AtomicCounter() {}
+    ~AtomicCounter() override = default;
 };
 
 template <typename T>
 class AtomicGauge : public AtomicMetric<T> {
 public:
     AtomicGauge(MetricUnit unit) : AtomicMetric<T>(MetricType::GAUGE, unit) {}
-    virtual ~AtomicGauge() {}
+    ~AtomicGauge() override = default;
 };
 
 template <typename T>
 class LockCounter : public LockSimpleMetric<T> {
 public:
     LockCounter(MetricUnit unit) : LockSimpleMetric<T>(MetricType::COUNTER, unit) {}
-    virtual ~LockCounter() {}
+    virtual ~LockCounter() = default;
 };
 
 // This can only used for trival type
@@ -207,7 +208,7 @@ template <typename T>
 class LockGauge : public LockSimpleMetric<T> {
 public:
     LockGauge(MetricUnit unit) : LockSimpleMetric<T>(MetricType::GAUGE, unit) {}
-    virtual ~LockGauge() {}
+    virtual ~LockGauge() = default;
 };
 
 // one key-value pair used to
@@ -215,8 +216,8 @@ struct MetricLabel {
     std::string name;
     std::string value;
 
-    MetricLabel() {}
-    MetricLabel(const std::string& name_, const std::string& value_) : name(name_), value(value_) {}
+    MetricLabel() = default;
+    MetricLabel(std::string name_, std::string value_) : name(std::move(name_)), value(std::move(value_)) {}
 
     bool operator==(const MetricLabel& other) const { return name == other.name && value == other.value; }
     bool operator!=(const MetricLabel& other) const { return !(*this == other); }
@@ -303,7 +304,7 @@ class MetricCollector;
 
 class MetricsVisitor {
 public:
-    virtual ~MetricsVisitor() {}
+    virtual ~MetricsVisitor() = default;
 
     // visit a collector, you can implement collector visitor, or only implement
     // metric visitor
@@ -332,7 +333,7 @@ private:
 
 class MetricRegistry {
 public:
-    MetricRegistry(const std::string& name) : _name(name) {}
+    MetricRegistry(std::string name) : _name(std::move(name)) {}
     ~MetricRegistry();
     bool register_metric(const std::string& name, Metric* metric) {
         return register_metric(name, MetricLabels::EmptyLabels, metric);
@@ -394,9 +395,9 @@ using DoubleGauge = LockGauge<double>;
 
 class TcmallocMetric final : public UIntGauge {
 public:
-    TcmallocMetric(const std::string& tcmalloc_var) : UIntGauge(MetricUnit::BYTES), _tcmalloc_var(tcmalloc_var) {}
+    TcmallocMetric(std::string tcmalloc_var) : UIntGauge(MetricUnit::BYTES), _tcmalloc_var(std::move(tcmalloc_var)) {}
 
-    virtual uint64_t value() const override {
+    uint64_t value() const override {
         uint64_t val = 0;
 #if !defined(ADDRESS_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(LEAK_SANITIZER)
         MallocExtension::instance()->GetNumericProperty(_tcmalloc_var.c_str(), reinterpret_cast<size_t*>(&val));

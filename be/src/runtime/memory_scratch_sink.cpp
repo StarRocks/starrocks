@@ -28,7 +28,7 @@
 
 #include "common/logging.h"
 #include "exprs/expr.h"
-#include "gen_cpp/DorisExternalService_types.h"
+#include "gen_cpp/StarrocksExternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/primitive_type.h"
@@ -37,6 +37,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/tuple_row.h"
 #include "util/arrow/row_batch.h"
+#include "util/arrow/starrocks_column_to_arrow.h"
 #include "util/date_func.h"
 #include "util/types.h"
 
@@ -46,7 +47,17 @@ MemoryScratchSink::MemoryScratchSink(const RowDescriptor& row_desc, const std::v
                                      const TMemoryScratchSink& sink)
         : _row_desc(row_desc), _t_output_expr(t_output_expr) {}
 
-MemoryScratchSink::~MemoryScratchSink() {}
+MemoryScratchSink::~MemoryScratchSink() = default;
+
+void MemoryScratchSink::convert_to_slot_types_and_ids() {
+    for (auto* tuple_desc : _row_desc.tuple_descriptors()) {
+        auto& slots = tuple_desc->slots();
+        for (auto slot : slots) {
+            _slot_types.push_back(&slot->type());
+            _slot_ids.push_back(slot->id());
+        }
+    }
+}
 
 Status MemoryScratchSink::prepare_exprs(RuntimeState* state) {
     // From the thrift expressions create the real exprs.
@@ -55,6 +66,7 @@ Status MemoryScratchSink::prepare_exprs(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc, _expr_mem_tracker.get()));
     // generate the arrow schema
     RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, &_arrow_schema));
+    convert_to_slot_types_and_ids();
     return Status::OK();
 }
 
@@ -74,11 +86,22 @@ Status MemoryScratchSink::prepare(RuntimeState* state) {
 }
 
 Status MemoryScratchSink::send(RuntimeState* state, RowBatch* batch) {
-    if (NULL == batch || 0 == batch->num_rows()) {
+    if (nullptr == batch || 0 == batch->num_rows()) {
         return Status::OK();
     }
     std::shared_ptr<arrow::RecordBatch> result;
     RETURN_IF_ERROR(convert_to_arrow_batch(*batch, _arrow_schema, arrow::default_memory_pool(), &result));
+    _queue->blocking_put(result);
+    return Status::OK();
+}
+
+Status MemoryScratchSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+    if (nullptr == chunk || 0 == chunk->num_rows()) {
+        return Status::OK();
+    }
+    std::shared_ptr<arrow::RecordBatch> result;
+    RETURN_IF_ERROR(convert_chunk_to_arrow_batch(chunk, _slot_types, _slot_ids, _arrow_schema,
+                                                 arrow::default_memory_pool(), &result));
     _queue->blocking_put(result);
     return Status::OK();
 }

@@ -10,7 +10,7 @@
 #ifndef BASE_INTEGRAL_TYPES_H_
 #define BASE_INTEGRAL_TYPES_H_
 
-#include <inttypes.h>
+#include <cinttypes>
 
 #include "butil/basictypes.h"
 

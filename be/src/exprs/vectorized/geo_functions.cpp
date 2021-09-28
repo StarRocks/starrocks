@@ -13,7 +13,7 @@ namespace vectorized {
 
 struct StConstructState {
     StConstructState() : is_null(false) {}
-    ~StConstructState() {}
+    ~StConstructState() = default;
 
     bool is_null;
     std::string encoded_buf;

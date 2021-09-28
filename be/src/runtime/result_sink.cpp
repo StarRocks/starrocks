@@ -21,6 +21,8 @@
 
 #include "runtime/result_sink.h"
 
+#include <memory>
+
 #include "common/config.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
@@ -47,7 +49,7 @@ ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& 
 
     if (_sink_type == TResultSinkType::FILE) {
         CHECK(sink.__isset.file_options);
-        _file_opts.reset(new ResultFileOptions(sink.file_options));
+        _file_opts = std::make_unique<ResultFileOptions>(sink.file_options);
     }
 }
 
@@ -129,7 +131,7 @@ Status ResultSink::close(RuntimeState* state, Status exec_status) {
         }
         _sender->close(final_status);
     }
-    state->exec_env()->result_mgr()->cancel_at_time(time(NULL) + config::result_buffer_cancelled_interval_time,
+    state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
                                                     state->fragment_instance_id());
     Expr::close(_output_expr_ctxs, state);
 

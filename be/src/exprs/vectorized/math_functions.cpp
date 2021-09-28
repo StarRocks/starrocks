@@ -2,7 +2,7 @@
 
 #include "exprs/vectorized/math_functions.h"
 
-#include <math.h>
+#include <cmath>
 
 #include "column/column_helper.h"
 #include "exprs/expr.h"

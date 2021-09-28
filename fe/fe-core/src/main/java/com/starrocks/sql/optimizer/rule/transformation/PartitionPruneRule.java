@@ -48,16 +48,20 @@ public class PartitionPruneRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalOlapScanOperator operator = (LogicalOlapScanOperator) input.getOp();
-        OlapTable table = operator.getOlapTable();
+        LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) input.getOp();
+        if (olapScanOperator.getSelectedPartitionId() != null) {
+            return Collections.emptyList();
+        }
+
+        OlapTable table = (OlapTable) olapScanOperator.getTable();
 
         PartitionInfo partitionInfo = table.getPartitionInfo();
-        Collection<Long> selectedPartitionIds = null;
+        List<Long> selectedPartitionIds = null;
 
         if (partitionInfo.getType() == PartitionType.RANGE) {
             selectedPartitionIds =
-                    partitionPrune(table, (RangePartitionInfo) partitionInfo, operator);
-            predicatePrune(operator, (RangePartitionInfo) partitionInfo, selectedPartitionIds);
+                    partitionPrune(table, (RangePartitionInfo) partitionInfo, olapScanOperator);
+            predicatePrune(olapScanOperator, (RangePartitionInfo) partitionInfo, selectedPartitionIds);
         }
 
         if (selectedPartitionIds == null) {
@@ -69,15 +73,22 @@ public class PartitionPruneRule extends TransformationRule {
                     .filter(id -> table.getPartition(id).hasData()).collect(Collectors.toList());
         }
 
-        if (selectedPartitionIds.equals(operator.getSelectedPartitionId())) {
-            return Collections.emptyList();
-        }
-
-        operator.setSelectedPartitionId(selectedPartitionIds);
-        return Lists.newArrayList(input);
+        return Lists.newArrayList(OptExpression.create(new LogicalOlapScanOperator(
+                olapScanOperator.getTable(),
+                olapScanOperator.getOutputColumns(),
+                olapScanOperator.getColRefToColumnMetaMap(),
+                olapScanOperator.getColumnMetaToColRefMap(),
+                olapScanOperator.getDistributionSpec(),
+                olapScanOperator.getLimit(),
+                olapScanOperator.getPredicate(),
+                olapScanOperator.getSelectedIndexId(),
+                selectedPartitionIds,
+                olapScanOperator.getPartitionNames(),
+                olapScanOperator.getSelectedTabletId(),
+                olapScanOperator.getHintsTabletIds()), input.getInputs()));
     }
 
-    private Collection<Long> partitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
+    private List<Long> partitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
                                             LogicalOlapScanOperator operator) {
         Map<Long, Range<PartitionKey>> keyRangeById;
         if (operator.getPartitionNames() != null) {

@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -36,6 +37,8 @@ public:
     // 256  |   8s210ms
     // From the result, we can see when fixed length is 128, we can get speed up for column read.
     enum { APPEND_OVERFLOW_MAX_SIZE = 128 };
+
+    static const uint32_t MAX_CAPACITY_LIMIT = UINT32_MAX;
 
     // mutable operations cannot be applied to shared data when concurrent
     using Ptr = std::shared_ptr<Column>;
@@ -263,10 +266,14 @@ public:
 
     // Compute fvn hash, mainly used by shuffle column data
     // Note: shuffle hash function should be different from Aggregate and Join Hash map hash function
-    virtual void fvn_hash(uint32_t* seed, uint16_t from, uint16_t to) const = 0;
+    virtual void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
 
     // used by data loading compute tablet bucket
-    virtual void crc32_hash(uint32_t* seed, uint16_t from, uint16_t to) const = 0;
+    virtual void crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
+
+    virtual void crc32_hash_at(uint32_t* seed, int32_t idx) const { crc32_hash(seed - idx, idx, idx + 1); }
+
+    virtual void fnv_hash_at(uint32_t* seed, int32_t idx) const { fnv_hash(seed - idx, idx, idx + 1); }
 
     // Push one row to MysqlRowBuffer
     virtual void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const = 0;
@@ -304,6 +311,8 @@ public:
     virtual void swap_column(Column& rhs) = 0;
 
     virtual void reset_column() { _delete_state = DEL_NOT_SATISFIED; }
+
+    virtual bool reach_capacity_limit() const = 0;
 
 protected:
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
@@ -349,11 +358,13 @@ public:
         return MutablePtr(new Derived(std::forward<std::initializer_list<T>>(arg)));
     }
 
-    typename AncestorBaseType::MutablePtr clone() const {
+    typename AncestorBaseType::MutablePtr clone() const override {
         return typename AncestorBase::MutablePtr(new Derived(*derived()));
     }
 
-    typename AncestorBaseType::Ptr clone_shared() const { return typename AncestorBase::Ptr(new Derived(*derived())); }
+    typename AncestorBaseType::Ptr clone_shared() const override {
+        return typename AncestorBase::Ptr(new Derived(*derived()));
+    }
 };
 
 } // namespace vectorized

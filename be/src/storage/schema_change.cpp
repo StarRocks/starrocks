@@ -21,11 +21,12 @@
 
 #include "storage/schema_change.h"
 
-#include <signal.h>
 #include <util/defer_op.h>
 
 #include <algorithm>
+#include <csignal>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "runtime/exec_env.h"
@@ -61,6 +62,7 @@ public:
     virtual ~RowBlockSorter();
 
     bool sort(RowBlock** row_block);
+    size_t allocated_rows() { return (_swap_row_block == nullptr) ? 0 : _swap_row_block->capacity(); }
 
 private:
     static bool _row_cursor_comparator(const RowCursor* a, const RowCursor* b) { return compare_row(*a, *b) < 0; }
@@ -257,7 +259,7 @@ ConvertTypeResolver::ConvertTypeResolver() {
     add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL128>();
 }
 
-ConvertTypeResolver::~ConvertTypeResolver() {}
+ConvertTypeResolver::~ConvertTypeResolver() = default;
 
 bool to_bitmap(RowCursor* read_helper, RowCursor* write_helper, const TabletColumn& ref_column, int field_idx,
                int ref_field_idx, MemPool* mem_pool) {
@@ -853,6 +855,14 @@ RowBlockAllocator::~RowBlockAllocator() {
     }
 }
 
+bool RowBlockAllocator::is_memory_enough_to_sort(size_t num_rows, size_t allocated_rows) {
+    if (num_rows <= allocated_rows) {
+        return true;
+    }
+    size_t row_block_size = _row_len * (num_rows - allocated_rows);
+    return _memory_allocated + row_block_size < _memory_limitation;
+}
+
 OLAPStatus RowBlockAllocator::allocate(RowBlock** row_block, size_t num_rows, bool null_supported) {
     size_t row_block_size = _row_len * num_rows;
 
@@ -899,11 +909,11 @@ void RowBlockAllocator::release(RowBlock* row_block) {
     delete row_block;
 }
 
-RowBlockMerger::RowBlockMerger(MemTracker* mem_tracker, TabletSharedPtr tablet) : _tablet(tablet) {
+RowBlockMerger::RowBlockMerger(MemTracker* mem_tracker, TabletSharedPtr tablet) : _tablet(std::move(tablet)) {
     _mem_tracker = std::make_unique<MemTracker>(-1, "block_merger", mem_tracker);
 }
 
-RowBlockMerger::~RowBlockMerger() {}
+RowBlockMerger::~RowBlockMerger() = default;
 
 bool RowBlockMerger::merge(const std::vector<RowBlock*>& row_block_arr, RowsetWriter* rowset_writer,
                            uint64_t* merged_rows) {
@@ -1277,6 +1287,17 @@ bool SchemaChangeWithSorting::process(RowsetReaderSharedPtr rowset_reader, Rowse
             LOG(WARNING) << "failed to allocate RowBlock.";
             result = false;
             goto SORTING_PROCESS_ERR;
+        } else {
+            // check allocator has enougth memory to do row-block sort
+            // in case of insufficient memory, row-block sort will fail which cause schema change fail
+            // if memory is not enough to do block sort, do internal-sorting frist to free memory
+            if (!_row_block_allocator->is_memory_enough_to_sort(ref_row_block->row_block_info().row_num,
+                                                                row_block_sorter.allocated_rows())) {
+                if (new_row_block != nullptr) {
+                    _row_block_allocator->release(new_row_block);
+                    new_row_block = nullptr;
+                }
+            }
         }
 
         if (new_row_block == nullptr) {
@@ -1419,7 +1440,7 @@ SORTING_PROCESS_ERR:
 }
 
 bool SchemaChangeWithSorting::_internal_sorting(const std::vector<RowBlock*>& row_block_arr, const Version& version,
-                                                VersionHash version_hash, TabletSharedPtr new_tablet,
+                                                VersionHash version_hash, const TabletSharedPtr& new_tablet,
                                                 RowsetTypePB new_rowset_type, SegmentsOverlapPB segments_overlap,
                                                 RowsetSharedPtr* rowset) {
     uint64_t merged_rows = 0;
@@ -1449,17 +1470,15 @@ bool SchemaChangeWithSorting::_internal_sorting(const std::vector<RowBlock*>& ro
 
     if (!merger.merge(row_block_arr, rowset_writer.get(), &merged_rows)) {
         LOG(WARNING) << "failed to merge row blocks.";
-        new_tablet->data_dir()->remove_pending_ids(ROWSET_ID_PREFIX + rowset_writer->rowset_id().to_string());
         return false;
     }
-    new_tablet->data_dir()->remove_pending_ids(ROWSET_ID_PREFIX + rowset_writer->rowset_id().to_string());
     add_merged_rows(merged_rows);
     *rowset = rowset_writer->build();
     return true;
 }
 
 bool SchemaChangeWithSorting::_external_sorting(vector<RowsetSharedPtr>& src_rowsets, RowsetWriter* rowset_writer,
-                                                TabletSharedPtr new_tablet) {
+                                                const TabletSharedPtr& new_tablet) {
     std::vector<RowsetReaderSharedPtr> rs_readers;
     for (auto& rowset : src_rowsets) {
         RowsetReaderSharedPtr rs_reader;
@@ -1549,9 +1568,16 @@ OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletRe
     if (!base_migration_rlock.owns_lock()) {
         return OLAP_ERR_RWLOCK_ERROR;
     }
+    if (Tablet::check_migrate(base_tablet)) {
+        return OLAP_ERR_OTHER_ERROR;
+    }
+
     std::shared_lock new_migration_rlock(new_tablet->get_migration_lock(), std::try_to_lock);
     if (!new_migration_rlock.owns_lock()) {
         return OLAP_ERR_RWLOCK_ERROR;
+    }
+    if (Tablet::check_migrate(new_tablet)) {
+        return OLAP_ERR_OTHER_ERROR;
     }
 
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
@@ -1747,7 +1773,7 @@ OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterT
     return res;
 }
 
-OLAPStatus SchemaChangeHandler::_get_versions_to_be_changed(TabletSharedPtr base_tablet,
+OLAPStatus SchemaChangeHandler::_get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
                                                             std::vector<Version>* versions_to_be_changed) {
     RowsetSharedPtr rowset = base_tablet->rowset_with_max_version();
     if (rowset == nullptr) {
@@ -1857,10 +1883,8 @@ OLAPStatus SchemaChangeHandler::_convert_historical_rowsets(const SchemaChangePa
             LOG(WARNING) << "failed to process the version."
                          << " version=" << rs_reader->version().first << "-" << rs_reader->version().second;
             res = OLAP_ERR_INPUT_PARAMETER_ERROR;
-            new_tablet->data_dir()->remove_pending_ids(ROWSET_ID_PREFIX + rowset_writer->rowset_id().to_string());
             goto PROCESS_ALTER_EXIT;
         }
-        new_tablet->data_dir()->remove_pending_ids(ROWSET_ID_PREFIX + rowset_writer->rowset_id().to_string());
         // Add the new version of the data to the header,
         // To prevent deadlocks, be sure to lock the old table first and then the new one
         sc_params.new_tablet->obtain_push_lock();
@@ -1914,8 +1938,8 @@ PROCESS_ALTER_EXIT : {
 
 // @static
 OLAPStatus SchemaChangeHandler::_parse_request(
-        TabletSharedPtr base_tablet, TabletSharedPtr new_tablet, RowBlockChanger* rb_changer, bool* sc_sorting,
-        bool* sc_directly,
+        const TabletSharedPtr& base_tablet, const TabletSharedPtr& new_tablet, RowBlockChanger* rb_changer,
+        bool* sc_sorting, bool* sc_directly,
         const std::unordered_map<std::string, AlterMaterializedViewParam>& materialized_function_map) {
     OLAPStatus res = OLAP_SUCCESS;
 
@@ -2098,7 +2122,8 @@ OLAPStatus SchemaChangeHandler::_init_column_mapping(ColumnMapping* column_mappi
     return OLAP_SUCCESS;
 }
 
-OLAPStatus SchemaChangeHandler::_validate_alter_result(TabletSharedPtr new_tablet, const TAlterTabletReqV2& request) {
+OLAPStatus SchemaChangeHandler::_validate_alter_result(const TabletSharedPtr& new_tablet,
+                                                       const TAlterTabletReqV2& request) {
     Version max_continuous_version = new_tablet->max_continuous_version_from_beginning();
     LOG(INFO) << "find max continuous version of tablet=" << new_tablet->full_name()
               << ", start_version=" << max_continuous_version.first
