@@ -83,8 +83,7 @@ import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TBackendMeta;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
-import com.starrocks.thrift.TColumnDef;
-import com.starrocks.thrift.TColumnDesc;
+import com.starrocks.thrift.TColumnMeta;
 import com.starrocks.thrift.TCommitRemoteTxnRequest;
 import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TDistributionDesc;
@@ -1050,17 +1049,15 @@ public class MasterImpl {
                     schemaMeta.setStorage_type(materializedIndexMeta.getStorageType());
                     schemaMeta.setKeys_type(materializedIndexMeta.getKeysType().name());
                     for (Column column : materializedIndexMeta.getSchema()) {
-                        TColumnDef columnDef = new TColumnDef();
-                        TColumnDesc columnDesc = new TColumnDesc();
-                        columnDesc.setColumnName(column.getName());
-                        columnDesc.setColumnType(column.getPrimitiveType().toThrift());
-                        columnDesc.setKey(column.isKey());
+                        TColumnMeta columnMeta = new TColumnMeta();
+                        columnMeta.setColumnName(column.getName());
+                        columnMeta.setColumnType(column.getType().toThrift());
+                        columnMeta.setKey(column.isKey());
                         if (column.getAggregationType() != null) {
-                            columnDesc.setAggregationType(column.getAggregationType().name());
+                            columnMeta.setAggregationType(column.getAggregationType().name());
                         }
-                        columnDef.setColumnDesc(columnDesc);
-                        columnDef.setComment(column.getComment());
-                        schemaMeta.addToColumns(columnDef);
+                        columnMeta.setComment(column.getComment());
+                        schemaMeta.addToColumns(columnMeta);
                     }
                     indexMeta.setSchema_meta(schemaMeta);
                     // fill in tablet info
