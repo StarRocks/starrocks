@@ -38,7 +38,7 @@ public class MetaCleaner {
 
     public void clean() throws IOException {
         Storage storage = new Storage(imageDir);
-        long currentVersion = storage.getImageSeq();
+        long currentVersion = storage.getImageJournalId();
         long imageDeleteVersion = currentVersion - 1;
 
         File currentImage = storage.getImageFile(currentVersion);
@@ -86,10 +86,6 @@ public class MetaCleaner {
             if (filename.contains(".")) {
                 if (filename.startsWith(Storage.IMAGE)) {
                     type = Storage.IMAGE;
-                }
-
-                if (filename.startsWith(Storage.EDITS)) {
-                    type = Storage.EDITS;
                 }
             }
         }
