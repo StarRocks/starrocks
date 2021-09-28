@@ -23,7 +23,6 @@ package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
-import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob.JobType;
