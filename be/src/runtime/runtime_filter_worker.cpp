@@ -351,7 +351,8 @@ public:
 
 static_assert(std::is_move_assignable<RuntimeFilterWorkerEvent>::value);
 
-RuntimeFilterWorker::RuntimeFilterWorker(ExecEnv* env) : _exec_env(env), _thread([this] { execute(); }) {}
+RuntimeFilterWorker::RuntimeFilterWorker(ExecEnv* env)
+        : _exec_env(env), _thread(std::bind<void>(&RuntimeFilterWorker::execute, this)) {}
 
 RuntimeFilterWorker::~RuntimeFilterWorker() {
     _queue.shutdown();
