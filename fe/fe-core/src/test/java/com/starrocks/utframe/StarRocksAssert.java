@@ -133,6 +133,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert dropView(String viewName) throws Exception {
+        DropTableStmt dropViewStmt =
+                (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt("drop view " + viewName + ";", ctx);
+        Catalog.getCurrentCatalog().dropTable(dropViewStmt);
+        return this;
+    }
+
     public StarRocksAssert dropDatabase(String dbName) throws Exception {
         DropDbStmt dropDbStmt =
                 (DropDbStmt) UtFrameUtils.parseAndAnalyzeStmt("drop database " + dbName + ";", ctx);
