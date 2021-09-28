@@ -156,7 +156,7 @@ public class HiveTable extends Table {
                 .getPartition(resourceName, hiveDb, hiveTable, partitionKey);
     }
 
-    public List<HivePartition> getPartitions(List<ReferencedPartitionInfo> partitionInfos)
+    public List<HivePartition> getPartitions(List<PartitionKey> partitionInfos)
             throws DdlException {
         return Catalog.getCurrentCatalog().getHiveRepository()
                 .getPartitions(resourceName, hiveDb, hiveTable, partitionInfos);
@@ -166,14 +166,9 @@ public class HiveTable extends Table {
         return Catalog.getCurrentCatalog().getHiveRepository().getTableStats(resourceName, hiveDb, hiveTable);
     }
 
-    public HivePartitionStats getPartitionStats(PartitionKey partitionKey) throws DdlException {
+    public List<HivePartitionStats> getPartitionsStats(List<PartitionKey> partitionKeys) throws DdlException {
         return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartitionStats(resourceName, hiveDb, hiveTable, partitionKey);
-    }
-
-    public List<HivePartitionStats> getPartitionsStats(List<PartitionKey> partitionKey) throws DdlException {
-        return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartitionsStats(resourceName, hiveDb, hiveTable, partitionKey);
+                .getPartitionsStats(resourceName, hiveDb, hiveTable, partitionKeys);
     }
 
     public Map<String, HiveColumnStats> getTableLevelColumnStats(List<String> columnNames) throws DdlException {
@@ -467,16 +462,22 @@ public class HiveTable extends Table {
         }
 
         // partitions
+        List<PartitionKey> partitionKeys = Lists.newArrayList();
+        for (ReferencedPartitionInfo partition : partitions) {
+            partitionKeys.add(partition.getKey());
+        }
         List<HivePartition> hivePartitions;
         try {
-            hivePartitions = getPartitions(partitions);
+            hivePartitions = getPartitions(partitionKeys);
         } catch (DdlException e) {
             LOG.warn("table {} gets partition info failed.", name, e);
             return null;
         }
 
+        int i = 0;
         for (HivePartition hivePartition : hivePartitions) {
-            ReferencedPartitionInfo info = hivePartition.getPartitionInfo();
+            // HiveRepository.getPartitions future to ensure an orderly
+            ReferencedPartitionInfo info = partitions.get(i);
             PartitionKey key = info.getKey();
             long partitionId = info.getId();
 
@@ -492,6 +493,7 @@ public class HiveTable extends Table {
             tPartitionLocation.setSuffix(hivePartition.getFullPath());
             tPartition.setLocation(tPartitionLocation);
             tHdfsTable.putToPartitions(partitionId, tPartition);
+            i++;
         }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.HDFS_TABLE, fullSchema.size(),

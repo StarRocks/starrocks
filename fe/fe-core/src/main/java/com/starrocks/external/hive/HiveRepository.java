@@ -5,7 +5,6 @@ package com.starrocks.external.hive;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveResource;
@@ -126,17 +125,13 @@ public class HiveRepository {
     }
 
     public List<HivePartition> getPartitions(String resourceName, String dbName, String tableName,
-                                             List<DescriptorTable.ReferencedPartitionInfo> partitionInfos)
+                                             List<PartitionKey> partitionKeys)
             throws DdlException {
         HiveMetaCache metaCache = getMetaCache(resourceName);
         List<Future<HivePartition>> futures = Lists.newArrayList();
-        for (DescriptorTable.ReferencedPartitionInfo partitionInfo : partitionInfos) {
-            Future<HivePartition> future = partitionDaemonExecutor.
-                    submit(() -> {
-                        HivePartition partition = metaCache.getPartition(dbName, tableName, partitionInfo.getKey());
-                        partition.setPartitionInfo(partitionInfo);
-                        return partition;
-                    });
+        for (PartitionKey partitionKey : partitionKeys) {
+            Future<HivePartition> future = partitionDaemonExecutor
+                    .submit(() -> metaCache.getPartition(dbName, tableName, partitionKey));
             futures.add(future);
         }
         List<HivePartition> result = Lists.newArrayList();

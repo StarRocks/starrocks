@@ -100,7 +100,6 @@ public class HdfsScanNodeTest {
         HdfsFileBlockDesc blockDesc = new HdfsFileBlockDesc(0, 100, new long[] {0}, null, client);
         HdfsFileDesc fileDesc = new HdfsFileDesc("/00000_0", "", 100, ImmutableList.of(blockDesc));
         HivePartition p0 = new HivePartition(HdfsFileFormat.PARQUET, ImmutableList.of(fileDesc), "path/part_col=1");
-        p0.setPartitionInfo(new DescriptorTable.ReferencedPartitionInfo(1, partitionKey));
 
         new Expectations() {
             {
@@ -110,7 +109,7 @@ public class HdfsScanNodeTest {
                 result = partitionCols;
                 table.getPartitionKeys();
                 result = partitionKeys;
-                table.getPartitions((List< DescriptorTable.ReferencedPartitionInfo >) any);
+                table.getPartitions((List<PartitionKey>) any);
                 result = Lists.newArrayList(p0);
                 table.getExtrapolatedRowCount(anyLong);
                 result = -1;
@@ -157,9 +156,7 @@ public class HdfsScanNodeTest {
         HdfsFileDesc fileDesc1 = new HdfsFileDesc("/00000_1", "", 200, ImmutableList.of(blockDesc, blockDesc1));
         HivePartition p2 = new HivePartition(HdfsFileFormat.PARQUET, ImmutableList.of(fileDesc, fileDesc1),
                 "path/part_col=2");
-        p2.setPartitionInfo(new DescriptorTable.ReferencedPartitionInfo(2, key2));
         HivePartition p3 = new HivePartition(HdfsFileFormat.PARQUET, ImmutableList.of(fileDesc), "path/part_col=3");
-        p3.setPartitionInfo(new DescriptorTable.ReferencedPartitionInfo(3, key3));
 
         SlotDescriptor partColSlotDesc = new SlotDescriptor(new SlotId(0), tupleDesc);
         partColSlotDesc.setColumn(partitionCol);
@@ -177,7 +174,7 @@ public class HdfsScanNodeTest {
                 result = partitionCols;
                 table.getPartitionKeys();
                 result = partitionKeys;
-                table.getPartitions((List< DescriptorTable.ReferencedPartitionInfo >) any);
+                table.getPartitions((List<PartitionKey>) any);
                 result = Lists.newArrayList(p2, p3);
                 table.getExtrapolatedRowCount(400);
                 result = 50;
@@ -215,7 +212,6 @@ public class HdfsScanNodeTest {
         HdfsFileBlockDesc blockDesc = new HdfsFileBlockDesc(0, 100, new long[] {0}, null, client);
         HdfsFileDesc fileDesc = new HdfsFileDesc("/00000_0", "", 100, ImmutableList.of(blockDesc));
         HivePartition p0 = new HivePartition(HdfsFileFormat.PARQUET, ImmutableList.of(fileDesc), "path/part_col=1");
-        p0.setPartitionInfo(new DescriptorTable.ReferencedPartitionInfo(1, partitionKey));
 
         SlotDescriptor partColSlotDesc = new SlotDescriptor(new SlotId(0), tupleDesc);
         partColSlotDesc.setColumn(partitionCol);
@@ -240,7 +236,7 @@ public class HdfsScanNodeTest {
                 result = partitionCols;
                 table.getPartitionKeys();
                 result = partitionKeys;
-                table.getPartitions((List< DescriptorTable.ReferencedPartitionInfo >) any);
+                table.getPartitions((List<PartitionKey>) any);
                 result = Lists.newArrayList(p0);
                 table.getExtrapolatedRowCount(anyLong);
                 result = -1;

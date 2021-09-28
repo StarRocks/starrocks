@@ -349,24 +349,29 @@ public class HdfsScanNode extends ScanNode {
         }
 
         long start = System.currentTimeMillis();
+        List<PartitionKey> partitionKeys = Lists.newArrayList();
         List<DescriptorTable.ReferencedPartitionInfo> partitionInfos = Lists.newArrayList();
         for (long partitionId : selectedPartitionIds) {
-            partitionInfos.add(new DescriptorTable.ReferencedPartitionInfo(partitionId,
-                    idToPartitionKey.get(partitionId)));
+            PartitionKey partitionKey = idToPartitionKey.get(partitionId);
+            partitionKeys.add(partitionKey);
+            partitionInfos.add(new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey));
         }
-        List<HivePartition> hivePartitions = hiveTable.getPartitions(partitionInfos);
+        List<HivePartition> hivePartitions = hiveTable.getPartitions(partitionKeys);
+
+        int i = 0;
         for (HivePartition hivePartition : hivePartitions) {
-            long partitionId = hivePartition.getPartitionInfo().getId();
-            descTbl.addReferencedPartitions(hiveTable, hivePartition.getPartitionInfo());
+            // HiveRepository.getPartitions future to ensure an orderly
+            descTbl.addReferencedPartitions(hiveTable, partitionInfos.get(i));
             for (HdfsFileDesc fileDesc : hivePartition.getFiles()) {
                 totalBytes += fileDesc.getLength();
                 for (HdfsFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
-                    addScanRangeLocations(partitionId, fileDesc, blockDesc, hivePartition.getFormat());
+                    addScanRangeLocations(partitionInfos.get(i).getId(), fileDesc, blockDesc, hivePartition.getFormat());
                     LOG.debug("add scan range success. partition: {}, file: {}, block: {}-{}",
                             hivePartition.getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
                             blockDesc.getLength());
                 }
             }
+            i++;
         }
         LOG.debug("get {} scan range locations cost: {} ms", result.size(), (System.currentTimeMillis() - start));
     }

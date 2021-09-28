@@ -7,7 +7,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Catalog;
@@ -464,10 +463,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             return 0;
         }
 
-        List<DescriptorTable.ReferencedPartitionInfo> partitionInfos = Lists.newArrayList();
+        List<PartitionKey> partitionInfos = Lists.newArrayList();
         for (long partitionId : selectedPartitionIds) {
-            partitionInfos.add(new DescriptorTable.ReferencedPartitionInfo(partitionId,
-                    idToPartitionKey.get(partitionId)));
+            partitionInfos.add(idToPartitionKey.get(partitionId));
         }
         List<HivePartition> hivePartitions = hiveTable.getPartitions(partitionInfos);
         for (HivePartition hivePartition : hivePartitions) {
