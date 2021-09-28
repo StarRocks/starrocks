@@ -52,7 +52,15 @@ export TP_JAR_DIR=$TP_INSTALL_DIR/lib/jar
 # of all thirdparties
 #####################################################
 
-# ATTENTION: The ${THIRDPARTY}_SOURCE should be unique.
+# Definitions for architecture-related thirdparty
+MACHINE_TYPE=$(uname -m)
+VARS_TARGET=vars-${MACHINE_TYPE}.sh
+
+if [ ! -f ${TP_DIR}/${VARS_TARGET} ]; then
+    echo "${VARS_TARGET} is missing".
+    exit 1
+fi
+. ${TP_DIR}/${VARS_TARGET}
 
 # libevent
 # the last release version of libevent is 2.1.8, which was released on 26 Jan 2017, that is too old.
@@ -248,30 +256,6 @@ BREAK_PAD_NAME="breakpad-d6a6f52606529111b9f0ade9a0e0d9040fa97c1f.zip"
 BREAK_PAD_SOURCE="breakpad-d6a6f52606529111b9f0ade9a0e0d9040fa97c1f"
 BREAK_PAD_MD5SUM="53e8e9ee2d5e4f842a0cb4d651e74af6"
 
-# HADOOP
-HADOOP_DOWNLOAD="https://cdn-thirdparty.starrocks.com/hadoop-3.3.0.tar.gz"
-HADOOP_NAME="hadoop-3.3.0.tar.gz"
-HADOOP_SOURCE="hadoop-3.3.0"
-HADOOP_MD5SUM="c4ba5155ec44abcb63d183d2dbe38df9"
-
-# HADOOP_AARCH64
-HADOOP_AARCH64_DOWNLOAD="https://cdn-thirdparty.starrocks.com/hadoop-3.3.0-aarch64.tar.gz"
-HADOOP_AARCH64_NAME="hadoop-3.3.0-aarch64.tar.gz"
-HADOOP_AARCH64_SOURCE="hadoop-3.3.0-aarch64"
-HADOOP_AARCH64_MD5SUM="4e2e3e0dc8a1d80e1940565bbf6199a4"
-
-# OPEN JDK
-JDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/java-se-8u41-ri.tar.gz"
-JDK_NAME="java-se-8u41-ri.tar.gz"
-JDK_SOURCE="java-se-8u41-ri"
-JDK_MD5SUM="7295b5a3fb90e7aaf80df23d5eac222d"
-
-# OPEN JDK FOR aarch64, provided by huawei kunpeng (https://www.hikunpeng.com/zh/developer/devkit/compiler)
-JDK_AARCH64_DOWNLOAD="https://mirror.iscas.ac.cn/kunpeng/archive/compiler/bisheng_jdk/bisheng-jdk-8u262-linux-aarch64.tar.gz"
-JDK_AARCH64_NAME="bisheng-jdk-8u262-linux-aarch64.tar.gz"
-JDK_AARCH64_SOURCE="bisheng-jdk1.8.0_262"
-JDK_AARCH64_MD5SUM="a1254dea3728e0a86e53a55d8debfbeb"
-
 # RAGEL
 # ragel-6.9+ is used by hyperscan, so we build it first
 RAGEL_DOWNLOAD="https://www.colm.net/files/ragel/ragel-6.10.tar.gz"
@@ -279,23 +263,11 @@ RAGEL_NAME="ragel-6.10.tar.gz"
 RAGEL_SOURCE="ragel-6.10"
 RAGEL_MD5SUM="748cae8b50cffe9efcaa5acebc6abf0d"
 
-# HYPERSCAN
-HYPERSCAN_DOWNLOAD="https://github.com/intel/hyperscan/archive/v5.4.0.tar.gz"
-HYPERSCAN_NAME="hyperscan-5.4.0.tar.gz"
-HYPERSCAN_SOURCE="hyperscan-5.4.0"
-HYPERSCAN_MD5SUM="65e08385038c24470a248f6ff2fa379b"
-
 # mariadb-connector-c
 MARIADB_DOWNLOAD="https://github.com/mariadb-corporation/mariadb-connector-c/archive/refs/tags/v3.1.14.tar.gz"
 MARIADB_NAME="mariadb-connector-c-3.1.14.tar.gz"
 MARIADB_SOURCE="mariadb-connector-c-3.1.14"
 MARIADB_MD5SUM="86c4052adeb8447900bf33b4e2ddd1f9"
 
-# HYPERSCAN for aarch64, provided by huawei kunpeng.
-HYPERSCAN_AARCH64_DOWNLOAD="https://github.com/kunpengcompute/hyperscan/archive/refs/tags/v5.3.0.aarch64.tar.gz"
-HYPERSCAN_AARCH64_NAME="hyperscan-5.3.0.aarch64.tar.gz"
-HYPERSCAN_AARCH64_SOURCE="hyperscan-5.3.0.aarch64"
-HYPERSCAN_AARCH64_MD5SUM="ef337257bde6583242a739fab6fb161f"
-
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
-TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP HADOOP_AARCH64 JDK JDK_AARCH64 RAGEL HYPERSCAN HYPERSCAN_AARCH64 MARIADB"
+TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB"
