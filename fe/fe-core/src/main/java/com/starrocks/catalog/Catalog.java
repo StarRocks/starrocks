@@ -793,7 +793,7 @@ public class Catalog {
         // 1. check and create dirs and files
         File meta = new File(metaDir);
         if (!meta.exists()) {
-            String oldMetaDir = System.getenv("DORIS_HOME") + "/doris-meta";
+            String oldMetaDir = System.getenv("STARROCKS_HOME") + "/doris-meta";
             File oldMeta = new File(oldMetaDir);
             if (oldMeta.exists()) {
                 // For backward compatible
