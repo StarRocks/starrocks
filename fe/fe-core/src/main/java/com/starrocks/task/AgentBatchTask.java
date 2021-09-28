@@ -116,6 +116,9 @@ public class AgentBatchTask implements Runnable {
     // return the limit number of unfinished tasks.
     public List<AgentTask> getUnfinishedTasks(int limit) {
         List<AgentTask> res = Lists.newArrayList();
+        if (limit == 0) {
+            return res;
+        }
         for (Map.Entry<Long, List<AgentTask>> entry : this.backendIdToTasks.entrySet()) {
             for (AgentTask agentTask : entry.getValue()) {
                 if (!agentTask.isFinished()) {
