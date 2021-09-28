@@ -48,9 +48,11 @@ export TP_LIB_DIR=$TP_INSTALL_DIR/lib
 export TP_JAR_DIR=$TP_INSTALL_DIR/lib/jar
 
 #####################################################
-# Download url, filename and unpaced filename
+# Download url, filename and unpacked filename
 # of all thirdparties
 #####################################################
+
+# ATTENTION: The ${THIRDPARTY}_SOURCE should be unique.
 
 # libevent
 # the last release version of libevent is 2.1.8, which was released on 26 Jan 2017, that is too old.
