@@ -586,12 +586,12 @@ Status ScalarColumnWriter::append_array_offsets(const vectorized::Column& column
 
         _next_rowid += num_written;
         raw_data += field_size * num_written;
+        _previous_ordinal += data[offset_ordinal + num_written] - data[offset_ordinal];
+        offset_ordinal += num_written;
         if (page_full) {
             RETURN_IF_ERROR(finish_current_page());
             _element_ordinal = _previous_ordinal;
         }
-        _previous_ordinal += data[offset_ordinal + num_written] - data[offset_ordinal];
-        offset_ordinal += num_written;
         remaining -= num_written;
     }
     return Status::OK();
