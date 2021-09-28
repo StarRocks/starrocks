@@ -500,11 +500,16 @@ public class ScalarType extends Type implements Cloneable {
                 return "CHAR";
             }
             return "CHAR(" + len + ")";
-        } else if (type.isDecimalV2Type() || type.isDecimalV3Type()) {
+        } else if (type.isDecimalV2Type()) {
             if (isWildcardDecimal()) {
                 return "DECIMAL";
             }
             return "DECIMAL(" + precision + "," + scale + ")";
+        } else if (type.isDecimalV3Type()) {
+            if (isWildcardDecimal()) {
+                return type.toString();
+            }
+            return type.toString() + "(" + precision + "," + scale + ")";
         } else if (type == PrimitiveType.VARCHAR) {
             if (isWildcardVarchar()) {
                 return "VARCHAR";
@@ -525,10 +530,13 @@ public class ScalarType extends Type implements Cloneable {
                 stringBuilder.append("varchar").append("(").append(len).append(")");
                 break;
             case DECIMALV2:
+                stringBuilder.append("decimal").append("(").append(precision).append(", ").append(scale).append(")");
+                break;
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
-                stringBuilder.append("decimal").append("(").append(precision).append(", ").append(scale).append(")");
+                stringBuilder.append(type.toString().toLowerCase()).append("(").append(precision).append(", ")
+                        .append(scale).append(")");
                 break;
             case BOOLEAN:
                 return "boolean";
