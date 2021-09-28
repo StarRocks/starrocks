@@ -538,7 +538,7 @@ private:
         std::mutex lock;
 
         // If true, tear down the update thread.
-        volatile bool _done;
+        volatile bool _done{false};
 
         // Thread performing asynchronous updates.
         std::unique_ptr<boost::thread> update_thread;

@@ -106,7 +106,7 @@ private:
 template <FieldType Type>
 class BinaryPrefixPageDecoder final : public PageDecoder {
 public:
-    BinaryPrefixPageDecoder(Slice data, const PageDecoderOptions& options) : _data(data), _parsed(false) {}
+    BinaryPrefixPageDecoder(Slice data, const PageDecoderOptions& options) : _data(data) {}
 
     Status init() override;
 

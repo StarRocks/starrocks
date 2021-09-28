@@ -40,9 +40,9 @@ namespace orc {
  */
 
 struct StatContext {
-    const bool correctStats;
-    const Timezone* const writerTimezone;
-    StatContext() : correctStats(false), writerTimezone(nullptr) {}
+    const bool correctStats{false};
+    const Timezone* const writerTimezone{nullptr};
+    StatContext() {}
     StatContext(bool cStat, const Timezone* const timezone = nullptr) : correctStats(cStat), writerTimezone(timezone) {}
 };
 

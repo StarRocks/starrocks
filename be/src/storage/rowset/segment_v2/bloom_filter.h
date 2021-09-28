@@ -57,7 +57,7 @@ public:
     // Factory function for BloomFilter
     static Status create(BloomFilterAlgorithmPB algorithm, std::unique_ptr<BloomFilter>* bf);
 
-    BloomFilter() : _data(nullptr), _num_bytes(0), _size(0), _has_null(nullptr) {}
+    BloomFilter() {}
 
     virtual ~BloomFilter() { delete[] _data; }
 
@@ -149,15 +149,15 @@ private:
 protected:
     // bloom filter data
     // specially add one byte for null flag
-    char* _data;
+    char* _data{nullptr};
     // optimal bloom filter num bytes
     // it is calculated by optimal_bit_num() / 8
-    uint32_t _num_bytes;
+    uint32_t _num_bytes{0};
     // equal to _num_bytes + 1
     // last byte is for has_null flag
-    uint32_t _size;
+    uint32_t _size{0};
     // last byte's pointer in data for null flag
-    bool* _has_null;
+    bool* _has_null{nullptr};
 
 private:
     std::function<void(const void*, const int, const uint64_t, void*)> _hash_func;

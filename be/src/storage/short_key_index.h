@@ -208,7 +208,7 @@ private:
 //      auto iter = decoder.lower_bound(key);
 class ShortKeyIndexDecoder {
 public:
-    ShortKeyIndexDecoder() : _parsed(false) {}
+    ShortKeyIndexDecoder() {}
 
     // client should assure that body is available when this class is used
     Status parse(const Slice& body, const segment_v2::ShortKeyFooterPB& footer);
@@ -271,7 +271,7 @@ private:
         }
     }
 
-    bool _parsed;
+    bool _parsed{false};
 
     // All following fields are only valid after parse has been executed successfully
     segment_v2::ShortKeyFooterPB _footer;

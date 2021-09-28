@@ -69,7 +69,7 @@ enum RowsetState {
 
 class RowsetStateMachine {
 public:
-    RowsetStateMachine() : _rowset_state(ROWSET_UNLOADED) {}
+    RowsetStateMachine() {}
 
     Status on_load() {
         switch (_rowset_state) {
@@ -112,7 +112,7 @@ public:
     RowsetState rowset_state() { return _rowset_state; }
 
 private:
-    RowsetState _rowset_state;
+    RowsetState _rowset_state{ROWSET_UNLOADED};
 };
 
 class Rowset : public std::enable_shared_from_this<Rowset> {

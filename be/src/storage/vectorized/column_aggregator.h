@@ -15,7 +15,7 @@ namespace starrocks::vectorized {
 
 class ColumnAggregatorBase {
 public:
-    ColumnAggregatorBase() : _source_column(nullptr), _aggregate_column(nullptr) {}
+    ColumnAggregatorBase() : _source_column(nullptr) {}
 
     virtual ~ColumnAggregatorBase() = default;
 
@@ -33,7 +33,7 @@ public:
 
 public:
     ColumnPtr _source_column;
-    Column* _aggregate_column;
+    Column* _aggregate_column{nullptr};
 };
 
 template <typename ColumnType>

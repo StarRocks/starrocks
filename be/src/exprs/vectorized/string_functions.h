@@ -395,9 +395,9 @@ private:
     struct StringFunctionsState {
         std::unique_ptr<re2::RE2> regex;
         std::unique_ptr<re2::RE2::Options> options;
-        bool const_pattern;
+        bool const_pattern{false};
 
-        StringFunctionsState() : regex(), options(), const_pattern(false) {}
+        StringFunctionsState() : regex(), options() {}
     };
 
     static ColumnPtr regexp_extract_const(re2::RE2* const_re, const Columns& columns);
@@ -426,9 +426,9 @@ private:
     };
 
     struct ParseUrlState {
-        bool const_pattern;
+        bool const_pattern{false};
         std::unique_ptr<UrlParser::UrlPart> url_part;
-        ParseUrlState() : const_pattern(false), url_part() {}
+        ParseUrlState() : url_part() {}
     };
 
     static ColumnPtr parse_url_general(FunctionContext* context, const starrocks::vectorized::Columns& columns);

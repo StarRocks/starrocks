@@ -144,7 +144,7 @@ private:
                                                const Slice& slice);
 
     struct LikePredicateState {
-        char escape_char;
+        char escape_char{'\\'};
 
         /// This is the function, set in the prepare function, that will be used to determine
         /// the value of the predicate. It will be set depending on whether the expression is
@@ -177,7 +177,7 @@ private:
         // one scratch space per thread, or concurrent caller, is required
         hs_scratch_t* scratch = nullptr;
 
-        LikePredicateState() : escape_char('\\') {}
+        LikePredicateState() {}
 
         ~LikePredicateState() {
             if (scratch != nullptr) {

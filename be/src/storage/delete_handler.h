@@ -67,11 +67,11 @@ private:
 
 // Represents a delete condition
 struct DeleteConditions {
-    DeleteConditions() : filter_version(0), del_cond(nullptr) {}
+    DeleteConditions() {}
     ~DeleteConditions() = default;
 
-    int32_t filter_version; // delete condition version
-    Conditions* del_cond;   // delete condition
+    int32_t filter_version{0};     // delete condition version
+    Conditions* del_cond{nullptr}; // delete condition
 };
 
 // Used to check if one row is deleted
@@ -92,7 +92,7 @@ class DeleteHandler {
 public:
     typedef std::vector<DeleteConditions>::size_type cond_num_t;
 
-    DeleteHandler() : _is_inited(false) {}
+    DeleteHandler() {}
     ~DeleteHandler() = default;
 
     // Use regular expression to extract 'column_name', 'op' and 'operands'

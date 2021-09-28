@@ -24,9 +24,9 @@ private:
     Status get_new_desc();
     Status get_create_table(std::string* result);
 
-    int _db_index;
-    int _table_index;
-    int _column_index;
+    int _db_index{0};
+    int _table_index{0};
+    int _column_index{0};
     TGetDbsResult _db_result;
     TGetTablesResult _table_result;
     TDescribeTableResult _desc_result;

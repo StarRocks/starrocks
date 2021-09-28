@@ -21,25 +21,19 @@ namespace starrocks::vectorized {
 
 // scanner parameter from frontend
 struct SchemaScannerParam {
-    const std::string* db;
-    const std::string* table;
-    const std::string* wild;
-    const std::string* user;
-    const std::string* user_ip;
-    const TUserIdentity* current_user_ident; // to replace the user and user ip
-    const std::string* ip;                   // frontend ip
-    int32_t port;                            // frontend thrift port
+    const std::string* db{nullptr};
+    const std::string* table{nullptr};
+    const std::string* wild{nullptr};
+    const std::string* user{nullptr};
+    const std::string* user_ip{nullptr};
+    const TUserIdentity* current_user_ident{nullptr}; // to replace the user and user ip
+    const std::string* ip{nullptr};                   // frontend ip
+    int32_t port{0};                                  // frontend thrift port
     int64_t thread_id = 0;
 
     SchemaScannerParam()
-            : db(nullptr),
-              table(nullptr),
-              wild(nullptr),
-              user(nullptr),
-              user_ip(nullptr),
-              current_user_ident(nullptr),
-              ip(nullptr),
-              port(0) {}
+
+    {}
 };
 
 // virtual scanner for all schema table

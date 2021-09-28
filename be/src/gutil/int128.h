@@ -53,8 +53,8 @@ private:
     // Little-endian memory order optimizations can benefit from
     // having lo_ first, hi_ last.
     // See util/endian/endian.h and Load128/Store128 for storing a uint128.
-    uint64 lo_;
-    uint64 hi_;
+    uint64 lo_{0};
+    uint64 hi_{0};
 
     // Not implemented, just declared for catching automatic type conversions.
     uint128(uint8);
@@ -103,7 +103,7 @@ inline bool operator!=(const uint128& lhs, const uint128& rhs) {
 }
 inline uint128& uint128::operator=(const uint128& b) = default;
 
-inline uint128::uint128() : lo_(0), hi_(0) {}
+inline uint128::uint128() {}
 inline uint128::uint128(uint64 top, uint64 bottom) : lo_(bottom), hi_(top) {}
 inline uint128::uint128(const uint128& v) = default;
 inline uint128::uint128(const uint128_pod& v) : lo_(v.lo), hi_(v.hi) {}
