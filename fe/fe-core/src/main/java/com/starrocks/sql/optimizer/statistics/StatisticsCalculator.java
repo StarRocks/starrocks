@@ -463,11 +463,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             return 0;
         }
 
-        List<PartitionKey> partitionInfos = Lists.newArrayList();
-        for (long partitionId : selectedPartitionIds) {
-            partitionInfos.add(idToPartitionKey.get(partitionId));
-        }
-        List<HivePartition> hivePartitions = hiveTable.getPartitions(partitionInfos);
+        List<HivePartition> hivePartitions = hiveTable.getPartitions(partitions);
         for (HivePartition hivePartition : hivePartitions) {
             for (HdfsFileDesc fileDesc : hivePartition.getFiles()) {
                 totalBytes += fileDesc.getLength();
