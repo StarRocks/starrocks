@@ -11,6 +11,7 @@ public abstract class Operator {
     protected final OperatorType opType;
     protected long limit = -1;
     protected ScalarOperator predicate;
+    protected Projection projection;
 
     public Operator(OperatorType opType) {
         this.opType = opType;

@@ -7,6 +7,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -123,12 +124,16 @@ public class MergeTwoAggRule extends TransformationRule {
             newAggregations.put(newName, newFn);
         }
 
-        LogicalAggregationOperator result =
-                new LogicalAggregationOperator(aggregateAbove.getGroupingKeys(), newAggregations);
-        result.setLimit(aggregateAbove.getLimit());
-        result.setPredicate(aggregateAbove.getPredicate());
+        LogicalAggregationOperator result = new LogicalAggregationOperator(AggType.GLOBAL,
+                aggregateAbove.getGroupingKeys(),
+                aggregateAbove.getPartitionByColumns(),
+                newAggregations,
+                false,
+                -1,
+                aggregateAbove.getLimit(),
+                aggregateAbove.getPredicate());
 
-        return Lists
-                .newArrayList(OptExpression.create(result, input.getInputs().get(0).getInputs().get(0).getInputs()));
+        return Lists.newArrayList(
+                OptExpression.create(result, input.getInputs().get(0).getInputs().get(0).getInputs()));
     }
 }

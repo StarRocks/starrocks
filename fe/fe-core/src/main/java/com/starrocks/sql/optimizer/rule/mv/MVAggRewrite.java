@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.rule.mv;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -79,42 +80,54 @@ public abstract class MVAggRewrite {
     // query: ndv(a) && mv: hll_union(a) -> hll_union_agg(a)
     // query: approx_count_distinct(a) && mv: hll_union(a) -> hll_union_agg(a)
     // query: percentile_approx(a) && mv: percentile_union(a) -> percentile_union(a)
-    protected void rewriteAggOperator(LogicalAggregationOperator aggOperator,
+    protected void rewriteAggOperator(OptExpression optExpression,
+                                      LogicalAggregationOperator aggregationOperator,
                                       CallOperator agg,
                                       ColumnRefOperator aggUsedColumn,
                                       Column mvColumn) {
-        for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggOperator.getAggregations().entrySet()) {
+
+        Map<ColumnRefOperator, CallOperator> newAggMap = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggregationOperator.getAggregations().entrySet()) {
             String functionName = kv.getValue().getFnName();
             if (functionName.equals(agg.getFnName())
                     && kv.getValue().getUsedColumns().getFirstId() == aggUsedColumn.getId()) {
                 if (kv.getValue().getFnName().equals(FunctionSet.COUNT) &&
                         !kv.getValue().isDistinct()) {
-                    kv.setValue(getSumFunction(kv.getValue()));
+                    newAggMap.put(kv.getKey(), getSumFunction(kv.getValue()));
                     break;
                 } else if (functionName.equals(FunctionSet.COUNT) &&
                         kv.getValue().isDistinct() &&
                         mvColumn.getAggregationType() == AggregateType.BITMAP_UNION) {
-                    kv.setValue(getBitmapUnionCountFunction(kv.getValue()));
+                    newAggMap.put(kv.getKey(), getBitmapUnionCountFunction(kv.getValue()));
                     break;
                 } else if (functionName.equals(FunctionSet.MULTI_DISTINCT_COUNT) &&
                         mvColumn.getAggregationType() == AggregateType.BITMAP_UNION) {
-                    kv.setValue(getBitmapUnionCountFunction(kv.getValue()));
+                    newAggMap.put(kv.getKey(), getBitmapUnionCountFunction(kv.getValue()));
                     break;
                 } else if (functionName.equals(FunctionSet.NDV) &&
                         mvColumn.getAggregationType() == AggregateType.HLL_UNION) {
-                    kv.setValue(getHLLUnionAggFunction(kv.getValue()));
+                    newAggMap.put(kv.getKey(), getHLLUnionAggFunction(kv.getValue()));
                     break;
                 } else if (functionName.equals(FunctionSet.APPROX_COUNT_DISTINCT) &&
                         mvColumn.getAggregationType() == AggregateType.HLL_UNION) {
-                    kv.setValue(getHLLUnionAggFunction(kv.getValue()));
+                    newAggMap.put(kv.getKey(), getHLLUnionAggFunction(kv.getValue()));
                     break;
                 } else if (functionName.equals(FunctionSet.PERCENTILE_APPROX) &&
                         mvColumn.getAggregationType() == AggregateType.PERCENTILE_UNION) {
-                    kv.setValue(getPercentileFunction(kv.getValue()));
+                    newAggMap.put(kv.getKey(), getPercentileFunction(kv.getValue()));
                     break;
                 }
             }
         }
+        optExpression.setChild(0, OptExpression.create(new LogicalAggregationOperator(
+                aggregationOperator.getType(),
+                aggregationOperator.getGroupingKeys(),
+                aggregationOperator.getPartitionByColumns(),
+                newAggMap,
+                aggregationOperator.isSplit(),
+                aggregationOperator.getSingleDistinctFunctionPos(),
+                aggregationOperator.getLimit(),
+                aggregationOperator.getPredicate()), optExpression.inputAt(0).getInputs()));
     }
 
     private CallOperator getHLLUnionAggFunction(CallOperator oldAgg) {

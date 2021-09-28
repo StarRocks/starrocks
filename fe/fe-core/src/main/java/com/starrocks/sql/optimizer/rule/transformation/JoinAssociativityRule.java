@@ -3,15 +3,12 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Streams;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -20,7 +17,6 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class JoinAssociativityRule extends TransformationRule {
@@ -53,8 +49,6 @@ public class JoinAssociativityRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         OptExpression leftChild = input.inputAt(0);
         OptExpression rightChild = input.inputAt(1);
-        OptExpression leftChildLeftChild = leftChild.inputAt(0);
-        OptExpression leftChildRightChild = leftChild.inputAt(1);
 
         LogicalJoinOperator parentJoin = (LogicalJoinOperator) input.getOp();
         LogicalJoinOperator leftChildJoin = (LogicalJoinOperator) leftChild.getOp();
@@ -63,19 +57,24 @@ public class JoinAssociativityRule extends TransformationRule {
             return Collections.emptyList();
         }
 
-        List<ScalarOperator> allConjuncts = Streams.concat(
-                        Utils.extractConjuncts(parentJoin.getOnPredicate()).stream(),
-                        Utils.extractConjuncts(leftChildJoin.getOnPredicate()).stream())
-                .collect(Collectors.toList());
+        List<ScalarOperator> parentConjuncts = Utils.extractConjuncts(parentJoin.getOnPredicate());
+        List<ScalarOperator> childConjuncts = Utils.extractConjuncts(leftChildJoin.getOnPredicate());
 
-        ColumnRefSet newRightChildOutputColumns = new ColumnRefSet();
-        newRightChildOutputColumns.union(rightChild.getOutputColumns());
-        newRightChildOutputColumns.union(leftChildRightChild.getOutputColumns());
+        List<ScalarOperator> allConjuncts = Lists.newArrayList();
+        allConjuncts.addAll(parentConjuncts);
+        allConjuncts.addAll(childConjuncts);
+
+        OptExpression leftChild1 = leftChild.inputAt(0);
+        OptExpression leftChild2 = leftChild.inputAt(1);
+
+        ColumnRefSet newRightChildColumns = new ColumnRefSet();
+        newRightChildColumns.union(rightChild.getOutputColumns());
+        newRightChildColumns.union(leftChild2.getOutputColumns());
 
         List<ScalarOperator> newChildConjuncts = Lists.newArrayList();
         List<ScalarOperator> newParentConjuncts = Lists.newArrayList();
         for (ScalarOperator conjunct : allConjuncts) {
-            if (newRightChildOutputColumns.contains(conjunct.getUsedColumns())) {
+            if (newRightChildColumns.contains(conjunct.getUsedColumns())) {
                 newChildConjuncts.add(conjunct);
             } else {
                 newParentConjuncts.add(conjunct);
@@ -89,33 +88,27 @@ public class JoinAssociativityRule extends TransformationRule {
 
         // compute right child join output columns
         // right child join output columns not only contains the parent join output, but also contains the parent conjuncts used columns
-        ColumnRefSet outputColumns = parentJoin.getOutputColumns(new ExpressionContext(input));
-        outputColumns.union(parentJoin.getUsedColumns());
+        ColumnRefSet outputColumns = new ColumnRefSet(parentJoin.getPruneOutputColumns());
         newParentConjuncts.forEach(conjunct -> outputColumns.union(conjunct.getUsedColumns()));
-
         List<ColumnRefOperator> newRightOutputColumns =
-                newRightChildOutputColumns.getStream().filter(outputColumns::contains).
+                newRightChildColumns.getStream().filter(outputColumns::contains).
                         mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
 
-        //newRightOutputColumns =
-        //        newRightChildOutputColumns.getStream().
-        //                mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
-
-        LogicalJoinOperator rightChildJoinOperator =
-                new LogicalJoinOperator(JoinOperator.INNER_JOIN, Utils.compoundAnd(newChildConjuncts));
-        rightChildJoinOperator.setProjection(
-                new Projection(newRightOutputColumns.stream().collect(Collectors.toMap(Function.identity(),
-                        Function.identity())), null));
-        OptExpression newRightChildJoin = OptExpression.create(rightChildJoinOperator, leftChildRightChild, rightChild);
+        LogicalJoinOperator rightChildJoinOperator = new LogicalJoinOperator(
+                JoinOperator.INNER_JOIN,
+                Utils.compoundAnd(newChildConjuncts),
+                "", -1, null, newRightOutputColumns, false);
+        OptExpression newRightChildJoin = OptExpression.create(rightChildJoinOperator, leftChild2, rightChild);
 
         LogicalJoinOperator topJoinOperator =
                 new LogicalJoinOperator(JoinOperator.INNER_JOIN, Utils.compoundAnd(newParentConjuncts),
-                        parentJoin.getLimit(), "");
-        topJoinOperator.setProjection(parentJoin.getProjection());
-
+                        "", parentJoin.getLimit(),
+                        parentJoin.getPredicate(),
+                        parentJoin.getPruneOutputColumns(),
+                        parentJoin.isHasPushDownJoinOnClause());
         OptExpression topJoin = OptExpression.create(
                 topJoinOperator,
-                leftChildLeftChild,
+                leftChild1,
                 newRightChildJoin);
 
         return Lists.newArrayList(topJoin);
