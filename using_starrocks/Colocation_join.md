@@ -414,7 +414,7 @@ StarRocks 提供了几个和 Colocation Join 有关的 HTTP Restful API，用于
 
 3. 设置 Group 的数据分布
 
-    该接口可以强制设置某一 Group 的数分布。
+    该接口可以强制设置某一 Group 的数据分布。
 
     `POST /api/colocate/bucketseq?db_id=10005&group_id= 10008`
 
@@ -424,6 +424,6 @@ StarRocks 提供了几个和 Colocation Join 有关的 HTTP Restful API，用于
 
     `返回：200`
 
-    其中 Body 是以嵌套数组表示的 BucketsSequence 以及每个 Bucket 中分片分布所在 BE 的 id。
+    其中 Body 是以嵌套数组表示的 BucketsSequence 以及每个 Bucket 中分片所在 BE 的 id。
 
     > 注意，使用该命令，可能需要将 FE 的配置 disable_colocate_relocate 和 disable_colocate_balance 设为 true。即关闭系统自动的 Colocation 副本修复和均衡。否则可能在修改后，会被系统自动重置。

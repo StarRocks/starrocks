@@ -243,7 +243,7 @@ DROP MATERIALIZED VIEW IF EXISTS store_amt on sales_records;
 
 删除处于创建中的物化视图，需要先取消异步任务，然后再删除物化视图，以表 `db0.table0` 上的物化视图 mv 为例:
 
-首先使用获得JobId，执行命令:
+首先获得JobId，执行命令:
 
 ~~~SQL
 show alter table rollup from db0;

@@ -40,7 +40,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 图5.1中，各表数据都依照site\_id、city\_code这两列排序。这里有两点需要注意：
 
-1. 排序列的定义必须出现在建表语句中其他列的定义之前。以图1中的建表语句为例，三个表的排序列可以是site\_id、city\_code，或者site\_id、city\_code、user\_name，但不能是city\_code、user\_name，或者site\_id、city\_code、pv。
+1. 排序列的定义必须出现在建表语句中其他列的定义之前。以图5.1中的建表语句为例，三个表的排序列可以是site\_id、city\_code，或者site\_id、city\_code、user\_name，但不能是city\_code、user\_name，或者site\_id、city\_code、pv。
 2. 排序列的顺序是由create table语句中的列顺序决定的。DUPLICATE/UNIQUE/AGGREGATE KEY中顺序需要和create table语句保持一致。以site\_access\_duplicate表为例，也就是说下面的建表语句会报错。
 
 ~~~ SQL

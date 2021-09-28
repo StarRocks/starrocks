@@ -4,9 +4,9 @@
 
 ### 数据模型选择
 
-StarRocks数据模型目前分为三类: AGGREGATE KEY, UNIQUE KEY, DUPLICATE KEY。三种模型中数据都是按KEY进行排序。
+StarRocks数据模型目前分为三类: AGGREGATE KEY， UNIQUE KEY， DUPLICATE KEY。三种模型中数据都是按KEY进行排序。
 
-* AGGREGATE KEY: AGGREGATE KEY相同时，新旧记录进行聚合，目前支持的聚合函数有SUM, MIN, MAX, REPLACE。 AGGREGATE KEY模型可以提前聚合数据, 适合报表和多维分析业务。
+* AGGREGATE KEY: AGGREGATE KEY相同时，新旧记录进行聚合，目前支持的聚合函数有SUM， MIN， MAX， REPLACE。 AGGREGATE KEY模型可以提前聚合数据，适合报表和多维分析业务。
 
 ~~~sql
 CREATE TABLE site_visit
@@ -167,16 +167,16 @@ Rollup本质上可以理解为原始表(base table)的一个物化索引。建�
 
 ## 导入
 
-StarRocks目前提供broker loads和stream load两种导入方式, 通过指定导入label标识一批次的导入。StarRocks对单批次的导入会保证原子生效, 即使单次导入多张表也同样保证其原子性。
+StarRocks目前提供broker load和stream load两种导入方式， 通过指定导入label标识一批次的导入。StarRocks对单批次的导入会保证原子生效， 即使单次导入多张表也同样保证其原子性。
 
 * stream load : 通过http推的方式进行导入，微批导入。1MB数据导入延迟维持在秒级别，适合高频导入。
-* broker load : 通过拉的方式导入, 适合天级别的批量数据的导入。
+* broker load : 通过拉的方式导入， 适合天级别的批量数据的导入。
 
 ## schema change
 
-StarRocks中目前进行schema change的方式有三种，sorted schema change，direct schema change, linked schema change。
+StarRocks中目前进行schema change的方式有三种，sorted schema change，direct schema change， linked schema change。
 
-* sorted schema change: 改变了列的排序方式，需对数据进行重新排序。例如删除排序列中的一列, 字段重排序。
+* sorted schema change: 改变了列的排序方式，需对数据进行重新排序。例如删除排序列中的一列， 字段重排序。
 
     `ALTER TABLE site_visit DROP COLUMN city;`
 

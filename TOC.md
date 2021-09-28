@@ -17,7 +17,7 @@
   + [数据分布](/table_design/Data_distribution.md)
   + [排序键和shortkey index](/table_design/Sort_key.md)
   + [物化视图](/table_design/Materialized_view.md)
-  + [bitmap索引](/table_design/Bitmap_index.md)
+  + [Bitmap索引](/table_design/Bitmap_index.md)
   + [Bloomfilter索引](/table_design/Bloomfilter_index.md)
 + 数据导入
   + [导入总览](/loading/Loading_intro.md)

@@ -14,7 +14,7 @@ StarRocks 是基于MPP 架构实现的，在使用count distinct做精准去重�
 |  dt   |   page  | user_id |
 | :---: | :---: | :---:|
 |   20191206  |   xiaoxiang  | 101 |
-|   20191206  |   waimai  | 101 |
+|   20191206  |   waimai  | 102 |
 |   20191206  |   xiaoxiang  | 101 |
 |   20191206  |   waimai  | 101 |
 |   20191206  |   xiaoxiang  | 101 |
@@ -31,7 +31,7 @@ StarRocks 是基于MPP 架构实现的，在使用count distinct做精准去重�
  select page, count(distinct user_id) as uv from table group by page;
 ```
 
-对于上图计算 PV 的 SQL，StarRocks 在计算时，会按照下图进行计算，先根据 page 列和 user_id 列 group by,最后再 count。
+对于上图计算 PV 的 SQL，StarRocks 在计算时，会按照下图进行计算，先根据 page 列和 user_id 列 group by，最后再 count。
 
 ![alter](../assets/6.1.2-2.png)
 
@@ -41,20 +41,20 @@ StarRocks 是基于MPP 架构实现的，在使用count distinct做精准去重�
 
 ## 使用bitmap去重
 
-假如给定一个数组A, 其取值范围为[0, n)(注: 不包括n), 对该数组去重, 可采用(n+7)/8的字节长度的bitmap, 初始化为全0; 逐个处理数组A的元素, 以A中元素取值作为bitmap的下标, 将该下标的bit置1; 最后统计bitmap中1的个数即为数组A的count distinct结果.
+假如给定一个数组A， 其取值范围为[0, n)(注: 不包括n)， 对该数组去重， 可采用(n+7)/8的字节长度的bitmap， 初始化为全0；逐个处理数组A的元素， 以A中元素取值作为bitmap的下标， 将该下标的bit置1； 最后统计bitmap中1的个数即为数组A的count distinct结果。
 
 ## 使用bitmap去重的优势
 
-1. 空间优势:  用bitmap的一个bit位表示对应下标是否存在, 具有极大的空间优势;  比如对int32去重, 使用普通bitmap所需的存储空间只占传统去重的1/32.  StarRocks中的Bitmap采用Roaring Bitmap的优化实现, 对于稀疏的bitmap, 存储空间会进一步显著降低.
-2. 时间优势:  bitmap的去重涉及的计算包括对给定下标的bit置位, 统计bitmap的置位个数, 分别为O(1)操作和O(n)操作, 并且后者可使用clz, ctz等指令高效计算. 此外, bitmap去重在MPP执行引擎中还可以并行加速处理, 每个计算节点各自计算本地子bitmap,  使用bitor操作将这些子bitmap合并成最终的bitmap, bitor操作比基于sort和基于hash的去重效率要高, 无条件依赖和数据依赖, 可向量化执行。
+1. 空间优势:  用bitmap的一个bit位表示对应下标是否存在， 具有极大的空间优势;  比如对int32去重， 使用普通bitmap所需的存储空间只占传统去重的1/32。  StarRocks中的Bitmap采用Roaring Bitmap的优化实现， 对于稀疏的bitmap， 存储空间会进一步显著降低。
+2. 时间优势:  bitmap的去重涉及的计算包括对给定下标的bit置位， 统计bitmap的置位个数， 分别为O(1)操作和O(n)操作， 并且后者可使用clz， ctz等指令高效计算。 此外， bitmap去重在MPP执行引擎中还可以并行加速处理， 每个计算节点各自计算本地子bitmap，  使用bitor操作将这些子bitmap合并成最终的bitmap， bitor操作比基于sort和基于hash的去重效率要高， 无条件依赖和数据依赖， 可向量化执行。
 
 Roaring Bitmap实现，细节可以参考：[具体论文和实现](https://github.com/RoaringBitmap/RoaringBitmap)
 
 ## 如何使用Bitmap
 
-1. 首先, 用户需要注意bitmap index和bitmap去重二者都是用bitmap技术, 但引入动机和解决的问题完全不同, 前者用于低基数的枚举型列的等值条件过滤, 后者用于计算一组数据行的指标列的不重复元素的个数.
-2. 目前Bitmap列只能存在于用聚合表, 明细表和更新不支持BITMAP列.
-3. 创建表时指定指标列的数据类型为BITMAP,  聚合函数为BITMAP_UNION。
+1. 首先， 用户需要注意bitmap index和bitmap去重二者都是用bitmap技术， 但引入动机和解决的问题完全不同， 前者用于低基数的枚举型列的等值条件过滤， 后者用于计算一组数据行的指标列的不重复元素的个数。
+2. 目前Bitmap列只能存在于用聚合表， 明细表和更新不支持BITMAP列.
+3. 创建表时指定指标列的数据类型为BITMAP，  聚合函数为BITMAP_UNION。
 4. 当在Bitmap类型列上使用count distinct时，StarRocks会自动转化为BITMAP_UNION_COUNT计算。
 
 具体操作函数参见 [Bitmap函数](../sql-reference/sql-functions/bitmap-functions/bitmap_and.md)。
@@ -90,7 +90,7 @@ insert into page_uv values
 (2, '2020-06-23 01:30:30', to_bitmap(23));
 ```
 
-在以上数据导入后，在 page_id = 1, visit_date = '2020-06-23 01:30:30'的数据行，visit_user字段包含着3个bitmap元素（13，23，33）；在page_id = 1, visit_date = '2020-06-23 02:30:30'的数据行，visit_user字段包含着1个bitmap元素（13）；在page_id = 2, visit_date = '2020-06-23 01:30:30'的数据行，visit_user字段包含着1个bitmap元素（23）。
+在以上数据导入后，在 page_id = 1， visit_date = '2020-06-23 01:30:30'的数据行，visit_user字段包含着3个bitmap元素（13，23，33）；在page_id = 1， visit_date = '2020-06-23 02:30:30'的数据行，visit_user字段包含着1个bitmap元素（13）；在page_id = 2， visit_date = '2020-06-23 01:30:30'的数据行，visit_user字段包含着1个bitmap元素（23）。
 
 采用本地文件导入
 
@@ -138,9 +138,9 @@ mysql> select page_id, count(distinct visit_users) from page_uv group by page_id
 这种方案中全局字典本身是一张 Hive 表，Hive 表有两个列，一个是原始值，一个是编码的 Int 值。全局字典的生成步骤：
 
 1. 将事实表的字典列去重生成临时表
-2. 临时表和全局字典进行left join, 悬空的词典项为新value.
-3. 对新value进行编码并插入全局字典.
-4. 事实表和更新后的全局字典进行left join , 将词典项替换为ID.
+2. 临时表和全局字典进行left join， 悬空的词典项为新value。
+3. 对新value进行编码并插入全局字典。
+4. 事实表和更新后的全局字典进行left join ， 将词典项替换为ID。
 
 采用这种构建全局字典的方式，可以通过 Spark 或者 MR 实现全局字典的更新，和对事实表中 Value 列的替换。相比基于 Trie 树的全局字典，这种方式可以分布式化，还可以实现全局字典复用。
 

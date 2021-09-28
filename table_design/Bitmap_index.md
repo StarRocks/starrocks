@@ -6,13 +6,13 @@ StarRocks 支持基于Bitmap索引，对于有Filter的查询有明显的加速�
 
 ### **1 什么是Bitmap**
 
-Bitmap是元素为1个bit的, 取值为0,1两种情形的, 可对某一位bit进行置位(set)和清零(clear)操作的数组. Bitmap的使用场景有:
+Bitmap是元素为bit的， 取值为0、1两种情形的, 可对某一位bit进行置位(set)和清零(clear)操作的数组。Bitmap的使用场景有：
 
-* 用两个long型表示16学生的性别, 0表示女生, 1表示男生.
-* 用bitmap表示一组数据中是否存在null值, 0表示元素不为null, 1表示为null.
-* 一组数据的取值为(Q1, Q2, Q3, Q4), 表示季度; 用bitmap表示这组数据中取值为Q4的元素; 1表示取值为Q4的元素, 0表示其他取值的元素.
+* 用一个long型表示32位学生的性别，0表示女生，1表示男生。
+* 用Bitmap表示一组数据中是否存在null值，0表示元素不为null，1表示为null。
+* 一组数据的取值为(Q1, Q2, Q3, Q4)，表示季度，用Bitmap表示这组数据中取值为Q4的元素，1表示取值为Q4的元素, 0表示其他取值的元素。
 
-### **2 什么是 Bitmap索引**
+### **2 什么是Bitmap索引**
 
 ![Bitmap索引](../assets/3.6.1-1.png)
 
@@ -63,4 +63,4 @@ DROP INDEX index_name ON [db_name.]table_name;
 1. 对于明细模型，所有列都可以建Bitmap 索引；对于聚合模型，只有Key列可以建Bitmap 索引。
 2. Bitmap索引, 应该在取值为枚举型, 取值大量重复, 较低基数, 并且用作等值条件查询或者可转化为等值条件查询的列上创建.
 3. 不支持对Float、Double、Decimal 类型的列建Bitmap 索引。
-4. 如果要查看某个查询是否命中了Bitmap索引，可以通过查询的Profile信息查看（TODO：加上查看Profile的链接）。
+4. 如果要查看某个查询是否命中了Bitmap索引，可以通过查询的[Profile](https://docs.starrocks.com/zh-cn/main/administration/Query_planning#profile%E5%88%86%E6%9E%90)信息查看。
