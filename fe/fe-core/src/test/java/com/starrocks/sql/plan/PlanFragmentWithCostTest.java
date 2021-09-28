@@ -414,11 +414,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         sql = "select count(*) from test_mv group by event_day;";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: r3"));
+        Assert.assertTrue(planFragment.contains("rollup: test_mv"));
 
         sql = "select count(*), event_day from test_mv group by event_day;";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: r3"));
+        Assert.assertTrue(planFragment.contains("rollup: test_mv"));
 
         sql = "select event_day from test_mv where citycode = 1 group by event_day;";
         planFragment = getFragmentPlan(sql);
