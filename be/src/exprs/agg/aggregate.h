@@ -75,7 +75,7 @@ public:
     virtual void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
                               AggDataPtr* states) const = 0;
 
-    // selection[i] = 0, will be update
+    // filter[i] = 0, will be update
     virtual void update_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset,
                                           const Column** columns, AggDataPtr* states,
                                           const std::vector<uint8_t>& filter) const = 0;
@@ -97,10 +97,10 @@ public:
     virtual void merge_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
                              AggDataPtr* states) const = 0;
 
-    // selection[i] = 0, will be merged
+    // filter[i] = 0, will be merged
     virtual void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset,
                                          const Column* column, AggDataPtr* states,
-                                         const std::vector<uint8_t>& filter) const {};
+                                         const std::vector<uint8_t>& filter) const = 0;
 
     // merge result to single state
     virtual void merge_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column* column,
