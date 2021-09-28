@@ -179,6 +179,12 @@ public:
     Status append(const vectorized::Column& column) override;
 
     Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) override {
+        // if column is Array<String>, encoding maybe not set
+        // check _is_speculated again to avoid _page_builder is not initialized
+        if (!_is_speculated) {
+            _scalar_column_writer->set_encoding(DEFAULT_ENCODING);
+            _is_speculated = true;
+        }
         return _scalar_column_writer->append(data, null_flags, count, has_null);
     };
 
