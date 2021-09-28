@@ -63,7 +63,7 @@ public:
     static uint32_t index_in_block(uint32_t rid) { return rid & BLOCK_MASK; }
 
     // Create a Column which provided column schema, underlying storage_type and initial version
-    Column(const ColumnSchema& cs, ColumnType storage_type, uint64_t version);
+    Column(ColumnSchema cs, ColumnType storage_type, uint64_t version);
 
     // Copy-on-write a new Column with new capacity
     Column(const Column& rhs, size_t new_base_capacity, size_t new_version_capacity);

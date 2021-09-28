@@ -23,6 +23,7 @@
 #define STARROCKS_BE_SRC_UTIL_ZIP_UTIL_H
 
 #include <string>
+#include <utility>
 
 #include "common/status.h"
 #include "util/minizip/unzip.h"
@@ -52,7 +53,7 @@ namespace starrocks {
  */
 class ZipFile {
 public:
-    ZipFile(const std::string& zip_path) : _zip_path(zip_path), _zip_file(nullptr), _open_current_file(false) {}
+    ZipFile(std::string zip_path) : _zip_path(std::move(zip_path)), _zip_file(nullptr), _open_current_file(false) {}
 
     ~ZipFile() { WARN_IF_ERROR(close(), "failed to close zip file: " + _zip_path); }
 

@@ -3,6 +3,7 @@
 #include "exec/parquet/column_reader.h"
 
 #include <memory>
+#include <utility>
 
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -318,7 +319,7 @@ private:
 
 class ScalarColumnReader : public ColumnReader {
 public:
-    ScalarColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
+    ScalarColumnReader(ColumnReaderOptions opts) : _opts(std::move(opts)) {}
     ~ScalarColumnReader() override = default;
 
     Status init(RandomAccessFile* file, const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata,
@@ -601,7 +602,7 @@ static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_le
 
 class ListColumnReader : public ColumnReader {
 public:
-    ListColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
+    ListColumnReader(ColumnReaderOptions opts) : _opts(std::move(opts)) {}
     ~ListColumnReader() override = default;
 
     Status init(const ParquetField* field, std::unique_ptr<ColumnReader> element_reader) {

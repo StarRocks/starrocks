@@ -3,6 +3,7 @@
 #pragma once
 
 #include <mutex>
+#include <utility>
 
 #include "exec/pipeline/exchange/local_exchange_memory_manager.h"
 #include "exec/pipeline/source_operator.h"
@@ -36,8 +37,8 @@ private:
 
 class LocalExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
-    LocalExchangeSourceOperatorFactory(int32_t id, const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager)
-            : SourceOperatorFactory(id, -1), _memory_manager(memory_manager) {}
+    LocalExchangeSourceOperatorFactory(int32_t id, std::shared_ptr<LocalExchangeMemoryManager> memory_manager)
+            : SourceOperatorFactory(id, -1), _memory_manager(std::move(memory_manager)) {}
 
     ~LocalExchangeSourceOperatorFactory() override = default;
 

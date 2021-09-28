@@ -40,7 +40,7 @@ bool supported(ColumnType type);
 // TODO: Add more properties and methods later
 class ColumnSchema {
 public:
-    explicit ColumnSchema(const TabletColumn& tcolumn);
+    explicit ColumnSchema(TabletColumn tcolumn);
     ColumnSchema(uint32_t cid, const string& name, ColumnType type, bool nullable, bool is_key);
 
     // Get column id
@@ -78,7 +78,7 @@ public:
     // Create schema by description string, utility method for test
     static Status create(const string& desc, scoped_refptr<Schema>* sc);
 
-    explicit Schema(const TabletSchema& tschema);
+    explicit Schema(TabletSchema tschema);
 
     std::string debug_string() const;
 

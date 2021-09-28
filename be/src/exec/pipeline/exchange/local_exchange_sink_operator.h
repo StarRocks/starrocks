@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/operator.h"
 
@@ -34,8 +36,8 @@ private:
 
 class LocalExchangeSinkOperatorFactory final : public OperatorFactory {
 public:
-    LocalExchangeSinkOperatorFactory(int32_t id, const std::shared_ptr<LocalExchanger>& exchanger)
-            : OperatorFactory(id, -1), _exchanger(exchanger) {}
+    LocalExchangeSinkOperatorFactory(int32_t id, std::shared_ptr<LocalExchanger> exchanger)
+            : OperatorFactory(id, -1), _exchanger(std::move(exchanger)) {}
 
     ~LocalExchangeSinkOperatorFactory() override = default;
 

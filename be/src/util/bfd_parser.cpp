@@ -22,6 +22,7 @@
 #include "util/bfd_parser.h"
 
 #include <memory>
+#include <utility>
 
 #include "common/logging.h"
 
@@ -131,8 +132,8 @@ void BfdParser::list_targets(std::vector<std::string>* out) {
     free(targets);
 }
 
-BfdParser::BfdParser(const std::string& file_name)
-        : _file_name(file_name), _abfd(nullptr), _syms(nullptr), _num_symbols(0), _symbol_size(0) {
+BfdParser::BfdParser(std::string file_name)
+        : _file_name(std::move(file_name)), _abfd(nullptr), _syms(nullptr), _num_symbols(0), _symbol_size(0) {
     if (!_is_bfd_inited) {
         init_bfd();
     }

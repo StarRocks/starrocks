@@ -3,6 +3,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 
 #include "column/column.h"
 #include "common/status.h"
@@ -28,11 +29,15 @@ struct FunctionDescriptor {
 
     CloseFunction close_function;
 
-    FunctionDescriptor(const std::string& nm, uint8_t args, ScalarFunction sf, PrepareFunction pf, CloseFunction cf)
-            : name(nm), args_nums(args), scalar_function(sf), prepare_function(pf), close_function(cf) {}
+    FunctionDescriptor(std::string nm, uint8_t args, ScalarFunction sf, PrepareFunction pf, CloseFunction cf)
+            : name(std::move(nm)), args_nums(args), scalar_function(sf), prepare_function(pf), close_function(cf) {}
 
-    FunctionDescriptor(const std::string& nm, uint8_t args, ScalarFunction sf)
-            : name(nm), args_nums(args), scalar_function(sf), prepare_function(nullptr), close_function(nullptr) {}
+    FunctionDescriptor(std::string nm, uint8_t args, ScalarFunction sf)
+            : name(std::move(nm)),
+              args_nums(args),
+              scalar_function(sf),
+              prepare_function(nullptr),
+              close_function(nullptr) {}
 };
 
 class BuiltinFunctions {

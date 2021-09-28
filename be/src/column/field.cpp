@@ -2,6 +2,8 @@
 
 #include "column/field.h"
 
+#include <utility>
+
 #include "column/datum.h"
 #include "storage/key_coder.h"
 #include "storage/types.h"
@@ -10,8 +12,8 @@
 namespace starrocks {
 namespace vectorized {
 
-Field::Field(ColumnId id, const std::string& name, FieldType type, int precision, int scale, bool nullable)
-        : _id(id), _name(name), _type(get_type_info(type, precision, scale)), _is_nullable(nullable) {}
+Field::Field(ColumnId id, std::string name, FieldType type, int precision, int scale, bool nullable)
+        : _id(id), _name(std::move(name)), _type(get_type_info(type, precision, scale)), _is_nullable(nullable) {}
 
 FieldPtr Field::with_type(const TypeInfoPtr& type) {
     return std::make_shared<Field>(_id, _name, type, _is_nullable);
