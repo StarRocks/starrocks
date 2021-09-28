@@ -512,14 +512,15 @@ public class FileScanNode extends LoadScanNode {
             smallestLocations = locationsHeap.poll();
             long leftBytes = fileStatus.size - curFileOffset;
             long rangeBytes = 0;
+            // The rest of the file belongs to one range
+            boolean isEndOfFile = false;
             if (smallestLocations.second + leftBytes > bytesPerInstance &&
                     (formatType == TFileFormatType.FORMAT_CSV_PLAIN && fileStatus.isSplitable)) {
                 // Now only support split plain text
                 rangeBytes = bytesPerInstance - smallestLocations.second;
-                curFileOffset += rangeBytes;
             } else {
                 rangeBytes = leftBytes;
-                curFileOffset = 0;
+                isEndOfFile = true;
                 i++;
             }
 
@@ -529,6 +530,8 @@ public class FileScanNode extends LoadScanNode {
             brokerScanRange(smallestLocations.first).addToRanges(rangeDesc);
             smallestLocations.second += rangeBytes;
             locationsHeap.add(smallestLocations);
+
+            curFileOffset = isEndOfFile ? 0 : curFileOffset + rangeBytes;
         }
 
         // Put locations with valid scan ranges to locationsList
