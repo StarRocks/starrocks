@@ -308,7 +308,7 @@ public class Config extends ConfigBase {
     /**
      * num of thread to handle hive meta load concurrency.
      */
-    @ConfField(masterOnly = true)
+    @ConfField
     public static int hive_meta_load_concurrency = 4;
 
     /**

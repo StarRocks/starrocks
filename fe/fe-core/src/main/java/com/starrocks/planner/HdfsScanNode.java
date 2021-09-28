@@ -358,20 +358,18 @@ public class HdfsScanNode extends ScanNode {
         }
         List<HivePartition> hivePartitions = hiveTable.getPartitions(partitionKeys);
 
-        int i = 0;
-        for (HivePartition hivePartition : hivePartitions) {
-            // HiveRepository.getPartitions future to ensure an orderly
+        for (int i = 0; i < hivePartitions.size(); i++) {
             descTbl.addReferencedPartitions(hiveTable, partitionInfos.get(i));
-            for (HdfsFileDesc fileDesc : hivePartition.getFiles()) {
+            for (HdfsFileDesc fileDesc : hivePartitions.get(i).getFiles()) {
                 totalBytes += fileDesc.getLength();
                 for (HdfsFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
-                    addScanRangeLocations(partitionInfos.get(i).getId(), fileDesc, blockDesc, hivePartition.getFormat());
+                    addScanRangeLocations(partitionInfos.get(i).getId(), fileDesc, blockDesc,
+                            hivePartitions.get(i).getFormat());
                     LOG.debug("add scan range success. partition: {}, file: {}, block: {}-{}",
-                            hivePartition.getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
+                            hivePartitions.get(i).getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
                             blockDesc.getLength());
                 }
             }
-            i++;
         }
         LOG.debug("get {} scan range locations cost: {} ms", result.size(), (System.currentTimeMillis() - start));
     }

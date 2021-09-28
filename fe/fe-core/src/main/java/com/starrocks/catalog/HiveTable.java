@@ -281,10 +281,10 @@ public class HiveTable extends Table {
             LOG.warn("table {} gets partitions stats failed.", name, e);
         }
 
-        int i = 0;
-        for (HivePartitionStats partitionStats : partitionsStats) {
-            long partNumRows = partitionStats.getNumRows();
-            long partTotalFileBytes = partitionStats.getTotalFileBytes();
+
+        for (int i = 0; i < partitionsStats.size(); i++) {
+            long partNumRows = partitionsStats.get(i).getNumRows();
+            long partTotalFileBytes = partitionsStats.get(i).getTotalFileBytes();
             // -1: missing stats
             if (partNumRows > -1) {
                 if (numRows == -1) {
@@ -295,7 +295,6 @@ public class HiveTable extends Table {
                 LOG.debug("table {} partition {} stats abnormal. num rows: {}, total file bytes: {}",
                         name, partitions.get(i), partNumRows, partTotalFileBytes);
             }
-            i++;
         }
         return numRows;
     }
@@ -476,15 +475,13 @@ public class HiveTable extends Table {
             return null;
         }
 
-        int i = 0;
-        for (HivePartition hivePartition : hivePartitions) {
-            // HiveRepository.getPartitions future to ensure an orderly
+        for (int i = 0; i < hivePartitions.size(); i++) {
             ReferencedPartitionInfo info = partitions.get(i);
             PartitionKey key = info.getKey();
             long partitionId = info.getId();
 
             THdfsPartition tPartition = new THdfsPartition();
-            tPartition.setFile_format(hivePartition.getFormat().toThrift());
+            tPartition.setFile_format(hivePartitions.get(i).getFormat().toThrift());
 
             List<LiteralExpr> keys = key.getKeys();
             keys.forEach(v -> v.setUseVectorized(true));
@@ -492,10 +489,9 @@ public class HiveTable extends Table {
 
             THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
             tPartitionLocation.setPrefix_index(-1);
-            tPartitionLocation.setSuffix(hivePartition.getFullPath());
+            tPartitionLocation.setSuffix(hivePartitions.get(i).getFullPath());
             tPartition.setLocation(tPartitionLocation);
             tHdfsTable.putToPartitions(partitionId, tPartition);
-            i++;
         }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.HDFS_TABLE, fullSchema.size(),
