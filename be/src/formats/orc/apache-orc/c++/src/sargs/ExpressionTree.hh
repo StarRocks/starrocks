@@ -70,7 +70,7 @@ public:
 
     void setLeaf(size_t leaf);
 
-    void addChild(TreeNode child);
+    void addChild(const TreeNode& child);
 
     std::string toString() const;
 

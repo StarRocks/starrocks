@@ -21,9 +21,8 @@
 
 #include "storage/snapshot_manager.h"
 
-#include <stdio.h>
-
 #include <algorithm>
+#include <cstdio>
 #include <iterator>
 #include <map>
 #include <set>
@@ -484,7 +483,7 @@ Status SnapshotManager::build_snapshot_meta(SnapshotTypePB snapshot_type, const 
         uint32_t next_segment_id = 0;
         version->mutable_version()->set_major(snapshot_version);
         version->mutable_version()->set_minor(0);
-        version->set_creation_time(time(NULL));
+        version->set_creation_time(time(nullptr));
         for (const auto& rm : snapshot_meta.rowset_metas()) {
             auto rsid = rm.rowset_seg_id();
             next_segment_id = std::max<uint32_t>(next_segment_id, rsid + rm.num_segments());

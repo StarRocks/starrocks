@@ -179,10 +179,16 @@ public:
     Status append(const vectorized::Column& column) override;
 
     Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) override {
+        // if column is Array<String>, encoding maybe not set
+        // check _is_speculated again to avoid _page_builder is not initialized
+        if (!_is_speculated) {
+            _scalar_column_writer->set_encoding(DEFAULT_ENCODING);
+            _is_speculated = true;
+        }
         return _scalar_column_writer->append(data, null_flags, count, has_null);
     };
 
-    Status append(const RowCursorCell& cell) {
+    Status append(const RowCursorCell& cell) override {
         if (!_is_speculated) {
             _scalar_column_writer->set_encoding(DEFAULT_ENCODING);
             _is_speculated = true;
@@ -490,7 +496,7 @@ Status ScalarColumnWriter::finish_current_page() {
     // build data page body : encoded values + [nullmap]
     std::vector<Slice> body;
     faststring* encoded_values = _page_builder->finish();
-    body.push_back(Slice(*encoded_values));
+    body.emplace_back(*encoded_values);
 
     OwnedSlice nullmap;
     if (is_nullable() && _curr_page_format == 1) {
@@ -586,12 +592,12 @@ Status ScalarColumnWriter::append_array_offsets(const vectorized::Column& column
 
         _next_rowid += num_written;
         raw_data += field_size * num_written;
+        _previous_ordinal += data[offset_ordinal + num_written] - data[offset_ordinal];
+        offset_ordinal += num_written;
         if (page_full) {
             RETURN_IF_ERROR(finish_current_page());
             _element_ordinal = _previous_ordinal;
         }
-        _previous_ordinal += data[offset_ordinal + num_written] - data[offset_ordinal];
-        offset_ordinal += num_written;
         remaining -= num_written;
     }
     return Status::OK();

@@ -55,7 +55,7 @@ OLAPStatus parse_root_path(const string& root_path, StorePath* path) {
 
     // parse root path name
     StripWhiteSpace(&tmp_vec[0]);
-    tmp_vec[0].erase(tmp_vec[0].find_last_not_of("/") + 1);
+    tmp_vec[0].erase(tmp_vec[0].find_last_not_of('/') + 1);
     if (tmp_vec[0].empty() || tmp_vec[0][0] != '/') {
         LOG(WARNING) << "invalid store path. path=" << tmp_vec[0];
         return OLAP_ERR_INPUT_PARAMETER_ERROR;
@@ -109,11 +109,11 @@ OLAPStatus parse_root_path(const string& root_path, StorePath* path) {
 
     path->capacity_bytes = -1;
     if (!capacity_str.empty()) {
-        if (!valid_signed_number<int64_t>(capacity_str) || strtol(capacity_str.c_str(), NULL, 10) < 0) {
+        if (!valid_signed_number<int64_t>(capacity_str) || strtol(capacity_str.c_str(), nullptr, 10) < 0) {
             LOG(WARNING) << "invalid capacity of store path, capacity=" << capacity_str;
             return OLAP_ERR_INPUT_PARAMETER_ERROR;
         }
-        path->capacity_bytes = strtol(capacity_str.c_str(), NULL, 10) * GB_EXCHANGE_BYTE;
+        path->capacity_bytes = strtol(capacity_str.c_str(), nullptr, 10) * GB_EXCHANGE_BYTE;
     }
 
     path->storage_medium = TStorageMedium::HDD;

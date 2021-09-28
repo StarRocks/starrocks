@@ -6,11 +6,16 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 public abstract class LogicalOperator extends Operator {
 
     protected LogicalOperator(OperatorType opType) {
         super(opType);
+    }
+
+    protected LogicalOperator(OperatorType opType, long limit, ScalarOperator predicate) {
+        super(opType, limit, predicate);
     }
 
     @Override

@@ -121,7 +121,7 @@ void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
         rf_desc->set_shared_runtime_filter(rf);
     }
 }
-RuntimeFilterMerger::RuntimeFilterMerger(ExecEnv* env, UniqueId query_id, TQueryOptions query_options)
+RuntimeFilterMerger::RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options)
         : _exec_env(env), _query_id(query_id), _query_options(query_options) {}
 
 Status RuntimeFilterMerger::init(const TRuntimeFilterParams& params) {
@@ -351,15 +351,14 @@ public:
 
 static_assert(std::is_move_assignable<RuntimeFilterWorkerEvent>::value);
 
-RuntimeFilterWorker::RuntimeFilterWorker(ExecEnv* env)
-        : _exec_env(env), _thread(std::bind<void>(&RuntimeFilterWorker::execute, this)) {}
+RuntimeFilterWorker::RuntimeFilterWorker(ExecEnv* env) : _exec_env(env), _thread([this] { execute(); }) {}
 
 RuntimeFilterWorker::~RuntimeFilterWorker() {
     _queue.shutdown();
     _thread.join();
 }
 
-void RuntimeFilterWorker::open_query(TUniqueId query_id, TQueryOptions query_options,
+void RuntimeFilterWorker::open_query(const TUniqueId& query_id, const TQueryOptions& query_options,
                                      const TRuntimeFilterParams& params) {
     VLOG_FILE << "RuntimeFilterWorker::open_query. query_id = " << query_id << ", params = " << params;
     RuntimeFilterWorkerEvent ev;
@@ -370,7 +369,7 @@ void RuntimeFilterWorker::open_query(TUniqueId query_id, TQueryOptions query_opt
     _queue.put(std::move(ev));
 }
 
-void RuntimeFilterWorker::close_query(TUniqueId query_id) {
+void RuntimeFilterWorker::close_query(const TUniqueId& query_id) {
     VLOG_FILE << "RuntimeFilterWorker::close_query. query_id = " << query_id;
     RuntimeFilterWorkerEvent ev;
     ev.type = CLOSE_QUERY;

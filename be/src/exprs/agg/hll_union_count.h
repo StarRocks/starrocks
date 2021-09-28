@@ -43,7 +43,7 @@ public:
         this->data(state).merge(*(hll_column->get_object(row_num)));
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
         DCHECK_GT(end, start);
         Int64Column* column = down_cast<Int64Column*>(dst);
         int64_t result = this->data(state).estimate_cardinality();
@@ -62,7 +62,7 @@ public:
     }
 
     void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
-        *dst = std::move(src[0]);
+        *dst = src[0];
     }
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr state,

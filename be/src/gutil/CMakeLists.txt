@@ -53,7 +53,7 @@ SET(SOURCE_FILES
         strtoint.cc
         sysinfo.cc
         threading/thread_collision_warner.cc
-        utf/rune.c
+        utf/rune.cpp
         cpu.cc)
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")

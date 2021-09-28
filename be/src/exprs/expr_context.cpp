@@ -23,6 +23,7 @@
 
 #include <gperftools/profiler.h>
 
+#include <memory>
 #include <sstream>
 
 #include "exprs/anyval_util.h"
@@ -44,7 +45,7 @@ namespace starrocks {
 // TODO: Remove old query executor related codes before 2021-09-30
 
 ExprContext::ExprContext(Expr* root)
-        : _fn_contexts_ptr(NULL), _root(root), _is_clone(false), _prepared(false), _opened(false), _closed(false) {}
+        : _fn_contexts_ptr(nullptr), _root(root), _is_clone(false), _prepared(false), _opened(false), _closed(false) {}
 
 ExprContext::~ExprContext() {
     DCHECK(!_prepared || _closed) << ". expr context address = " << this;
@@ -58,12 +59,12 @@ Status ExprContext::prepare(RuntimeState* state, const RowDescriptor& row_desc, 
     if (_prepared) {
         return Status::OK();
     }
-    DCHECK(tracker != NULL) << std::endl << get_stack_trace();
-    DCHECK(_pool.get() == NULL);
+    DCHECK(tracker != nullptr) << std::endl << get_stack_trace();
+    DCHECK(_pool.get() == nullptr);
     _prepared = true;
     // TODO: use param tracker to replace instance_mem_tracker
     // _pool.reset(new MemPool(new MemTracker(-1)));
-    _pool.reset(new MemPool(state->instance_mem_tracker()));
+    _pool = std::make_unique<MemPool>(state->instance_mem_tracker());
     return _root->prepare(state, row_desc, this);
 }
 
@@ -117,10 +118,10 @@ int ExprContext::register_func(RuntimeState* state, const starrocks_udf::Functio
 Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx) {
     DCHECK(_prepared);
     DCHECK(_opened);
-    DCHECK(*new_ctx == NULL);
+    DCHECK(*new_ctx == nullptr);
 
     *new_ctx = state->obj_pool()->add(new ExprContext(_root));
-    (*new_ctx)->_pool.reset(new MemPool(_pool->mem_tracker()));
+    (*new_ctx)->_pool = std::make_unique<MemPool>(_pool->mem_tracker());
     for (int i = 0; i < _fn_contexts.size(); ++i) {
         (*new_ctx)->_fn_contexts.push_back(_fn_contexts[i]->impl()->clone((*new_ctx)->_pool.get()));
     }
@@ -136,10 +137,10 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx) {
 Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx, Expr* root) {
     DCHECK(_prepared);
     DCHECK(_opened);
-    DCHECK(*new_ctx == NULL);
+    DCHECK(*new_ctx == nullptr);
 
     *new_ctx = state->obj_pool()->add(new ExprContext(root));
-    (*new_ctx)->_pool.reset(new MemPool(_pool->mem_tracker()));
+    (*new_ctx)->_pool = std::make_unique<MemPool>(_pool->mem_tracker());
     for (int i = 0; i < _fn_contexts.size(); ++i) {
         (*new_ctx)->_fn_contexts.push_back(_fn_contexts[i]->impl()->clone((*new_ctx)->_pool.get()));
     }

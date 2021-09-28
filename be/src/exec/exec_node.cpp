@@ -99,9 +99,9 @@ bool ExecNode::RowBatchQueue::AddBatchWithTimeout(RowBatch* batch, int64_t timeo
 }
 
 RowBatch* ExecNode::RowBatchQueue::GetBatch() {
-    RowBatch* result = NULL;
+    RowBatch* result = nullptr;
     if (blocking_get(&result)) return result;
-    return NULL;
+    return nullptr;
 }
 
 int ExecNode::RowBatchQueue::Cleanup() {
@@ -133,9 +133,9 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _debug_action(TDebugAction::WAIT),
           _limit(tnode.limit),
           _num_rows_returned(0),
-          _rows_returned_counter(NULL),
-          _rows_returned_rate(NULL),
-          _memory_used_counter(NULL),
+          _rows_returned_counter(nullptr),
+          _rows_returned_rate(nullptr),
+          _memory_used_counter(nullptr),
           _use_vectorized(tnode.use_vectorized),
           _is_closed(false) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
@@ -214,12 +214,13 @@ Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 Status ExecNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::PREPARE));
-    DCHECK(_runtime_profile.get() != NULL);
+    DCHECK(_runtime_profile.get() != nullptr);
     _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
     _rows_returned_rate = runtime_profile()->add_derived_counter(
             ROW_THROUGHPUT_COUNTER, TUnit::UNIT_PER_SECOND,
-            std::bind<int64_t>(&RuntimeProfile::units_per_second, _rows_returned_counter,
-                               runtime_profile()->total_time_counter()),
+            [this, capture0 = runtime_profile()->total_time_counter()] {
+                return RuntimeProfile::units_per_second(_rows_returned_counter, capture0);
+            },
             "");
     _mem_tracker.reset(
             new MemTracker(_runtime_profile.get(), -1, _runtime_profile->name(), state->instance_mem_tracker()));
@@ -261,7 +262,7 @@ pipeline::OpFactories ExecNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 // if pre chunk is not nullptr and pre chunk size + cur chunk size <= 4096, merge the two chunk
 // if pre chunk is not nullptr and pre chunk size + cur chunk size > 4096, return pre chunk
 Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* eos, ChunkPtr& pre_output_chunk,
-                                    std::function<Status(RuntimeState*, ChunkPtr*, bool*)> specific_get_next) {
+                                    const std::function<Status(RuntimeState*, ChunkPtr*, bool*)>& specific_get_next) {
     size_t batch_size = state->batch_size();
 
     while (true) {
@@ -338,7 +339,7 @@ Status ExecNode::close(RuntimeState* state) {
     _is_closed = true;
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::CLOSE));
 
-    if (_rows_returned_counter != NULL) {
+    if (_rows_returned_counter != nullptr) {
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     }
 
@@ -390,12 +391,12 @@ void ExecNode::add_runtime_exec_option(const std::string& str) {
 Status ExecNode::create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan, const DescriptorTbl& descs,
                              ExecNode** root) {
     if (plan.nodes.size() == 0) {
-        *root = NULL;
+        *root = nullptr;
         return Status::OK();
     }
 
     int node_idx = 0;
-    RETURN_IF_ERROR(create_tree_helper(state, pool, plan.nodes, descs, NULL, &node_idx, root));
+    RETURN_IF_ERROR(create_tree_helper(state, pool, plan.nodes, descs, nullptr, &node_idx, root));
 
     if (node_idx + 1 != plan.nodes.size()) {
         // TODO: print thrift msg for diagnostic purposes.
@@ -415,11 +416,11 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
     const TPlanNode& tnode = tnodes[*node_idx];
 
     int num_children = tnodes[*node_idx].num_children;
-    ExecNode* node = NULL;
+    ExecNode* node = nullptr;
     RETURN_IF_ERROR(create_vectorized_node(state, pool, tnodes[*node_idx], descs, &node));
 
     // assert(parent != NULL || (node_idx == 0 && root_expr != NULL));
-    if (parent != NULL) {
+    if (parent != nullptr) {
         parent->_children.push_back(node);
     } else {
         *root = node;
@@ -427,7 +428,7 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
 
     for (int i = 0; i < num_children; i++) {
         ++*node_idx;
-        RETURN_IF_ERROR(create_tree_helper(state, pool, tnodes, descs, node, node_idx, NULL));
+        RETURN_IF_ERROR(create_tree_helper(state, pool, tnodes, descs, node, node_idx, nullptr));
 
         // we are expecting a child, but have used all nodes
         // this means we have been given a bad tree and must fail
@@ -442,11 +443,11 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
     // build up tree of profiles; add children >0 first, so that when we print
     // the profile, child 0 is printed last (makes the output more readable)
     for (int i = 1; i < node->_children.size(); ++i) {
-        node->runtime_profile()->add_child(node->_children[i]->runtime_profile(), true, NULL);
+        node->runtime_profile()->add_child(node->_children[i]->runtime_profile(), true, nullptr);
     }
 
     if (!node->_children.empty()) {
-        node->runtime_profile()->add_child(node->_children[0]->runtime_profile(), true, NULL);
+        node->runtime_profile()->add_child(node->_children[0]->runtime_profile(), true, nullptr);
     }
 
     return Status::OK();

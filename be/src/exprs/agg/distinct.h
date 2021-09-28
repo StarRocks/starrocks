@@ -209,6 +209,14 @@ struct DistinctAggregateStateV2<PT, FixedLengthPTGuard<PT>> {
         return sum;
     }
 
+    ~DistinctAggregateStateV2() {
+#ifdef PHMAP_USE_CUSTOM_INFO_HANDLE
+        const auto& info = set.infoz();
+        VLOG_FILE << "HashSet Info: # of insert = " << info.insert_number
+                  << ", insert probe length = " << info.insert_probe_length << ", # of rehash = " << info.rehash_number;
+#endif
+    }
+
     MyHashSet set;
 };
 
@@ -216,8 +224,8 @@ template <PrimitiveType PT>
 struct DistinctAggregateStateV2<PT, BinaryPTGuard<PT>> : public DistinctAggregateState<PT> {};
 
 // Dear god this template class as template parameter kills me!
-template <PrimitiveType PT, template <PrimitiveType X> class TDistinctAggState, AggDistinctType DistinctType,
-          typename T = RunTimeCppType<PT>>
+template <PrimitiveType PT, template <PrimitiveType X, typename = guard::Guard> class TDistinctAggState,
+          AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
 class TDistinctAggregateFunction
         : public AggregateFunctionBatchHelper<TDistinctAggState<PT>,
                                               TDistinctAggregateFunction<PT, TDistinctAggState, DistinctType, T>> {

@@ -36,8 +36,8 @@ class TableFunctionResolver {
     DECLARE_SINGLETON(TableFunctionResolver);
 
 public:
-    const TableFunction* get_table_function(const std::string& name, const std::vector<PrimitiveType> arg_type,
-                                            const std::vector<PrimitiveType> return_type) const {
+    const TableFunction* get_table_function(const std::string& name, const std::vector<PrimitiveType>& arg_type,
+                                            const std::vector<PrimitiveType>& return_type) const {
         auto pair = _infos_mapping.find(std::make_tuple(name, arg_type, return_type));
         if (pair == _infos_mapping.end()) {
             return nullptr;
@@ -45,8 +45,8 @@ public:
         return pair->second.get();
     }
 
-    void add_function_mapping(std::string&& name, const std::vector<PrimitiveType> arg_type,
-                              const std::vector<PrimitiveType> return_type) {
+    void add_function_mapping(std::string&& name, const std::vector<PrimitiveType>& arg_type,
+                              const std::vector<PrimitiveType>& return_type) {
         _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type), TableFunctionFactory::MakeUnnest());
     }
 
@@ -79,8 +79,8 @@ TableFunctionResolver::TableFunctionResolver() {
 
 TableFunctionResolver::~TableFunctionResolver() = default;
 
-const TableFunction* get_table_function(const std::string& name, const std::vector<PrimitiveType> arg_type,
-                                        const std::vector<PrimitiveType> return_type) {
+const TableFunction* get_table_function(const std::string& name, const std::vector<PrimitiveType>& arg_type,
+                                        const std::vector<PrimitiveType>& return_type) {
     return TableFunctionResolver::instance()->get_table_function(name, arg_type, return_type);
 }
 } // namespace starrocks::vectorized

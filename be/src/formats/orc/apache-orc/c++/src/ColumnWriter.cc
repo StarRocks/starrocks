@@ -39,7 +39,7 @@ public:
     StreamsFactoryImpl(const WriterOptions& writerOptions, OutputStream* outputStream)
             : options(writerOptions), outStream(outputStream) {}
 
-    virtual std::unique_ptr<BufferedOutputStream> createStream(proto::Stream_Kind kind) const override;
+    std::unique_ptr<BufferedOutputStream> createStream(proto::Stream_Kind kind) const override;
 
 private:
     const WriterOptions& options;
@@ -224,29 +224,28 @@ class StructColumnWriter : public ColumnWriter {
 public:
     StructColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options);
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
-    virtual void flush(std::vector<proto::Stream>& streams) override;
+    void flush(std::vector<proto::Stream>& streams) override;
 
-    virtual uint64_t getEstimatedSize() const override;
-    virtual void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
+    uint64_t getEstimatedSize() const override;
+    void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
 
-    virtual void getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
+    void getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
 
-    virtual void getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
+    void getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
 
-    virtual void mergeStripeStatsIntoFileStats() override;
+    void mergeStripeStatsIntoFileStats() override;
 
-    virtual void mergeRowGroupStatsIntoStripeStats() override;
+    void mergeRowGroupStatsIntoStripeStats() override;
 
-    virtual void createRowIndexEntry() override;
+    void createRowIndexEntry() override;
 
-    virtual void writeIndex(std::vector<proto::Stream>& streams) const override;
+    void writeIndex(std::vector<proto::Stream>& streams) const override;
 
-    virtual void writeDictionary() override;
+    void writeDictionary() override;
 
-    virtual void reset() override;
+    void reset() override;
 
 private:
     std::vector<std::unique_ptr<ColumnWriter>> children;
@@ -384,16 +383,15 @@ class IntegerColumnWriter : public ColumnWriter {
 public:
     IntegerColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options);
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
-    virtual void flush(std::vector<proto::Stream>& streams) override;
+    void flush(std::vector<proto::Stream>& streams) override;
 
-    virtual uint64_t getEstimatedSize() const override;
+    uint64_t getEstimatedSize() const override;
 
-    virtual void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
+    void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
 
-    virtual void recordPosition() const override;
+    void recordPosition() const override;
 
 protected:
     std::unique_ptr<RleEncoder> rleEncoder;
@@ -482,16 +480,15 @@ class ByteColumnWriter : public ColumnWriter {
 public:
     ByteColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options);
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
-    virtual void flush(std::vector<proto::Stream>& streams) override;
+    void flush(std::vector<proto::Stream>& streams) override;
 
-    virtual uint64_t getEstimatedSize() const override;
+    uint64_t getEstimatedSize() const override;
 
-    virtual void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
+    void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
 
-    virtual void recordPosition() const override;
+    void recordPosition() const override;
 
 private:
     std::unique_ptr<ByteRleEncoder> byteRleEncoder;
@@ -579,16 +576,15 @@ class BooleanColumnWriter : public ColumnWriter {
 public:
     BooleanColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options);
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
-    virtual void flush(std::vector<proto::Stream>& streams) override;
+    void flush(std::vector<proto::Stream>& streams) override;
 
-    virtual uint64_t getEstimatedSize() const override;
+    uint64_t getEstimatedSize() const override;
 
-    virtual void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
+    void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
 
-    virtual void recordPosition() const override;
+    void recordPosition() const override;
 
 private:
     std::unique_ptr<ByteRleEncoder> rleEncoder;
@@ -677,16 +673,15 @@ class DoubleColumnWriter : public ColumnWriter {
 public:
     DoubleColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options, bool isFloat);
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
-    virtual void flush(std::vector<proto::Stream>& streams) override;
+    void flush(std::vector<proto::Stream>& streams) override;
 
-    virtual uint64_t getEstimatedSize() const override;
+    uint64_t getEstimatedSize() const override;
 
-    virtual void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
+    void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
 
-    virtual void recordPosition() const override;
+    void recordPosition() const override;
 
 private:
     bool isFloat;
@@ -847,7 +842,7 @@ size_t SortedStringDictionary::insert(const char* str, size_t len) {
     auto ret = dict.insert({DictEntry(str, len), dict.size()});
     if (ret.second) {
         // make a copy to internal storage
-        data.push_back(std::vector<char>(len));
+        data.emplace_back(len);
         memcpy(data.back().data(), str, len);
         // update dictionary entry to link pointer to internal storage
         DictEntry* entry = const_cast<DictEntry*>(&(ret.first->first));
@@ -917,22 +912,21 @@ class StringColumnWriter : public ColumnWriter {
 public:
     StringColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options);
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
-    virtual void flush(std::vector<proto::Stream>& streams) override;
+    void flush(std::vector<proto::Stream>& streams) override;
 
-    virtual uint64_t getEstimatedSize() const override;
+    uint64_t getEstimatedSize() const override;
 
-    virtual void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
+    void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
 
-    virtual void recordPosition() const override;
+    void recordPosition() const override;
 
-    virtual void createRowIndexEntry() override;
+    void createRowIndexEntry() override;
 
-    virtual void writeDictionary() override;
+    void writeDictionary() override;
 
-    virtual void reset() override;
+    void reset() override;
 
 private:
     /**
@@ -1328,8 +1322,7 @@ public:
         padBuffer.resize(maxLength * 6);
     }
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
 private:
     uint64_t maxLength;
@@ -1402,8 +1395,7 @@ public:
         // PASS
     }
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
 private:
     uint64_t maxLength;
@@ -1465,8 +1457,7 @@ public:
         // PASS
     }
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 };
 
 void BinaryColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
@@ -1512,16 +1503,15 @@ public:
     TimestampColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options,
                           bool isInstantType);
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
-    virtual void flush(std::vector<proto::Stream>& streams) override;
+    void flush(std::vector<proto::Stream>& streams) override;
 
-    virtual uint64_t getEstimatedSize() const override;
+    uint64_t getEstimatedSize() const override;
 
-    virtual void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
+    void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
 
-    virtual void recordPosition() const override;
+    void recordPosition() const override;
 
 protected:
     std::unique_ptr<RleEncoder> secRleEncoder, nanoRleEncoder;
@@ -1662,8 +1652,7 @@ class DateColumnWriter : public IntegerColumnWriter {
 public:
     DateColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options);
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 };
 
 DateColumnWriter::DateColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options)
@@ -1712,16 +1701,15 @@ public:
 
     Decimal64ColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options);
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
-    virtual void flush(std::vector<proto::Stream>& streams) override;
+    void flush(std::vector<proto::Stream>& streams) override;
 
-    virtual uint64_t getEstimatedSize() const override;
+    uint64_t getEstimatedSize() const override;
 
-    virtual void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
+    void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
 
-    virtual void recordPosition() const override;
+    void recordPosition() const override;
 
 protected:
     RleVersion rleVersion;
@@ -1841,8 +1829,7 @@ class Decimal128ColumnWriter : public Decimal64ColumnWriter {
 public:
     Decimal128ColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options);
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
 private:
     char buffer[20];
@@ -1923,32 +1910,31 @@ public:
     ListColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options);
     ~ListColumnWriter() override;
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
-    virtual void flush(std::vector<proto::Stream>& streams) override;
+    void flush(std::vector<proto::Stream>& streams) override;
 
-    virtual uint64_t getEstimatedSize() const override;
+    uint64_t getEstimatedSize() const override;
 
-    virtual void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
+    void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
 
-    virtual void getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
+    void getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
 
-    virtual void getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
+    void getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
 
-    virtual void mergeStripeStatsIntoFileStats() override;
+    void mergeStripeStatsIntoFileStats() override;
 
-    virtual void mergeRowGroupStatsIntoStripeStats() override;
+    void mergeRowGroupStatsIntoStripeStats() override;
 
-    virtual void createRowIndexEntry() override;
+    void createRowIndexEntry() override;
 
-    virtual void writeIndex(std::vector<proto::Stream>& streams) const override;
+    void writeIndex(std::vector<proto::Stream>& streams) const override;
 
-    virtual void recordPosition() const override;
+    void recordPosition() const override;
 
-    virtual void writeDictionary() override;
+    void writeDictionary() override;
 
-    virtual void reset() override;
+    void reset() override;
 
 private:
     std::unique_ptr<RleEncoder> lengthEncoder;
@@ -2122,32 +2108,31 @@ public:
     MapColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options);
     ~MapColumnWriter() override;
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
-    virtual void flush(std::vector<proto::Stream>& streams) override;
+    void flush(std::vector<proto::Stream>& streams) override;
 
-    virtual uint64_t getEstimatedSize() const override;
+    uint64_t getEstimatedSize() const override;
 
-    virtual void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
+    void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
 
-    virtual void getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
+    void getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
 
-    virtual void getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
+    void getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
 
-    virtual void mergeStripeStatsIntoFileStats() override;
+    void mergeStripeStatsIntoFileStats() override;
 
-    virtual void mergeRowGroupStatsIntoStripeStats() override;
+    void mergeRowGroupStatsIntoStripeStats() override;
 
-    virtual void createRowIndexEntry() override;
+    void createRowIndexEntry() override;
 
-    virtual void writeIndex(std::vector<proto::Stream>& streams) const override;
+    void writeIndex(std::vector<proto::Stream>& streams) const override;
 
-    virtual void recordPosition() const override;
+    void recordPosition() const override;
 
-    virtual void writeDictionary() override;
+    void writeDictionary() override;
 
-    virtual void reset() override;
+    void reset() override;
 
 private:
     std::unique_ptr<ColumnWriter> keyWriter;
@@ -2362,32 +2347,31 @@ class UnionColumnWriter : public ColumnWriter {
 public:
     UnionColumnWriter(const Type& type, const StreamsFactory& factory, const WriterOptions& options);
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
-    virtual void flush(std::vector<proto::Stream>& streams) override;
+    void flush(std::vector<proto::Stream>& streams) override;
 
-    virtual uint64_t getEstimatedSize() const override;
+    uint64_t getEstimatedSize() const override;
 
-    virtual void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
+    void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
 
-    virtual void getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
+    void getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
 
-    virtual void getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
+    void getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const override;
 
-    virtual void mergeStripeStatsIntoFileStats() override;
+    void mergeStripeStatsIntoFileStats() override;
 
-    virtual void mergeRowGroupStatsIntoStripeStats() override;
+    void mergeRowGroupStatsIntoStripeStats() override;
 
-    virtual void createRowIndexEntry() override;
+    void createRowIndexEntry() override;
 
-    virtual void writeIndex(std::vector<proto::Stream>& streams) const override;
+    void writeIndex(std::vector<proto::Stream>& streams) const override;
 
-    virtual void recordPosition() const override;
+    void recordPosition() const override;
 
-    virtual void writeDictionary() override;
+    void writeDictionary() override;
 
-    virtual void reset() override;
+    void reset() override;
 
 private:
     std::unique_ptr<ByteRleEncoder> rleEncoder;

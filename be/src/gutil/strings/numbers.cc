@@ -6,15 +6,14 @@
 
 #include "gutil/strings/numbers.h"
 
-#include <assert.h>
-#include <ctype.h>
-#include <errno.h>
-#include <float.h> // for DBL_DIG and FLT_DIG
-#include <math.h>  // for HUGE_VAL
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
+#include <cassert>
+#include <cctype>
+#include <cerrno>
+#include <cfloat> // for DBL_DIG and FLT_DIG
+#include <cmath>  // for HUGE_VAL
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <limits>
 using std::numeric_limits;
 #include <string>
@@ -454,7 +453,7 @@ string FpToString(Fprint fp) {
 }
 
 // Default arguments
-string Uint128ToHexString(uint128 ui128) {
+string Uint128ToHexString(const uint128& ui128) {
     char buf[33];
     snprintf(buf, sizeof(buf), "%016" PRIx64, Uint128High64(ui128));
     snprintf(buf + 16, sizeof(buf) - 16, "%016" PRIx64, Uint128Low64(ui128));

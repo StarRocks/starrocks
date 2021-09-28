@@ -10,7 +10,7 @@ namespace starrocks::vectorized {
 class SchemaViewsScanner : public SchemaScanner {
 public:
     SchemaViewsScanner();
-    virtual ~SchemaViewsScanner();
+    ~SchemaViewsScanner() override;
 
     Status start(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;

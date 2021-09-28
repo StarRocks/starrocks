@@ -125,7 +125,7 @@ public:
         return *this;
     }
 
-    HyperLogLog(HyperLogLog&& other) : _type(other._type), _hash_set(std::move(other._hash_set)) {
+    HyperLogLog(HyperLogLog&& other) noexcept : _type(other._type), _hash_set(std::move(other._hash_set)) {
         if (_registers.data != nullptr) {
             ChunkAllocator::instance()->free(_registers);
         }
@@ -135,7 +135,7 @@ public:
         other._registers.data = nullptr;
     }
 
-    HyperLogLog& operator=(HyperLogLog&& other) {
+    HyperLogLog& operator=(HyperLogLog&& other) noexcept {
         if (this != &other) {
             this->_type = other._type;
             this->_hash_set = std::move(other._hash_set);
@@ -244,7 +244,7 @@ public:
               _full_value_position(nullptr),
               _explicit_value(nullptr),
               _explicit_num(0),
-              _sparse_count(0) {}
+              _sparse_count(nullptr) {}
 
     ~HllSetResolver() = default;
 

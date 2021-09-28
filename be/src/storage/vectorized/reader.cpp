@@ -95,7 +95,7 @@ Status Reader::_init_collector(const ReaderParams& params) {
         std::vector<ChunkIteratorPtr> children;
         children.reserve(seg_iters.size());
         for (auto& seg_iter : seg_iters) {
-            children.emplace_back(timed_chunk_iterator(std::move(seg_iter), scan_timer));
+            children.emplace_back(timed_chunk_iterator(seg_iter, scan_timer));
         }
         seg_iters.swap(children);
     }
@@ -117,7 +117,7 @@ Status Reader::_init_collector(const ReaderParams& params) {
         //       |           |           |
         // SegmentIterator  ...    SegmentIterator
         //
-        _collect_iter = new_merge_iterator(std::move(seg_iters));
+        _collect_iter = new_merge_iterator(seg_iters);
     } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr) ||
                (select_all_keys && seg_iters.size() == 1)) {
         //             UnionIterator
@@ -150,9 +150,9 @@ Status Reader::_init_collector(const ReaderParams& params) {
             RuntimeProfile::Counter* aggr_timer = ADD_TIMER(p, "aggr");
 
             _collect_iter = new_merge_iterator(seg_iters);
-            _collect_iter = timed_chunk_iterator(std::move(_collect_iter), sort_timer);
+            _collect_iter = timed_chunk_iterator(_collect_iter, sort_timer);
             _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);
-            _collect_iter = timed_chunk_iterator(std::move(_collect_iter), aggr_timer);
+            _collect_iter = timed_chunk_iterator(_collect_iter, aggr_timer);
         } else {
             _collect_iter = new_merge_iterator(seg_iters);
             _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);
@@ -180,9 +180,9 @@ Status Reader::_init_collector(const ReaderParams& params) {
             RuntimeProfile::Counter* aggr_timer = ADD_TIMER(p, "aggr");
 
             _collect_iter = new_union_iterator(std::move(seg_iters));
-            _collect_iter = timed_chunk_iterator(std::move(_collect_iter), union_timer);
+            _collect_iter = timed_chunk_iterator(_collect_iter, union_timer);
             _collect_iter = new_aggregate_iterator(std::move(_collect_iter), f);
-            _collect_iter = timed_chunk_iterator(std::move(_collect_iter), aggr_timer);
+            _collect_iter = timed_chunk_iterator(_collect_iter, aggr_timer);
         } else {
             _collect_iter = new_union_iterator(std::move(seg_iters));
             _collect_iter = new_aggregate_iterator(std::move(_collect_iter), f);

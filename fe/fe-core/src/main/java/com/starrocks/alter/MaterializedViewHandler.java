@@ -378,7 +378,8 @@ public class MaterializedViewHandler extends AlterHandler {
                             || baseReplica.getState() == Replica.ReplicaState.DECOMMISSION
                             || baseReplica.getLastFailedVersion() > 0) {
                         LOG.info(
-                                "base replica {} of tablet {} state is {}, and last failed version is {}, skip creating rollup replica",
+                                "base replica {} of tablet {} state is {}, and last failed version is {}, " +
+                                        "skip creating rollup replica",
                                 baseReplica.getId(), baseTabletId, baseReplica.getState(),
                                 baseReplica.getLastFailedVersion());
                         continue;

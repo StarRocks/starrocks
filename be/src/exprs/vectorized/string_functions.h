@@ -380,6 +380,13 @@ public:
      * Get the string of this hexadecimal representation represents
      */
     DEFINE_VECTORIZED_FN(unhex);
+    /**
+     * @param: [StringColumn]
+     * @return: StringColumn
+     * Get the hexadecimal representation of SM3 hash value
+     *
+     */
+    DEFINE_VECTORIZED_FN(sm3);
 
 private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);

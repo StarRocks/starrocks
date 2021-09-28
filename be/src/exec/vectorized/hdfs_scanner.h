@@ -177,7 +177,7 @@ protected:
 class HdfsParquetScanner final : public HdfsScanner {
 public:
     HdfsParquetScanner() = default;
-    virtual ~HdfsParquetScanner() = default;
+    ~HdfsParquetScanner() override = default;
 
     void update_counter();
     Status do_open(RuntimeState* runtime_state) override;

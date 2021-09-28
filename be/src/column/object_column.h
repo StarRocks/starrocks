@@ -179,7 +179,7 @@ public:
 
     const std::vector<T>& get_pool() const { return _pool; }
 
-    std::string debug_item(uint32_t idx) const;
+    std::string debug_item(uint32_t idx) const override;
 
     std::string debug_string() const override {
         std::stringstream ss;

@@ -22,8 +22,7 @@
 #ifndef STARROCKS_BE_SRC_RUNTIME_SMALL_FILE_MGR_H
 #define STARROCKS_BE_SRC_RUNTIME_SMALL_FILE_MGR_H
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -49,7 +48,7 @@ struct CacheEntry {
  */
 class SmallFileMgr {
 public:
-    SmallFileMgr(ExecEnv* env, const std::string& local_path);
+    SmallFileMgr(ExecEnv* env, std::string local_path);
 
     ~SmallFileMgr();
 

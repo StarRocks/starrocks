@@ -22,8 +22,7 @@
 #ifndef STARROCKS_BE_SRC_EXEC_BROKER_WRITER_H
 #define STARROCKS_BE_SRC_EXEC_BROKER_WRITER_H
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <map>
 #include <string>
 
@@ -42,14 +41,14 @@ class TNetworkAddress;
 class BrokerWriter : public FileWriter {
 public:
     BrokerWriter(ExecEnv* env, const std::vector<TNetworkAddress>& broker_addresses,
-                 const std::map<std::string, std::string>& properties, const std::string& path, int64_t start_offset);
-    virtual ~BrokerWriter();
+                 const std::map<std::string, std::string>& properties, std::string path, int64_t start_offset);
+    ~BrokerWriter() override;
 
-    virtual Status open() override;
+    Status open() override;
 
-    virtual Status write(const uint8_t* buf, size_t buf_len, size_t* written_len) override;
+    Status write(const uint8_t* buf, size_t buf_len, size_t* written_len) override;
 
-    virtual Status close() override;
+    Status close() override;
 
 private:
     ExecEnv* _env;

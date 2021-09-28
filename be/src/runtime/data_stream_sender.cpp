@@ -29,6 +29,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <random>
 
 #include "column/chunk.h"
 #include "common/logging.h"
@@ -380,8 +381,8 @@ Status DataStreamSender::Channel::add_row(TupleRow* row) {
     const std::vector<TupleDescriptor*>& descs = _row_desc.tuple_descriptors();
 
     for (int i = 0; i < descs.size(); ++i) {
-        if (UNLIKELY(row->get_tuple(i) == NULL)) {
-            dest->set_tuple(i, NULL);
+        if (UNLIKELY(row->get_tuple(i) == nullptr)) {
+            dest->set_tuple(i, nullptr);
         } else {
             dest->set_tuple(i, row->get_tuple(i)->deep_copy(*descs[i], _batch->tuple_data_pool()));
         }
@@ -483,7 +484,7 @@ DataStreamSender::DataStreamSender(ObjectPool* pool, bool is_vectorized, int sen
                                    const TDataStreamSink& sink,
                                    const std::vector<TPlanFragmentDestination>& destinations,
                                    int per_channel_buffer_size, bool send_query_statistics_with_every_batch)
-        : _is_vectorized(is_vectorized),
+        : _is_vectorized(true),
           _sender_id(sender_id),
           _pool(pool),
           _row_desc(row_desc),
@@ -491,9 +492,9 @@ DataStreamSender::DataStreamSender(ObjectPool* pool, bool is_vectorized, int sen
           _part_type(sink.output_partition.type),
           _ignore_not_found(!sink.__isset.ignore_not_found || sink.ignore_not_found),
           _current_pb_batch(&_pb_batch1),
-          _profile(NULL),
-          _serialize_batch_timer(NULL),
-          _bytes_sent_counter(NULL),
+          _profile(nullptr),
+          _serialize_batch_timer(nullptr),
+          _bytes_sent_counter(nullptr),
           _dest_node_id(sink.dest_node_id) {
     DCHECK_GT(destinations.size(), 0);
     DCHECK(sink.output_partition.type == TPartitionType::UNPARTITIONED ||
@@ -593,7 +594,7 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     if (_part_type == TPartitionType::UNPARTITIONED || _part_type == TPartitionType::RANDOM) {
         // Randomize the order we open/transmit to channels to avoid thundering herd problems.
         srand(reinterpret_cast<uint64_t>(this));
-        std::random_shuffle(_channels.begin(), _channels.end());
+        std::shuffle(_channels.begin(), _channels.end(), std::mt19937(std::random_device()()));
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
         RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, _row_desc, _expr_mem_tracker.get()));
@@ -615,7 +616,9 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     _shuffle_hash_timer = ADD_TIMER(profile(), "ShuffleHashTime");
     _overall_throughput = profile()->add_derived_counter(
             "OverallThroughput", TUnit::BYTES_PER_SECOND,
-            std::bind<int64_t>(&RuntimeProfile::units_per_second, _bytes_sent_counter, profile()->total_time_counter()),
+            [this, capture0 = profile()->total_time_counter()] {
+                return RuntimeProfile::units_per_second(_bytes_sent_counter, capture0);
+            },
             "");
     for (int i = 0; i < _channels.size(); ++i) {
         RETURN_IF_ERROR(_channels[i]->init(state));
@@ -637,7 +640,7 @@ DataStreamSender::~DataStreamSender() {
 }
 
 Status DataStreamSender::open(RuntimeState* state) {
-    DCHECK(state != NULL);
+    DCHECK(state != nullptr);
     RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
     for (auto iter : _partition_infos) {
         RETURN_IF_ERROR(iter->open(state));
@@ -835,7 +838,7 @@ Status DataStreamSender::find_partition(RuntimeState* state, TupleRow* row, Part
         void* partition_val = ctx->get_value(row);
         // construct a PartRangeKey
         PartRangeKey tmpPartKey;
-        if (NULL != partition_val) {
+        if (nullptr != partition_val) {
             RETURN_IF_ERROR(PartRangeKey::from_value(ctx->root()->type().type, partition_val, &tmpPartKey));
         } else {
             tmpPartKey = PartRangeKey::neg_infinite();
@@ -867,7 +870,7 @@ Status DataStreamSender::process_distribute(RuntimeState* state, TupleRow* row, 
     uint32_t hash_val = 0;
     for (auto& ctx : part->distributed_expr_ctxs()) {
         void* partition_val = ctx->get_value(row);
-        if (partition_val != NULL) {
+        if (partition_val != nullptr) {
             hash_val = RawValue::zlib_crc32(partition_val, ctx->root()->type(), hash_val);
         } else {
             //NULL is treat as 0 when hash

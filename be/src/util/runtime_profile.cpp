@@ -24,6 +24,7 @@
 #include <boost/thread/thread.hpp>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <utility>
 
 #include "common/config.h"
@@ -84,7 +85,7 @@ RuntimeProfile::~RuntimeProfile() {
 }
 
 void RuntimeProfile::merge(RuntimeProfile* other) {
-    DCHECK(other != NULL);
+    DCHECK(other != nullptr);
 
     // Merge this level
     {
@@ -129,7 +130,7 @@ void RuntimeProfile::merge(RuntimeProfile* other) {
         for (int i = 0; i < other->_children.size(); ++i) {
             RuntimeProfile* other_child = other->_children[i].first;
             ChildMap::iterator j = _child_map.find(other_child->_name);
-            RuntimeProfile* child = NULL;
+            RuntimeProfile* child = nullptr;
 
             if (j != _child_map.end()) {
                 child = j->second;
@@ -215,7 +216,7 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
         for (int i = 0; i < node.num_children; ++i) {
             const TRuntimeProfileNode& tchild = nodes[*idx];
             ChildMap::iterator j = _child_map.find(tchild.name);
-            RuntimeProfile* child = NULL;
+            RuntimeProfile* child = nullptr;
 
             if (j != _child_map.end()) {
                 child = j->second;
@@ -352,7 +353,7 @@ const std::string* RuntimeProfile::get_info_string(const std::string& key) {
     InfoStrings::const_iterator it = _info_strings.find(key);
 
     if (it == _info_strings.end()) {
-        return NULL;
+        return nullptr;
     }
 
     return &it->second;
@@ -398,7 +399,7 @@ RuntimeProfile::DerivedCounter* RuntimeProfile::add_derived_counter(const std::s
     std::lock_guard<std::mutex> l(_counter_map_lock);
 
     if (_counter_map.find(name) != _counter_map.end()) {
-        return NULL;
+        return nullptr;
     }
 
     DerivedCounter* counter = _pool->add(new DerivedCounter(type, counter_fn));
@@ -425,13 +426,13 @@ RuntimeProfile::Counter* RuntimeProfile::get_counter(const std::string& name) {
         return _counter_map[name];
     }
 
-    return NULL;
+    return nullptr;
 }
 
 void RuntimeProfile::get_counters(const std::string& name, std::vector<Counter*>* counters) {
     Counter* c = get_counter(name);
 
-    if (c != NULL) {
+    if (c != nullptr) {
         counters->push_back(c);
     }
 
@@ -606,30 +607,30 @@ RuntimeProfile::Counter* RuntimeProfile::add_rate_counter(const std::string& nam
 
     default:
         DCHECK(false) << "Unsupported src counter type: " << src_counter->type();
-        return NULL;
+        return nullptr;
     }
 
     Counter* dst_counter = add_counter(name, dst_type);
-    register_periodic_counter(src_counter, NULL, dst_counter, RATE_COUNTER);
+    register_periodic_counter(src_counter, nullptr, dst_counter, RATE_COUNTER);
     return dst_counter;
 }
 
 RuntimeProfile::Counter* RuntimeProfile::add_rate_counter(const std::string& name, SampleFn fn, TUnit::type dst_type) {
     Counter* dst_counter = add_counter(name, dst_type);
-    register_periodic_counter(NULL, std::move(fn), dst_counter, RATE_COUNTER);
+    register_periodic_counter(nullptr, std::move(fn), dst_counter, RATE_COUNTER);
     return dst_counter;
 }
 
 RuntimeProfile::Counter* RuntimeProfile::add_sampling_counter(const std::string& name, Counter* src_counter) {
     DCHECK(src_counter->type() == TUnit::UNIT);
     Counter* dst_counter = add_counter(name, TUnit::DOUBLE_VALUE);
-    register_periodic_counter(src_counter, NULL, dst_counter, SAMPLING_COUNTER);
+    register_periodic_counter(src_counter, nullptr, dst_counter, SAMPLING_COUNTER);
     return dst_counter;
 }
 
 RuntimeProfile::Counter* RuntimeProfile::add_sampling_counter(const std::string& name, SampleFn sample_fn) {
     Counter* dst_counter = add_counter(name, TUnit::DOUBLE_VALUE);
-    register_periodic_counter(NULL, std::move(sample_fn), dst_counter, SAMPLING_COUNTER);
+    register_periodic_counter(nullptr, std::move(sample_fn), dst_counter, SAMPLING_COUNTER);
     return dst_counter;
 }
 
@@ -648,9 +649,9 @@ void RuntimeProfile::add_bucketing_counters(const std::string& name, const std::
 
     std::lock_guard<std::mutex> l(_s_periodic_counter_update_state.lock);
 
-    if (_s_periodic_counter_update_state.update_thread.get() == NULL) {
-        _s_periodic_counter_update_state.update_thread.reset(
-                new boost::thread(&RuntimeProfile::periodic_counter_update_loop));
+    if (_s_periodic_counter_update_state.update_thread.get() == nullptr) {
+        _s_periodic_counter_update_state.update_thread =
+                std::make_unique<boost::thread>(&RuntimeProfile::periodic_counter_update_loop);
     }
 
     BucketCountersInfo info{.src_counter = src_counter, .num_sampled = 0};
@@ -672,13 +673,13 @@ RuntimeProfile::EventSequence* RuntimeProfile::add_event_sequence(const std::str
 
 void RuntimeProfile::register_periodic_counter(Counter* src_counter, SampleFn sample_fn, Counter* dst_counter,
                                                PeriodicCounterType type) {
-    DCHECK(src_counter == NULL || sample_fn == NULL);
+    DCHECK(src_counter == nullptr || sample_fn == nullptr);
 
     std::lock_guard<std::mutex> l(_s_periodic_counter_update_state.lock);
 
-    if (_s_periodic_counter_update_state.update_thread.get() == NULL) {
-        _s_periodic_counter_update_state.update_thread.reset(
-                new boost::thread(&RuntimeProfile::periodic_counter_update_loop));
+    if (_s_periodic_counter_update_state.update_thread.get() == nullptr) {
+        _s_periodic_counter_update_state.update_thread =
+                std::make_unique<boost::thread>(&RuntimeProfile::periodic_counter_update_loop);
     }
 
     switch (type) {
@@ -740,7 +741,7 @@ void RuntimeProfile::stop_bucketing_counters_updates(std::vector<Counter*>* buck
 RuntimeProfile::PeriodicCounterUpdateState::PeriodicCounterUpdateState() : _done(false) {}
 
 RuntimeProfile::PeriodicCounterUpdateState::~PeriodicCounterUpdateState() {
-    if (_s_periodic_counter_update_state.update_thread.get() != NULL) {
+    if (_s_periodic_counter_update_state.update_thread.get() != nullptr) {
         {
             // Lock to ensure the update thread will see the update to _done
             std::lock_guard<std::mutex> l(_s_periodic_counter_update_state.lock);
@@ -765,10 +766,10 @@ void RuntimeProfile::periodic_counter_update_loop() {
             it->second.elapsed_ms += elapsed_ms;
             int64_t value;
 
-            if (it->second.src_counter != NULL) {
+            if (it->second.src_counter != nullptr) {
                 value = it->second.src_counter->value();
             } else {
-                DCHECK(it->second.sample_fn != NULL);
+                DCHECK(it->second.sample_fn != nullptr);
                 value = it->second.sample_fn();
             }
 
@@ -782,10 +783,10 @@ void RuntimeProfile::periodic_counter_update_loop() {
             ++it->second.num_sampled;
             int64_t value;
 
-            if (it->second.src_counter != NULL) {
+            if (it->second.src_counter != nullptr) {
                 value = it->second.src_counter->value();
             } else {
-                DCHECK(it->second.sample_fn != NULL);
+                DCHECK(it->second.sample_fn != nullptr);
                 value = it->second.sample_fn();
             }
 

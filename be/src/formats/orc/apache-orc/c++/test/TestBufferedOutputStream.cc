@@ -113,7 +113,7 @@ TEST(BufferedOutputStream, protobuff_serialization) {
 
     EXPECT_TRUE(ps.SerializeToZeroCopyStream(&bufStream));
     bufStream.flush();
-    EXPECT_EQ(ps.ByteSize(), memStream.getLength());
+    EXPECT_EQ(ps.ByteSizeLong(), memStream.getLength());
 
     proto::PostScript ps2;
     ps2.ParseFromArray(memStream.getData(), static_cast<int>(memStream.getLength()));

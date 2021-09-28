@@ -318,8 +318,7 @@ public class SmallFileMgr implements Writable {
             MessageDigest digest = MessageDigest.getInstance("MD5");
             if (saveContent) {
                 // download from url, and check file size
-                bytesRead = 0;
-                byte buf[] = new byte[contentLength];
+                byte[] buf = new byte[contentLength];
                 try (BufferedInputStream in = new BufferedInputStream(url.openStream())) {
                     while (bytesRead < contentLength) {
                         bytesRead += in.read(buf, bytesRead, contentLength - bytesRead);

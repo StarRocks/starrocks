@@ -2,7 +2,9 @@
 
 #include "column/binary_column.h"
 
+#ifdef __x86_64__
 #include <immintrin.h>
+#endif
 
 #include "column/bytes.h"
 #include "common/logging.h"

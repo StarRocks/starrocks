@@ -22,7 +22,7 @@ import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collection;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -104,7 +104,7 @@ public class ListPartitionPruner implements PartitionPruner {
      * An empty set is returned if no match partitions.
      */
     @Override
-    public Collection<Long> prune() throws AnalysisException {
+    public List<Long> prune() throws AnalysisException {
         Preconditions.checkNotNull(columnToPartitionValuesMap);
         Preconditions.checkNotNull(columnToNullPartitions);
         Preconditions.checkArgument(columnToPartitionValuesMap.size() == columnToNullPartitions.size());
@@ -139,7 +139,11 @@ public class ListPartitionPruner implements PartitionPruner {
                 noEvalConjuncts.add(operator);
             }
         }
-        return matches;
+        if (matches == null) {
+            return null;
+        } else {
+            return new ArrayList<>(matches);
+        }
     }
 
     private Set<Long> evalPartitionPruneFilter(ScalarOperator operator) {

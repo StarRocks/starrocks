@@ -22,9 +22,8 @@
 #ifndef STARROCKS_BE_UTIL_TIME_H
 #define STARROCKS_BE_UTIL_TIME_H
 
-#include <stdint.h>
-#include <time.h>
-
+#include <cstdint>
+#include <ctime>
 #include <string>
 
 #define NANOS_PER_SEC 1000000000ll

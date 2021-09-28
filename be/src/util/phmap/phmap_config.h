@@ -43,7 +43,7 @@
 #define PHMAP_VERSION_PATCH 0
 
 // Included for the __GLIBC__ macro (or similar macros on other systems).
-#include <limits.h>
+#include <climits>
 
 #ifdef __cplusplus
 // Included for __GLIBCXX__, _LIBCPP_VERSION

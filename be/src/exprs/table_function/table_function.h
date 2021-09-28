@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/column.h"
 #include "exprs/vectorized/function_helper.h"
 
@@ -11,7 +13,7 @@ class TableFunctionState {
 public:
     TableFunctionState() {}
 
-    void set_params(starrocks::vectorized::Columns columns) { this->_columns = columns; }
+    void set_params(starrocks::vectorized::Columns columns) { this->_columns = std::move(columns); }
 
     void set_offset(int offset) { this->_offset = offset; }
 

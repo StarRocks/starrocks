@@ -6,13 +6,14 @@
 #include <common/linux/linux_libc_support.h>
 #include <glob.h>
 #include <google_breakpad/common/minidump_format.h>
-#include <signal.h>
 
+#include <csignal>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <system_error>
 #include <thread>
@@ -40,7 +41,7 @@ void Minidump::handle_signal(int signal) {
     size_t size_limit = 1024 * static_cast<int64_t>(config::sys_minidump_limit);
     descriptor.set_size_limit(size_limit);
 
-    google_breakpad::ExceptionHandler eh(descriptor, NULL, Minidump::dump_callback, nullptr, false, -1);
+    google_breakpad::ExceptionHandler eh(descriptor, nullptr, Minidump::dump_callback, nullptr, false, -1);
     eh.WriteMinidump();
 }
 
@@ -55,8 +56,8 @@ Minidump::Minidump() : _minidump(), _minidump_dir(config::sys_minidump_dir) {
     descriptor.set_size_limit(size_limit);
 
     // Step 1: use breakpad to generate minidump caused by crash.
-    _minidump.reset(new google_breakpad::ExceptionHandler(descriptor, Minidump::filter_callback,
-                                                          Minidump::dump_callback, NULL, true, -1));
+    _minidump = std::make_unique<google_breakpad::ExceptionHandler>(descriptor, Minidump::filter_callback,
+                                                                    Minidump::dump_callback, nullptr, true, -1);
 
     // Step 2: write minidump as reactive to SIGUSR1.
     struct sigaction signal_action;
@@ -77,7 +78,7 @@ void Minidump::check_and_rotate_minidumps(int max_minidumps, const std::string& 
     string pattern = minidump_dir + "/*.dmp";
 
     glob_t result;
-    glob(pattern.c_str(), GLOB_TILDE, NULL, &result);
+    glob(pattern.c_str(), GLOB_TILDE, nullptr, &result);
     for (size_t i = 0; i < result.gl_pathc; ++i) {
         const std::filesystem::path minidump_path(result.gl_pathv[i]);
         std::error_code err;

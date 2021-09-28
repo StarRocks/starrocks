@@ -6,7 +6,7 @@
 
 namespace starrocks::pipeline {
 
-void PipelineBuilderContext::maybe_interpolate_local_exchange(OpFactories& pred_operators) {
+OpFactories PipelineBuilderContext::maybe_interpolate_local_exchange(OpFactories& pred_operators) {
     // predecessor pipeline has multiple drivers that will produce multiple output streams, but sort operator is
     // not parallelized now and can not accept multiple streams as input, so add a LocalExchange to gather multiple
     // streams and produce one output stream piping into the sort operator.
@@ -21,18 +21,22 @@ void PipelineBuilderContext::maybe_interpolate_local_exchange(OpFactories& pred_
         // Add LocalExchangeSinkOperator to predecessor pipeline.
         pred_operators.emplace_back(std::move(local_exchange_sink));
         // predecessor pipeline comes to end.
-        add_pipeline(std::move(pred_operators));
+        add_pipeline(pred_operators);
+
+        OpFactories operators_source_with_local_exchange;
         // Multiple LocalChangeSinkOperators pipe into one LocalChangeSourceOperator.
         local_exchange_source->set_degree_of_parallelism(1);
-        // pred_operators is re-used, and a new pipeline is created, LocalExchangeSourceOperator is added as the
-        // head of the pipeline.
-        pred_operators.emplace_back(local_exchange_source);
+        // A new pipeline is created, LocalExchangeSourceOperator is added as the head of the pipeline.
+        operators_source_with_local_exchange.emplace_back(std::move(local_exchange_source));
+        return operators_source_with_local_exchange;
+    } else {
+        return pred_operators;
     }
 }
 
 Pipelines PipelineBuilder::build(const FragmentContext& fragment, ExecNode* exec_node) {
     pipeline::OpFactories operators = exec_node->decompose_to_pipeline(&_context);
-    _context.add_pipeline(std::move(operators));
+    _context.add_pipeline(operators);
     return _context.get_pipelines();
 }
 

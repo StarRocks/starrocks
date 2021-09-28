@@ -64,12 +64,12 @@ using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
 
 class Tablet : public BaseTablet {
 public:
-    static TabletSharedPtr create_tablet_from_meta(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta,
+    static TabletSharedPtr create_tablet_from_meta(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta,
                                                    DataDir* data_dir = nullptr);
 
     Tablet(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta, DataDir* data_dir);
 
-    ~Tablet();
+    ~Tablet() override;
 
     OLAPStatus init();
     inline bool init_succeeded();
@@ -104,7 +104,7 @@ public:
     inline size_t field_index(const string& field_name) const;
 
     // operation in rowsets
-    OLAPStatus add_rowset(RowsetSharedPtr rowset, bool need_persist = true);
+    OLAPStatus add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
     void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete);
 
     // _rs_version_map and _inc_rs_version_map should be protected by _meta_lock
@@ -235,13 +235,13 @@ public:
 
     void do_tablet_meta_checkpoint();
 
-    bool rowset_meta_is_useful(RowsetMetaSharedPtr rowset_meta);
+    bool rowset_meta_is_useful(const RowsetMetaSharedPtr& rowset_meta);
 
     void build_tablet_report_info(TTabletInfo* tablet_info);
 
-    void generate_tablet_meta_copy(TabletMetaSharedPtr new_tablet_meta) const;
+    void generate_tablet_meta_copy(const TabletMetaSharedPtr& new_tablet_meta) const;
     // caller should hold the _meta_lock before calling this method
-    void generate_tablet_meta_copy_unlocked(TabletMetaSharedPtr new_tablet_meta) const;
+    void generate_tablet_meta_copy_unlocked(const TabletMetaSharedPtr& new_tablet_meta) const;
 
     // return a json string to show the compaction status of this tablet
     void get_compaction_status(std::string* json_result);

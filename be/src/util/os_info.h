@@ -22,8 +22,7 @@
 #ifndef STARROCKS_BE_UTIL_OS_INFO_H
 #define STARROCKS_BE_UTIL_OS_INFO_H
 
-#include <time.h>
-
+#include <ctime>
 #include <string>
 
 #include "common/logging.h"

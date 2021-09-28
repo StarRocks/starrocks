@@ -18,10 +18,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-public class PhysicalHiveScanOperator extends PhysicalOperator {
-    private final List<ColumnRefOperator> outputColumns;
-    private final Map<ColumnRefOperator, Column> columnRefMap;
-    private Table table;
+public class PhysicalHiveScanOperator extends PhysicalScanOperator {
     private final Collection<Long> selectedPartitionIds;
     // id -> partition key
     private final Map<Long, PartitionKey> idToPartitionKey;
@@ -44,24 +41,13 @@ public class PhysicalHiveScanOperator extends PhysicalOperator {
                                     List<ScalarOperator> nonPartitionConjuncts,
                                     List<ScalarOperator> minMaxConjuncts,
                                     Map<ColumnRefOperator, Column> minMaxColumnRefMap) {
-        super(OperatorType.PHYSICAL_HIVE_SCAN);
-        this.table = table;
-        this.outputColumns = outputColumns;
-        this.columnRefMap = columnRefMap;
+        super(OperatorType.PHYSICAL_HIVE_SCAN, table, outputColumns, columnRefMap);
         this.selectedPartitionIds = selectedPartitionIds;
         this.idToPartitionKey = idToPartitionKey;
         this.noEvalPartitionConjuncts = noEvalPartitionConjuncts;
         this.nonPartitionConjuncts = nonPartitionConjuncts;
         this.minMaxConjuncts = minMaxConjuncts;
         this.minMaxColumnRefMap = minMaxColumnRefMap;
-    }
-
-    public Table getTable() {
-        return table;
-    }
-
-    public Map<ColumnRefOperator, Column> getColumnRefMap() {
-        return columnRefMap;
     }
 
     public Collection<Long> getSelectedPartitionIds() {
@@ -106,9 +92,12 @@ public class PhysicalHiveScanOperator extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (!super.equals(o)) {
+            return false;
+        }
+
         PhysicalHiveScanOperator that = (PhysicalHiveScanOperator) o;
-        return Objects.equal(outputColumns, that.outputColumns) && Objects.equal(columnRefMap, that.columnRefMap) &&
-                Objects.equal(table, that.table) && Objects.equal(selectedPartitionIds, that.selectedPartitionIds) &&
+        return Objects.equal(table, that.table) && Objects.equal(selectedPartitionIds, that.selectedPartitionIds) &&
                 Objects.equal(idToPartitionKey, that.idToPartitionKey) &&
                 Objects.equal(noEvalPartitionConjuncts, that.noEvalPartitionConjuncts) &&
                 Objects.equal(nonPartitionConjuncts, that.nonPartitionConjuncts) &&
@@ -118,15 +107,13 @@ public class PhysicalHiveScanOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(outputColumns, columnRefMap, table, selectedPartitionIds, idToPartitionKey,
+        return Objects.hashCode(super.hashCode(), table, selectedPartitionIds, idToPartitionKey,
                 noEvalPartitionConjuncts, nonPartitionConjuncts, minMaxConjuncts, minMaxColumnRefMap);
     }
 
     @Override
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet refs = super.getUsedColumns();
-        outputColumns.forEach(refs::union);
-        columnRefMap.keySet().forEach(refs::union);
         noEvalPartitionConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
         nonPartitionConjuncts.forEach(d -> refs.union(d.getUsedColumns()));
         minMaxConjuncts.forEach(d -> refs.union(d.getUsedColumns()));

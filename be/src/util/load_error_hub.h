@@ -23,6 +23,7 @@
 #define STARROCKS_BE_SRC_UTIL_LOAD_ERROR_HUB_H
 
 #include <memory>
+#include <utility>
 
 #include "common/status.h"
 
@@ -38,7 +39,7 @@ public:
         std::string msg;
         // enum ErrType type;
 
-        ErrorMsg(int64_t id, const std::string& message) : job_id(id), msg(message) {}
+        ErrorMsg(int64_t id, std::string message) : job_id(id), msg(std::move(message)) {}
     };
 
     LoadErrorHub() {}

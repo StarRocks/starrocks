@@ -22,9 +22,8 @@
 #ifndef STARROCKS_BE_RUNTIME_THREAD_RESOURCE_MGR_H
 #define STARROCKS_BE_RUNTIME_THREAD_RESOURCE_MGR_H
 
-#include <stdlib.h>
-
 #include <boost/thread/thread.hpp>
+#include <cstdlib>
 #include <functional>
 #include <list>
 
@@ -124,7 +123,7 @@ public:
         // TODO: rethink this.  How we do coordinate when we have multiple places in
         // the execution that all need threads (e.g. do we use that thread for
         // the scanner or for the join).
-        void set_thread_available_cb(thread_available_cb fn);
+        void set_thread_available_cb(const thread_available_cb& fn);
 
         // Returns the number of threads that are from acquire_thread_token.
         int num_required_threads() const { return _num_threads & 0xFFFFFFFF; }
@@ -220,7 +219,7 @@ private:
     // If new_pool is non-null, new_pool will *not* be notified.
     void update_pool_quotas(ResourcePool* new_pool);
 
-    void update_pool_quotas() { update_pool_quotas(NULL); }
+    void update_pool_quotas() { update_pool_quotas(nullptr); }
 };
 
 inline void ThreadResourceMgr::ResourcePool::acquire_thread_token() {
@@ -273,10 +272,10 @@ inline void ThreadResourceMgr::ResourcePool::release_thread_token(bool required)
     // since only scanner threads call this with any frequency and that only
     // happens once when the scanner thread is complete.
     // TODO: reconsider this.
-    if (num_available_threads() > 0 && _thread_available_fn != NULL) {
+    if (num_available_threads() > 0 && _thread_available_fn != nullptr) {
         std::unique_lock<std::mutex> l(_lock);
 
-        if (num_available_threads() > 0 && _thread_available_fn != NULL) {
+        if (num_available_threads() > 0 && _thread_available_fn != nullptr) {
             _thread_available_fn(this);
         }
     }

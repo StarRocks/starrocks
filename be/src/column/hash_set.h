@@ -83,7 +83,7 @@ struct SliceKey8 {
         u.value = x.u.value;
         return *this;
     }
-    SliceKey8(SliceKey8&& x) { u.value = x.u.value; }
+    SliceKey8(SliceKey8&& x) noexcept { u.value = x.u.value; }
 };
 
 struct SliceKey16 {
@@ -105,7 +105,7 @@ struct SliceKey16 {
         u.value = x.u.value;
         return *this;
     }
-    SliceKey16(SliceKey16&& x) { u.value = x.u.value; }
+    SliceKey16(SliceKey16&& x) noexcept { u.value = x.u.value; }
 };
 
 template <typename SliceKey, PhmapSeed seed>

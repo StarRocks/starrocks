@@ -844,7 +844,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             if (routineLoadTaskInfo.getTxnStatus() != TransactionStatus.COMMITTED) {
                 // TODO(cmy): Normally, this should not happen. But for safe reason, just pause the job
                 String msg = String.format(
-                        "should not happen, we find that task %s is not COMMITTED when handling afterVisble. job id: %d, txn id: %d, txn status: %s",
+                        "should not happen, we find that task %s is not COMMITTED when handling afterVisble. " +
+                                "job id: %d, txn id: %d, txn status: %s",
                         DebugUtil.printId(routineLoadTaskInfo.getId()), id, txnState.getTransactionId(),
                         routineLoadTaskInfo.getTxnStatus().name());
                 LOG.warn(msg);
@@ -1479,9 +1480,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
     }
 
-    abstract public void modifyProperties(AlterRoutineLoadStmt stmt) throws DdlException;
+    public abstract void modifyProperties(AlterRoutineLoadStmt stmt) throws DdlException;
 
-    abstract public void replayModifyProperties(AlterRoutineLoadJobOperationLog log);
+    public abstract void replayModifyProperties(AlterRoutineLoadJobOperationLog log);
 
     // for ALTER ROUTINE LOAD
     protected void modifyCommonJobProperties(Map<String, String> jobProperties) {

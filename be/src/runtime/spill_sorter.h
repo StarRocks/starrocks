@@ -96,7 +96,7 @@ public:
     // compare_less_than is a comparator for the sort tuples (returns true if lhs < rhs).
     // _merge_batch_size is the size of the batches created to provide rows to the merger
     // and retrieve rows from an intermediate merger.
-    SpillSorter(const TupleRowComparator& compare_less_than, const std::vector<ExprContext*>& sort_tuple_slot_expr_ctxs,
+    SpillSorter(TupleRowComparator compare_less_than, const std::vector<ExprContext*>& sort_tuple_slot_expr_ctxs,
                 RowDescriptor* output_row_desc, MemTracker* mem_tracker, RuntimeProfile* profile, RuntimeState* state);
 
     ~SpillSorter();

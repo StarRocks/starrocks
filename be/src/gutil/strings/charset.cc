@@ -2,7 +2,7 @@
 
 #include "gutil/strings/charset.h"
 
-#include <string.h>
+#include <cstring>
 
 namespace strings {
 

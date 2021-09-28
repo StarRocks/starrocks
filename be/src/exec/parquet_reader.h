@@ -31,8 +31,8 @@
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
-#include <stdint.h>
 
+#include <cstdint>
 #include <map>
 #include <string>
 
@@ -55,7 +55,7 @@ class FileReader;
 class ParquetFile : public arrow::io::RandomAccessFile {
 public:
     ParquetFile(FileReader* file);
-    virtual ~ParquetFile();
+    ~ParquetFile() override;
     arrow::Result<int64_t> Read(int64_t nbytes, void* buffer) override;
     arrow::Result<int64_t> ReadAt(int64_t position, int64_t nbytes, void* out) override;
     arrow::Result<int64_t> GetSize() override;

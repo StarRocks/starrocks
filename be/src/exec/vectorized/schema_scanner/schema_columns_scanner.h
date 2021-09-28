@@ -12,9 +12,9 @@ namespace starrocks::vectorized {
 class SchemaColumnsScanner : public SchemaScanner {
 public:
     SchemaColumnsScanner();
-    virtual ~SchemaColumnsScanner();
-    virtual Status start(RuntimeState* state);
-    virtual Status get_next(ChunkPtr* chunk, bool* eos);
+    ~SchemaColumnsScanner() override;
+    Status start(RuntimeState* state) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
     std::string to_mysql_data_type_string(TColumnDesc& desc);
     std::string type_to_string(TColumnDesc& desc);
 

@@ -79,6 +79,7 @@ void init_builtins_dummy() {}
 FunctionContext* Expr::register_function_context(ExprContext* ctx, RuntimeState* state, int varargs_buffer_size) {
     FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
     std::vector<FunctionContext::TypeDesc> arg_types;
+    arg_types.reserve(_children.size());
     for (int i = 0; i < _children.size(); ++i) {
         arg_types.push_back(AnyValUtil::column_type_to_type_desc(_children[i]->_type));
     }
@@ -167,11 +168,11 @@ Expr::Expr(TypeDescriptor type)
     }
 }
 
-Expr::Expr(const TypeDescriptor& type, bool is_slotref)
+Expr::Expr(TypeDescriptor type, bool is_slotref)
         : _opcode(TExprOpcode::INVALID_OPCODE),
           // _vector_opcode(TExprOpcode::INVALID_OPCODE),
           _is_slotref(is_slotref),
-          _type(type),
+          _type(std::move(type)),
           _output_scale(-1),
           _output_column(-1),
           _fn_context_index(-1) {
@@ -264,12 +265,12 @@ Expr::~Expr() {}
 Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx) {
     // input is empty
     if (texpr.nodes.empty()) {
-        *ctx = NULL;
+        *ctx = nullptr;
         return Status::OK();
     }
     int node_idx = 0;
-    Expr* e = NULL;
-    Status status = create_tree_from_thrift(pool, texpr.nodes, NULL, &node_idx, &e, ctx);
+    Expr* e = nullptr;
+    Status status = create_tree_from_thrift(pool, texpr.nodes, nullptr, &node_idx, &e, ctx);
     if (status.ok() && node_idx + 1 != texpr.nodes.size()) {
         status = Status::InternalError("Expression tree only partially reconstructed. Not all thrift nodes were used.");
     }
@@ -298,20 +299,20 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
         return Status::InternalError("Failed to reconstruct expression tree from thrift.");
     }
     int num_children = nodes[*node_idx].num_children;
-    Expr* expr = NULL;
+    Expr* expr = nullptr;
     RETURN_IF_ERROR(create_vectorized_expr(pool, nodes[*node_idx], &expr));
-    DCHECK(expr != NULL);
-    if (parent != NULL) {
+    DCHECK(expr != nullptr);
+    if (parent != nullptr) {
         parent->add_child(expr);
     } else {
-        DCHECK(root_expr != NULL);
-        DCHECK(ctx != NULL);
+        DCHECK(root_expr != nullptr);
+        DCHECK(ctx != nullptr);
         *root_expr = expr;
         *ctx = pool->add(new ExprContext(expr));
     }
     for (int i = 0; i < num_children; i++) {
         *node_idx += 1;
-        RETURN_IF_ERROR(create_tree_from_thrift(pool, nodes, expr, node_idx, NULL, NULL));
+        RETURN_IF_ERROR(create_tree_from_thrift(pool, nodes, expr, node_idx, nullptr, nullptr));
         // we are expecting a child, but have used all nodes
         // this means we have been given a bad tree and must fail
         if (*node_idx >= nodes.size()) {
@@ -516,6 +517,7 @@ int Expr::compute_results_layout(const std::vector<Expr*>& exprs, std::vector<in
 int Expr::compute_results_layout(const std::vector<ExprContext*>& ctxs, std::vector<int>* offsets,
                                  int* var_result_begin) {
     std::vector<Expr*> exprs;
+    exprs.reserve(ctxs.size());
     for (int i = 0; i < ctxs.size(); ++i) {
         exprs.push_back(ctxs[i]->root());
     }
@@ -577,7 +579,7 @@ void Expr::close(RuntimeState* state, ExprContext* context, FunctionContext::Fun
 
 Status Expr::clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeState* state,
                                  std::vector<ExprContext*>* new_ctxs) {
-    DCHECK(new_ctxs != NULL);
+    DCHECK(new_ctxs != nullptr);
     if (!new_ctxs->empty()) {
         // 'ctxs' was already cloned into '*new_ctxs', nothing to do.
         DCHECK_EQ(new_ctxs->size(), ctxs.size());
@@ -625,6 +627,7 @@ std::string Expr::debug_string(const std::vector<Expr*>& exprs) {
 
 std::string Expr::debug_string(const std::vector<ExprContext*>& ctxs) {
     std::vector<Expr*> exprs;
+    exprs.reserve(ctxs.size());
     for (int i = 0; i < ctxs.size(); ++i) {
         exprs.push_back(ctxs[i]->root());
     }
@@ -657,43 +660,43 @@ const Expr* Expr::expr_without_cast(const Expr* expr) {
 
 starrocks_udf::AnyVal* Expr::get_const_val(ExprContext* context) {
     if (!is_constant()) {
-        return NULL;
+        return nullptr;
     }
-    if (_constant_val != NULL) {
+    if (_constant_val != nullptr) {
         return _constant_val.get();
     }
     switch (_type.type) {
     case TYPE_BOOLEAN: {
-        _constant_val.reset(new BooleanVal(get_boolean_val(context, NULL)));
+        _constant_val.reset(new BooleanVal(get_boolean_val(context, nullptr)));
         break;
     }
     case TYPE_TINYINT: {
-        _constant_val.reset(new TinyIntVal(get_tiny_int_val(context, NULL)));
+        _constant_val.reset(new TinyIntVal(get_tiny_int_val(context, nullptr)));
         break;
     }
     case TYPE_SMALLINT: {
-        _constant_val.reset(new SmallIntVal(get_small_int_val(context, NULL)));
+        _constant_val.reset(new SmallIntVal(get_small_int_val(context, nullptr)));
         break;
     }
     case TYPE_INT: {
-        _constant_val.reset(new IntVal(get_int_val(context, NULL)));
+        _constant_val.reset(new IntVal(get_int_val(context, nullptr)));
         break;
     }
     case TYPE_BIGINT: {
-        _constant_val.reset(new BigIntVal(get_big_int_val(context, NULL)));
+        _constant_val.reset(new BigIntVal(get_big_int_val(context, nullptr)));
         break;
     }
     case TYPE_LARGEINT: {
-        _constant_val.reset(new LargeIntVal(get_large_int_val(context, NULL)));
+        _constant_val.reset(new LargeIntVal(get_large_int_val(context, nullptr)));
         break;
     }
     case TYPE_FLOAT: {
-        _constant_val.reset(new FloatVal(get_float_val(context, NULL)));
+        _constant_val.reset(new FloatVal(get_float_val(context, nullptr)));
         break;
     }
     case TYPE_DOUBLE:
     case TYPE_TIME: {
-        _constant_val.reset(new DoubleVal(get_double_val(context, NULL)));
+        _constant_val.reset(new DoubleVal(get_double_val(context, nullptr)));
         break;
     }
     case TYPE_CHAR:
@@ -701,20 +704,20 @@ starrocks_udf::AnyVal* Expr::get_const_val(ExprContext* context) {
     case TYPE_HLL:
     case TYPE_OBJECT:
     case TYPE_PERCENTILE: {
-        _constant_val.reset(new StringVal(get_string_val(context, NULL)));
+        _constant_val.reset(new StringVal(get_string_val(context, nullptr)));
         break;
     }
     case TYPE_DATE:
     case TYPE_DATETIME: {
-        _constant_val.reset(new DateTimeVal(get_datetime_val(context, NULL)));
+        _constant_val.reset(new DateTimeVal(get_datetime_val(context, nullptr)));
         break;
     }
     case TYPE_DECIMAL: {
-        _constant_val.reset(new DecimalVal(get_decimal_val(context, NULL)));
+        _constant_val.reset(new DecimalVal(get_decimal_val(context, nullptr)));
         break;
     }
     case TYPE_DECIMALV2: {
-        _constant_val.reset(new DecimalV2Val(get_decimalv2_val(context, NULL)));
+        _constant_val.reset(new DecimalV2Val(get_decimalv2_val(context, nullptr)));
         break;
     }
     case TYPE_NULL: {
@@ -724,7 +727,7 @@ starrocks_udf::AnyVal* Expr::get_const_val(ExprContext* context) {
     default:
         DCHECK(false) << "Type not implemented: " << type();
     }
-    DCHECK(_constant_val.get() != NULL);
+    DCHECK(_constant_val.get() != nullptr);
     return _constant_val.get();
 }
 

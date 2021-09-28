@@ -22,8 +22,7 @@
 #ifndef STARROCKS_BE_SRC_RUNTIME_SNAPSHOT_LOADER_H
 #define STARROCKS_BE_SRC_RUNTIME_SNAPSHOT_LOADER_H
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
@@ -76,7 +75,7 @@ public:
     Status download(const std::map<std::string, std::string>& src_to_dest_path, const TNetworkAddress& broker_addr,
                     const std::map<std::string, std::string>& broker_prop, std::vector<int64_t>* downloaded_tablet_ids);
 
-    Status move(const std::string& snapshot_path, TabletSharedPtr tablet, bool overwrite);
+    Status move(const std::string& snapshot_path, const TabletSharedPtr& tablet, bool overwrite);
 
 private:
     Status _get_tablet_id_and_schema_hash_from_file_path(const std::string& src_path, int64_t* tablet_id,
@@ -97,7 +96,7 @@ private:
 
     void _assemble_file_name(const std::string& snapshot_path, const std::string& tablet_path, int64_t tablet_id,
                              int64_t start_version, int64_t end_version, int64_t vesion_hash, int32_t seg_num,
-                             const std::string suffix, std::string* snapshot_file, std::string* tablet_file);
+                             const std::string& suffix, std::string* snapshot_file, std::string* tablet_file);
 
     Status _replace_tablet_id(const std::string& file_name, int64_t tablet_id, std::string* new_file_name);
 

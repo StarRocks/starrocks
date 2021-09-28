@@ -139,7 +139,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
-    context->maybe_interpolate_local_exchange(operators_with_sink);
+    operators_with_sink = context->maybe_interpolate_local_exchange(operators_with_sink);
 
     // shared by sink operator and source operator
     AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode, child(0)->row_desc());
@@ -152,7 +152,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     auto source_operator =
             std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(), id(), aggregator);
 
-    // The merge-aggregation phase cannot be parallel, so we set the degree of parallism to 1
+    // TODO(hcf) Currently, the shared data structure aggregator does not support concurrency.
+    // So the degree of parallism must set to 1, we'll fix it later
     source_operator->set_degree_of_parallelism(1);
     operators_with_source.push_back(std::move(source_operator));
     return operators_with_source;

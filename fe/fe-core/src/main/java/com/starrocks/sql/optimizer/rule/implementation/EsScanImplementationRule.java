@@ -22,7 +22,8 @@ public class EsScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalEsScanOperator logical = (LogicalEsScanOperator) input.getOp();
         PhysicalEsScanOperator physical =
-                new PhysicalEsScanOperator(logical.getTable(), logical.getColumnRefMap(), logical.getSelectedIndex());
+                new PhysicalEsScanOperator(logical.getTable(), logical.getOutputColumns(),
+                        logical.getColRefToColumnMetaMap(), logical.getSelectedIndex());
 
         physical.setPredicate(logical.getPredicate());
         physical.setLimit(logical.getLimit());

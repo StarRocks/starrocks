@@ -4,6 +4,8 @@
 
 #include <fmt/format.h>
 
+#include <memory>
+
 #include "common/config.h"
 #include "exec/es/es_predicate.h"
 #include "exec/es/es_query_builder.h"
@@ -272,8 +274,8 @@ Status EsHttpScanNode::_create_scanner(int scanner_idx, std::unique_ptr<EsHttpSc
     properties[ESScanReader::KEY_QUERY] =
             ESScrollQueryBuilder::build(properties, _column_names, _predicates, _docvalue_context, &doc_value_mode);
 
-    res->reset(new EsHttpScanner(_runtime_state, runtime_profile(), _tuple_id, std::move(properties), scanner_expr_ctxs,
-                                 _docvalue_context, doc_value_mode));
+    *res = std::make_unique<EsHttpScanner>(_runtime_state, runtime_profile(), _tuple_id, std::move(properties),
+                                           scanner_expr_ctxs, _docvalue_context, doc_value_mode);
     return Status::OK();
 }
 

@@ -4461,7 +4461,7 @@ public:
         template <class T>
         explicit DoNothing(T&&) {}
         DoNothing& operator=(const DoNothing&) { return *this; }
-        DoNothing& operator=(DoNothing&&) { return *this; }
+        DoNothing& operator=(DoNothing&&) noexcept { return *this; }
         void swap(DoNothing&) {}
         bool owns_lock() const noexcept { return true; }
     };
@@ -4484,12 +4484,12 @@ public:
 
         WriteLock(mutex_type& m, try_to_lock_t) : m_(&m), locked_(false) { m_->try_lock(); }
 
-        WriteLock(WriteLock&& o) : m_(std::move(o.m_)), locked_(std::move(o.locked_)) {
+        WriteLock(WriteLock&& o) noexcept : m_(std::move(o.m_)), locked_(std::move(o.locked_)) {
             o.locked_ = false;
             o.m_ = nullptr;
         }
 
-        WriteLock& operator=(WriteLock&& other) {
+        WriteLock& operator=(WriteLock&& other) noexcept {
             WriteLock temp(std::move(other));
             swap(temp);
             return *this;
@@ -4551,12 +4551,12 @@ public:
 
         ReadLock(mutex_type& m, try_to_lock_t) : m_(&m), locked_(false) { m_->try_lock_shared(); }
 
-        ReadLock(ReadLock&& o) : m_(std::move(o.m_)), locked_(std::move(o.locked_)) {
+        ReadLock(ReadLock&& o) noexcept : m_(std::move(o.m_)), locked_(std::move(o.locked_)) {
             o.locked_ = false;
             o.m_ = nullptr;
         }
 
-        ReadLock& operator=(ReadLock&& other) {
+        ReadLock& operator=(ReadLock&& other) noexcept {
             ReadLock temp(std::move(other));
             swap(temp);
             return *this;

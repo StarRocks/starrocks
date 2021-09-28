@@ -31,7 +31,7 @@ OLAPStatus decimal12_t::from_string(const std::string& str) {
     const char* value_string = str.c_str();
     const char* sign = strchr(value_string, '-');
 
-    if (sign != NULL) {
+    if (sign != nullptr) {
         if (sign != value_string) {
             return OLAP_ERR_INPUT_PARAMETER_ERROR;
         } else {
@@ -40,8 +40,8 @@ OLAPStatus decimal12_t::from_string(const std::string& str) {
     }
 
     const char* sepr = strchr(value_string, '.');
-    if ((sepr != NULL && sepr - value_string > MAX_INT_DIGITS_NUM) ||
-        (sepr == NULL && strlen(value_string) > MAX_INT_DIGITS_NUM)) {
+    if ((sepr != nullptr && sepr - value_string > MAX_INT_DIGITS_NUM) ||
+        (sepr == nullptr && strlen(value_string) > MAX_INT_DIGITS_NUM)) {
         integer = 999999999999999999;
         fraction = 999999999;
     } else {
@@ -52,12 +52,12 @@ OLAPStatus decimal12_t::from_string(const std::string& str) {
             sscanf(value_string, "%18ld.%9d", &integer, &fraction);
         }
 
-        int32_t frac_len = (NULL != sepr) ? MAX_FRAC_DIGITS_NUM - strlen(sepr + 1) : MAX_FRAC_DIGITS_NUM;
+        int32_t frac_len = (nullptr != sepr) ? MAX_FRAC_DIGITS_NUM - strlen(sepr + 1) : MAX_FRAC_DIGITS_NUM;
         frac_len = frac_len > 0 ? frac_len : 0;
         fraction *= g_power_table[frac_len];
     }
 
-    if (sign != NULL) {
+    if (sign != nullptr) {
         fraction = -fraction;
         integer = -integer;
     }

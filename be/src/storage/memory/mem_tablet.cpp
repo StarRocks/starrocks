@@ -21,6 +21,8 @@
 
 #include "storage/memory/mem_tablet.h"
 
+#include <memory>
+
 #include "storage/memory/mem_sub_tablet.h"
 #include "storage/memory/mem_tablet_scan.h"
 #include "storage/memory/write_txn.h"
@@ -28,7 +30,7 @@
 namespace starrocks {
 namespace memory {
 
-MemTablet::MemTablet(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta, DataDir* data_dir)
+MemTablet::MemTablet(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
         : BaseTablet(mem_tracker, tablet_meta, data_dir) {
     _mem_schema.reset(new Schema(tablet_meta->tablet_schema()));
     _mem_tracker->consume(sizeof(MemTablet));
@@ -38,7 +40,8 @@ MemTablet::~MemTablet() {
     _mem_tracker->release(sizeof(MemTablet));
 }
 
-std::shared_ptr<MemTablet> MemTablet::create_tablet_from_meta(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta,
+std::shared_ptr<MemTablet> MemTablet::create_tablet_from_meta(MemTracker* mem_tracker,
+                                                              const TabletMetaSharedPtr& tablet_meta,
                                                               DataDir* data_dir) {
     return std::make_shared<MemTablet>(mem_tracker, tablet_meta, data_dir);
 }
@@ -75,7 +78,7 @@ Status MemTablet::scan(std::unique_ptr<ScanSpec>* spec, std::unique_ptr<MemTable
 }
 
 Status MemTablet::create_write_txn(std::unique_ptr<WriteTxn>* wtxn) {
-    wtxn->reset(new WriteTxn(&_mem_schema));
+    *wtxn = std::make_unique<WriteTxn>(&_mem_schema);
     return Status::OK();
 }
 

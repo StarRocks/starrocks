@@ -26,10 +26,10 @@
 #ifndef STRINGS_UTIL_H_
 #define STRINGS_UTIL_H_
 
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #ifndef _MSC_VER
 #include <strings.h> // for strcasecmp, but msvc does not have this header
 #endif
@@ -73,7 +73,7 @@ StringPiece FindEol(StringPiece sp);
 // string, or NULL if the input is null or empty.
 inline char* strdup_nonempty(const char* src) {
     if (src && src[0]) return strdup(src);
-    return NULL;
+    return nullptr;
 }
 
 // Finds the first occurrence of a character in at most a given number of bytes
@@ -88,7 +88,7 @@ inline char* strnchr(const char* buf, char c, int sz) {
         if (*buf == c) return const_cast<char*>(buf);
         ++buf;
     }
-    return NULL;
+    return nullptr;
 }
 
 // Finds the first occurrence of the null-terminated needle in at most the first
@@ -156,7 +156,7 @@ inline CharStar var_strcaseprefix(CharStar str, const char* prefix) {
 
 // Returns input, or "(null)" if NULL. (Useful for logging.)
 inline const char* GetPrintableString(const char* const in) {
-    return NULL == in ? "(null)" : in;
+    return nullptr == in ? "(null)" : in;
 }
 
 // Returns whether str begins with prefix.
@@ -185,7 +185,7 @@ inline char* strsuffix(char* str, const char* suffix) {
     if (lenstr >= lensuffix && 0 == strcmp(strbeginningoftheend, suffix)) {
         return (strbeginningoftheend);
     } else {
-        return (NULL);
+        return (nullptr);
     }
 }
 inline const char* strsuffix(const char* str, const char* suffix) {
@@ -205,7 +205,7 @@ const char* strncasesuffix(const char* haystack, int haystack_size, const char* 
 // Returns the number of times a character occurs in a string for a null
 // terminated string.
 inline ptrdiff_t strcount(const char* buf, char c) {
-    if (buf == NULL) return 0;
+    if (buf == nullptr) return 0;
     ptrdiff_t num = 0;
     for (const char* bp = buf; *bp != '\0'; bp++) {
         if (*bp == c) num++;
@@ -216,7 +216,7 @@ inline ptrdiff_t strcount(const char* buf, char c) {
 // defined by a pointer to the first character and a pointer just past the last
 // character.
 inline ptrdiff_t strcount(const char* buf_begin, const char* buf_end, char c) {
-    if (buf_begin == NULL) return 0;
+    if (buf_begin == nullptr) return 0;
     if (buf_end <= buf_begin) return 0;
     ptrdiff_t num = 0;
     for (const char* bp = buf_begin; bp != buf_end; bp++) {
@@ -251,7 +251,7 @@ char* AdjustedLastPos(const char* str, char separator, int n);
 //    hash_map<const char*, Value, hash<const char*>, streq> ht;
 struct streq : public binary_function<const char*, const char*, bool> {
     bool operator()(const char* s1, const char* s2) const {
-        return ((s1 == 0 && s2 == 0) || (s1 && s2 && *s1 == *s2 && strcmp(s1, s2) == 0));
+        return ((s1 == nullptr && s2 == nullptr) || (s1 && s2 && *s1 == *s2 && strcmp(s1, s2) == 0));
     }
 };
 
@@ -260,7 +260,7 @@ struct streq : public binary_function<const char*, const char*, bool> {
 //    map<const char*, Value, strlt> m;
 struct strlt : public binary_function<const char*, const char*, bool> {
     bool operator()(const char* s1, const char* s2) const {
-        return (s1 != s2) && (s2 == 0 || (s1 != 0 && strcmp(s1, s2) < 0));
+        return (s1 != s2) && (s2 == nullptr || (s1 != nullptr && strcmp(s1, s2) < 0));
     }
 };
 

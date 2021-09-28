@@ -36,7 +36,7 @@ public:
     // return OLAP_SUCCESS and set inited rowset in `*rowset`.
     // return others if failed to create or init rowset.
     static OLAPStatus create_rowset(MemTracker* mem_tracker, const TabletSchema* schema, const std::string& rowset_path,
-                                    RowsetMetaSharedPtr rowset_meta, RowsetSharedPtr* rowset);
+                                    const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset);
 
     // create and init rowset writer.
     // return OLAP_SUCCESS and set `*output` to inited rowset writer.

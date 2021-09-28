@@ -21,7 +21,10 @@ public class SchemaScanImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalSchemaScanOperator logical = (LogicalSchemaScanOperator) input.getOp();
-        PhysicalSchemaScanOperator physical = new PhysicalSchemaScanOperator(logical.getTable(), logical.getColumnRefMap());
+        PhysicalSchemaScanOperator physical =
+                new PhysicalSchemaScanOperator(logical.getTable(),
+                        logical.getOutputColumns(),
+                        logical.getColRefToColumnMetaMap());
 
         physical.setPredicate(logical.getPredicate());
         physical.setLimit(logical.getLimit());

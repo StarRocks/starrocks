@@ -7,6 +7,8 @@
 #include <column/column_helper.h>
 #include <gutil/strings/substitute.h>
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "common/logging.h"
 #include "exec/file_reader.h"
@@ -18,10 +20,10 @@
 namespace starrocks::vectorized {
 
 ParquetChunkReader::ParquetChunkReader(std::shared_ptr<ParquetReaderWrap>&& parquet_reader,
-                                       const std::vector<SlotDescriptor*>& src_slot_desc, const std::string& time_zone)
+                                       const std::vector<SlotDescriptor*>& src_slot_desc, std::string time_zone)
         : _parquet_reader(std::move(parquet_reader)),
           _src_slot_descs(src_slot_desc),
-          _time_zone(time_zone),
+          _time_zone(std::move(time_zone)),
           _state(State::UNINITIALIZED) {}
 
 ParquetChunkReader::~ParquetChunkReader() {

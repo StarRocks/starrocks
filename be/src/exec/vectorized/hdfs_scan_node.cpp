@@ -261,9 +261,6 @@ int HdfsScanNode::_compute_priority(int32_t num_submitted_tasks) {
 
 void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
     Status status = scanner->open(_runtime_state);
-    if (!status.ok()) {
-        _update_status(status);
-    }
     scanner->set_keep_priority(false);
 
     bool resubmit = false;

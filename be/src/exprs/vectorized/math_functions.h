@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <math.h>
+#include <cmath>
 
 #include "column/column.h"
 #include "column/column_builder.h"
@@ -382,7 +382,7 @@ public:
 
         std::vector<ColumnViewer<Type>> list;
         list.reserve(columns.size());
-        for (ColumnPtr col : columns) {
+        for (const ColumnPtr& col : columns) {
             list.emplace_back(ColumnViewer<Type>(col));
         }
 
@@ -423,7 +423,7 @@ public:
 
         std::vector<ColumnViewer<Type>> list;
         list.reserve(columns.size());
-        for (ColumnPtr col : columns) {
+        for (const ColumnPtr& col : columns) {
             list.emplace_back(ColumnViewer<Type>(col));
         }
 

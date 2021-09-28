@@ -44,7 +44,7 @@ public:
               _total_length(total_length),
               _finished(false),
               _cancelled(false) {}
-    virtual ~StreamLoadPipe() {}
+    ~StreamLoadPipe() override {}
 
     Status open() override { return Status::OK(); }
 

@@ -27,7 +27,7 @@ public class HiveScanImplementationRule extends ImplementationRule {
         if (scan.getTableType() == Table.TableType.HIVE) {
             PhysicalHiveScanOperator physicalHiveScan = new PhysicalHiveScanOperator(scan.getTable(),
                     scan.getOutputColumns(),
-                    scan.getColumnRefMap(),
+                    scan.getColRefToColumnMetaMap(),
                     scan.getSelectedPartitionIds(),
                     scan.getIdToPartitionKey(),
                     scan.getNoEvalPartitionConjuncts(),

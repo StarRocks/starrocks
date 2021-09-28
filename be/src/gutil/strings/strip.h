@@ -7,8 +7,7 @@
 #ifndef STRINGS_STRIP_H_
 #define STRINGS_STRIP_H_
 
-#include <stddef.h>
-
+#include <cstddef>
 #include <string>
 using std::string;
 
@@ -134,7 +133,7 @@ inline const char* StripLeadingWhiteSpace(const char* line) {
     while (ascii_isspace(*line)) ++line;
 
     if ('\0' == *line) // end of line, no non-whitespace
-        return NULL;
+        return nullptr;
 
     return line;
 }

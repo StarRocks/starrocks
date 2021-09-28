@@ -21,6 +21,8 @@
 
 #include "runtime/test_env.h"
 
+#include <memory>
+
 #include "util/disk_info.h"
 #include "util/starrocks_metrics.h"
 
@@ -29,27 +31,27 @@ namespace starrocks {
 std::unique_ptr<MetricRegistry> TestEnv::_s_static_metrics;
 
 TestEnv::TestEnv() {
-    if (_s_static_metrics == NULL) {
-        _s_static_metrics.reset(new MetricRegistry("test_env"));
+    if (_s_static_metrics == nullptr) {
+        _s_static_metrics = std::make_unique<MetricRegistry>("test_env");
     }
-    _exec_env.reset(new ExecEnv());
+    _exec_env = std::make_unique<ExecEnv>();
     // _exec_env->init_for_tests();
-    _io_mgr_tracker.reset(new MemTracker(-1));
-    _block_mgr_parent_tracker.reset(new MemTracker(-1));
+    _io_mgr_tracker = std::make_unique<MemTracker>(-1);
+    _block_mgr_parent_tracker = std::make_unique<MemTracker>(-1);
     _exec_env->disk_io_mgr()->init(_io_mgr_tracker.get());
     init_metrics();
-    _tmp_file_mgr.reset(new TmpFileMgr());
+    _tmp_file_mgr = std::make_unique<TmpFileMgr>();
     _tmp_file_mgr->init(_metrics.get());
 }
 
 void TestEnv::init_metrics() {
-    _metrics.reset(new MetricRegistry("test_env"));
+    _metrics = std::make_unique<MetricRegistry>("test_env");
 }
 
 void TestEnv::init_tmp_file_mgr(const std::vector<std::string>& tmp_dirs, bool one_dir_per_device) {
     // Need to recreate metrics to avoid error when registering metric twice.
     init_metrics();
-    _tmp_file_mgr.reset(new TmpFileMgr());
+    _tmp_file_mgr = std::make_unique<TmpFileMgr>();
     _tmp_file_mgr->init_custom(tmp_dirs, one_dir_per_device, _metrics.get());
 }
 
@@ -72,7 +74,7 @@ RuntimeState* TestEnv::create_runtime_state(int64_t query_id) {
 
 Status TestEnv::create_query_state(int64_t query_id, int max_buffers, int block_size, RuntimeState** runtime_state) {
     *runtime_state = create_runtime_state(query_id);
-    if (*runtime_state == NULL) {
+    if (*runtime_state == nullptr) {
         return Status::InternalError("Unexpected error creating RuntimeState");
     }
 
@@ -90,7 +92,7 @@ Status TestEnv::create_query_state(int64_t query_id, int max_buffers, int block_
 Status TestEnv::create_query_states(int64_t start_query_id, int num_mgrs, int buffers_per_mgr, int block_size,
                                     std::vector<RuntimeState*>* runtime_states) {
     for (int i = 0; i < num_mgrs; ++i) {
-        RuntimeState* runtime_state = NULL;
+        RuntimeState* runtime_state = nullptr;
         RETURN_IF_ERROR(create_query_state(start_query_id + i, buffers_per_mgr, block_size, &runtime_state));
         runtime_states->push_back(runtime_state);
     }

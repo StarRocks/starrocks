@@ -46,9 +46,8 @@ class TxnManager;
 // Now, After DataDir was created, it will never be deleted for easy implementation.
 class DataDir {
 public:
-    DataDir(const std::string& path, int64_t capacity_bytes = -1,
-            TStorageMedium::type storage_medium = TStorageMedium::HDD, TabletManager* tablet_manager = nullptr,
-            TxnManager* txn_manager = nullptr);
+    DataDir(std::string path, int64_t capacity_bytes = -1, TStorageMedium::type storage_medium = TStorageMedium::HDD,
+            TabletManager* tablet_manager = nullptr, TxnManager* txn_manager = nullptr);
     ~DataDir();
 
     Status init(bool read_only = false);
@@ -98,10 +97,6 @@ public:
 
     // load data from meta and data files
     OLAPStatus load();
-
-    void add_pending_ids(const std::string& id);
-
-    void remove_pending_ids(const std::string& id);
 
     // this function scans the paths in data dir to collect the paths to check
     // this is a producer function. After scan, it will notify the perform_path_gc function to gc
@@ -171,9 +166,6 @@ private:
     std::condition_variable _cv;
     std::set<std::string> _all_check_paths;
     std::set<std::string> _all_tablet_schemahash_paths;
-
-    std::shared_mutex _pending_path_mutex;
-    std::set<std::string> _pending_path_ids;
 };
 
 } // namespace starrocks

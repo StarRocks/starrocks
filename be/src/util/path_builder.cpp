@@ -21,8 +21,7 @@
 
 #include "util/path_builder.h"
 
-#include <stdlib.h>
-
+#include <cstdlib>
 #include <sstream>
 
 namespace starrocks {
@@ -30,7 +29,7 @@ namespace starrocks {
 const char* PathBuilder::_s_starrocks_home;
 
 void PathBuilder::load_starrocks_home() {
-    if (_s_starrocks_home != NULL) {
+    if (_s_starrocks_home != nullptr) {
         return;
     }
 

@@ -28,7 +28,7 @@ namespace starrocks::pipeline {
 
 Morsels convert_scan_range_to_morsel(const std::vector<TScanRangeParams>& scan_ranges, int node_id) {
     Morsels morsels;
-    for (auto scan_range : scan_ranges) {
+    for (const auto& scan_range : scan_ranges) {
         morsels.emplace_back(std::make_unique<OlapMorsel>(node_id, scan_range));
     }
     return morsels;
@@ -45,7 +45,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     if (existing_query_ctx) {
         auto&& existing_fragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_id);
         if (existing_fragment_ctx) {
-            return Status::OK();
+            return Status::DuplicateRpcInvocation("Duplicate invocations of exec_plan_fragment");
         }
     }
 
@@ -86,7 +86,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     // Set up desc tbl
     auto* obj_pool = runtime_state->obj_pool();
-    DescriptorTbl* desc_tbl = NULL;
+    DescriptorTbl* desc_tbl = nullptr;
     DCHECK(request.__isset.desc_tbl);
     RETURN_IF_ERROR(DescriptorTbl::create(obj_pool, request.desc_tbl, &desc_tbl));
     runtime_state->set_desc_tbl(desc_tbl);
@@ -198,10 +198,10 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 }
 
 Status FragmentExecutor::execute(ExecEnv* exec_env) {
-    for (auto driver : _fragment_ctx->drivers()) {
+    for (const auto& driver : _fragment_ctx->drivers()) {
         RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
     }
-    for (auto driver : _fragment_ctx->drivers()) {
+    for (const auto& driver : _fragment_ctx->drivers()) {
         exec_env->driver_dispatcher()->dispatch(driver);
     }
     return Status::OK();

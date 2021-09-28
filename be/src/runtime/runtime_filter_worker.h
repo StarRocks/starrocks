@@ -48,7 +48,7 @@ private:
 class RuntimeFilterMergerStatus {
 public:
     RuntimeFilterMergerStatus() = default;
-    RuntimeFilterMergerStatus(RuntimeFilterMergerStatus&& other)
+    RuntimeFilterMergerStatus(RuntimeFilterMergerStatus&& other) noexcept
             : arrives(std::move(other.arrives)),
               expect_number(other.expect_number),
               pool(std::move(other.pool)),
@@ -82,7 +82,7 @@ public:
 // and sent merged RF to consumer nodes.
 class RuntimeFilterMerger {
 public:
-    RuntimeFilterMerger(ExecEnv* env, UniqueId query_id, TQueryOptions query_options);
+    RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options);
     Status init(const TRuntimeFilterParams& params);
     void merge_runtime_filter(PTransmitRuntimeFilterParams& params, RuntimeFilterRpcClosure* rpc_closure);
 
@@ -112,8 +112,8 @@ public:
     RuntimeFilterWorker(ExecEnv* env);
     ~RuntimeFilterWorker();
     // open query for creating runtime filter merger.
-    void open_query(TUniqueId query_id, TQueryOptions query_options, const TRuntimeFilterParams& params);
-    void close_query(TUniqueId query_id);
+    void open_query(const TUniqueId& query_id, const TQueryOptions& query_options, const TRuntimeFilterParams& params);
+    void close_query(const TUniqueId& query_id);
     void receive_runtime_filter(const PTransmitRuntimeFilterParams& params);
     void execute();
     void send_part_runtime_filter(PTransmitRuntimeFilterParams&& params,

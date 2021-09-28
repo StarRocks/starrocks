@@ -135,7 +135,7 @@ struct BASE_EXPORT AsserterBase {
 };
 
 struct BASE_EXPORT DCheckAsserter : public AsserterBase {
-    virtual ~DCheckAsserter() {}
+    ~DCheckAsserter() override {}
     void warn(int64_t previous_thread_id, int64_t current_thread_id) override;
 };
 

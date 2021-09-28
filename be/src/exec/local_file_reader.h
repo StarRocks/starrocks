@@ -22,7 +22,7 @@
 #pragma once
 
 #define _FILE_OFFSET_BITS 64
-#include <stdio.h>
+#include <cstdio>
 
 #include "exec/file_reader.h"
 
@@ -30,23 +30,23 @@ namespace starrocks {
 
 class LocalFileReader : public FileReader {
 public:
-    LocalFileReader(const std::string& path, int64_t start_offset);
-    virtual ~LocalFileReader();
+    LocalFileReader(std::string path, int64_t start_offset);
+    ~LocalFileReader() override;
 
-    virtual Status open() override;
+    Status open() override;
 
     // Read content to 'buf', 'buf_len' is the max size of this buffer.
     // Return ok when read success, and 'buf_len' is set to size of read content
     // If reach to end of file, the eof is set to true. meanwhile 'buf_len'
     // is set to zero.
-    virtual Status read(uint8_t* buf, size_t* buf_len, bool* eof) override;
-    virtual Status readat(int64_t position, int64_t nbytes, int64_t* bytes_read, void* out) override;
-    virtual Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length) override;
-    virtual int64_t size() override;
-    virtual Status seek(int64_t position) override;
-    virtual Status tell(int64_t* position) override;
-    virtual void close() override;
-    virtual bool closed() override;
+    Status read(uint8_t* buf, size_t* buf_len, bool* eof) override;
+    Status readat(int64_t position, int64_t nbytes, int64_t* bytes_read, void* out) override;
+    Status read_one_message(std::unique_ptr<uint8_t[]>* buf, size_t* length) override;
+    int64_t size() override;
+    Status seek(int64_t position) override;
+    Status tell(int64_t* position) override;
+    void close() override;
+    bool closed() override;
 
 private:
     std::string _path;

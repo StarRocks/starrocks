@@ -3,10 +3,11 @@
 #include "gutil/strings/strcat.h"
 
 #include <common/logging.h>
-#include <stdarg.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
+
+#include <cstdarg>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 
 #include "gutil/gscoped_ptr.h"
 #include "gutil/stl_util.h"

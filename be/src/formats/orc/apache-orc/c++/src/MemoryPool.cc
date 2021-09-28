@@ -22,10 +22,12 @@
 
 #include "orc/MemoryPool.hh"
 
+#ifdef __x86_64__
 #include <immintrin.h>
-#include <string.h>
+#endif
 
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 
 #include "Adaptor.hh"
@@ -39,7 +41,7 @@ MemoryPool::~MemoryPool() {
 
 class MemoryPoolImpl : public MemoryPool {
 public:
-    virtual ~MemoryPoolImpl() override;
+    ~MemoryPoolImpl() override;
 
     char* malloc(uint64_t size) override;
     void free(char* p) override;

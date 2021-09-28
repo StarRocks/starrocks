@@ -601,7 +601,7 @@ struct BaseFieldtypeTraits : public CppTypeTraits<field_type> {
     static OLAPStatus from_string(void* buf, const std::string& scan_key) {
         CppType value = 0;
         if (scan_key.length() > 0) {
-            value = static_cast<CppType>(strtol(scan_key.c_str(), NULL, 10));
+            value = static_cast<CppType>(strtol(scan_key.c_str(), nullptr, 10));
         }
         unaligned_store<CppType>(buf, value);
         return OLAP_SUCCESS;
@@ -735,7 +735,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_LARGEINT> : public BaseFieldtypeTraits<OL
         int128_t value;
 
         const char* value_string = scan_key.c_str();
-        char* end = NULL;
+        char* end = nullptr;
         value = strtol(value_string, &end, 10);
         if (*end != 0) {
             value = 0;
@@ -987,7 +987,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_DATE> : public BaseFieldtypeTraits<OLAP_F
         tm time_tm;
         char* res = strptime(scan_key.c_str(), "%Y-%m-%d", &time_tm);
 
-        if (NULL != res) {
+        if (nullptr != res) {
             int value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
             unaligned_store<CppType>(buf, value);
         } else {
@@ -1106,7 +1106,7 @@ struct FieldTypeTraits<OLAP_FIELD_TYPE_DATETIME> : public BaseFieldtypeTraits<OL
         tm time_tm;
         char* res = strptime(scan_key.c_str(), "%Y-%m-%d %H:%M:%S", &time_tm);
 
-        if (NULL != res) {
+        if (nullptr != res) {
             CppType value =
                     ((time_tm.tm_year + 1900) * 10000L + (time_tm.tm_mon + 1) * 100L + time_tm.tm_mday) * 1000000L +
                     time_tm.tm_hour * 10000L + time_tm.tm_min * 100L + time_tm.tm_sec;

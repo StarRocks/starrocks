@@ -39,8 +39,8 @@ HealthAction::HealthAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
 void HealthAction::handle(HttpRequest* req) {
     std::stringstream ss;
     ss << "{";
-    ss << "\"status\": \"OK\",";
-    ss << "\"msg\": \"To Be Added\"";
+    ss << R"("status": "OK",)";
+    ss << R"("msg": "To Be Added")";
     ss << "}";
     std::string result = ss.str();
 

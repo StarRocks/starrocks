@@ -267,7 +267,7 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalOlapScan(OptExpression optExpr, ExecPlan context) {
             PhysicalOlapScanOperator node = (PhysicalOlapScanOperator) optExpr.getOp();
 
-            OlapTable referenceTable = node.getTable();
+            OlapTable referenceTable = (OlapTable) node.getTable();
             context.getDescTbl().addReferencedTable(referenceTable);
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(referenceTable);
@@ -321,7 +321,7 @@ public class PlanFragmentBuilder {
             }
 
             // set slot
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());
@@ -361,7 +361,7 @@ public class PlanFragmentBuilder {
             tupleDescriptor.setTable(referenceTable);
 
             // set slot
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());
@@ -443,7 +443,7 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(node.getTable());
 
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());
@@ -486,7 +486,7 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(node.getTable());
 
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());
@@ -527,7 +527,7 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(node.getTable());
 
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());

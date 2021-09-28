@@ -18,8 +18,8 @@
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
 #include <runtime/types.h>
-#include <stdint.h>
 
+#include <cstdint>
 #include <map>
 #include <string>
 
@@ -32,7 +32,7 @@ using RecordBatchPtr = std::shared_ptr<RecordBatch>;
 class ParquetChunkFile : public arrow::io::RandomAccessFile {
 public:
     ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos);
-    virtual ~ParquetChunkFile();
+    ~ParquetChunkFile() override;
     arrow::Result<int64_t> Read(int64_t nbytes, void* buffer) override;
     arrow::Result<int64_t> ReadAt(int64_t position, int64_t nbytes, void* out) override;
     arrow::Result<int64_t> GetSize() override;
@@ -53,7 +53,7 @@ public:
     enum State { UNINITIALIZED, INITIALIZED, END_OF_FILE };
 
     ParquetChunkReader(std::shared_ptr<ParquetReaderWrap>&& parquet_reader,
-                       const std::vector<SlotDescriptor*>& src_slot_descs, const std::string& time_zone);
+                       const std::vector<SlotDescriptor*>& src_slot_descs, std::string time_zone);
     ~ParquetChunkReader();
     Status next_batch(RecordBatchPtr* batch);
 

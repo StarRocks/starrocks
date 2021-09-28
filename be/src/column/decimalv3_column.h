@@ -30,7 +30,7 @@ public:
 
     MutableColumnPtr clone_empty() const override;
 
-    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const;
+    void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const override;
     std::string debug_item(uint32_t idx) const override;
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
 

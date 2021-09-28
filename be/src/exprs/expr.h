@@ -92,7 +92,7 @@ public:
     // evaluate expr and return pointer to result. The result is
     // valid as long as 'row' doesn't change.
     // TODO: stop having the result cached in this Expr object
-    void* get_value(TupleRow* row) { return NULL; }
+    void* get_value(TupleRow* row) { return nullptr; }
 
     // Vectorize Evalute expr and return result column index.
     // Result cached in batch and valid as long as batch.
@@ -336,7 +336,7 @@ protected:
 
     explicit Expr(TypeDescriptor type);
     explicit Expr(const TExprNode& node);
-    Expr(const TypeDescriptor& type, bool is_slotref);
+    Expr(TypeDescriptor type, bool is_slotref);
     Expr(const TExprNode& node, bool is_slotref);
 
     /// Initializes this expr instance for execution. This does not include initializing

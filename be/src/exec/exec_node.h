@@ -108,7 +108,7 @@ public:
     // Used by sub nodes to get big chunk.
     // specific_get_next is the subclass's implementation to get datas.
     static Status get_next_big_chunk(RuntimeState*, ChunkPtr*, bool*, ChunkPtr& pre_output_chunk,
-                                     std::function<Status(RuntimeState*, ChunkPtr*, bool*)> specific_get_next);
+                                     const std::function<Status(RuntimeState*, ChunkPtr*, bool*)>& specific_get_next);
 
     // Resets the stream of row batches to be retrieved by subsequent GetNext() calls.
     // Clears all internal state, returning this node to the state it was in after calling

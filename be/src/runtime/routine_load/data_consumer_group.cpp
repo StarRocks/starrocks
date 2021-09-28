@@ -70,20 +70,20 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     Status result_st = Status::OK();
     // start all consumers
     for (auto& consumer : _consumers) {
-        if (!_thread_pool.offer(std::bind<void>(
-                    &KafkaDataConsumerGroup::actual_consume, this, consumer, &_queue, ctx->max_interval_s * 1000,
-                    [this, &result_st](const Status& st) {
-                        std::unique_lock<std::mutex> lock(_mutex);
-                        _counter--;
-                        VLOG(1) << "group counter is: " << _counter << ", grp: " << _grp_id;
-                        if (_counter == 0) {
-                            _queue.shutdown();
-                            LOG(INFO) << "all consumers are finished. shutdown queue. group id: " << _grp_id;
-                        }
-                        if (result_st.ok() && !st.ok()) {
-                            result_st = st;
-                        }
-                    }))) {
+        if (!_thread_pool.offer([this, consumer, capture0 = &_queue, capture1 = ctx->max_interval_s * 1000,
+                                 capture2 = [this, &result_st](const Status& st) {
+                                     std::unique_lock<std::mutex> lock(_mutex);
+                                     _counter--;
+                                     VLOG(1) << "group counter is: " << _counter << ", grp: " << _grp_id;
+                                     if (_counter == 0) {
+                                         _queue.shutdown();
+                                         LOG(INFO)
+                                                 << "all consumers are finished. shutdown queue. group id: " << _grp_id;
+                                     }
+                                     if (result_st.ok() && !st.ok()) {
+                                         result_st = st;
+                                     }
+                                 }] { actual_consume(consumer, capture0, capture1, capture2); })) {
             LOG(WARNING) << "failed to submit data consumer: " << consumer->id() << ", group id: " << _grp_id;
             return Status::InternalError("failed to submit data consumer");
         } else {
@@ -196,9 +196,9 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
     return Status::OK();
 }
 
-void KafkaDataConsumerGroup::actual_consume(std::shared_ptr<DataConsumer> consumer,
+void KafkaDataConsumerGroup::actual_consume(const std::shared_ptr<DataConsumer>& consumer,
                                             TimedBlockingQueue<RdKafka::Message*>* queue, int64_t max_running_time_ms,
-                                            ConsumeFinishCallback cb) {
+                                            const ConsumeFinishCallback& cb) {
     Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->group_consume(queue, max_running_time_ms);
     cb(st);
 }

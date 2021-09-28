@@ -3,6 +3,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 
 #include "column/vectorized_fwd.h"
 #include "storage/types.h"
@@ -14,7 +15,7 @@ class Datum;
 
 class Field {
 public:
-    Field(ColumnId id, const std::string& name, FieldType type, int precision, int scale, bool nullable);
+    Field(ColumnId id, std::string name, FieldType type, int precision, int scale, bool nullable);
     Field(ColumnId id, const std::string& name, FieldType type, bool nullable)
             : Field(id, name, type, -1, -1, nullable) {
         DCHECK(type != OLAP_FIELD_TYPE_DECIMAL32);
@@ -23,8 +24,8 @@ public:
         DCHECK(type != OLAP_FIELD_TYPE_ARRAY);
     }
 
-    Field(ColumnId id, const std::string& name, const TypeInfoPtr& type, bool is_nullable = true)
-            : _id(id), _name(name), _type(type), _is_nullable(is_nullable) {}
+    Field(ColumnId id, std::string name, TypeInfoPtr type, bool is_nullable = true)
+            : _id(id), _name(std::move(name)), _type(std::move(type)), _is_nullable(is_nullable) {}
 
     Field(const Field&) = default;
     Field(Field&&) = default;

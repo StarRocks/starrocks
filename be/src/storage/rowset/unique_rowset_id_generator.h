@@ -32,7 +32,7 @@ namespace starrocks {
 class UniqueRowsetIdGenerator : public RowsetIdGenerator {
 public:
     UniqueRowsetIdGenerator(const UniqueId& backend_uid);
-    ~UniqueRowsetIdGenerator() {}
+    ~UniqueRowsetIdGenerator() override {}
 
     RowsetId next_id() override;
 

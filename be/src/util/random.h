@@ -22,7 +22,7 @@
 #ifndef STARROCKS_BE_SRC_COMMON_UTIL_RANDOM_H
 #define STARROCKS_BE_SRC_COMMON_UTIL_RANDOM_H
 
-#include <stdint.h>
+#include <cstdint>
 
 namespace starrocks {
 

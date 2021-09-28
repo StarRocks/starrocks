@@ -53,6 +53,9 @@ using strings::Substitute;
 
 Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result) {
     switch (type.type) {
+    case TYPE_BOOLEAN:
+        *result = arrow::boolean();
+        break;
     case TYPE_TINYINT:
         *result = arrow::int8();
         break;
@@ -85,6 +88,11 @@ Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::
         break;
     case TYPE_DECIMALV2:
         *result = std::make_shared<arrow::Decimal128Type>(27, 9);
+        break;
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
+        *result = std::make_shared<arrow::Decimal128Type>(type.precision, type.scale);
         break;
     default:
         return Status::InvalidArgument(strings::Substitute("Unknown primitive type($0)", type.type));
@@ -148,7 +156,7 @@ Status convert_to_row_desc(ObjectPool* pool, const arrow::Schema& schema, RowDes
     TDescriptorTableBuilder builder;
     TTupleDescriptorBuilder tuple_builder;
     for (int i = 0; i < schema.num_fields(); ++i) {
-        auto field = schema.field(i);
+        const auto& field = schema.field(i);
         TSlotDescriptorBuilder slot_builder;
         RETURN_IF_ERROR(convert_to_slot_desc(*field, i, &slot_builder));
         tuple_builder.add_slot(slot_builder.build());
@@ -234,13 +242,13 @@ public:
                 int len = 48;
                 char* v = LargeIntValue::to_string(reinterpret_cast<const PackedInt128*>(cell_ptr)->value, buf, &len);
                 std::string temp(v, len);
-                ARROW_RETURN_NOT_OK(builder.Append(std::move(temp)));
+                ARROW_RETURN_NOT_OK(builder.Append(temp));
                 break;
             }
             case TYPE_DECIMAL: {
                 const DecimalValue* decimal_val = reinterpret_cast<const DecimalValue*>(cell_ptr);
                 std::string decimal_str = decimal_val->to_string();
-                ARROW_RETURN_NOT_OK(builder.Append(std::move(decimal_str)));
+                ARROW_RETURN_NOT_OK(builder.Append(decimal_str));
                 break;
             }
             default: {
@@ -325,7 +333,7 @@ Status FromRowBatchConverter::convert(std::shared_ptr<arrow::RecordBatch>* out) 
 
     for (size_t idx = 0; idx < num_fields; ++idx) {
         _cur_field_idx = idx;
-        _cur_slot_ref.reset(new SlotRef(slot_descs[idx]));
+        _cur_slot_ref = std::make_unique<SlotRef>(slot_descs[idx]);
         RETURN_IF_ERROR(_cur_slot_ref->prepare(slot_descs[idx], _batch.row_desc()));
         auto arrow_st = arrow::VisitTypeInline(*_schema->field(idx)->type(), this);
         if (!arrow_st.ok()) {
@@ -419,7 +427,7 @@ Status ToRowBatchConverter::convert(std::shared_ptr<RowBatch>* result) {
         }
     }
     for (size_t idx = 0; idx < num_fields; ++idx) {
-        _cur_slot_ref.reset(new SlotRef(slot_descs[idx]));
+        _cur_slot_ref = std::make_unique<SlotRef>(slot_descs[idx]);
         RETURN_IF_ERROR(_cur_slot_ref->prepare(slot_descs[idx], _row_desc));
         auto arrow_st = arrow::VisitArrayInline(*_batch.column(idx), this);
         if (!arrow_st.ok()) {

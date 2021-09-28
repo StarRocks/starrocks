@@ -10,9 +10,9 @@ namespace starrocks::vectorized {
 class SchemaDummyScanner : public SchemaScanner {
 public:
     SchemaDummyScanner();
-    virtual ~SchemaDummyScanner();
+    ~SchemaDummyScanner() override;
     virtual Status start();
-    virtual Status get_next(ChunkPtr* chunk, bool* eos);
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
     static SchemaScanner::ColumnDesc _s_dummy_columns[];

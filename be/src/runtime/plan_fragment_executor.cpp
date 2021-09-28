@@ -21,6 +21,9 @@
 
 #include "runtime/plan_fragment_executor.h"
 
+#include <memory>
+#include <utility>
+
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "exec/data_sink.h"
@@ -44,9 +47,9 @@
 
 namespace starrocks {
 
-PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, const report_status_callback& report_status_cb)
+PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb)
         : _exec_env(exec_env),
-          _report_status_cb(report_status_cb),
+          _report_status_cb(std::move(report_status_cb)),
           _done(false),
           _prepared(false),
           _closed(false),
@@ -62,14 +65,13 @@ PlanFragmentExecutor::~PlanFragmentExecutor() {
 
 Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     const TPlanFragmentExecParams& params = request.params;
-    _is_vectorized = params.use_vectorized;
     _query_id = params.query_id;
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(_query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id)
               << " backend_num=" << request.backend_num;
 
-    _runtime_state.reset(new RuntimeState(request, request.query_options, request.query_globals, _exec_env));
+    _runtime_state = std::make_unique<RuntimeState>(request, request.query_options, request.query_globals, _exec_env);
 
     if (_is_vectorized) {
         _runtime_state->set_batch_size(config::vector_chunk_size);
@@ -126,7 +128,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     RETURN_IF_ERROR(_runtime_state->create_block_mgr());
 
     // set up desc tbl
-    DescriptorTbl* desc_tbl = NULL;
+    DescriptorTbl* desc_tbl = nullptr;
     DCHECK(request.__isset.desc_tbl);
     RETURN_IF_ERROR(DescriptorTbl::create(obj_pool(), request.desc_tbl, &desc_tbl));
     _runtime_state->set_desc_tbl(desc_tbl);
@@ -188,8 +190,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
         RuntimeProfile* sink_profile = _sink->profile();
 
-        if (sink_profile != NULL) {
-            profile()->add_child(sink_profile, true, NULL);
+        if (sink_profile != nullptr) {
+            profile()->add_child(sink_profile, true, nullptr);
         }
 
         _collect_query_statistics_with_every_batch = params.__isset.send_query_statistics_with_every_batch
@@ -197,11 +199,11 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
                                                              : false;
     } else {
         // _sink is set to NULL
-        _sink.reset(NULL);
+        _sink.reset(nullptr);
     }
 
     // set up profile counters
-    profile()->add_child(_plan->runtime_profile(), true, NULL);
+    profile()->add_child(_plan->runtime_profile(), true, nullptr);
     _rows_produced_counter = ADD_COUNTER(profile(), "RowsProduced", TUnit::UNIT);
 
     VLOG(3) << "plan_root=\n" << _plan->debug_string();
@@ -209,7 +211,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     _prepared = true;
 
     _query_statistics.reset(new QueryStatistics());
-    if (_sink.get() != NULL) {
+    if (_sink.get() != nullptr) {
         _sink->set_query_statistics(_query_statistics);
     }
 

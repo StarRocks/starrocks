@@ -17,10 +17,10 @@
 #ifndef STRINGS_FASTMEM_H_
 #define STRINGS_FASTMEM_H_
 
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 
 #include "gutil/integral_types.h"
 #include "gutil/port.h"
