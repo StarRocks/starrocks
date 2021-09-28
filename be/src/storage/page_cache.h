@@ -101,7 +101,7 @@ private:
 // class will release the cache entry when it is destroyed.
 class PageCacheHandle {
 public:
-    PageCacheHandle() {}
+    PageCacheHandle() = default;
     PageCacheHandle(Cache* cache, Cache::Handle* handle) : _cache(cache), _handle(handle) {}
     ~PageCacheHandle() {
         if (_handle != nullptr) {

@@ -83,7 +83,7 @@ private:
 template <class T>
 class RefCounted : public subtle::RefCountedBase {
 public:
-    RefCounted() {}
+    RefCounted() = default;
 
     void AddRef() const { subtle::RefCountedBase::AddRef(); }
 
@@ -94,7 +94,7 @@ public:
     }
 
 protected:
-    ~RefCounted() {}
+    ~RefCounted() = default;
 
 private:
     DISALLOW_COPY_AND_ASSIGN(RefCounted<T>);
@@ -131,7 +131,7 @@ struct DefaultRefCountedThreadSafeTraits {
 template <class T, typename Traits = DefaultRefCountedThreadSafeTraits<T> >
 class RefCountedThreadSafe : public subtle::RefCountedThreadSafeBase {
 public:
-    RefCountedThreadSafe() {}
+    RefCountedThreadSafe() = default;
 
     void AddRef() const { subtle::RefCountedThreadSafeBase::AddRef(); }
 
@@ -142,7 +142,7 @@ public:
     }
 
 protected:
-    ~RefCountedThreadSafe() {}
+    ~RefCountedThreadSafe() = default;
 
 private:
     friend struct DefaultRefCountedThreadSafeTraits<T>;
@@ -165,7 +165,7 @@ public:
 
 private:
     friend class starrocks::RefCountedThreadSafe<starrocks::RefCountedData<T> >;
-    ~RefCountedData() {}
+    ~RefCountedData() = default;
 };
 
 } // namespace starrocks

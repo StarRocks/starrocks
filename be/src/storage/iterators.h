@@ -88,8 +88,8 @@ public:
 // Used to read data in RowBlockV2 one by one
 class RowwiseIterator {
 public:
-    RowwiseIterator() {}
-    virtual ~RowwiseIterator() {}
+    RowwiseIterator() = default;
+    virtual ~RowwiseIterator() = default;
 
     // Initialize this iterator and make it ready to read with
     // input options.

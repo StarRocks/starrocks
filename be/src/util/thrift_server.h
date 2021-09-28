@@ -76,7 +76,7 @@ public:
                  MetricRegistry* metrics = nullptr, int num_worker_threads = DEFAULT_WORKER_THREADS,
                  ServerType server_type = THREADED);
 
-    ~ThriftServer() {}
+    ~ThriftServer() = default;
 
     int port() const { return _port; }
 

@@ -28,8 +28,8 @@ namespace starrocks {
 // Update BE config.
 class UpdateConfigAction : public HttpHandler {
 public:
-    UpdateConfigAction() {}
-    ~UpdateConfigAction() override {}
+    UpdateConfigAction() = default;
+    ~UpdateConfigAction() override = default;
 
     void handle(HttpRequest* req) override;
 };

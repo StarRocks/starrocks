@@ -55,7 +55,7 @@ public:
     SortedRunMerger(TupleRowComparator compare_less_than, RowDescriptor* row_desc, RuntimeProfile* profile,
                     bool deep_copy_input);
 
-    ~SortedRunMerger() {}
+    ~SortedRunMerger() = default;
 
     // Prepare this merger to merge and return rows from the sorted runs in 'input_runs'.
     // Retrieves the first batch from each run and sets up the binary heap implementing

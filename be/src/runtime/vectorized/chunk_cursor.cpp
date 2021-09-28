@@ -38,7 +38,7 @@ ChunkCursor::ChunkCursor(ChunkSupplier chunk_supplier, ChunkProbeSupplier chunk_
     }
 }
 
-ChunkCursor::~ChunkCursor() {}
+ChunkCursor::~ChunkCursor() = default;
 
 bool ChunkCursor::operator<(const ChunkCursor& cursor) const {
     DCHECK_EQ(_current_order_by_columns.size(), cursor._current_order_by_columns.size());

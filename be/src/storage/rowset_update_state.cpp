@@ -12,9 +12,9 @@ namespace starrocks {
 
 using vectorized::ChunkHelper;
 
-RowsetUpdateState::RowsetUpdateState() {}
+RowsetUpdateState::RowsetUpdateState() = default;
 
-RowsetUpdateState::~RowsetUpdateState() {}
+RowsetUpdateState::~RowsetUpdateState() = default;
 
 Status RowsetUpdateState::load(int64_t tablet_id, Rowset* rowset) {
     if (UNLIKELY(!_status.ok())) {

@@ -26,7 +26,7 @@ namespace memory {
 
 WriteTxn::WriteTxn(scoped_refptr<Schema>* schema) : _schema(schema->get()) {}
 
-WriteTxn::~WriteTxn() {}
+WriteTxn::~WriteTxn() = default;
 
 PartialRowBatch* WriteTxn::new_batch() {
     _batches.emplace_back(new PartialRowBatch(&_schema));

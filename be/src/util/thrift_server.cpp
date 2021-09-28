@@ -48,7 +48,7 @@ public:
     ThriftServerEventProcessor(ThriftServer* thrift_server) : _thrift_server(thrift_server), _signal_fired(false) {}
 
     // friendly to code style
-    ~ThriftServerEventProcessor() override {}
+    ~ThriftServerEventProcessor() override = default;
 
     // Called by TNonBlockingServer when server has acquired its resources and is ready to
     // serve, and signals to StartAndWaitForServer that start-up is finished.

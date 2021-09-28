@@ -33,7 +33,7 @@ PartialRowBatch::PartialRowBatch(scoped_refptr<Schema>* schema) : _schema(*schem
     _cells.reserve(_schema->num_columns());
 }
 
-PartialRowBatch::~PartialRowBatch() {}
+PartialRowBatch::~PartialRowBatch() = default;
 
 Status PartialRowBatch::load(std::vector<uint8_t>&& buffer) {
     _buffer = std::move(buffer);
@@ -128,7 +128,7 @@ Status PartialRowWriter::start_batch(size_t row_capacity, size_t byte_capacity) 
     return Status::OK();
 }
 
-PartialRowWriter::~PartialRowWriter() {}
+PartialRowWriter::~PartialRowWriter() = default;
 
 Status PartialRowWriter::start_row() {
     if (_row_size >= _row_capacity) {

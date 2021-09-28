@@ -159,7 +159,7 @@ std::string OlapTableDescriptor::debug_string() const {
 
 SchemaTableDescriptor::SchemaTableDescriptor(const TTableDescriptor& tdesc)
         : TableDescriptor(tdesc), _schema_table_type(tdesc.schemaTable.tableType) {}
-SchemaTableDescriptor::~SchemaTableDescriptor() {}
+SchemaTableDescriptor::~SchemaTableDescriptor() = default;
 
 std::string SchemaTableDescriptor::debug_string() const {
     std::stringstream out;
@@ -169,7 +169,7 @@ std::string SchemaTableDescriptor::debug_string() const {
 
 BrokerTableDescriptor::BrokerTableDescriptor(const TTableDescriptor& tdesc) : TableDescriptor(tdesc) {}
 
-BrokerTableDescriptor::~BrokerTableDescriptor() {}
+BrokerTableDescriptor::~BrokerTableDescriptor() = default;
 
 std::string BrokerTableDescriptor::debug_string() const {
     std::stringstream out;
@@ -179,7 +179,7 @@ std::string BrokerTableDescriptor::debug_string() const {
 
 EsTableDescriptor::EsTableDescriptor(const TTableDescriptor& tdesc) : TableDescriptor(tdesc) {}
 
-EsTableDescriptor::~EsTableDescriptor() {}
+EsTableDescriptor::~EsTableDescriptor() = default;
 
 std::string EsTableDescriptor::debug_string() const {
     std::stringstream out;

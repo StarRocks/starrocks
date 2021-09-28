@@ -86,7 +86,8 @@ public:
     // that have 1+ thread usage).
     class ResourcePool {
     public:
-        virtual ~ResourcePool(){};
+        virtual ~ResourcePool() = default;
+        ;
         // Acquire a thread for the pool.  This will always succeed; the
         // pool will go over the quota.
         // Pools should use this API to reserve threads they need in order

@@ -31,7 +31,7 @@ namespace starrocks {
 // NOTE: Deprecated, use `Env::WritableFile` instead.
 class FileWriter {
 public:
-    virtual ~FileWriter() {}
+    virtual ~FileWriter() = default;
 
     virtual Status open() = 0;
 

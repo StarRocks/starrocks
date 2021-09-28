@@ -72,7 +72,7 @@ class TraceAlloc {
 public:
     using value_type = T;
 
-    TraceAlloc() noexcept {}
+    TraceAlloc() noexcept = default;
     template <class U>
     TraceAlloc(TraceAlloc<U> const&) noexcept {}
 
@@ -798,7 +798,7 @@ static std::unique_ptr<HashIndex> create_hash_index(FieldType key_type, size_t f
     }
 }
 
-PrimaryIndex::PrimaryIndex() {}
+PrimaryIndex::PrimaryIndex() = default;
 
 PrimaryIndex::~PrimaryIndex() {
     if (_tablet_id != 0) {

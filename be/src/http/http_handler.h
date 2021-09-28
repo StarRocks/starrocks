@@ -30,7 +30,7 @@ class HttpChannel;
 // Handler for on http request
 class HttpHandler {
 public:
-    virtual ~HttpHandler() {}
+    virtual ~HttpHandler() = default;
     virtual void handle(HttpRequest* req) = 0;
 
     virtual bool request_will_be_read_progressively() { return false; }

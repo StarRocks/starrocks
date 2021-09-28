@@ -42,7 +42,7 @@ BRpcService::BRpcService(ExecEnv* exec_env) : _exec_env(exec_env), _server(new b
     brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
 }
 
-BRpcService::~BRpcService() {}
+BRpcService::~BRpcService() = default;
 
 Status BRpcService::start(int port) {
     // Add service

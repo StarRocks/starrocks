@@ -279,7 +279,7 @@ private:
             _current_tuple = _buffer_start + block_offset + past_end_bytes;
         }
 
-        ~TupleIterator() {}
+        ~TupleIterator() = default;
 
         // Sets _current_tuple to point to the next tuple in the run. Increments
         // block_index and resets buffer if the next tuple is in the next block.

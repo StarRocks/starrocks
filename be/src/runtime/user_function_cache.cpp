@@ -97,7 +97,7 @@ UserFunctionCacheEntry::~UserFunctionCacheEntry() {
     }
 }
 
-UserFunctionCache::UserFunctionCache() {}
+UserFunctionCache::UserFunctionCache() = default;
 
 UserFunctionCache::~UserFunctionCache() {
     std::lock_guard<std::mutex> l(_cache_lock);

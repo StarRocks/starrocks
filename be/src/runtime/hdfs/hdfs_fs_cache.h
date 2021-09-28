@@ -30,7 +30,7 @@ private:
     std::mutex _lock;
     HdfsFsMap _cache;
 
-    HdfsFsCache() {}
+    HdfsFsCache() = default;
     DISALLOW_COPY_AND_ASSIGN(HdfsFsCache);
 };
 

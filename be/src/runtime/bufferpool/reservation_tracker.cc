@@ -34,7 +34,7 @@
 
 namespace starrocks {
 
-ReservationTracker::ReservationTracker() {}
+ReservationTracker::ReservationTracker() = default;
 
 ReservationTracker::~ReservationTracker() {
     DCHECK(!initialized_);

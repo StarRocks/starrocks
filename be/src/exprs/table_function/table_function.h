@@ -11,7 +11,7 @@ namespace starrocks::vectorized {
 
 class TableFunctionState {
 public:
-    TableFunctionState() {}
+    TableFunctionState() = default;
 
     void set_params(starrocks::vectorized::Columns columns) { this->_columns = std::move(columns); }
 

@@ -50,7 +50,7 @@ Status MemSubTablet::create(uint64_t version, const Schema& schema, std::unique_
 
 MemSubTablet::MemSubTablet() : _index(new HashIndex(1 << 16)) {}
 
-MemSubTablet::~MemSubTablet() {}
+MemSubTablet::~MemSubTablet() = default;
 
 Status MemSubTablet::get_size(uint64_t version, size_t* size) const {
     std::lock_guard<std::mutex> lg(_lock);

@@ -44,7 +44,7 @@ std::string VectorizedInfoFunc::debug_string() const {
     return out.str();
 }
 
-VectorizedInfoFunc::~VectorizedInfoFunc() {}
+VectorizedInfoFunc::~VectorizedInfoFunc() = default;
 
 } // namespace vectorized
 } // namespace starrocks

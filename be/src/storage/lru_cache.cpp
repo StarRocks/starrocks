@@ -60,7 +60,7 @@ uint32_t CacheKey::hash(const char* data, size_t n, uint32_t seed) const {
     return h;
 }
 
-Cache::~Cache() {}
+Cache::~Cache() = default;
 
 // LRU cache implementation
 LRUHandle* HandleTable::lookup(const CacheKey& key, uint32_t hash) {

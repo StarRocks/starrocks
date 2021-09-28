@@ -58,7 +58,7 @@ using BufferHandle = BufferPool::BufferHandle;
 /// coalescing of the holes in most cases.
 class FreeList {
 public:
-    FreeList() {}
+    FreeList() = default;
 
     /// Gets a free buffer. If the list is non-empty, returns true and sets 'buffer' to
     /// one of the buffers previously added with AddFreeBuffer(). Otherwise returns false.

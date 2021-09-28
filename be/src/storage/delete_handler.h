@@ -38,8 +38,8 @@ class RowCursor;
 
 class DeleteConditionHandler {
 public:
-    DeleteConditionHandler() {}
-    ~DeleteConditionHandler() {}
+    DeleteConditionHandler() = default;
+    ~DeleteConditionHandler() = default;
 
     // generated DeletePredicatePB by TCondition
     OLAPStatus generate_delete_predicate(const TabletSchema& schema, const std::vector<TCondition>& conditions,
@@ -68,7 +68,7 @@ private:
 // Represents a delete condition
 struct DeleteConditions {
     DeleteConditions() : filter_version(0), del_cond(nullptr) {}
-    ~DeleteConditions() {}
+    ~DeleteConditions() = default;
 
     int32_t filter_version; // delete condition version
     Conditions* del_cond;   // delete condition
@@ -93,7 +93,7 @@ public:
     typedef std::vector<DeleteConditions>::size_type cond_num_t;
 
     DeleteHandler() : _is_inited(false) {}
-    ~DeleteHandler() {}
+    ~DeleteHandler() = default;
 
     // Use regular expression to extract 'column_name', 'op' and 'operands'
     static bool parse_condition(const std::string& condition_str, TCondition* condition);

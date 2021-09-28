@@ -278,7 +278,7 @@ enum DecompressState { DECOMPRESS_HEADER, DECOMPRESS_START, DECOMPRESS_CONTINUE,
 class DecompressionStream : public SeekableInputStream {
 public:
     DecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t bufferSize, MemoryPool& pool);
-    ~DecompressionStream() override {}
+    ~DecompressionStream() override = default;
     bool Next(const void** data, int* size) override;
     void BackUp(int count) override;
     bool Skip(int count) override;
@@ -634,7 +634,7 @@ class BlockDecompressionStream : public DecompressionStream {
 public:
     BlockDecompressionStream(std::unique_ptr<SeekableInputStream> inStream, size_t blockSize, MemoryPool& pool);
 
-    ~BlockDecompressionStream() override {}
+    ~BlockDecompressionStream() override = default;
     std::string getName() const override = 0;
 
 protected:

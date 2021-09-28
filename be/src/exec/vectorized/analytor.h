@@ -35,7 +35,7 @@ class Analytor {
     friend class ManagedFunctionStates;
 
 public:
-    ~Analytor() {}
+    ~Analytor() = default;
     Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc);
 
     Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, MemTracker* expr_mem_tracker,

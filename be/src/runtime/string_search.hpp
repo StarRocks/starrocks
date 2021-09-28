@@ -68,7 +68,7 @@ namespace starrocks {
 class StringSearch {
 
 public:
-    virtual ~StringSearch() {}
+    virtual ~StringSearch() = default;
     StringSearch() : _pattern(nullptr), _mask(0) {}
 
     // Initialize/Precompute a StringSearch object from the pattern

@@ -41,7 +41,8 @@ class ThriftServer;
 class HeartbeatServer : public HeartbeatServiceIf {
 public:
     explicit HeartbeatServer(TMasterInfo* master_info);
-    ~HeartbeatServer() override{};
+    ~HeartbeatServer() override = default;
+    ;
 
     virtual void init_cluster_id();
 

@@ -96,13 +96,9 @@ public:
      */
     Roaring64Map() = default;
 
-    Roaring64Map(const Roaring64Map& other) : roarings(other.roarings), copyOnWrite(other.copyOnWrite) {}
+    Roaring64Map(const Roaring64Map& other) = default;
 
-    Roaring64Map& operator=(const Roaring64Map& other) {
-        this->roarings = other.roarings;
-        this->copyOnWrite = other.copyOnWrite;
-        return *this;
-    }
+    Roaring64Map& operator=(const Roaring64Map& other) = default;
 
     Roaring64Map(Roaring64Map&& other) noexcept : roarings(std::move(other.roarings)), copyOnWrite(other.copyOnWrite) {
         other.copyOnWrite = false;

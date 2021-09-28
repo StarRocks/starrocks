@@ -29,7 +29,7 @@ namespace starrocks {
 
 NullPredicate::NullPredicate(uint32_t column_id, bool is_null) : ColumnPredicate(column_id), _is_null(is_null) {}
 
-NullPredicate::~NullPredicate() {}
+NullPredicate::~NullPredicate() = default;
 
 void NullPredicate::evaluate(VectorizedRowBatch* batch) const {
     uint16_t n = batch->size();

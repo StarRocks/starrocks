@@ -48,7 +48,7 @@ SmallFileMgr::SmallFileMgr(ExecEnv* env, std::string local_path) : _exec_env(env
     });
 }
 
-SmallFileMgr::~SmallFileMgr() {}
+SmallFileMgr::~SmallFileMgr() = default;
 
 Status SmallFileMgr::init() {
     RETURN_IF_ERROR(_load_local_files());

@@ -24,7 +24,7 @@ EsHttpScanNode::EsHttpScanNode(ObjectPool* pool, const TPlanNode& tnode, const D
           _scan_finished(false),
           _result_chunks(config::doris_scanner_queue_size) {}
 
-EsHttpScanNode::~EsHttpScanNode() {}
+EsHttpScanNode::~EsHttpScanNode() = default;
 
 Status EsHttpScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));

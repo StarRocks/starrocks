@@ -77,7 +77,7 @@ struct SliceKey8 {
     } u;
     static_assert(sizeof(u) == sizeof(u.value));
     bool operator==(const SliceKey8& k) const { return u.value == k.u.value; }
-    SliceKey8() {}
+    SliceKey8() = default;
     SliceKey8(const SliceKey8& x) { u.value = x.u.value; }
     SliceKey8& operator=(const SliceKey8& x) {
         u.value = x.u.value;
@@ -99,7 +99,7 @@ struct SliceKey16 {
     } u;
     static_assert(sizeof(u) == sizeof(u.value));
     bool operator==(const SliceKey16& k) const { return u.value == k.u.value; }
-    SliceKey16() {}
+    SliceKey16() = default;
     SliceKey16(const SliceKey16& x) { u.value = x.u.value; }
     SliceKey16& operator=(const SliceKey16& x) {
         u.value = x.u.value;
