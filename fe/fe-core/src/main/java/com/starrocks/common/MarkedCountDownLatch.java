@@ -39,7 +39,7 @@ public class MarkedCountDownLatch<K, V> extends CountDownLatch {
         marks = HashMultimap.create();
     }
 
-    public void addMark(K key, V value) {
+    public synchronized void addMark(K key, V value) {
         marks.put(key, value);
     }
 
