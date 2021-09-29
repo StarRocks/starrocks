@@ -163,7 +163,7 @@ FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId&
     _start_time = DateTimeValue::local_time();
 }
 
-FragmentExecState::~FragmentExecState() {}
+FragmentExecState::~FragmentExecState() = default;
 
 Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
     if (params.__isset.query_options) {

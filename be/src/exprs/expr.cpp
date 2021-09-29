@@ -168,11 +168,11 @@ Expr::Expr(TypeDescriptor type)
     }
 }
 
-Expr::Expr(const TypeDescriptor& type, bool is_slotref)
+Expr::Expr(TypeDescriptor type, bool is_slotref)
         : _opcode(TExprOpcode::INVALID_OPCODE),
           // _vector_opcode(TExprOpcode::INVALID_OPCODE),
           _is_slotref(is_slotref),
-          _type(type),
+          _type(std::move(type)),
           _output_scale(-1),
           _output_column(-1),
           _fn_context_index(-1) {
@@ -260,7 +260,7 @@ Expr::Expr(const TExprNode& node, bool is_slotref)
     }
 }
 
-Expr::~Expr() {}
+Expr::~Expr() = default;
 
 Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx) {
     // input is empty

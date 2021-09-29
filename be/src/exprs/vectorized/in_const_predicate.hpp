@@ -44,7 +44,7 @@ public:
     VectorizedInConstPredicate(const VectorizedInConstPredicate& other)
             : Predicate(other), _is_not_in(other._is_not_in), _null_in_set(false) {}
 
-    ~VectorizedInConstPredicate() override {}
+    ~VectorizedInConstPredicate() override = default;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedInConstPredicate(*this)); }
 

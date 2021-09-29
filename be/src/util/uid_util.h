@@ -80,7 +80,7 @@ struct UniqueId {
         return uid;
     }
 
-    ~UniqueId() noexcept {}
+    ~UniqueId() noexcept = default;
 
     std::string to_string() const {
         char buf[33];

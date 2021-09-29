@@ -30,6 +30,6 @@ SchemaScanner::ColumnDesc SchemaStatisticsScanner::_s_cols_statistics[] = {
 SchemaStatisticsScanner::SchemaStatisticsScanner()
         : SchemaScanner(_s_cols_statistics, sizeof(_s_cols_statistics) / sizeof(SchemaScanner::ColumnDesc)) {}
 
-SchemaStatisticsScanner::~SchemaStatisticsScanner() {}
+SchemaStatisticsScanner::~SchemaStatisticsScanner() = default;
 
 } // namespace starrocks::vectorized

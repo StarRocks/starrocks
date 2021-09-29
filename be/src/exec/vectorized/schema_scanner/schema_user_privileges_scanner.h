@@ -19,7 +19,7 @@ public:
 private:
     Status fill_chunk(ChunkPtr* chunk);
 
-    int _user_priv_index;
+    int _user_priv_index{0};
     TGetUserPrivsResult _user_privs_result;
     static SchemaScanner::ColumnDesc _s_user_privs_columns[];
 };

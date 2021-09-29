@@ -22,10 +22,10 @@ class TupleDescriptor;
 
 namespace vectorized {
 struct EsScanCounter {
-    EsScanCounter() : num_rows_returned(0), num_rows_filtered(0) {}
+    EsScanCounter() {}
 
-    int64_t num_rows_returned;
-    int64_t num_rows_filtered;
+    int64_t num_rows_returned{0};
+    int64_t num_rows_filtered{0};
 };
 
 class EsHttpScanner {

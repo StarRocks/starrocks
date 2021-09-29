@@ -266,8 +266,7 @@ DiskIoMgr::DiskIoMgr()
         : _num_threads_per_disk(config::num_threads_per_disk),
           _max_buffer_size(config::read_size),
           _min_buffer_size(config::min_buffer_size),
-          _cached_read_options(nullptr),
-          _shut_down(false),
+
           _total_bytes_read_counter(TUnit::BYTES),
           _read_timer(TUnit::TIME_NS)
 // _read_timer(TUnit::TIME_NS),

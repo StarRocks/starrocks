@@ -10,9 +10,9 @@
 
 namespace starrocks {
 
-DelVector::DelVector() {}
+DelVector::DelVector() = default;
 
-DelVector::~DelVector() {}
+DelVector::~DelVector() = default;
 
 void DelVector::set_empty() {
     _version = 1;

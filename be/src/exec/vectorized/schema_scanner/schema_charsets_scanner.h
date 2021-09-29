@@ -26,7 +26,7 @@ private:
 
     Status fill_chunk(ChunkPtr* chunk);
 
-    int _index;
+    int _index{0};
     static SchemaScanner::ColumnDesc _s_css_columns[];
     static CharsetStruct _s_charsets[];
 };

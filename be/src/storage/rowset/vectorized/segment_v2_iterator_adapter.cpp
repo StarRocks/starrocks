@@ -13,7 +13,7 @@ SegmentV2IteratorAdapter::SegmentV2IteratorAdapter(const TabletSchema& tablet_sc
                                                    const ::starrocks::Schema& out_schema)
         : _tablet_schema(tablet_schema), _new_types(new_types), _out_schema(out_schema) {}
 
-SegmentV2IteratorAdapter::~SegmentV2IteratorAdapter() {}
+SegmentV2IteratorAdapter::~SegmentV2IteratorAdapter() = default;
 
 Status SegmentV2IteratorAdapter::init(const ::starrocks::StorageReadOptions& options) {
     // rewrite schema

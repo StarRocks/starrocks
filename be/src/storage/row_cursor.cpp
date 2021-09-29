@@ -33,7 +33,7 @@ using std::string;
 using std::vector;
 
 namespace starrocks {
-RowCursor::RowCursor() : _fixed_len(0), _variable_len(0) {}
+RowCursor::RowCursor() {}
 
 RowCursor::~RowCursor() {
     delete[] _owned_fixed_buf;

@@ -57,7 +57,6 @@ public class BackendsProcDir implements ProcDirInterface {
             .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status")
             .build();
 
-    public static final int IP_INDEX = 2;
     public static final int HOSTNAME_INDEX = 3;
 
     private SystemInfoService clusterInfoService;

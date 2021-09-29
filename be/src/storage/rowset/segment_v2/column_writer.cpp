@@ -90,7 +90,7 @@ private:
 
 class NullMapRLEBuilder {
 public:
-    NullMapRLEBuilder() : _has_null(false), _bitmap_buf(512), _rle_encoder(&_bitmap_buf, 1) {}
+    NullMapRLEBuilder() : _bitmap_buf(512), _rle_encoder(&_bitmap_buf, 1) {}
 
     explicit NullMapRLEBuilder(size_t reserve_bits)
             : _has_null(false), _bitmap_buf(BitmapSize(reserve_bits)), _rle_encoder(&_bitmap_buf, 1) {}
@@ -116,14 +116,14 @@ public:
     uint64_t size() { return _bitmap_buf.size(); }
 
 private:
-    bool _has_null;
+    bool _has_null{false};
     faststring _bitmap_buf;
     RleEncoder<bool> _rle_encoder;
 };
 
 class NullMapBitshuffleBuilder {
 public:
-    NullMapBitshuffleBuilder() : _has_null(false), _null_map(32 * 1024) {}
+    NullMapBitshuffleBuilder() : _null_map(32 * 1024) {}
 
     explicit NullMapBitshuffleBuilder(size_t reserve_bits) : _has_null(false), _null_map(reserve_bits) {}
 
@@ -162,7 +162,7 @@ public:
     }
 
 private:
-    bool _has_null;
+    bool _has_null{false};
     faststring _null_map;
     faststring _encode_buf;
 };
@@ -179,6 +179,12 @@ public:
     Status append(const vectorized::Column& column) override;
 
     Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) override {
+        // if column is Array<String>, encoding maybe not set
+        // check _is_speculated again to avoid _page_builder is not initialized
+        if (!_is_speculated) {
+            _scalar_column_writer->set_encoding(DEFAULT_ENCODING);
+            _is_speculated = true;
+        }
         return _scalar_column_writer->append(data, null_flags, count, has_null);
     };
 
@@ -586,12 +592,12 @@ Status ScalarColumnWriter::append_array_offsets(const vectorized::Column& column
 
         _next_rowid += num_written;
         raw_data += field_size * num_written;
+        _previous_ordinal += data[offset_ordinal + num_written] - data[offset_ordinal];
+        offset_ordinal += num_written;
         if (page_full) {
             RETURN_IF_ERROR(finish_current_page());
             _element_ordinal = _previous_ordinal;
         }
-        _previous_ordinal += data[offset_ordinal + num_written] - data[offset_ordinal];
-        offset_ordinal += num_written;
         remaining -= num_written;
     }
     return Status::OK();

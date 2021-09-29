@@ -238,13 +238,8 @@ private:
 class HllSetResolver {
 public:
     HllSetResolver()
-            : _buf_ref(nullptr),
-              _buf_len(0),
-              _set_type(HLL_DATA_EMPTY),
-              _full_value_position(nullptr),
-              _explicit_value(nullptr),
-              _explicit_num(0),
-              _sparse_count(nullptr) {}
+
+    {}
 
     ~HllSetResolver() = default;
 
@@ -284,14 +279,14 @@ public:
     void parse();
 
 private:
-    char* _buf_ref;        // set
-    int _buf_len;          // set len
-    HllDataType _set_type; //set type
-    char* _full_value_position;
-    uint64_t* _explicit_value;
-    ExpliclitLengthValueType _explicit_num;
+    char* _buf_ref{nullptr};               // set
+    int _buf_len{0};                       // set len
+    HllDataType _set_type{HLL_DATA_EMPTY}; //set type
+    char* _full_value_position{nullptr};
+    uint64_t* _explicit_value{nullptr};
+    ExpliclitLengthValueType _explicit_num{0};
     std::map<SparseIndexType, SparseValueType> _sparse_map;
-    SparseLengthValueType* _sparse_count;
+    SparseLengthValueType* _sparse_count{nullptr};
 };
 
 // todo(kks): remove this when dpp_sink class was removed

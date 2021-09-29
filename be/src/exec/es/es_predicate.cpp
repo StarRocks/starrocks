@@ -138,7 +138,7 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
     return res;
 }
 
-SExtLiteral::~SExtLiteral() {}
+SExtLiteral::~SExtLiteral() = default;
 
 int8_t SExtLiteral::get_byte() {
     DCHECK(_type == TYPE_TINYINT);
@@ -209,7 +209,7 @@ std::string SExtLiteral::get_largeint_string() {
 }
 
 EsPredicate::EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, ObjectPool* pool)
-        : _context(context), _disjuncts_num(0), _tuple_desc(tuple_desc), _es_query_status(Status::OK()), _pool(pool) {}
+        : _context(context), _tuple_desc(tuple_desc), _es_query_status(Status::OK()), _pool(pool) {}
 
 EsPredicate::~EsPredicate() {
     for (int i = 0; i < _disjuncts.size(); i++) {

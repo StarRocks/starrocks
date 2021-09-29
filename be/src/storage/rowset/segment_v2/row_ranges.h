@@ -76,7 +76,7 @@ public:
         return false;
     }
 
-    RowRange() : _from(0), _to(0) {}
+    RowRange() {}
 
     // Creates a range of [from, to) (from inclusive and to exclusive; empty ranges are invalid)
     RowRange(int64_t from, int64_t to) : _from(from), _to(to) {}
@@ -96,13 +96,13 @@ public:
     std::string to_string() const { return strings::Substitute("[$0-$1)", _from, _to); }
 
 private:
-    int64_t _from;
-    int64_t _to;
+    int64_t _from{0};
+    int64_t _to{0};
 };
 
 class RowRanges {
 public:
-    RowRanges() : _count(0) {}
+    RowRanges() {}
 
     void clear() {
         _ranges.clear();
@@ -269,7 +269,7 @@ public:
 
 private:
     std::vector<RowRange> _ranges;
-    size_t _count;
+    size_t _count{0};
 };
 
 } // namespace segment_v2

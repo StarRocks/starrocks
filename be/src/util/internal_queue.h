@@ -53,7 +53,7 @@ public:
     struct Node {
     public:
         Node() : parent_queue(nullptr), next_node(nullptr), prev_node(nullptr) {}
-        virtual ~Node() {}
+        virtual ~Node() = default;
 
         /// Returns true if the node is in a queue.
         bool in_queue() const { return parent_queue != nullptr; }
@@ -77,7 +77,7 @@ public:
         Node* prev_node;
     };
 
-    InternalQueueBase() : head_(nullptr), tail_(nullptr), size_(0) {}
+    InternalQueueBase() : head_(nullptr), tail_(nullptr) {}
 
     /// Returns the element at the head of the list without dequeuing or NULL
     /// if the queue is empty. This is O(1).
@@ -271,7 +271,7 @@ private:
     friend struct Node;
     mutable LockType lock_;
     Node *head_, *tail_;
-    int size_;
+    int size_{0};
 };
 
 // The default LockType is SpinLock.

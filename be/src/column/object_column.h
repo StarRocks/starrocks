@@ -32,7 +32,7 @@ public:
 
     ObjectColumn(const ObjectColumn& column) { DCHECK(false) << "Can't copy construct object column"; }
 
-    ObjectColumn(ObjectColumn&& object_column) noexcept : _pool(std::move(object_column._pool)), _cache_ok(false) {}
+    ObjectColumn(ObjectColumn&& object_column) noexcept : _pool(std::move(object_column._pool)) {}
 
     void operator=(const ObjectColumn&) = delete;
 

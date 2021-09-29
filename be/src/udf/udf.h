@@ -387,15 +387,15 @@ typedef ResultType (*UdaFinalize)(FunctionContext* context, const IntermediateTy
 //-------------Implementation of the *Val structs ----------------------------
 //----------------------------------------------------------------------------
 struct AnyVal {
-    bool is_null;
-    AnyVal() : is_null(false) {}
+    bool is_null{false};
+    AnyVal() {}
     AnyVal(bool is_null) : is_null(is_null) {}
 };
 
 struct BooleanVal : public AnyVal {
-    bool val;
+    bool val{false};
 
-    BooleanVal() : val(false) {}
+    BooleanVal() {}
     BooleanVal(bool val) : val(val) {}
 
     static BooleanVal null() {
@@ -419,9 +419,9 @@ struct BooleanVal : public AnyVal {
 };
 
 struct TinyIntVal : public AnyVal {
-    int8_t val;
+    int8_t val{0};
 
-    TinyIntVal() : val(0) {}
+    TinyIntVal() {}
     TinyIntVal(int8_t val) : val(val) {}
 
     static TinyIntVal null() {
@@ -445,9 +445,9 @@ struct TinyIntVal : public AnyVal {
 };
 
 struct SmallIntVal : public AnyVal {
-    int16_t val;
+    int16_t val{0};
 
-    SmallIntVal() : val(0) {}
+    SmallIntVal() {}
     SmallIntVal(int16_t val) : val(val) {}
 
     static SmallIntVal null() {
@@ -471,9 +471,9 @@ struct SmallIntVal : public AnyVal {
 };
 
 struct IntVal : public AnyVal {
-    int32_t val;
+    int32_t val{0};
 
-    IntVal() : val(0) {}
+    IntVal() {}
     IntVal(int32_t val) : val(val) {}
 
     static IntVal null() {
@@ -497,9 +497,9 @@ struct IntVal : public AnyVal {
 };
 
 struct BigIntVal : public AnyVal {
-    int64_t val;
+    int64_t val{0};
 
-    BigIntVal() : val(0) {}
+    BigIntVal() {}
     BigIntVal(int64_t val) : val(val) {}
 
     static BigIntVal null() {
@@ -523,9 +523,9 @@ struct BigIntVal : public AnyVal {
 };
 
 struct FloatVal : public AnyVal {
-    float val;
+    float val{0.0};
 
-    FloatVal() : val(0.0) {}
+    FloatVal() {}
     FloatVal(float val) : val(val) {}
 
     static FloatVal null() {
@@ -539,9 +539,9 @@ struct FloatVal : public AnyVal {
 };
 
 struct DoubleVal : public AnyVal {
-    double val;
+    double val{0.0};
 
-    DoubleVal() : val(0.0) {}
+    DoubleVal() {}
     DoubleVal(double val) : val(val) {}
 
     static DoubleVal null() {
@@ -567,12 +567,12 @@ struct DoubleVal : public AnyVal {
 // This object has a compatible storage format with boost::ptime.
 struct DateTimeVal : public AnyVal {
     // MySQL packet time
-    int64_t packed_time;
+    int64_t packed_time{0};
     // Indicate which type of this value.
-    int type;
+    int type{3};
 
     // NOTE: Type 3 is TIME_DATETIME in runtime/datetime_value.h
-    DateTimeVal() : packed_time(0), type(3) {}
+    DateTimeVal() {}
 
     static DateTimeVal null() {
         DateTimeVal result;
@@ -599,12 +599,12 @@ struct DateTimeVal : public AnyVal {
 struct StringVal : public AnyVal {
     static const int MAX_LENGTH = (1 << 30);
 
-    int64_t len;
-    uint8_t* ptr;
+    int64_t len{0};
+    uint8_t* ptr{nullptr};
 
     // Construct a StringVal from ptr/len. Note: this does not make a copy of ptr
     // so the buffer must exist as long as this StringVal does.
-    StringVal() : len(0), ptr(nullptr) {}
+    StringVal() {}
 
     // Construct a StringVal from ptr/len. Note: this does not make a copy of ptr
     // so the buffer must exist as long as this StringVal does.
@@ -661,13 +661,13 @@ struct StringVal : public AnyVal {
 };
 
 struct DecimalVal : public AnyVal {
-    int8_t int_len;
-    int8_t frac_len;
-    bool sign;
+    int8_t int_len{0};
+    int8_t frac_len{0};
+    bool sign{false};
     int32_t buffer[9] = {0};
 
     // Default value is zero
-    DecimalVal() : int_len(0), frac_len(0), sign(false) {
+    DecimalVal() {
         // Do nothing here
     }
 
@@ -692,10 +692,10 @@ struct DecimalVal : public AnyVal {
 };
 
 struct DecimalV2Val : public AnyVal {
-    __int128 val;
+    __int128 val{0};
 
     // Default value is zero
-    DecimalV2Val() : val(0) {}
+    DecimalV2Val() {}
 
     const __int128& value() const { return val; }
 
@@ -729,9 +729,9 @@ struct DecimalV2Val : public AnyVal {
 };
 
 struct LargeIntVal : public AnyVal {
-    __int128 val;
+    __int128 val{0};
 
-    LargeIntVal() : val(0) {}
+    LargeIntVal() {}
 
     LargeIntVal(__int128 large_value) : val(large_value) {}
 

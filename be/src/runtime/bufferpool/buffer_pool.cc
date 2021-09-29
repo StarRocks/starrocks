@@ -22,6 +22,7 @@
 #include <limits>
 #include <memory>
 #include <sstream>
+#include <utility>
 
 #include "gutil/strings/substitute.h"
 #include "runtime/bufferpool/buffer_allocator.h"
@@ -115,7 +116,7 @@ BufferPool::BufferPool(int64_t min_buffer_len, int64_t buffer_bytes_limit, int64
     DCHECK_EQ(min_buffer_len, BitUtil::RoundUpToPowerOfTwo(min_buffer_len));
 }
 
-BufferPool::~BufferPool() {}
+BufferPool::~BufferPool() = default;
 
 Status BufferPool::RegisterClient(const string& name, //TmpFileMgr::FileGroup* file_group,
                                   ReservationTracker* parent_reservation, MemTracker* mem_tracker,
@@ -350,7 +351,7 @@ BufferPool::SubReservation::SubReservation(ClientHandle* client) {
     tracker_->InitChildTracker(nullptr, client->impl_->reservation(), nullptr, numeric_limits<int64_t>::max());
 }
 
-BufferPool::SubReservation::~SubReservation() {}
+BufferPool::SubReservation::~SubReservation() = default;
 
 int64_t BufferPool::SubReservation::GetReservation() const {
     return tracker_->GetReservation();
@@ -366,11 +367,11 @@ void BufferPool::SubReservation::Close() {
 }
 
 BufferPool::Client::Client(BufferPool* pool, //TmpFileMgr::FileGroup* file_group,
-                           const string& name, ReservationTracker* parent_reservation, MemTracker* mem_tracker,
+                           string name, ReservationTracker* parent_reservation, MemTracker* mem_tracker,
                            int64_t reservation_limit, RuntimeProfile* profile)
         : pool_(pool),
           //file_group_(file_group),
-          name_(name),
+          name_(std::move(name)),
           debug_write_delay_ms_(0),
           num_pages_(0),
           buffers_allocated_bytes_(0) {

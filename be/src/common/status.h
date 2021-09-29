@@ -17,7 +17,7 @@ namespace starrocks {
 
 class Status {
 public:
-    Status() : _state(nullptr) {}
+    Status() {}
     ~Status() noexcept {
         if (!is_moved_from(_state)) {
             delete[] _state;
@@ -248,7 +248,7 @@ private:
     //    _state[4]    == code
     //    _state[5..6] == precise_code
     //    _state[7..]  == message
-    const char* _state;
+    const char* _state{nullptr};
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Status& st) {

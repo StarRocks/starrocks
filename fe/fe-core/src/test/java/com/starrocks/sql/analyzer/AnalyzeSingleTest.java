@@ -324,7 +324,7 @@ public class AnalyzeSingleTest {
 
         Assert.assertEquals(
                 "v1,v2,v3," +
-                        "CAST(`v1` AS INT),CAST(`v1` AS CHAR),CAST(`v1` AS VARCHAR),CAST(`v1` AS DECIMAL(10,5)),CAST(`v1` AS BOOLEAN)," +
+                        "CAST(`v1` AS INT),CAST(`v1` AS CHAR),CAST(`v1` AS VARCHAR),CAST(`v1` AS DECIMAL64(10,5)),CAST(`v1` AS BOOLEAN)," +
                         "abs(`v1`)," +
                         "`v1` * `v1` / `v1` % `v1` + `v1` - `v1` DIV `v1`,`v2` & ~ `v1` | `v3` ^ 1," +
                         "`v1` + 20," +

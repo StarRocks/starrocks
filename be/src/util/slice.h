@@ -51,7 +51,7 @@ class faststring;
 class Slice {
 public:
     char* data;
-    size_t size;
+    size_t size{0};
 
     static void init();
     static const Slice& max_value();
@@ -60,7 +60,7 @@ public:
     // Intentionally copyable
 
     /// Create an empty slice.
-    Slice() : data(const_cast<char*>("")), size(0) {}
+    Slice() : data(const_cast<char*>("")) {}
 
     /// Create a slice that refers to a @c char byte array.
     Slice(const char* d, size_t n) : data(const_cast<char*>(d)), size(n) {}

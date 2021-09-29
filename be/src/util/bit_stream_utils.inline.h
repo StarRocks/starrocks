@@ -94,8 +94,7 @@ inline void BitWriter::PutVlqInt(int32_t v) {
     PutAligned<uint8_t>(v & 0x7F, 1);
 }
 
-inline BitReader::BitReader(const uint8_t* buffer, int buffer_len)
-        : buffer_(buffer), max_bytes_(buffer_len), buffered_values_(0), byte_offset_(0), bit_offset_(0) {
+inline BitReader::BitReader(const uint8_t* buffer, int buffer_len) : buffer_(buffer), max_bytes_(buffer_len) {
     int num_bytes = std::min(8, max_bytes_);
     memcpy(&buffered_values_, buffer_ + byte_offset_, num_bytes);
 }

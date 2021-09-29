@@ -41,7 +41,7 @@ class LoadPathMgr {
 public:
     LoadPathMgr(ExecEnv* env);
 
-    ~LoadPathMgr() {}
+    ~LoadPathMgr() = default;
 
     Status init();
 

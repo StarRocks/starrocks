@@ -19,9 +19,9 @@ namespace vectorized {
 
 class RowsetMerger {
 public:
-    RowsetMerger() {}
+    RowsetMerger() = default;
 
-    virtual ~RowsetMerger() {}
+    virtual ~RowsetMerger() = default;
 
     virtual Status do_merge(Tablet& tablet, int64_t version, const Schema& schema,
                             const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg) = 0;
@@ -41,7 +41,7 @@ struct MergeEntry {
     // set |encode_schema| if require encode chunk pk columns
     const vectorized::Schema* encode_schema = nullptr;
 
-    MergeEntry() {}
+    MergeEntry() = default;
     ~MergeEntry() { close(); }
 
     string debug_string() {
@@ -142,9 +142,9 @@ struct MergeEntryCmp {
 template <class T>
 class RowsetMergerImpl : public RowsetMerger {
 public:
-    RowsetMergerImpl() {}
+    RowsetMergerImpl() = default;
 
-    ~RowsetMergerImpl() override {}
+    ~RowsetMergerImpl() override = default;
 
     Status _fill_heap(MergeEntry<T>* entry) {
         auto st = entry->next();

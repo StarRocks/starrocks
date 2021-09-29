@@ -96,7 +96,7 @@ static CondOp parse_op_type(const string& op) {
     }
 }
 
-Cond::Cond() : op(OP_NULL), operand_field(nullptr), min_value_filed(nullptr), max_value_filed(nullptr) {}
+Cond::Cond() {}
 
 Cond::~Cond() {
     delete operand_field;

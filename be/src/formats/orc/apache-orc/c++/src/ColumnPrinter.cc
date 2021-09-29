@@ -40,7 +40,7 @@ namespace orc {
 class VoidColumnPrinter : public ColumnPrinter {
 public:
     VoidColumnPrinter(std::string&);
-    ~VoidColumnPrinter() override {}
+    ~VoidColumnPrinter() override = default;
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -51,7 +51,7 @@ private:
 
 public:
     BooleanColumnPrinter(std::string&);
-    ~BooleanColumnPrinter() override {}
+    ~BooleanColumnPrinter() override = default;
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -62,7 +62,7 @@ private:
 
 public:
     LongColumnPrinter(std::string&);
-    ~LongColumnPrinter() override {}
+    ~LongColumnPrinter() override = default;
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -74,7 +74,7 @@ private:
 
 public:
     DoubleColumnPrinter(std::string&, const Type& type);
-    ~DoubleColumnPrinter() override {}
+    ~DoubleColumnPrinter() override = default;
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -86,7 +86,7 @@ private:
 
 public:
     TimestampColumnPrinter(std::string&);
-    ~TimestampColumnPrinter() override {}
+    ~TimestampColumnPrinter() override = default;
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -97,7 +97,7 @@ private:
 
 public:
     DateColumnPrinter(std::string&);
-    ~DateColumnPrinter() override {}
+    ~DateColumnPrinter() override = default;
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -109,7 +109,7 @@ private:
 
 public:
     Decimal64ColumnPrinter(std::string&);
-    ~Decimal64ColumnPrinter() override {}
+    ~Decimal64ColumnPrinter() override = default;
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -121,7 +121,7 @@ private:
 
 public:
     Decimal128ColumnPrinter(std::string&);
-    ~Decimal128ColumnPrinter() override {}
+    ~Decimal128ColumnPrinter() override = default;
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -133,7 +133,7 @@ private:
 
 public:
     StringColumnPrinter(std::string&);
-    ~StringColumnPrinter() override {}
+    ~StringColumnPrinter() override = default;
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -145,7 +145,7 @@ private:
 
 public:
     BinaryColumnPrinter(std::string&);
-    ~BinaryColumnPrinter() override {}
+    ~BinaryColumnPrinter() override = default;
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -157,7 +157,7 @@ private:
 
 public:
     ListColumnPrinter(std::string&, const Type& type);
-    ~ListColumnPrinter() override {}
+    ~ListColumnPrinter() override = default;
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };
@@ -170,7 +170,7 @@ private:
 
 public:
     MapColumnPrinter(std::string&, const Type& type);
-    ~MapColumnPrinter() override {}
+    ~MapColumnPrinter() override = default;
     void printRow(uint64_t rowId) override;
     void reset(const ColumnVectorBatch& batch) override;
 };

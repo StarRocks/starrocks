@@ -46,7 +46,7 @@ struct TabletsChannelKey {
 
     TabletsChannelKey(const PUniqueId& pid, int64_t index_id_) : id(pid), index_id(index_id_) {}
 
-    ~TabletsChannelKey() noexcept {}
+    ~TabletsChannelKey() noexcept = default;
 
     bool operator==(const TabletsChannelKey& rhs) const noexcept { return index_id == rhs.index_id && id == rhs.id; }
 
@@ -140,7 +140,7 @@ private:
 
     static std::atomic<uint64_t> _s_tablet_writer_count;
 
-    bool _is_vectorized = false;
+    bool _is_vectorized = true;
     vectorized::RuntimeChunkMeta _chunk_meta;
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     // tablet_id -> TabletChannel

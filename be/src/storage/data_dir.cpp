@@ -36,6 +36,7 @@
 #include <fstream>
 #include <set>
 #include <sstream>
+#include <utility>
 
 #include "env/env.h"
 #include "gen_cpp/version.h"
@@ -61,9 +62,9 @@ namespace starrocks {
 static const char* const kMtabPath = "/etc/mtab";
 static const char* const kTestFilePath = "/.testfile";
 
-DataDir::DataDir(const std::string& path, int64_t capacity_bytes, TStorageMedium::type storage_medium,
+DataDir::DataDir(std::string path, int64_t capacity_bytes, TStorageMedium::type storage_medium,
                  TabletManager* tablet_manager, TxnManager* txn_manager)
-        : _path(path),
+        : _path(std::move(path)),
           _capacity_bytes(capacity_bytes),
           _available_bytes(0),
           _disk_capacity_bytes(0),
@@ -73,8 +74,7 @@ DataDir::DataDir(const std::string& path, int64_t capacity_bytes, TStorageMedium
           _txn_manager(txn_manager),
           _cluster_id(-1),
           _to_be_deleted(false),
-          _current_shard(0),
-          _kv_store(nullptr) {}
+          _current_shard(0) {}
 
 DataDir::~DataDir() {
     delete _id_generator;

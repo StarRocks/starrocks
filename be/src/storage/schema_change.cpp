@@ -259,7 +259,7 @@ ConvertTypeResolver::ConvertTypeResolver() {
     add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL128>();
 }
 
-ConvertTypeResolver::~ConvertTypeResolver() {}
+ConvertTypeResolver::~ConvertTypeResolver() = default;
 
 bool to_bitmap(RowCursor* read_helper, RowCursor* write_helper, const TabletColumn& ref_column, int field_idx,
                int ref_field_idx, MemPool* mem_pool) {
@@ -913,7 +913,7 @@ RowBlockMerger::RowBlockMerger(MemTracker* mem_tracker, TabletSharedPtr tablet) 
     _mem_tracker = std::make_unique<MemTracker>(-1, "block_merger", mem_tracker);
 }
 
-RowBlockMerger::~RowBlockMerger() {}
+RowBlockMerger::~RowBlockMerger() = default;
 
 bool RowBlockMerger::merge(const std::vector<RowBlock*>& row_block_arr, RowsetWriter* rowset_writer,
                            uint64_t* merged_rows) {

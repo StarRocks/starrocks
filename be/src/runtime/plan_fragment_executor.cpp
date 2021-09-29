@@ -22,6 +22,7 @@
 #include "runtime/plan_fragment_executor.h"
 
 #include <memory>
+#include <utility>
 
 #include "common/logging.h"
 #include "common/object_pool.h"
@@ -46,9 +47,9 @@
 
 namespace starrocks {
 
-PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, const report_status_callback& report_status_cb)
+PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb)
         : _exec_env(exec_env),
-          _report_status_cb(report_status_cb),
+          _report_status_cb(std::move(report_status_cb)),
           _done(false),
           _prepared(false),
           _closed(false),
@@ -64,7 +65,6 @@ PlanFragmentExecutor::~PlanFragmentExecutor() {
 
 Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     const TPlanFragmentExecParams& params = request.params;
-    _is_vectorized = params.use_vectorized;
     _query_id = params.query_id;
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(_query_id)

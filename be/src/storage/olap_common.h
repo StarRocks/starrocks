@@ -58,14 +58,14 @@ typedef UniqueId TabletUid;
 enum CompactionType { BASE_COMPACTION = 1, CUMULATIVE_COMPACTION = 2, UPDATE_COMPACTION = 3 };
 
 struct DataDirInfo {
-    DataDirInfo() : path_hash(0), disk_capacity(1), available(0), data_used_capacity(0), is_used(false) {}
+    DataDirInfo() {}
 
     std::string path;
-    size_t path_hash;
-    int64_t disk_capacity; // actual disk capacity
-    int64_t available;
-    int64_t data_used_capacity;
-    bool is_used;
+    size_t path_hash{0};
+    int64_t disk_capacity{1}; // actual disk capacity
+    int64_t available{0};
+    int64_t data_used_capacity{0};
+    bool is_used{false};
     TStorageMedium::type storage_medium; // storage medium: SSD|HDD
 };
 
@@ -329,11 +329,11 @@ inline bool is_compaction(ReaderType reader_type) {
 //using Version = std::pair<TupleVersion, TupleVersion>;
 
 struct Version {
-    int64_t first;
-    int64_t second;
+    int64_t first{0};
+    int64_t second{0};
 
     Version(int64_t first_, int64_t second_) : first(first_), second(second_) {}
-    Version() : first(0), second(0) {}
+    Version() {}
 
     friend std::ostream& operator<<(std::ostream& os, const Version& version);
 

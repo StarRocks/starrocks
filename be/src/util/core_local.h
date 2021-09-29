@@ -35,13 +35,13 @@ namespace starrocks {
 
 class CoreDataAllocator {
 public:
-    virtual ~CoreDataAllocator() {}
+    virtual ~CoreDataAllocator() = default;
     virtual void* get_or_create(size_t id) = 0;
 };
 
 class CoreDataAllocatorFactory {
 public:
-    CoreDataAllocatorFactory() {}
+    CoreDataAllocatorFactory() = default;
     ~CoreDataAllocatorFactory();
     CoreDataAllocator* get_allocator(size_t cpu_id, size_t data_bytes);
     static CoreDataAllocatorFactory* instance();
@@ -69,7 +69,7 @@ public:
         }
     }
 
-    ~CoreLocalValueController() {}
+    ~CoreLocalValueController() = default;
 
     int get_id() {
         std::lock_guard<std::mutex> l(_lock);

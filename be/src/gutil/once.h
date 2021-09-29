@@ -91,7 +91,7 @@ inline void GoogleOnceInitArg(GoogleOnceType* state, void (*func_with_arg)(T*), 
 //   }
 class GoogleOnceDynamic {
 public:
-    GoogleOnceDynamic() : state_(GOOGLE_ONCE_INTERNAL_INIT) {}
+    GoogleOnceDynamic() {}
 
     // If this->Init() has not been called before by any thread,
     // execute (*func_with_arg)(arg) then return.
@@ -110,7 +110,7 @@ public:
     }
 
 private:
-    Atomic32 state_;
+    Atomic32 state_{GOOGLE_ONCE_INTERNAL_INIT};
     DISALLOW_COPY_AND_ASSIGN(GoogleOnceDynamic);
 };
 

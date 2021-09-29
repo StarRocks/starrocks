@@ -12,10 +12,10 @@ namespace starrocks {
 namespace vectorized {
 
 struct StConstructState {
-    StConstructState() : is_null(false) {}
-    ~StConstructState() {}
+    StConstructState() {}
+    ~StConstructState() = default;
 
-    bool is_null;
+    bool is_null{false};
     std::string encoded_buf;
 };
 
@@ -289,12 +289,12 @@ ColumnPtr GeoFunctions::st_as_wkt(FunctionContext* context, const Columns& colum
 }
 
 struct StContainsState {
-    StContainsState() : is_null(false), shapes{nullptr, nullptr} {}
+    StContainsState() : shapes{nullptr, nullptr} {}
     ~StContainsState() {
         delete shapes[0];
         delete shapes[1];
     }
-    bool is_null;
+    bool is_null{false};
     GeoShape* shapes[2];
 };
 

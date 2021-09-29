@@ -169,7 +169,7 @@ OlapTablePartitionParam::OlapTablePartitionParam(std::shared_ptr<OlapTableSchema
           _mem_tracker(new MemTracker()),
           _mem_pool(new MemPool(_mem_tracker.get())) {}
 
-OlapTablePartitionParam::~OlapTablePartitionParam() {}
+OlapTablePartitionParam::~OlapTablePartitionParam() = default;
 
 Status OlapTablePartitionParam::init() {
     std::map<std::string, SlotDescriptor*> slots_map;

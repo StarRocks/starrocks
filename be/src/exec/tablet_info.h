@@ -25,6 +25,7 @@
 #include <map>
 #include <memory>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "common/object_pool.h"
@@ -55,8 +56,8 @@ struct OlapTableIndexSchema {
 
 class OlapTableSchemaParam {
 public:
-    OlapTableSchemaParam() {}
-    ~OlapTableSchemaParam() noexcept {}
+    OlapTableSchemaParam() = default;
+    ~OlapTableSchemaParam() noexcept = default;
 
     Status init(const TOlapTableSchemaParam& tschema);
     Status init(const POlapTableSchemaParam& pschema);
@@ -110,7 +111,7 @@ struct OlapTablePartition {
 
 class OlapTablePartKeyComparator {
 public:
-    OlapTablePartKeyComparator(const std::vector<SlotDescriptor*>& slot_descs) : _slot_descs(slot_descs) {}
+    OlapTablePartKeyComparator(std::vector<SlotDescriptor*> slot_descs) : _slot_descs(std::move(slot_descs)) {}
     // return true if lhs < rhs
     // 'nullptr' is max value, but 'null' is min value
     bool operator()(const Tuple* lhs, const Tuple* rhs) const {

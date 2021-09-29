@@ -39,9 +39,9 @@ typedef std::unordered_map<std::string, std::unique_ptr<PluginLoader>> PluginLoa
 
 class PluginMgr {
 public:
-    PluginMgr() {}
+    PluginMgr() = default;
 
-    ~PluginMgr() {}
+    ~PluginMgr() = default;
 
     Status install_plugin(const TPluginMetaInfo& info);
 

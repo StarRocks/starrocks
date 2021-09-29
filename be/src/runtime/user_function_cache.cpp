@@ -25,6 +25,7 @@
 #include <boost/algorithm/string/classification.hpp> // boost::is_any_of
 #include <boost/algorithm/string/predicate.hpp>      // boost::algorithm::ends_with
 #include <regex>
+#include <utility>
 #include <vector>
 
 #include "env/env.h"
@@ -41,8 +42,8 @@ static const int kLibShardNum = 128;
 
 // function cache entry, store information for
 struct UserFunctionCacheEntry {
-    UserFunctionCacheEntry(int64_t fid_, const std::string& checksum_, const std::string& lib_file_)
-            : function_id(fid_), checksum(checksum_), lib_file(lib_file_) {}
+    UserFunctionCacheEntry(int64_t fid_, std::string checksum_, std::string lib_file_)
+            : function_id(fid_), checksum(std::move(checksum_)), lib_file(std::move(lib_file_)) {}
     ~UserFunctionCacheEntry();
 
     void ref() { _refs.fetch_add(1); }
@@ -96,7 +97,7 @@ UserFunctionCacheEntry::~UserFunctionCacheEntry() {
     }
 }
 
-UserFunctionCache::UserFunctionCache() {}
+UserFunctionCache::UserFunctionCache() = default;
 
 UserFunctionCache::~UserFunctionCache() {
     std::lock_guard<std::mutex> l(_cache_lock);

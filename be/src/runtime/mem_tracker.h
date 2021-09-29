@@ -89,15 +89,15 @@ public:
     /// If 'auto_unregister' is true, never call unregister_from_parent().
     /// If 'log_usage_if_zero' is false, this tracker (and its children) will not be included
     /// in LogUsage() output if consumption is 0.
-    MemTracker(int64_t byte_limit = -1, const std::string& label = std::string(), MemTracker* parent = nullptr,
+    MemTracker(int64_t byte_limit = -1, std::string label = std::string(), MemTracker* parent = nullptr,
                bool auto_unregister = true, bool log_usage_if_zero = true);
 
-    MemTracker(Type type, int64_t byte_limit = -1, const std::string& label = std::string(),
-               MemTracker* parent = nullptr, bool auto_unregister = true, bool log_usage_if_zero = true);
+    MemTracker(Type type, int64_t byte_limit = -1, std::string label = std::string(), MemTracker* parent = nullptr,
+               bool auto_unregister = true, bool log_usage_if_zero = true);
 
     /// C'tor for tracker for which consumption counter is created as part of a profile.
     /// The counter is created with name COUNTER_NAME.
-    MemTracker(RuntimeProfile* profile, int64_t byte_limit, const std::string& label = std::string(),
+    MemTracker(RuntimeProfile* profile, int64_t byte_limit, std::string label = std::string(),
                MemTracker* parent = nullptr, bool auto_unregister = true);
 
     ~MemTracker();
@@ -391,7 +391,7 @@ private:
     /// Lock to protect GcMemory(). This prevents many GCs from occurring at once.
     std::mutex _gc_lock;
 
-    Type _type;
+    Type _type{NO_SET};
 
     int64_t _limit; // in bytes
 

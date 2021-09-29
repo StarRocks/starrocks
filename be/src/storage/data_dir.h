@@ -46,9 +46,8 @@ class TxnManager;
 // Now, After DataDir was created, it will never be deleted for easy implementation.
 class DataDir {
 public:
-    DataDir(const std::string& path, int64_t capacity_bytes = -1,
-            TStorageMedium::type storage_medium = TStorageMedium::HDD, TabletManager* tablet_manager = nullptr,
-            TxnManager* txn_manager = nullptr);
+    DataDir(std::string path, int64_t capacity_bytes = -1, TStorageMedium::type storage_medium = TStorageMedium::HDD,
+            TabletManager* tablet_manager = nullptr, TxnManager* txn_manager = nullptr);
     ~DataDir();
 
     Status init(bool read_only = false);

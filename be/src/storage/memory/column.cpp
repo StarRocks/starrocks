@@ -21,14 +21,16 @@
 
 #include "storage/memory/column.h"
 
+#include <utility>
+
 #include "storage/memory/typed_column_reader.h"
 #include "storage/memory/typed_column_writer.h"
 
 namespace starrocks {
 namespace memory {
 
-Column::Column(const ColumnSchema& cs, ColumnType storage_type, uint64_t version)
-        : _cs(cs), _storage_type(storage_type), _base_idx(0) {
+Column::Column(ColumnSchema cs, ColumnType storage_type, uint64_t version)
+        : _cs(std::move(cs)), _storage_type(storage_type), _base_idx(0) {
     _base.reserve(BASE_CAPACITY_MIN_STEP_SIZE);
     _versions.reserve(VERSION_CAPACITY_STEP_SIZE);
     _versions.emplace_back(version);

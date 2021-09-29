@@ -29,6 +29,8 @@
 #include <arrow/type_fwd.h>
 #include <arrow/visitor_inline.h>
 
+#include <utility>
+
 #include "gutil/strings/substitute.h"
 #include "storage/column_block.h"
 #include "storage/field.h"
@@ -145,11 +147,10 @@ Status convert_to_starrocks_schema(const arrow::Schema& schema, std::shared_ptr<
 // Now we inherit TypeVisitor to use default Visit implemention
 class FromRowBlockConverter : public arrow::TypeVisitor {
 public:
-    FromRowBlockConverter(const RowBlockV2& block, const std::shared_ptr<arrow::Schema>& schema,
-                          arrow::MemoryPool* pool)
-            : _block(block), _schema(schema), _pool(pool) {}
+    FromRowBlockConverter(const RowBlockV2& block, std::shared_ptr<arrow::Schema> schema, arrow::MemoryPool* pool)
+            : _block(block), _schema(std::move(schema)), _pool(pool) {}
 
-    ~FromRowBlockConverter() override {}
+    ~FromRowBlockConverter() override = default;
 
     // Use base class function
     using arrow::TypeVisitor::Visit;
@@ -226,7 +227,7 @@ class ToRowBlockConverter : public arrow::ArrayVisitor {
 public:
     ToRowBlockConverter(const arrow::RecordBatch& batch, const Schema& schema) : _batch(batch), _schema(schema) {}
 
-    ~ToRowBlockConverter() override {}
+    ~ToRowBlockConverter() override = default;
 
     using arrow::ArrayVisitor::Visit;
 

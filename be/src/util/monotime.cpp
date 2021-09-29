@@ -169,7 +169,7 @@ const MonoTime& MonoTime::Earliest(const MonoTime& a, const MonoTime& b) {
     return a;
 }
 
-MonoTime::MonoTime() : nanos_(0) {}
+MonoTime::MonoTime() {}
 
 bool MonoTime::Initialized() const {
     return nanos_ != 0;

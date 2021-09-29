@@ -839,7 +839,7 @@ public:
         using pointer = phmap::remove_reference_t<reference>*;
         using difference_type = typename raw_hash_set::difference_type;
 
-        iterator() {}
+        iterator() = default;
 
         // PRECONDITION: not an end() iterator.
         reference operator*() const { return PolicyTraits::element(slot_); }
@@ -917,7 +917,7 @@ public:
         using pointer = typename raw_hash_set::const_pointer;
         using difference_type = typename raw_hash_set::difference_type;
 
-        const_iterator() {}
+        const_iterator() = default;
         // Implicit construction from iterator.
         const_iterator(iterator i) : inner_(std::move(i)) {}
 
@@ -945,7 +945,7 @@ public:
 
     raw_hash_set() noexcept(std::is_nothrow_default_constructible<hasher>::value&&
                                     std::is_nothrow_default_constructible<key_equal>::value&&
-                                            std::is_nothrow_default_constructible<allocator_type>::value) {}
+                                            std::is_nothrow_default_constructible<allocator_type>::value) = default;
 
     explicit raw_hash_set(size_t bucket_cnt, const hasher& hashfn = hasher(), const key_equal& eq = key_equal(),
                           const allocator_type& alloc = allocator_type())
@@ -1074,8 +1074,7 @@ public:
     raw_hash_set(raw_hash_set&& that, const allocator_type& a)
             : ctrl_(EmptyGroup()),
               slots_(nullptr),
-              size_(0),
-              capacity_(0),
+
               settings_(0, that.hash_ref(), that.eq_ref(), a) {
         if (a == that.alloc_ref()) {
             std::swap(ctrl_, that.ctrl_);
@@ -2142,7 +2141,7 @@ public:
     using iterator = typename raw_hash_map::raw_hash_set::iterator;
     using const_iterator = typename raw_hash_map::raw_hash_set::const_iterator;
 
-    raw_hash_map() {}
+    raw_hash_map() = default;
     using Base::raw_hash_set; // use raw_hash_set constructor
 
     // The last two template parameters ensure that both arguments are rvalues
@@ -2379,7 +2378,7 @@ public:
         using EmbeddedSet = typename parallel_hash_set::EmbeddedSet;
         using EmbeddedIterator = typename EmbeddedSet::iterator;
 
-        iterator() {}
+        iterator() = default;
 
         reference operator*() const { return *it_; }
         pointer operator->() const { return &operator*(); }
@@ -2440,7 +2439,7 @@ public:
         using difference_type = typename parallel_hash_set::difference_type;
         using Inner = typename parallel_hash_set::Inner;
 
-        const_iterator() {}
+        const_iterator() = default;
         // Implicit construction from iterator.
         const_iterator(iterator i) : iter_(std::move(i)) {}
 
@@ -2469,9 +2468,9 @@ public:
 
     // ------------------------- c o n s t r u c t o r s ------------------
 
-    parallel_hash_set() noexcept(std::is_nothrow_default_constructible<hasher>::value&&
-                                         std::is_nothrow_default_constructible<key_equal>::value&&
-                                                 std::is_nothrow_default_constructible<allocator_type>::value) {}
+    parallel_hash_set() noexcept(
+            std::is_nothrow_default_constructible<hasher>::value&& std::is_nothrow_default_constructible<
+                    key_equal>::value&& std::is_nothrow_default_constructible<allocator_type>::value) = default;
 
     explicit parallel_hash_set(size_t bucket_cnt, const hasher& hash_param = hasher(),
                                const key_equal& eq = key_equal(), const allocator_type& alloc = allocator_type()) {
@@ -2589,7 +2588,7 @@ public:
         return *this;
     }
 
-    ~parallel_hash_set() {}
+    ~parallel_hash_set() = default;
 
     iterator begin() {
         auto it = iterator(&sets_[0], &sets_[0] + num_tables, sets_[0].set_.begin());
@@ -3348,7 +3347,7 @@ public:
     using iterator = typename parallel_hash_map::parallel_hash_set::iterator;
     using const_iterator = typename parallel_hash_map::parallel_hash_set::const_iterator;
 
-    parallel_hash_map() {}
+    parallel_hash_map() = default;
 
 #ifdef __INTEL_COMPILER
     using Base::parallel_hash_set;
@@ -4058,7 +4057,7 @@ class flat_hash_set : public phmap::priv::raw_hash_set<phmap::priv::FlatHashSetP
     using Base = typename flat_hash_set::raw_hash_set;
 
 public:
-    flat_hash_set() {}
+    flat_hash_set() = default;
 #ifdef __INTEL_COMPILER
     using Base::raw_hash_set;
 #else
@@ -4120,7 +4119,7 @@ class flat_hash_map : public phmap::priv::raw_hash_map<phmap::priv::FlatHashMapP
     using Base = typename flat_hash_map::raw_hash_map;
 
 public:
-    flat_hash_map() {}
+    flat_hash_map() = default;
 #ifdef __INTEL_COMPILER
     using Base::raw_hash_map;
 #else
@@ -4181,7 +4180,7 @@ class node_hash_set : public phmap::priv::raw_hash_set<phmap::priv::NodeHashSetP
     using Base = typename node_hash_set::raw_hash_set;
 
 public:
-    node_hash_set() {}
+    node_hash_set() = default;
 #ifdef __INTEL_COMPILER
     using Base::raw_hash_set;
 #else
@@ -4242,7 +4241,7 @@ class node_hash_map : public phmap::priv::raw_hash_map<phmap::priv::NodeHashMapP
     using Base = typename node_hash_map::raw_hash_map;
 
 public:
-    node_hash_map() {}
+    node_hash_map() = default;
 #ifdef __INTEL_COMPILER
     using Base::raw_hash_map;
 #else
@@ -4296,7 +4295,7 @@ class parallel_flat_hash_set
     using Base = typename parallel_flat_hash_set::parallel_hash_set;
 
 public:
-    parallel_flat_hash_set() {}
+    parallel_flat_hash_set() = default;
 #ifdef __INTEL_COMPILER
     using Base::parallel_hash_set;
 #else
@@ -4347,7 +4346,7 @@ class parallel_flat_hash_map
     using Base = typename parallel_flat_hash_map::parallel_hash_map;
 
 public:
-    parallel_flat_hash_map() {}
+    parallel_flat_hash_map() = default;
 #ifdef __INTEL_COMPILER
     using Base::parallel_hash_map;
 #else
@@ -4403,7 +4402,7 @@ class parallel_node_hash_set
     using Base = typename parallel_node_hash_set::parallel_hash_set;
 
 public:
-    parallel_node_hash_set() {}
+    parallel_node_hash_set() = default;
 #ifdef __INTEL_COMPILER
     using Base::parallel_hash_set;
 #else
@@ -4456,7 +4455,7 @@ class parallel_node_hash_map
     using Base = typename parallel_node_hash_map::parallel_hash_map;
 
 public:
-    parallel_node_hash_map() {}
+    parallel_node_hash_map() = default;
 #ifdef __INTEL_COMPILER
     using Base::parallel_hash_map;
 #else

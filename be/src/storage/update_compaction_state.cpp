@@ -13,7 +13,7 @@ namespace starrocks {
 
 namespace vectorized {
 
-CompactionState::CompactionState() {}
+CompactionState::CompactionState() = default;
 
 CompactionState::~CompactionState() {
     StorageEngine::instance()->update_manager()->compaction_state_mem_tracker()->release(_memory_usage);

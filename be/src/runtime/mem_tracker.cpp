@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <utility>
 
 #include "exec/exec_node.h"
 #include "gutil/strings/substitute.h"
@@ -43,11 +44,10 @@ namespace starrocks {
 
 const std::string MemTracker::COUNTER_NAME = "PeakMemoryUsage";
 
-MemTracker::MemTracker(int64_t byte_limit, const std::string& label, MemTracker* parent, bool auto_unregister,
+MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent, bool auto_unregister,
                        bool log_usage_if_zero)
-        : _type(NO_SET),
-          _limit(byte_limit),
-          _label(label),
+        : _limit(byte_limit),
+          _label(std::move(label)),
           _parent(parent),
           _consumption(&_local_counter),
           _local_counter(TUnit::BYTES),
@@ -57,11 +57,11 @@ MemTracker::MemTracker(int64_t byte_limit, const std::string& label, MemTracker*
     Init();
 }
 
-MemTracker::MemTracker(Type type, int64_t byte_limit, const std::string& label, MemTracker* parent,
-                       bool auto_unregister, bool log_usage_if_zero)
+MemTracker::MemTracker(Type type, int64_t byte_limit, std::string label, MemTracker* parent, bool auto_unregister,
+                       bool log_usage_if_zero)
         : _type(type),
           _limit(byte_limit),
-          _label(label),
+          _label(std::move(label)),
           _parent(parent),
           _consumption(&_local_counter),
           _local_counter(TUnit::BYTES),
@@ -71,11 +71,11 @@ MemTracker::MemTracker(Type type, int64_t byte_limit, const std::string& label, 
     Init();
 }
 
-MemTracker::MemTracker(RuntimeProfile* profile, int64_t byte_limit, const std::string& label, MemTracker* parent,
+MemTracker::MemTracker(RuntimeProfile* profile, int64_t byte_limit, std::string label, MemTracker* parent,
                        bool auto_unregister)
         : _type(NO_SET),
           _limit(byte_limit),
-          _label(label),
+          _label(std::move(label)),
           _parent(parent),
           _consumption(profile->AddHighWaterMarkCounter(COUNTER_NAME, TUnit::BYTES)),
           _local_counter(TUnit::BYTES),

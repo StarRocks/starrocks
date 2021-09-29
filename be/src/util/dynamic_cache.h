@@ -9,6 +9,7 @@
 #include <list>
 #include <mutex>
 #include <unordered_map>
+#include <utility>
 
 #include "runtime/mem_tracker.h"
 #include "storage/rowset_update_state.h"
@@ -29,7 +30,7 @@ class DynamicCache {
 public:
     struct Entry {
     public:
-        Entry(DynamicCache<Key, T>& cache, const Key& key) : _cache(cache), _key(key), _ref(1) {}
+        Entry(DynamicCache<Key, T>& cache, Key key) : _cache(cache), _key(std::move(key)), _ref(1) {}
 
         const Key& key() const { return _key; }
         T& value() { return _value; }

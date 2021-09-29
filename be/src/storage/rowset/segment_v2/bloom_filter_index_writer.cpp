@@ -23,6 +23,7 @@
 
 #include <map>
 #include <memory>
+#include <utility>
 
 #include "env/env.h"
 #include "runtime/mem_pool.h"
@@ -97,9 +98,9 @@ public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
     using ValueDict = typename BloomFilterTraits<CppType>::ValueDict;
 
-    explicit BloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, const TypeInfoPtr& typeinfo)
+    explicit BloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
             : _bf_options(bf_options),
-              _typeinfo(typeinfo),
+              _typeinfo(std::move(typeinfo)),
               _tracker(),
               _pool(&_tracker),
               _has_null(false),
