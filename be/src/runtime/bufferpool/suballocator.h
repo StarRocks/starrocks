@@ -102,7 +102,8 @@ public:
     static constexpr int64_t MIN_ALLOCATION_BYTES = 1L << LOG_MIN_ALLOCATION_BYTES;
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(Suballocator);
+    Suballocator(const Suballocator&) = delete;
+    const Suballocator& operator=(const Suballocator&) = delete;
 
     /// Compute the index for allocations of size 'bytes' in 'free_lists_'. 'bytes' is
     /// rounded up to the next power-of-two if it is not already a power-of-two.
@@ -178,7 +179,8 @@ public:
 private:
     friend class Suballocator;
 
-    DISALLOW_COPY_AND_ASSIGN(Suballocation);
+    Suballocation(const Suballocation&) = delete;
+    const Suballocation& operator=(const Suballocation&) = delete;
 
     /// Static constructor for Suballocation. Can fail if new fails to allocate memory.
     static Status Create(std::unique_ptr<Suballocation>* new_suballocation);

@@ -315,7 +315,8 @@ private:
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
 
-    DISALLOW_COPY_AND_ASSIGN(TabletUpdates);
+    TabletUpdates(const TabletUpdates&) = delete;
+    const TabletUpdates& operator=(const TabletUpdates&) = delete;
 };
 
 } // namespace starrocks

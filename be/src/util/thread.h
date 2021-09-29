@@ -272,7 +272,8 @@ private:
     int _warn_every_ms;
     int _give_up_after_ms;
 
-    DISALLOW_COPY_AND_ASSIGN(ThreadJoiner);
+    ThreadJoiner(const ThreadJoiner&) = delete;
+    const ThreadJoiner& operator=(const ThreadJoiner&) = delete;
 };
 
 } //namespace starrocks

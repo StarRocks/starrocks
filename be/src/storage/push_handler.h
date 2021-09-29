@@ -71,7 +71,8 @@ private:
 
     int64_t _write_bytes = 0;
     int64_t _write_rows = 0;
-    DISALLOW_COPY_AND_ASSIGN(PushHandler);
+    PushHandler(const PushHandler&) = delete;
+    const PushHandler& operator=(const PushHandler&) = delete;
 };
 
 class PushBrokerReader {

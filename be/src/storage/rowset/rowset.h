@@ -265,7 +265,8 @@ public:
 protected:
     friend class RowsetFactory;
 
-    DISALLOW_COPY_AND_ASSIGN(Rowset);
+    Rowset(const Rowset&) = delete;
+    const Rowset& operator=(const Rowset&) = delete;
     // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
     Rowset(MemTracker* mem_tracker, const TabletSchema* schema, std::string rowset_path,
            RowsetMetaSharedPtr rowset_meta);

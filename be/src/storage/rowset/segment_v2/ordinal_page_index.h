@@ -57,7 +57,8 @@ public:
     Status finish(fs::WritableBlock* wblock, ColumnIndexMetaPB* meta);
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(OrdinalIndexWriter);
+    OrdinalIndexWriter(const OrdinalIndexWriter&) = delete;
+    const OrdinalIndexWriter& operator=(const OrdinalIndexWriter&) = delete;
     std::unique_ptr<IndexPageBuilder> _page_builder;
     PagePointer _last_pp;
 };

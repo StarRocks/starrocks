@@ -31,7 +31,8 @@ private:
     HdfsFsMap _cache;
 
     HdfsFsCache() = default;
-    DISALLOW_COPY_AND_ASSIGN(HdfsFsCache);
+    HdfsFsCache(const HdfsFsCache&) = delete;
+    const HdfsFsCache& operator=(const HdfsFsCache&) = delete;
 };
 
 } // namespace starrocks

@@ -234,7 +234,8 @@ public:
     }
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(faststring);
+    faststring(const faststring&) = delete;
+    const faststring& operator=(const faststring&) = delete;
 
     // If necessary, expand the buffer to fit at least 'count' more bytes.
     // If the array has to be grown, it is grown by at least 50%.

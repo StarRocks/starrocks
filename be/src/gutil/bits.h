@@ -117,7 +117,8 @@ public:
 private:
     static const char num_bits[];
     static const unsigned char bit_reverse_table[];
-    DISALLOW_COPY_AND_ASSIGN(Bits);
+    Bits(const Bits&) = delete;
+    const Bits& operator=(const Bits&) = delete;
 };
 
 // A utility class for some handy bit patterns.  The names l and h

@@ -71,7 +71,8 @@ public:
 private:
     size_t _bsize = 0;
     uint8_t* _data = nullptr;
-    DISALLOW_COPY_AND_ASSIGN(Buffer);
+    Buffer(const Buffer&) = delete;
+    const Buffer& operator=(const Buffer&) = delete;
 };
 
 } // namespace memory
