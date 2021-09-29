@@ -277,70 +277,64 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public class Catalog {
-    private static final Logger LOG = LogManager.getLogger(Catalog.class);
     // 0 ~ 9999 used for qe
     public static final long NEXT_ID_INIT_VALUE = 10000;
+    private static final Logger LOG = LogManager.getLogger(Catalog.class);
     private static final int HTTP_TIMEOUT_SECOND = 5;
     private static final int STATE_CHANGE_CHECK_INTERVAL_MS = 100;
     private static final int REPLAY_INTERVAL_MS = 1;
     private static final String BDB_DIR = "/bdb";
     private static final String IMAGE_DIR = "/image";
-
+    private static Catalog CHECKPOINT = null;
+    private static long checkpointThreadId = -1;
+    private final StatisticsMetaManager statisticsMetaManager;
+    private final StatisticAutoCollector statisticAutoCollector;
     private String metaDir;
     private String bdbDir;
     private String imageDir;
-
-    private MetaContext metaContext;
+    private final MetaContext metaContext;
     private long epoch = 0;
-
     // Lock to perform atomic modification on map like 'idToDb' and 'fullNameToDb'.
     // These maps are all thread safe, we only use lock to perform atomic operations.
     // Operations like Get or Put do not need lock.
     // We use fair ReentrantLock to avoid starvation. Do not use this lock in critical code pass
     // because fair lock has poor performance.
     // Using QueryableReentrantLock to print owner thread in debug mode.
-    private QueryableReentrantLock lock;
-
-    private ConcurrentHashMap<Long, Database> idToDb;
-    private ConcurrentHashMap<String, Database> fullNameToDb;
-
-    private ConcurrentHashMap<Long, Cluster> idToCluster;
-    private ConcurrentHashMap<String, Cluster> nameToCluster;
-
-    private Load load;
-    private LoadManager loadManager;
-    private RoutineLoadManager routineLoadManager;
-    private ExportMgr exportMgr;
-    private Alter alter;
-    private ConsistencyChecker consistencyChecker;
-    private BackupHandler backupHandler;
-    private PublishVersionDaemon publishVersionDaemon;
+    private final QueryableReentrantLock lock;
+    private final ConcurrentHashMap<Long, Database> idToDb;
+    private final ConcurrentHashMap<String, Database> fullNameToDb;
+    private final ConcurrentHashMap<Long, Cluster> idToCluster;
+    private final ConcurrentHashMap<String, Cluster> nameToCluster;
+    private final Load load;
+    private final LoadManager loadManager;
+    private final RoutineLoadManager routineLoadManager;
+    private final ExportMgr exportMgr;
+    private final Alter alter;
+    private final ConsistencyChecker consistencyChecker;
+    private final BackupHandler backupHandler;
+    private final PublishVersionDaemon publishVersionDaemon;
     private DeleteHandler deleteHandler;
-    private UpdateDbUsedDataQuotaDaemon updateDbUsedDataQuotaDaemon;
-
+    private final UpdateDbUsedDataQuotaDaemon updateDbUsedDataQuotaDaemon;
     private MasterDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private MasterDaemon txnCleaner; // To clean aborted or timeout txns
     private Daemon replayer;
     private Daemon timePrinter;
     private Daemon listener;
-    private EsRepository esRepository;  // it is a daemon, so add it here
-    private StarRocksRepository starRocksRepository;
-    private HiveRepository hiveRepository;
-
+    private final EsRepository esRepository;  // it is a daemon, so add it here
+    private final StarRocksRepository starRocksRepository;
+    private final HiveRepository hiveRepository;
     private boolean isFirstTimeStartUp = false;
     private boolean isElectable;
     // set to true after finished replay all meta and ready to serve
     // set to false when catalog is not ready.
-    private AtomicBoolean isReady = new AtomicBoolean(false);
+    private final AtomicBoolean isReady = new AtomicBoolean(false);
     // set to true if FE can offer READ service.
     // canRead can be true even if isReady is false.
     // for example: OBSERVER transfer to UNKNOWN, then isReady will be set to false, but canRead can still be true
-    private AtomicBoolean canRead = new AtomicBoolean(false);
-    private BlockingQueue<FrontendNodeType> typeTransferQueue;
-
+    private final AtomicBoolean canRead = new AtomicBoolean(false);
+    private final BlockingQueue<FrontendNodeType> typeTransferQueue;
     // false if default_cluster is not created.
     private boolean isDefaultClusterCreated = false;
-
     // node name is used for bdbje NodeName.
     private String nodeName;
     private FrontendNodeType role;
@@ -350,157 +344,54 @@ public class Catalog {
     private int masterRpcPort;
     private int masterHttpPort;
     private String masterIp;
-
-    private CatalogIdGenerator idGenerator = new CatalogIdGenerator(NEXT_ID_INIT_VALUE);
-
+    private final CatalogIdGenerator idGenerator = new CatalogIdGenerator(NEXT_ID_INIT_VALUE);
     private EditLog editLog;
     private int clusterId;
     private String token;
     // For checkpoint and observer memory replayed marker
-    private AtomicLong replayedJournalId;
-
-    private static Catalog CHECKPOINT = null;
-    private static long checkpointThreadId = -1;
+    private final AtomicLong replayedJournalId;
     private Checkpoint checkpointer;
-    private List<Pair<String, Integer>> helperNodes = Lists.newArrayList();
+    private final List<Pair<String, Integer>> helperNodes = Lists.newArrayList();
     private Pair<String, Integer> selfNode = null;
-
     // node name -> Frontend
-    private ConcurrentHashMap<String, Frontend> frontends;
+    private final ConcurrentHashMap<String, Frontend> frontends;
     // removed frontends' name. used for checking if name is duplicated in bdbje
-    private ConcurrentLinkedQueue<String> removedFrontends;
-
+    private final ConcurrentLinkedQueue<String> removedFrontends;
     private HAProtocol haProtocol = null;
-
-    private JournalObservable journalObservable;
-
-    private SystemInfoService systemInfo;
-    private Map<Integer, SystemInfoService> systemInfoMap;
-    private HeartbeatMgr heartbeatMgr;
-    private TabletInvertedIndex tabletInvertedIndex;
+    private final JournalObservable journalObservable;
+    private final SystemInfoService systemInfo;
+    private final Map<Integer, SystemInfoService> systemInfoMap;
+    private final HeartbeatMgr heartbeatMgr;
+    private final TabletInvertedIndex tabletInvertedIndex;
     private ColocateTableIndex colocateTableIndex;
-
-    private CatalogRecycleBin recycleBin;
-    private FunctionSet functionSet;
-
-    private MetaReplayState metaReplayState;
-
-    private BrokerMgr brokerMgr;
+    private final CatalogRecycleBin recycleBin;
+    private final FunctionSet functionSet;
+    private final MetaReplayState metaReplayState;
+    private final BrokerMgr brokerMgr;
     private ResourceMgr resourceMgr;
-
-    private GlobalTransactionMgr globalTransactionMgr;
-
-    private TabletStatMgr tabletStatMgr;
-
-    private Auth auth;
-
-    private DomainResolver domainResolver;
-
-    private TabletSchedulerStat stat;
-
-    private TabletScheduler tabletScheduler;
-
-    private TabletChecker tabletChecker;
-
+    private final GlobalTransactionMgr globalTransactionMgr;
+    private final TabletStatMgr tabletStatMgr;
+    private final Auth auth;
+    private final DomainResolver domainResolver;
+    private final TabletSchedulerStat stat;
+    private final TabletScheduler tabletScheduler;
+    private final TabletChecker tabletChecker;
     // Thread pools for pending and loading task, separately
-    private MasterTaskExecutor pendingLoadTaskScheduler;
-    private MasterTaskExecutor loadingLoadTaskScheduler;
-
-    private LoadJobScheduler loadJobScheduler;
-
-    private LoadTimeoutChecker loadTimeoutChecker;
-    private LoadEtlChecker loadEtlChecker;
-    private LoadLoadingChecker loadLoadingChecker;
-
-    private RoutineLoadScheduler routineLoadScheduler;
-
-    private RoutineLoadTaskScheduler routineLoadTaskScheduler;
-
-    private SmallFileMgr smallFileMgr;
-
-    private DynamicPartitionScheduler dynamicPartitionScheduler;
-
-    private PluginMgr pluginMgr;
-
-    private AuditEventProcessor auditEventProcessor;
-
-    private final StatisticsMetaManager statisticsMetaManager;
-
-    private final StatisticAutoCollector statisticAutoCollector;
-
-    private AnalyzeManager analyzeManager;
+    private final MasterTaskExecutor pendingLoadTaskScheduler;
+    private final MasterTaskExecutor loadingLoadTaskScheduler;
+    private final LoadJobScheduler loadJobScheduler;
+    private final LoadTimeoutChecker loadTimeoutChecker;
+    private final LoadEtlChecker loadEtlChecker;
+    private final LoadLoadingChecker loadLoadingChecker;
+    private final RoutineLoadScheduler routineLoadScheduler;
+    private final RoutineLoadTaskScheduler routineLoadTaskScheduler;
+    private final SmallFileMgr smallFileMgr;
+    private final DynamicPartitionScheduler dynamicPartitionScheduler;
+    private final PluginMgr pluginMgr;
+    private final AuditEventProcessor auditEventProcessor;
+    private final AnalyzeManager analyzeManager;
 
     private StatisticStorage statisticStorage;
-
-    public List<Frontend> getFrontends(FrontendNodeType nodeType) {
-        if (nodeType == null) {
-            // get all
-            return Lists.newArrayList(frontends.values());
-        }
-
-        List<Frontend> result = Lists.newArrayList();
-        for (Frontend frontend : frontends.values()) {
-            if (frontend.getRole() == nodeType) {
-                result.add(frontend);
-            }
-        }
-
-        return result;
-    }
-
-    public List<String> getRemovedFrontendNames() {
-        return Lists.newArrayList(removedFrontends);
-    }
-
-    public JournalObservable getJournalObservable() {
-        return journalObservable;
-    }
-
-    public SystemInfoService getOrCreateSystemInfo(Integer clusterId) {
-        SystemInfoService systemInfoService = systemInfoMap.get(clusterId);
-        if (systemInfoService == null) {
-            systemInfoService = new SystemInfoService();
-            systemInfoMap.put(clusterId, systemInfoService);
-        }
-        return systemInfoService;
-    }
-
-    private SystemInfoService getClusterInfo() {
-        return this.systemInfo;
-    }
-
-    private HeartbeatMgr getHeartbeatMgr() {
-        return this.heartbeatMgr;
-    }
-
-    public TabletInvertedIndex getTabletInvertedIndex() {
-        return this.tabletInvertedIndex;
-    }
-
-    // only for test
-    public void setColocateTableIndex(ColocateTableIndex colocateTableIndex) {
-        this.colocateTableIndex = colocateTableIndex;
-    }
-
-    public ColocateTableIndex getColocateTableIndex() {
-        return this.colocateTableIndex;
-    }
-
-    private CatalogRecycleBin getRecycleBin() {
-        return this.recycleBin;
-    }
-
-    public MetaReplayState getMetaReplayState() {
-        return metaReplayState;
-    }
-
-    public DynamicPartitionScheduler getDynamicPartitionScheduler() {
-        return this.dynamicPartitionScheduler;
-    }
-
-    private static class SingletonHolder {
-        private static final Catalog INSTANCE = new Catalog();
-    }
 
     private Catalog() {
         this(false);
@@ -627,48 +518,8 @@ public class Catalog {
         return SingletonHolder.INSTANCE;
     }
 
-    public BrokerMgr getBrokerMgr() {
-        return brokerMgr;
-    }
-
-    public ResourceMgr getResourceMgr() {
-        return resourceMgr;
-    }
-
     public static GlobalTransactionMgr getCurrentGlobalTransactionMgr() {
         return getCurrentCatalog().globalTransactionMgr;
-    }
-
-    public GlobalTransactionMgr getGlobalTransactionMgr() {
-        return globalTransactionMgr;
-    }
-
-    public PluginMgr getPluginMgr() {
-        return pluginMgr;
-    }
-
-    public AnalyzeManager getAnalyzeManager() {
-        return analyzeManager;
-    }
-
-    public Auth getAuth() {
-        return auth;
-    }
-
-    public TabletScheduler getTabletScheduler() {
-        return tabletScheduler;
-    }
-
-    public TabletChecker getTabletChecker() {
-        return tabletChecker;
-    }
-
-    public ConcurrentHashMap<String, Database> getFullNameToDb() {
-        return fullNameToDb;
-    }
-
-    public AuditEventProcessor getAuditEventProcessor() {
-        return auditEventProcessor;
     }
 
     // use this to get correct ClusterInfoService instance
@@ -719,13 +570,474 @@ public class Catalog {
         return getCurrentCatalog().statisticStorage;
     }
 
+    public static AuditEventProcessor getCurrentAuditEventProcessor() {
+        return getCurrentCatalog().getAuditEventProcessor();
+    }
+
+    public static String genFeNodeName(String host, int port, boolean isOldStyle) {
+        String name = host + "_" + port;
+        if (isOldStyle) {
+            return name;
+        } else {
+            return name + "_" + System.currentTimeMillis();
+        }
+    }
+
+    public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
+                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
+        getDdlStmt(null, table, createTableStmt, addPartitionStmt, createRollupStmt, separatePartition, hidePassword);
+    }
+
+    public static void getDdlStmt(String dbName, Table table, List<String> createTableStmt,
+                                  List<String> addPartitionStmt,
+                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
+        StringBuilder sb = new StringBuilder();
+
+        // 1. create table
+        // 1.1 view
+        if (table.getType() == TableType.VIEW) {
+            View view = (View) table;
+            sb.append("CREATE VIEW `").append(table.getName()).append("` AS ").append(view.getInlineViewDef());
+            sb.append(";");
+            createTableStmt.add(sb.toString());
+            return;
+        }
+
+        // 1.2 other table type
+        sb.append("CREATE ");
+        if (table.getType() == TableType.MYSQL || table.getType() == TableType.ELASTICSEARCH
+                || table.getType() == TableType.BROKER || table.getType() == TableType.HIVE) {
+            sb.append("EXTERNAL ");
+        }
+        sb.append("TABLE ");
+        if (!Strings.isNullOrEmpty(dbName)) {
+            sb.append("`").append(dbName).append("`.");
+        }
+        sb.append("`").append(table.getName()).append("` (\n");
+        int idx = 0;
+        for (Column column : table.getBaseSchema()) {
+            if (idx++ != 0) {
+                sb.append(",\n");
+            }
+            // There MUST BE 2 space in front of each column description line
+            // sqlalchemy requires this to parse SHOW CREATE TAEBL stmt.
+            sb.append("  ").append(column.toSql());
+        }
+        if (table.getType() == TableType.OLAP) {
+            OlapTable olapTable = (OlapTable) table;
+            if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
+                for (Index index : olapTable.getIndexes()) {
+                    sb.append(",\n");
+                    sb.append("  ").append(index.toSql());
+                }
+            }
+        }
+        sb.append("\n) ENGINE=");
+        sb.append(table.getType().name()).append(" ");
+
+        if (table.getType() == TableType.OLAP) {
+            OlapTable olapTable = (OlapTable) table;
+
+            // keys
+            sb.append("\n").append(olapTable.getKeysType().toSql()).append("(");
+            List<String> keysColumnNames = Lists.newArrayList();
+            for (Column column : olapTable.getBaseSchema()) {
+                if (column.isKey()) {
+                    keysColumnNames.add("`" + column.getName() + "`");
+                }
+            }
+            sb.append(Joiner.on(", ").join(keysColumnNames)).append(")");
+
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+
+            // partition
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            List<Long> partitionId = null;
+            if (separatePartition) {
+                partitionId = Lists.newArrayList();
+            }
+            if (partitionInfo.getType() == PartitionType.RANGE) {
+                sb.append("\n").append(partitionInfo.toSql(olapTable, partitionId));
+            }
+
+            // distribution
+            DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+            sb.append("\n").append(distributionInfo.toSql());
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+
+            // replicationNum
+            Short replicationNum = olapTable.getDefaultReplicationNum();
+            sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
+            sb.append(replicationNum).append("\"");
+
+            // bloom filter
+            Set<String> bfColumnNames = olapTable.getCopiedBfColumns();
+            if (bfColumnNames != null) {
+                sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS).append("\" = \"");
+                sb.append(Joiner.on(", ").join(olapTable.getCopiedBfColumns())).append("\"");
+            }
+
+            if (separatePartition) {
+                // version info
+                sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_VERSION_INFO).append("\" = \"");
+                Partition partition = null;
+                if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
+                    partition = olapTable.getPartition(olapTable.getName());
+                } else {
+                    Preconditions.checkState(partitionId.size() == 1);
+                    partition = olapTable.getPartition(partitionId.get(0));
+                }
+                sb.append(Joiner.on(",").join(partition.getVisibleVersion(), partition.getVisibleVersionHash()))
+                        .append("\"");
+            }
+
+            // colocateTable
+            String colocateTable = olapTable.getColocateGroup();
+            if (colocateTable != null) {
+                sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH).append("\" = \"");
+                sb.append(colocateTable).append("\"");
+            }
+
+            // dynamic partition
+            if (olapTable.dynamicPartitionExists()) {
+                sb.append(olapTable.getTableProperty().getDynamicPartitionProperty().toString());
+            }
+
+            // in memory
+            sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_INMEMORY).append("\" = \"");
+            sb.append(olapTable.isInMemory()).append("\"");
+
+            // storage type
+            sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).append("\" = \"");
+            sb.append(olapTable.getStorageFormat()).append("\"");
+
+            sb.append("\n)");
+        } else if (table.getType() == TableType.MYSQL) {
+            MysqlTable mysqlTable = (MysqlTable) table;
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"host\" = \"").append(mysqlTable.getHost()).append("\",\n");
+            sb.append("\"port\" = \"").append(mysqlTable.getPort()).append("\",\n");
+            sb.append("\"user\" = \"").append(mysqlTable.getUserName()).append("\",\n");
+            sb.append("\"password\" = \"").append(hidePassword ? "" : mysqlTable.getPasswd()).append("\",\n");
+            sb.append("\"database\" = \"").append(mysqlTable.getMysqlDatabaseName()).append("\",\n");
+            sb.append("\"table\" = \"").append(mysqlTable.getMysqlTableName()).append("\"\n");
+            sb.append(")");
+        } else if (table.getType() == TableType.BROKER) {
+            BrokerTable brokerTable = (BrokerTable) table;
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"broker_name\" = \"").append(brokerTable.getBrokerName()).append("\",\n");
+            sb.append("\"path\" = \"").append(Joiner.on(",").join(brokerTable.getEncodedPaths())).append("\",\n");
+            sb.append("\"column_separator\" = \"").append(brokerTable.getReadableColumnSeparator()).append("\",\n");
+            sb.append("\"line_delimiter\" = \"").append(brokerTable.getReadableRowDelimiter()).append("\"\n");
+            sb.append(")");
+            if (!brokerTable.getBrokerProperties().isEmpty()) {
+                sb.append("\nBROKER PROPERTIES (\n");
+                sb.append(new PrintableMap<>(brokerTable.getBrokerProperties(), " = ", true, true,
+                        hidePassword).toString());
+                sb.append("\n)");
+            }
+        } else if (table.getType() == TableType.ELASTICSEARCH) {
+            EsTable esTable = (EsTable) table;
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+
+            // partition
+            PartitionInfo partitionInfo = esTable.getPartitionInfo();
+            if (partitionInfo.getType() == PartitionType.RANGE) {
+                sb.append("\n");
+                sb.append("PARTITION BY RANGE(");
+                idx = 0;
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                for (Column column : rangePartitionInfo.getPartitionColumns()) {
+                    if (idx != 0) {
+                        sb.append(", ");
+                    }
+                    sb.append("`").append(column.getName()).append("`");
+                }
+                sb.append(")\n()");
+            }
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"hosts\" = \"").append(esTable.getHosts()).append("\",\n");
+            sb.append("\"user\" = \"").append(esTable.getUserName()).append("\",\n");
+            sb.append("\"password\" = \"").append(hidePassword ? "" : esTable.getPasswd()).append("\",\n");
+            sb.append("\"index\" = \"").append(esTable.getIndexName()).append("\",\n");
+            sb.append("\"type\" = \"").append(esTable.getMappingType()).append("\",\n");
+            sb.append("\"transport\" = \"").append(esTable.getTransport()).append("\",\n");
+            sb.append("\"enable_docvalue_scan\" = \"").append(esTable.isDocValueScanEnable()).append("\",\n");
+            sb.append("\"max_docvalue_fields\" = \"").append(esTable.maxDocValueFields()).append("\",\n");
+            sb.append("\"enable_keyword_sniff\" = \"").append(esTable.isKeywordSniffEnable()).append("\"\n");
+            sb.append(")");
+        } else if (table.getType() == TableType.HIVE) {
+            HiveTable hiveTable = (HiveTable) table;
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"database\" = \"").append(hiveTable.getHiveDb()).append("\",\n");
+            sb.append("\"table\" = \"").append(hiveTable.getHiveTable()).append("\",\n");
+            sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\",\n");
+            sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
+            sb.append("\n)");
+        }
+        sb.append(";");
+
+        createTableStmt.add(sb.toString());
+
+        // 2. add partition
+        if (separatePartition && (table instanceof OlapTable)
+                && ((OlapTable) table).getPartitionInfo().getType() == PartitionType.RANGE
+                && ((OlapTable) table).getPartitions().size() > 1) {
+            OlapTable olapTable = (OlapTable) table;
+            RangePartitionInfo partitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+            boolean first = true;
+            for (Map.Entry<Long, Range<PartitionKey>> entry : partitionInfo.getSortedRangeMap(false)) {
+                if (first) {
+                    first = false;
+                    continue;
+                }
+                sb = new StringBuilder();
+                Partition partition = olapTable.getPartition(entry.getKey());
+                sb.append("ALTER TABLE ").append(table.getName());
+                sb.append(" ADD PARTITION ").append(partition.getName()).append(" VALUES [");
+                sb.append(entry.getValue().lowerEndpoint().toSql());
+                sb.append(", ").append(entry.getValue().upperEndpoint().toSql()).append(")");
+                sb.append("(\"version_info\" = \"");
+                sb.append(Joiner.on(",").join(partition.getVisibleVersion(), partition.getVisibleVersionHash()))
+                        .append("\"");
+                sb.append(");");
+                addPartitionStmt.add(sb.toString());
+            }
+        }
+
+        // 3. rollup
+        if (createRollupStmt != null && (table instanceof OlapTable)) {
+            OlapTable olapTable = (OlapTable) table;
+            for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTable.getIndexIdToMeta().entrySet()) {
+                if (entry.getKey() == olapTable.getBaseIndexId()) {
+                    continue;
+                }
+                MaterializedIndexMeta materializedIndexMeta = entry.getValue();
+                sb = new StringBuilder();
+                String indexName = olapTable.getIndexNameById(entry.getKey());
+                sb.append("ALTER TABLE ").append(table.getName()).append(" ADD ROLLUP ").append(indexName);
+                sb.append("(");
+
+                List<Column> indexSchema = materializedIndexMeta.getSchema();
+                for (int i = 0; i < indexSchema.size(); i++) {
+                    Column column = indexSchema.get(i);
+                    sb.append(column.getName());
+                    if (i != indexSchema.size() - 1) {
+                        sb.append(", ");
+                    }
+                }
+                sb.append(");");
+                createRollupStmt.add(sb.toString());
+            }
+        }
+    }
+
+    public static short calcShortKeyColumnCount(List<Column> columns, Map<String, String> properties)
+            throws DdlException {
+        List<Column> indexColumns = new ArrayList<Column>();
+        for (Column column : columns) {
+            if (column.isKey()) {
+                indexColumns.add(column);
+            }
+        }
+        LOG.debug("index column size: {}", indexColumns.size());
+        Preconditions.checkArgument(indexColumns.size() > 0);
+
+        // figure out shortKeyColumnCount
+        short shortKeyColumnCount = (short) -1;
+        try {
+            shortKeyColumnCount = PropertyAnalyzer.analyzeShortKeyColumnCount(properties);
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+        if (shortKeyColumnCount != (short) -1) {
+            // use user specified short key column count
+            if (shortKeyColumnCount <= 0) {
+                throw new DdlException("Invalid short key: " + shortKeyColumnCount);
+            }
+
+            if (shortKeyColumnCount > indexColumns.size()) {
+                throw new DdlException("Short key is too large. should less than: " + indexColumns.size());
+            }
+
+            for (int pos = 0; pos < shortKeyColumnCount; pos++) {
+                if (indexColumns.get(pos).getPrimitiveType() == PrimitiveType.VARCHAR &&
+                        pos != shortKeyColumnCount - 1) {
+                    throw new DdlException("Varchar should not in the middle of short keys.");
+                }
+            }
+        } else {
+            /*
+             * Calc short key column count. NOTE: short key column count is
+             * calculated as follow: 1. All index column are taking into
+             * account. 2. Max short key column count is Min(Num of
+             * indexColumns, META_MAX_SHORT_KEY_NUM). 3. Short key list can
+             * contains at most one VARCHAR column. And if contains, it should
+             * be at the last position of the short key list.
+             */
+            shortKeyColumnCount = 0;
+            int shortKeySizeByte = 0;
+            int maxShortKeyColumnCount = Math.min(indexColumns.size(), FeConstants.shortkey_max_column_count);
+            for (int i = 0; i < maxShortKeyColumnCount; i++) {
+                Column column = indexColumns.get(i);
+                shortKeySizeByte += column.getOlapColumnIndexSize();
+                if (shortKeySizeByte > FeConstants.shortkey_maxsize_bytes) {
+                    if (column.getPrimitiveType().isCharFamily()) {
+                        ++shortKeyColumnCount;
+                    }
+                    break;
+                }
+                if (column.getType().isFloatingPointType() || column.getType().isComplexType()) {
+                    break;
+                }
+                if (column.getPrimitiveType() == PrimitiveType.VARCHAR) {
+                    ++shortKeyColumnCount;
+                    break;
+                }
+                ++shortKeyColumnCount;
+            }
+            if (indexColumns.isEmpty()) {
+                throw new DdlException("Empty schema");
+            }
+            if (shortKeyColumnCount == 0) {
+                throw new DdlException("Data type of first column cannot be " + indexColumns.get(0).getType());
+            }
+
+        } // end calc shortKeyColumnCount
+
+        return shortKeyColumnCount;
+    }
+
+    public List<Frontend> getFrontends(FrontendNodeType nodeType) {
+        if (nodeType == null) {
+            // get all
+            return Lists.newArrayList(frontends.values());
+        }
+
+        List<Frontend> result = Lists.newArrayList();
+        for (Frontend frontend : frontends.values()) {
+            if (frontend.getRole() == nodeType) {
+                result.add(frontend);
+            }
+        }
+
+        return result;
+    }
+
+    public List<String> getRemovedFrontendNames() {
+        return Lists.newArrayList(removedFrontends);
+    }
+
+    public JournalObservable getJournalObservable() {
+        return journalObservable;
+    }
+
+    public SystemInfoService getOrCreateSystemInfo(Integer clusterId) {
+        SystemInfoService systemInfoService = systemInfoMap.get(clusterId);
+        if (systemInfoService == null) {
+            systemInfoService = new SystemInfoService();
+            systemInfoMap.put(clusterId, systemInfoService);
+        }
+        return systemInfoService;
+    }
+
+    private SystemInfoService getClusterInfo() {
+        return this.systemInfo;
+    }
+
+    private HeartbeatMgr getHeartbeatMgr() {
+        return this.heartbeatMgr;
+    }
+
+    public TabletInvertedIndex getTabletInvertedIndex() {
+        return this.tabletInvertedIndex;
+    }
+
+    public ColocateTableIndex getColocateTableIndex() {
+        return this.colocateTableIndex;
+    }
+
+    // only for test
+    public void setColocateTableIndex(ColocateTableIndex colocateTableIndex) {
+        this.colocateTableIndex = colocateTableIndex;
+    }
+
+    private CatalogRecycleBin getRecycleBin() {
+        return this.recycleBin;
+    }
+
+    public MetaReplayState getMetaReplayState() {
+        return metaReplayState;
+    }
+
+    public DynamicPartitionScheduler getDynamicPartitionScheduler() {
+        return this.dynamicPartitionScheduler;
+    }
+
+    public BrokerMgr getBrokerMgr() {
+        return brokerMgr;
+    }
+
+    public ResourceMgr getResourceMgr() {
+        return resourceMgr;
+    }
+
+    public GlobalTransactionMgr getGlobalTransactionMgr() {
+        return globalTransactionMgr;
+    }
+
+    public PluginMgr getPluginMgr() {
+        return pluginMgr;
+    }
+
+    public AnalyzeManager getAnalyzeManager() {
+        return analyzeManager;
+    }
+
+    public Auth getAuth() {
+        return auth;
+    }
+
+    public TabletScheduler getTabletScheduler() {
+        return tabletScheduler;
+    }
+
+    public TabletChecker getTabletChecker() {
+        return tabletChecker;
+    }
+
+    public ConcurrentHashMap<String, Database> getFullNameToDb() {
+        return fullNameToDb;
+    }
+
+    public AuditEventProcessor getAuditEventProcessor() {
+        return auditEventProcessor;
+    }
+
     // Only used in UT
     public void setStatisticStorage(StatisticStorage statisticStorage) {
         this.statisticStorage = statisticStorage;
-    }
-
-    public static AuditEventProcessor getCurrentAuditEventProcessor() {
-        return getCurrentCatalog().getAuditEventProcessor();
     }
 
     // Use tryLock to avoid potential dead lock
@@ -1044,26 +1356,13 @@ public class Catalog {
             System.exit(-1);
         }
 
-        if (role.equals(FrontendNodeType.FOLLOWER)) {
-            isElectable = true;
-        } else {
-            isElectable = false;
-        }
+        isElectable = role.equals(FrontendNodeType.FOLLOWER);
 
         systemInfoMap.put(clusterId, systemInfo);
 
         Preconditions.checkState(helperNodes.size() == 1);
         LOG.info("finished to get cluster id: {}, role: {} and node name: {}",
                 clusterId, role.name(), nodeName);
-    }
-
-    public static String genFeNodeName(String host, int port, boolean isOldStyle) {
-        String name = host + "_" + port;
-        if (isOldStyle) {
-            return name;
-        } else {
-            return name + "_" + System.currentTimeMillis();
-        }
     }
 
     // Get the role info and node name from helper node.
@@ -3686,10 +3985,10 @@ public class Catalog {
         OlapTable olapTable = null;
         if (stmt.isExternal()) {
             olapTable = new ExternalOlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
-                                              distributionInfo, indexes, stmt.getProperties());
+                    distributionInfo, indexes, stmt.getProperties());
         } else {
             olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
-                                      distributionInfo, indexes);
+                    distributionInfo, indexes);
         }
         olapTable.setComment(stmt.getComment());
 
@@ -4082,276 +4381,6 @@ public class Catalog {
         }
 
         LOG.info("successfully create table[{}-{}]", tableName, tableId);
-    }
-
-    public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
-                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
-        getDdlStmt(null, table, createTableStmt, addPartitionStmt, createRollupStmt, separatePartition, hidePassword);
-    }
-
-    public static void getDdlStmt(String dbName, Table table, List<String> createTableStmt,
-                                  List<String> addPartitionStmt,
-                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
-        StringBuilder sb = new StringBuilder();
-
-        // 1. create table
-        // 1.1 view
-        if (table.getType() == TableType.VIEW) {
-            View view = (View) table;
-            sb.append("CREATE VIEW `").append(table.getName()).append("` AS ").append(view.getInlineViewDef());
-            sb.append(";");
-            createTableStmt.add(sb.toString());
-            return;
-        }
-
-        // 1.2 other table type
-        sb.append("CREATE ");
-        if (table.getType() == TableType.MYSQL || table.getType() == TableType.ELASTICSEARCH
-                || table.getType() == TableType.BROKER || table.getType() == TableType.HIVE) {
-            sb.append("EXTERNAL ");
-        }
-        sb.append("TABLE ");
-        if (!Strings.isNullOrEmpty(dbName)) {
-            sb.append("`").append(dbName).append("`.");
-        }
-        sb.append("`").append(table.getName()).append("` (\n");
-        int idx = 0;
-        for (Column column : table.getBaseSchema()) {
-            if (idx++ != 0) {
-                sb.append(",\n");
-            }
-            // There MUST BE 2 space in front of each column description line
-            // sqlalchemy requires this to parse SHOW CREATE TAEBL stmt.
-            sb.append("  ").append(column.toSql());
-        }
-        if (table.getType() == TableType.OLAP) {
-            OlapTable olapTable = (OlapTable) table;
-            if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
-                for (Index index : olapTable.getIndexes()) {
-                    sb.append(",\n");
-                    sb.append("  ").append(index.toSql());
-                }
-            }
-        }
-        sb.append("\n) ENGINE=");
-        sb.append(table.getType().name()).append(" ");
-
-        if (table.getType() == TableType.OLAP) {
-            OlapTable olapTable = (OlapTable) table;
-
-            // keys
-            sb.append("\n").append(olapTable.getKeysType().toSql()).append("(");
-            List<String> keysColumnNames = Lists.newArrayList();
-            for (Column column : olapTable.getBaseSchema()) {
-                if (column.isKey()) {
-                    keysColumnNames.add("`" + column.getName() + "`");
-                }
-            }
-            sb.append(Joiner.on(", ").join(keysColumnNames)).append(")");
-
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
-
-            // partition
-            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-            List<Long> partitionId = null;
-            if (separatePartition) {
-                partitionId = Lists.newArrayList();
-            }
-            if (partitionInfo.getType() == PartitionType.RANGE) {
-                sb.append("\n").append(partitionInfo.toSql(olapTable, partitionId));
-            }
-
-            // distribution
-            DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-            sb.append("\n").append(distributionInfo.toSql());
-
-            // properties
-            sb.append("\nPROPERTIES (\n");
-
-            // replicationNum
-            Short replicationNum = olapTable.getDefaultReplicationNum();
-            sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
-            sb.append(replicationNum).append("\"");
-
-            // bloom filter
-            Set<String> bfColumnNames = olapTable.getCopiedBfColumns();
-            if (bfColumnNames != null) {
-                sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS).append("\" = \"");
-                sb.append(Joiner.on(", ").join(olapTable.getCopiedBfColumns())).append("\"");
-            }
-
-            if (separatePartition) {
-                // version info
-                sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_VERSION_INFO).append("\" = \"");
-                Partition partition = null;
-                if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
-                    partition = olapTable.getPartition(olapTable.getName());
-                } else {
-                    Preconditions.checkState(partitionId.size() == 1);
-                    partition = olapTable.getPartition(partitionId.get(0));
-                }
-                sb.append(Joiner.on(",").join(partition.getVisibleVersion(), partition.getVisibleVersionHash()))
-                        .append("\"");
-            }
-
-            // colocateTable
-            String colocateTable = olapTable.getColocateGroup();
-            if (colocateTable != null) {
-                sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH).append("\" = \"");
-                sb.append(colocateTable).append("\"");
-            }
-
-            // dynamic partition
-            if (olapTable.dynamicPartitionExists()) {
-                sb.append(olapTable.getTableProperty().getDynamicPartitionProperty().toString());
-            }
-
-            // in memory
-            sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_INMEMORY).append("\" = \"");
-            sb.append(olapTable.isInMemory()).append("\"");
-
-            // storage type
-            sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).append("\" = \"");
-            sb.append(olapTable.getStorageFormat()).append("\"");
-
-            sb.append("\n)");
-        } else if (table.getType() == TableType.MYSQL) {
-            MysqlTable mysqlTable = (MysqlTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
-            // properties
-            sb.append("\nPROPERTIES (\n");
-            sb.append("\"host\" = \"").append(mysqlTable.getHost()).append("\",\n");
-            sb.append("\"port\" = \"").append(mysqlTable.getPort()).append("\",\n");
-            sb.append("\"user\" = \"").append(mysqlTable.getUserName()).append("\",\n");
-            sb.append("\"password\" = \"").append(hidePassword ? "" : mysqlTable.getPasswd()).append("\",\n");
-            sb.append("\"database\" = \"").append(mysqlTable.getMysqlDatabaseName()).append("\",\n");
-            sb.append("\"table\" = \"").append(mysqlTable.getMysqlTableName()).append("\"\n");
-            sb.append(")");
-        } else if (table.getType() == TableType.BROKER) {
-            BrokerTable brokerTable = (BrokerTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
-            // properties
-            sb.append("\nPROPERTIES (\n");
-            sb.append("\"broker_name\" = \"").append(brokerTable.getBrokerName()).append("\",\n");
-            sb.append("\"path\" = \"").append(Joiner.on(",").join(brokerTable.getEncodedPaths())).append("\",\n");
-            sb.append("\"column_separator\" = \"").append(brokerTable.getReadableColumnSeparator()).append("\",\n");
-            sb.append("\"line_delimiter\" = \"").append(brokerTable.getReadableRowDelimiter()).append("\"\n");
-            sb.append(")");
-            if (!brokerTable.getBrokerProperties().isEmpty()) {
-                sb.append("\nBROKER PROPERTIES (\n");
-                sb.append(new PrintableMap<>(brokerTable.getBrokerProperties(), " = ", true, true,
-                        hidePassword).toString());
-                sb.append("\n)");
-            }
-        } else if (table.getType() == TableType.ELASTICSEARCH) {
-            EsTable esTable = (EsTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
-
-            // partition
-            PartitionInfo partitionInfo = esTable.getPartitionInfo();
-            if (partitionInfo.getType() == PartitionType.RANGE) {
-                sb.append("\n");
-                sb.append("PARTITION BY RANGE(");
-                idx = 0;
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                for (Column column : rangePartitionInfo.getPartitionColumns()) {
-                    if (idx != 0) {
-                        sb.append(", ");
-                    }
-                    sb.append("`").append(column.getName()).append("`");
-                }
-                sb.append(")\n()");
-            }
-
-            // properties
-            sb.append("\nPROPERTIES (\n");
-            sb.append("\"hosts\" = \"").append(esTable.getHosts()).append("\",\n");
-            sb.append("\"user\" = \"").append(esTable.getUserName()).append("\",\n");
-            sb.append("\"password\" = \"").append(hidePassword ? "" : esTable.getPasswd()).append("\",\n");
-            sb.append("\"index\" = \"").append(esTable.getIndexName()).append("\",\n");
-            sb.append("\"type\" = \"").append(esTable.getMappingType()).append("\",\n");
-            sb.append("\"transport\" = \"").append(esTable.getTransport()).append("\",\n");
-            sb.append("\"enable_docvalue_scan\" = \"").append(esTable.isDocValueScanEnable()).append("\",\n");
-            sb.append("\"max_docvalue_fields\" = \"").append(esTable.maxDocValueFields()).append("\",\n");
-            sb.append("\"enable_keyword_sniff\" = \"").append(esTable.isKeywordSniffEnable()).append("\"\n");
-            sb.append(")");
-        } else if (table.getType() == TableType.HIVE) {
-            HiveTable hiveTable = (HiveTable) table;
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
-            }
-
-            // properties
-            sb.append("\nPROPERTIES (\n");
-            sb.append("\"database\" = \"").append(hiveTable.getHiveDb()).append("\",\n");
-            sb.append("\"table\" = \"").append(hiveTable.getHiveTable()).append("\",\n");
-            sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\",\n");
-            sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
-            sb.append("\n)");
-        }
-        sb.append(";");
-
-        createTableStmt.add(sb.toString());
-
-        // 2. add partition
-        if (separatePartition && (table instanceof OlapTable)
-                && ((OlapTable) table).getPartitionInfo().getType() == PartitionType.RANGE
-                && ((OlapTable) table).getPartitions().size() > 1) {
-            OlapTable olapTable = (OlapTable) table;
-            RangePartitionInfo partitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
-            boolean first = true;
-            for (Map.Entry<Long, Range<PartitionKey>> entry : partitionInfo.getSortedRangeMap(false)) {
-                if (first) {
-                    first = false;
-                    continue;
-                }
-                sb = new StringBuilder();
-                Partition partition = olapTable.getPartition(entry.getKey());
-                sb.append("ALTER TABLE ").append(table.getName());
-                sb.append(" ADD PARTITION ").append(partition.getName()).append(" VALUES [");
-                sb.append(entry.getValue().lowerEndpoint().toSql());
-                sb.append(", ").append(entry.getValue().upperEndpoint().toSql()).append(")");
-                sb.append("(\"version_info\" = \"");
-                sb.append(Joiner.on(",").join(partition.getVisibleVersion(), partition.getVisibleVersionHash()))
-                        .append("\"");
-                sb.append(");");
-                addPartitionStmt.add(sb.toString());
-            }
-        }
-
-        // 3. rollup
-        if (createRollupStmt != null && (table instanceof OlapTable)) {
-            OlapTable olapTable = (OlapTable) table;
-            for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTable.getIndexIdToMeta().entrySet()) {
-                if (entry.getKey() == olapTable.getBaseIndexId()) {
-                    continue;
-                }
-                MaterializedIndexMeta materializedIndexMeta = entry.getValue();
-                sb = new StringBuilder();
-                String indexName = olapTable.getIndexNameById(entry.getKey());
-                sb.append("ALTER TABLE ").append(table.getName()).append(" ADD ROLLUP ").append(indexName);
-                sb.append("(");
-
-                List<Column> indexSchema = materializedIndexMeta.getSchema();
-                for (int i = 0; i < indexSchema.size(); i++) {
-                    Column column = indexSchema.get(i);
-                    sb.append(column.getName());
-                    if (i != indexSchema.size() - 1) {
-                        sb.append(", ");
-                    }
-                }
-                sb.append(");");
-                createRollupStmt.add(sb.toString());
-            }
-        }
     }
 
     public void replayCreateTable(String dbName, Table table) {
@@ -4811,10 +4840,18 @@ public class Catalog {
         return editLog;
     }
 
+    public void setEditLog(EditLog editLog) {
+        this.editLog = editLog;
+    }
+
     // Get the next available, need't lock because of nextId is atomic.
     public long getNextId() {
         long id = idGenerator.getNextId();
         return id;
+    }
+
+    public void setNextId(long id) {
+        idGenerator.setId(id);
     }
 
     public List<String> getDbNames() {
@@ -5020,6 +5057,10 @@ public class Catalog {
         return this.haProtocol;
     }
 
+    public void setHaProtocol(HAProtocol protocol) {
+        this.haProtocol = protocol;
+    }
+
     public Long getMaxJournalId() {
         return this.editLog.getMaxJournalId();
     }
@@ -5090,12 +5131,6 @@ public class Catalog {
         return this.hiveRepository;
     }
 
-    public void setMaster(MasterInfo info) {
-        this.masterIp = info.getIp();
-        this.masterHttpPort = info.getHttpPort();
-        this.masterRpcPort = info.getRpcPort();
-    }
-
     public boolean canRead() {
         return this.canRead.get();
     }
@@ -5108,110 +5143,28 @@ public class Catalog {
         return feType == FrontendNodeType.MASTER;
     }
 
+    public void setMaster(MasterInfo info) {
+        this.masterIp = info.getIp();
+        this.masterHttpPort = info.getHttpPort();
+        this.masterRpcPort = info.getRpcPort();
+    }
+
     public void setSynchronizedTime(long time) {
         this.synchronizedTimeMs = time;
-    }
-
-    public void setEditLog(EditLog editLog) {
-        this.editLog = editLog;
-    }
-
-    public void setNextId(long id) {
-        idGenerator.setId(id);
-    }
-
-    public void setHaProtocol(HAProtocol protocol) {
-        this.haProtocol = protocol;
-    }
-
-    public static short calcShortKeyColumnCount(List<Column> columns, Map<String, String> properties)
-            throws DdlException {
-        List<Column> indexColumns = new ArrayList<Column>();
-        for (Column column : columns) {
-            if (column.isKey()) {
-                indexColumns.add(column);
-            }
-        }
-        LOG.debug("index column size: {}", indexColumns.size());
-        Preconditions.checkArgument(indexColumns.size() > 0);
-
-        // figure out shortKeyColumnCount
-        short shortKeyColumnCount = (short) -1;
-        try {
-            shortKeyColumnCount = PropertyAnalyzer.analyzeShortKeyColumnCount(properties);
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
-        }
-        if (shortKeyColumnCount != (short) -1) {
-            // use user specified short key column count
-            if (shortKeyColumnCount <= 0) {
-                throw new DdlException("Invalid short key: " + shortKeyColumnCount);
-            }
-
-            if (shortKeyColumnCount > indexColumns.size()) {
-                throw new DdlException("Short key is too large. should less than: " + indexColumns.size());
-            }
-
-            for (int pos = 0; pos < shortKeyColumnCount; pos++) {
-                if (indexColumns.get(pos).getPrimitiveType() == PrimitiveType.VARCHAR &&
-                        pos != shortKeyColumnCount - 1) {
-                    throw new DdlException("Varchar should not in the middle of short keys.");
-                }
-            }
-        } else {
-            /*
-             * Calc short key column count. NOTE: short key column count is
-             * calculated as follow: 1. All index column are taking into
-             * account. 2. Max short key column count is Min(Num of
-             * indexColumns, META_MAX_SHORT_KEY_NUM). 3. Short key list can
-             * contains at most one VARCHAR column. And if contains, it should
-             * be at the last position of the short key list.
-             */
-            shortKeyColumnCount = 0;
-            int shortKeySizeByte = 0;
-            int maxShortKeyColumnCount = Math.min(indexColumns.size(), FeConstants.shortkey_max_column_count);
-            for (int i = 0; i < maxShortKeyColumnCount; i++) {
-                Column column = indexColumns.get(i);
-                shortKeySizeByte += column.getOlapColumnIndexSize();
-                if (shortKeySizeByte > FeConstants.shortkey_maxsize_bytes) {
-                    if (column.getPrimitiveType().isCharFamily()) {
-                        ++shortKeyColumnCount;
-                    }
-                    break;
-                }
-                if (column.getType().isFloatingPointType() || column.getType().isComplexType()) {
-                    break;
-                }
-                if (column.getPrimitiveType() == PrimitiveType.VARCHAR) {
-                    ++shortKeyColumnCount;
-                    break;
-                }
-                ++shortKeyColumnCount;
-            }
-            if (indexColumns.isEmpty()) {
-                throw new DdlException("Empty schema");
-            }
-            if (shortKeyColumnCount == 0) {
-                throw new DdlException("Data type of first column cannot be " + indexColumns.get(0).getType());
-            }
-
-        } // end calc shortKeyColumnCount
-
-        return shortKeyColumnCount;
     }
 
     /*
      * used for handling AlterTableStmt (for client is the ALTER TABLE command).
      * including SchemaChangeHandler and RollupHandler
      */
-    public void alterTable(AlterTableStmt stmt) throws DdlException, UserException {
+    public void alterTable(AlterTableStmt stmt) throws UserException {
         this.alter.processAlterTable(stmt);
     }
 
     /**
      * used for handling AlterViewStmt (the ALTER VIEW command).
      */
-    public void alterView(AlterViewStmt stmt) throws DdlException, UserException {
+    public void alterView(AlterViewStmt stmt) throws UserException {
         this.alter.processAlterView(stmt, ConnectContext.get());
     }
 
@@ -5707,7 +5660,7 @@ public class Catalog {
      * used for handling AlterClusterStmt
      * (for client is the ALTER CLUSTER command).
      */
-    public void alterCluster(AlterSystemStmt stmt) throws DdlException, UserException {
+    public void alterCluster(AlterSystemStmt stmt) throws UserException {
         this.alter.processAlterCluster(stmt);
     }
 
@@ -6389,7 +6342,7 @@ public class Catalog {
                             + cluster.getBackendIdList().size());
                 }
                 // The number of BE in cluster is not same as in SystemInfoService, when perform 'ALTER
-                // SYSTEM ADD BACKEND TO ...' or 'ALTER SYSTEM ADD BACKEND ...', because both of them are 
+                // SYSTEM ADD BACKEND TO ...' or 'ALTER SYSTEM ADD BACKEND ...', because both of them are
                 // for adding BE to some Cluster, but loadCluster is after loadBackend.
                 cluster.setBackendIdList(latestBackendIds);
 
@@ -7256,6 +7209,10 @@ public class Catalog {
                 invertedIndex.deleteTablet(tablet.getId());
             }
         }
+    }
+
+    private static class SingletonHolder {
+        private static final Catalog INSTANCE = new Catalog();
     }
 
 }
