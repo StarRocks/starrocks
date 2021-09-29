@@ -29,20 +29,16 @@ public class StorageInfoTest {
     public void test() {
         StorageInfo info = new StorageInfo();
         Assert.assertEquals(-1, info.getClusterID());
-        Assert.assertEquals(0, info.getImageSeq());
-        Assert.assertEquals(0, info.getEditsSeq());
+        Assert.assertEquals(0, info.getImageJournalId());
 
-        info = new StorageInfo(10, 20, 30);
+        info = new StorageInfo(10, 20);
         Assert.assertEquals(10, info.getClusterID());
-        Assert.assertEquals(20, info.getImageSeq());
-        Assert.assertEquals(30, info.getEditsSeq());
+        Assert.assertEquals(20, info.getImageJournalId());
 
         info.setClusterID(100);
-        info.setImageSeq(200);
-        info.setEditsSeq(300);
+        info.setImageJournalId(200);
 
         Assert.assertEquals(100, info.getClusterID());
-        Assert.assertEquals(200, info.getImageSeq());
-        Assert.assertEquals(300, info.getEditsSeq());
+        Assert.assertEquals(200, info.getImageJournalId());
     }
 }
