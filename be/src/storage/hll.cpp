@@ -475,10 +475,10 @@ void HllSetHelper::set_sparse(char* result, const std::map<int, uint8_t>& index_
     result[0] = HLL_DATA_SPARSE;
     *len = sizeof(HllSetResolver::SetTypeValueType) + sizeof(HllSetResolver::SparseLengthValueType);
     char* write_value_pos = result + *len;
-    for (std::map<int, uint8_t>::const_iterator iter = index_to_value.begin(); iter != index_to_value.end(); iter++) {
-        write_value_pos[0] = (char)(iter->first & 0xff);
-        write_value_pos[1] = (char)(iter->first >> 8 & 0xff);
-        write_value_pos[2] = iter->second;
+    for (auto iter : index_to_value) {
+        write_value_pos[0] = (char)(iter.first & 0xff);
+        write_value_pos[1] = (char)(iter.first >> 8 & 0xff);
+        write_value_pos[2] = iter.second;
         write_value_pos += 3;
     }
     int registers_count = index_to_value.size();
@@ -492,8 +492,7 @@ void HllSetHelper::set_explicit(char* result, const std::set<uint64_t>& hash_val
     result[1] = (HllSetResolver::ExpliclitLengthValueType)(hash_value_set.size());
     *len = sizeof(HllSetResolver::SetTypeValueType) + sizeof(HllSetResolver::ExpliclitLengthValueType);
     char* write_pos = result + *len;
-    for (std::set<uint64_t>::const_iterator iter = hash_value_set.begin(); iter != hash_value_set.end(); iter++) {
-        uint64_t hash_value = *iter;
+    for (unsigned long hash_value : hash_value_set) {
         *(uint64_t*)write_pos = hash_value;
         write_pos += 8;
     }

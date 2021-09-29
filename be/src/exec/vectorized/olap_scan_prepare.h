@@ -709,8 +709,8 @@ static Status build_scan_key(const std::vector<std::string>& key_column_names,
                              bool no_limit, int32_t max_scan_key_num) {
     int conditional_key_columns = 0;
     scan_keys.set_is_convertible(no_limit);
-    for (int i = 0; i < key_column_names.size(); ++i) {
-        if (column_value_ranges.count(key_column_names[i]) == 0) {
+    for (const auto& key_column_name : key_column_names) {
+        if (column_value_ranges.count(key_column_name) == 0) {
             break;
         }
         conditional_key_columns++;

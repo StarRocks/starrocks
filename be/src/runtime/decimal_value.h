@@ -291,8 +291,8 @@ public:
            << "_sign: " << _sign << "; "
            << "_buffer_length: " << _buffer_length << "; ";
         ss << "_buffer: [";
-        for (int i = 0; i < DIG_PER_DEC1; ++i) {
-            ss << _buffer[i] << ", ";
+        for (int i : _buffer) {
+            ss << i << ", ";
         }
         ss << "]; ";
         return ss.str();
@@ -303,8 +303,8 @@ public:
         value._sign = true;
         value._int_length = DECIMAL_MAX_POSSIBLE_PRECISION;
         value._frac_length = 0;
-        for (int i = 0; i < DIG_PER_DEC1; ++i) {
-            value._buffer[i] = DIG_BASE - 1;
+        for (int& i : value._buffer) {
+            i = DIG_BASE - 1;
         }
         return value;
     }
@@ -314,8 +314,8 @@ public:
         value._sign = false;
         value._int_length = DECIMAL_MAX_POSSIBLE_PRECISION;
         value._frac_length = 0;
-        for (int i = 0; i < DIG_PER_DEC1; ++i) {
-            value._buffer[i] = DIG_BASE - 1;
+        for (int& i : value._buffer) {
+            i = DIG_BASE - 1;
         }
         return value;
     }

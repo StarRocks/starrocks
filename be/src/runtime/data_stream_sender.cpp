@@ -620,8 +620,8 @@ Status DataStreamSender::prepare(RuntimeState* state) {
                 return RuntimeProfile::units_per_second(capture0, capture1);
             },
             "");
-    for (int i = 0; i < _channels.size(); ++i) {
-        RETURN_IF_ERROR(_channels[i]->init(state));
+    for (auto& _channel : _channels) {
+        RETURN_IF_ERROR(_channel->init(state));
     }
 
     // set eos for all channels.
@@ -910,18 +910,18 @@ Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
         _chunk_request.set_eos(true);
         butil::IOBuf attachment;
         construct_brpc_attachment(&_chunk_request, &attachment);
-        for (int i = 0; i < _channels.size(); ++i) {
-            _channels[i]->send_chunk_request(&_chunk_request, attachment);
+        for (auto& _channel : _channels) {
+            _channel->send_chunk_request(&_chunk_request, attachment);
         }
     } else {
-        for (int i = 0; i < _channels.size(); ++i) {
-            _channels[i]->close(state);
+        for (auto& _channel : _channels) {
+            _channel->close(state);
         }
     }
 
     // wait all channels to finish
-    for (int i = 0; i < _channels.size(); ++i) {
-        _channels[i]->close_wait(state);
+    for (auto& _channel : _channels) {
+        _channel->close_wait(state);
     }
     for (auto iter : _partition_infos) {
         auto st = iter->close(state);
@@ -1032,8 +1032,8 @@ int64_t DataStreamSender::get_num_data_bytes_sent() const {
     // atomic?
     int64_t result = 0;
 
-    for (int i = 0; i < _channels.size(); ++i) {
-        result += _channels[i]->num_data_bytes_sent();
+    for (auto _channel : _channels) {
+        result += _channel->num_data_bytes_sent();
     }
 
     return result;
