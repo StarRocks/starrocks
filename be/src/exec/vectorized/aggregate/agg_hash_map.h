@@ -60,6 +60,7 @@ using SliceAggTwoLevelHashMap =
         phmap::parallel_flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual,
                                       phmap::priv::Allocator<phmap::priv::Pair<const Slice, AggDataPtr>>, PHMAPN>;
 
+// This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
 static constexpr size_t AGG_HASH_MAP_DEFAULT_PREFETCH_DIST = 16;
 
 static_assert(sizeof(AggDataPtr) == sizeof(size_t));
