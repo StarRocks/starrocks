@@ -273,7 +273,7 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
                 new_tablet->delete_alter_task();
             }
         }
-    } while (0);
+    } while (false);
 
     // 4. clear
     if (!new_meta_file.empty()) {
