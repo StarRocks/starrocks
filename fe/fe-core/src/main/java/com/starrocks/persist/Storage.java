@@ -112,7 +112,7 @@ public class Storage {
             for (File child : children) {
                 String name = child.getName();
                 try {
-                    if (name.startsWith(IMAGE) && name.contains(".")) {
+                    if (!name.equals(IMAGE_NEW) && name.startsWith(IMAGE) && name.contains(".")) {
                         imageJournalId = Math.max(Long.parseLong(name.substring(name.lastIndexOf('.') + 1)), imageJournalId);
                     }
                 } catch (Exception e) {

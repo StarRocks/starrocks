@@ -31,6 +31,7 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.master.MetaHelper;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
@@ -214,6 +215,8 @@ public class MetaService {
                 writeResponse(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
                 return;
             }
+
+            MetricRepo.GAUGE_IMAGE_JOURNAL_ID.setValue(version);
 
             // Delete old image files
             MetaCleaner cleaner = new MetaCleaner(Config.meta_dir + "/image");

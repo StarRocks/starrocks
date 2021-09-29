@@ -1510,6 +1510,7 @@ public class Catalog {
         Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
         long loadImageEndTime = System.currentTimeMillis();
+        MetricRepo.GAUGE_IMAGE_JOURNAL_ID.setValue(storage.getImageJournalId());
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
     }
 

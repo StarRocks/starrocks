@@ -71,6 +71,7 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_ERR;
     public static LongCounterMetric COUNTER_QUERY_TIMEOUT;
     public static LongCounterMetric COUNTER_QUERY_SUCCESS;
+    public static LongCounterMetric COUNTER_SLOW_QUERY;
     public static LongCounterMetric COUNTER_LOAD_ADD;
     public static LongCounterMetric COUNTER_LOAD_FINISHED;
     public static LongCounterMetric COUNTER_EDIT_LOG_WRITE;
@@ -103,6 +104,9 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P99;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
     public static GaugeMetricImpl<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
+
+    // metrics for image journal id
+    public static GaugeMetricImpl<Long> GAUGE_IMAGE_JOURNAL_ID;
 
     private static ScheduledThreadPoolExecutor metricTimer =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
@@ -182,14 +186,20 @@ public final class MetricRepo {
                 "max_journal_id", MetricUnit.NOUNIT, "max journal id of this frontends") {
             @Override
             public Long getValue() {
-                EditLog editLog = Catalog.getCurrentCatalog().getEditLog();
-                if (editLog == null) {
-                    return -1L;
-                }
-                return editLog.getMaxJournalId();
+                return Catalog.getCurrentCatalog().getMaxJournalId();
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(maxJournalId);
+
+        // meta log total count
+        GaugeMetric<Long> metaLogCount = new GaugeMetric<Long>(
+                "meta_log_count", MetricUnit.NOUNIT, "meta log total count") {
+            @Override
+            public Long getValue() {
+                return Catalog.getCurrentCatalog().getMaxJournalId() - GAUGE_IMAGE_JOURNAL_ID.getValue();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
 
         // scheduled tablet num
         GaugeMetric<Long> scheduledTabletNum = (GaugeMetric<Long>) new GaugeMetric<Long>(
@@ -282,6 +292,12 @@ public final class MetricRepo {
         GAUGE_QUERY_LATENCY_P999.setValue(0.0);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_LATENCY_P999);
 
+        // NOTE: we do not register this to STARROCKS_METRIC_REGISTER, cause we do not need to show this metrics.
+        // it is used to calculate the meta_log_count metrics
+        GAUGE_IMAGE_JOURNAL_ID =
+                new GaugeMetricImpl<>("image_journal_id", MetricUnit.NOUNIT, "image journal id");
+        GAUGE_IMAGE_JOURNAL_ID.setValue(0L);
+
         // 2. counter
         COUNTER_REQUEST_ALL = new LongCounterMetric("request_total", MetricUnit.REQUESTS, "total request");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_REQUEST_ALL);
@@ -293,6 +309,8 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_TIMEOUT);
         COUNTER_QUERY_SUCCESS = new LongCounterMetric("query_success", MetricUnit.REQUESTS, "total success query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_SUCCESS);
+        COUNTER_SLOW_QUERY = new LongCounterMetric("slow_query", MetricUnit.REQUESTS, "total slow query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SLOW_QUERY);
         COUNTER_LOAD_ADD = new LongCounterMetric("load_add", MetricUnit.REQUESTS, "total load submit");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LOAD_ADD);
         COUNTER_ROUTINE_LOAD_PAUSED =
