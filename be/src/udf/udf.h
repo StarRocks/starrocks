@@ -681,7 +681,7 @@ struct DecimalVal : public AnyVal {
         memset(buffer, 0, sizeof(int32_t) * 9);
         int_len = 0;
         frac_len = 0;
-        sign = 0;
+        sign = false;
     }
 
     void set_to_abs_value() { sign = false; }
