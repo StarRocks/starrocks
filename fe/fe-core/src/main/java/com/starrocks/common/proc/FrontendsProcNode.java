@@ -75,6 +75,9 @@ public class FrontendsProcNode implements ProcNodeInterface {
 
     public static void getFrontendsInfo(Catalog catalog, List<List<String>> infos) {
         String masterIp = Catalog.getCurrentCatalog().getMasterIp();
+        if (masterIp == null) {
+            masterIp = "";
+        }
 
         // get all node which are joined in bdb group
         List<InetSocketAddress> allFe = catalog.getHaProtocol().getElectableNodes(true /* include leader */);
