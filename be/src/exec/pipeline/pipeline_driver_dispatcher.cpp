@@ -53,7 +53,8 @@ void GlobalDriverDispatcher::run() {
         auto* runtime_state = fragment_ctx->runtime_state();
 
         if (fragment_ctx->is_canceled()) {
-            VLOG_ROW << "[Driver] Canceled: error=" << fragment_ctx->final_status().to_string();
+            VLOG_ROW << "[Driver] Canceled: driver=" << driver.get()
+                     << ", error=" << fragment_ctx->final_status().to_string();
             driver->cancel(runtime_state);
             if (driver->source_operator()->pending_finish()) {
                 driver->set_driver_state(DriverState::PENDING_FINISH);
