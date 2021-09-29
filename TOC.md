@@ -10,3 +10,7 @@
   + [Data flow and control flow](/quick_start/Data_flow_and_control_flow.md)
   + [Import and query](/quick_start/Import_and_query.md)
   + [Test FAQs](/quick_start/Test_faq.md)
++ Table design
+  + [StarRocks table design](/table_design/StarRocks_table_design.md)
+  + [Data model](/table_design/Data_model.md)
+  + [Data distribution](/table_design/Data_distribution.md)
