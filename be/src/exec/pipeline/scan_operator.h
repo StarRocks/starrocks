@@ -76,6 +76,9 @@ public:
     // ScanOperator needs to attach MorselQueue.
     bool with_morsels() const override { return true; }
 
+    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
+    void close(RuntimeState* state) override;
+
 private:
     TOlapScanNode _olap_scan_node;
     std::vector<ExprContext*> _conjunct_ctxs;

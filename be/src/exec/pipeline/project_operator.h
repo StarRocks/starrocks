@@ -70,6 +70,9 @@ public:
                                                  _common_sub_column_ids, _common_sub_expr_ctxs);
     }
 
+    Status prepare(RuntimeState* state, MemTracker* mem_tracker);
+    void close(RuntimeState* state);
+
 private:
     std::vector<int32_t> _column_ids;
     std::vector<ExprContext*> _expr_ctxs;
