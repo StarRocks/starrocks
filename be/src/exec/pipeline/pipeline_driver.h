@@ -129,6 +129,9 @@ public:
     DriverState driver_state() { return _state; }
     void set_driver_state(DriverState state) { _state = state; }
     SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
+
+    void cancel(RuntimeState* state);
+
     Operator* sink_operator() { return _operators.back().get(); }
     bool is_finished() {
         return _state == DriverState::FINISH || _state == DriverState::CANCELED ||

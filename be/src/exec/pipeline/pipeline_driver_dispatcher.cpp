@@ -54,6 +54,7 @@ void GlobalDriverDispatcher::run() {
 
         if (fragment_ctx->is_canceled()) {
             VLOG_ROW << "[Driver] Canceled: error=" << fragment_ctx->final_status().to_string();
+            driver->cancel(runtime_state);
             if (driver->source_operator()->pending_finish()) {
                 driver->set_driver_state(DriverState::PENDING_FINISH);
                 _blocked_driver_poller->add_blocked_driver(driver);
@@ -75,6 +76,7 @@ void GlobalDriverDispatcher::run() {
         if (!status.ok()) {
             VLOG_ROW << "[Driver] Process error: error=" << status.status().to_string();
             query_ctx->cancel(status.status());
+            driver->cancel(runtime_state);
             if (driver->source_operator()->pending_finish()) {
                 driver->set_driver_state(DriverState::PENDING_FINISH);
                 _blocked_driver_poller->add_blocked_driver(driver);
