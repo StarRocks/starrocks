@@ -463,10 +463,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (selectedPartitionIds.isEmpty()) {
             return 0;
         }
-        for (long partitionId : selectedPartitionIds) {
-            PartitionKey partitionKey = idToPartitionKey.get(partitionId);
-            HivePartition partition = hiveTable.getPartition(partitionKey);
-            for (HdfsFileDesc fileDesc : partition.getFiles()) {
+
+        List<HivePartition> hivePartitions = hiveTable.getPartitions(partitions);
+        for (HivePartition hivePartition : hivePartitions) {
+            for (HdfsFileDesc fileDesc : hivePartition.getFiles()) {
                 totalBytes += fileDesc.getLength();
             }
         }
