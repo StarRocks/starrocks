@@ -147,7 +147,7 @@ public class ShowMetaInfoAction extends RestBaseAction {
         feInfo.put("is_ready", String.valueOf(Catalog.getCurrentCatalog().isReady()));
         try {
             Storage storage = new Storage(Config.meta_dir + "/image");
-            feInfo.put("last_checkpoint_version", String.valueOf(storage.getImageSeq()));
+            feInfo.put("last_checkpoint_version", String.valueOf(storage.getImageJournalId()));
             long lastCheckpointTime = storage.getCurrentImageFile().lastModified();
             feInfo.put("last_checkpoint_time", String.valueOf(lastCheckpointTime));
         } catch (IOException e) {
