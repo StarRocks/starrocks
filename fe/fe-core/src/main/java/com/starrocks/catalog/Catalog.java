@@ -269,8 +269,6 @@ import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -431,6 +429,8 @@ public class Catalog {
     private AnalyzeManager analyzeManager;
 
     private StatisticStorage statisticStorage;
+
+    private long imageJournalId;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
@@ -1510,7 +1510,7 @@ public class Catalog {
         Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
         long loadImageEndTime = System.currentTimeMillis();
-        MetricRepo.GAUGE_IMAGE_JOURNAL_ID.setValue(storage.getImageJournalId());
+        this.imageJournalId = storage.getImageJournalId();
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
     }
 
@@ -7259,5 +7259,12 @@ public class Catalog {
         }
     }
 
+    public long getImageJournalId() {
+        return imageJournalId;
+    }
+
+    public void setImageJournalId(long imageJournalId) {
+        this.imageJournalId = imageJournalId;
+    }
 }
 

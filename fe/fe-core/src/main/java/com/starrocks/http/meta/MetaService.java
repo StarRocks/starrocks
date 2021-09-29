@@ -216,7 +216,7 @@ public class MetaService {
                 return;
             }
 
-            MetricRepo.GAUGE_IMAGE_JOURNAL_ID.setValue(version);
+            Catalog.getCurrentCatalog().setImageJournalId(version);
 
             // Delete old image files
             MetaCleaner cleaner = new MetaCleaner(Config.meta_dir + "/image");

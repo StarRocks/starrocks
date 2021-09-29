@@ -41,7 +41,6 @@ import com.starrocks.metric.Metric.MetricType;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.monitor.jvm.JvmService;
 import com.starrocks.monitor.jvm.JvmStats;
-import com.starrocks.persist.EditLog;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -104,9 +103,6 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P99;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_P999;
     public static GaugeMetricImpl<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
-
-    // metrics for image journal id
-    public static GaugeMetricImpl<Long> GAUGE_IMAGE_JOURNAL_ID;
 
     private static ScheduledThreadPoolExecutor metricTimer =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
@@ -196,7 +192,7 @@ public final class MetricRepo {
                 "meta_log_count", MetricUnit.NOUNIT, "meta log total count") {
             @Override
             public Long getValue() {
-                return Catalog.getCurrentCatalog().getMaxJournalId() - GAUGE_IMAGE_JOURNAL_ID.getValue();
+                return Catalog.getCurrentCatalog().getMaxJournalId() - Catalog.getCurrentCatalog().getImageJournalId();
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(metaLogCount);
@@ -291,12 +287,6 @@ public final class MetricRepo {
         GAUGE_QUERY_LATENCY_P999.addLabel(new MetricLabel("type", "999_quantile"));
         GAUGE_QUERY_LATENCY_P999.setValue(0.0);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_QUERY_LATENCY_P999);
-
-        // NOTE: we do not register this to STARROCKS_METRIC_REGISTER, cause we do not need to show this metrics.
-        // it is used to calculate the meta_log_count metrics
-        GAUGE_IMAGE_JOURNAL_ID =
-                new GaugeMetricImpl<>("image_journal_id", MetricUnit.NOUNIT, "image journal id");
-        GAUGE_IMAGE_JOURNAL_ID.setValue(0L);
 
         // 2. counter
         COUNTER_REQUEST_ALL = new LongCounterMetric("request_total", MetricUnit.REQUESTS, "total request");
