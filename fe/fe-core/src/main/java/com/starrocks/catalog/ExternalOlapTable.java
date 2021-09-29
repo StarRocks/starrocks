@@ -16,7 +16,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBackendMeta;
-import com.starrocks.thrift.TColumnDef;
+import com.starrocks.thrift.TColumnMeta;
 import com.starrocks.thrift.THashDistributionInfo;
 import com.starrocks.thrift.TIndexInfo;
 import com.starrocks.thrift.TIndexMeta;
@@ -164,11 +164,11 @@ public class ExternalOlapTable extends OlapTable {
         externalTableInfo = null;
     }
 
-    public ExternalOlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
+    public ExternalOlapTable(long tableId, String tableName, List<Column> baseSchema, KeysType keysType,
                              PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
                              TableIndexes indexes, Map<String, String> properties)
         throws DdlException {
-        super(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, indexes);
+        super(tableId, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, indexes);
         setType(TableType.OLAP_EXTERNAL);
         dbId = -1;
         lastExternalMeta = null;
@@ -269,18 +269,17 @@ public class ExternalOlapTable extends OlapTable {
 
             for (TIndexMeta indexMeta : meta.getIndexes()) {
                 List<Column> columns = new ArrayList();
-                for (TColumnDef columnDef : indexMeta.getSchema_meta().getColumns()) {
-                    Type type = Type.fromPrimitiveType(PrimitiveType.fromThrift(columnDef.getColumnDesc().getColumnType()));
-                    Column column = new Column(columnDef.getColumnDesc().getColumnName(), type);
-                    if (columnDef.getColumnDesc().isSetKey()) {
-                        column.setIsKey(columnDef.getColumnDesc().isKey());
+                for (TColumnMeta columnMeta : indexMeta.getSchema_meta().getColumns()) {
+                    Type type = Type.fromThrift(columnMeta.getColumnType());
+                    Column column = new Column(columnMeta.getColumnName(), type);
+                    if (columnMeta.isSetKey()) {
+                        column.setIsKey(columnMeta.isKey());
                     }
-                    // TODO(wulei): confirm false ok
-                    if (columnDef.getColumnDesc().isSetAggregationType()) {
-                        column.setAggregationType(AggregateType.valueOf(columnDef.getColumnDesc().getAggregationType()), false);
+                    if (columnMeta.isSetAggregationType()) {
+                        column.setAggregationType(AggregateType.valueOf(columnMeta.getAggregationType()), false);
                     }
-                    if (columnDef.isSetComment()) {
-                        column.setComment(columnDef.getComment());
+                    if (columnMeta.isSetComment()) {
+                        column.setComment(columnMeta.getComment());
                     }
                     columns.add(column);
                 }
