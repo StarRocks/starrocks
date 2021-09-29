@@ -94,8 +94,8 @@ public class HdfsScanNodeTest {
         partitionCols.add(partitionCol);
 
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
-        partitionKeys.put(PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols),
-                0L);
+        PartitionKey partitionKey = PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols);
+        partitionKeys.put(partitionKey, 0L);
 
         HdfsFileBlockDesc blockDesc = new HdfsFileBlockDesc(0, 100, new long[] {0}, null, client);
         HdfsFileDesc fileDesc = new HdfsFileDesc("/00000_0", "", 100, ImmutableList.of(blockDesc));
@@ -109,8 +109,8 @@ public class HdfsScanNodeTest {
                 result = partitionCols;
                 table.getPartitionKeys();
                 result = partitionKeys;
-                table.getPartition((PartitionKey) any);
-                result = p0;
+                table.getPartitions((List<PartitionKey>) any);
+                result = Lists.newArrayList(p0);
                 table.getExtrapolatedRowCount(anyLong);
                 result = -1;
                 table.getPartitionStatsRowCount((List<PartitionKey>) any);
@@ -174,10 +174,8 @@ public class HdfsScanNodeTest {
                 result = partitionCols;
                 table.getPartitionKeys();
                 result = partitionKeys;
-                table.getPartition(key2);
-                result = p2;
-                table.getPartition(key3);
-                result = p3;
+                table.getPartitions((List<PartitionKey>) any);
+                result = Lists.newArrayList(p2, p3);
                 table.getExtrapolatedRowCount(400);
                 result = 50;
             }
@@ -208,8 +206,8 @@ public class HdfsScanNodeTest {
         partitionCols.add(partitionCol);
 
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
-        partitionKeys.put(PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols),
-                0L);
+        PartitionKey partitionKey = PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("1")), partitionCols);
+        partitionKeys.put(partitionKey, 0L);
 
         HdfsFileBlockDesc blockDesc = new HdfsFileBlockDesc(0, 100, new long[] {0}, null, client);
         HdfsFileDesc fileDesc = new HdfsFileDesc("/00000_0", "", 100, ImmutableList.of(blockDesc));
@@ -238,8 +236,8 @@ public class HdfsScanNodeTest {
                 result = partitionCols;
                 table.getPartitionKeys();
                 result = partitionKeys;
-                table.getPartition((PartitionKey) any);
-                result = p0;
+                table.getPartitions((List<PartitionKey>) any);
+                result = Lists.newArrayList(p0);
                 table.getExtrapolatedRowCount(anyLong);
                 result = -1;
                 table.getPartitionStatsRowCount((List<PartitionKey>) any);
