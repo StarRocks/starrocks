@@ -77,6 +77,8 @@ public:
     virtual OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) = 0;
     virtual bool is_source() const { return false; }
     int32_t plan_node_id() const { return _plan_node_id; }
+    virtual Status prepare(RuntimeState* state, MemTracker* mem_tracker) { return Status::OK(); }
+    virtual void close(RuntimeState* state) {}
 
 protected:
     int32_t _id = 0;

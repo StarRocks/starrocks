@@ -256,9 +256,6 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
         _partitions_columns.resize(_partition_expr_ctxs.size());
-        RowDescriptor row_desc;
-        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, row_desc, get_memtracker()));
-        RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
     } else {
         DCHECK(false) << "shouldn't go to here";
     }
@@ -396,7 +393,6 @@ void ExchangeSinkOperator::finish(RuntimeState* state) {
 
 Status ExchangeSinkOperator::close(RuntimeState* state) {
     ScopedTimer<MonotonicStopWatch> close_timer(_profile != nullptr ? _profile->total_time_counter() : nullptr);
-    Expr::close(_partition_expr_ctxs, state);
     Operator::close(state);
     return _close_status;
 }
@@ -481,6 +477,20 @@ OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, i
         DCHECK(false) << " Shouldn't reach here!";
         return nullptr;
     }
+}
+
+Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+    if (_part_type == TPartitionType::HASH_PARTITIONED ||
+        _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+        RowDescriptor row_desc;
+        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, row_desc, mem_tracker));
+        RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
+    }
+    return Status::OK();
+}
+
+void ExchangeSinkOperatorFactory::close(RuntimeState* state) {
+    Expr::close(_partition_expr_ctxs, state);
 }
 
 } // namespace starrocks::pipeline

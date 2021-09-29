@@ -19,16 +19,10 @@ using namespace starrocks::vectorized;
 namespace starrocks::pipeline {
 Status SortSinkOperator::prepare(RuntimeState* state) {
     Operator::prepare(state);
-    // call prepare and open at exprs, Maintain the same procedure as topnnode.
-    RETURN_IF_ERROR(
-            _sort_exec_exprs.prepare(state, _parent_node_row_desc, _parent_node_child_row_desc, get_memtracker()));
-    RETURN_IF_ERROR(_sort_exec_exprs.open(state));
     return Status::OK();
 }
 
 Status SortSinkOperator::close(RuntimeState* state) {
-    // call close exprs, Maintain the same procedure as topnnode.
-    _sort_exec_exprs.close(state);
     return Operator::close(state);
 }
 
@@ -104,6 +98,16 @@ vectorized::ChunkPtr SortSinkOperator::_materialize_chunk_before_sort(vectorized
 void SortSinkOperator::finish(RuntimeState* state) {
     _chunks_sorter->finish(state);
     _is_finished = true;
+}
+
+Status SortSinkOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+    RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _parent_node_row_desc, _parent_node_child_row_desc, mem_tracker));
+    RETURN_IF_ERROR(_sort_exec_exprs.open(state));
+    return Status::OK();
+}
+
+void SortSinkOperatorFactory::close(RuntimeState* state) {
+    _sort_exec_exprs.close(state);
 }
 
 } // namespace starrocks::pipeline
