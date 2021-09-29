@@ -33,14 +33,9 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
     </module>
 
     <module name="SuppressWarningsFilter"/>
-    <module name="TreeWalker">
-        <module name="AvoidStarImport"/>
-        <module name="UnusedImports"/>
-    </module>
-
     <module name="BeforeExecutionExclusionFileFilter">
         <property name="fileNamePattern"
-                  value="HiveMetaClient.java|HiveMetaStoreThriftClient.java|FunctionSet.java|TableMetricsEntity.java|(.*[\\/]starrocks[\\/](analysis)|(planner)[\\/].*$)||DataOutputBuffer.java|LimitOutputStream.java|Log4jConfig.java|StmtExecutor.java|SubqueryUtils.java|Text.java"/>
+                  value="(.*[\\/]starrocks[\\/](analysis)|(planner)[\\/].*$)|Log4jConfig.java|FunctionSet.java|HiveMetaStoreThriftClient.java"/>
     </module>
 
     <module name="FileTabCharacter">
@@ -60,6 +55,7 @@ https://github.com/checkstyle/checkstyle/blob/master/src/main/resources/google_c
             <property name="allowByTailComment" value="true"/>
             <property name="allowNonPrintableEscapes" value="true"/>
         </module>
+        <module name="UnusedImports"/>
         <module name="AvoidStarImport"/>
         <!--        <module name="OneTopLevelClass"/>-->
         <module name="NoLineWrap">

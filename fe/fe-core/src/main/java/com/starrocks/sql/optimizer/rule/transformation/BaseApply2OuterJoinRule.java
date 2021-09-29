@@ -72,7 +72,7 @@ public abstract class BaseApply2OuterJoinRule extends TransformationRule {
 
         // extract join-key
         Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> pair =
-                SubqueryUtils.rewriteCorrelationPredicateAndExtractColumnRefs(correlationPredicates,
+                SubqueryUtils.rewritePredicateAndExtractColumnRefs(correlationPredicates,
                         correlationColumnRefs, context);
 
         // rootOptExpression
