@@ -105,7 +105,8 @@ private:
     mutable std::condition_variable cond_;
 
     int64_t count_;
-    DISALLOW_COPY_AND_ASSIGN(CountDownLatch);
+    CountDownLatch(const CountDownLatch&) = delete;
+    const CountDownLatch& operator=(const CountDownLatch&) = delete;
 };
 
 // Utility class which calls latch->CountDown() in its destructor.
@@ -115,7 +116,8 @@ public:
     ~CountDownOnScopeExit() { latch_->count_down(); }
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(CountDownOnScopeExit);
+    CountDownOnScopeExit(const CountDownOnScopeExit&) = delete;
+    const CountDownOnScopeExit& operator=(const CountDownOnScopeExit&) = delete;
 
     CountDownLatch* latch_;
 };

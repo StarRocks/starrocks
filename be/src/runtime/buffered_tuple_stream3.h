@@ -369,7 +369,8 @@ public:
     std::string DebugString() const;
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(BufferedTupleStream3);
+    BufferedTupleStream3(const BufferedTupleStream3&) = delete;
+    const BufferedTupleStream3& operator=(const BufferedTupleStream3&) = delete;
     friend class ArrayTupleStreamTest_TestArrayDeepCopy_Test;
     friend class ArrayTupleStreamTest_TestComputeRowSize_Test;
     friend class MultiNullableTupleStreamTest_TestComputeRowSize_Test;

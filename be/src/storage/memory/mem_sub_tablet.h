@@ -116,7 +116,8 @@ private:
     size_t _num_update = 0;
     size_t _num_update_cell = 0;
 
-    DISALLOW_COPY_AND_ASSIGN(MemSubTablet);
+    MemSubTablet(const MemSubTablet&) = delete;
+    const MemSubTablet& operator=(const MemSubTablet&) = delete;
 };
 
 } // namespace memory

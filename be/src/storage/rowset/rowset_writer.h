@@ -118,7 +118,8 @@ public:
     virtual RowsetId rowset_id() = 0;
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(RowsetWriter);
+    RowsetWriter(const RowsetWriter&) = delete;
+    const RowsetWriter& operator=(const RowsetWriter&) = delete;
 };
 
 } // namespace starrocks

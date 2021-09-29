@@ -425,7 +425,8 @@ protected:
     BaseDeleter() = default;
 
 private:
-    DISALLOW_EVIL_CONSTRUCTORS(BaseDeleter);
+    BaseDeleter(const BaseDeleter&) = delete;
+    const BaseDeleter& operator=(const BaseDeleter&) = delete;
 };
 
 // Given a pointer to an STL container, this class will delete all the element
@@ -441,7 +442,8 @@ public:
 private:
     STLContainer* container_ptr_;
 
-    DISALLOW_EVIL_CONSTRUCTORS(TemplatedElementDeleter);
+    TemplatedElementDeleter(const TemplatedElementDeleter&) = delete;
+    const TemplatedElementDeleter& operator=(const TemplatedElementDeleter&) = delete;
 };
 
 // Like TemplatedElementDeleter, this class will delete element pointers from a
@@ -457,7 +459,8 @@ public:
 private:
     BaseDeleter* deleter_;
 
-    DISALLOW_EVIL_CONSTRUCTORS(ElementDeleter);
+    ElementDeleter(const ElementDeleter&) = delete;
+    const ElementDeleter& operator=(const ElementDeleter&) = delete;
 };
 
 // Given a pointer to an STL container this class will delete all the value
@@ -473,7 +476,8 @@ public:
 private:
     STLContainer* container_ptr_;
 
-    DISALLOW_EVIL_CONSTRUCTORS(TemplatedValueDeleter);
+    TemplatedValueDeleter(const TemplatedValueDeleter&) = delete;
+    const TemplatedValueDeleter& operator=(const TemplatedValueDeleter&) = delete;
 };
 
 // Similar to ElementDeleter, but wraps a TemplatedValueDeleter rather than an
@@ -488,7 +492,8 @@ public:
 private:
     BaseDeleter* deleter_;
 
-    DISALLOW_EVIL_CONSTRUCTORS(ValueDeleter);
+    ValueDeleter(const ValueDeleter&) = delete;
+    const ValueDeleter& operator=(const ValueDeleter&) = delete;
 };
 
 // STLElementDeleter and STLValueDeleter are similar to ElementDeleter and

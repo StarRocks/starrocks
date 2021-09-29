@@ -115,7 +115,8 @@ public:
     virtual const PageDecoder* dict_page_decoder() const { return nullptr; }
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(PageDecoder);
+    PageDecoder(const PageDecoder&) = delete;
+    const PageDecoder& operator=(const PageDecoder&) = delete;
 };
 
 } // namespace segment_v2

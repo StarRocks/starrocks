@@ -96,7 +96,8 @@ public:
     Status flush_data_async();
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(FileWritableBlock);
+    FileWritableBlock(const FileWritableBlock&) = delete;
+    const FileWritableBlock& operator=(const FileWritableBlock&) = delete;
 
     enum SyncMode { SYNC, NO_SYNC };
 
@@ -289,7 +290,8 @@ private:
     // this must be an atomic primitive.
     std::atomic_bool _closed;
 
-    DISALLOW_COPY_AND_ASSIGN(FileReadableBlock);
+    FileReadableBlock(const FileReadableBlock&) = delete;
+    const FileReadableBlock& operator=(const FileReadableBlock&) = delete;
 };
 
 FileReadableBlock::FileReadableBlock(FileBlockManager* block_manager, string path,

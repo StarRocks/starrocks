@@ -51,7 +51,8 @@ public:
     void publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request);
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(AgentServer);
+    AgentServer(const AgentServer&) = delete;
+    const AgentServer& operator=(const AgentServer&) = delete;
 
     // Not Owned
     ExecEnv* _exec_env;

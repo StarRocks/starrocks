@@ -62,7 +62,8 @@ private:
     typedef std::pair<FieldAggregationMethod, FieldType> key_t;
     std::unordered_map<key_t, const AggregateInfo*, AggregateFuncMapHash> _infos_mapping;
 
-    DISALLOW_COPY_AND_ASSIGN(AggregateFuncResolver);
+    AggregateFuncResolver(const AggregateFuncResolver&) = delete;
+    const AggregateFuncResolver& operator=(const AggregateFuncResolver&) = delete;
 };
 
 AggregateFuncResolver::AggregateFuncResolver() {
