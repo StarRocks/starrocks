@@ -91,35 +91,44 @@ public class MaterializedViewRule extends Rule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         this.factory = context.getColumnRefFactory();
         OptExpression optExpression = input;
-        if (isExistMVs(optExpression)) {
-            init(optExpression);
-            for (LogicalOlapScanOperator scan : scanOperators) {
-                int relationId = factory.getRelationId(scan.getOutputColumns().get(0).getId());
-                // clear rewrite context since we are going to handle another scan operator.
-                rewriteContexts.clear();
-                Map<Long, List<Column>> candidateIndexIdToSchema =
-                        selectValidIndexes(scan, relationId);
-                if (!candidateIndexIdToSchema.isEmpty()) {
-                    long bestIndex = selectBestIndexes(scan, candidateIndexIdToSchema, relationId);
-                    BestIndexRewriter bestIndexRewriter = new BestIndexRewriter(scan);
-                    optExpression = bestIndexRewriter.rewrite(optExpression, bestIndex);
+        if (!isExistMVs(optExpression)) {
+            return Lists.newArrayList(optExpression);
+        }
 
-                    if (rewriteContexts.containsKey(bestIndex)) {
-                        List<RewriteContext> rewriteContext = rewriteContexts.get(bestIndex);
-                        List<RewriteContext> percentileContexts = rewriteContext.stream().
-                                filter(e -> e.aggCall.getFnName().equals(FunctionSet.PERCENTILE_APPROX))
-                                .collect(Collectors.toList());
-                        if (!percentileContexts.isEmpty()) {
-                            MVProjectAggProjectScanRewrite.getInstance().rewriteOptExpressionTree(
-                                    factory, relationId, optExpression, percentileContexts);
-                        }
-                        rewriteContext.removeAll(percentileContexts);
+        init(optExpression);
 
-                        MaterializedViewRewriter rewriter = new MaterializedViewRewriter();
-                        for (MaterializedViewRule.RewriteContext rc : rewriteContext) {
-                            optExpression = rewriter.rewrite(optExpression, rc);
-                        }
-                    }
+        for (LogicalOlapScanOperator scan : scanOperators) {
+            int relationId = factory.getRelationId(scan.getOutputColumns().get(0).getId());
+            // clear rewrite context since we are going to handle another scan operator.
+            rewriteContexts.clear();
+            Map<Long, List<Column>> candidateIndexIdToSchema = selectValidIndexes(scan, relationId);
+            if (candidateIndexIdToSchema.isEmpty()) {
+                continue;
+            }
+
+            long bestIndex = selectBestIndexes(scan, candidateIndexIdToSchema, relationId);
+
+            if (bestIndex == scan.getSelectedIndexId()) {
+                continue;
+            }
+
+            BestIndexRewriter bestIndexRewriter = new BestIndexRewriter(scan);
+            optExpression = bestIndexRewriter.rewrite(optExpression, bestIndex);
+
+            if (rewriteContexts.containsKey(bestIndex)) {
+                List<RewriteContext> rewriteContext = rewriteContexts.get(bestIndex);
+                List<RewriteContext> percentileContexts = rewriteContext.stream().
+                        filter(e -> e.aggCall.getFnName().equals(FunctionSet.PERCENTILE_APPROX))
+                        .collect(Collectors.toList());
+                if (!percentileContexts.isEmpty()) {
+                    MVProjectAggProjectScanRewrite.getInstance().rewriteOptExpressionTree(
+                            factory, relationId, optExpression, percentileContexts);
+                }
+                rewriteContext.removeAll(percentileContexts);
+
+                MaterializedViewRewriter rewriter = new MaterializedViewRewriter();
+                for (MaterializedViewRule.RewriteContext rc : rewriteContext) {
+                    optExpression = rewriter.rewrite(optExpression, rc);
                 }
             }
         }
@@ -155,7 +164,8 @@ public class MaterializedViewRule extends Rule {
         checkAggregationFunction(columnNameToIds.get(relationId), aggFunctions.get(relationId), candidateIndexIdToMeta,
                 disableSPJGMVs.get(relationId), isSPJQueries.get(relationId));
         // Step5: columns required to compute output expr are available in the view output
-        checkOutputColumns(columnNameToIds.get(relationId), columnIdsInQueryOutput.get(relationId), candidateIndexIdToMeta);
+        checkOutputColumns(columnNameToIds.get(relationId), columnIdsInQueryOutput.get(relationId),
+                candidateIndexIdToMeta);
         // Step6: if table type is aggregate and the candidateIndexIdToSchema is empty,
         if ((table.getKeysType() == KeysType.AGG_KEYS || table.getKeysType() == KeysType.UNIQUE_KEYS)
                 && candidateIndexIdToMeta.size() == 0) {
