@@ -43,7 +43,8 @@ private:
     static std::string _s_localhost;
     static std::vector<CIDR> _s_priority_cidrs;
 
-    DISALLOW_COPY_AND_ASSIGN(BackendOptions);
+    BackendOptions(const BackendOptions&) = delete;
+    const BackendOptions& operator=(const BackendOptions&) = delete;
 };
 
 } // namespace starrocks

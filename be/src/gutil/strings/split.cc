@@ -775,7 +775,8 @@ private:
     // Valid closing characters.
     bool valid_closing_[256];
 
-    DISALLOW_COPY_AND_ASSIGN(ClosingSymbolLookup);
+    ClosingSymbolLookup(const ClosingSymbolLookup&) = delete;
+    const ClosingSymbolLookup& operator=(const ClosingSymbolLookup&) = delete;
 };
 
 char* SplitStructuredLineInternal(char* line, char delimiter, const char* symbol_pairs, vector<char*>* cols,

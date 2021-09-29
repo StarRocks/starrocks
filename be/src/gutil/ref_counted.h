@@ -39,7 +39,8 @@ private:
 
     DFAKE_MUTEX(add_release_);
 
-    DISALLOW_COPY_AND_ASSIGN(RefCountedBase);
+    RefCountedBase(const RefCountedBase&) = delete;
+    const RefCountedBase& operator=(const RefCountedBase&) = delete;
 };
 
 class RefCountedThreadSafeBase {
@@ -61,7 +62,8 @@ private:
     mutable bool in_dtor_;
 #endif
 
-    DISALLOW_COPY_AND_ASSIGN(RefCountedThreadSafeBase);
+    RefCountedThreadSafeBase(const RefCountedThreadSafeBase&) = delete;
+    const RefCountedThreadSafeBase& operator=(const RefCountedThreadSafeBase&) = delete;
 };
 
 } // namespace subtle
@@ -97,7 +99,8 @@ protected:
     ~RefCounted() = default;
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(RefCounted<T>);
+    RefCounted(const RefCounted&) = delete;
+    const RefCounted& operator=(const RefCounted&) = delete;
 };
 
 // Forward declaration.
@@ -148,7 +151,8 @@ private:
     friend struct DefaultRefCountedThreadSafeTraits<T>;
     static void DeleteInternal(const T* x) { delete x; }
 
-    DISALLOW_COPY_AND_ASSIGN(RefCountedThreadSafe);
+    RefCountedThreadSafe(const RefCountedThreadSafe&) = delete;
+    const RefCountedThreadSafe& operator=(const RefCountedThreadSafe&) = delete;
 };
 
 //

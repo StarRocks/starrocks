@@ -73,7 +73,8 @@ private:
     // delete handler for filtering data which use specified in DELETE_DATA
     DeleteHandler _delete_handler;
 
-    DISALLOW_COPY_AND_ASSIGN(RowBlockChanger);
+    RowBlockChanger(const RowBlockChanger&) = delete;
+    const RowBlockChanger& operator=(const RowBlockChanger&) = delete;
 };
 
 class RowBlockAllocator {
@@ -133,7 +134,8 @@ public:
 
 private:
     const RowBlockChanger& _row_block_changer;
-    DISALLOW_COPY_AND_ASSIGN(LinkedSchemaChange);
+    LinkedSchemaChange(const LinkedSchemaChange&) = delete;
+    const LinkedSchemaChange& operator=(const LinkedSchemaChange&) = delete;
 };
 
 // @brief schema change without sorting.
@@ -154,7 +156,8 @@ private:
 
     bool _write_row_block(RowsetWriter* rowset_builder, RowBlock* row_block);
 
-    DISALLOW_COPY_AND_ASSIGN(SchemaChangeDirectly);
+    SchemaChangeDirectly(const SchemaChangeDirectly&) = delete;
+    const SchemaChangeDirectly& operator=(const SchemaChangeDirectly&) = delete;
 };
 
 // @breif schema change with sorting
@@ -180,7 +183,8 @@ private:
     Version _temp_delta_versions;
     RowBlockAllocator* _row_block_allocator;
 
-    DISALLOW_COPY_AND_ASSIGN(SchemaChangeWithSorting);
+    SchemaChangeWithSorting(const SchemaChangeWithSorting&) = delete;
+    const SchemaChangeWithSorting& operator=(const SchemaChangeWithSorting&) = delete;
 };
 
 class SchemaChangeHandler {
@@ -231,7 +235,8 @@ private:
 private:
     RowsetReaderContext _reader_context;
 
-    DISALLOW_COPY_AND_ASSIGN(SchemaChangeHandler);
+    SchemaChangeHandler(const SchemaChangeHandler&) = delete;
+    const SchemaChangeHandler& operator=(const SchemaChangeHandler&) = delete;
 };
 
 } // namespace starrocks

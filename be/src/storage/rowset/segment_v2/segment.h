@@ -134,7 +134,8 @@ public:
     const std::string& file_name() const { return _fname; }
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(Segment);
+    Segment(const Segment&) = delete;
+    const Segment& operator=(const Segment&) = delete;
 
     struct private_type {
         explicit private_type(int) {}

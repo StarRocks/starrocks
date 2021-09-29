@@ -88,7 +88,8 @@ private:
 
     std::atomic<uint64_t> _max_version;
 
-    DISALLOW_COPY_AND_ASSIGN(MemTablet);
+    MemTablet(const MemTablet&) = delete;
+    const MemTablet& operator=(const MemTablet&) = delete;
 };
 
 } // namespace memory

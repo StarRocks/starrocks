@@ -121,7 +121,8 @@ private:
     // Get latest version's related delta
     void capture_latest(vector<ColumnDelta*>* deltas, uint64_t* version) const;
 
-    DISALLOW_COPY_AND_ASSIGN(Column);
+    Column(const Column&) = delete;
+    const Column& operator=(const Column&) = delete;
 };
 
 } // namespace memory

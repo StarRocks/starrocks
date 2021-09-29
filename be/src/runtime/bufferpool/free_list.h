@@ -100,7 +100,8 @@ public:
 private:
     friend class FreeListTest;
 
-    DISALLOW_COPY_AND_ASSIGN(FreeList);
+    FreeList(const FreeList&) = delete;
+    const FreeList& operator=(const FreeList&) = delete;
 
     /// Compare function that orders by memory address.
     inline static bool SortCompare(const BufferHandle& b1, const BufferHandle& b2) { return b1.data() < b2.data(); }

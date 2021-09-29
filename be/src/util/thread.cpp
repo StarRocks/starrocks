@@ -116,7 +116,8 @@ private:
     uint64_t _threads_started_metric{0};
     uint64_t _threads_running_metric{0};
 
-    DISALLOW_COPY_AND_ASSIGN(ThreadMgr);
+    ThreadMgr(const ThreadMgr&) = delete;
+    const ThreadMgr& operator=(const ThreadMgr&) = delete;
 };
 
 void ThreadMgr::set_thread_name(const std::string& name, int64_t tid) {

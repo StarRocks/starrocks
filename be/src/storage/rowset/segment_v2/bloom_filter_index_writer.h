@@ -60,7 +60,8 @@ public:
     virtual uint64_t size() = 0;
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(BloomFilterIndexWriter);
+    BloomFilterIndexWriter(const BloomFilterIndexWriter&) = delete;
+    const BloomFilterIndexWriter& operator=(const BloomFilterIndexWriter&) = delete;
 };
 
 } // namespace segment_v2

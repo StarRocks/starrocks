@@ -54,7 +54,8 @@ private:
     std::unordered_map<std::tuple<std::string, std::vector<PrimitiveType>, std::vector<PrimitiveType>>,
                        TableFunctionPtr, TableFunctionMapHash>
             _infos_mapping;
-    DISALLOW_COPY_AND_ASSIGN(TableFunctionResolver);
+    TableFunctionResolver(const TableFunctionResolver&) = delete;
+    const TableFunctionResolver& operator=(const TableFunctionResolver&) = delete;
 };
 
 TableFunctionResolver::TableFunctionResolver() {

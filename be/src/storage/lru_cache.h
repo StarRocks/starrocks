@@ -202,7 +202,8 @@ public:
     virtual void get_cache_status(rapidjson::Document* document) = 0;
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(Cache);
+    Cache(const Cache&) = delete;
+    const Cache& operator=(const Cache&) = delete;
 };
 
 // An entry is a variable length heap-allocated structure.  Entries

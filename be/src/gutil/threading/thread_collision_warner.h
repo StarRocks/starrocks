@@ -160,7 +160,8 @@ public:
     private:
         ThreadCollisionWarner* warner_;
 
-        DISALLOW_COPY_AND_ASSIGN(Check);
+        Check(const Check&) = delete;
+        const Check& operator=(const Check&) = delete;
     };
 
     // This class is meant to be used through the macro
@@ -174,7 +175,8 @@ public:
     private:
         ThreadCollisionWarner* warner_;
 
-        DISALLOW_COPY_AND_ASSIGN(ScopedCheck);
+        ScopedCheck(const ScopedCheck&) = delete;
+        const ScopedCheck& operator=(const ScopedCheck&) = delete;
     };
 
     // This class is meant to be used through the macro
@@ -188,7 +190,8 @@ public:
     private:
         ThreadCollisionWarner* warner_;
 
-        DISALLOW_COPY_AND_ASSIGN(ScopedRecursiveCheck);
+        ScopedRecursiveCheck(const ScopedRecursiveCheck&) = delete;
+        const ScopedRecursiveCheck& operator=(const ScopedRecursiveCheck&) = delete;
     };
 
 private:
@@ -216,7 +219,8 @@ private:
     // DCHECK but notify the collision with something else.
     AsserterBase* asserter_;
 
-    DISALLOW_COPY_AND_ASSIGN(ThreadCollisionWarner);
+    ThreadCollisionWarner(const ThreadCollisionWarner&) = delete;
+    const ThreadCollisionWarner& operator=(const ThreadCollisionWarner&) = delete;
 };
 
 } // namespace base

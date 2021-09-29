@@ -292,7 +292,8 @@ protected:
     BufferAllocator* allocator() { return allocator_.get(); }
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(BufferPool);
+    BufferPool(const BufferPool&) = delete;
+    const BufferPool& operator=(const BufferPool&) = delete;
     class Client;
     class FreeBufferArena;
     class PageList;
@@ -373,7 +374,8 @@ private:
     friend class BufferPool;
     friend class BufferPoolTest;
     friend class SubReservation;
-    DISALLOW_COPY_AND_ASSIGN(ClientHandle);
+    ClientHandle(const ClientHandle&) = delete;
+    const ClientHandle& operator=(const ClientHandle&) = delete;
 
     /// Internal state for the client. NULL means the client isn't registered.
     /// Owned by BufferPool.
@@ -397,7 +399,8 @@ public:
 
 private:
     friend class BufferPool::ClientHandle;
-    DISALLOW_COPY_AND_ASSIGN(SubReservation);
+    SubReservation(const SubReservation&) = delete;
+    const SubReservation& operator=(const SubReservation&) = delete;
 
     /// Child of the client's tracker used to track the sub-reservation. Usage is not
     /// tracked against this tracker - instead the reservation is always transferred back
@@ -445,7 +448,8 @@ public:
     void Unpoison() { ASAN_UNPOISON_MEMORY_REGION(data(), len()); }
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(BufferHandle);
+    BufferHandle(const BufferHandle&) = delete;
+    const BufferHandle& operator=(const BufferHandle&) = delete;
     friend class BufferPool;
     friend class SystemAllocator;
 
@@ -503,7 +507,8 @@ public:
     std::string DebugString() const;
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(PageHandle);
+    PageHandle(const PageHandle&) = delete;
+    const PageHandle& operator=(const PageHandle&) = delete;
     friend class BufferPool;
     friend class BufferPoolTest;
     friend class Page;
