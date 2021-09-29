@@ -500,7 +500,7 @@ FileVersion ReaderImpl::getFormatVersion() const {
     if (contents->postscript->version_size() != 2) {
         return FileVersion::v_0_11();
     }
-    return FileVersion(contents->postscript->version(0), contents->postscript->version(1));
+    return {contents->postscript->version(0), contents->postscript->version(1)};
 }
 
 uint64_t ReaderImpl::getNumberOfRows() const {
