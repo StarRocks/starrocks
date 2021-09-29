@@ -85,7 +85,7 @@ select v1,unnest from lateral_test2 , unnest(split(v2, ",")) ;
 ~~~SQL
 CREATE TABLE lateral_test (
     `v1` bigint(20) NULL COMMENT "",
-    `v2` ARRAY NULL COMMENT ""
+    `v2` ARRAY<int> NULL COMMENT ""
 ) 
 duplicate key(v1)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1
