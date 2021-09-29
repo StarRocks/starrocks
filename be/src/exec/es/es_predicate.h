@@ -166,7 +166,7 @@ public:
     EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, ObjectPool* pool);
     ~EsPredicate();
     const std::vector<ExtPredicate*>& get_predicate_list();
-    Status build_disjuncts_list(bool use_vectorized = false);
+    Status build_disjuncts_list(bool use_vectorized = true);
     // public for tests
     EsPredicate(const std::vector<ExtPredicate*>& all_predicates) { _disjuncts = all_predicates; };
 

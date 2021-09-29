@@ -6,11 +6,16 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.system.SystemInfoService;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public class StatisticUtils {
@@ -30,8 +35,8 @@ public class StatisticUtils {
         context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         context.setDatabase(Constants.StatisticsDBName);
         context.setCatalog(Catalog.getCurrentCatalog());
-        context.setCurrentUserIdentity(UserIdentity.ADMIN);
-        context.setQualifiedUser(UserIdentity.ADMIN.getQualifiedUser());
+        context.setCurrentUserIdentity(UserIdentity.ROOT);
+        context.setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
         context.setQueryId(UUIDUtil.genUUID());
         context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
         context.setThreadLocalInfo();
@@ -66,6 +71,12 @@ public class StatisticUtils {
         }
 
         return false;
+    }
+
+    public static LocalDateTime getTableLastUpdateTime(Table table) {
+        long maxTime = ((OlapTable) table).getPartitions().stream().map(Partition::getVisibleVersionTime)
+                .max(Long::compareTo).orElse(0L);
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
     }
 
 }

@@ -3110,8 +3110,8 @@ public class PlanFragmentTest extends PlanTestBase {
         // test having aggregate column
         sql = "select count(*) as count from join1 left join join2 on join1.id = join2.id\n" +
                 "having count > 1;";
-        starRocksAssert.query(sql).explainContains("6:AGGREGATE (update finalize)\n" +
-                        "  |  output: count(*)\n" +
+        starRocksAssert.query(sql).explainContains("7:AGGREGATE (merge finalize)\n" +
+                        "  |  output: count(7: count())\n" +
                         "  |  group by: \n" +
                         "  |  having: 7: count() > 1",
                 "  3:HASH JOIN\n" +
@@ -3996,6 +3996,18 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("EXCHANGE"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
 
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
+    }
+
+    @Test
+    public void testReplicationJoinWithPartitionTable() throws Exception {
+        connectContext.getSessionVariable().setEnableReplicationJoin(true);
+        boolean oldValue = FeConstants.runningUnitTest;
+        FeConstants.runningUnitTest = true;
+        String sql = "select * from join1 join pushdown_test on join1.id = pushdown_test.k1;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("INNER JOIN (BROADCAST)"));
+        FeConstants.runningUnitTest = oldValue;
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
 

@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -64,15 +65,26 @@ public class MaterializedViewRule extends Rule {
     private final Map<Long, List<RewriteContext>> rewriteContexts = Maps.newHashMap();
 
     private ColumnRefFactory factory;
-    private boolean disableAggMV = false;
-    private boolean isSPJQuery = false;
+    // record the relation id -> disableSPJGMV flag
+    // this can be set to true when query has count(*) or count(1)
+    private final Map<Integer, Boolean> disableSPJGMVs = Maps.newHashMap();
+    // record the relation id -> isSPJQuery flag
+    private final Map<Integer, Boolean> isSPJQueries = Maps.newHashMap();
+    // record the scan node relation id which has been accessed.
+    private final Set<Integer> traceRelationIds = Sets.newHashSet();
 
     private void init(OptExpression root) {
         collectAllPredicates(root);
         collectGroupByAndAggFunctions(root);
         collectScanOutputColumns(root);
-        if (aggFunctions.isEmpty() && columnIdsInGrouping.isEmpty()) {
-            isSPJQuery = true;
+        for (Integer scanId : traceRelationIds) {
+            if (!isSPJQueries.containsKey(scanId) && !aggFunctions.containsKey(scanId) &&
+                    !columnIdsInGrouping.containsKey(scanId)) {
+                isSPJQueries.put(scanId, true);
+            }
+            if (!disableSPJGMVs.containsKey(scanId)) {
+                disableSPJGMVs.put(scanId, false);
+            }
         }
     }
 
@@ -127,18 +139,20 @@ public class MaterializedViewRule extends Rule {
         return false;
     }
 
-    private Map<Long, List<Column>> selectValidIndexes(LogicalOlapScanOperator scanOperator, int tableId) {
+    private Map<Long, List<Column>> selectValidIndexes(LogicalOlapScanOperator scanOperator, int relationId) {
         OlapTable table = scanOperator.getOlapTable();
         Map<Long, MaterializedIndexMeta> candidateIndexIdToMeta = table.getVisibleIndexIdToMeta();
         // Step2: check all columns in compensating predicates are available in the view output
-        checkCompensatingPredicates(columnNameToIds.get(tableId), columnIdsInPredicates.get(tableId),
+        checkCompensatingPredicates(columnNameToIds.get(relationId), columnIdsInPredicates.get(relationId),
                 candidateIndexIdToMeta);
         // Step3: group by list in query is the subset of group by list in view or view contains no aggregation
-        checkGrouping(columnNameToIds.get(tableId), columnIdsInGrouping.get(tableId), candidateIndexIdToMeta);
+        checkGrouping(columnNameToIds.get(relationId), columnIdsInGrouping.get(relationId), candidateIndexIdToMeta,
+                disableSPJGMVs.get(relationId), isSPJQueries.get(relationId));
         // Step4: aggregation functions are available in the view output
-        checkAggregationFunction(columnNameToIds.get(tableId), aggFunctions.get(tableId), candidateIndexIdToMeta);
+        checkAggregationFunction(columnNameToIds.get(relationId), aggFunctions.get(relationId), candidateIndexIdToMeta,
+                disableSPJGMVs.get(relationId), isSPJQueries.get(relationId));
         // Step5: columns required to compute output expr are available in the view output
-        checkOutputColumns(columnNameToIds.get(tableId), columnIdsInQueryOutput.get(tableId), candidateIndexIdToMeta);
+        checkOutputColumns(columnNameToIds.get(relationId), columnIdsInQueryOutput.get(relationId), candidateIndexIdToMeta);
         // Step6: if table type is aggregate and the candidateIndexIdToSchema is empty,
         if ((table.getKeysType() == KeysType.AGG_KEYS || table.getKeysType() == KeysType.UNIQUE_KEYS)
                 && candidateIndexIdToMeta.size() == 0) {
@@ -159,7 +173,7 @@ public class MaterializedViewRule extends Rule {
              */
             compensateCandidateIndex(candidateIndexIdToMeta, table.getVisibleIndexIdToMeta(),
                     table);
-            checkOutputColumns(columnNameToIds.get(tableId), columnIdsInQueryOutput.get(tableId),
+            checkOutputColumns(columnNameToIds.get(relationId), columnIdsInQueryOutput.get(relationId),
                     candidateIndexIdToMeta);
         }
         Map<Long, List<Column>> result = Maps.newHashMap();
@@ -236,11 +250,17 @@ public class MaterializedViewRule extends Rule {
         }
 
         Operator operator = root.getOp();
+        if (operator instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) operator;
+            traceRelationIds.add(factory.getRelationId(scanOperator.getOutputColumns().get(0).getId()));
+        }
+
         if (operator instanceof LogicalAggregationOperator) {
             LogicalAggregationOperator aggOperator = (LogicalAggregationOperator) operator;
             Operator childOperator = root.getInputs().get(0).getOp();
             if (!(childOperator instanceof LogicalProjectOperator) &&
-                    !(childOperator instanceof LogicalOlapScanOperator)) {
+                    !(childOperator instanceof LogicalOlapScanOperator) &&
+                    !(childOperator instanceof LogicalRepeatOperator)) {
                 return;
             }
 
@@ -254,9 +274,10 @@ public class MaterializedViewRule extends Rule {
 
                 List<CallOperator> newAggs = Lists.newArrayList();
                 for (CallOperator agg : aggOperator.getAggregations().values()) {
-                    // Must forbidden count(*) for materialized view.
-                    if (agg.getChildren().size() < 1) {
-                        disableAggMV = true;
+                    // Must forbidden count(*) or count(1) for materialized view.
+                    if (agg.getChildren().size() < 1 ||
+                            (agg.getChildren().size() == 1 && agg.getChild(0).isConstantRef())) {
+                        disableSPJGMaterializedView();
                         break;
                     }
                     newAggs.add((CallOperator) agg.clone().accept(rewriter, null));
@@ -269,10 +290,44 @@ public class MaterializedViewRule extends Rule {
         }
     }
 
+    // Disable SPJG materialized view for traced scan node which not has aggregation
+    private void disableSPJGMaterializedView() {
+        for (Integer scanId : traceRelationIds) {
+            if (!columnIdsInGrouping.containsKey(scanId) && !aggFunctions.containsKey(scanId)) {
+                disableSPJGMVs.put(scanId, true);
+            }
+        }
+    }
+
+    // set table is not SPJ query
+    private void disableSPJQueries(int table) {
+        if (table != -1) {
+            isSPJQueries.put(table, false);
+        } else {
+            for (Integer scanId : traceRelationIds) {
+                if (!isSPJQueries.containsKey(scanId)) {
+                    isSPJQueries.put(scanId, false);
+                }
+            }
+        }
+    }
+
     private void collectGroupByAndAggFunction(List<ScalarOperator> groupBys,
                                               List<CallOperator> aggs) {
         for (ScalarOperator groupBy : groupBys) {
-            updateTableToColumns(groupBy, columnIdsInGrouping);
+            ColumnRefSet columns = groupBy.getUsedColumns();
+            for (int columnId : columns.getColumnIds()) {
+                int table = factory.getRelationId(columnId);
+                if (table != -1) {
+                    if (columnIdsInGrouping.containsKey(table)) {
+                        columnIdsInGrouping.get(table).add(columnId);
+                    } else {
+                        columnIdsInGrouping.put(table, Sets.newHashSet(columnId));
+                    }
+                }
+                // This table has group by, disable isSPJQuery
+                disableSPJQueries(table);
+            }
         }
 
         for (CallOperator agg : aggs) {
@@ -286,6 +341,8 @@ public class MaterializedViewRule extends Rule {
                         aggFunctions.put(table, Sets.newHashSet(agg));
                     }
                 }
+                // This table has aggregation, disable isSPJQuery
+                disableSPJQueries(table);
             }
         }
     }
@@ -427,8 +484,8 @@ public class MaterializedViewRule extends Rule {
      */
     private void checkGrouping(
             Map<String, Integer> columnToIds,
-            Set<Integer> columnsInGrouping, Map<Long, MaterializedIndexMeta>
-                    candidateIndexIdToMeta) {
+            Set<Integer> columnsInGrouping, Map<Long, MaterializedIndexMeta> candidateIndexIdToMeta,
+            boolean disableSPJGMV, boolean isSPJQuery) {
         Iterator<Map.Entry<Long, MaterializedIndexMeta>> iterator = candidateIndexIdToMeta.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<Long, MaterializedIndexMeta> entry = iterator.next();
@@ -458,9 +515,7 @@ public class MaterializedViewRule extends Rule {
                 continue;
             }
             // When the query is SPJ type but the candidate index is SPJG type, it will not pass directly.
-            // For aggregate table: select aggregate_key1 from table <=>
-            // select aggregate_key1 from table group by aggregate_key1
-            if (candidateIndexMeta.getKeysType() == KeysType.DUP_KEYS && (isSPJQuery || disableAggMV)) {
+            if (disableSPJGMV || isSPJQuery) {
                 iterator.remove();
                 continue;
             }
@@ -479,7 +534,8 @@ public class MaterializedViewRule extends Rule {
     private void checkAggregationFunction(
             Map<String, Integer> columnToIds,
             Set<CallOperator> aggregatedColumnsInQueryOutput,
-            Map<Long, MaterializedIndexMeta> candidateIndexIdToMeta) {
+            Map<Long, MaterializedIndexMeta> candidateIndexIdToMeta,
+            boolean disableSPJGMV, boolean isSPJQuery) {
         Iterator<Map.Entry<Long, MaterializedIndexMeta>> iterator = candidateIndexIdToMeta.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<Long, MaterializedIndexMeta> entry = iterator.next();
@@ -490,9 +546,7 @@ public class MaterializedViewRule extends Rule {
                 continue;
             }
             // When the query is SPJ type but the candidate index is SPJG type, it will not pass directly.
-            // For aggregate table: select aggregate_key1 from table <=>
-            // select aggregate_key1 from table group by aggregate_key1
-            if (candidateIndexMeta.getKeysType() == KeysType.DUP_KEYS && (isSPJQuery || disableAggMV)) {
+            if (disableSPJGMV || isSPJQuery) {
                 iterator.remove();
                 continue;
             }

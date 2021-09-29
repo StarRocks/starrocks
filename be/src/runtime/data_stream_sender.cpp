@@ -483,7 +483,7 @@ DataStreamSender::DataStreamSender(ObjectPool* pool, bool is_vectorized, int sen
                                    const TDataStreamSink& sink,
                                    const std::vector<TPlanFragmentDestination>& destinations,
                                    int per_channel_buffer_size, bool send_query_statistics_with_every_batch)
-        : _is_vectorized(is_vectorized),
+        : _is_vectorized(true),
           _sender_id(sender_id),
           _pool(pool),
           _row_desc(row_desc),

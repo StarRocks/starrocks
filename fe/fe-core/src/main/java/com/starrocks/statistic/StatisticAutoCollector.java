@@ -7,8 +7,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.MasterDaemon;
@@ -18,8 +16,6 @@ import com.starrocks.statistic.Constants.ScheduleType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.Clock;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Comparator;
@@ -234,7 +230,7 @@ public class StatisticAutoCollector extends MasterDaemon {
     private void createTableJobs(Map<Long, List<TableCollectJob>> tableJobs, AnalyzeJob job,
                                  Database db, Table table, List<String> columns) {
         // check table has update
-        LocalDateTime updateTime = getTableLastUpdateTime(table);
+        LocalDateTime updateTime = StatisticUtils.getTableLastUpdateTime(table);
 
         // 1. If job is schedule and the table has update, we need re-collect data
         // 2. If job is once and is happened after the table update, we need add it to avoid schedule-job cover data
@@ -294,11 +290,5 @@ public class StatisticAutoCollector extends MasterDaemon {
         } catch (Exception e) {
             LOG.warn("expire statistic failed.", e);
         }
-    }
-
-    private LocalDateTime getTableLastUpdateTime(Table table) {
-        long maxTime = ((OlapTable) table).getPartitions().stream().map(Partition::getVisibleVersionTime)
-                .max(Long::compareTo).orElse(0L);
-        return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
     }
 }

@@ -250,7 +250,7 @@ private:
     int64_t _serialize_batch_ns = 0;
 
     // vectorized
-    bool _is_vectorized = false;
+    bool _is_vectorized = true;
     std::unique_ptr<vectorized::Chunk> _cur_chunk;
     using AddChunkReq = std::pair<std::unique_ptr<vectorized::Chunk>, PTabletWriterAddChunkRequest>;
     std::queue<AddChunkReq> _pending_chunks;
@@ -413,7 +413,7 @@ private:
     std::vector<DecimalV2Value> _min_decimalv2_val;
 
     // vectorized:
-    bool _is_vectorized = false;
+    bool _is_vectorized = true;
     std::vector<vectorized::OlapTablePartition*> _partitions;
     std::vector<uint32_t> _tablet_indexes;
     // one chunk selection index for partition validation and data validation
