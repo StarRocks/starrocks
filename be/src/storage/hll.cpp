@@ -73,7 +73,7 @@ void HyperLogLog::_convert_explicit_to_register() {
     phmap::flat_hash_set<uint64_t>().swap(_hash_set);
 }
 
-// Change HLL_DATA_EXPLICIT to HLL_DATA_FULL directly, because HLL_DATA_SPRASE
+// Change HLL_DATA_EXPLICIT to HLL_DATA_FULL directly, because HLL_DATA_SPARSE
 // is implemented in the same way in memory with HLL_DATA_FULL.
 void HyperLogLog::update(uint64_t hash_value) {
     switch (_type) {
@@ -89,7 +89,7 @@ void HyperLogLog::update(uint64_t hash_value) {
         _convert_explicit_to_register();
         _type = HLL_DATA_FULL;
         // fall through
-    case HLL_DATA_SPRASE:
+    case HLL_DATA_SPARSE:
     case HLL_DATA_FULL:
         _update_registers(hash_value);
         break;
@@ -109,7 +109,7 @@ void HyperLogLog::merge(const HyperLogLog& other) {
         case HLL_DATA_EXPLICIT:
             _hash_set = other._hash_set;
             break;
-        case HLL_DATA_SPRASE:
+        case HLL_DATA_SPARSE:
         case HLL_DATA_FULL:
             DCHECK_EQ(_registers.data, nullptr);
             ChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
@@ -133,7 +133,7 @@ void HyperLogLog::merge(const HyperLogLog& other) {
                 _type = HLL_DATA_FULL;
             }
             break;
-        case HLL_DATA_SPRASE:
+        case HLL_DATA_SPARSE:
         case HLL_DATA_FULL:
             _convert_explicit_to_register();
             _merge_registers(other._registers.data);
@@ -144,7 +144,7 @@ void HyperLogLog::merge(const HyperLogLog& other) {
         }
         break;
     }
-    case HLL_DATA_SPRASE:
+    case HLL_DATA_SPARSE:
     case HLL_DATA_FULL: {
         switch (other._type) {
         case HLL_DATA_EXPLICIT:
@@ -152,7 +152,7 @@ void HyperLogLog::merge(const HyperLogLog& other) {
                 _update_registers(hash_value);
             }
             break;
-        case HLL_DATA_SPRASE:
+        case HLL_DATA_SPARSE:
         case HLL_DATA_FULL:
             _merge_registers(other._registers.data);
             break;
@@ -171,7 +171,7 @@ size_t HyperLogLog::max_serialized_size() const {
         return 1;
     case HLL_DATA_EXPLICIT:
         return 2 + _hash_set.size() * 8;
-    case HLL_DATA_SPRASE:
+    case HLL_DATA_SPARSE:
     case HLL_DATA_FULL:
         return 1 + HLL_REGISTERS_COUNT;
     }
@@ -199,7 +199,7 @@ size_t HyperLogLog::serialize(uint8_t* dst) const {
         }
         break;
     }
-    case HLL_DATA_SPRASE:
+    case HLL_DATA_SPARSE:
     case HLL_DATA_FULL: {
         uint32_t num_non_zero_registers = 0;
         for (int i = 0; i < HLL_REGISTERS_COUNT; i++) {
@@ -215,7 +215,7 @@ size_t HyperLogLog::serialize(uint8_t* dst) const {
             memcpy(ptr, _registers.data, HLL_REGISTERS_COUNT);
             ptr += HLL_REGISTERS_COUNT;
         } else {
-            *ptr++ = HLL_DATA_SPRASE;
+            *ptr++ = HLL_DATA_SPARSE;
             // 2-5(4 byte): number of registers
             encode_fixed32_le(ptr, num_non_zero_registers);
             ptr += 4;
@@ -255,7 +255,7 @@ bool HyperLogLog::is_valid(const Slice& slice) {
         ptr += num_explicits * 8;
         break;
     }
-    case HLL_DATA_SPRASE: {
+    case HLL_DATA_SPARSE: {
         if ((ptr + 4) > end) {
             return false;
         }
@@ -309,7 +309,7 @@ bool HyperLogLog::deserialize(const Slice& slice) {
         }
         break;
     }
-    case HLL_DATA_SPRASE: {
+    case HLL_DATA_SPARSE: {
         DCHECK_EQ(_registers.data, nullptr);
         ChunkAllocator::instance()->allocate(HLL_REGISTERS_COUNT, &_registers);
         DCHECK_NE(_registers.data, nullptr);
@@ -404,7 +404,7 @@ std::string HyperLogLog::to_string() const {
     case HLL_DATA_EMPTY:
         return {};
     case HLL_DATA_EXPLICIT:
-    case HLL_DATA_SPRASE:
+    case HLL_DATA_SPARSE:
     case HLL_DATA_FULL: {
         return strings::Substitute("hash set size: $0\ncardinality:$1\ntype:$2", _hash_set.size(),
                                    estimate_cardinality(), _type);
@@ -446,7 +446,7 @@ void HllSetResolver::parse() {
         _explicit_num = (ExpliclitLengthValueType)(pdata[sizeof(SetTypeValueType)]);
         _explicit_value = (uint64_t*)(pdata + sizeof(SetTypeValueType) + sizeof(ExpliclitLengthValueType));
         break;
-    case HLL_DATA_SPRASE:
+    case HLL_DATA_SPARSE:
         // first byte : type
         // second ~(2^HLL_COLUMN_PRECISION)/8 byte : bitmap mark which is not zero
         // > 2^HLL_COLUMN_PRECISION)/8 + 1: value
@@ -472,7 +472,7 @@ void HllSetResolver::parse() {
 }
 
 void HllSetHelper::set_sparse(char* result, const std::map<int, uint8_t>& index_to_value, int* len) {
-    result[0] = HLL_DATA_SPRASE;
+    result[0] = HLL_DATA_SPARSE;
     *len = sizeof(HllSetResolver::SetTypeValueType) + sizeof(HllSetResolver::SparseLengthValueType);
     char* write_value_pos = result + *len;
     for (std::map<int, uint8_t>::const_iterator iter = index_to_value.begin(); iter != index_to_value.end(); iter++) {
