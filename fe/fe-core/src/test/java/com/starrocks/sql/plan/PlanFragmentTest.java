@@ -3989,6 +3989,23 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testReplicatedAgg() throws Exception {
+        connectContext.getSessionVariable().setEnableReplicationJoin(true);
+
+        String sql = "select value, SUM(id) from join1 group by value";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: id)\n" +
+                "  |  group by: 3: value\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode"));
+
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
+    }
+
+    @Test
     public void testReplicationJoinWithPartitionTable() throws Exception {
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         boolean oldValue = FeConstants.runningUnitTest;

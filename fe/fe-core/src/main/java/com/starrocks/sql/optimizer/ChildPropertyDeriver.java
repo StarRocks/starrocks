@@ -7,6 +7,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -784,6 +785,15 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         }
 
         outputInputProps.clear();
+
+        // Replicate table can be satisfy anything hash distribution
+        if (Utils.checkReplicaMoreThanNodes((OlapTable) node.getTable(), node.getSelectedIndexId(),
+                node.getSelectedPartitionId(), node.getSelectedTabletId())) {
+            outputInputProps.clear();
+            outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList()));
+            return visitOperator(node, context);
+        }
+
         HashDistributionDesc requireDistributionDesc = required.get();
         if (requireDistributionDesc.getColumns().containsAll(hashDistributionSpec.getShuffleColumns()) &&
                 satisfyLocalProperty) {

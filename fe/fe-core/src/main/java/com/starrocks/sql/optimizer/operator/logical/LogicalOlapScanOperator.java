@@ -100,7 +100,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     }
 
     public boolean canDoReplicatedJoin() {
-        return Utils.canDoReplicatedJoin((OlapTable) table, selectedIndexId, selectedPartitionId, selectedTabletId);
+        return Utils.checkReplicaMoreThanNodes((OlapTable) table, selectedIndexId, selectedPartitionId, selectedTabletId);
     }
 
     @Override

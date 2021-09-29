@@ -328,8 +328,9 @@ public class Utils {
         Operator operator = root.getOp();
         if (operator instanceof LogicalScanOperator) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) operator;
-            List<String> colNames = scanOperator.getColRefToColumnMetaMap().values().stream().map(Column::getName).collect(
-                    Collectors.toList());
+            List<String> colNames =
+                    scanOperator.getColRefToColumnMetaMap().values().stream().map(Column::getName).collect(
+                            Collectors.toList());
 
             List<ColumnStatistic> columnStatisticList =
                     Catalog.getCurrentStatisticStorage().getColumnStatistics(scanOperator.getTable(), colNames);
@@ -368,9 +369,9 @@ public class Utils {
         return smallestColumnRef;
     }
 
-    public static boolean canDoReplicatedJoin(OlapTable table, long selectedIndexId,
-                                              Collection<Long> selectedPartitionId,
-                                              Collection<Long> selectedTabletId) {
+    public static boolean checkReplicaMoreThanNodes(OlapTable table, long selectedIndexId,
+                                                    Collection<Long> selectedPartitionId,
+                                                    Collection<Long> selectedTabletId) {
         int backendSize = Catalog.getCurrentSystemInfo().backendSize();
         int aliveBackendSize = Catalog.getCurrentSystemInfo().getBackendIds(true).size();
         int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);

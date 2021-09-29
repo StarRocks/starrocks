@@ -839,6 +839,6 @@ public class OlapScanNode extends ScanNode {
 
     @Override
     public boolean canDoReplicatedJoin() {
-        return Utils.canDoReplicatedJoin(olapTable, selectedIndexId, selectedPartitionIds, scanTabletIds);
+        return Utils.checkReplicaMoreThanNodes(olapTable, selectedIndexId, selectedPartitionIds, scanTabletIds);
     }
 }
