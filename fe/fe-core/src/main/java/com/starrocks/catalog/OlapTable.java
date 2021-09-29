@@ -1600,8 +1600,9 @@ public class OlapTable extends Table {
     }
 
     @Override
-    public void onCreate() { }
-    
+    public void onCreate() {
+    }
+
     @Override
     public void onDrop() {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
