@@ -21,8 +21,7 @@
 
 #include "storage/memory/delta_index.h"
 
-namespace starrocks {
-namespace memory {
+namespace starrocks::memory {
 
 size_t DeltaIndex::memory() const {
     return _data.bsize() + _block_ends.size() * sizeof(uint32_t);
@@ -53,5 +52,4 @@ uint32_t DeltaIndex::find_idx(uint32_t rid) {
     }
 }
 
-} // namespace memory
-} // namespace starrocks
+} // namespace starrocks::memory

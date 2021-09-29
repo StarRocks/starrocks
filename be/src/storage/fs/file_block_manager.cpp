@@ -49,8 +49,7 @@ using std::string;
 
 using strings::Substitute;
 
-namespace starrocks {
-namespace fs {
+namespace starrocks::fs {
 
 namespace internal {
 
@@ -444,5 +443,4 @@ Status FileBlockManager::_sync_metadata(const string& path) {
     return Status::OK();
 }
 
-} // namespace fs
-} // namespace starrocks
+} // namespace starrocks::fs

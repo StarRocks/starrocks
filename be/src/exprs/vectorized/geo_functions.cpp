@@ -8,8 +8,7 @@
 #include "common/logging.h"
 #include "geo/geo_types.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 struct StConstructState {
     StConstructState() {}
@@ -423,5 +422,4 @@ Status GeoFunctions::st_polygon_prepare(FunctionContext* ctx, FunctionContext::F
     return st_from_wkt_prepare_common(ctx, scope, GEO_SHAPE_POLYGON);
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

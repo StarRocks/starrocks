@@ -28,8 +28,7 @@
 #endif
 #include "util/coding.h"
 
-namespace starrocks {
-namespace crc32c {
+namespace starrocks::crc32c {
 
 static const uint32_t table0_[256] = {
         0x00000000, 0xf26b8303, 0xe13b70f7, 0x1350f3f4, 0xc79a971f, 0x35f1141c, 0x26a1e7e8, 0xd4ca64eb, 0x8ad958cf,
@@ -238,5 +237,4 @@ uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
 #endif
 }
 
-} // namespace crc32c
-} // namespace starrocks
+} // namespace starrocks::crc32c

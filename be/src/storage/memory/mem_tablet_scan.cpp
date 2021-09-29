@@ -25,8 +25,7 @@
 #include "storage/memory/mem_sub_tablet.h"
 #include "storage/memory/mem_tablet.h"
 
-namespace starrocks {
-namespace memory {
+namespace starrocks::memory {
 
 MemTabletScan::~MemTabletScan() = default;
 
@@ -57,5 +56,4 @@ Status MemTabletScan::next_block(const RowBlock** block) {
     return Status::OK();
 }
 
-} // namespace memory
-} // namespace starrocks
+} // namespace starrocks::memory

@@ -9,8 +9,7 @@
 #include "simd/simd.h"
 #include "util/mysql_row_buffer.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 NullableColumn::NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column)
         : _data_column(std::move(data_column)), _has_null(false) {
@@ -311,5 +310,4 @@ void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

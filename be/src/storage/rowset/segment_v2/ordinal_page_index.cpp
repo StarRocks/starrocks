@@ -28,8 +28,7 @@
 #include "storage/rowset/segment_v2/page_handle.h"
 #include "storage/rowset/segment_v2/page_io.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 void OrdinalIndexWriter::append_entry(ordinal_t ordinal, const PagePointer& data_pp) {
     std::string key;
@@ -133,5 +132,4 @@ OrdinalPageIndexIterator OrdinalIndexReader::seek_at_or_before(ordinal_t ordinal
     return OrdinalPageIndexIterator(this, left);
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

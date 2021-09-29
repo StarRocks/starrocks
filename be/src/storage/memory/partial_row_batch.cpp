@@ -24,8 +24,7 @@
 #include "common/compiler_util.h"
 #include "util/bitmap.h"
 
-namespace starrocks {
-namespace memory {
+namespace starrocks::memory {
 
 // Methods for PartialRowBatch
 
@@ -276,5 +275,4 @@ Status PartialRowWriter::finish_batch(vector<uint8_t>* buffer) {
     return Status::OK();
 }
 
-} // namespace memory
-} // namespace starrocks
+} // namespace starrocks::memory

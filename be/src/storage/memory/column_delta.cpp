@@ -21,8 +21,7 @@
 
 #include "storage/memory/column_delta.h"
 
-namespace starrocks {
-namespace memory {
+namespace starrocks::memory {
 
 size_t ColumnDelta::memory() const {
     return _index->memory() + _nulls.bsize() + _data.bsize();
@@ -55,5 +54,4 @@ Status ColumnDelta::alloc(size_t nblock, size_t size, size_t esize, bool has_nul
     return Status::OK();
 }
 
-} // namespace memory
-} // namespace starrocks
+} // namespace starrocks::memory

@@ -7,8 +7,7 @@
 #include "column/object_column.h"
 #include "exprs/vectorized/unary_function.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // hll_cardinality_from_string
 DEFINE_UNARY_FN_WITH_IMPL(hllCardinalityFromStringImpl, str) {
@@ -64,5 +63,4 @@ ColumnPtr HyperloglogFunction::hll_empty(FunctionContext* context, const Columns
     return ConstColumn::create(p, 1);
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

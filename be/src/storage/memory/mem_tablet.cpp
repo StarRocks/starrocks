@@ -27,8 +27,7 @@
 #include "storage/memory/mem_tablet_scan.h"
 #include "storage/memory/write_txn.h"
 
-namespace starrocks {
-namespace memory {
+namespace starrocks::memory {
 
 MemTablet::MemTablet(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
         : BaseTablet(mem_tracker, tablet_meta, data_dir) {
@@ -95,5 +94,4 @@ Status MemTablet::commit_write_txn(WriteTxn* wtxn, uint64_t version) {
     return Status::OK();
 }
 
-} // namespace memory
-} // namespace starrocks
+} // namespace starrocks::memory

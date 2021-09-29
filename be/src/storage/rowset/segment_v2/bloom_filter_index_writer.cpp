@@ -36,8 +36,7 @@
 #include "storage/types.h"
 #include "util/slice.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 namespace {
 
@@ -254,5 +253,4 @@ Status BloomFilterIndexWriter::create(const BloomFilterOptions& bf_options, cons
     return Status::OK();
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

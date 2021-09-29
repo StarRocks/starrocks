@@ -29,8 +29,7 @@ using std::unordered_set;
 // Implementations for some of the Split2 API. Much of the Split2 API is
 // templated so it exists in header files, either strings/split.h or
 // strings/split_iternal.h.
-namespace strings {
-namespace delimiter {
+namespace strings::delimiter {
 
 namespace {
 
@@ -92,8 +91,7 @@ StringPiece AnyOf::Find(StringPiece text) const {
     return GenericFind(text, delimiters_, AnyOfPolicy());
 }
 
-} // namespace delimiter
-} // namespace strings
+} // namespace strings::delimiter
 
 //
 // ==================== LEGACY SPLIT FUNCTIONS ====================
