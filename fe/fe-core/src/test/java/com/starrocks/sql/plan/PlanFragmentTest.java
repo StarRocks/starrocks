@@ -4112,4 +4112,103 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: bitmap_union_count(5: b1)"));
     }
+
+    @Test
+    public void testNotExpr() throws Exception {
+        String sql = "select v1 from t0 where not (v1 in (1, 2))";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("     PREDICATES: 1: v1 NOT IN (1, 2)"));
+
+        sql = "select v1 from t0 where not (v1 > 2)";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 <= 2"));
+
+        sql = "select v1 from t0 where not (v1 > 2)";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 <= 2"));
+
+        sql = "select v1 from t0 where not (v1 > 2 and v2 < 3)";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: (1: v1 <= 2) OR (2: v2 >= 3)"));
+
+        sql = "select v1 from t0 where not (v1 > 2 and v2 is null)";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: (1: v1 <= 2) OR (2: v2 IS NOT NULL)"));
+
+        sql = "select v1 from t0 where not (v1 > 2 and v2 is null and v3 < 6)";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: ((1: v1 <= 2) OR (2: v2 IS NOT NULL)) OR (3: v3 >= 6)"));
+
+        sql = "select v1 from t0 where not (v1 > 2 and if(v2 > 2, FALSE, TRUE))";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: (1: v1 <= 2) OR (NOT if(2: v2 > 2, FALSE, TRUE))"));
+
+        sql = "select v1 from t0 where not (v1 > 2 or v2 is null or if(v3 > 2, FALSE, TRUE))";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(
+                planFragment.contains("PREDICATES: 1: v1 <= 2, 2: v2 IS NOT NULL, NOT if(3: v3 > 2, FALSE, TRUE)"));
+    }
+
+    @Test
+    public void testArithmeticCommutative() throws Exception {
+        String sql = "select v1 from t0 where v1 + 2 > 3";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 > 1"));
+
+        sql = "select v1 from t0 where  v1 / 2 <=> 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(1: v1 AS DOUBLE) <=> 6.0"));
+
+        sql = "select v1 from t0 where  v1 / -2 > 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(1: v1 AS DOUBLE) < -6.0"));
+
+        sql = "select v1 from t0 where  v1 / abs(-2) > 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(1: v1 AS DOUBLE) / CAST(abs(-2) AS DOUBLE) > 3.0"));
+
+        sql = "select v1 from t0 where  v1 / -2 != 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(1: v1 AS DOUBLE) != -6.0"));
+
+        sql = "select v1 from t0 where  v1 / abs(-2) = 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(1: v1 AS DOUBLE) = 3.0 * CAST(abs(-2) AS DOUBLE)"));
+
+        sql = "select v1 from t0 where 2 + v1 <= 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 <= 1"));
+
+        sql = "select v1 from t0 where 2 - v1 <= 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 >= -1"));
+
+        sql = "select k5 from bigtable where k5 * 2 <= 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(5: k5 AS DECIMAL64(18,3)) * 2 <= 3"));
+
+        sql = "select k5 from bigtable where 2 / k5 <= 3";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 2 / CAST(5: k5 AS DECIMAL128(38,3)) <= 3"));
+
+        sql = "select t1a from test_all_type where date_add(id_datetime, 2) = '2020-12-21'";
+        planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 8: id_datetime = '2020-12-19 00:00:00'"));
+
+        sql = "select t1a from test_all_type where date_sub(id_datetime, 2) = '2020-12-21'";
+        planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 8: id_datetime = '2020-12-23 00:00:00'"));
+
+        sql = "select t1a from test_all_type where years_sub(id_datetime, 2) = '2020-12-21'";
+        planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 8: id_datetime = '2022-12-21 00:00:00'"));
+
+        sql = "select t1a from test_all_type where years_add(id_datetime, 2) = '2020-12-21'";
+        planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 8: id_datetime = '2018-12-21 00:00:00'"));
+    }
 }
