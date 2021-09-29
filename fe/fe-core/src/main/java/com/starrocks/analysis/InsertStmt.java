@@ -291,8 +291,8 @@ public class InsertStmt extends DdlStmt {
             if (targetTable instanceof ExternalOlapTable) {
                 LoadJobSourceType sourceType = LoadJobSourceType.INSERT_STREAMING;
                 ExternalOlapTable externalTable = (ExternalOlapTable)targetTable;
-                transactionId = Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(tblName.getDb(),
-                        Lists.newArrayList(targetTable.getName()), label,
+                transactionId = Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(externalTable.getDbId(),
+                        Lists.newArrayList(externalTable.getExternalInfo().getTableName()), label,
                         externalTable.getExternalInfo().getHost(),
                         externalTable.getExternalInfo().getPort(),
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),

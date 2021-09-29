@@ -1133,7 +1133,7 @@ public class MasterImpl {
 
     public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {
         TBeginRemoteTxnResponse response = new TBeginRemoteTxnResponse();
-        Database db = Catalog.getCurrentCatalog().getDb(request.getDb_name());
+        Database db = Catalog.getCurrentCatalog().getDb(request.getDb_id());
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist"));
