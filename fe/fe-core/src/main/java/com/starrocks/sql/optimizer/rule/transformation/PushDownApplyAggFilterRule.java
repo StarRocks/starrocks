@@ -119,7 +119,7 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
 
         // extract group columns
         Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> pair =
-                SubqueryUtils.rewriteCorrelationPredicateAndExtractColumnRefs(correlationPredicate,
+                SubqueryUtils.rewritePredicateAndExtractColumnRefs(correlationPredicate,
                         apply.getCorrelationColumnRefs(), context);
 
         // create new trees

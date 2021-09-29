@@ -30,5 +30,5 @@ public abstract class CounterMetric<T> extends Metric<T> {
         super(name, MetricType.COUNTER, unit, description);
     }
 
-    abstract public void increase(T delta);
+    public abstract void increase(T delta);
 }
