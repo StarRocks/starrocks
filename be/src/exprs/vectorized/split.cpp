@@ -10,8 +10,7 @@
 #include "column/column_viewer.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 const void* _memchr(const void* big, size_t big_len, const void* little, size_t little_len) {
     return memchr(big, *((char*)little), big_len);
@@ -196,5 +195,4 @@ ColumnPtr StringFunctions::split(FunctionContext* context, const starrocks::vect
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

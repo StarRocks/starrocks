@@ -23,8 +23,7 @@
 
 #include "util/debug_util.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 const uint32_t BlockSplitBloomFilter::SALT[8] = {0x47b6137b, 0x44974d91, 0x8824ad5b, 0xa2b7289d,
                                                  0x705495c7, 0x2df1424b, 0x9efc4947, 0x5c6bfb31};
@@ -64,5 +63,4 @@ bool BlockSplitBloomFilter::test_hash(uint64_t hash) const {
     return true;
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

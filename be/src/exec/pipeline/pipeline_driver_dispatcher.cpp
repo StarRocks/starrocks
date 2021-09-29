@@ -3,8 +3,7 @@
 #include "exec/pipeline/pipeline_driver_dispatcher.h"
 
 #include "gutil/strings/substitute.h"
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool)
         : _driver_queue(new QuerySharedDriverQueue()),
           _thread_pool(std::move(thread_pool)),
@@ -138,5 +137,4 @@ void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, co
 
     this->_exec_state_reporter->submit(std::move(report_task));
 }
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

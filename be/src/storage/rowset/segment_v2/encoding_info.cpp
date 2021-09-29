@@ -33,8 +33,7 @@
 #include "storage/rowset/segment_v2/plain_page.h"
 #include "storage/rowset/segment_v2/rle_page.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 struct EncodingMapHash {
     size_t operator()(const std::pair<FieldType, EncodingTypePB>& pair) const {
@@ -303,5 +302,4 @@ EncodingTypePB EncodingInfo::get_default_encoding(const FieldType& data_type, bo
     return s_encoding_info_resolver.get_default_encoding(data_type, optimize_value_seek);
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

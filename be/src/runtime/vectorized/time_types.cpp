@@ -6,8 +6,7 @@
 #include "gutil/strings/substitute.h"
 #include "util/raw_container.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // two-digit years < this are 20..; >= this are 19..
 const int YY_PART_YEAR = 70;
@@ -646,5 +645,4 @@ int timestamp::to_string(Timestamp timestamp, char* to, size_t n) {
     return 19;
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

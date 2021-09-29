@@ -7,8 +7,7 @@
 #include "exec/vectorized/arrow_type_traits.h"
 #include "util/raw_container.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 template <PrimitiveType PT, ArrowTypeId AT, bool is_nullable, typename = guard::Guard>
 struct ColumnToArrowConverter;
@@ -307,5 +306,4 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDe
     *result = arrow::RecordBatch::Make(schema, chunk->num_rows(), std::move(arrays));
     return Status::OK();
 }
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -26,8 +26,7 @@
 #include "common/logging.h"
 #include "util/coding.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 void IndexPageBuilder::add(const Slice& key, const PagePointer& ptr) {
     DCHECK(!_finished) << "must reset() after finish() to add new entry";
@@ -139,5 +138,4 @@ Status IndexPageIterator::seek_at_or_after(const Slice& search_key) {
     return Status::OK();
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2
