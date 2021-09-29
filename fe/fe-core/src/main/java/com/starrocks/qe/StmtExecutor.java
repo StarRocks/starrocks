@@ -1308,8 +1308,8 @@ public class StmtExecutor {
         long transactionId = -1;
         if (targetTable instanceof ExternalOlapTable) {
             ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-            transactionId = Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(database.getFullName(),
-                    Lists.newArrayList(targetTable.getName()), label,
+            transactionId = Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(externalTable.getDbId(),
+                    Lists.newArrayList(externalTable.getExternalInfo().getTableName()), label,
                     externalTable.getExternalInfo().getHost(),
                     externalTable.getExternalInfo().getPort(),
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,

@@ -9,7 +9,6 @@ import com.starrocks.analysis.IndexDef;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Replica.ReplicaState;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.system.Backend;
@@ -153,6 +152,7 @@ public class ExternalOlapTable extends OlapTable {
     }
 
     private long dbId;
+    private long sourceDbId;
     private TTableMeta lastExternalMeta;
     private ExternalTableInfo externalTableInfo;
 
@@ -160,17 +160,20 @@ public class ExternalOlapTable extends OlapTable {
         super();
         setType(TableType.OLAP_EXTERNAL);
         dbId = -1;
+        sourceDbId = -1;
         lastExternalMeta = null;
         externalTableInfo = null;
     }
 
-    public ExternalOlapTable(long tableId, String tableName, List<Column> baseSchema, KeysType keysType,
+    public ExternalOlapTable(long sourceDb, long tableId, String tableName, List<Column> baseSchema, KeysType keysType,
                              PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
                              TableIndexes indexes, Map<String, String> properties)
         throws DdlException {
         super(tableId, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, indexes);
         setType(TableType.OLAP_EXTERNAL);
         dbId = -1;
+        sourceDbId = sourceDb;
+        LOG.info("new external table, dbid: {}", sourceDb);
         lastExternalMeta = null;
 
         externalTableInfo = new ExternalTableInfo();
@@ -179,6 +182,10 @@ public class ExternalOlapTable extends OlapTable {
 
     public long getDbId() {
         return dbId;
+    }
+
+    public long getSourceDbId() {
+        return sourceDbId;
     }
 
     public ExternalTableInfo getExternalInfo() {
@@ -200,6 +207,7 @@ public class ExternalOlapTable extends OlapTable {
         Text.writeString(out, type.name());
         out.writeLong(id);
         Text.writeString(out, name);
+        out.writeLong(sourceDbId);
         externalTableInfo.write(out);
     }
 
@@ -207,6 +215,7 @@ public class ExternalOlapTable extends OlapTable {
     public void readFields(DataInput in) throws IOException {
         this.id = in.readLong();
         this.name = Text.readString(in);
+        this.sourceDbId = in.readLong();
 
         externalTableInfo = new ExternalTableInfo();
         externalTableInfo.read(in);
@@ -222,10 +231,9 @@ public class ExternalOlapTable extends OlapTable {
         clusterId = meta.getCluster_id();
         dbId = meta.getDb_id();
 
-        String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
-        Database db = Catalog.getCurrentCatalog().getDb(fullDbName);
+        Database db = Catalog.getCurrentCatalog().getDb(sourceDbId);
         if (db == null) {
-            throw new DdlException("database " + dbName + " does not exist");
+            throw new DdlException("database " + sourceDbId + " does not exist");
         }
         db.writeLock();
 

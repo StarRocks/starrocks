@@ -108,7 +108,7 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     // begin transaction in remote StarRocks cluster
-    public long beginRemoteTransaction(String dbName, List<String> tableNames, String label,
+    public long beginRemoteTransaction(long dbId, List<String> tableNames, String label,
                                        String host, int port, TxnCoordinator coordinator,
                                        LoadJobSourceType sourceType, long timeoutSecond)
             throws AnalysisException, LabelAlreadyUsedException, BeginTransactionException, DuplicatedRequestException {
@@ -135,7 +135,7 @@ public class GlobalTransactionMgr implements Writable {
         }
 
         TBeginRemoteTxnRequest request = new TBeginRemoteTxnRequest();
-        request.setDb_name(dbName);
+        request.setDb_id(dbId);
         for (String tableName : tableNames) {
             request.addToTable_name(tableName);
         }

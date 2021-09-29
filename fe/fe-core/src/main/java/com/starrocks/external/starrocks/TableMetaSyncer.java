@@ -34,7 +34,7 @@ public class TableMetaSyncer {
 
         TGetTableMetaRequest request = new TGetTableMetaRequest();
         request.setDb_name(table.getExternalInfo().getDbName());
-        request.setTable_name(table.getName());
+        request.setTable_name(table.getExternalInfo().getTableName());
         TAuthenticateParams authInfo = new TAuthenticateParams();
         authInfo.setUser(table.getExternalInfo().getUser());
         authInfo.setPasswd(table.getExternalInfo().getPassword());
