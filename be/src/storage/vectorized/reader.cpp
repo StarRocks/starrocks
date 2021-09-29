@@ -203,8 +203,6 @@ Status Reader::_init_predicates(const ReaderParams& params) {
 Status Reader::_init_delete_predicates(const ReaderParams& params, DeletePredicates* dels) {
     PredicateParser pred_parser(_tablet->tablet_schema());
 
-    Status st;
-
     _tablet->obtain_header_rdlock();
 
     for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {
@@ -217,8 +215,8 @@ Status Reader::_init_delete_predicates(const ReaderParams& params, DeletePredica
             TCondition cond;
             if (!DeleteHandler::parse_condition(pred_pb.sub_predicates(i), &cond)) {
                 LOG(WARNING) << "invalid delete condition: " << pred_pb.sub_predicates(i) << "]";
-                st = Status::InternalError("invalid delete condition string");
-                break;
+                _tablet->release_header_lock();
+                return Status::InternalError("invalid delete condition string");
             }
             size_t idx = _tablet->tablet_schema().field_index(cond.column_name);
             if (idx >= _tablet->num_key_columns() && _tablet->keys_type() != DUP_KEYS) {
@@ -265,7 +263,7 @@ Status Reader::_init_delete_predicates(const ReaderParams& params, DeletePredica
     }
 
     _tablet->release_header_lock();
-    return st;
+    return Status::OK();
 }
 
 // convert an OlapTuple to SeekTuple.
