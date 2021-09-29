@@ -62,9 +62,8 @@ public:
             return;
         }
         Status* old_status = nullptr;
-        static Status s_status;
-        if (_final_status.compare_exchange_strong(old_status, &s_status)) {
-            s_status = status;
+        if (_final_status.compare_exchange_strong(old_status, &_s_status)) {
+            _s_status = status;
         }
     }
 
@@ -112,6 +111,7 @@ private:
     std::atomic<size_t> _num_drivers;
     std::atomic<Status*> _final_status;
     std::atomic<bool> _cancel_flag;
+    Status _s_status;
 };
 class FragmentContextManager {
 public:
