@@ -47,7 +47,8 @@ public:
     static CoreDataAllocatorFactory* instance();
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(CoreDataAllocatorFactory);
+    CoreDataAllocatorFactory(const CoreDataAllocatorFactory&) = delete;
+    const CoreDataAllocatorFactory& operator=(const CoreDataAllocatorFactory&) = delete;
 
 private:
     std::mutex _lock;
@@ -95,7 +96,8 @@ public:
     }
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(CoreLocalValueController);
+    CoreLocalValueController(const CoreLocalValueController&) = delete;
+    const CoreLocalValueController& operator=(const CoreLocalValueController&) = delete;
 
 private:
     std::mutex _lock;

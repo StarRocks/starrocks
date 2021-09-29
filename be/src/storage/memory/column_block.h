@@ -62,7 +62,8 @@ private:
     size_t _size = 0;
     Buffer _nulls;
     Buffer _data;
-    DISALLOW_COPY_AND_ASSIGN(ColumnBlock);
+    ColumnBlock(const ColumnBlock&) = delete;
+    const ColumnBlock& operator=(const ColumnBlock&) = delete;
 };
 
 } // namespace memory

@@ -129,7 +129,8 @@ private:
     Cache::Handle* _handle = nullptr;
 
     // Don't allow copy and assign
-    DISALLOW_COPY_AND_ASSIGN(PageCacheHandle);
+    PageCacheHandle(const PageCacheHandle&) = delete;
+    const PageCacheHandle& operator=(const PageCacheHandle&) = delete;
 };
 
 } // namespace starrocks

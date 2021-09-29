@@ -199,7 +199,8 @@ private:
     typedef std::pair<FieldType, FieldType> convert_type_pair;
     std::unordered_set<convert_type_pair, ConvertTypeMapHash> _convert_type_set;
 
-    DISALLOW_COPY_AND_ASSIGN(ConvertTypeResolver);
+    ConvertTypeResolver(const ConvertTypeResolver&) = delete;
+    const ConvertTypeResolver& operator=(const ConvertTypeResolver&) = delete;
 };
 
 ConvertTypeResolver::ConvertTypeResolver() {

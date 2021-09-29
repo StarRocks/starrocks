@@ -129,7 +129,8 @@ private:
     std::unique_ptr<MemTracker> _tracker;
     std::unique_ptr<MemPool> _mem_pool;
 
-    DISALLOW_COPY_AND_ASSIGN(RowBlock);
+    RowBlock(const RowBlock&) = delete;
+    const RowBlock& operator=(const RowBlock&) = delete;
 };
 
 } // namespace starrocks

@@ -53,7 +53,8 @@ private:
     scoped_refptr<DeltaIndex> _index;
     Buffer _nulls;
     Buffer _data;
-    DISALLOW_COPY_AND_ASSIGN(ColumnDelta);
+    ColumnDelta(const ColumnDelta&) = delete;
+    const ColumnDelta& operator=(const ColumnDelta&) = delete;
 };
 
 } // namespace memory

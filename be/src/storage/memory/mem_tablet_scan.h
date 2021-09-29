@@ -78,7 +78,8 @@ private:
     std::unique_ptr<RowBlock> _row_block;
     size_t _next_block = 0;
 
-    DISALLOW_COPY_AND_ASSIGN(MemTabletScan);
+    MemTabletScan(const MemTabletScan&) = delete;
+    const MemTabletScan& operator=(const MemTabletScan&) = delete;
 };
 
 } // namespace memory

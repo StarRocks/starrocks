@@ -38,7 +38,8 @@ private:
     ScopedLSANDisabler lsan_disabler;
 #endif
 
-    DISALLOW_COPY_AND_ASSIGN(ScopedLeakCheckDisabler);
+    ScopedLeakCheckDisabler(const ScopedLeakCheckDisabler&) = delete;
+    const ScopedLeakCheckDisabler& operator=(const ScopedLeakCheckDisabler&) = delete;
 };
 
 } // namespace debug

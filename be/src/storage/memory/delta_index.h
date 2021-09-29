@@ -73,7 +73,8 @@ public:
 private:
     vector<uint32_t> _block_ends;
     Buffer _data;
-    DISALLOW_COPY_AND_ASSIGN(DeltaIndex);
+    DeltaIndex(const DeltaIndex&) = delete;
+    const DeltaIndex& operator=(const DeltaIndex&) = delete;
 };
 
 } // namespace memory
