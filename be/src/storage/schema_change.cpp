@@ -1697,7 +1697,7 @@ OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterT
             rs_reader->init(&_reader_context);
         }
 
-    } while (0);
+    } while (false);
 
     new_tablet->release_header_lock();
     base_tablet->release_header_lock();
@@ -1755,7 +1755,7 @@ OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterT
             break;
         }
         new_tablet->save_meta();
-    } while (0);
+    } while (false);
 
     if (res == OLAP_SUCCESS) {
         // _validate_alter_result should be outside the above while loop.

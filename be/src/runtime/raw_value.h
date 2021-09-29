@@ -162,7 +162,7 @@ inline bool RawValue::lt(const void* v1, const void* v2, const TypeDescriptor& t
 
     default:
         DCHECK(false) << "invalid type: " << type;
-        return 0;
+        return false;
     };
 }
 inline bool RawValue::eq(const void* v1, const void* v2, const TypeDescriptor& type) {
@@ -213,7 +213,7 @@ inline bool RawValue::eq(const void* v1, const void* v2, const TypeDescriptor& t
 
     default:
         DCHECK(false) << "invalid type: " << type;
-        return 0;
+        return false;
     };
 }
 

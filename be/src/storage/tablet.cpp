@@ -165,7 +165,7 @@ OLAPStatus Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& ro
             break;
         }
         _tablet_meta = new_tablet_meta;
-    } while (0);
+    } while (false);
 
     for (auto& version : versions_to_delete) {
         auto it = _rs_version_map.find(version);
@@ -623,7 +623,7 @@ OLAPStatus Tablet::_capture_consistent_rowsets_unlocked(const std::vector<Versio
                 rowsets->push_back(it_expired->second);
                 break;
             }
-        } while (0);
+        } while (false);
 
         if (!is_find) {
             LOG(WARNING) << "fail to find Rowset for version. tablet=" << full_name() << ", version='" << version;
