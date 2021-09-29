@@ -102,7 +102,7 @@ public class MetaService {
             try {
                 Storage currentStorageInfo = new Storage(imageDir.getAbsolutePath());
                 StorageInfo storageInfo = new StorageInfo(currentStorageInfo.getClusterID(),
-                        currentStorageInfo.getImageSeq(), currentStorageInfo.getEditsSeq());
+                        currentStorageInfo.getImageJournalId());
 
                 response.setContentType("application/json");
                 Gson gson = new Gson();
