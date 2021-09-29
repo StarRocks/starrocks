@@ -7,8 +7,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 VectorizedInfoFunc::VectorizedInfoFunc(const TExprNode& node) : Expr(node) {
     switch (_type.type) {
@@ -46,5 +45,4 @@ std::string VectorizedInfoFunc::debug_string() const {
 
 VectorizedInfoFunc::~VectorizedInfoFunc() = default;
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

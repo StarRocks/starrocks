@@ -12,8 +12,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/vectorized/Volnitsky.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // A regex to match any regex pattern is equivalent to a substring search.
 static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]*)(?:\.\*)*)");
@@ -513,5 +512,4 @@ void LikePredicate::remove_escape_character(std::string* search_string) {
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

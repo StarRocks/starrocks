@@ -3,8 +3,7 @@
 #include "exec/pipeline/pipeline_driver_queue.h"
 
 #include "gutil/strings/substitute.h"
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 void QuerySharedDriverQueue::put_back(const DriverPtr& driver) {
     int level = driver->driver_acct().get_level();
     {
@@ -60,5 +59,4 @@ SubQuerySharedDriverQueue* QuerySharedDriverQueue::get_sub_queue(size_t index) {
     return _queues + index;
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

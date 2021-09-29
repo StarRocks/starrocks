@@ -36,8 +36,7 @@
 #include "util/faststring.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 using strings::Substitute;
 
@@ -207,5 +206,4 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     return Status::OK();
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

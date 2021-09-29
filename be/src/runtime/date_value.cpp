@@ -24,8 +24,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/timestamp_value.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 static const std::string s_day_name[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 static const char* s_month_name[] = {"",     "January", "February",  "March",   "April",    "May",      "June",
@@ -178,5 +177,4 @@ DateValue::operator TimestampValue() const {
     return TimestampValue{date::to_timestamp(_julian)};
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

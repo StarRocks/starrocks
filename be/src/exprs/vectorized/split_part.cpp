@@ -8,8 +8,7 @@
 #include "column/column_viewer.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 /**
  * @param: [haystack, delimiter, part_number]
@@ -108,5 +107,4 @@ ColumnPtr StringFunctions::split_part(FunctionContext* context, const starrocks:
     return res.build(ColumnHelper::is_all_const(columns));
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

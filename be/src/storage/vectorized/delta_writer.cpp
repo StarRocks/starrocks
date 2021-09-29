@@ -12,8 +12,7 @@
 #include "storage/update_manager.h"
 #include "storage/vectorized/memtable.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 Status DeltaWriter::open(WriteRequest* req, MemTracker* mem_tracker, DeltaWriter** writer) {
     *writer = new DeltaWriter(req, mem_tracker, StorageEngine::instance());
@@ -306,5 +305,4 @@ int64_t DeltaWriter::partition_id() const {
     return _req.partition_id;
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -3,8 +3,7 @@
 #include "pipeline_driver_poller.h"
 
 #include <chrono>
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 void PipelineDriverPoller::start() {
     DCHECK(this->_polling_thread == nullptr);
@@ -110,5 +109,4 @@ void PipelineDriverPoller::add_blocked_driver(const DriverPtr& driver) {
     this->_cond.notify_one();
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

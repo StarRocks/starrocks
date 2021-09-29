@@ -23,9 +23,7 @@
 
 #include "util/starrocks_metrics.h"
 
-namespace starrocks {
-namespace fs {
-namespace internal {
+namespace starrocks::fs::internal {
 
 BlockManagerMetrics::BlockManagerMetrics() {
     blocks_open_reading = &StarRocksMetrics::instance()->blocks_open_reading;
@@ -40,6 +38,4 @@ BlockManagerMetrics::BlockManagerMetrics() {
     total_disk_sync = &StarRocksMetrics::instance()->disk_sync_total;
 }
 
-} // namespace internal
-} // namespace fs
-} // namespace starrocks
+} // namespace starrocks::fs::internal

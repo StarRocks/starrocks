@@ -26,8 +26,7 @@
 #include "storage/memory/typed_column_reader.h"
 #include "storage/memory/typed_column_writer.h"
 
-namespace starrocks {
-namespace memory {
+namespace starrocks::memory {
 
 Column::Column(ColumnSchema cs, ColumnType storage_type, uint64_t version)
         : _cs(std::move(cs)), _storage_type(storage_type), _base_idx(0) {
@@ -207,5 +206,4 @@ Status Column::create_writer(std::unique_ptr<ColumnWriter>* writer) {
     return Status::OK();
 }
 
-} // namespace memory
-} // namespace starrocks
+} // namespace starrocks::memory

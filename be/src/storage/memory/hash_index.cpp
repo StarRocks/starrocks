@@ -33,8 +33,7 @@
 
 #include "gutil/stringprintf.h"
 
-namespace starrocks {
-namespace memory {
+namespace starrocks::memory {
 
 struct alignas(64) HashChunk {
     static const uint32_t CAPACITY = 12;
@@ -174,5 +173,4 @@ const std::string HashIndex::dump() const {
                         _num_chunks * 64.0f / (1024 * 1024), size(), max_size(), size() / (_num_chunks * 12.0f));
 }
 
-} // namespace memory
-} // namespace starrocks
+} // namespace starrocks::memory

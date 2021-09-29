@@ -44,11 +44,9 @@
 #include "gutil/spinlock_internal.h"
 
 // forward declaration for use by spinlock_*-inl.h
-namespace base {
-namespace internal {
+namespace base::internal {
 static int SuggestedDelayNS(int loop);
-}
-} // namespace base
+} // namespace base::internal
 
 #if defined(_WIN32)
 #include "gutil/spinlock_win32-inl.h"
@@ -58,8 +56,7 @@ static int SuggestedDelayNS(int loop);
 #include "gutil/spinlock_posix-inl.h"
 #endif
 
-namespace base {
-namespace internal {
+namespace base::internal {
 
 // See spinlock_internal.h for spec.
 int32 SpinLockWait(volatile Atomic32* w, int n, const SpinLockWaitTransition trans[]) {
@@ -121,5 +118,4 @@ static int SuggestedDelayNS(int loop) {
 #endif
 }
 
-} // namespace internal
-} // namespace base
+} // namespace base::internal

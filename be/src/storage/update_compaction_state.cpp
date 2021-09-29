@@ -9,9 +9,7 @@
 #include "storage/update_manager.h"
 #include "storage/vectorized/chunk_helper.h"
 
-namespace starrocks {
-
-namespace vectorized {
+namespace starrocks::vectorized {
 
 CompactionState::CompactionState() = default;
 
@@ -124,6 +122,4 @@ Status CompactionState::_do_load(Rowset* rowset) {
     return Status::OK();
 }
 
-} // namespace vectorized
-
-} // namespace starrocks
+} // namespace starrocks::vectorized

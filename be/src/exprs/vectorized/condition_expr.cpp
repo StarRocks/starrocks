@@ -8,8 +8,7 @@
 #include "common/object_pool.h"
 #include "exprs/vectorized/function_helper.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 #define DEFINE_CLASS_CONSTRUCT_FN(NAME)         \
     NAME(const TExprNode& node) : Expr(node) {} \
@@ -307,5 +306,4 @@ Expr* VectorizedConditionExprFactory::create_coalesce_expr(const TExprNode& node
 #undef CASE_TYPE
 #undef CASE_ALL_TYPE
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

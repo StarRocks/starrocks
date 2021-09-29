@@ -21,8 +21,7 @@
 
 #include "storage/memory/column_block.h"
 
-namespace starrocks {
-namespace memory {
+namespace starrocks::memory {
 
 size_t ColumnBlock::memory() const {
     return _data.bsize() + _nulls.bsize();
@@ -72,5 +71,4 @@ Status ColumnBlock::copy_to(ColumnBlock* dest, size_t size, size_t esize) {
     return Status::OK();
 }
 
-} // namespace memory
-} // namespace starrocks
+} // namespace starrocks::memory

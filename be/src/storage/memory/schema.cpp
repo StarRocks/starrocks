@@ -25,8 +25,7 @@
 
 #include "gutil/strings/split.h"
 
-namespace starrocks {
-namespace memory {
+namespace starrocks::memory {
 
 bool supported(ColumnType type) {
     switch (type) {
@@ -175,5 +174,4 @@ const ColumnSchema* Schema::get_by_cid(uint32_t cid) const {
     }
 }
 
-} // namespace memory
-} // namespace starrocks
+} // namespace starrocks::memory

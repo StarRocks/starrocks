@@ -19,8 +19,7 @@
 #include "util/sm3.h"
 #include "util/utf8.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 constexpr size_t CONCAT_SMALL_OPTIMIZE_THRESHOLD = 16 << 20;
 
@@ -2907,5 +2906,4 @@ ColumnPtr StringFunctions::parse_url(FunctionContext* context, const starrocks::
     return parse_url_general(context, columns);
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

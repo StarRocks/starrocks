@@ -21,8 +21,7 @@
 
 #include "storage/memory/write_txn.h"
 
-namespace starrocks {
-namespace memory {
+namespace starrocks::memory {
 
 WriteTxn::WriteTxn(scoped_refptr<Schema>* schema) : _schema(schema->get()) {}
 
@@ -37,5 +36,4 @@ PartialRowBatch* WriteTxn::get_batch(size_t idx) const {
     return _batches[idx].get();
 }
 
-} // namespace memory
-} // namespace starrocks
+} // namespace starrocks::memory

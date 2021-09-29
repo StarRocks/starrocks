@@ -1,8 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
 #include "exec/pipeline/fragment_context.h"
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {
     std::lock_guard<std::mutex> lock(_lock);
@@ -39,5 +38,4 @@ void FragmentContextManager::cancel(const Status& status) {
     }
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

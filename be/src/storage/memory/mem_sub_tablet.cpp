@@ -28,8 +28,7 @@
 #include "storage/memory/partial_row_batch.h"
 #include "storage/memory/schema.h"
 
-namespace starrocks {
-namespace memory {
+namespace starrocks::memory {
 
 Status MemSubTablet::create(uint64_t version, const Schema& schema, std::unique_ptr<MemSubTablet>* ret) {
     std::unique_ptr<MemSubTablet> tmp(new MemSubTablet());
@@ -242,5 +241,4 @@ scoped_refptr<HashIndex> MemSubTablet::rebuild_hash_index(size_t new_capacity) {
     return hi;
 }
 
-} // namespace memory
-} // namespace starrocks
+} // namespace starrocks::memory
