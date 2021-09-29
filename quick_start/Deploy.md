@@ -103,7 +103,9 @@ Step 4: Look up the log file (`log/fe.log`) to confirm that the FE has been star
 ### Use MySQL Client to Access FE
 
 Step 1: Install the MySQL client if you haven’t done so.
-Ubuntu：sudo apt-get install mysql
+
+Ubuntu：sudo apt-get install mysql-client
+
 Centos：sudo yum install mysql-client
 
 Step 2: Connect using the MySQL client.
