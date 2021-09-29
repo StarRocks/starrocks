@@ -19,7 +19,7 @@ import org.apache.logging.log4j.Logger;
  * show partitions' detail info within a table
  */
 public class HivePartitionsProcDir implements ProcDirInterface {
-    Logger LOG = LogManager.getLogger(HivePartitionsProcDir.class);
+    private static final Logger LOG = LogManager.getLogger(HivePartitionsProcDir.class);
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("PartitionName")
             .build();

@@ -774,11 +774,10 @@ public class DatabaseTransactionMgr {
                                         replica.updateVersionInfo(replica.getVersion(), replica.getVersionHash(),
                                                 partition.getVisibleVersion(), partition.getVisibleVersionHash(),
                                                 partitionCommitInfo.getVersion(), partitionCommitInfo.getVersionHash());
-                                        LOG.warn(
-                                                "transaction state {} has error, the replica [{}] not appeared in error replica list "
-                                                        +
-                                                        " and its version not equal to partition commit version or commit version - 1"
-                                                        + " if its not a upgrate stage, its a fatal error. ",
+                                        LOG.warn("transaction state {} has error, the replica [{}] not appeared " +
+                                                        "in error replica list and its version not equal to partition " +
+                                                        "commit version or commit version - 1 if its not a upgrate " +
+                                                        "stage, its a fatal error. ",
                                                 transactionState, replica);
                                     }
                                 } else if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
@@ -792,9 +791,9 @@ public class DatabaseTransactionMgr {
                             if (healthReplicaNum < quorumReplicaNum) {
                                 // prevent excessive logging
                                 if (transactionState.getLastErrTimeMs() + 3000 < System.nanoTime() / 1000000) {
-                                    LOG.info(
-                                            "publish version failed for transaction {} on tablet {}, with only {} replicas less than quorum {}",
-                                            transactionState, tablet, healthReplicaNum, quorumReplicaNum);
+                                    LOG.info("publish version failed for transaction {} on tablet {}, with only {} " +
+                                                    "replicas less than quorum {}", transactionState, tablet, healthReplicaNum,
+                                            quorumReplicaNum);
                                 }
                                 String errMsg = String.format(
                                         "publish on tablet %d failed. succeed replica num %d less than quorum %d."
