@@ -60,25 +60,19 @@ using SliceAggTwoLevelHashMap =
         phmap::parallel_flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual,
                                       phmap::priv::Allocator<phmap::priv::Pair<const Slice, AggDataPtr>>, PHMAPN>;
 
-static_assert(sizeof(AggDataPtr) == sizeof(size_t));
-#define PRECOMPUTE_HASH_VALUES_NUMBER(column, prefetch_dist)             \
-    size_t const column_size = column->size();                           \
-    size_t* hash_values = reinterpret_cast<size_t*>(agg_states->data()); \
-    for (size_t i = 0; i < column_size; i++) {                           \
-        auto key = column->get_data()[i];                                \
-        size_t hashval = hash_map.hash_function()(key);                  \
-        hash_values[i] = hashval;                                        \
-    }                                                                    \
-    size_t __prefetch_index = prefetch_dist;
+static constexpr size_t AGG_HASH_MAP_DEFAULT_PREFETCH_DIST = 16;
 
-#define PRECOMPUTE_HASH_VALUES_SLICE(column, prefetch_dist)              \
-    size_t const column_size = column->size();                           \
-    size_t* hash_values = reinterpret_cast<size_t*>(agg_states->data()); \
-    for (size_t i = 0; i < column_size; i++) {                           \
-        auto key = column->get_slice(i);                                 \
-        size_t hashval = hash_map.hash_function()(key);                  \
-        hash_values[i] = hashval;                                        \
-    }                                                                    \
+static_assert(sizeof(AggDataPtr) == sizeof(size_t));
+#define PRECOMPUTE_HASH_VALUES(column, prefetch_dist)                     \
+    size_t const column_size = column->size();                            \
+    size_t* hash_values = reinterpret_cast<size_t*>(agg_states->data());  \
+    {                                                                     \
+        const auto& container_data = column->get_data();                  \
+        for (size_t i = 0; i < column_size; i++) {                        \
+            size_t hashval = hash_map.hash_function()(container_data[i]); \
+            hash_values[i] = hashval;                                     \
+        }                                                                 \
+    }                                                                     \
     size_t __prefetch_index = prefetch_dist;
 
 #define PREFETCH_HASH_VALUE()                                    \
@@ -106,7 +100,7 @@ struct AggHashMapWithOneNumberKey {
         DCHECK(!key_columns[0]->is_nullable());
         auto column = down_cast<ColumnType*>(key_columns[0].get());
 
-        PRECOMPUTE_HASH_VALUES_NUMBER(column, 16);
+        PRECOMPUTE_HASH_VALUES(column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
         for (size_t i = 0; i < column_size; i++) {
             PREFETCH_HASH_VALUE();
 
@@ -173,7 +167,7 @@ struct AggHashMapWithOneNullableNumberKey {
             auto* data_column = down_cast<ColumnType*>(nullable_column->data_column().get());
 
             if (!nullable_column->has_null()) {
-                PRECOMPUTE_HASH_VALUES_NUMBER(data_column, 16);
+                PRECOMPUTE_HASH_VALUES(data_column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
                 for (size_t i = 0; i < column_size; i++) {
                     PREFETCH_HASH_VALUE();
 
@@ -283,7 +277,7 @@ struct AggHashMapWithOneStringKey {
         DCHECK(key_columns[0]->is_binary());
         auto column = down_cast<BinaryColumn*>(key_columns[0].get());
 
-        PRECOMPUTE_HASH_VALUES_SLICE(column, 16);
+        PRECOMPUTE_HASH_VALUES(column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
 
         for (size_t i = 0; i < column_size; i++) {
             PREFETCH_HASH_VALUE();
@@ -353,7 +347,7 @@ struct AggHashMapWithOneNullableStringKey {
             DCHECK(data_column->is_binary());
 
             if (!nullable_column->has_null()) {
-                PRECOMPUTE_HASH_VALUES_SLICE(data_column, 16);
+                PRECOMPUTE_HASH_VALUES(data_column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
 
                 for (size_t i = 0; i < column_size; i++) {
                     PREFETCH_HASH_VALUE();
@@ -616,7 +610,7 @@ struct AggHashMapWithSerializedKeyFixedSize {
                 size_t hashval = hash_map.hash_function()(key);
                 hash_values[i] = hashval;
             }
-            size_t __prefetch_index = 16;
+            size_t __prefetch_index = AGG_HASH_MAP_DEFAULT_PREFETCH_DIST;
 
             for (size_t i = 0; i < chunk_size; ++i) {
                 if (__prefetch_index < chunk_size) {
