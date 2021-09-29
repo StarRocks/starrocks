@@ -24,6 +24,7 @@ class FragmentContext {
 public:
     FragmentContext() : _cancel_flag(false) {}
     ~FragmentContext() {
+        close_all_pipelines();
         if (_plan != nullptr) {
             _plan->close(_runtime_state.get());
         }
@@ -82,6 +83,19 @@ public:
     bool is_canceled() { return _cancel_flag.load(std::memory_order_acquire) == true; }
 
     MorselQueueMap& morsel_queues() { return _morsel_queues; }
+
+    Status prepare_all_pipelines() {
+        for (auto& pipe : _pipelines) {
+            RETURN_IF_ERROR(pipe->prepare(_runtime_state.get(), _mem_tracker.get()));
+        }
+        return Status::OK();
+    }
+
+    void close_all_pipelines() {
+        for (auto& pipe : _pipelines) {
+            pipe->close(_runtime_state.get());
+        }
+    }
 
 private:
     // Id of this query

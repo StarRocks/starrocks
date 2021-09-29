@@ -53,9 +53,6 @@ void ScanOperator::_trigger_read_chunk() {
 }
 Status ScanOperator::prepare(RuntimeState* state) {
     Operator::prepare(state);
-    RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc, get_memtracker()));
-    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     if (_io_threads != nullptr) {
         auto num_scan_operators = 1 + state->exec_env()->increment_num_scan_operators(1);
         if (num_scan_operators > _io_threads->get_queue_capacity()) {
@@ -70,7 +67,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
 }
 
 Status ScanOperator::close(RuntimeState* state) {
-    Expr::close(_conjunct_ctxs, state);
     if (_io_threads != nullptr) {
         state->exec_env()->decrement_num_scan_operators(1);
     }
@@ -185,4 +181,16 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         return _pull_chunk_nonblocking(state);
     }
 }
+
+Status ScanOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+    RowDescriptor row_desc;
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc, mem_tracker));
+    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+    return Status::OK();
+}
+
+void ScanOperatorFactory::close(RuntimeState* state) {
+    Expr::close(_conjunct_ctxs, state);
+}
+
 } // namespace starrocks::pipeline

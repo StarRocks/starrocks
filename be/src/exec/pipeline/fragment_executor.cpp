@@ -148,6 +148,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         _convert_data_sink_to_operator(params, &context, sink.get());
     }
 
+    RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
     Drivers drivers;
     const auto& pipelines = _fragment_ctx->pipelines();
     const size_t num_pipelines = pipelines.size();
