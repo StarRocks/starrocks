@@ -21,8 +21,7 @@
 
 #include "storage/memory/buffer.h"
 
-namespace starrocks {
-namespace memory {
+namespace starrocks::memory {
 
 Status Buffer::alloc(size_t bsize) {
     if (bsize > 0) {
@@ -54,5 +53,4 @@ Buffer::~Buffer() {
     clear();
 }
 
-} // namespace memory
-} // namespace starrocks
+} // namespace starrocks::memory

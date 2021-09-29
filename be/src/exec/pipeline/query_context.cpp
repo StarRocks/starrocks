@@ -3,8 +3,7 @@
 
 #include "exec/pipeline/fragment_context.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()), _num_fragments(0), _num_active_fragments(0) {}
 
@@ -56,5 +55,4 @@ QueryContextPtr QueryContextManager::remove(const TUniqueId& query_id) {
     }
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

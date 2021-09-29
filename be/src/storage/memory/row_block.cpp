@@ -21,12 +21,10 @@
 
 #include "storage/memory/row_block.h"
 
-namespace starrocks {
-namespace memory {
+namespace starrocks::memory {
 
 RowBlock::RowBlock(size_t num_columns) {
     _columns.resize(num_columns);
 }
 
-} // namespace memory
-} // namespace starrocks
+} // namespace starrocks::memory

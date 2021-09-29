@@ -12,8 +12,7 @@
 #include "runtime/runtime_state.h"
 #include "service/backend_options.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 std::string to_load_error_http_path(const std::string& file_name) {
     if (file_name.empty()) {
         return "";
@@ -160,5 +159,4 @@ void ExecStateReporter::submit(std::function<void()>&& report_task) {
     _thread_pool->submit_func(std::move(report_task));
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

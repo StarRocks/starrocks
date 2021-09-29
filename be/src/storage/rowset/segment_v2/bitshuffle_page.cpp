@@ -24,8 +24,7 @@
 #include "gutil/strings/substitute.h"
 #include "storage/rowset/segment_v2/common.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 std::string bitshuffle_error_msg(int64_t err) {
     switch (err) {
@@ -46,5 +45,4 @@ std::string bitshuffle_error_msg(int64_t err) {
     }
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

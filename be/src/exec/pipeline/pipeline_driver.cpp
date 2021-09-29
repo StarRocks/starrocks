@@ -10,8 +10,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     if (_state == DriverState::NOT_READY) {
         source_operator()->add_morsel_queue(_morsel_queue);
@@ -194,5 +193,4 @@ std::string PipelineDriver::to_debug_string() const {
     ss << "]";
     return ss.str();
 }
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

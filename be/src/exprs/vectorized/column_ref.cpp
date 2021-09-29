@@ -2,8 +2,7 @@
 
 #include "exprs/vectorized/column_ref.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 ColumnRef::ColumnRef(const TExprNode& node)
         : Expr(node, true), _column_id(node.slot_ref.slot_id), _tuple_id(node.slot_ref.tuple_id) {}
@@ -35,5 +34,4 @@ ColumnPtr ColumnRef::evaluate(ExprContext* context, Chunk* ptr) {
     return get_column(this, ptr);
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
