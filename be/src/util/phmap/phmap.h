@@ -945,7 +945,7 @@ public:
 
     raw_hash_set() noexcept(std::is_nothrow_default_constructible<hasher>::value&&
                                     std::is_nothrow_default_constructible<key_equal>::value&&
-                                            std::is_nothrow_default_constructible<allocator_type>::value) = default;
+                                            std::is_nothrow_default_constructible<allocator_type>::value) {}
 
     explicit raw_hash_set(size_t bucket_cnt, const hasher& hashfn = hasher(), const key_equal& eq = key_equal(),
                           const allocator_type& alloc = allocator_type())
@@ -2468,9 +2468,9 @@ public:
 
     // ------------------------- c o n s t r u c t o r s ------------------
 
-    parallel_hash_set() noexcept(
-            std::is_nothrow_default_constructible<hasher>::value&& std::is_nothrow_default_constructible<
-                    key_equal>::value&& std::is_nothrow_default_constructible<allocator_type>::value) = default;
+    parallel_hash_set() noexcept(std::is_nothrow_default_constructible<hasher>::value&&
+                                         std::is_nothrow_default_constructible<key_equal>::value&&
+                                                 std::is_nothrow_default_constructible<allocator_type>::value) {}
 
     explicit parallel_hash_set(size_t bucket_cnt, const hasher& hash_param = hasher(),
                                const key_equal& eq = key_equal(), const allocator_type& alloc = allocator_type()) {
