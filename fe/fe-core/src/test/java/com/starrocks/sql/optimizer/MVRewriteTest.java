@@ -61,7 +61,6 @@ public class MVRewriteTest {
         UtFrameUtils.createMinStarRocksCluster(runningDir);
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withEnableMV().withDatabase(HR_DB_NAME).useDatabase(HR_DB_NAME);
-        starRocksAssert.enableNewPlanner();
     }
 
     @Before
