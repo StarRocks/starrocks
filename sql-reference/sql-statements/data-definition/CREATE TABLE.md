@@ -25,66 +25,71 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     语法：
 
     ```sql
-    `col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]`
+    col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
     ```
 
     说明：
 
     ```plain text
     col_name：列名称
+    ```
+
+    ```plain text
     col_type：列类型
 
-    TINYINT（1字节）
+    具体的列类型以及范围等信息如下：
+
+    * TINYINT（1字节）
     范围：-2^7 + 1 ~ 2^7 - 1
 
-    SMALLINT（2字节）
+    * SMALLINT（2字节）
     范围：-2^15 + 1 ~ 2^15 - 1
 
-    INT（4字节）
+    * INT（4字节）
     范围：-2^31 + 1 ~ 2^31 - 1
 
-    BIGINT（8字节）
+    * BIGINT（8字节）
     范围：-2^63 + 1 ~ 2^63 - 1
 
-    LARGEINT（16字节）
+    * LARGEINT（16字节）
     范围：-2^127 + 1 ~ 2^127 - 1
 
-    FLOAT（4字节）
+    * FLOAT（4字节）
     支持科学计数法
 
-    DOUBLE（12字节）
+    * DOUBLE（12字节）
     支持科学计数法
 
-    DECIMAL[(precision, scale)] (16字节)
+    * DECIMAL[(precision, scale)] (16字节)
     保证精度的小数类型。默认是 DECIMAL(10, 0)
-
-    precision: 1 ~ 27
-
-    scale: 0 ~ 9
-
-    其中整数部分为 1 ~ 18
+      precision: 1 ~ 38
+      scale: 0 ~ precision
+    其中整数部分为：precision - scale
     不支持科学计数法
 
-    DATE（3字节）
+    * DATE（3字节）
     范围：0000-01-01 ~ 9999-12-31
 
-    DATETIME（8字节）
+    * DATETIME（8字节）
     范围：0000-01-01 00:00:00 ~ 9999-12-31 23:59:59
 
-    CHAR[(length)]
+    * CHAR[(length)]
     定长字符串。长度范围：1 ~ 255。默认为1
 
-    VARCHAR[(length)]
+    * VARCHAR[(length)]
     变长字符串。长度范围：1 ~ 65533
 
-    HLL (1~16385个字节)
-    hll列类型，不需要指定长度和默认值、长度根据数据的聚合
-    程度系统内控制，并且HLL列只能通过配套的hll_union_agg、Hll_cardinality、hll_hash进行查询或使用
+    * HLL (1~16385个字节)
+    hll列类型，不需要指定长度和默认值，长度根据数据的聚合程度系统内控制，并且HLL列只能通过配套的hll_union_agg、Hll_cardinality、hll_hash进行查询或使用
 
-    BITMAP
+    * BITMAP
     bitmap列类型，不需要指定长度和默认值。表示整型的集合，元素最大支持到2^64 - 1
+    ```
 
+    ```plain text
     agg_type：聚合类型，如果不指定，则该列为 key 列。否则，该列为 value 列
+
+    支持的聚合类型如下：
 
     * SUM、MAX、MIN、REPLACE
 
@@ -92,13 +97,16 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
     * BITMAP_UNION(仅用于 BITMAP 列，为 BITMAP 独有的聚合方式)、
 
-    * REPLACE_IF_NOT_NULL：这个聚合类型的含义是当且仅当新导入数据是非NULL值时会发生替换行为，如果新导入的数据是NULL，那么StarRocks仍然会保留原值。注意：如果用在建表时REPLACE_IF_NOT_NULL列指定了NOT NULL，那么StarRocks仍然会将其转化NULL，不会向用户报错。用户可以借助这个类型完成部分列导入的功能。
-    * 该类型只对聚合模型(key_desc的type为AGGREGATE KEY)有用，其它模型不需要指这个。
+    * REPLACE_IF_NOT_NULL：这个聚合类型的含义是当且仅当新导入数据是非NULL值时会发生替换行为，如果新导入的数据是NULL，那么StarRocks仍然会保留原值。
+      注意：如果用在建表时REPLACE_IF_NOT_NULL列指定了NOT NULL，那么StarRocks仍然会将其转化NULL，不会向用户报错。用户可以借助这个类型完成「部分列导入」的功能。
+      该类型只对聚合模型(key_desc的type为AGGREGATE KEY)有用，其它模型不能指这个。
+    ```
 
+    ```plain text
     是否允许为NULL: 默认不允许为 NULL。NULL 值在导入数据中用 \N 来表示
 
     注意：
-    BITMAP_UNION聚合类型列在导入时的原始数据类型必须是TINYINT,SMALLINT,INT,BIGINT。
+    BITMAP_UNION聚合类型列在导入时的原始数据类型必须是TINYINT,SMALLINT, INT, BIGINT。
     ```
 
 2. index_definition
@@ -106,13 +114,16 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     语法：
 
     ```sql
-    `INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
+    INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
     ```
 
     说明：
+
     index_name：索引名称
+
     col_name：列名
-    注意：
+
+    > 注意：
     当前仅支持BITMAP索引， BITMAP索引仅支持应用于单列
 
 3. ENGINE 类型
