@@ -25,9 +25,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DdlStmt;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.KillStmt;
-import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.ShowAuthorStmt;
@@ -36,16 +34,11 @@ import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.UseStmt;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlSerializer;
-import com.starrocks.planner.Planner;
-import com.starrocks.rewrite.ExprRewriter;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TUniqueId;
 import java_cup.runtime.Symbol;
 import mockit.Expectations;
@@ -60,8 +53,6 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 import java.util.List;
-import java.util.SortedMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class StmtExecutorTest {
     private ConnectContext ctx;
@@ -91,7 +82,6 @@ public class StmtExecutorTest {
         ctx.setQueryId(UUIDUtil.genUUID());
 
         SessionVariable sessionVariable = new SessionVariable();
-        sessionVariable.disableNewPlanner();
         MysqlSerializer serializer = MysqlSerializer.newInstance();
         Catalog catalog = AccessTestUtil.fetchAdminCatalog();
 
@@ -173,80 +163,6 @@ public class StmtExecutorTest {
                 result = 1L;
             }
         };
-    }
-
-    @Test
-    public void testSelect(@Mocked QueryStmt queryStmt,
-                           @Mocked SqlParser parser,
-                           @Mocked Planner planner,
-                           @Mocked Coordinator coordinator) throws Exception {
-        Catalog catalog = Catalog.getCurrentCatalog();
-        Deencapsulation.setField(catalog, "canRead", new AtomicBoolean(true));
-
-        new Expectations() {
-            {
-                queryStmt.analyze((Analyzer) any);
-                minTimes = 0;
-
-                queryStmt.getColLabels();
-                minTimes = 0;
-                result = Lists.<String>newArrayList();
-
-                queryStmt.getResultExprs();
-                minTimes = 0;
-                result = Lists.<Expr>newArrayList();
-
-                queryStmt.isExplain();
-                minTimes = 0;
-                result = false;
-
-                queryStmt.getDbs(ctx, (SortedMap) any);
-                minTimes = 0;
-
-                queryStmt.getRedirectStatus();
-                minTimes = 0;
-                result = RedirectStatus.NO_FORWARD;
-
-                queryStmt.rewriteExprs((ExprRewriter) any);
-                minTimes = 0;
-
-                Symbol symbol = new Symbol(0, Lists.newArrayList(queryStmt));
-                parser.parse();
-                minTimes = 0;
-                result = symbol;
-
-                planner.plan((QueryStmt) any, (Analyzer) any, (TQueryOptions) any);
-                minTimes = 0;
-
-                // mock coordinator
-                coordinator.exec();
-                minTimes = 0;
-
-                coordinator.endProfile();
-                minTimes = 0;
-
-                coordinator.getQueryProfile();
-                minTimes = 0;
-                result = new RuntimeProfile();
-
-                coordinator.getNext();
-                minTimes = 0;
-                result = new RowBatch();
-
-                coordinator.getJobId();
-                minTimes = 0;
-                result = -1L;
-
-                Catalog.getCurrentCatalog();
-                minTimes = 0;
-                result = catalog;
-            }
-        };
-
-        StmtExecutor stmtExecutor = new StmtExecutor(ctx, "");
-        stmtExecutor.execute();
-
-        Assert.assertEquals(QueryState.MysqlStateType.EOF, state.getStateType());
     }
 
     @Test

@@ -10,7 +10,6 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        connectContext.getSessionVariable().disableNewPlanner();
         starRocksAssert.withTable("CREATE TABLE `lineorder_new_l` (\n" +
                 "  `LO_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n" +
                 "  `LO_ORDERDATE` date NOT NULL COMMENT \"\",\n" +
