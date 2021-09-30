@@ -535,10 +535,17 @@ public class Alter {
                     throw new DdlException(
                             "table " + olapTable.getName() + " is colocate table, cannot change replicationNum");
                 }
-                partitionInfo.setReplicationNum(partition.getId(), newReplicationNum);
-                // update default replication num if this table is unpartitioned table
-                if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                    olapTable.setReplicationNum(newReplicationNum);
+                List<Backend> clusterBackends = Catalog.getCurrentSystemInfo().getClusterBackends(SystemInfoService.DEFAULT_CLUSTER);
+                if (newReplicationNum <= clusterBackends.size()) {
+                    partitionInfo.setReplicationNum(partition.getId(), newReplicationNum);
+                    // update default replication num if this table is unpartitioned table
+                    if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                        olapTable.setReplicationNum(newReplicationNum);
+                    }
+                } else {
+                    throw new DdlException(
+                            "Failed to find enough backends , current backends num is : " + clusterBackends.size() + ". ddl num is : " + newReplicationNum
+                    );
                 }
             }
             // 3. in memory
