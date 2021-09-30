@@ -567,7 +567,7 @@ public class FileScanNode extends LoadScanNode {
         for (TBrokerFileStatus fileStatus : fileStatuses) {
             totalBytes += fileStatus.size;
         }
-        long numInstances = (totalBytes + bytesPerInstance - 1) / bytesPerInstance;
+        long numInstances = bytesPerInstance == 0 ? 1 : (totalBytes + bytesPerInstance - 1) / bytesPerInstance;
 
         for (int i = 0; i < numInstances; ++i) {
             locationsHeap.add(Pair.create(newLocations(context.params, brokerDesc.getName()), 0L));
