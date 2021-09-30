@@ -274,6 +274,7 @@
   + [错误码](/reference/Error_code.md)
   + [系统限制](/reference/System_limit.md)
 + 管理手册
+  + [在容器内编译](/administration/Build_in_docker.md))
   + [集群部署](/administration/Deployment.md)
   + [集群管理](/administration/Cluster_administration.md)
   + [配置参数](/administration/Configuration.md)

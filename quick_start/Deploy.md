@@ -624,3 +624,7 @@ mysql> desc table2;
 +-----------+-------------+------+-------+---------+-------+
 5 rows in set (0.00 sec)
 ```
+
+## 使用Docker进行编译
+
+具体参考[在容器内编译](../administration/Build_in_docker.md)。
