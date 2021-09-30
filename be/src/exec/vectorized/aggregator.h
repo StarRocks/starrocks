@@ -251,31 +251,18 @@ private:
 public:
     template <typename HashMapWithKey>
     void build_hash_map(HashMapWithKey& hash_map_with_key, size_t chunk_size, bool group_by_with_limit = false) {
-        if (group_by_with_limit) {
-            hash_map_with_key.compute_agg_states_with_limit(
-                    chunk_size, _group_by_columns, _mem_pool.get(),
-                    [this]() {
-                        vectorized::AggDataPtr agg_state =
-                                _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-                        for (int i = 0; i < _agg_functions.size(); i++) {
-                            _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
-                        }
-                        return agg_state;
-                    },
-                    &_tmp_agg_states, _limit, &_streaming_selection);
-        } else {
-            hash_map_with_key.compute_agg_states(
-                    chunk_size, _group_by_columns, _mem_pool.get(),
-                    [this]() {
-                        vectorized::AggDataPtr agg_state =
-                                _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
-                        for (int i = 0; i < _agg_functions.size(); i++) {
-                            _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
-                        }
-                        return agg_state;
-                    },
-                    &_tmp_agg_states);
-        }
+        size_t limit = group_by_with_limit ? _limit : std::numeric_limits<size_t>::max();
+        hash_map_with_key.compute_agg_states(
+                chunk_size, _group_by_columns, _mem_pool.get(),
+                [this]() {
+                    vectorized::AggDataPtr agg_state =
+                            _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+                    for (int i = 0; i < _agg_functions.size(); i++) {
+                        _agg_functions[i]->create(agg_state + _agg_states_offsets[i]);
+                    }
+                    return agg_state;
+                },
+                &_tmp_agg_states, limit, &_streaming_selection);
     }
 
     template <typename HashMapWithKey>
