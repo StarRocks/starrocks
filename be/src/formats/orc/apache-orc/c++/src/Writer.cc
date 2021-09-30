@@ -481,7 +481,7 @@ void WriterImpl::writeMetadata() {
     if (!metadata.SerializeToZeroCopyStream(compressionStream.get())) {
         throw std::logic_error("Failed to write metadata.");
     }
-    postScript.set_metadatalength(compressionStream.get()->flush());
+    postScript.set_metadatalength(compressionStream->flush());
 }
 
 void WriterImpl::writeFileFooter() {

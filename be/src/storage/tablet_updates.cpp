@@ -741,7 +741,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         }
     }
     for (const auto& one_delete : state.deletes()) {
-        index.erase(*one_delete.get(), &new_deletes);
+        index.erase(*one_delete, &new_deletes);
     }
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
     // release resource

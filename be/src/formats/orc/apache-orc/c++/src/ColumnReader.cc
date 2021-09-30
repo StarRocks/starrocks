@@ -54,7 +54,7 @@ inline RleVersion convertRleVersion(proto::ColumnEncoding_Kind kind) {
 ColumnReader::ColumnReader(const Type& type, StripeStreams& stripe)
         : columnId(type.getColumnId()), memoryPool(stripe.getMemoryPool()) {
     std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_PRESENT, true);
-    if (stream.get()) {
+    if (stream) {
         notNullDecoder = createBooleanRleDecoder(std::move(stream));
     }
 }
@@ -112,7 +112,7 @@ void ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* i
 }
 
 void ColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) {
-    if (notNullDecoder.get()) {
+    if (notNullDecoder) {
         notNullDecoder->seek(positions.at(columnId));
     }
 }
@@ -1141,7 +1141,7 @@ void ListColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numVal
 void ListColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) {
     ColumnReader::seekToRowGroup(positions);
     rle->seek(positions.at(columnId));
-    if (child.get()) {
+    if (child) {
         child->seekToRowGroup(positions);
     }
 }
@@ -1274,10 +1274,10 @@ void MapColumnReader::nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValu
 void MapColumnReader::seekToRowGroup(std::unordered_map<uint64_t, PositionProvider>& positions) {
     ColumnReader::seekToRowGroup(positions);
     rle->seek(positions.at(columnId));
-    if (keyReader.get()) {
+    if (keyReader) {
         keyReader->seekToRowGroup(positions);
     }
-    if (elementReader.get()) {
+    if (elementReader) {
         elementReader->seekToRowGroup(positions);
     }
 }

@@ -67,7 +67,7 @@ public:
     const std::string& user() const { return _user; }
 
 private:
-    std::string _user = "";
+    std::string _user;
 };
 } // namespace starrocks
 #else

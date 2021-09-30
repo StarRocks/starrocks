@@ -624,7 +624,6 @@ B255:
 #endif
 
     memcpy(dst, src, size);
-    return;
 }
 
 }

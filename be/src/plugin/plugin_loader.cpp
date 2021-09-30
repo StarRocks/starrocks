@@ -47,7 +47,7 @@ Status PluginLoader::open_valid() {
 }
 
 Status PluginLoader::close_valid() {
-    if (_plugin.get() != nullptr && (_plugin->flags & PLUGIN_NOT_DYNAMIC_UNINSTALL)) {
+    if (_plugin != nullptr && (_plugin->flags & PLUGIN_NOT_DYNAMIC_UNINSTALL)) {
         return Status::InternalError(strings::Substitute("plugin $0 not allow dynamic uninstall", _name));
     }
 
@@ -138,7 +138,7 @@ Status DynamicPluginLoader::close_plugin() {
         return Status::OK();
     }
 
-    if (_plugin.get() != nullptr) {
+    if (_plugin != nullptr) {
         RETURN_IF_ERROR(close_valid());
 
         if (_plugin->close != nullptr) {
@@ -178,7 +178,7 @@ Status BuiltinPluginLoader::uninstall() {
         return Status::OK();
     }
 
-    if (_plugin.get() != nullptr) {
+    if (_plugin != nullptr) {
         RETURN_IF_ERROR(close_valid());
 
         if (_plugin->close != nullptr) {

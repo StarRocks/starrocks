@@ -56,7 +56,7 @@ const uint64_t _s_available_space_threshold_mb = 1024;
 const std::string TMP_FILE_MGR_ACTIVE_SCRATCH_DIRS = "tmp_file_mgr.active_scratch_dirs";
 const std::string TMP_FILE_MGR_ACTIVE_SCRATCH_DIRS_LIST = "tmp_file_mgr.active_scratch_dirs.list";
 
-TmpFileMgr::TmpFileMgr(ExecEnv* exec_env) : _exec_env(exec_env), _initialized(false), _dir_status_lock(), _tmp_dirs() {}
+TmpFileMgr::TmpFileMgr(ExecEnv* exec_env) : _exec_env(exec_env), _initialized(false) {}
 // _num_active_scratch_dirs_metric(NULL), _active_scratch_dirs_metric(NULL) {}
 
 Status TmpFileMgr::init(MetricRegistry* metrics) {

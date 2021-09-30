@@ -100,7 +100,7 @@ public:
     explicit BloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
             : _bf_options(bf_options),
               _typeinfo(std::move(typeinfo)),
-              _tracker(),
+
               _pool(&_tracker),
               _has_null(false),
               _bf_buffer_size(0) {}

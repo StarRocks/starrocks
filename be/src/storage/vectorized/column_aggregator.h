@@ -115,11 +115,7 @@ private:
 class ValueNullableColumnAggregator final : public ValueColumnAggregatorBase {
 public:
     explicit ValueNullableColumnAggregator(ValueColumnAggregatorPtr child)
-            : ValueColumnAggregatorBase(),
-              _child(std::move(child)),
-              _aggregate_nulls(nullptr),
-              _source_nulls_data(nullptr),
-              _row_is_null(0) {}
+            : _child(std::move(child)), _aggregate_nulls(nullptr), _source_nulls_data(nullptr), _row_is_null(0) {}
 
     void update_source(const ColumnPtr& src) override {
         _source_column = src;

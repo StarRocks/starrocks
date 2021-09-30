@@ -196,8 +196,7 @@ public:
     typedef ThriftClient<T> Client;
 
     ClientCache()
-            : _client_cache_helper(),
-              _client_factory(std::bind<ThriftClientImpl*>(std::mem_fn(&ClientCache::make_client), this,
+            : _client_factory(std::bind<ThriftClientImpl*>(std::mem_fn(&ClientCache::make_client), this,
                                                            std::placeholders::_1, std::placeholders::_2)) {}
 
     ClientCache(int max_cache_size)
