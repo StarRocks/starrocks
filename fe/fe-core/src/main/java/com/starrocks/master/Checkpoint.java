@@ -113,6 +113,7 @@ public class Checkpoint extends MasterDaemon {
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
             }
+            Catalog.getServingCatalog().setImageJournalId(checkPointVersion);
             LOG.info("checkpoint finished save image.{}", replayedJournalId);
         } catch (Exception e) {
             e.printStackTrace();
