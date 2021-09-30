@@ -241,7 +241,7 @@ Broker Load导入是异步的，用户可以在SHOW LOAD命令中指定Label来�
 
 示例：
 
-~~~sql
+~~~Plain Text
 mysql> show load where label = 'label1'\G
 *************************** 1. row ***************************
          JobId: 76391
@@ -268,37 +268,42 @@ LoadFinishTime: 2019-07-27 11:50:16
 * State:  导入任务当前所处的阶段。在Broker load导入过程中主要会出现PENDING和LOADING这两个导入中的状态。如果Broker load处于PENDING状态，则说明当前导入任务正在等待被执行；LOADING状态则表示正在执行中。
 * 导入任务的最终阶段有两个：CANCELLED和FINISHED。当任务处于这两个阶段时，导入完成。其中CANCELLED为导入失败，FINISHED为导入成功。
 * Progress:  导入任务的进度描述。分为两种进度：ETL和LOAD，分别对应导入流程的两个阶段 ETL和LOADING。目前Broker Load只有LOADING阶段，所以ETL固定显示为 N/A，而LOAD的进度范围为：0~100%。LOAD进度 = 当前完成导入的表个数 / 本次导入任务设计的总表个数 \* 100%
-* 如果所有导入表均完成导入，此时 LOAD 的进度为 99%， 导入进入到最后生效阶段，整个导入完成后，LOAD 的进度才会改为 100%。
+  * 如果所有导入表均完成导入，此时 LOAD 的进度为 99%， 导入进入到最后生效阶段，整个导入完成后，LOAD 的进度才会改为 100%。
 
-> 注意：导入进度并不是线性的，所以如果一段时间内进度没有变化，并不代表导入没有在执行。
+    > 注意：导入进度并不是线性的，所以如果一段时间内进度没有变化，并不代表导入没有在执行。
 
 * Type:  导入任务的类型。Broker Load 的 type 取值是 BROKER。
+
 * EtlInfo:  主要显示了导入的数据量指标 unselected.rows , dpp.norm.ALL 和 dpp.abnorm.ALL。用户可以根据第一个数值判断 where 条件过滤了多少行，后两个指标验证当前导入任务的错误率是否超过 max-filter-ratio。三个指标之和就是原始数据量的总行数。
 * TaskInfo:  主要显示了当前导入任务参数，也就是创建 Broker Load 导入任务时用户指定的参数，包括：cluster，timeout 和 max-filter-ratio。
-* ErrorMsg:  如果导入任务状态为CANCELLED，会显示失败的原因，包括两部分：type 和 msg。如果导入任务成功则显示 N/A。
-  
+* ErrorMsg:  如果导入任务状态为CANCELLED，会显示失败的原因，包括两部分：**type** 和 **msg**。如果导入任务成功则显示 N/A。
+
     **type**的取值意义：
-* USER-CANCEL**: 用户取消的任务
-* ETL-RUN-FAIL:  在ETL阶段失败的导入任务
-* ETL-QUALITY-UNSATISFIED:  数据质量不合格，也就是错误数据率超过了 max-filter-ratio
-* LOAD-RUN-FAIL:  在LOADING阶段失败的导入任务
-* TIMEOUT:  导入任务没在超时时间内完成
-* UNKNOWN:  未知的导入错误
+  * USER-CANCEL: 用户取消的任务
+  * ETL-RUN-FAIL:  在ETL阶段失败的导入任务
+  * ETL-QUALITY-UNSATISFIED:  数据质量不合格，也就是错误数据率超过了 max-filter-ratio
+  * LOAD-RUN-FAIL:  在LOADING阶段失败的导入任务
+  * TIMEOUT:  导入任务没在超时时间内完成
+  * UNKNOWN:  未知的导入错误
 
-* **CreateTime/EtlStartTime/EtlFinishTime/LoadStartTime/LoadFinishTime:  这几个值分别代表导入创建的时间、ETL阶段开始的时间、ETL阶段完成的时间、Loading阶段开始的时间和整个导入任务完成的时间。
-* Broker Load 导入由于没有 ETL 阶段，所以其 EtlStartTime, EtlFinishTime, LoadStartTime 被设置为同一个值。
-* 若导入任务长时间停留在 CreateTime，而 LoadStartTime 为 N/A ，则说明目前导入任务堆积严重，用户可减少导入提交的频率。
+* CreateTime/EtlStartTime/EtlFinishTime/LoadStartTime/LoadFinishTime:  这几个值分别代表导入创建的时间、ETL阶段开始的时间、ETL阶段完成的时间、Loading阶段开始的时间和整个导入任务完成的时间。
+  * Broker Load 导入由于没有 ETL 阶段，所以其 EtlStartTime, EtlFinishTime, LoadStartTime 被设置为同一个值。
+  * 若导入任务长时间停留在 CreateTime，而 LoadStartTime 为 N/A ，则说明目前导入任务堆积严重，用户可减少导入提交的频率。
 
-`LoadFinishTime - CreateTime = 整个导入任务所消耗时间`
+    ~~~Plain Text
+    LoadFinishTime - CreateTime = 整个导入任务所消耗时间
 
-`LoadFinishTime - LoadStartTime = 整个 Broker load 导入任务执行时间 = 整个导入任务所消耗时间 - 导入任务等待的时间`
+    LoadFinishTime - LoadStartTime = 整个 Broker load 导入任务执行时间 = 整个导入任务所消耗时间 - 导入任务等待的时间
+    ~~~
 
 * URL:  导入任务的错误数据样例，访问 URL 地址即可获取本次导入的错误数据样例。当本次导入不存在错误数据时，URL字段则为N/A。
 * JobDetails:  显示作业的详细运行状态。包括导入文件的个数、总大小（字节）、子任务个数、已处理的原始行数，运行子任务的BE节点 Id，未完成的BE节点 Id。
 
-`{"Unfinished backends":{"9c3441027ff948a0-8287923329a2b6a7":[10002]},"ScannedRows":2390016,"TaskNumber":1,"All backends":{"9c3441027ff948a0-8287923329a2b6a7":[10002]},"FileNumber":1,"FileSize":1073741824}`
+    ~~~Json
+    {"Unfinished backends":{"9c3441027ff948a0-8287923329a2b6a7":[10002]},"ScannedRows":2390016,"TaskNumber":1,"All backends":{"9c3441027ff948a0-8287923329a2b6a7":[10002]},"FileNumber":1,"FileSize":1073741824}
+    ~~~
 
-其中已处理的原始行数，每 5 秒更新一次。该行数仅用于展示当前的进度，不代表最终实际的处理行数。实际处理行数以 EtlInfo 中显示的数据为准。
+    其中已处理的原始行数，每 5 秒更新一次。该行数仅用于展示当前的进度，不代表最终实际的处理行数。实际处理行数以 EtlInfo 中显示的数据为准。
 
 ### 取消导入任务
 

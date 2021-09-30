@@ -32,7 +32,7 @@ curl -v --location-trusted -u root: \
 
 * jsonpaths : 选择每一列的json路径
 * json\_root : 选择json开始解析的列
-* strip\_outer\_array ： 裁剪最外面的 array 字段
+* strip\_outer\_array ： 裁剪最外面的 array 字段（可以见下一个样例）
 * strict\_mode：导入过程中的列类型转换进行严格过滤
 
 对于Json数据和StarRocks数据schema不完全一致的情况，我们可以通过修改Jsonpath等方式来进行导入
@@ -65,7 +65,9 @@ curl -v --location-trusted -u root: \
 +------+------+
 ~~~
 
-对于缺失的列 如果列的定义是nullable，那么会补上NULL，也可以通过ifnull补充默认值
+<br>
+
+对于缺失的列 如果列的定义是nullable，那么会补上NULL，也可以通过ifnull补充默认值。
 
 样例数据：
 
@@ -76,6 +78,8 @@ curl -v --location-trusted -u root: \
     {"k1": 3, "k2": "c"},
 ]
 ~~~
+
+> 这里最外层有一对表示 json array 的中括号 `[ ]`，导入时就需要指定 `strip_outer_array = true`
 
 导入示例-1：
 
