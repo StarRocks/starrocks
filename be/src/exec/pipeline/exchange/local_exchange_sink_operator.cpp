@@ -21,8 +21,10 @@ StatusOr<vectorized::ChunkPtr> LocalExchangeSinkOperator::pull_chunk(RuntimeStat
 }
 
 void LocalExchangeSinkOperator::finish(RuntimeState* state) {
-    _is_finished = true;
-    _exchanger->finish(state);
+    if (!_is_finished) {
+        _is_finished = true;
+        _exchanger->finish(state);
+    }
 }
 
 Status LocalExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
