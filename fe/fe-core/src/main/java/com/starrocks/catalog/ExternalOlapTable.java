@@ -3,6 +3,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Range;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.starrocks.analysis.DistributionDesc;
@@ -18,18 +19,22 @@ import com.starrocks.system.Backend.BackendState;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBackendMeta;
 import com.starrocks.thrift.TColumnMeta;
+import com.starrocks.thrift.TDataProperty;
 import com.starrocks.thrift.THashDistributionInfo;
 import com.starrocks.thrift.TIndexInfo;
 import com.starrocks.thrift.TIndexMeta;
 import com.starrocks.thrift.TPartitionInfo;
 import com.starrocks.thrift.TPartitionMeta;
+import com.starrocks.thrift.TRangePartitionDesc;
 import com.starrocks.thrift.TReplicaMeta;
 import com.starrocks.thrift.TTableMeta;
 import com.starrocks.thrift.TTabletMeta;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayInputStream;
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -286,7 +291,7 @@ public class ExternalOlapTable extends OlapTable {
         externalTableInfo.fromJsonObj(obj);
     }
 
-    public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas) throws DdlException {
+    public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas) throws DdlException, IOException {
         // no meta changed since last time, do nothing
         if (lastExternalMeta != null && meta.compareTo(lastExternalMeta) == 0) {
             LOG.info("no meta changed since last time, do nothing");
@@ -330,12 +335,63 @@ public class ExternalOlapTable extends OlapTable {
             }
 
             TPartitionInfo tPartitionInfo = meta.getPartition_info();
-            partitionInfo = new PartitionInfo(PartitionType.valueOf(tPartitionInfo.getType()));
-            for (Map.Entry<Long, Short> entry : tPartitionInfo.getReplica_num_map().entrySet()) {
-                partitionInfo.setReplicationNum(entry.getKey(), entry.getValue());
-            }
-            for (Map.Entry<Long, Boolean> entry : tPartitionInfo.getIn_memory_map().entrySet()) {
-                partitionInfo.setIsInMemory(entry.getKey(), entry.getValue());
+            PartitionType partitionType = PartitionType.valueOf(tPartitionInfo.getType());
+            switch (partitionType) {
+                case RANGE:
+                    List<Column> columns = new ArrayList<Column>();
+                    for (TColumnMeta columnMeta : tPartitionInfo.getColumns()) {
+                        Type type = Type.fromThrift(columnMeta.getColumnType());
+                        Column column = new Column(columnMeta.getColumnName(), type);
+                        if (columnMeta.isSetKey()) {
+                            column.setIsKey(columnMeta.isKey());
+                        }
+                        if (columnMeta.isSetAggregationType()) {
+                            column.setAggregationType(AggregateType.valueOf(columnMeta.getAggregationType()), false);
+                        }
+                        if (columnMeta.isSetComment()) {
+                            column.setComment(columnMeta.getComment());
+                        }
+                        columns.add(column);
+                    }
+                    partitionInfo = new RangePartitionInfo(columns);
+
+                    for (Map.Entry<Long, TRangePartitionDesc> entry : tPartitionInfo.getPartition_desc().entrySet()) {
+                        TRangePartitionDesc desc = entry.getValue();
+                        long partitionId = desc.getPartition_id();
+                        ByteArrayInputStream stream = new ByteArrayInputStream(desc.getStart_key());
+                        DataInputStream input = new DataInputStream(stream);
+                        PartitionKey startKey = PartitionKey.read(input);
+                        stream = new ByteArrayInputStream(desc.getEnd_key());
+                        input = new DataInputStream(stream);
+                        PartitionKey endKey = PartitionKey.read(input);
+                        // TODO(wulei): is closed or open or openClosed or closedOpen
+                        Range<PartitionKey> range = Range.closedOpen(startKey, endKey);
+                        LOG.info("new range {}", range);
+                        short replicaNum = tPartitionInfo.getReplica_num_map().get(partitionId);
+                        boolean inMemory = tPartitionInfo.getIn_memory_map().get(partitionId);
+                        TDataProperty thriftDataProperty = tPartitionInfo.getData_property().get(partitionId);
+                        DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
+                                                                     thriftDataProperty.getCold_time());
+                        // TODO: confirm false is ok
+                        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                        rangePartitionInfo.addPartition(partitionId, false, range, dataProperty, replicaNum, inMemory);
+                    }
+                    break;
+                case UNPARTITIONED:
+                    partitionInfo = new SinglePartitionInfo();
+                    for (Map.Entry<Long, Short> entry : tPartitionInfo.getReplica_num_map().entrySet()) {
+                        long partitionId = entry.getKey();
+                        short replicaNum = tPartitionInfo.getReplica_num_map().get(partitionId);
+                        boolean inMemory = tPartitionInfo.getIn_memory_map().get(partitionId);
+                        TDataProperty thriftDataProperty = tPartitionInfo.getData_property().get(partitionId);
+                        DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
+                                                                     thriftDataProperty.getCold_time());
+                        partitionInfo.addPartition(partitionId, dataProperty, replicaNum, inMemory);
+                    }
+                    break;
+                default:
+                    LOG.error("invalid partition type: {}", partitionType);
+                    return;
             }
 
             indexIdToMeta.clear();
@@ -345,7 +401,7 @@ public class ExternalOlapTable extends OlapTable {
                 List<Column> columns = new ArrayList();
                 for (TColumnMeta columnMeta : indexMeta.getSchema_meta().getColumns()) {
                     Type type = Type.fromThrift(columnMeta.getColumnType());
-                    Column column = new Column(columnMeta.getColumnName(), type);
+                    Column column = new Column(columnMeta.getColumnName(), type, columnMeta.isAllow_null());
                     if (columnMeta.isSetKey()) {
                         column.setIsKey(columnMeta.isKey());
                     }
@@ -421,10 +477,12 @@ public class ExternalOlapTable extends OlapTable {
                                                             tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
                         index.addTablet(tablet, tabletMeta);
                     }
-                    if (index.getId() != baseIndexId) {
-                        partition.createRollupIndex(index);
-                    } else {
-                        partition.setBaseIndex(index);
+                    if (indexMeta.getPartition_id() == partition.getId()) {
+                        if (index.getId() != baseIndexId) {
+                            partition.createRollupIndex(index);
+                        } else {
+                            partition.setBaseIndex(index);
+                        }
                     }
                 }
                 addPartition(partition);

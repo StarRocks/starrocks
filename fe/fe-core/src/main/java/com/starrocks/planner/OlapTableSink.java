@@ -121,6 +121,7 @@ public class OlapTableSink extends DataSink {
     public void complete() throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
 
+        LOG.info("dst table name: {}, type: {}", dstTable.getName(), dstTable.getClass().getName());
         tSink.setTable_id(dstTable.getId());
         tSink.setTuple_id(tupleDescriptor.getId().asInt());
         int numReplicas = 1;
