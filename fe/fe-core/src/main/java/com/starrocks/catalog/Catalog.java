@@ -5577,17 +5577,23 @@ public class Catalog {
         short replicationNum = Short.valueOf(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
         boolean isInMemory = partitionInfo.getIsInMemory(partition.getId());
         DataProperty newDataProperty = partitionInfo.getDataProperty(partition.getId());
-        partitionInfo.setReplicationNum(partition.getId(), replicationNum);
 
         // update table default replication num
-        table.setReplicationNum(replicationNum);
-
-        // log
-        ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), table.getId(), partition.getId(),
-                newDataProperty, replicationNum, isInMemory);
-        editLog.logModifyPartition(info);
-        LOG.info("modify partition[{}-{}-{}] replication num to {}", db.getFullName(), table.getName(),
-                partition.getName(), replicationNum);
+        List<Backend> clusterBackends = systemInfo.getClusterBackends(SystemInfoService.DEFAULT_CLUSTER);
+        if (replicationNum <= clusterBackends.size()) {
+            partitionInfo.setReplicationNum(partition.getId(), replicationNum);
+            table.setReplicationNum(replicationNum);
+            //log
+            ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), table.getId(), partition.getId(),
+                    newDataProperty, replicationNum, isInMemory);
+            editLog.logModifyPartition(info);
+            LOG.info("modify partition[{}-{}-{}] replication num to {}", db.getFullName(), table.getName(),
+                    partition.getName(), replicationNum);
+        } else {
+            throw new DdlException(
+                    "Failed to find enough backends , current backends num is : " + clusterBackends.size() + ". ddl num is : " + replicationNum
+            );
+        }
     }
 
     /**
