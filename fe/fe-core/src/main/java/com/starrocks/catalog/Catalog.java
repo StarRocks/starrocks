@@ -3048,12 +3048,10 @@ public class Catalog {
             } finally {
                 db.readUnlock();
             }
-            StatementBase statementBase =
-                    SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+            StatementBase statementBase = SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
             if (statementBase instanceof CreateTableStmt) {
                 CreateTableStmt parsedCreateTableStmt =
-                        (CreateTableStmt) SqlParserUtils
-                                .parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+                        (CreateTableStmt) SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
                 parsedCreateTableStmt.setTableName(stmt.getTableName());
                 if (stmt.isSetIfNotExists()) {
                     parsedCreateTableStmt.setIfNotExists();
@@ -3210,12 +3208,10 @@ public class Catalog {
 
                 copiedTable.getPartitionInfo().setDataProperty(partitionId, dataProperty);
                 copiedTable.getPartitionInfo().setTabletType(partitionId, singleRangePartitionDesc.getTabletType());
-                copiedTable.getPartitionInfo()
-                        .setReplicationNum(partitionId, singleRangePartitionDesc.getReplicationNum());
+                copiedTable.getPartitionInfo().setReplicationNum(partitionId, singleRangePartitionDesc.getReplicationNum());
                 copiedTable.getPartitionInfo().setIsInMemory(partitionId, singleRangePartitionDesc.isInMemory());
 
-                Partition partition =
-                        createPartition(db, copiedTable, partitionId, partitionName, versionInfo, tabletIdSet);
+                Partition partition = createPartition(db, copiedTable, partitionId, partitionName, versionInfo, tabletIdSet);
 
                 partitionList.add(partition);
                 tabletIdSetForAll.addAll(tabletIdSet);
@@ -3532,11 +3528,9 @@ public class Catalog {
             MaterializedIndexMeta indexMeta = table.getIndexIdToMeta().get(indexId);
 
             // create tablets
-            TabletMeta tabletMeta =
-                    new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),
-                            storageMedium);
-            createTablets(db.getClusterName(), index, ReplicaState.NORMAL, distributionInfo,
-                    partition.getVisibleVersion(),
+            TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),
+                                                   storageMedium);
+            createTablets(db.getClusterName(), index, ReplicaState.NORMAL, distributionInfo, partition.getVisibleVersion(),
                     partition.getVisibleVersionHash(), replicationNum, tabletMeta, tabletIdSet);
             if (index.getId() != table.getBaseIndexId()) {
                 // add rollup index to partition
@@ -3814,10 +3808,10 @@ public class Catalog {
         OlapTable olapTable = null;
         if (stmt.isExternal()) {
             olapTable = new ExternalOlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
-                    distributionInfo, indexes, stmt.getProperties());
+                                              distributionInfo, indexes, stmt.getProperties());
         } else {
             olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
-                    distributionInfo, indexes);
+                                      distributionInfo, indexes);
         }
         olapTable.setComment(stmt.getComment());
 
@@ -3989,8 +3983,7 @@ public class Catalog {
                 if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
                     // this is a 1-level partitioned table, use table name as partition name
                     long partitionId = partitionNameToId.get(tableName);
-                    Partition partition =
-                            createPartition(db, olapTable, partitionId, tableName, versionInfo, tabletIdSet);
+                    Partition partition = createPartition(db, olapTable, partitionId, tableName, versionInfo, tabletIdSet);
                     olapTable.addPartition(partition);
                 } else if (partitionInfo.getType() == PartitionType.RANGE) {
                     try {
@@ -4008,12 +4001,10 @@ public class Catalog {
                     }
 
                     // this is a 2-level partitioned tables
-                    RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                     List<Partition> partitions = new ArrayList<>(partitionNameToId.size());
                     for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
-                        Partition partition =
-                                createPartition(db, olapTable, entry.getValue(), entry.getKey(), versionInfo,
-                                        tabletIdSet);
+                        Partition partition = createPartition(db, olapTable, entry.getValue(), entry.getKey(), versionInfo,
+                                                              tabletIdSet);
                         partitions.add(partition);
                     }
                     buildPartitions(db, olapTable, partitions);
@@ -6860,8 +6851,7 @@ public class Catalog {
                 partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(oldPartitionId));
                 partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
 
-                Partition newPartition =
-                        createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
+                Partition newPartition = createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
                 newPartitions.add(newPartition);
             }
             buildPartitions(db, copiedTbl, newPartitions);
