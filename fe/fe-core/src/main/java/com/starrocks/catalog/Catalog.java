@@ -5591,7 +5591,7 @@ public class Catalog {
                     partition.getName(), replicationNum);
         } else {
             throw new DdlException(
-                    "Failed to find enough backends , current backends num is : " + clusterBackends.size() + ". ddl num is : " + replicationNum
+                    "Failed to find enough backends , current backends num is : " + clusterBackends.size() + ". replication  num is : " + replicationNum
             );
         }
     }
