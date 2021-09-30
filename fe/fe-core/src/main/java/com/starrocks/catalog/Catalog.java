@@ -3569,7 +3569,7 @@ public class Catalog {
         // The number 200 is just an experiment value that seems to work without obvious problems, feel free to
         // change it if you have a better choice.
         int avgReplicasPerPartition = numReplicas / partitions.size();
-        int partitionGroupSize = Math.max(1, numBackends * 200 / avgReplicasPerPartition);
+        int partitionGroupSize = Math.max(1, numBackends * 200 / Math.max(1, avgReplicasPerPartition));
         for (int i = 0; i < partitions.size(); i += partitionGroupSize) {
             int endIndex = Math.min(partitions.size(), i + partitionGroupSize);
             List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partitions.subList(i, endIndex));
