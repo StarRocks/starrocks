@@ -206,8 +206,6 @@ int128_t div(const int128_t& x, const int128_t& y) {
     if (x == 0 || y == 0) return DecimalV2Value(0);
     bool is_positive = (x > 0 && y > 0) || (x < 0 && y < 0);
     do_div(abs(x), abs(y), &result);
-    std::cout << "div"
-              << "x: " << int64_t(x) << "y: " << int64_t(y) << "result: " << int64_t(result) << std::endl;
 
     if (!is_positive) result = -result;
 
