@@ -495,7 +495,7 @@ std::unique_ptr<Type> buildSelectedType(const Type* fileType, const std::vector<
         result = new TypeImpl(fileType->getKind());
         for (uint64_t child = 0; child < fileType->getSubtypeCount(); ++child) {
             std::unique_ptr<Type> childType = buildSelectedType(fileType->getSubtype(child), selected);
-            if (childType.get() != nullptr) {
+            if (childType != nullptr) {
                 result->addStructField(fileType->getFieldName(child), std::move(childType));
             }
         }
@@ -506,7 +506,7 @@ std::unique_ptr<Type> buildSelectedType(const Type* fileType, const std::vector<
         result = new TypeImpl(fileType->getKind());
         for (uint64_t child = 0; child < fileType->getSubtypeCount(); ++child) {
             std::unique_ptr<Type> childType = buildSelectedType(fileType->getSubtype(child), selected);
-            if (childType.get() != nullptr) {
+            if (childType != nullptr) {
                 result->addUnionChild(std::move(childType));
             }
         }

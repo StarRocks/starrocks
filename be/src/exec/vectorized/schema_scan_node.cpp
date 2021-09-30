@@ -91,7 +91,7 @@ Status SchemaScanNode::prepare(RuntimeState* state) {
     // new one scanner
     _schema_scanner.reset(SchemaScanner::create(schema_table->schema_table_type()));
 
-    if (nullptr == _schema_scanner.get()) {
+    if (nullptr == _schema_scanner) {
         return Status::InternalError("schema scanner get nullptr pointer.");
     }
 

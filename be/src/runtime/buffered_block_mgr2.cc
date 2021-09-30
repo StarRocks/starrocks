@@ -450,7 +450,7 @@ BufferedBlockMgr2::~BufferedBlockMgr2() {
         // ~BufferedBlockMgr2() call occurs, it won't find an entry for this _query_id.
         if (it != _s_query_to_block_mgrs.end()) {
             std::shared_ptr<BufferedBlockMgr2> mgr = it->second.lock();
-            if (mgr.get() == nullptr) {
+            if (mgr == nullptr) {
                 // The BufferBlockMgr object referenced by this entry is being deconstructed.
                 _s_query_to_block_mgrs.erase(it);
             } else {

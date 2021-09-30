@@ -98,7 +98,6 @@ void DataConsumerPool::return_consumer(const std::shared_ptr<DataConsumer>& cons
     consumer->reset();
     _pool.push_back(consumer);
     VLOG(3) << "return the data consumer: " << consumer->id() << ", current pool size: " << _pool.size();
-    return;
 }
 
 void DataConsumerPool::return_consumers(DataConsumerGroup* grp) {

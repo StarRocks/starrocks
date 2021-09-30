@@ -113,7 +113,6 @@ bool LoadPathMgr::is_too_old(time_t cur_time, const std::string& label_dir, int6
 
 void LoadPathMgr::get_load_data_path(std::vector<std::string>* data_paths) {
     data_paths->insert(data_paths->end(), _path_vec.begin(), _path_vec.end());
-    return;
 }
 
 const std::string ERROR_FILE_NAME = "error_log";
@@ -121,7 +120,7 @@ const std::string ERROR_FILE_NAME = "error_log";
 Status LoadPathMgr::get_load_error_file_name(const std::string& db, const std::string& label,
                                              const TUniqueId& fragment_instance_id, std::string* error_path) {
     std::stringstream ss;
-    std::string shard = "";
+    std::string shard;
     {
         std::lock_guard<std::mutex> l(_lock);
         shard = SHARD_PREFIX + std::to_string(_error_path_next_shard++ % MAX_SHARD_NUM);

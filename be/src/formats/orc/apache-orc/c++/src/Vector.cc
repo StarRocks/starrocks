@@ -152,7 +152,7 @@ StringDictionary::StringDictionary(MemoryPool& pool) : dictionaryBlob(pool), dic
 }
 
 EncodedStringVectorBatch::EncodedStringVectorBatch(uint64_t _capacity, MemoryPool& pool)
-        : StringVectorBatch(_capacity, pool), dictionary(), index(pool, _capacity) {
+        : StringVectorBatch(_capacity, pool), index(pool, _capacity) {
     // PASS
 }
 

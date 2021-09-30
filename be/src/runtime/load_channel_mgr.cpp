@@ -227,7 +227,7 @@ void LoadChannelMgr::_handle_mem_exceed_limit(const std::shared_ptr<LoadChannel>
             flush_tablets.emplace_back(load_channel.get(), tablets_channel.get(), tablet_id);
             flush_tablet_ids.insert(tablet_id);
             exceeded_mem -= tablet_mem_consumption;
-            VLOG(3) << "Flush " << *load_channel.get() << ", tablet id=" << tablet_id
+            VLOG(3) << "Flush " << *load_channel << ", tablet id=" << tablet_id
                     << ", mem consumption=" << tablet_mem_consumption;
         } else {
             break;
