@@ -38,7 +38,6 @@ public class ConstantExpressionTest {
         UtFrameUtils.startFEServer(runningDir);
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setQueryId(UUIDUtil.genUUID());
-        connectContext.getSessionVariable().disableNewPlanner();
     }
 
     private static void testFragmentPlanContainsConstExpr(String sql, String result) throws Exception {

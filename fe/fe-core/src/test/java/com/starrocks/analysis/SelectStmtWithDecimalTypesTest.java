@@ -688,7 +688,7 @@ public class SelectStmtWithDecimalTypesTest {
     @Test
     public void testDecimalV3WindowFunction() throws Exception {
         String sql = "explain select sum(col_decimal_p9s4) over() from db1.decimal_table;";
-        String plan = UtFrameUtils.getSQLPlanOrErrorMsg(ctx, sql);
+        String plan = UtFrameUtils.getNewFragmentPlan(ctx, sql);
         Assert.assertFalse(plan.contains("not supported with OVER clause."));
     }
 
@@ -805,7 +805,6 @@ public class SelectStmtWithDecimalTypesTest {
     public void testCoalesce() throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
-        ctx.getSessionVariable().enableNewPlanner();
         String sql = "" +
                 "select\n" +
                 "   coalesce(cast('999.99' as decimal32(9,3)), col0_decimal_p9s2)\n" +
@@ -826,7 +825,6 @@ public class SelectStmtWithDecimalTypesTest {
     public void testIntDiv() throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
-        ctx.getSessionVariable().enableNewPlanner();
         String sql = "" +
                 "select\n" +
                 "   col_decimal_p9s9 div 3.14\n" +
@@ -844,7 +842,6 @@ public class SelectStmtWithDecimalTypesTest {
     public void testIfnullGreatestLeastCoalesce() throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
-        ctx.getSessionVariable().enableNewPlanner();
         String sql = "" +
                 "select\n" +
                 "   greatest(col_decimal_p9s9, 3.14),\n" +
@@ -880,7 +877,6 @@ public class SelectStmtWithDecimalTypesTest {
     public void testGetCommonTypeForDecimalAndString() throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
-        ctx.getSessionVariable().enableNewPlanner();
         String sql = "" +
                 "select\n" +
                 "   greatest(col_decimal_p9s9, 3.14),\n" +
@@ -902,7 +898,6 @@ public class SelectStmtWithDecimalTypesTest {
     public void testGetCommonTypeForDecimalAndStringOverflow() throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
-        ctx.getSessionVariable().enableNewPlanner();
         String sql = "" +
                 "select\n" +
                 "   greatest(col_decimal_p9s9, 3.14),\n" +
@@ -924,7 +919,6 @@ public class SelectStmtWithDecimalTypesTest {
     public void testGetCommonTypeForDecimalAndStringHighPrecision() throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
-        ctx.getSessionVariable().enableNewPlanner();
         String sql = "" +
                 "select\n" +
                 "   greatest(col_decimal_p9s9, 3.14),\n" +
