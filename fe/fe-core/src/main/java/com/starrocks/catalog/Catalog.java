@@ -3547,11 +3547,13 @@ public class Catalog {
             numReplicas += partition.getReplicaCount();
         }
 
-        if (partitions.size() > 3 && numReplicas >= numAliveBackends * 500 && numAliveBackends >= 2) {
+        if (partitions.size() > 3 && numReplicas >= numAliveBackends * 500 && numAliveBackends >= 3) {
             LOG.info("creating {} partitions of table {} concurrently", partitions.size(), table.getName());
             buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
-        } else {
+        } else if (numAliveBackends > 0) {
             buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
+        } else {
+            throw new DdlException("no alive backend");
         }
     }
 
