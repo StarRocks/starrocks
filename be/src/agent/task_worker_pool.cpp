@@ -1218,7 +1218,7 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_all_tablets_requests_failed.increment(1);
-            LOG(WARNING) << "Fail to report olap table state to"
+            LOG(WARNING) << "Fail to report olap table state to "
                          << worker_pool_this->_master_info.network_address.hostname << ":"
                          << worker_pool_this->_master_info.network_address.port << ", err=" << status;
         }
