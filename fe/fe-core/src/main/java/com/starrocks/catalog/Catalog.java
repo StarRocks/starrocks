@@ -432,6 +432,8 @@ public class Catalog {
 
     private StatisticStorage statisticStorage;
 
+    private long imageJournalId;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
@@ -1510,6 +1512,7 @@ public class Catalog {
         Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
         long loadImageEndTime = System.currentTimeMillis();
+        this.imageJournalId = storage.getImageJournalId();
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
     }
 
@@ -7258,5 +7261,12 @@ public class Catalog {
         }
     }
 
+    public long getImageJournalId() {
+        return imageJournalId;
+    }
+
+    public void setImageJournalId(long imageJournalId) {
+        this.imageJournalId = imageJournalId;
+    }
 }
 
