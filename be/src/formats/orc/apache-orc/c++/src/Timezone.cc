@@ -650,7 +650,7 @@ const Timezone& getTimezoneByFilename(const std::string& filename) {
     std::lock_guard<std::mutex> timezone_lock(timezone_mutex);
     std::map<std::string, std::shared_ptr<Timezone> >::iterator itr = timezoneCache.find(filename);
     if (itr != timezoneCache.end()) {
-        return *(itr->second).get();
+        return *itr->second;
     }
     try {
         ORC_UNIQUE_PTR<InputStream> file = readFile(filename);

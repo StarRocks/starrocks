@@ -35,7 +35,7 @@ template <FieldType Type>
 class FrameOfReferencePageBuilder final : public PageBuilder {
 public:
     explicit FrameOfReferencePageBuilder(const PageBuilderOptions& options)
-            : _options(options), _count(0), _finished(false), _buf(), _encoder(&_buf) {}
+            : _options(options), _count(0), _finished(false), _encoder(&_buf) {}
 
     ~FrameOfReferencePageBuilder() override = default;
 

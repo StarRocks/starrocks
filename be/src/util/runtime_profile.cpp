@@ -649,7 +649,7 @@ void RuntimeProfile::add_bucketing_counters(const std::string& name, const std::
 
     std::lock_guard<std::mutex> l(_s_periodic_counter_update_state.lock);
 
-    if (_s_periodic_counter_update_state.update_thread.get() == nullptr) {
+    if (_s_periodic_counter_update_state.update_thread == nullptr) {
         _s_periodic_counter_update_state.update_thread =
                 std::make_unique<boost::thread>(&RuntimeProfile::periodic_counter_update_loop);
     }
@@ -677,7 +677,7 @@ void RuntimeProfile::register_periodic_counter(Counter* src_counter, SampleFn sa
 
     std::lock_guard<std::mutex> l(_s_periodic_counter_update_state.lock);
 
-    if (_s_periodic_counter_update_state.update_thread.get() == nullptr) {
+    if (_s_periodic_counter_update_state.update_thread == nullptr) {
         _s_periodic_counter_update_state.update_thread =
                 std::make_unique<boost::thread>(&RuntimeProfile::periodic_counter_update_loop);
     }
@@ -741,7 +741,7 @@ void RuntimeProfile::stop_bucketing_counters_updates(std::vector<Counter*>* buck
 RuntimeProfile::PeriodicCounterUpdateState::PeriodicCounterUpdateState() {}
 
 RuntimeProfile::PeriodicCounterUpdateState::~PeriodicCounterUpdateState() {
-    if (_s_periodic_counter_update_state.update_thread.get() != nullptr) {
+    if (_s_periodic_counter_update_state.update_thread != nullptr) {
         {
             // Lock to ensure the update thread will see the update to _done
             std::lock_guard<std::mutex> l(_s_periodic_counter_update_state.lock);

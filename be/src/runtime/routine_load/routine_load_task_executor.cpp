@@ -320,11 +320,9 @@ void RoutineLoadTaskExecutor::err_handler(StreamLoadContext* ctx, const Status& 
         _exec_env->stream_load_executor()->rollback_txn(ctx);
         ctx->need_rollback = false;
     }
-    if (ctx->body_sink.get() != nullptr) {
+    if (ctx->body_sink != nullptr) {
         ctx->body_sink->cancel();
     }
-
-    return;
 }
 
 // for test only

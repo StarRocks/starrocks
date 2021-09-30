@@ -209,7 +209,7 @@ TupleDescriptor::TupleDescriptor(const TTupleDescriptor& tdesc)
           _byte_size(tdesc.byteSize),
           _num_null_bytes(tdesc.numNullBytes),
           _num_materialized_slots(0),
-          _slots(),
+
           _has_varlen_slots(false) {
     if (false == tdesc.__isset.numNullSlots) {
         //be compatible for existing tables with no NULL value
@@ -225,7 +225,7 @@ TupleDescriptor::TupleDescriptor(const PTupleDescriptor& pdesc)
           _byte_size(pdesc.byte_size()),
           _num_null_bytes(pdesc.num_null_bytes()),
           _num_materialized_slots(0),
-          _slots(),
+
           _has_varlen_slots(false) {
     if (!pdesc.has_num_null_slots()) {
         //be compatible for existing tables with no NULL value

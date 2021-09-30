@@ -126,7 +126,7 @@ Status RestoreTabletAction::_reload_tablet(const std::string& key, const std::st
         }
         return Status::InternalError("command executor load header failed");
     } else {
-        std::string trash_tablet_schema_hash_dir = "";
+        std::string trash_tablet_schema_hash_dir;
         {
             // get tablet path in trash
             std::lock_guard<std::mutex> l(_tablet_restore_lock);

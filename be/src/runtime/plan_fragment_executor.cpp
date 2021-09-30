@@ -211,7 +211,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     _prepared = true;
 
     _query_statistics.reset(new QueryStatistics());
-    if (_sink.get() != nullptr) {
+    if (_sink != nullptr) {
         _sink->set_query_statistics(_query_statistics);
     }
 
@@ -246,7 +246,7 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
         RETURN_IF_ERROR(_plan->open(_runtime_state.get()));
     }
 
-    if (_sink.get() == nullptr) {
+    if (_sink == nullptr) {
         return Status::OK();
     }
     RETURN_IF_ERROR(_sink->open(runtime_state()));
@@ -458,13 +458,13 @@ void PlanFragmentExecutor::close() {
     }
 
     // Prepare may not have been called, which sets _runtime_state
-    if (_runtime_state.get() != nullptr) {
+    if (_runtime_state != nullptr) {
         // _runtime_state init failed
         if (_plan != nullptr) {
             _plan->close(_runtime_state.get());
         }
 
-        if (_sink.get() != nullptr) {
+        if (_sink != nullptr) {
             if (_prepared) {
                 Status status;
                 {

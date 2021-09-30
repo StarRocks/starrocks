@@ -292,7 +292,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::S
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
           _opts(std::move(options)),
-          _scan_range(),
+
           _predicate_columns(_opts.predicates.size()) {}
 
 Status SegmentIterator::_init() {

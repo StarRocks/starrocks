@@ -40,9 +40,6 @@
 
 namespace starrocks {
 
-constexpr int BufferPool::LOG_MAX_BUFFER_BYTES;
-constexpr int64_t BufferPool::MAX_BUFFER_BYTES;
-
 void BufferPool::BufferHandle::Open(uint8_t* data, int64_t len, int home_core) {
     DCHECK_LE(0, home_core);
     DCHECK_LT(home_core, CpuInfo::get_max_num_cores());
