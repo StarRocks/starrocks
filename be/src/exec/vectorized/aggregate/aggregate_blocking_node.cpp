@@ -28,9 +28,9 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
 
     VLOG_ROW << "group_by_expr_ctxs size " << _aggregator->group_by_expr_ctxs().size() << " _needs_finalize "
              << _aggregator->needs_finalize();
-    bool group_by_with_limit = (!_aggregator->is_none_group_by_exprs() && // has group by
-                                _limit != -1 && // has limit
-                                _conjunct_ctxs.empty() && // no 'having' clause
+    bool group_by_with_limit = (!_aggregator->is_none_group_by_exprs() &&     // has group by
+                                _limit != -1 &&                               // has limit
+                                _conjunct_ctxs.empty() &&                     // no 'having' clause
                                 _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
     while (true) {
         bool eos = false;
