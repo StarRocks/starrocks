@@ -3541,6 +3541,9 @@ public class Catalog {
     }
 
     private void buildPartitions(Database db, OlapTable table, List<Partition> partitions) throws DdlException {
+        if (partitions.isEmpty()) {
+            return;
+        }
         int numAliveBackends = systemInfo.getBackendIds(true).size();
         int numReplicas = 0;
         for (Partition partition : partitions) {
@@ -4010,6 +4013,7 @@ public class Catalog {
                                                               tabletIdSet);
                         partitions.add(partition);
                     }
+                    // It's ok if partitions is empty.
                     buildPartitions(db, olapTable, partitions);
                     for (Partition partition : partitions) {
                         olapTable.addPartition(partition);
