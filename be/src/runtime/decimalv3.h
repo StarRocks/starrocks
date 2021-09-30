@@ -189,13 +189,17 @@ public:
     }
 
     template <typename T>
-    static constexpr T float_overflow_indicator = std::numeric_limits<T>::lowest();
+    static constexpr T float_lower_overflow_indicator = std::numeric_limits<T>::max();
+    template <typename T>
+    static constexpr T float_upper_overflow_indicator = std::numeric_limits<T>::min();
+
     template <typename From, typename To>
     static inline bool from_float(FloatType<From> value, DecimalType<To> const& scale_factor,
                                   DecimalType<To>* dec_value) {
         *dec_value = static_cast<To>(scale_factor * static_cast<double>(value));
         if constexpr (is_decimal32<To> || is_decimal64<To>) {
-            return *dec_value == float_overflow_indicator<To>;
+            return (*dec_value == float_lower_overflow_indicator<To>) ||
+                   (*dec_value == float_upper_overflow_indicator<To>);
         } else if constexpr (is_decimal128<To>) {
             // abs(value)<1.0 -> 0: Acceptable
             // abs(value)>=1.0 -> 0 or different sign: Overflow!!
