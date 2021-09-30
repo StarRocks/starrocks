@@ -209,10 +209,10 @@ ExchangeSinkOperator::ExchangeSinkOperator(int32_t id, int32_t plan_node_id, con
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(partition_expr_ctxs) {
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
-    for (int i = 0; i < destinations.size(); ++i) {
-        const auto& fragment_instance_id = destinations[i].fragment_instance_id;
+    for (const auto& destination : destinations) {
+        const auto& fragment_instance_id = destination.fragment_instance_id;
         if (fragment_id_to_channel_index.find(fragment_instance_id.lo) == fragment_id_to_channel_index.end()) {
-            _channels.emplace_back(new Channel(this, destinations[i].brpc_server, fragment_instance_id, dest_node_id));
+            _channels.emplace_back(new Channel(this, destination.brpc_server, fragment_instance_id, dest_node_id));
             fragment_id_to_channel_index.insert({fragment_instance_id.lo, _channels.size() - 1});
         } else {
             _channels.emplace_back(_channels[fragment_id_to_channel_index[fragment_instance_id.lo]]);
@@ -273,8 +273,8 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
                 return RuntimeProfile::units_per_second(capture0, capture1);
             },
             "");
-    for (int i = 0; i < _channels.size(); ++i) {
-        RETURN_IF_ERROR(_channels[i]->init(state));
+    for (auto& _channel : _channels) {
+        RETURN_IF_ERROR(_channel->init(state));
     }
 
     // set eos for all channels.
@@ -388,8 +388,8 @@ void ExchangeSinkOperator::finish(RuntimeState* state) {
     }
 
     _is_finished = true;
-    for (int i = 0; i < _channels.size(); ++i) {
-        _channels[i]->close(state);
+    for (auto& _channel : _channels) {
+        _channel->close(state);
     }
 }
 

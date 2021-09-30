@@ -733,8 +733,8 @@ void SplitCSVLineWithDelimiterForStrings(const string& line, char delimiter, vec
     char* cline = strndup_with_new(line.c_str(), line.size());
     vector<char*> v;
     SplitCSVLineWithDelimiter(cline, delimiter, &v);
-    for (vector<char*>::const_iterator ci = v.begin(); ci != v.end(); ++ci) {
-        cols->push_back(*ci);
+    for (auto ci : v) {
+        cols->push_back(ci);
     }
     delete[] cline;
 }

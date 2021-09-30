@@ -37,8 +37,8 @@ Suballocator::Suballocator(BufferPool* pool, BufferPool::ClientHandle* client, i
 Suballocator::~Suballocator() {
     // All allocations should be free and buffers deallocated.
     DCHECK_EQ(allocated_, 0);
-    for (int i = 0; i < NUM_FREE_LISTS; ++i) {
-        DCHECK(free_lists_[i] == nullptr);
+    for (auto& free_list : free_lists_) {
+        DCHECK(free_list == nullptr);
     }
 }
 

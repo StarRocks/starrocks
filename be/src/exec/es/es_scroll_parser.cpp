@@ -274,9 +274,7 @@ Status ScrollParser::fill_tuple(const TupleDescriptor* tuple_desc, Tuple* tuple,
     const rapidjson::Value& line = obj.HasMember(FIELD_SOURCE) ? obj[FIELD_SOURCE] : obj["fields"];
 
     tuple->init(tuple_desc->byte_size());
-    for (int i = 0; i < tuple_desc->slots().size(); ++i) {
-        const SlotDescriptor* slot_desc = tuple_desc->slots()[i];
-
+    for (auto slot_desc : tuple_desc->slots()) {
         if (!slot_desc->is_materialized()) {
             continue;
         }

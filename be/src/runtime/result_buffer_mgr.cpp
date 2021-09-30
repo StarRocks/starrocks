@@ -148,8 +148,8 @@ void ResultBufferMgr::cancel_thread() {
             TimeoutMap::iterator end = _timeout_map.upper_bound(now_time + 1);
 
             for (TimeoutMap::iterator iter = _timeout_map.begin(); iter != end; ++iter) {
-                for (int i = 0; i < iter->second.size(); ++i) {
-                    query_to_cancel.push_back(iter->second[i]);
+                for (auto& i : iter->second) {
+                    query_to_cancel.push_back(i);
                 }
             }
 
@@ -157,8 +157,8 @@ void ResultBufferMgr::cancel_thread() {
         }
 
         // cancel query
-        for (int i = 0; i < query_to_cancel.size(); ++i) {
-            cancel(query_to_cancel[i]);
+        for (auto& i : query_to_cancel) {
+            cancel(i);
         }
 
         sleep(1);

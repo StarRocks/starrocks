@@ -773,14 +773,14 @@ inline Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t 
             _end_scan_keys.back().add_value(
                     cast_to_string(range.get_range_max_value(), range.type(), range.precision(), range.scale()));
         } else {
-            for (int i = 0; i < _begin_scan_keys.size(); ++i) {
-                _begin_scan_keys[i].add_value(
+            for (auto& _begin_scan_key : _begin_scan_keys) {
+                _begin_scan_key.add_value(
                         cast_to_string(range.get_range_min_value(), range.type(), range.precision(), range.scale()),
                         range.is_low_value_mininum());
             }
 
-            for (int i = 0; i < _end_scan_keys.size(); ++i) {
-                _end_scan_keys[i].add_value(
+            for (auto& _end_scan_key : _end_scan_keys) {
+                _end_scan_key.add_value(
                         cast_to_string(range.get_range_max_value(), range.type(), range.precision(), range.scale()));
             }
         }
