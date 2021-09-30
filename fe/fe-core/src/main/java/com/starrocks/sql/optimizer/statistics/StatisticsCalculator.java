@@ -182,9 +182,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             String partitionColumnName = Lists.newArrayList(olapTable.getPartitionColumnNames()).get(0);
             Optional<Map.Entry<Column, Integer>> partitionColumnEntry = columnToIds.entrySet().stream().
                     filter(column -> column.getKey().getName().equalsIgnoreCase(partitionColumnName)).findAny();
-            Preconditions.checkState(partitionColumnEntry.isPresent());
-            builder.addColumnStatistic(columnRefFactory.getColumnRef(partitionColumnEntry.get().getValue()),
-                    partitionStatistic);
+            partitionColumnEntry.ifPresent(entry -> builder
+                    .addColumnStatistic(columnRefFactory.getColumnRef(partitionColumnEntry.get().getValue()),
+                            partitionStatistic));
         }
 
         builder.setOutputRowCount(tableRowCount);
