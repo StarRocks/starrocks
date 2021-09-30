@@ -3984,6 +3984,7 @@ public class Catalog {
                     // this is a 1-level partitioned table, use table name as partition name
                     long partitionId = partitionNameToId.get(tableName);
                     Partition partition = createPartition(db, olapTable, partitionId, tableName, versionInfo, tabletIdSet);
+                    buildPartitions(db, olapTable, Collections.singletonList(partition));
                     olapTable.addPartition(partition);
                 } else if (partitionInfo.getType() == PartitionType.RANGE) {
                     try {
