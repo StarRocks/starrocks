@@ -80,8 +80,8 @@ FunctionContext* Expr::register_function_context(ExprContext* ctx, RuntimeState*
     FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
     std::vector<FunctionContext::TypeDesc> arg_types;
     arg_types.reserve(_children.size());
-    for (int i = 0; i < _children.size(); ++i) {
-        arg_types.push_back(AnyValUtil::column_type_to_type_desc(_children[i]->_type));
+    for (auto& i : _children) {
+        arg_types.push_back(AnyValUtil::column_type_to_type_desc(i->_type));
     }
     _fn_context_index = ctx->register_func(state, return_type, arg_types, varargs_buffer_size);
     return ctx->fn_context(_fn_context_index);
@@ -284,9 +284,9 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
 
 Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs) {
     ctxs->clear();
-    for (int i = 0; i < texprs.size(); ++i) {
+    for (const auto& texpr : texprs) {
         ExprContext* ctx = nullptr;
-        RETURN_IF_ERROR(create_expr_tree(pool, texprs[i], &ctx));
+        RETURN_IF_ERROR(create_expr_tree(pool, texpr, &ctx));
         ctxs->push_back(ctx);
     }
     return Status::OK();
@@ -488,27 +488,27 @@ int Expr::compute_results_layout(const std::vector<Expr*>& exprs, std::vector<in
     offsets->clear();
     *var_result_begin = -1;
 
-    for (int i = 0; i < data.size(); ++i) {
-        DCHECK_GE(data[i].byte_size, current_alignment);
+    for (auto& i : data) {
+        DCHECK_GE(i.byte_size, current_alignment);
 
         // Don't align more than word (8-byte) size.  This is consistent with what compilers
         // do.
-        if (data[i].byte_size != current_alignment && current_alignment != max_alignment) {
-            byte_offset += data[i].byte_size - current_alignment;
-            current_alignment = std::min(data[i].byte_size, max_alignment);
+        if (i.byte_size != current_alignment && current_alignment != max_alignment) {
+            byte_offset += i.byte_size - current_alignment;
+            current_alignment = std::min(i.byte_size, max_alignment);
             // TODO(zc): fixed decimal align
-            if (data[i].byte_size == 40) {
+            if (i.byte_size == 40) {
                 current_alignment = 4;
             }
         }
 
-        (*offsets)[data[i].expr_idx] = byte_offset;
+        (*offsets)[i.expr_idx] = byte_offset;
 
-        if (data[i].variable_length && *var_result_begin == -1) {
+        if (i.variable_length && *var_result_begin == -1) {
             *var_result_begin = byte_offset;
         }
 
-        byte_offset += data[i].byte_size;
+        byte_offset += i.byte_size;
     }
 
     return byte_offset;
@@ -518,52 +518,52 @@ int Expr::compute_results_layout(const std::vector<ExprContext*>& ctxs, std::vec
                                  int* var_result_begin) {
     std::vector<Expr*> exprs;
     exprs.reserve(ctxs.size());
-    for (int i = 0; i < ctxs.size(); ++i) {
-        exprs.push_back(ctxs[i]->root());
+    for (auto ctx : ctxs) {
+        exprs.push_back(ctx->root());
     }
     return compute_results_layout(exprs, offsets, var_result_begin);
 }
 
 Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state, const RowDescriptor& row_desc,
                      MemTracker* tracker) {
-    for (int i = 0; i < ctxs.size(); ++i) {
-        RETURN_IF_ERROR(ctxs[i]->prepare(state, row_desc, tracker));
+    for (auto ctx : ctxs) {
+        RETURN_IF_ERROR(ctx->prepare(state, row_desc, tracker));
     }
     return Status::OK();
 }
 
 Status Expr::prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* context) {
     DCHECK(_type.type != INVALID_TYPE);
-    for (int i = 0; i < _children.size(); ++i) {
-        RETURN_IF_ERROR(_children[i]->prepare(state, row_desc, context));
+    for (auto& i : _children) {
+        RETURN_IF_ERROR(i->prepare(state, row_desc, context));
     }
     return Status::OK();
 }
 
 Status Expr::open(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
-    for (int i = 0; i < ctxs.size(); ++i) {
-        RETURN_IF_ERROR(ctxs[i]->open(state));
+    for (auto ctx : ctxs) {
+        RETURN_IF_ERROR(ctx->open(state));
     }
     return Status::OK();
 }
 
 Status Expr::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
     DCHECK(_type.type != INVALID_TYPE);
-    for (int i = 0; i < _children.size(); ++i) {
-        RETURN_IF_ERROR(_children[i]->open(state, context, scope));
+    for (auto& i : _children) {
+        RETURN_IF_ERROR(i->open(state, context, scope));
     }
     return Status::OK();
 }
 
 void Expr::close(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
-    for (int i = 0; i < ctxs.size(); ++i) {
-        ctxs[i]->close(state);
+    for (auto ctx : ctxs) {
+        ctx->close(state);
     }
 }
 
 void Expr::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
-    for (int i = 0; i < _children.size(); ++i) {
-        _children[i]->close(state, context, scope);
+    for (auto& i : _children) {
+        i->close(state, context, scope);
     }
     // TODO(zc)
 #if 0
@@ -583,8 +583,8 @@ Status Expr::clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeS
     if (!new_ctxs->empty()) {
         // 'ctxs' was already cloned into '*new_ctxs', nothing to do.
         DCHECK_EQ(new_ctxs->size(), ctxs.size());
-        for (int i = 0; i < new_ctxs->size(); ++i) {
-            DCHECK((*new_ctxs)[i]->_is_clone);
+        for (auto& new_ctx : *new_ctxs) {
+            DCHECK(new_ctx->_is_clone);
         }
         return Status::OK();
     }
@@ -628,15 +628,15 @@ std::string Expr::debug_string(const std::vector<Expr*>& exprs) {
 std::string Expr::debug_string(const std::vector<ExprContext*>& ctxs) {
     std::vector<Expr*> exprs;
     exprs.reserve(ctxs.size());
-    for (int i = 0; i < ctxs.size(); ++i) {
-        exprs.push_back(ctxs[i]->root());
+    for (auto ctx : ctxs) {
+        exprs.push_back(ctx->root());
     }
     return debug_string(exprs);
 }
 
 bool Expr::is_constant() const {
-    for (int i = 0; i < _children.size(); ++i) {
-        if (!_children[i]->is_constant()) {
+    for (auto i : _children) {
+        if (!i->is_constant()) {
             return false;
         }
     }
@@ -732,8 +732,8 @@ starrocks_udf::AnyVal* Expr::get_const_val(ExprContext* context) {
 }
 
 bool Expr::is_bound(const std::vector<TupleId>& tuple_ids) const {
-    for (int i = 0; i < _children.size(); ++i) {
-        if (!_children[i]->is_bound(tuple_ids)) {
+    for (auto i : _children) {
+        if (!i->is_bound(tuple_ids)) {
             return false;
         }
     }
@@ -744,8 +744,8 @@ bool Expr::is_bound(const std::vector<TupleId>& tuple_ids) const {
 int Expr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
     int n = 0;
 
-    for (int i = 0; i < _children.size(); ++i) {
-        n += _children[i]->get_slot_ids(slot_ids);
+    for (auto i : _children) {
+        n += i->get_slot_ids(slot_ids);
     }
 
     return n;

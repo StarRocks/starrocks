@@ -258,13 +258,13 @@ bool MemTracker::GcMemory(int64_t max_consumption) {
 
     int64_t curr_consumption = pre_gc_consumption;
     // Try to free up some memory
-    for (int i = 0; i < _gc_functions.size(); ++i) {
+    for (auto& _gc_function : _gc_functions) {
         // Try to free up the amount we are over plus some extra so that we don't have to
         // immediately GC again. Don't free all the memory since that can be unnecessarily
         // expensive.
         const int64_t EXTRA_BYTES_TO_FREE = 512L * 1024L * 1024L;
         int64_t bytes_to_free = curr_consumption - max_consumption + EXTRA_BYTES_TO_FREE;
-        _gc_functions[i](bytes_to_free);
+        _gc_function(bytes_to_free);
         if (_consumption_metric != nullptr) RefreshConsumptionFromMetric();
         curr_consumption = consumption();
         if (max_consumption - curr_consumption <= EXTRA_BYTES_TO_FREE) break;

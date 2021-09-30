@@ -129,19 +129,16 @@ void ColumnSelector::buildTypeNameIdMap(const Type* type) {
 void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns, const RowReaderOptions& options) {
     selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
     if (contents->schema->getKind() == STRUCT && options.getIndexesSet()) {
-        for (std::list<uint64_t>::const_iterator field = options.getInclude().begin();
-             field != options.getInclude().end(); ++field) {
-            updateSelectedByFieldId(selectedColumns, *field);
+        for (unsigned long field : options.getInclude()) {
+            updateSelectedByFieldId(selectedColumns, field);
         }
     } else if (contents->schema->getKind() == STRUCT && options.getNamesSet()) {
-        for (std::list<std::string>::const_iterator field = options.getIncludeNames().begin();
-             field != options.getIncludeNames().end(); ++field) {
-            updateSelectedByName(selectedColumns, *field);
+        for (const auto& field : options.getIncludeNames()) {
+            updateSelectedByName(selectedColumns, field);
         }
     } else if (options.getTypeIdsSet()) {
-        for (std::list<uint64_t>::const_iterator typeId = options.getInclude().begin();
-             typeId != options.getInclude().end(); ++typeId) {
-            updateSelectedByTypeId(selectedColumns, *typeId);
+        for (unsigned long typeId : options.getInclude()) {
+            updateSelectedByTypeId(selectedColumns, typeId);
         }
     } else {
         // default is to select all columns
@@ -373,9 +370,9 @@ void RowReaderImpl::seekToRowGroup(uint32_t rowGroupEntryId) {
     // store position providers for selected colimns
     std::unordered_map<uint64_t, PositionProvider> positionProviders;
 
-    for (auto rowIndex = rowIndexes.cbegin(); rowIndex != rowIndexes.cend(); ++rowIndex) {
-        uint64_t colId = rowIndex->first;
-        const proto::RowIndexEntry& entry = rowIndex->second.entry(static_cast<int32_t>(rowGroupEntryId));
+    for (const auto& rowIndexe : rowIndexes) {
+        uint64_t colId = rowIndexe.first;
+        const proto::RowIndexEntry& entry = rowIndexe.second.entry(static_cast<int32_t>(rowGroupEntryId));
 
         // copy index positions for a specific column
         positions.emplace_back();
@@ -752,8 +749,8 @@ uint64_t ReaderImpl::getMemoryUseByFieldId(const std::list<uint64_t>& include, i
     selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
     ColumnSelector column_selector(contents.get());
     if (contents->schema->getKind() == STRUCT && include.begin() != include.end()) {
-        for (std::list<uint64_t>::const_iterator field = include.begin(); field != include.end(); ++field) {
-            column_selector.updateSelectedByFieldId(selectedColumns, *field);
+        for (unsigned long field : include) {
+            column_selector.updateSelectedByFieldId(selectedColumns, field);
         }
     } else {
         // default is to select all columns
@@ -769,8 +766,8 @@ uint64_t ReaderImpl::getMemoryUseByName(const std::list<std::string>& names, int
     selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
     ColumnSelector column_selector(contents.get());
     if (contents->schema->getKind() == STRUCT && names.begin() != names.end()) {
-        for (std::list<std::string>::const_iterator field = names.begin(); field != names.end(); ++field) {
-            column_selector.updateSelectedByName(selectedColumns, *field);
+        for (const auto& name : names) {
+            column_selector.updateSelectedByName(selectedColumns, name);
         }
     } else {
         // default is to select all columns
@@ -786,8 +783,8 @@ uint64_t ReaderImpl::getMemoryUseByTypeId(const std::list<uint64_t>& include, in
     selectedColumns.assign(static_cast<size_t>(contents->footer->types_size()), false);
     ColumnSelector column_selector(contents.get());
     if (include.begin() != include.end()) {
-        for (std::list<uint64_t>::const_iterator field = include.begin(); field != include.end(); ++field) {
-            column_selector.updateSelectedByTypeId(selectedColumns, *field);
+        for (unsigned long field : include) {
+            column_selector.updateSelectedByTypeId(selectedColumns, field);
         }
     } else {
         // default is to select all columns

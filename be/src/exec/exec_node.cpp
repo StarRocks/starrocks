@@ -114,9 +114,9 @@ int ExecNode::RowBatchQueue::Cleanup() {
     // }
 
     std::lock_guard<std::mutex> l(lock_);
-    for (std::list<RowBatch*>::iterator it = cleanup_queue_.begin(); it != cleanup_queue_.end(); ++it) {
+    for (auto& it : cleanup_queue_) {
         // num_io_buffers += (*it)->num_io_buffers();
-        delete *it;
+        delete it;
     }
     cleanup_queue_.clear();
     return num_io_buffers;
@@ -145,8 +145,8 @@ ExecNode::~ExecNode() = default;
 
 void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) {
     if (_type != TPlanNodeType::AGGREGATION_NODE) {
-        for (int i = 0; i < _children.size(); ++i) {
-            _children[i]->push_down_predicate(state, expr_ctxs, is_vectorized);
+        for (auto& i : _children) {
+            i->push_down_predicate(state, expr_ctxs, is_vectorized);
             if (expr_ctxs->size() == 0) {
                 return;
             }
@@ -177,8 +177,8 @@ void ExecNode::push_down_join_runtime_filter(RuntimeState* state, vectorized::Ru
 
 void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state,
                                                          vectorized::RuntimeFilterProbeCollector* collector) {
-    for (int i = 0; i < _children.size(); ++i) {
-        _children[i]->push_down_join_runtime_filter(state, collector);
+    for (auto& i : _children) {
+        i->push_down_join_runtime_filter(state, collector);
         if (collector->size() == 0) {
             return;
         }
@@ -232,8 +232,8 @@ Status ExecNode::prepare(RuntimeState* state) {
     // TODO(zc):
     // AddExprCtxsToFree(_conjunct_ctxs);
 
-    for (int i = 0; i < _children.size(); ++i) {
-        RETURN_IF_ERROR(_children[i]->prepare(state));
+    for (auto& i : _children) {
+        RETURN_IF_ERROR(i->prepare(state));
     }
 
     return Status::OK();
@@ -318,8 +318,8 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
 
 Status ExecNode::reset(RuntimeState* state) {
     _num_rows_returned = 0;
-    for (int i = 0; i < _children.size(); ++i) {
-        RETURN_IF_ERROR(_children[i]->reset(state));
+    for (auto& i : _children) {
+        RETURN_IF_ERROR(i->reset(state));
     }
     return Status::OK();
 }
@@ -344,8 +344,8 @@ Status ExecNode::close(RuntimeState* state) {
     }
 
     Status result;
-    for (int i = 0; i < _children.size(); ++i) {
-        auto st = _children[i]->close(state);
+    for (auto& i : _children) {
+        auto st = i->close(state);
         if (result.ok() && !st.ok()) {
             result = st;
         }
@@ -548,8 +548,8 @@ void ExecNode::set_debug_options(int node_id, TExecNodePhase::type phase, TDebug
         return;
     }
 
-    for (int i = 0; i < root->_children.size(); ++i) {
-        set_debug_options(node_id, phase, action, root->_children[i]);
+    for (auto& i : root->_children) {
+        set_debug_options(node_id, phase, action, i);
     }
 }
 
@@ -569,9 +569,9 @@ void ExecNode::debug_string(int indentation_level, std::stringstream* out) const
     }
     *out << "]";
 
-    for (int i = 0; i < _children.size(); ++i) {
+    for (auto i : _children) {
         *out << "\n";
-        _children[i]->debug_string(indentation_level + 1, out);
+        i->debug_string(indentation_level + 1, out);
     }
 }
 
@@ -704,8 +704,8 @@ void ExecNode::collect_nodes(TPlanNodeType::type node_type, std::vector<ExecNode
         nodes->push_back(this);
     }
 
-    for (int i = 0; i < _children.size(); ++i) {
-        _children[i]->collect_nodes(node_type, nodes);
+    for (auto& i : _children) {
+        i->collect_nodes(node_type, nodes);
     }
 }
 
@@ -722,8 +722,8 @@ bool ExecNode::_check_has_vectorized_scan_child() {
         return true;
     }
 
-    for (int i = 0; i < _children.size(); ++i) {
-        if (_children[i]->_check_has_vectorized_scan_child()) {
+    for (auto& i : _children) {
+        if (i->_check_has_vectorized_scan_child()) {
             return true;
         }
     }

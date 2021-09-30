@@ -130,11 +130,10 @@ public:
             RefreshConsumptionFromMetric();
             return;
         }
-        for (std::vector<MemTracker*>::iterator tracker = _all_trackers.begin(); tracker != _all_trackers.end();
-             ++tracker) {
-            (*tracker)->_consumption->add(bytes);
-            if ((*tracker)->_consumption_metric == nullptr) {
-                DCHECK_GE((*tracker)->_consumption->current_value(), 0);
+        for (auto& _all_tracker : _all_trackers) {
+            _all_tracker->_consumption->add(bytes);
+            if (_all_tracker->_consumption_metric == nullptr) {
+                DCHECK_GE(_all_tracker->_consumption->current_value(), 0);
             }
         }
     }
@@ -146,10 +145,10 @@ public:
     /// the limit recorded in one of its ancestors already happened.
     void consume_local(int64_t bytes, MemTracker* end_tracker) {
         DCHECK(_consumption_metric == nullptr) << "Should not be called on root.";
-        for (int i = 0; i < _all_trackers.size(); ++i) {
-            if (_all_trackers[i] == end_tracker) return;
-            DCHECK(!_all_trackers[i]->has_limit());
-            _all_trackers[i]->_consumption->add(bytes);
+        for (auto& _all_tracker : _all_trackers) {
+            if (_all_tracker == end_tracker) return;
+            DCHECK(!_all_tracker->has_limit());
+            _all_tracker->_consumption->add(bytes);
         }
         DCHECK(false) << "end_tracker is not an ancestor";
     }
@@ -232,18 +231,17 @@ public:
             RefreshConsumptionFromMetric();
             return;
         }
-        for (std::vector<MemTracker*>::iterator tracker = _all_trackers.begin(); tracker != _all_trackers.end();
-             ++tracker) {
-            (*tracker)->_consumption->add(-bytes);
+        for (auto& _all_tracker : _all_trackers) {
+            _all_tracker->_consumption->add(-bytes);
             /// If a UDF calls FunctionContext::TrackAllocation() but allocates less than the
             /// reported amount, the subsequent call to FunctionContext::Free() may cause the
             /// process mem tracker to go negative until it is synced back to the tcmalloc
             /// metric. Don't blow up in this case. (Note that this doesn't affect non-process
             /// trackers since we can enforce that the reported memory usage is internally
             /// consistent.)
-            if ((*tracker)->_consumption_metric == nullptr) {
-                DCHECK_GE((*tracker)->_consumption->current_value(), 0) << std::endl
-                                                                        << (*tracker)->LogUsage(UNLIMITED_DEPTH);
+            if (_all_tracker->_consumption_metric == nullptr) {
+                DCHECK_GE(_all_tracker->_consumption->current_value(), 0) << std::endl
+                                                                          << _all_tracker->LogUsage(UNLIMITED_DEPTH);
             }
         }
 
@@ -252,9 +250,8 @@ public:
 
     // Returns true if a valid limit of this tracker or one of its ancestors is exceeded.
     bool any_limit_exceeded() {
-        for (std::vector<MemTracker*>::iterator tracker = _limit_trackers.begin(); tracker != _limit_trackers.end();
-             ++tracker) {
-            if ((*tracker)->limit_exceeded()) {
+        for (auto& _limit_tracker : _limit_trackers) {
+            if (_limit_tracker->limit_exceeded()) {
                 return true;
             }
         }
@@ -263,10 +260,9 @@ public:
 
     // Return limit exceeded tracker or null
     MemTracker* find_limit_exceeded_tracker() {
-        for (std::vector<MemTracker*>::iterator tracker = _limit_trackers.begin(); tracker != _limit_trackers.end();
-             ++tracker) {
-            if ((*tracker)->limit_exceeded()) {
-                return *tracker;
+        for (auto& _limit_tracker : _limit_trackers) {
+            if (_limit_tracker->limit_exceeded()) {
+                return _limit_tracker;
             }
         }
         return nullptr;
@@ -277,9 +273,8 @@ public:
     // limits and a negative value if any limit is already exceeded.
     int64_t spare_capacity() const {
         int64_t result = std::numeric_limits<int64_t>::max();
-        for (std::vector<MemTracker*>::const_iterator tracker = _limit_trackers.begin();
-             tracker != _limit_trackers.end(); ++tracker) {
-            int64_t mem_left = (*tracker)->limit() - (*tracker)->consumption();
+        for (auto _limit_tracker : _limit_trackers) {
+            int64_t mem_left = _limit_tracker->limit() - _limit_tracker->consumption();
             result = std::min(result, mem_left);
         }
         return result;
@@ -308,9 +303,9 @@ public:
     int64_t lowest_limit() const {
         if (_limit_trackers.empty()) return -1;
         int64_t v = std::numeric_limits<int64_t>::max();
-        for (int i = 0; i < _limit_trackers.size(); ++i) {
-            DCHECK(_limit_trackers[i]->has_limit());
-            v = std::min(v, _limit_trackers[i]->limit());
+        for (auto _limit_tracker : _limit_trackers) {
+            DCHECK(_limit_tracker->has_limit());
+            v = std::min(v, _limit_tracker->limit());
         }
         return v;
     }

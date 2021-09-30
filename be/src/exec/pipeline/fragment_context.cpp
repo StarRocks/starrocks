@@ -33,8 +33,8 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
 
 void FragmentContextManager::cancel(const Status& status) {
     std::lock_guard<std::mutex> lock(_lock);
-    for (auto ctx_it = _fragment_contexts.begin(); ctx_it != _fragment_contexts.end(); ++ctx_it) {
-        ctx_it->second->cancel(status);
+    for (auto& _fragment_context : _fragment_contexts) {
+        _fragment_context.second->cancel(status);
     }
 }
 

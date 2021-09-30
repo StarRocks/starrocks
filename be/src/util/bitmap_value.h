@@ -208,9 +208,9 @@ public:
      *
      */
     uint64_t minimum() const {
-        for (auto roaring_iter = roarings.cbegin(); roaring_iter != roarings.cend(); ++roaring_iter) {
-            if (!roaring_iter->second.isEmpty()) {
-                return uniteBytes(roaring_iter->first, roaring_iter->second.minimum());
+        for (const auto& roaring : roarings) {
+            if (!roaring.second.isEmpty()) {
+                return uniteBytes(roaring.first, roaring.second.minimum());
             }
         }
         // we put std::numeric_limits<>::max/lowest in parenthesis
@@ -1668,8 +1668,8 @@ public:
             array->emplace_back(_sv);
             break;
         case BITMAP: {
-            for (auto ptr_value = _bitmap->begin(); ptr_value != _bitmap->end(); ++ptr_value) {
-                array->emplace_back(*ptr_value);
+            for (unsigned long ptr_value : *_bitmap) {
+                array->emplace_back(ptr_value);
             }
             break;
         }

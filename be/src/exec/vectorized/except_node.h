@@ -137,8 +137,8 @@ class ExceptNode : public ExecNode {
 
         size_t get_max_serialize_size(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs) {
             size_t max_size = 0;
-            for (size_t i = 0; i < exprs.size(); i++) {
-                ColumnPtr key_column = exprs[i]->evaluate(chunkPtr.get());
+            for (auto expr : exprs) {
+                ColumnPtr key_column = expr->evaluate(chunkPtr.get());
                 max_size += key_column->max_one_element_serialize_size();
                 if (!key_column->is_nullable()) {
                     max_size += sizeof(bool);

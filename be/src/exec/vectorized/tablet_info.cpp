@@ -50,8 +50,7 @@ Status OlapTablePartitionParam::init() {
     _distributed_columns.resize(_distributed_slot_descs.size());
 
     // initial partitions
-    for (int i = 0; i < _t_param.partitions.size(); ++i) {
-        const TOlapTablePartition& t_part = _t_param.partitions[i];
+    for (auto& t_part : _t_param.partitions) {
         OlapTablePartition* part = _obj_pool.add(new OlapTablePartition());
         part->id = t_part.id;
         if (t_part.__isset.start_keys) {

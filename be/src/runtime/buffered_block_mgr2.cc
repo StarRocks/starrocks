@@ -701,8 +701,8 @@ Status BufferedBlockMgr2::allocate_scratch_space(int64_t block_size, TmpFileMgr:
     }
     Status err_status =
             Status::InternalError("No usable temporary files: space could not be allocated on any temporary device.");
-    for (int i = 0; i < errs.size(); ++i) {
-        err_status = err_status.clone_and_append(errs[i]);
+    for (auto& err : errs) {
+        err_status = err_status.clone_and_append(err);
     }
     return err_status;
 }
@@ -1156,9 +1156,8 @@ Status BufferedBlockMgr2::init_tmp_files() {
     vector<TmpFileMgr::DeviceId> tmp_devices = _tmp_file_mgr->active_tmp_devices();
     // Initialize the tmp files and the initial file to use.
     _tmp_files.reserve(tmp_devices.size());
-    for (int i = 0; i < tmp_devices.size(); ++i) {
+    for (int tmp_device_id : tmp_devices) {
         TmpFileMgr::File* tmp_file;
-        TmpFileMgr::DeviceId tmp_device_id = tmp_devices[i];
         // It is possible for a device to be blacklisted after it was returned
         // by active_tmp_devices() - handle this gracefully.
         Status status = _tmp_file_mgr->get_file(tmp_device_id, _query_id, &tmp_file);

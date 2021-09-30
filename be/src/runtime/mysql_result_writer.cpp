@@ -351,8 +351,8 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::process_chunk(vectorized::Chunk
         SCOPED_TIMER(_convert_tuple_timer);
         for (int i = 0; i < num_rows; ++i) {
             DCHECK_EQ(0, _row_buffer->length());
-            for (size_t j = 0; j < result_columns.size(); ++j) {
-                result_columns[j]->put_mysql_row_buffer(_row_buffer, i);
+            for (auto& result_column : result_columns) {
+                result_column->put_mysql_row_buffer(_row_buffer, i);
             }
             size_t len = _row_buffer->length();
             _row_buffer->move_content(&result_rows[i]);

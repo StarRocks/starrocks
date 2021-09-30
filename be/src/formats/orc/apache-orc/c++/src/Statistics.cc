@@ -66,8 +66,8 @@ StatisticsImpl::StatisticsImpl(const proto::Footer& footer, const StatContext& s
 }
 
 StatisticsImpl::~StatisticsImpl() {
-    for (std::vector<ColumnStatistics*>::iterator ptr = colStats.begin(); ptr != colStats.end(); ++ptr) {
-        delete *ptr;
+    for (auto& colStat : colStats) {
+        delete colStat;
     }
 }
 

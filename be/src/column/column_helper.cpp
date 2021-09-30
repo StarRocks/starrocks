@@ -72,9 +72,9 @@ void ColumnHelper::merge_filters(const Columns& columns, Column::Filter* __restr
     DCHECK_GT(columns.size(), 0);
 
     // All filters must be the same length, there is no const filter
-    for (int i = 0; i < columns.size(); i++) {
+    for (const auto& column : columns) {
         bool all_zero = false;
-        merge_two_filters(columns[i], filter, &all_zero);
+        merge_two_filters(column, filter, &all_zero);
         if (all_zero) {
             break;
         }

@@ -1270,14 +1270,14 @@ inline Schema reorder_schema(const Schema& input, const std::unordered_map<Colum
 
     Schema output;
     output.reserve(fields.size());
-    for (size_t i = 0; i < fields.size(); i++) {
-        if (predicates.count(fields[i]->id())) {
-            output.append(fields[i]);
+    for (const auto& field : fields) {
+        if (predicates.count(field->id())) {
+            output.append(field);
         }
     }
-    for (size_t i = 0; i < fields.size(); i++) {
-        if (!predicates.count(fields[i]->id())) {
-            output.append(fields[i]);
+    for (const auto& field : fields) {
+        if (!predicates.count(field->id())) {
+            output.append(field);
         }
     }
     return output;
