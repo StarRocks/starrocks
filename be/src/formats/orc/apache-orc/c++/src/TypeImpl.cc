@@ -562,8 +562,8 @@ std::unique_ptr<Type> TypeImpl::parseStructType(const std::string& input, size_t
     if (v.size() == 0) {
         throw std::logic_error("Struct type must contain at least one sub type.");
     }
-    for (size_t i = 0; i < v.size(); ++i) {
-        structType->addStructField(v[i].first, std::move(v[i].second));
+    for (auto& i : v) {
+        structType->addStructField(i.first, std::move(i.second));
     }
     return return_value;
 }
@@ -575,8 +575,8 @@ std::unique_ptr<Type> TypeImpl::parseUnionType(const std::string& input, size_t 
     if (v.size() == 0) {
         throw std::logic_error("Union type must contain at least one sub type.");
     }
-    for (size_t i = 0; i < v.size(); ++i) {
-        unionType->addChildType(std::move(v[i].second));
+    for (auto& i : v) {
+        unionType->addChildType(std::move(i.second));
     }
     return return_value;
 }

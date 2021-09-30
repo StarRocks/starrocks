@@ -369,8 +369,8 @@ uint32_t ShardedLRUCache::_shard(uint32_t hash) {
 ShardedLRUCache::ShardedLRUCache(size_t capacity) : _last_id(0) {
     const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
 
-    for (int s = 0; s < kNumShards; s++) {
-        _shards[s].set_capacity(per_shard);
+    for (auto& _shard : _shards) {
+        _shard.set_capacity(per_shard);
     }
 }
 
@@ -411,16 +411,16 @@ uint64_t ShardedLRUCache::new_id() {
 
 void ShardedLRUCache::prune() {
     int num_prune = 0;
-    for (int s = 0; s < kNumShards; s++) {
-        num_prune += _shards[s].prune();
+    for (auto& _shard : _shards) {
+        num_prune += _shard.prune();
     }
     VLOG(7) << "Successfully prune cache, clean " << num_prune << " entries.";
 }
 
 size_t ShardedLRUCache::get_memory_usage() {
     size_t total_usage = 0;
-    for (int s = 0; s < kNumShards; s++) {
-        total_usage += _shards[s].get_usage();
+    for (const auto& _shard : _shards) {
+        total_usage += _shard.get_usage();
     }
     return total_usage;
 }

@@ -114,8 +114,7 @@ public:
         // build slot desc
         _tuple_id = tb->next_tuple_id();
         int num_nullables = 0;
-        for (int i = 0; i < _slot_descs.size(); ++i) {
-            auto& slot_desc = _slot_descs[i];
+        for (auto& slot_desc : _slot_descs) {
             if (slot_desc.nullIndicatorByte >= 0) {
                 num_nullables++;
             }

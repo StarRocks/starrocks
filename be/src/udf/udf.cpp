@@ -122,8 +122,8 @@ uint8_t* FunctionContextImpl::allocate_local(int64_t byte_size) {
 }
 
 void FunctionContextImpl::free_local_allocations() {
-    for (int i = 0; i < _local_allocations.size(); ++i) {
-        _pool->free(_local_allocations[i]);
+    for (auto& _local_allocation : _local_allocations) {
+        _pool->free(_local_allocation);
     }
 
     _local_allocations.clear();
@@ -489,10 +489,8 @@ void HllVal::agg_parse_and_cal(FunctionContext* ctx, const HllVal& other) {
     } else if (resolver.get_hll_data_type() == starrocks::HLL_DATA_SPARSE) {
         std::map<starrocks::HllSetResolver::SparseIndexType, starrocks::HllSetResolver::SparseValueType>& sparse_map =
                 resolver.get_sparse_map();
-        for (std::map<starrocks::HllSetResolver::SparseIndexType, starrocks::HllSetResolver::SparseValueType>::iterator
-                     iter = sparse_map.begin();
-             iter != sparse_map.end(); iter++) {
-            pdata[iter->first] = std::max(pdata[iter->first], (uint8_t)iter->second);
+        for (auto& iter : sparse_map) {
+            pdata[iter.first] = std::max(pdata[iter.first], (uint8_t)iter.second);
         }
     } else if (resolver.get_hll_data_type() == starrocks::HLL_DATA_FULL) {
         char* full_value = resolver.get_full_value();

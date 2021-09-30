@@ -167,8 +167,7 @@ public:
     static void ranges_intersection(const RowRanges& left, const RowRanges& right, RowRanges* result) {
         RowRanges tmp_range;
         int right_index = 0;
-        for (auto it1 = left._ranges.begin(); it1 != left._ranges.end(); ++it1) {
-            const RowRange& range1 = *it1;
+        for (auto range1 : left._ranges) {
             for (int i = right_index; i < right._ranges.size(); ++i) {
                 const RowRange& range2 = right._ranges[i];
                 if (range1.is_before(range2)) {
@@ -188,8 +187,8 @@ public:
 
     static Roaring ranges_to_roaring(const RowRanges& ranges) {
         Roaring result;
-        for (auto it = ranges._ranges.begin(); it != ranges._ranges.end(); ++it) {
-            result.addRange(it->from(), it->to());
+        for (auto _range : ranges._ranges) {
+            result.addRange(_range.from(), _range.to());
         }
         return result;
     }

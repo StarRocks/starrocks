@@ -22,8 +22,8 @@ inline ColumnPtr HashFunctions::murmur_hash3_32(FunctionContext* context,
     std::vector<ColumnViewer<TYPE_VARCHAR>> viewers;
 
     viewers.reserve(columns.size());
-    for (int i = 0; i < columns.size(); ++i) {
-        viewers.emplace_back(columns[i]);
+    for (const auto& column : columns) {
+        viewers.emplace_back(column);
     }
 
     ColumnBuilder<TYPE_INT> builder;

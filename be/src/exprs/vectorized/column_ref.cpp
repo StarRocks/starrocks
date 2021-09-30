@@ -15,8 +15,8 @@ int ColumnRef::get_slot_ids(std::vector<SlotId>* slot_ids) const {
 }
 
 bool ColumnRef::is_bound(const std::vector<TupleId>& tuple_ids) const {
-    for (int i = 0; i < tuple_ids.size(); i++) {
-        if (_tuple_id == tuple_ids[i]) {
+    for (int tuple_id : tuple_ids) {
+        if (_tuple_id == tuple_id) {
             return true;
         }
     }

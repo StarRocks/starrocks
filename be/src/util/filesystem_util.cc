@@ -68,12 +68,12 @@ Status FileSystemUtil::create_directory(const string& directory) {
 }
 
 Status FileSystemUtil::remove_paths(const vector<string>& directories) {
-    for (int i = 0; i < directories.size(); ++i) {
+    for (const auto& directorie : directories) {
         std::error_code errcode;
-        std::filesystem::remove_all(directories[i], errcode);
+        std::filesystem::remove_all(directorie, errcode);
         if (errcode) {
             std::stringstream error_msg;
-            error_msg << "Encountered error removing directory " << directories[i] << ": " << errcode.message();
+            error_msg << "Encountered error removing directory " << directorie << ": " << errcode.message();
             return Status::InternalError(error_msg.str());
         }
     }

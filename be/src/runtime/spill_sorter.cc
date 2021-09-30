@@ -581,8 +581,7 @@ Status SpillSorter::Run::unpin_all_blocks() {
         DCHECK(_var_len_copy_block == nullptr);
     }
 
-    for (int i = 0; i < _fixed_len_blocks.size(); ++i) {
-        BufferedBlockMgr2::Block* cur_fixed_block = _fixed_len_blocks[i];
+    for (auto cur_fixed_block : _fixed_len_blocks) {
         if (has_var_len_blocks()) {
             for (int block_offset = 0; block_offset < cur_fixed_block->valid_data_len();
                  block_offset += _sort_tuple_size) {
@@ -1026,11 +1025,11 @@ SpillSorter::SpillSorter(TupleRowComparator compare_less_than, const vector<Expr
 
 SpillSorter::~SpillSorter() {
     // Delete blocks from the block mgr.
-    for (deque<Run*>::iterator it = _sorted_runs.begin(); it != _sorted_runs.end(); ++it) {
-        (*it)->delete_all_blocks();
+    for (auto& _sorted_run : _sorted_runs) {
+        _sorted_run->delete_all_blocks();
     }
-    for (deque<Run*>::iterator it = _merging_runs.begin(); it != _merging_runs.end(); ++it) {
-        (*it)->delete_all_blocks();
+    for (auto& _merging_run : _merging_runs) {
+        _merging_run->delete_all_blocks();
     }
     if (_unsorted_run != nullptr) {
         _unsorted_run->delete_all_blocks();
@@ -1272,8 +1271,8 @@ Status SpillSorter::create_merger(int num_runs) {
     DCHECK_GT(num_runs, 1);
 
     // Clean up the runs from the previous merge.
-    for (deque<Run*>::iterator it = _merging_runs.begin(); it != _merging_runs.end(); ++it) {
-        (*it)->delete_all_blocks();
+    for (auto& _merging_run : _merging_runs) {
+        _merging_run->delete_all_blocks();
     }
     _merging_runs.clear();
     _merger = std::make_unique<SortedRunMerger>(_compare_less_than, _output_row_desc, _profile, true);
