@@ -3547,7 +3547,7 @@ public class Catalog {
             numReplicas += partition.getReplicaCount();
         }
 
-        if (partitions.size() > 3 && numReplicas >= numAliveBackends * 500 && numAliveBackends >= 3) {
+        if (partitions.size() >= 3 && numAliveBackends >= 3 && numReplicas >= numAliveBackends * 500) {
             LOG.info("creating {} partitions of table {} concurrently", partitions.size(), table.getName());
             buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
         } else if (numAliveBackends > 0) {
