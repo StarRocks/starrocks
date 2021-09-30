@@ -215,6 +215,8 @@ public class MetaService {
                 return;
             }
 
+            Catalog.getCurrentCatalog().setImageJournalId(version);
+
             // Delete old image files
             MetaCleaner cleaner = new MetaCleaner(Config.meta_dir + "/image");
             try {
