@@ -104,7 +104,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
             }
 
             info.add(fe.getRole().name());
-            info.add(String.valueOf(fe.getHost().equals(masterIp));
+            info.add(String.valueOf(fe.getHost().equals(masterIp)));
 
             info.add(Integer.toString(catalog.getClusterId()));
             info.add(String.valueOf(isJoin(allFeHosts, fe)));
