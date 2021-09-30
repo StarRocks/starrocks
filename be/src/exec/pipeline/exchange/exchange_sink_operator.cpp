@@ -269,7 +269,9 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _wait_response_timer = ADD_TIMER(profile(), "WaitResponseTime");
     _overall_throughput = profile()->add_derived_counter(
             "OverallThroughput", TUnit::BYTES_PER_SECOND,
-            std::bind<int64_t>(&RuntimeProfile::units_per_second, _bytes_sent_counter, profile()->total_time_counter()),
+            [capture0 = _bytes_sent_counter, capture1 = profile()->total_time_counter()] {
+                return RuntimeProfile::units_per_second(capture0, capture1);
+            },
             "");
     for (int i = 0; i < _channels.size(); ++i) {
         RETURN_IF_ERROR(_channels[i]->init(state));

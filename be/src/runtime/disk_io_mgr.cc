@@ -378,7 +378,8 @@ Status DiskIoMgr::init(MemTracker* process_mem_tracker) {
             ss << "work-loop(Disk: " << i << ", Thread: " << j << ")";
             // _disk_thread_group.AddThread(new Thread("disk-io-mgr", ss.str(),
             //             &DiskIoMgr::work_loop, this, _disk_queues[i]));
-            _disk_thread_group.add_thread(new boost::thread(std::bind(&DiskIoMgr::work_loop, this, _disk_queues[i])));
+            _disk_thread_group.add_thread(
+                    new boost::thread([this, capture0 = _disk_queues[i]] { work_loop(capture0); }));
         }
     }
     _request_context_cache = std::make_unique<RequestContextCache>(this);
