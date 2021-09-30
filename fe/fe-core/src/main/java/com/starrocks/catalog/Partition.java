@@ -298,6 +298,23 @@ public class Partition extends MetaObject implements Writable {
         return indices;
     }
 
+    public int getMaterializedIndicesCount(IndexExtState extState) {
+        switch (extState) {
+            case ALL:
+                return 1 + idToVisibleRollupIndex.size() + idToShadowIndex.size();
+            case VISIBLE:
+                return 1 + idToVisibleRollupIndex.size();
+            case SHADOW:
+                return idToVisibleRollupIndex.size();
+            default:
+                return 0;
+        }
+    }
+
+    public int getVisibleMaterializedIndicesCount() {
+        return getMaterializedIndicesCount(IndexExtState.VISIBLE);
+    }
+
     public long getDataSize() {
         long dataSize = 0;
         for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
