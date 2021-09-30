@@ -544,7 +544,7 @@ public class Alter {
                     }
                 } else {
                     throw new DdlException(
-                            "Failed to find enough backends , current backends num is : " + clusterBackends.size() + ". ddl num is : " + newReplicationNum
+                            "Failed to find enough backends , current backends num is : " + clusterBackends.size() + " . replication  num is : " + newReplicationNum
                     );
                 }
             }
