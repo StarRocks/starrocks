@@ -325,7 +325,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
 }
 
 FragmentMgr::FragmentMgr(ExecEnv* exec_env)
-        : _exec_env(exec_env), _fragment_map(), _stop(false), _cancel_thread([this] { cancel_worker(); }) {
+        : _exec_env(exec_env), _stop(false), _cancel_thread([this] { cancel_worker(); }) {
     REGISTER_GAUGE_STARROCKS_METRIC(plan_fragment_count, [this]() {
         std::lock_guard<std::mutex> lock(_lock);
         return _fragment_map.size();

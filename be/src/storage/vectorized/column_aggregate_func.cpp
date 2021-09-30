@@ -247,8 +247,7 @@ class ReplaceNullableColumnAggregator final : public ValueColumnAggregatorBase {
 public:
     ~ReplaceNullableColumnAggregator() override = default;
 
-    explicit ReplaceNullableColumnAggregator(ValueColumnAggregatorPtr child)
-            : ValueColumnAggregatorBase(), _child(std::move(child)) {
+    explicit ReplaceNullableColumnAggregator(ValueColumnAggregatorPtr child) : _child(std::move(child)) {
         _null_child = std::make_unique<ReplaceAggregator<NullColumn, uint8_t>>();
     }
 

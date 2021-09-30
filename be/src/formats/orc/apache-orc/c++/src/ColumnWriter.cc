@@ -1981,7 +1981,7 @@ void ListColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_
     }
 
     // unnecessary to deal with null as elements are packed together
-    if (child.get()) {
+    if (child) {
         child->add(*listBatch->elements, elemOffset, totalNumValues, nullptr);
     }
     lengthEncoder->add(offsets, numValues, notNull);
@@ -2016,21 +2016,21 @@ void ListColumnWriter::flush(std::vector<proto::Stream>& streams) {
     stream.set_length(lengthEncoder->flush());
     streams.push_back(stream);
 
-    if (child.get()) {
+    if (child) {
         child->flush(streams);
     }
 }
 
 void ListColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
     ColumnWriter::writeIndex(streams);
-    if (child.get()) {
+    if (child) {
         child->writeIndex(streams);
     }
 }
 
 uint64_t ListColumnWriter::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
-    if (child.get()) {
+    if (child) {
         size += lengthEncoder->getBufferSize();
         size += child->getEstimatedSize();
     }
@@ -2045,42 +2045,42 @@ void ListColumnWriter::getColumnEncoding(std::vector<proto::ColumnEncoding>& enc
         encoding.set_bloomencoding(BloomFilterVersion::UTF8);
     }
     encodings.push_back(encoding);
-    if (child.get()) {
+    if (child) {
         child->getColumnEncoding(encodings);
     }
 }
 
 void ListColumnWriter::getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getStripeStatistics(stats);
-    if (child.get()) {
+    if (child) {
         child->getStripeStatistics(stats);
     }
 }
 
 void ListColumnWriter::mergeStripeStatsIntoFileStats() {
     ColumnWriter::mergeStripeStatsIntoFileStats();
-    if (child.get()) {
+    if (child) {
         child->mergeStripeStatsIntoFileStats();
     }
 }
 
 void ListColumnWriter::getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getFileStatistics(stats);
-    if (child.get()) {
+    if (child) {
         child->getFileStatistics(stats);
     }
 }
 
 void ListColumnWriter::mergeRowGroupStatsIntoStripeStats() {
     ColumnWriter::mergeRowGroupStatsIntoStripeStats();
-    if (child.get()) {
+    if (child) {
         child->mergeRowGroupStatsIntoStripeStats();
     }
 }
 
 void ListColumnWriter::createRowIndexEntry() {
     ColumnWriter::createRowIndexEntry();
-    if (child.get()) {
+    if (child) {
         child->createRowIndexEntry();
     }
 }
@@ -2186,10 +2186,10 @@ void MapColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t
     lengthEncoder->add(offsets, numValues, notNull);
 
     // unnecessary to deal with null as keys and values are packed together
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->add(*mapBatch->keys, elemOffset, totalNumValues, nullptr);
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->add(*mapBatch->elements, elemOffset, totalNumValues, nullptr);
     }
 
@@ -2223,20 +2223,20 @@ void MapColumnWriter::flush(std::vector<proto::Stream>& streams) {
     stream.set_length(lengthEncoder->flush());
     streams.push_back(stream);
 
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->flush(streams);
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->flush(streams);
     }
 }
 
 void MapColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
     ColumnWriter::writeIndex(streams);
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->writeIndex(streams);
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->writeIndex(streams);
     }
 }
@@ -2244,10 +2244,10 @@ void MapColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
 uint64_t MapColumnWriter::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
     size += lengthEncoder->getBufferSize();
-    if (keyWriter.get()) {
+    if (keyWriter) {
         size += keyWriter->getEstimatedSize();
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         size += elemWriter->getEstimatedSize();
     }
     return size;
@@ -2261,60 +2261,60 @@ void MapColumnWriter::getColumnEncoding(std::vector<proto::ColumnEncoding>& enco
         encoding.set_bloomencoding(BloomFilterVersion::UTF8);
     }
     encodings.push_back(encoding);
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->getColumnEncoding(encodings);
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->getColumnEncoding(encodings);
     }
 }
 
 void MapColumnWriter::getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getStripeStatistics(stats);
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->getStripeStatistics(stats);
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->getStripeStatistics(stats);
     }
 }
 
 void MapColumnWriter::mergeStripeStatsIntoFileStats() {
     ColumnWriter::mergeStripeStatsIntoFileStats();
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->mergeStripeStatsIntoFileStats();
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->mergeStripeStatsIntoFileStats();
     }
 }
 
 void MapColumnWriter::getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getFileStatistics(stats);
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->getFileStatistics(stats);
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->getFileStatistics(stats);
     }
 }
 
 void MapColumnWriter::mergeRowGroupStatsIntoStripeStats() {
     ColumnWriter::mergeRowGroupStatsIntoStripeStats();
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->mergeRowGroupStatsIntoStripeStats();
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->mergeRowGroupStatsIntoStripeStats();
     }
 }
 
 void MapColumnWriter::createRowIndexEntry() {
     ColumnWriter::createRowIndexEntry();
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->createRowIndexEntry();
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->createRowIndexEntry();
     }
 }

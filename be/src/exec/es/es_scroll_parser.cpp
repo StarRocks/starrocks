@@ -210,8 +210,7 @@ static Status get_float_value(const rapidjson::Value& col, PrimitiveType type, v
     return Status::OK();
 }
 
-ScrollParser::ScrollParser(bool doc_value_mode)
-        : _scroll_id(""), _size(0), _line_index(0), _doc_value_mode(doc_value_mode) {}
+ScrollParser::ScrollParser(bool doc_value_mode) : _size(0), _line_index(0), _doc_value_mode(doc_value_mode) {}
 
 ScrollParser::~ScrollParser() = default;
 

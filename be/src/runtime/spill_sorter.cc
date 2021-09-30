@@ -665,7 +665,7 @@ Status SpillSorter::Run::prepare_read() {
 }
 
 Status SpillSorter::Run::get_next_batch(RowBatch** output_batch) {
-    if (_buffered_batch.get() != nullptr) {
+    if (_buffered_batch != nullptr) {
         _buffered_batch->reset();
         // Fill more rows into _buffered_batch.
         bool eos = false;

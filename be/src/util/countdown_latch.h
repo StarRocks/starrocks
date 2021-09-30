@@ -37,7 +37,7 @@ namespace starrocks {
 class CountDownLatch {
 public:
     // Initialize the latch with the given initial count.
-    explicit CountDownLatch(int count) : cond_(), count_(count) {}
+    explicit CountDownLatch(int count) : count_(count) {}
 
     // REQUIRES: amount >= 0.
     // Decrement the count of this latch by 'amount'.

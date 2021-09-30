@@ -494,7 +494,7 @@ private:
     struct FromUnixState {
         bool const_format{false};
         std::string format_content;
-        FromUnixState() : format_content("") {}
+        FromUnixState() {}
     };
 
     // The context used for convert tz

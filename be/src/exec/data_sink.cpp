@@ -118,7 +118,7 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
         return Status::InternalError(error_msg.str());
     }
 
-    if (sink->get() != nullptr) {
+    if (*sink != nullptr) {
         RETURN_IF_ERROR((*sink)->init(thrift_sink));
     }
 
