@@ -417,7 +417,7 @@ DataDir* StorageEngine::get_store(int64_t path_hash) {
 }
 
 static bool too_many_disks_are_failed(uint32_t unused_num, uint32_t total_num) {
-    return ((total_num == 0) || (unused_num * 100 / total_num > config::max_percentage_of_error_disk));
+    return total_num == 0 || unused_num * 100 / total_num > config::max_percentage_of_error_disk;
 }
 
 bool StorageEngine::_delete_tablets_on_unused_root_path() {
