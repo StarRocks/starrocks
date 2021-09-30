@@ -22,9 +22,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.planner.Planner;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.VariableMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -343,45 +341,9 @@ public class SelectStmtTest {
     }
 
     @Test
-    public void testForbiddenCorrelatedSubqueryInHavingClause() throws Exception {
-        String sql = "SELECT k1 FROM baseall GROUP BY k1 HAVING EXISTS(SELECT k4 FROM tbl1 GROUP BY k4 HAVING SUM"
-                + "(baseall.k1) = k4);";
-        try {
-            starRocksAssert.query(sql).explainQuery();
-            Assert.fail("The correlated subquery in having clause should be forbidden.");
-        } catch (AnalysisException e) {
-            System.out.println(e.getMessage());
-        }
-    }
-
-    @Test
     public void testGroupByConstantExpression() throws Exception {
         String sql = "SELECT k1 - 4*60*60 FROM baseall GROUP BY k1 - 4*60*60";
         starRocksAssert.query(sql).explainQuery();
-    }
-
-    @Test
-    public void testSelectHintSetVar() throws Exception {
-        starRocksAssert.disableNewPlanner();
-
-        String sql = "SELECT sleep(3);";
-        Planner planner = starRocksAssert.query(sql).internalExecuteOneAndGetPlan();
-        Assert.assertEquals(VariableMgr.getDefaultSessionVariable().getQueryTimeoutS(),
-                planner.getPlannerContext().getQueryOptions().query_timeout);
-
-        sql = "SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);";
-        planner = starRocksAssert.query(sql).internalExecuteOneAndGetPlan();
-        Assert.assertEquals(1, planner.getPlannerContext().getQueryOptions().query_timeout);
-
-        sql = "select * from db1.partition_table where datekey=20200726";
-        planner = starRocksAssert.query(sql).internalExecuteOneAndGetPlan();
-        Assert.assertEquals(VariableMgr.getDefaultSessionVariable().getMaxExecMemByte(),
-                planner.getPlannerContext().getQueryOptions().mem_limit);
-
-        sql = "select /*+ SET_VAR(exec_mem_limit = 8589934592) */ poi_id, count(*) from db1.partition_table " +
-                "where datekey=20200726 group by 1";
-        planner = starRocksAssert.query(sql).internalExecuteOneAndGetPlan();
-        Assert.assertEquals(8589934592L, planner.getPlannerContext().getQueryOptions().mem_limit);
     }
 
     @Test
@@ -411,7 +373,6 @@ public class SelectStmtTest {
 
     @Test
     public void testTimeTypeInAggFunctions() throws Exception {
-        starRocksAssert.disableNewPlanner();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         expectedEx.expect(AnalysisException.class);
         expectedEx.expectMessage("Time Type can not used in max function");

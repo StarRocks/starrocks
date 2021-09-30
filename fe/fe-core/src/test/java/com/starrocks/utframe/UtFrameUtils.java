@@ -125,7 +125,6 @@ public class UtFrameUtils {
         ctx.setQualifiedUser(Auth.ROOT_USER);
         ctx.setCatalog(Catalog.getCurrentCatalog());
         ctx.setThreadLocalInfo();
-        ctx.getSessionVariable().disableNewPlanner();
         return ctx;
     }
 
@@ -340,18 +339,6 @@ public class UtFrameUtils {
         }
     }
 
-    public static String getPlanThriftString(ConnectContext ctx, String queryStr) throws Exception {
-        ctx.getState().reset();
-        StmtExecutor stmtExecutor = new StmtExecutor(ctx, queryStr);
-        stmtExecutor.execute();
-        if (ctx.getState().getStateType() != QueryState.MysqlStateType.ERR) {
-            Planner planner = stmtExecutor.planner();
-            return getThriftString(planner.getFragments());
-        } else {
-            return ctx.getState().getErrorMessage();
-        }
-    }
-
     public static String getPlanThriftStringForNewPlanner(ConnectContext ctx, String queryStr) throws Exception {
         return UtFrameUtils.getThriftString(UtFrameUtils.getNewPlanAndFragment(ctx, queryStr).second.getFragments());
     }
@@ -423,14 +410,14 @@ public class UtFrameUtils {
         connectContext.setSessionVariable(replayDumpInfo.getSessionVariable());
         // create table
         int backendId = 10002;
-        int backendIdSize = connectContext.getCatalog().getCurrentSystemInfo().getBackendIds(true).size();
+        int backendIdSize = Catalog.getCurrentSystemInfo().getBackendIds(true).size();
         for (int i = 1; i < backendIdSize; ++i) {
             UtFrameUtils.dropMockBackend(backendId++);
         }
 
         Set<String> dbSet = replayDumpInfo.getCreateTableStmtMap().keySet().stream().map(key -> key.split("\\.")[0])
                 .collect(Collectors.toSet());
-        dbSet.stream().forEach(db -> {
+        dbSet.forEach(db -> {
             if (starRocksAssert.databaseExist(db)) {
                 try {
                     starRocksAssert.dropDatabase(db);

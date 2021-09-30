@@ -290,9 +290,7 @@ public class StmtExecutor {
 
             // Entrance to the new planner
             if (isStatisticsOrAnalyzer(parsedStmt, context)
-                    || (context.getSessionVariable().isEnableNewPlanner()
-                    && context.getSessionVariable().useVectorizedEngineEnable()
-                    && supportedByNewPlanner(parsedStmt, context))) {
+                    || supportedByNewPlanner(parsedStmt, context)) {
                 try {
                     redirectStatus = parsedStmt.getRedirectStatus();
                     if (!isForwardToMaster()) {
