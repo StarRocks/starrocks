@@ -1702,7 +1702,7 @@ private:
     };
 
     template <class K, class... Args>
-    std::pair<iterator, bool> emplace_decomposable(const K& key, size_t hashval, Args&&... args) {
+    std::pair<iterator, bool> emplace_decomposable_with_hash(const K& key, size_t hashval, Args&&... args) {
         auto res = find_or_prepare_insert(key, hashval);
         if (res.second) {
             emplace_at(res.first, std::forward<Args>(args)...);
@@ -1713,7 +1713,7 @@ private:
     struct EmplaceDecomposable {
         template <class K, class... Args>
         std::pair<iterator, bool> operator()(const K& key, Args&&... args) const {
-            return s.emplace_decomposable(key, s.hash(key), std::forward<Args>(args)...);
+            return s.emplace_decomposable_with_hash(key, s.hash(key), std::forward<Args>(args)...);
         }
         raw_hash_set& s;
     };
@@ -1721,7 +1721,7 @@ private:
     struct EmplaceDecomposableHashval {
         template <class K, class... Args>
         std::pair<iterator, bool> operator()(const K& key, Args&&... args) const {
-            return s.emplace_decomposable(key, hashval, std::forward<Args>(args)...);
+            return s.emplace_decomposable_with_hash(key, hashval, std::forward<Args>(args)...);
         }
         raw_hash_set& s;
         size_t hashval;
@@ -2744,7 +2744,7 @@ public:
         Inner& inner = sets_[subidx(hashval)];
         auto& set = inner.set_;
         typename Lockable::UniqueLock m(inner);
-        return make_rv(&inner, set.emplace_decomposable(key, hashval, std::forward<Args>(args)...));
+        return make_rv(&inner, set.emplace_decomposable_with_hash(key, hashval, std::forward<Args>(args)...));
     }
 
     struct EmplaceDecomposableHashval {
@@ -2812,7 +2812,7 @@ public:
         Inner& inner = sets_[subidx(hashval)];
         auto& set = inner.set_;
         typename Lockable::UniqueLock m(inner);
-        return make_rv(&inner, set.emplace_decomposable(key, hashval, std::forward<Args>(args)...));
+        return make_rv(&inner, set.emplace_decomposable_with_hash(key, hashval, std::forward<Args>(args)...));
     }
 
     struct EmplaceDecomposable {

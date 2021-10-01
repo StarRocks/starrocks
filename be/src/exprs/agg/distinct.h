@@ -33,6 +33,11 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
         return pair.second * phmap::item_serialize_size<HashSet<T>>::value;
     }
 
+    size_t update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) {
+        auto pair = set.emplace_with_hash(hash, key);
+        return pair.second * phmap::item_serialize_size<HashSet<T>>::value;
+    }
+
     void prefetch(T key) { set.prefetch(key); }
 
     int64_t disctint_count() const { return set.size(); }
@@ -88,6 +93,18 @@ struct DistinctAggregateState<PT, BinaryPTGuard<PT>> {
         size_t ret = 0;
         KeyType key(raw_key);
         set.template lazy_emplace(key, [&](const auto& ctor) {
+            uint8_t* pos = mem_pool->allocate(key.size);
+            memcpy(pos, key.data, key.size);
+            ctor(pos, key.size, key.hash);
+            ret = phmap::item_serialize_size<SliceHashSet>::value;
+        });
+        return ret;
+    }
+
+    size_t update_with_hash(MemPool* mem_pool, Slice raw_key, size_t hash) {
+        size_t ret = 0;
+        KeyType key(reinterpret_cast<uint8_t*>(raw_key.data), raw_key.size, hash);
+        set.template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
             uint8_t* pos = mem_pool->allocate(key.size);
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
@@ -156,6 +173,11 @@ struct DistinctAggregateStateV2<PT, FixedLengthPTGuard<PT>> {
 
     size_t update(T key) {
         auto pair = set.insert(key);
+        return pair.second * item_size;
+    }
+
+    size_t update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) {
+        auto pair = set.emplace_with_hash(hash, key);
         return pair.second * item_size;
     }
 
@@ -249,23 +271,56 @@ public:
         size_t mem_usage = 0;
         auto& agg_state = this->data(state);
 
-        if constexpr (IsSlice<T>) {
-            MemPool* mem_pool = ctx->impl()->mem_pool();
-            for (size_t i = 0; i < batch_size; ++i) {
-                mem_usage += agg_state.update(mem_pool, column->get_slice(i));
+        struct CacheEntry {
+            size_t hash_value;
+        };
+
+        std::vector<CacheEntry> cache(batch_size);
+        const auto& container_data = column->get_data();
+        for (size_t i = 0; i < batch_size; ++i) {
+            size_t hash_value = agg_state.set.hash_function()(container_data[i]);
+            cache[i] = CacheEntry{hash_value};
+        }
+        size_t prefetch_index = 16;
+
+        MemPool* mem_pool = ctx->impl()->mem_pool();
+        for (size_t i = 0; i < batch_size; ++i) {
+            if (prefetch_index < batch_size) {
+                agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
+                prefetch_index++;
             }
-        } else {
-            auto* data = column->get_data().data();
-            // after doing some benchmark, we see a lot of perf gain by prefetching when doing count(distinct)
-            // but only when there is no group by clause or group by number is low.
-            // prefetching has down side if group by number is high.
-            static const size_t prefetch_dist = 4;
-            for (size_t i = 0; i < batch_size; ++i) {
-                if ((i + prefetch_dist) < batch_size) {
-                    agg_state.prefetch(data[i + prefetch_dist]);
-                }
-                mem_usage += agg_state.update(data[i]);
+            mem_usage += agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+        }
+        ctx->impl()->add_mem_usage(mem_usage);
+    }
+
+    void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
+                      AggDataPtr* states) const override {
+        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
+        size_t mem_usage = 0;
+
+        struct CacheEntry {
+            TDistinctAggState<PT>* agg_state;
+            size_t hash_value;
+        };
+
+        std::vector<CacheEntry> cache(batch_size);
+        const auto& container_data = column->get_data();
+        for (size_t i = 0; i < batch_size; ++i) {
+            AggDataPtr state = states[i] + state_offset;
+            auto& agg_state = this->data(state);
+            size_t hash_value = agg_state.set.hash_function()(container_data[i]);
+            cache[i] = CacheEntry{&agg_state, hash_value};
+        }
+        size_t prefetch_index = 16;
+
+        MemPool* mem_pool = ctx->impl()->mem_pool();
+        for (size_t i = 0; i < batch_size; ++i) {
+            if (prefetch_index < batch_size) {
+                cache[prefetch_index].agg_state->set.prefetch_hash(cache[prefetch_index].hash_value);
+                prefetch_index++;
             }
+            mem_usage += cache[i].agg_state->update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
         }
         ctx->impl()->add_mem_usage(mem_usage);
     }
