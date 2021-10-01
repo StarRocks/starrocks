@@ -366,6 +366,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DISABLE_JOIN_REORDER)
     private boolean disableJoinReorder = false;
 
+    // TODO(kks): Remove this variable after 2021-10-07
+    @VariableMgr.VarAttr(name = "enable_cbo")
+    private boolean enableCbo = true;
+
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
 
