@@ -28,8 +28,8 @@ public:
 
 private:
     std::atomic<bool> _is_finished{false};
-    vectorized::ChunkPtr _full_chunk = nullptr;
-    vectorized::ChunkUniquePtr _partial_chunk = nullptr;
+    vectorized::ChunkPtr _full_chunk;
+    vectorized::ChunkUniquePtr _partial_chunk;
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;
     const std::shared_ptr<LocalExchangeMemoryManager>& _memory_manager;

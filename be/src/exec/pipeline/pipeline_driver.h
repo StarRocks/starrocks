@@ -165,8 +165,8 @@ private:
     // The first one is source operator
     MorselQueue* _morsel_queue = nullptr;
     DriverState _state;
-    std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
-    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
+    std::shared_ptr<RuntimeProfile> _runtime_profile;
+    std::shared_ptr<MemTracker> _mem_tracker;
     const size_t _yield_max_chunks_moved;
     const int64_t _yield_max_time_spent;
 };

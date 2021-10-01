@@ -231,7 +231,7 @@ private:
     friend bool operator==(const TabletMeta& a, const TabletMeta& b);
     friend bool operator!=(const TabletMeta& a, const TabletMeta& b);
 
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _mem_tracker;
 
     int64_t _table_id = 0;
     int64_t _partition_id = 0;
@@ -246,7 +246,7 @@ private:
     TabletState _tablet_state = TABLET_NOTREADY;
     // Note: Segment store the pointer of TabletSchema,
     // so this point should never change
-    std::shared_ptr<TabletSchema> _schema = nullptr;
+    std::shared_ptr<TabletSchema> _schema;
 
     std::vector<RowsetMetaSharedPtr> _rs_metas;
     std::vector<RowsetMetaSharedPtr> _inc_rs_metas;

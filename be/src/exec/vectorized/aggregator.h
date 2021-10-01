@@ -200,7 +200,7 @@ private:
     std::vector<starrocks_udf::FunctionContext*> _agg_fn_ctxs;
     std::vector<const vectorized::AggregateFunction*> _agg_functions;
     // agg state when no group by columns
-    vectorized::AggDataPtr _single_agg_state = nullptr;
+    vectorized::AggDataPtr _single_agg_state;
     // The expr used to evaluate agg input columns
     // one agg function could have multi input exprs
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;

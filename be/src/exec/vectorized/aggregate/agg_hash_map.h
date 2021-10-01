@@ -262,7 +262,7 @@ struct AggHashMapWithOneNullableNumberKey {
     }
 
     static constexpr bool has_single_null_key = true;
-    AggDataPtr null_key_data = nullptr;
+    AggDataPtr null_key_data;
     ResultVector results;
 };
 
@@ -452,7 +452,7 @@ struct AggHashMapWithOneNullableStringKey {
     }
 
     static constexpr bool has_single_null_key = true;
-    AggDataPtr null_key_data = nullptr;
+    AggDataPtr null_key_data;
     ResultVector results;
 };
 
