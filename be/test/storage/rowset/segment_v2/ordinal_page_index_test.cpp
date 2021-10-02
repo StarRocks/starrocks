@@ -55,7 +55,7 @@ public:
     }
 
 protected:
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _mem_tracker;
     EnvMemory* _env = nullptr;
     fs::FileBlockManager* _block_mgr = nullptr;
 };

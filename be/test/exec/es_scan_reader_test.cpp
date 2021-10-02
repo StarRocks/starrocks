@@ -236,7 +236,7 @@ TEST_F(MockESServerTest, workflow) {
     auto st = reader.open();
     ASSERT_TRUE(st.ok());
     bool eos = false;
-    std::unique_ptr<ScrollParser> parser = nullptr;
+    std::unique_ptr<ScrollParser> parser;
     while (!eos) {
         st = reader.get_next(&eos, parser);
         ASSERT_TRUE(st.ok());

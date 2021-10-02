@@ -153,7 +153,7 @@ private:
     PageHandle _ordinal_index_page_handle;
     PageHandle _value_index_page_handle;
 
-    TypeInfoPtr _type_info = nullptr;
+    TypeInfoPtr _type_info;
     const EncodingInfo* _encoding_info = nullptr;
     const BlockCompressionCodec* _compress_codec = nullptr;
     const KeyCoder* _validx_key_coder = nullptr;

@@ -841,7 +841,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
             _output_chunk = std::make_unique<vectorized::Chunk>();
             for (size_t i = 0; i < _output_expr_ctxs.size(); ++i) {
                 ColumnPtr tmp = _output_expr_ctxs[i]->evaluate(chunk);
-                ColumnPtr output_column = nullptr;
+                ColumnPtr output_column;
                 if (tmp->only_null()) {
                     // Only null column maybe lost type info
                     output_column =

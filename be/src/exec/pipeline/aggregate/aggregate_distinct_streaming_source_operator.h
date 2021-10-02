@@ -28,7 +28,7 @@ private:
 
     // It is used to perform aggregation algorithms
     // shared by AggregateStreamingSinkOperator
-    AggregatorPtr _aggregator = nullptr;
+    AggregatorPtr _aggregator;
     // Whether prev operator has no output
     bool _is_finished = false;
 };
@@ -45,6 +45,6 @@ public:
     }
 
 private:
-    AggregatorPtr _aggregator = nullptr;
+    AggregatorPtr _aggregator;
 };
 } // namespace starrocks::pipeline

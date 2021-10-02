@@ -43,7 +43,7 @@ protected:
     ObjectPool _pool;
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeState* _runtime_state = nullptr;
-    std::shared_ptr<RowDescriptor> _row_desc = nullptr;
+    std::shared_ptr<RowDescriptor> _row_desc;
 };
 
 void HdfsScannerTest::_create_runtime_profile() {

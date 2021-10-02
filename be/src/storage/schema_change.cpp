@@ -90,7 +90,7 @@ private:
     bool _make_heap(const std::vector<RowBlock*>& row_block_arr);
     bool _pop_heap();
 
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _mem_tracker;
     TabletSharedPtr _tablet;
     std::priority_queue<MergeElement> _heap;
 };
@@ -1366,7 +1366,7 @@ bool SchemaChangeWithSorting::process(RowsetReaderSharedPtr rowset_reader, Rowse
 
     if (!row_block_arr.empty()) {
         // enter here while memory limitation is reached.
-        RowsetSharedPtr rowset = nullptr;
+        RowsetSharedPtr rowset;
 
         RowsetTypePB new_rowset_type = rowset_reader->rowset()->rowset_meta()->rowset_type();
         if (use_beta_rowset) {

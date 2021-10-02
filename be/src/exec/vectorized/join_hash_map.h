@@ -70,7 +70,7 @@ struct JoinKeyDesc {
 
 struct JoinHashTableItems {
     //TODO: memory continus problem?
-    ChunkPtr build_chunk = nullptr;
+    ChunkPtr build_chunk;
     Columns key_columns;
     Buffer<SlotDescriptor*> build_slots;
     Buffer<SlotDescriptor*> probe_slots;
@@ -99,8 +99,8 @@ struct JoinHashTableItems {
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
 
     MemTracker* mem_tracker = nullptr;
-    std::unique_ptr<MemPool> build_pool = nullptr;
-    std::unique_ptr<MemPool> probe_pool = nullptr;
+    std::unique_ptr<MemPool> build_pool;
+    std::unique_ptr<MemPool> probe_pool;
     uint64_t last_memory_usage = 0;
     std::vector<JoinKeyDesc> join_keys;
 
@@ -526,25 +526,25 @@ private:
     void _remove_duplicate_index_for_right_anti_join(Column::Filter* filter);
     void _remove_duplicate_index_for_full_outer_join(Column::Filter* filter);
 
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_BOOLEAN)> _keyboolean = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_TINYINT)> _key8 = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_SMALLINT)> _key16 = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_INT)> _key32 = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_BIGINT)> _key64 = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_LARGEINT)> _key128 = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_FLOAT)> _keyfloat = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_DOUBLE)> _keydouble = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_VARCHAR)> _keystring = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_DATE)> _keydate = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_DATETIME)> _keydatetime = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMALV2)> _keydecimal = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL32)> _keydecimal32 = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL64)> _keydecimal64 = nullptr;
-    std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL128)> _keydecimal128 = nullptr;
-    std::unique_ptr<JoinHashMapForSerializedKey(TYPE_VARCHAR)> _slice = nullptr;
-    std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_INT)> _fixed32 = nullptr;
-    std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_BIGINT)> _fixed64 = nullptr;
-    std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_LARGEINT)> _fixed128 = nullptr;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_BOOLEAN)> _keyboolean;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_TINYINT)> _key8;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_SMALLINT)> _key16;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_INT)> _key32;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_BIGINT)> _key64;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_LARGEINT)> _key128;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_FLOAT)> _keyfloat;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_DOUBLE)> _keydouble;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_VARCHAR)> _keystring;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_DATE)> _keydate;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_DATETIME)> _keydatetime;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMALV2)> _keydecimal;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL32)> _keydecimal32;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL64)> _keydecimal64;
+    std::unique_ptr<JoinHashMapForOneKey(TYPE_DECIMAL128)> _keydecimal128;
+    std::unique_ptr<JoinHashMapForSerializedKey(TYPE_VARCHAR)> _slice;
+    std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_INT)> _fixed32;
+    std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_BIGINT)> _fixed64;
+    std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_LARGEINT)> _fixed128;
 
     JoinHashMapType _hash_map_type = JoinHashMapType::empty;
 

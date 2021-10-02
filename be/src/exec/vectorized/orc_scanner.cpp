@@ -122,7 +122,7 @@ StatusOr<ChunkPtr> ORCScanner::get_next() {
         return Status::EndOfFile("eof");
     }
 
-    ChunkPtr tmp_chunk = nullptr;
+    ChunkPtr tmp_chunk;
     while (true) {
         auto result = _next_orc_chunk();
         if (!result.ok()) {
