@@ -137,8 +137,8 @@ public:
         _mem_tracker->release(_mem_tracker->consumption());
     }
 
-    virtual bool process(vectorized::Reader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                         TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+    bool process(vectorized::Reader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                 TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
     ChunkChanger& _chunk_changer;
@@ -152,8 +152,8 @@ public:
     explicit SchemaChangeWithSorting(MemTracker* mem_tracker, ChunkChanger& chunk_changer, size_t memory_limitation);
     virtual ~SchemaChangeWithSorting();
 
-    virtual bool process(vectorized::Reader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                         TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+    bool process(vectorized::Reader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                 TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
     bool _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet);

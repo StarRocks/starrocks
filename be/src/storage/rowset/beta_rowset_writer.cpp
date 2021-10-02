@@ -289,8 +289,9 @@ Status BetaRowsetWriter::_final_merge() {
         } else {
             //itr = new_union_iterator(seg_iterators);
             for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
-                auto old_path = BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, 0);
-                auto new_path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, 0);
+                auto old_path =
+                        BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
+                auto new_path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
                 auto st = _context.env->rename_file(old_path, new_path);
                 RETURN_IF_ERROR_WITH_WARN(st, "Fail to rename file");
             }

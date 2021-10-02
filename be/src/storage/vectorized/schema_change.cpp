@@ -262,212 +262,21 @@ ConvertTypeResolver::ConvertTypeResolver() {
     add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL_V2, OLAP_FIELD_TYPE_DECIMAL>();
     add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL, OLAP_FIELD_TYPE_DECIMAL128>();
     add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL_V2, OLAP_FIELD_TYPE_DECIMAL128>();
+
+    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL32>();
+    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL64>();
+    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL128>();
+
+    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL32>();
+    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL64>();
+    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL128>();
+
+    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL32>();
+    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL64>();
+    add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL128>();
 }
 
 ConvertTypeResolver::~ConvertTypeResolver() {}
-
-bool to_bitmap(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col,
-               int ref_field_idx) {
-    BitmapValue bitmap;
-    if (!base_datum.is_null()) {
-        uint64_t origin_value;
-        switch (ref_column.type()) {
-        case OLAP_FIELD_TYPE_TINYINT:
-            if (base_datum.get_int8() < 0) {
-                LOG(WARNING) << "The input: " << base_datum.get_uint8()
-                             << " is not valid, to_bitmap only support bigint value from 0 to "
-                                "18446744073709551615 currently";
-                return false;
-            }
-            origin_value = base_datum.get_int8();
-            break;
-        case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
-            origin_value = base_datum.get_uint8();
-            break;
-        case OLAP_FIELD_TYPE_SMALLINT:
-            if (base_datum.get_int16() < 0) {
-                LOG(WARNING) << "The input: " << base_datum.get_uint16()
-                             << " is not valid, to_bitmap only support bigint value from 0 to "
-                                "18446744073709551615 currently";
-                return false;
-            }
-            origin_value = base_datum.get_int16();
-            break;
-        case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
-            origin_value = base_datum.get_uint16();
-            break;
-        case OLAP_FIELD_TYPE_INT:
-            if (base_datum.get_int32() < 0) {
-                LOG(WARNING) << "The input: " << base_datum.get_uint32()
-                             << " is not valid, to_bitmap only support bigint value from 0 to "
-                                "18446744073709551615 currently";
-                return false;
-            }
-            origin_value = base_datum.get_int32();
-            break;
-        case OLAP_FIELD_TYPE_UNSIGNED_INT:
-            origin_value = base_datum.get_uint32();
-            break;
-        case OLAP_FIELD_TYPE_BIGINT:
-            if (base_datum.get_int64() < 0) {
-                LOG(WARNING) << "The input: " << base_datum.get_uint64()
-                             << " is not valid, to_bitmap only support bigint value from 0 to "
-                                "18446744073709551615 currently";
-                return false;
-            }
-            origin_value = base_datum.get_int64();
-            break;
-        case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-            origin_value = base_datum.get_uint64();
-            break;
-        default:
-            LOG(WARNING) << "the column type which was altered from was unsupported."
-                         << " from_type=" << ref_column.type();
-            return false;
-        }
-        bitmap.add(origin_value);
-    } else {
-        dst_datum.set_null();
-        new_col->append_datum(dst_datum);
-        return true;
-    }
-    dst_datum.set_bitmap(&bitmap);
-    new_col->append_datum(dst_datum);
-    return true;
-}
-
-bool hll_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col,
-              int ref_field_idx) {
-    HyperLogLog hll;
-    if (!base_datum.is_null()) {
-        uint64_t hash_value;
-        switch (ref_column.type()) {
-        case OLAP_FIELD_TYPE_CHAR:
-        case OLAP_FIELD_TYPE_VARCHAR:
-        case OLAP_FIELD_TYPE_BOOL:
-        case OLAP_FIELD_TYPE_TINYINT:
-        case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
-        case OLAP_FIELD_TYPE_SMALLINT:
-        case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
-        case OLAP_FIELD_TYPE_INT:
-        case OLAP_FIELD_TYPE_UNSIGNED_INT:
-        case OLAP_FIELD_TYPE_BIGINT:
-        case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-        case OLAP_FIELD_TYPE_LARGEINT:
-        case OLAP_FIELD_TYPE_FLOAT:
-        case OLAP_FIELD_TYPE_DOUBLE:
-        case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
-        case OLAP_FIELD_TYPE_DATE:
-        case OLAP_FIELD_TYPE_DATETIME:
-        case OLAP_FIELD_TYPE_DATE_V2:
-        case OLAP_FIELD_TYPE_TIMESTAMP: {
-            Field f = ChunkHelper::convert_field_to_format_v2(ref_field_idx, ref_column);
-            std::string ref_column_string = datum_to_string(f.type().get(), base_datum);
-            hash_value = HashUtil::murmur_hash64A(ref_column_string.c_str(), ref_column_string.length(),
-                                                  HashUtil::MURMUR_SEED);
-            break;
-        }
-        default:
-            LOG(WARNING) << "fail to hll hash type : " << ref_column.type();
-            return false;
-        }
-
-        hll.update(hash_value);
-    } else {
-        dst_datum.set_null();
-        new_col->append_datum(dst_datum);
-        return true;
-    }
-    dst_datum.set_hyperloglog(&hll);
-    new_col->append_datum(dst_datum);
-    return true;
-}
-
-bool count_field(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col,
-                 int ref_field_idx) {
-    int64_t count = base_datum.is_null() ? 0 : 1;
-    dst_datum.set_int64(count);
-    new_col->append_datum(dst_datum);
-    return true;
-}
-
-bool percentile_hash(Datum& base_datum, Datum& dst_datum, const TabletColumn& ref_column, ColumnPtr new_col,
-                     int ref_field_idx) {
-    PercentileValue percentile;
-    if (!base_datum.is_null()) {
-        double origin_value;
-        switch (ref_column.type()) {
-        case OLAP_FIELD_TYPE_TINYINT:
-            origin_value = base_datum.get_int8();
-            break;
-        case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
-            origin_value = base_datum.get_uint8();
-            break;
-        case OLAP_FIELD_TYPE_SMALLINT:
-            origin_value = base_datum.get_int16();
-            break;
-        case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
-            origin_value = base_datum.get_uint16();
-            break;
-        case OLAP_FIELD_TYPE_INT:
-            origin_value = base_datum.get_int32();
-            break;
-        case OLAP_FIELD_TYPE_UNSIGNED_INT:
-            origin_value = base_datum.get_uint32();
-            break;
-        case OLAP_FIELD_TYPE_BIGINT:
-            origin_value = base_datum.get_int64();
-            break;
-        case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-            origin_value = base_datum.get_uint64();
-            break;
-        case OLAP_FIELD_TYPE_LARGEINT:
-            origin_value = base_datum.get_int128();
-            break;
-        case OLAP_FIELD_TYPE_FLOAT:
-            origin_value = base_datum.get_float();
-            break;
-        case OLAP_FIELD_TYPE_DOUBLE:
-            origin_value = base_datum.get_double();
-            break;
-        case OLAP_FIELD_TYPE_DECIMAL_V2: {
-            auto v = base_datum.get_decimal();
-            origin_value = (double)v;
-            break;
-        }
-        case OLAP_FIELD_TYPE_DECIMAL32: {
-            auto v = base_datum.get_int32();
-            auto scale_factor = get_scale_factor<int32_t>(ref_column.scale());
-            DecimalV3Cast::to_float<int32_t, double>(v, scale_factor, &origin_value);
-            break;
-        }
-        case OLAP_FIELD_TYPE_DECIMAL64: {
-            auto v = base_datum.get_int64();
-            auto scale_factor = get_scale_factor<int64_t>(ref_column.scale());
-            DecimalV3Cast::to_float<int64_t, double>(v, scale_factor, &origin_value);
-            break;
-        }
-        case OLAP_FIELD_TYPE_DECIMAL128: {
-            auto v = base_datum.get_int128();
-            auto scale_factor = get_scale_factor<int128_t>(ref_column.scale());
-            DecimalV3Cast::to_float<int128_t, double>(v, scale_factor, &origin_value);
-            break;
-        }
-        default:
-            LOG(WARNING) << "the column type which was altered from was unsupported."
-                         << " from_type=" << ref_column.type();
-            return false;
-        }
-        percentile.add(origin_value);
-    } else {
-        dst_datum.set_null();
-        new_col->append_datum(dst_datum);
-        return true;
-    }
-    dst_datum.set_percentile(&percentile);
-    new_col->append_datum(dst_datum);
-    return true;
-}
 
 bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, TabletSharedPtr& base_tablet,
                                 TabletSharedPtr& new_tablet, MemPool* mem_pool) {
@@ -480,17 +289,20 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
 
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
         int ref_column = _schema_mapping[i].ref_column;
+        FieldType ref_type = base_tablet->tablet_meta()->tablet_schema().column(ref_column).type();
+        FieldType new_type = new_tablet->tablet_meta()->tablet_schema().column(i).type();
+
         if (_schema_mapping[i].ref_column >= 0) {
             if (!_schema_mapping[i].materialized_function.empty()) {
-                bool (*_do_materialized_transform)(Datum&, Datum&, const TabletColumn&, ColumnPtr, int);
+                const MaterializeTypeConverter* converter = nullptr;
                 if (_schema_mapping[i].materialized_function == "to_bitmap") {
-                    _do_materialized_transform = to_bitmap;
+                    converter = vectorized::get_materialized_converter(ref_type, OLAP_MATERIALIZE_TYPE_BITMAP);
                 } else if (_schema_mapping[i].materialized_function == "hll_hash") {
-                    _do_materialized_transform = hll_hash;
+                    converter = vectorized::get_materialized_converter(ref_type, OLAP_MATERIALIZE_TYPE_HLL);
                 } else if (_schema_mapping[i].materialized_function == "count_field") {
-                    _do_materialized_transform = count_field;
+                    converter = vectorized::get_materialized_converter(ref_type, OLAP_MATERIALIZE_TYPE_COUNT);
                 } else if (_schema_mapping[i].materialized_function == "percentile_hash") {
-                    _do_materialized_transform = percentile_hash;
+                    converter = vectorized::get_materialized_converter(ref_type, OLAP_MATERIALIZE_TYPE_PERCENTILE);
                 } else {
                     LOG(WARNING) << "error materialized view function : " << _schema_mapping[i].materialized_function;
                     return false;
@@ -498,24 +310,23 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
                 VLOG(3) << "_schema_mapping[" << i
                         << "].materialized_function : " << _schema_mapping[i].materialized_function;
 
+                if (converter == nullptr) {
+                    LOG(WARNING) << "error materialized view function : " << _schema_mapping[i].materialized_function;
+                    return false;
+                }
                 ColumnPtr& base_col = base_chunk->get_column_by_index(ref_column);
                 ColumnPtr& new_col = new_chunk->get_column_by_index(i);
-
-                for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
-                    Datum base_datum = base_col->get(row_index);
-                    Datum dst_datum;
-
-                    if (!_do_materialized_transform(base_datum, dst_datum,
-                                                    base_tablet->tablet_meta()->tablet_schema().column(ref_column),
-                                                    new_col, _schema_mapping[i].ref_column)) {
-                        return false;
-                    }
+                Field f = ChunkHelper::convert_field_to_format_v2(
+                        ref_column, base_tablet->tablet_meta()->tablet_schema().column(ref_column));
+                Status st =
+                        converter->convert_materialized(base_col, new_col, f.type().get(),
+                                                        base_tablet->tablet_meta()->tablet_schema().column(ref_column));
+                if (!st.ok()) {
+                    return false;
                 }
                 continue;
             }
 
-            FieldType ref_type = base_tablet->tablet_meta()->tablet_schema().column(ref_column).type();
-            FieldType new_type = new_tablet->tablet_meta()->tablet_schema().column(i).type();
             int reftype_precision = base_tablet->tablet_meta()->tablet_schema().column(ref_column).precision();
             int reftype_scale = base_tablet->tablet_meta()->tablet_schema().column(ref_column).scale();
             int newtype_precision = new_tablet->tablet_meta()->tablet_schema().column(i).precision();
@@ -550,6 +361,11 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
                     new_col = base_col;
                 }
             } else if (ConvertTypeResolver::instance()->get_convert_type_info(ref_type, new_type)) {
+                auto converter = vectorized::get_type_converter(ref_type, new_type);
+                if (converter == nullptr) {
+                    LOG(WARNING) << "failed to get type converter, from_type=" << ref_type << ", to_type" << new_type;
+                    return false;
+                }
                 for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
                     Datum base_datum = base_col->get(row_index);
                     Field f = ChunkHelper::convert_field_to_format_v2(
@@ -557,34 +373,13 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
                     Field f2 = ChunkHelper::convert_field_to_format_v2(
                             i, new_tablet->tablet_meta()->tablet_schema().column(i));
                     Datum new_datum;
-                    Status st = convert_datum(f.type().get(), base_datum, f2.type().get(), new_datum);
+                    Status st =
+                            converter->convert_datum(f.type().get(), base_datum, f2.type().get(), new_datum, mem_pool);
                     if (!st.ok()) {
                         LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
                                      << field_type_to_string(new_type);
                         return false;
                     }
-                    new_col->append_datum(new_datum);
-                }
-                // TODO check
-            } else if (is_decimalv3_field_type(ref_type) && is_decimalv3_field_type(new_type)) {
-                TabletColumn new_column = new_tablet->tablet_meta()->tablet_schema().column(i);
-                Field new_field = ChunkHelper::convert_field_to_format_v2(i, new_column);
-
-                TabletColumn base_column = base_tablet->tablet_meta()->tablet_schema().column(ref_column);
-                Field base_field = ChunkHelper::convert_field_to_format_v2(ref_column, base_column);
-                for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
-                    Datum base_datum = base_col->get(row_index);
-                    Datum new_datum;
-                    if (base_datum.is_null()) {
-                        new_datum.set_null();
-                    } else {
-                        if (new_field.type()->convert_from(new_datum, base_datum, base_field.type()) != OLAP_SUCCESS) {
-                            LOG(WARNING) << "failed to convert " << field_type_to_string(ref_type) << " to "
-                                         << field_type_to_string(new_type);
-                            return false;
-                        }
-                    }
-
                     new_col->append_datum(new_datum);
                 }
             } else {
@@ -891,23 +686,20 @@ bool SchemaChangeDirectly::process(vectorized::Reader* reader, RowsetWriter* new
         if (!status.ok()) {
             LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
             if (!status.is_end_of_file()) {
-                result = false;
-                goto DIRECTLY_PROCESS_ERR;
+                return false;
             } else {
                 break;
             }
         }
         if (!_chunk_changer.change_chunk(base_chunk, new_chunk, base_tablet, new_tablet, mem_pool.get())) {
             LOG(WARNING) << "failed to change data in chunk";
-            result = false;
-            goto DIRECTLY_PROCESS_ERR;
+            return false;
         }
 
         OLAPStatus olap_st = new_rowset_writer->add_chunk(*new_chunk);
         if (olap_st != OLAP_SUCCESS) {
             LOG(WARNING) << "failed to write chunk";
-            result = false;
-            goto DIRECTLY_PROCESS_ERR;
+            return false;
         }
 
         new_chunk->reset();
@@ -918,15 +710,13 @@ bool SchemaChangeDirectly::process(vectorized::Reader* reader, RowsetWriter* new
     if (base_chunk->num_rows() != 0) {
         if (!_chunk_changer.change_chunk(base_chunk, new_chunk, base_tablet, new_tablet, mem_pool.get())) {
             LOG(WARNING) << "failed to change data in chunk";
-            result = false;
-            goto DIRECTLY_PROCESS_ERR;
+            return false;
         }
 
         OLAPStatus olap_st = new_rowset_writer->add_chunk(*new_chunk);
         if (olap_st != OLAP_SUCCESS) {
             LOG(WARNING) << "failed to write chunk";
-            result = false;
-            goto DIRECTLY_PROCESS_ERR;
+            return false;
         }
     }
 
@@ -935,9 +725,6 @@ bool SchemaChangeDirectly::process(vectorized::Reader* reader, RowsetWriter* new
         result = false;
     }
 
-DIRECTLY_PROCESS_ERR:
-
-    mem_pool->clear();
     return result;
 }
 
@@ -972,6 +759,11 @@ bool SchemaChangeWithSorting::process(vectorized::Reader* reader, RowsetWriter* 
     std::unique_ptr<MemTracker> mem_tracker(new MemTracker(-1));
     std::unique_ptr<MemPool> mem_pool(new MemPool(mem_tracker.get()));
 
+    DeferOp release_chunkarr([this, &chunk_arr] {
+        for (auto& it : chunk_arr) {
+            this->_chunk_allocator->release(it, it->num_rows());
+        }
+    });
     while (true) {
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
         ChunkPtr new_chunk = nullptr;
@@ -979,8 +771,7 @@ bool SchemaChangeWithSorting::process(vectorized::Reader* reader, RowsetWriter* 
         if (!status.ok()) {
             LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
             if (!status.is_end_of_file()) {
-                result = false;
-                goto SORTING_PROCESS_ERR;
+                return false;
             } else if (base_chunk->num_rows() <= 0) {
                 break;
             }
@@ -996,8 +787,7 @@ bool SchemaChangeWithSorting::process(vectorized::Reader* reader, RowsetWriter* 
 
             if (!_internal_sorting(chunk_arr, new_rowset_writer, new_tablet)) {
                 LOG(WARNING) << "failed to sorting internally.";
-                result = false;
-                goto SORTING_PROCESS_ERR;
+                return false;
             }
 
             for (vector<ChunkPtr>::iterator it = chunk_arr.begin(); it != chunk_arr.end(); ++it) {
@@ -1009,23 +799,20 @@ bool SchemaChangeWithSorting::process(vectorized::Reader* reader, RowsetWriter* 
 
         if (!_chunk_allocator->allocate(new_chunk, base_chunk->num_rows(), new_schema).ok()) {
             LOG(WARNING) << "failed to allocate chunk";
-            result = false;
-            goto SORTING_PROCESS_ERR;
+            return false;
         }
 
         if (!_chunk_changer.change_chunk(base_chunk, new_chunk, base_tablet, new_tablet, mem_pool.get())) {
             _chunk_allocator->release(new_chunk, base_chunk->num_rows());
             LOG(WARNING) << "failed to change data in chunk";
-            result = false;
-            goto SORTING_PROCESS_ERR;
+            return false;
         }
 
         if (new_chunk->num_rows() > 0) {
             if (!chunk_sorter.sort(new_chunk, new_tablet)) {
                 _chunk_allocator->release(new_chunk, base_chunk->num_rows());
                 LOG(WARNING) << "failed to sort chunk.";
-                result = false;
-                goto SORTING_PROCESS_ERR;
+                return false;
             }
         }
 
@@ -1036,24 +823,15 @@ bool SchemaChangeWithSorting::process(vectorized::Reader* reader, RowsetWriter* 
     if (!chunk_arr.empty()) {
         if (!_internal_sorting(chunk_arr, new_rowset_writer, new_tablet)) {
             LOG(WARNING) << "failed to sorting internally.";
-            result = false;
-            goto SORTING_PROCESS_ERR;
+            return false;
         }
     }
 
     if (OLAP_SUCCESS != new_rowset_writer->flush()) {
         LOG(WARNING) << "failed to flush rowset writer";
         result = false;
-        goto SORTING_PROCESS_ERR;
     }
 
-SORTING_PROCESS_ERR:
-    mem_pool->clear();
-    //delete mem_pool;
-
-    for (auto& it : chunk_arr) {
-        _chunk_allocator->release(it, it->num_rows());
-    }
     return result;
 }
 
@@ -1095,9 +873,9 @@ OLAPStatus SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2&
     }
 
     OLAPStatus res = _do_process_alter_tablet_v2(request);
+    StorageEngine::instance()->tablet_manager()->release_schema_change_lock(request.base_tablet_id);
     LOG(INFO) << "finished alter tablet process, res=" << res << " duration: " << timer.elapsed_time() / 1000000
               << "ms";
-    StorageEngine::instance()->tablet_manager()->release_schema_change_lock(request.base_tablet_id);
     return res;
 }
 
@@ -1359,9 +1137,14 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
     // a. parse Alter request
     Status status = _parse_request(sc_params.base_tablet, sc_params.new_tablet, &chunk_changer, &sc_sorting,
                                    &sc_directly, sc_params.materialized_params_map);
+
+    DeferOp save_meta([&sc_params] {
+        std::unique_lock new_wlock(sc_params.new_tablet->get_header_lock());
+        sc_params.new_tablet->save_meta();
+    });
     if (!status.ok()) {
         LOG(WARNING) << "failed to parse the request. res=" << status.get_error_msg();
-        goto PROCESS_ALTER_EXIT;
+        return status;
     }
 
     if (sc_sorting) {
@@ -1381,8 +1164,14 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         LOG(WARNING) << "failed to malloc SchemaChange. "
                      << "malloc_size=" << sizeof(SchemaChangeWithSorting);
         status = Status::InternalError("failed to malloc SchemaChange");
-        goto PROCESS_ALTER_EXIT;
+        return status;
     }
+
+    DeferOp delete_procedure([&sc_procedure] {
+        if (sc_procedure != nullptr) {
+            delete (sc_procedure);
+        }
+    });
 
     for (int i = 0; i < sc_params.rowset_readers.size(); ++i) {
         LOG(INFO) << "begin to convert a history rowset. version=" << sc_params.rowsets_to_change[i]->version().first
@@ -1416,7 +1205,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         if (st != OLAP_SUCCESS) {
             status = Status::InternalError("build rowset writer failed");
             LOG(INFO) << "build rowset writer failed";
-            goto PROCESS_ALTER_EXIT;
+            return status;
         }
 
         if (!sc_procedure->process(sc_params.rowset_readers[i], rowset_writer.get(), new_tablet, base_tablet,
@@ -1424,7 +1213,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             LOG(WARNING) << "failed to process the version."
                          << " version=" << sc_params.version.first << "-" << sc_params.version.second;
             status = Status::InternalError("process failed");
-            goto PROCESS_ALTER_EXIT;
+            return status;
         }
         // Add the new version of the data to the header,
         // To prevent deadlocks, be sure to lock the old table first and then the new one
@@ -1433,7 +1222,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         if (new_rowset == nullptr) {
             LOG(WARNING) << "failed to build rowset, exit alter process";
             sc_params.new_tablet->release_push_lock();
-            goto PROCESS_ALTER_EXIT;
+            break;
         }
         LOG(INFO) << "new rowset has " << new_rowset->num_segments() << " segments";
         OLAPStatus res = sc_params.new_tablet->add_rowset(new_rowset, false);
@@ -1449,7 +1238,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
                          << "-" << sc_params.version.second;
             StorageEngine::instance()->add_unused_rowset(new_rowset);
             sc_params.new_tablet->release_push_lock();
-            goto PROCESS_ALTER_EXIT;
+            break;
         } else {
             VLOG(3) << "register new version. tablet=" << sc_params.new_tablet->full_name()
                     << ", version=" << sc_params.version.first << "-" << sc_params.version.second;
@@ -1462,16 +1251,10 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         // because the new Delta has to be converted to the old and new Schema versions
     }
 
-PROCESS_ALTER_EXIT : {
-    // save tablet meta here because rowset meta is not saved during add rowset
-    std::unique_lock new_wlock(sc_params.new_tablet->get_header_lock());
-    sc_params.new_tablet->save_meta();
-}
     OLAPStatus res = OLAP_SUCCESS;
     if (status.ok()) {
         res = sc_params.new_tablet->check_version_integrity(sc_params.version);
     }
-    SAFE_DELETE(sc_procedure);
 
     LOG(INFO) << "finish converting rowsets for new_tablet from base_tablet. "
               << "base_tablet=" << sc_params.base_tablet->full_name()

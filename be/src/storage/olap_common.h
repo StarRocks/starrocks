@@ -101,6 +101,14 @@ enum RangeCondition {
     LE = 3, // less or equal
 };
 
+enum MaterializeType {
+    OLAP_MATERIALIZE_TYPE_UNKNOWN = 0,
+    OLAP_MATERIALIZE_TYPE_PERCENTILE = 1,
+    OLAP_MATERIALIZE_TYPE_HLL = 2,
+    OLAP_MATERIALIZE_TYPE_BITMAP = 3,
+    OLAP_MATERIALIZE_TYPE_COUNT = 4
+};
+
 enum FieldType {
     OLAP_FIELD_TYPE_UNKNOWN = 0, // UNKNOW Type
     OLAP_FIELD_TYPE_TINYINT = 1, // MYSQL_TYPE_TINY
