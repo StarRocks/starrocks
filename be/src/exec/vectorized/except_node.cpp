@@ -78,7 +78,7 @@ Status ExceptNode::open(RuntimeState* state) {
     // initial build hash table used for remove duplicted
     _hash_set = std::make_unique<HashSerializeSet>();
 
-    ChunkPtr chunk = nullptr;
+    ChunkPtr chunk;
     RETURN_IF_ERROR(child(0)->open(state));
     bool eos = false;
 

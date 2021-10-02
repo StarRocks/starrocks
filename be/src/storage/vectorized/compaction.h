@@ -68,7 +68,7 @@ protected:
     static Semaphore _concurrency_sem;
 
 protected:
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _mem_tracker;
     TabletSharedPtr _tablet;
 
     std::vector<RowsetSharedPtr> _input_rowsets;

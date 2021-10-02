@@ -44,7 +44,7 @@ private:
     std::vector<ExprContext*> _output_expr_ctxs;
     std::shared_ptr<BufferControlBlock> _sender;
     std::shared_ptr<ResultWriter> _writer;
-    std::unique_ptr<RuntimeProfile> _profile = nullptr;
+    std::unique_ptr<RuntimeProfile> _profile;
     mutable TFetchDataResultPtr _fetch_data_result;
     mutable Status _last_error;
     bool _is_finished = false;

@@ -38,7 +38,7 @@ Status AssertNumRowsNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
 
     assert(_children.size() == 1);
-    ChunkPtr chunk = nullptr;
+    ChunkPtr chunk;
     bool eos = false;
     RETURN_IF_ERROR(child(0)->open(state));
     while (true) {

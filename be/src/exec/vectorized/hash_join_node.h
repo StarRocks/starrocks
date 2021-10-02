@@ -85,9 +85,9 @@ private:
 
     JoinHashTable _ht;
 
-    ChunkPtr _cur_left_input_chunk = nullptr;
-    ChunkPtr _pre_left_input_chunk = nullptr;
-    ChunkPtr _probing_chunk = nullptr;
+    ChunkPtr _cur_left_input_chunk;
+    ChunkPtr _pre_left_input_chunk;
+    ChunkPtr _probing_chunk;
 
     Columns _key_columns;
     size_t _probe_column_count = 0;

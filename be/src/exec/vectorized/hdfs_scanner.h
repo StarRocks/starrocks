@@ -51,7 +51,7 @@ struct HdfsScannerParams {
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
     // file fd (local file or hdfs file)
-    std::shared_ptr<RandomAccessFile> fs = nullptr;
+    std::shared_ptr<RandomAccessFile> fs;
 
     const TupleDescriptor* tuple_desc;
 
@@ -186,7 +186,7 @@ public:
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
 
 private:
-    std::shared_ptr<parquet::FileReader> _reader = nullptr;
+    std::shared_ptr<parquet::FileReader> _reader;
 };
 
 } // namespace starrocks::vectorized

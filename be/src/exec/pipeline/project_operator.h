@@ -47,7 +47,7 @@ private:
     const std::vector<ExprContext*>& _common_sub_expr_ctxs;
 
     bool _is_finished = false;
-    vectorized::ChunkPtr _cur_chunk = nullptr;
+    vectorized::ChunkPtr _cur_chunk;
 };
 
 class ProjectOperatorFactory final : public OperatorFactory {

@@ -32,7 +32,7 @@ vectorized::Schema ChunkHelper::convert_schema(const starrocks::TabletSchema& sc
 starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id, const TabletColumn& c) {
     FieldType type = TypeUtils::to_storage_format_v2(c.type());
 
-    TypeInfoPtr type_info = nullptr;
+    TypeInfoPtr type_info;
     if (type == OLAP_FIELD_TYPE_ARRAY || type == OLAP_FIELD_TYPE_DECIMAL32 || type == OLAP_FIELD_TYPE_DECIMAL64 ||
         type == OLAP_FIELD_TYPE_DECIMAL128) {
         // ARRAY and DECIMAL should be handled specially
