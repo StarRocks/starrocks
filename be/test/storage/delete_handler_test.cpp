@@ -429,7 +429,6 @@ protected:
 
 TEST_F(TestDeleteConditionHandler2, ValidConditionValue) {
     OLAPStatus res;
-    DeleteConditionHandler cond_handler;
     std::vector<TCondition> conditions;
 
     // k1,k2,k3,k4 type is int8, int16, int32, int64
@@ -543,7 +542,6 @@ TEST_F(TestDeleteConditionHandler2, ValidConditionValue) {
 
 TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
     OLAPStatus res;
-    DeleteConditionHandler cond_handler;
     std::vector<TCondition> conditions;
 
     // Test k1 max, k1 type is int8
@@ -767,7 +765,6 @@ protected:
 TEST_F(TestDeleteHandler, InitSuccess) {
     OLAPStatus res;
     std::vector<TCondition> conditions;
-    DeleteConditionHandler delete_condition_handler;
 
     // add delete condition in FileHeader
     TCondition condition;
@@ -849,7 +846,6 @@ TEST_F(TestDeleteHandler, InitSuccess) {
 // That is, the data will be filtered only if all the subconditions contained in a filter condition are satisfied
 TEST_F(TestDeleteHandler, FilterDataSubconditions) {
     OLAPStatus res;
-    DeleteConditionHandler cond_handler;
     std::vector<TCondition> conditions;
 
     TCondition condition;
@@ -905,7 +901,6 @@ TEST_F(TestDeleteHandler, FilterDataSubconditions) {
 // Test that multiple filter conditions are or related to each other
 TEST_F(TestDeleteHandler, FilterDataConditions) {
     OLAPStatus res;
-    DeleteConditionHandler cond_handler;
     std::vector<TCondition> conditions;
 
     TCondition condition;
@@ -979,7 +974,6 @@ TEST_F(TestDeleteHandler, FilterDataConditions) {
 // Test that filter conditions with version numbers less than the data version will not work when filtering
 TEST_F(TestDeleteHandler, FilterDataVersion) {
     OLAPStatus res;
-    DeleteConditionHandler cond_handler;
     std::vector<TCondition> conditions;
 
     TCondition condition;
