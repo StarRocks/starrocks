@@ -30,7 +30,7 @@ private:
     const TPlanNode _tnode;
     // Tuple descriptor for storing results of analytic fn evaluation.
     const TupleDescriptor* _result_tuple_desc;
-    AnalytorPtr _analytor = nullptr;
+    AnalytorPtr _analytor;
 
     Status _get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);
     Status _get_next_for_unbounded_preceding_range_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos);

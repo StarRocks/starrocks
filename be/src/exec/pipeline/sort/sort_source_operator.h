@@ -40,7 +40,7 @@ private:
     std::shared_ptr<vectorized::ChunksSorter> _chunks_sorter;
 
     bool _is_finished = false;
-    vectorized::ChunkPtr _full_chunk = nullptr;
+    vectorized::ChunkPtr _full_chunk;
 
     std::atomic<bool> _is_source_complete = false;
 };

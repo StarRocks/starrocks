@@ -145,7 +145,7 @@ Status HashJoinNode::open(RuntimeState* state) {
     }
 
     while (true) {
-        ChunkPtr chunk = nullptr;
+        ChunkPtr chunk;
         bool eos = false;
         {
             RETURN_IF_CANCELLED(state);

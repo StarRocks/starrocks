@@ -150,7 +150,7 @@ Status UnionNode::close(RuntimeState* state) {
 
 Status UnionNode::_get_next_passthrough(RuntimeState* state, ChunkPtr* chunk) {
     (*chunk) = std::make_shared<Chunk>();
-    ChunkPtr tmp_chunk = nullptr;
+    ChunkPtr tmp_chunk;
 
     if (_child_eos) {
         RETURN_IF_ERROR(child(_child_idx)->open(state));
@@ -178,7 +178,7 @@ Status UnionNode::_get_next_passthrough(RuntimeState* state, ChunkPtr* chunk) {
 
 Status UnionNode::_get_next_materialize(RuntimeState* state, ChunkPtr* chunk) {
     (*chunk) = std::make_shared<Chunk>();
-    ChunkPtr tmp_chunk = nullptr;
+    ChunkPtr tmp_chunk;
     if (_child_eos) {
         RETURN_IF_ERROR(child(_child_idx)->open(state));
         _child_eos = false;

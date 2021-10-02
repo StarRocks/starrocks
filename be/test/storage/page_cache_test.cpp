@@ -33,7 +33,7 @@ public:
     virtual ~StoragePageCacheTest() {}
 
 private:
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _mem_tracker;
 };
 
 // NOLINTNEXTLINE

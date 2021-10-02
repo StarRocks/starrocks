@@ -145,8 +145,8 @@ protected:
 
     EnvMemory* _env = nullptr;
     fs::FileBlockManager* _block_mgr = nullptr;
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
-    std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<MemTracker> _page_cache_mem_tracker;
 };
 
 TEST_F(SegmentReaderWriterTest, normal) {

@@ -77,7 +77,7 @@ private:
     //   If `CASE` equals `WHEN`, return `THEN`
     //   If `CASE` can't match ANY `WHEN`, return NULL
     ColumnPtr evaluate_case(ExprContext* context, vectorized::Chunk* chunk) {
-        ColumnPtr else_column = nullptr;
+        ColumnPtr else_column;
         if (!_has_else_expr) {
             else_column = ColumnHelper::create_const_null_column(chunk != nullptr ? chunk->num_rows() : 1);
         } else {
@@ -189,7 +189,7 @@ private:
     //  If all `WHEN` is null/false, return NULL
     //  If `WHEN` is not null and true, return `THEN`
     ColumnPtr evaluate_no_case(ExprContext* context, vectorized::Chunk* chunk) {
-        ColumnPtr else_column = nullptr;
+        ColumnPtr else_column;
         if (!_has_else_expr) {
             else_column = ColumnHelper::create_const_null_column(chunk != nullptr ? chunk->num_rows() : 1);
         } else {

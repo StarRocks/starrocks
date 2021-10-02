@@ -82,7 +82,7 @@ public:
     }
 
 protected:
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _mem_tracker;
     DataDir* _data_dir;
     std::string _engine_data_path;
     int64_t _tablet_id;

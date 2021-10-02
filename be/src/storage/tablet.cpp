@@ -311,7 +311,7 @@ const RowsetSharedPtr Tablet::rowset_with_max_version() const {
 }
 
 RowsetSharedPtr Tablet::_rowset_with_largest_size() {
-    RowsetSharedPtr largest_rowset = nullptr;
+    RowsetSharedPtr largest_rowset;
     for (auto& it : _rs_version_map) {
         if (it.second->empty() || it.second->zero_num_rows()) {
             continue;
