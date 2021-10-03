@@ -210,7 +210,7 @@ TEST_F(RepeatNodeTest, repeat_node_test) {
 
     int rows = 0;
     bool eos = false;
-    ChunkPtr result_chunk;
+    ChunkPtr result_chunk = nullptr;
 
     /*
     +------+------+

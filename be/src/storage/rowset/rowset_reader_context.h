@@ -64,7 +64,7 @@ struct RowsetReaderContext {
     OlapReaderStatistics* stats = nullptr;
     RuntimeState* runtime_state = nullptr;
     bool use_page_cache = false;
-    vectorized::SchemaPtr schema;
+    vectorized::SchemaPtr schema = nullptr;
     int chunk_size = DEFAULT_CHUNK_SIZE;
 };
 

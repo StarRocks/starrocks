@@ -85,7 +85,7 @@ Status GroupReader::_init_column_readers() {
 }
 
 Status GroupReader::_create_column_reader(const GroupReaderParam::Column& column) {
-    std::unique_ptr<ColumnReader> column_reader;
+    std::unique_ptr<ColumnReader> column_reader = nullptr;
     const auto* schema_node = _file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
 
     ColumnReaderOptions opts;

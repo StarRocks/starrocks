@@ -222,7 +222,7 @@ public:
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
-    vectorized::ColumnPtr _buf_column;
+    vectorized::ColumnPtr _buf_column = nullptr;
 };
 
 Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn* column, fs::WritableBlock* _wblock,

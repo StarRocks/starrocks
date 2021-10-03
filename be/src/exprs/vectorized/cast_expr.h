@@ -38,8 +38,8 @@ public:
             return ColumnHelper::create_const_null_column(column->size());
         }
         ColumnPtr cast_column = column->clone_shared();
-        ArrayColumn::Ptr array_col;
-        NullableColumn::Ptr nullable_col;
+        ArrayColumn::Ptr array_col = nullptr;
+        NullableColumn::Ptr nullable_col = nullptr;
         ColumnPtr src_col = cast_column;
 
         if (src_col->is_nullable()) {

@@ -201,7 +201,7 @@ public:
     void clear_all_batches();
 
 private:
-    std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
     OlapTableSink* _parent = nullptr;
     int64_t _index_id = -1;
@@ -366,7 +366,7 @@ private:
     ObjectPool* _pool;
     const RowDescriptor& _input_row_desc;
 
-    std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
     // unique load id
     PUniqueId _load_id;

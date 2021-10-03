@@ -267,7 +267,7 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
 
     while (true) {
         bool cur_eos = false;
-        ChunkPtr cur_chunk;
+        ChunkPtr cur_chunk = nullptr;
 
         RETURN_IF_ERROR(specific_get_next(state, &cur_chunk, &cur_eos));
         if (cur_eos) {

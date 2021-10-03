@@ -106,8 +106,8 @@ private:
 
     // never adjust the order of _mem_tracker, _runtime_state, _plan, _pipelines and _drivers, since
     // _plan depends on _runtime_state and _drivers depends on _mem_tracker and _runtime_state.
-    std::unique_ptr<MemTracker> _mem_tracker;
-    std::shared_ptr<RuntimeState> _runtime_state;
+    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    std::shared_ptr<RuntimeState> _runtime_state = nullptr;
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     Pipelines _pipelines;
     Drivers _drivers;
