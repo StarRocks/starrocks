@@ -73,7 +73,7 @@ private:
     // NULL    NULL    NULL    NULL
     std::string _file_2_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet2";
     int64_t _file_2_size = 850;
-    std::shared_ptr<RowDescriptor> _row_desc;
+    std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     ObjectPool _pool;
 };
 

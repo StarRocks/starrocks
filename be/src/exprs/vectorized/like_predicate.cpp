@@ -269,7 +269,7 @@ ColumnPtr LikePredicate::constant_substring_fn(FunctionContext* context,
     }
 
     BinaryColumn* haystack = nullptr;
-    NullColumnPtr res_null;
+    NullColumnPtr res_null = nullptr;
     if (columns[0]->is_nullable()) {
         auto haystack_null = ColumnHelper::as_column<NullableColumn>(columns[0]);
         haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_null->data_column());

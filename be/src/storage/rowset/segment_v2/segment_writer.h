@@ -95,7 +95,7 @@ private:
     Status _write_raw_data(const std::vector<Slice>& slices);
     void _init_column_meta(ColumnMetaPB* meta, uint32_t* column_id, const TabletColumn& column);
 
-    std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     uint32_t _segment_id;
     const TabletSchema* _tablet_schema;
     SegmentWriterOptions _opts;

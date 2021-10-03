@@ -16,7 +16,7 @@ NullColumnPtr ColumnHelper::one_size_not_null_column = NullColumn::create(1, 0);
 
 NullColumnPtr ColumnHelper::one_size_null_column = NullColumn::create(1, 1);
 
-NullColumnPtr ColumnHelper::s_all_not_null_column;
+NullColumnPtr ColumnHelper::s_all_not_null_column = nullptr;
 
 void ColumnHelper::init_static_variable() {
     ColumnHelper::s_all_not_null_column = NullColumn::create(config::vector_chunk_size, 0);

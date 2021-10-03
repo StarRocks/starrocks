@@ -93,7 +93,7 @@ private:
     static StoragePageCache* _s_instance;
 
     MemTracker* _mem_tracker = nullptr;
-    std::unique_ptr<Cache> _cache;
+    std::unique_ptr<Cache> _cache = nullptr;
 };
 
 // A handle for StoragePageCache entry. This class make it easy to handle
