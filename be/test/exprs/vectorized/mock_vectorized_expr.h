@@ -167,7 +167,7 @@ public:
         if (only_null) {
             return ColumnHelper::create_const_null_column(1);
         }
-        ColumnPtr col;
+        ColumnPtr col = nullptr;
         if constexpr (pt_is_decimal<Type>) {
             col = RunTimeColumnType<Type>::create(this->type().precision, this->type().scale);
         } else {

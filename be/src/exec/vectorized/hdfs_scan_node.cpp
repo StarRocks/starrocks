@@ -266,7 +266,7 @@ void HdfsScanNode::_scanner_thread(HdfsScanner* scanner) {
     bool resubmit = false;
     int64_t raw_rows_threshold = scanner->raw_rows_read() + config::doris_scanner_row_num;
 
-    ChunkPtr chunk;
+    ChunkPtr chunk = nullptr;
 
     while (status.ok()) {
         {

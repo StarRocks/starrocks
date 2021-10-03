@@ -7,7 +7,9 @@
 
 namespace starrocks::vectorized {
 TableFunctionNode::TableFunctionNode(ObjectPool* pool, const TPlanNode& node, const DescriptorTbl& desc)
-        : ExecNode(pool, node, desc) {}
+        : ExecNode(pool, node, desc) {
+    _input_chunk_ptr = nullptr;
+}
 
 TableFunctionNode::~TableFunctionNode() = default;
 

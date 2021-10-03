@@ -283,7 +283,7 @@ protected:
     // allow subclass to add custom logic when rowset is being published
     virtual void make_visible_extra(Version version, VersionHash version_hash) {}
 
-    std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
     const TabletSchema* _schema;
     std::string _rowset_path;

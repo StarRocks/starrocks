@@ -83,7 +83,7 @@ private:
 
     ColumnId _id = 0;
     std::string _name;
-    TypeInfoPtr _type;
+    TypeInfoPtr _type = nullptr;
     starrocks::FieldAggregationMethod _agg_method = OLAP_FIELD_AGGREGATION_NONE;
     size_t _short_key_length = 0;
     bool _is_nullable = true;

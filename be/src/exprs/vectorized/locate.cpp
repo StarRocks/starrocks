@@ -32,8 +32,8 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
                                            const ColumnPtr& start_pos_ptr) {
     BinaryColumn* haystack = nullptr;
     FixedLengthColumn<int32_t>* start_pos = nullptr;
-    NullColumnPtr res_null;
-    ColumnPtr start_pos_expansion;
+    NullColumnPtr res_null = nullptr;
+    ColumnPtr start_pos_expansion = nullptr;
     if (start_pos_ptr->is_constant()) {
         // expand vector in start_pos_ptr to specfied size
         start_pos_expansion = RunTimeColumnType<TYPE_INT>::create();

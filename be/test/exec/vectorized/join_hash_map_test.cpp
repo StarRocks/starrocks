@@ -84,11 +84,11 @@ private:
     static ColumnPtr create_nullable_column(PrimitiveType PT, const Buffer<uint8_t>& nulls, uint32_t start,
                                             uint32_t count);
 
-    std::shared_ptr<ObjectPool> _object_pool;
-    std::shared_ptr<MemTracker> _mem_tracker;
-    std::shared_ptr<MemPool> _mem_pool;
-    std::shared_ptr<RuntimeProfile> _runtime_profile;
-    std::shared_ptr<RuntimeState> _runtime_state;
+    std::shared_ptr<ObjectPool> _object_pool = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
+    std::shared_ptr<MemPool> _mem_pool = nullptr;
+    std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
+    std::shared_ptr<RuntimeState> _runtime_state = nullptr;
 };
 
 ColumnPtr JoinHashMapTest::create_tuple_column(const Buffer<uint8_t>& data) {

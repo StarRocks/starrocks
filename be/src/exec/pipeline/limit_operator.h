@@ -27,7 +27,7 @@ public:
 
 private:
     int64_t _limit = 0;
-    vectorized::ChunkPtr _cur_chunk;
+    vectorized::ChunkPtr _cur_chunk = nullptr;
 };
 
 class LimitOperatorFactory final : public OperatorFactory {

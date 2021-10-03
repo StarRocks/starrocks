@@ -116,7 +116,7 @@ public:
     void reset_merged_rows() { _merged_rows = 0; }
 
 protected:
-    std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
 private:
     uint64_t _filtered_rows;

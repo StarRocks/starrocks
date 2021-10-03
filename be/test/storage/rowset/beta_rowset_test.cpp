@@ -207,9 +207,9 @@ protected:
     }
 
 private:
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
-    std::unique_ptr<MemTracker> _schema_change_mem_tracker;
-    std::unique_ptr<MemTracker> _page_cache_mem_tracker;
+    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _schema_change_mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
 };
 
 TEST_F(BetaRowsetTest, BasicFunctionTest) {

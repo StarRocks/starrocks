@@ -25,7 +25,7 @@ public:
 private:
     // It is used to perform analytic algorithms
     // shared by AnalyticSinkOperator
-    AnalytorPtr _analytor;
+    AnalytorPtr _analytor = nullptr;
     // Whether prev operator has no output
     bool _is_finished = false;
 };
@@ -42,6 +42,6 @@ public:
     }
 
 private:
-    AnalytorPtr _analytor;
+    AnalytorPtr _analytor = nullptr;
 };
 } // namespace starrocks::pipeline
