@@ -75,7 +75,7 @@ TabletManager::TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_sh
 Status TabletManager::_add_tablet_unlocked(TTabletId tablet_id, SchemaHash schema_hash, const TabletSharedPtr& tablet,
                                            bool update_meta, bool force) {
     Status res = Status::OK();
-    TabletSharedPtr existed_tablet;
+    TabletSharedPtr existed_tablet = nullptr;
     tablet_map_t& tablet_map = _get_tablet_map(tablet_id);
     for (const TabletSharedPtr& item : tablet_map[tablet_id].table_arr) {
         if (item->equal(tablet_id, schema_hash)) {
@@ -210,7 +210,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
         }
     }
 
-    TabletSharedPtr base_tablet;
+    TabletSharedPtr base_tablet = nullptr;
     bool is_schema_change = false;
     // If the CreateTabletReq has base_tablet_id then it is a alter-tablet request
     if (request.__isset.base_tablet_id && request.base_tablet_id > 0) {

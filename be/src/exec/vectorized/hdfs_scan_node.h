@@ -17,7 +17,7 @@ struct HdfsFileDesc {
     hdfsFS hdfs_fs;
     hdfsFile hdfs_file;
     THdfsFileFormat::type hdfs_file_format;
-    std::shared_ptr<RandomAccessFile> fs;
+    std::shared_ptr<RandomAccessFile> fs = nullptr;
 
     int partition_id = 0;
     std::string path;

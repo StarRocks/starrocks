@@ -46,10 +46,10 @@ private:
     void _init_chunk(ChunkPtr* chunk);
 
     // previsou saved chunk.
-    ChunkPtr _pre_output_chunk;
+    ChunkPtr _pre_output_chunk = nullptr;
     // used as right table's chunk.
     // _build_chunk include all rows of right table.
-    ChunkPtr _build_chunk;
+    ChunkPtr _build_chunk = nullptr;
     // total rows of right table.
     size_t _number_of_build_rows = 0;
     // total rows of right table by chunk_size.
@@ -61,7 +61,7 @@ private:
 
     // used as left table's chunk.
     // _probe_chunk about one chunk_size(maybe 4096) of left table.
-    ChunkPtr _probe_chunk;
+    ChunkPtr _probe_chunk = nullptr;
     // used when scan chunks in right table based on one row of left table.
     //  _probe_chunk_index is a local index in _probe_chunk.
     size_t _probe_chunk_index = 0;

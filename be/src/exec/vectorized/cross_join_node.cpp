@@ -452,7 +452,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
 
     while (true) {
         bool eos = false;
-        ChunkPtr chunk;
+        ChunkPtr chunk = nullptr;
         RETURN_IF_CANCELLED(state);
         build_timer.stop();
         RETURN_IF_ERROR(child(1)->get_next(state, &chunk, &eos));

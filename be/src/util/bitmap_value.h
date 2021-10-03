@@ -1728,7 +1728,7 @@ private:
         SET = 3
     };
     // Use shared_ptr, not unique_ptr, because we want to avoid unnecessary copy
-    std::shared_ptr<detail::Roaring64Map> _bitmap;
+    std::shared_ptr<detail::Roaring64Map> _bitmap = nullptr;
     phmap::flat_hash_set<uint64_t> _set;
     uint64_t _sv = 0; // store the single value when _type == SINGLE
     BitmapDataType _type{EMPTY};

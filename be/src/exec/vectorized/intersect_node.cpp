@@ -79,7 +79,7 @@ Status IntersectNode::open(RuntimeState* state) {
     // initial build hash table used for record hitting.
     _hash_set = std::make_unique<HashSerializeSet>();
 
-    ChunkPtr chunk;
+    ChunkPtr chunk = nullptr;
     RETURN_IF_ERROR(child(0)->open(state));
     bool eos = false;
 

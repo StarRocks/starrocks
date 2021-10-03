@@ -683,7 +683,7 @@ static inline ColumnPtr substr_not_const(FunctionContext* context, const starroc
     ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
     ColumnViewer<TYPE_INT> off_viewer(columns[1]);
 
-    ColumnPtr len_column;
+    ColumnPtr len_column = nullptr;
     // has length
     if (columns.size() > 2) {
         len_column = columns[2];
@@ -1431,7 +1431,7 @@ ColumnPtr StringFunctions::append_trailing_char_if_absent(FunctionContext* conte
         }
 
         BinaryColumn* src = nullptr;
-        ColumnPtr dst;
+        ColumnPtr dst = nullptr;
         BinaryColumn* binary_dst = nullptr;
         if (columns[0]->is_nullable()) {
             NullableColumn* src_null = ColumnHelper::as_raw_column<NullableColumn>(columns[0]);

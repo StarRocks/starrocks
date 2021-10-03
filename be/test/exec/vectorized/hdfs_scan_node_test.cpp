@@ -43,10 +43,10 @@ private:
     std::vector<TScanRangeParams> _create_scan_ranges_for_filter_partition();
     static vectorized::ChunkPtr _create_chunk();
 
-    std::shared_ptr<RuntimeState> _runtime_state;
+    std::shared_ptr<RuntimeState> _runtime_state = nullptr;
     HdfsTableDescriptor* _table_desc = nullptr;
     ObjectPool* _pool = nullptr;
-    std::shared_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     ExecEnv* _exec_env = nullptr;
     // num rows: 4
     std::string _file = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet1";

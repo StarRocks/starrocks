@@ -112,7 +112,7 @@ public:
 
 private:
     std::string _root_path;
-    unique_ptr<MemTracker> _root_mem_tracker;
+    unique_ptr<MemTracker> _root_mem_tracker = nullptr;
     unique_ptr<KVStore> _meta;
     unique_ptr<UpdateManager> _update_manager;
     TabletSharedPtr _tablet;
