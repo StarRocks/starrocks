@@ -32,9 +32,7 @@
 #include "storage/types.h"
 #include "util/unaligned_access.h"
 
-namespace starrocks {
-
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 struct ZoneMap {
     // min value of zone
@@ -272,5 +270,4 @@ Status ZoneMapIndexReader::load(fs::BlockManager* block_mgr, const std::string& 
     return Status::OK();
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

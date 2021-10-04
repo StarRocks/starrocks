@@ -31,8 +31,7 @@ Rowset::Rowset(MemTracker* mem_tracker, const TabletSchema* schema, std::string 
         : _schema(schema),
           _rowset_path(std::move(rowset_path)),
           _rowset_meta(std::move(rowset_meta)),
-          _refs_by_reader(0),
-          _rowset_state_machine(RowsetStateMachine()) {
+          _refs_by_reader(0) {
     _mem_tracker = std::make_unique<MemTracker>(-1, "", mem_tracker, true);
 }
 

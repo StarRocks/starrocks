@@ -116,7 +116,8 @@ private:
     int _max_queue_size;
     MonoDelta _idle_timeout;
 
-    DISALLOW_COPY_AND_ASSIGN(ThreadPoolBuilder);
+    ThreadPoolBuilder(const ThreadPoolBuilder&) = delete;
+    const ThreadPoolBuilder& operator=(const ThreadPoolBuilder&) = delete;
 };
 
 // Thread pool with a variable number of threads.
@@ -320,7 +321,8 @@ private:
     // ExecutionMode::CONCURRENT token used by the pool for tokenless submission.
     std::unique_ptr<ThreadPoolToken> _tokenless;
 
-    DISALLOW_COPY_AND_ASSIGN(ThreadPool);
+    ThreadPool(const ThreadPool&) = delete;
+    const ThreadPool& operator=(const ThreadPool&) = delete;
 };
 
 // Entry point for token-based task submission and blocking for a particular
@@ -429,7 +431,8 @@ private:
     // token.
     int _active_threads;
 
-    DISALLOW_COPY_AND_ASSIGN(ThreadPoolToken);
+    ThreadPoolToken(const ThreadPoolToken&) = delete;
+    const ThreadPoolToken& operator=(const ThreadPoolToken&) = delete;
 };
 
 } // namespace starrocks

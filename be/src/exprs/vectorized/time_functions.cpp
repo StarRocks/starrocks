@@ -7,8 +7,7 @@
 #include "runtime/runtime_state.h"
 #include "udf/udf_internal.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.
 static int day_to_first[8] = {0 /*never use*/, 6, 0, 1, 2, 3, 4, 5};
 
@@ -1653,6 +1652,4 @@ Status TimeFunctions::date_trunc_close(starrocks_udf::FunctionContext* context,
 #undef DEFINE_TIME_STRING_UNARY_FN
 #undef DEFINE_TIME_UNARY_FN_EXTEND
 
-} // namespace vectorized
-
-} // namespace starrocks
+} // namespace starrocks::vectorized

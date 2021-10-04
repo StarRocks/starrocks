@@ -34,8 +34,7 @@
 #include "storage/rowset/segment_v2/page_handle.h"
 #include "util/rle_encoding.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 namespace {
 class ByteIterator {
@@ -342,5 +341,4 @@ Status parse_page(std::unique_ptr<ParsedPage>* result, PageHandle handle, const 
     return Status::InternalError(strings::Substitute("Unknown page format version $0", version));
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

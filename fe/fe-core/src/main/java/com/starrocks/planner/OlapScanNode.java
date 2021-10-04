@@ -430,12 +430,7 @@ public class OlapScanNode extends ScanNode {
 
                 //for CBO
                 if (!collectedStat && replica.getRowCount() != -1) {
-                    if (!ConnectContext.get().getSessionVariable().isEnableNewPlanner()) {
-                        cardinality += replica.getRowCount();
-                        totalBytes += replica.getDataSize();
-                    } else {
-                        actualRows += replica.getRowCount();
-                    }
+                    actualRows += replica.getRowCount();
                     collectedStat = true;
                 }
                 scanBackendIds.add(backend.getId());

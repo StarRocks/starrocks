@@ -27,9 +27,7 @@
 #include "storage/fs/file_block_manager.h"
 #include "storage/storage_engine.h"
 
-namespace starrocks {
-namespace fs {
-namespace fs_util {
+namespace starrocks::fs::fs_util {
 
 BlockManager* block_manager() {
 #ifdef BE_TEST
@@ -46,6 +44,4 @@ BlockManager* block_mgr_for_ut() {
     return &block_mgr;
 }
 
-} // namespace fs_util
-} // namespace fs
-} // namespace starrocks
+} // namespace starrocks::fs::fs_util

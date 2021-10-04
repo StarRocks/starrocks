@@ -295,22 +295,22 @@ void StructColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint6
 
 void StructColumnWriter::flush(std::vector<proto::Stream>& streams) {
     ColumnWriter::flush(streams);
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->flush(streams);
+    for (auto& i : children) {
+        i->flush(streams);
     }
 }
 
 void StructColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
     ColumnWriter::writeIndex(streams);
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->writeIndex(streams);
+    for (const auto& i : children) {
+        i->writeIndex(streams);
     }
 }
 
 uint64_t StructColumnWriter::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        size += children[i]->getEstimatedSize();
+    for (const auto& i : children) {
+        size += i->getEstimatedSize();
     }
     return size;
 }
@@ -320,62 +320,62 @@ void StructColumnWriter::getColumnEncoding(std::vector<proto::ColumnEncoding>& e
     encoding.set_kind(proto::ColumnEncoding_Kind_DIRECT);
     encoding.set_dictionarysize(0);
     encodings.push_back(encoding);
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->getColumnEncoding(encodings);
+    for (const auto& i : children) {
+        i->getColumnEncoding(encodings);
     }
 }
 
 void StructColumnWriter::getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getStripeStatistics(stats);
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->getStripeStatistics(stats);
+    for (const auto& i : children) {
+        i->getStripeStatistics(stats);
     }
 }
 
 void StructColumnWriter::mergeStripeStatsIntoFileStats() {
     ColumnWriter::mergeStripeStatsIntoFileStats();
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->mergeStripeStatsIntoFileStats();
+    for (auto& i : children) {
+        i->mergeStripeStatsIntoFileStats();
     }
 }
 
 void StructColumnWriter::getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getFileStatistics(stats);
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->getFileStatistics(stats);
+    for (const auto& i : children) {
+        i->getFileStatistics(stats);
     }
 }
 
 void StructColumnWriter::mergeRowGroupStatsIntoStripeStats() {
     ColumnWriter::mergeRowGroupStatsIntoStripeStats();
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->mergeRowGroupStatsIntoStripeStats();
+    for (auto& i : children) {
+        i->mergeRowGroupStatsIntoStripeStats();
     }
 }
 
 void StructColumnWriter::createRowIndexEntry() {
     ColumnWriter::createRowIndexEntry();
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->createRowIndexEntry();
+    for (auto& i : children) {
+        i->createRowIndexEntry();
     }
 }
 
 void StructColumnWriter::reset() {
     ColumnWriter::reset();
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->reset();
+    for (auto& i : children) {
+        i->reset();
     }
 }
 
 void StructColumnWriter::writeDictionary() {
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->writeDictionary();
+    for (auto& i : children) {
+        i->writeDictionary();
     }
 }
 
@@ -854,9 +854,9 @@ size_t SortedStringDictionary::insert(const char* str, size_t len) {
 
 // write dictionary data & length to output buffer
 void SortedStringDictionary::flush(AppendOnlyBufferedStream* dataStream, RleEncoder* lengthEncoder) const {
-    for (auto it = dict.cbegin(); it != dict.cend(); ++it) {
-        dataStream->write(it->first.data, it->first.length);
-        lengthEncoder->write(static_cast<int64_t>(it->first.length));
+    for (const auto& it : dict) {
+        dataStream->write(it.first.data, it.first.length);
+        lengthEncoder->write(static_cast<int64_t>(it.first.length));
     }
 }
 
@@ -874,8 +874,8 @@ void SortedStringDictionary::reorder(std::vector<int64_t>& idxBuffer) const {
     // iterate the dictionary to get mapping from insertion order to value order
     std::vector<size_t> mapping(dict.size());
     size_t dictIdx = 0;
-    for (auto it = dict.cbegin(); it != dict.cend(); ++it) {
-        mapping[it->second] = dictIdx++;
+    for (const auto& it : dict) {
+        mapping[it.second] = dictIdx++;
     }
 
     // do the transformation
@@ -887,8 +887,8 @@ void SortedStringDictionary::reorder(std::vector<int64_t>& idxBuffer) const {
 // get dict entries in insertion order
 void SortedStringDictionary::getEntriesInInsertionOrder(std::vector<const DictEntry*>& entries) const {
     entries.resize(dict.size());
-    for (auto it = dict.cbegin(); it != dict.cend(); ++it) {
-        entries[it->second] = &(it->first);
+    for (const auto& it : dict) {
+        entries[it.second] = &(it.first);
     }
 }
 
@@ -1981,7 +1981,7 @@ void ListColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_
     }
 
     // unnecessary to deal with null as elements are packed together
-    if (child.get()) {
+    if (child) {
         child->add(*listBatch->elements, elemOffset, totalNumValues, nullptr);
     }
     lengthEncoder->add(offsets, numValues, notNull);
@@ -2016,21 +2016,21 @@ void ListColumnWriter::flush(std::vector<proto::Stream>& streams) {
     stream.set_length(lengthEncoder->flush());
     streams.push_back(stream);
 
-    if (child.get()) {
+    if (child) {
         child->flush(streams);
     }
 }
 
 void ListColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
     ColumnWriter::writeIndex(streams);
-    if (child.get()) {
+    if (child) {
         child->writeIndex(streams);
     }
 }
 
 uint64_t ListColumnWriter::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
-    if (child.get()) {
+    if (child) {
         size += lengthEncoder->getBufferSize();
         size += child->getEstimatedSize();
     }
@@ -2045,42 +2045,42 @@ void ListColumnWriter::getColumnEncoding(std::vector<proto::ColumnEncoding>& enc
         encoding.set_bloomencoding(BloomFilterVersion::UTF8);
     }
     encodings.push_back(encoding);
-    if (child.get()) {
+    if (child) {
         child->getColumnEncoding(encodings);
     }
 }
 
 void ListColumnWriter::getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getStripeStatistics(stats);
-    if (child.get()) {
+    if (child) {
         child->getStripeStatistics(stats);
     }
 }
 
 void ListColumnWriter::mergeStripeStatsIntoFileStats() {
     ColumnWriter::mergeStripeStatsIntoFileStats();
-    if (child.get()) {
+    if (child) {
         child->mergeStripeStatsIntoFileStats();
     }
 }
 
 void ListColumnWriter::getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getFileStatistics(stats);
-    if (child.get()) {
+    if (child) {
         child->getFileStatistics(stats);
     }
 }
 
 void ListColumnWriter::mergeRowGroupStatsIntoStripeStats() {
     ColumnWriter::mergeRowGroupStatsIntoStripeStats();
-    if (child.get()) {
+    if (child) {
         child->mergeRowGroupStatsIntoStripeStats();
     }
 }
 
 void ListColumnWriter::createRowIndexEntry() {
     ColumnWriter::createRowIndexEntry();
-    if (child.get()) {
+    if (child) {
         child->createRowIndexEntry();
     }
 }
@@ -2186,10 +2186,10 @@ void MapColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t
     lengthEncoder->add(offsets, numValues, notNull);
 
     // unnecessary to deal with null as keys and values are packed together
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->add(*mapBatch->keys, elemOffset, totalNumValues, nullptr);
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->add(*mapBatch->elements, elemOffset, totalNumValues, nullptr);
     }
 
@@ -2223,20 +2223,20 @@ void MapColumnWriter::flush(std::vector<proto::Stream>& streams) {
     stream.set_length(lengthEncoder->flush());
     streams.push_back(stream);
 
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->flush(streams);
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->flush(streams);
     }
 }
 
 void MapColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
     ColumnWriter::writeIndex(streams);
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->writeIndex(streams);
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->writeIndex(streams);
     }
 }
@@ -2244,10 +2244,10 @@ void MapColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
 uint64_t MapColumnWriter::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
     size += lengthEncoder->getBufferSize();
-    if (keyWriter.get()) {
+    if (keyWriter) {
         size += keyWriter->getEstimatedSize();
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         size += elemWriter->getEstimatedSize();
     }
     return size;
@@ -2261,60 +2261,60 @@ void MapColumnWriter::getColumnEncoding(std::vector<proto::ColumnEncoding>& enco
         encoding.set_bloomencoding(BloomFilterVersion::UTF8);
     }
     encodings.push_back(encoding);
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->getColumnEncoding(encodings);
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->getColumnEncoding(encodings);
     }
 }
 
 void MapColumnWriter::getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getStripeStatistics(stats);
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->getStripeStatistics(stats);
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->getStripeStatistics(stats);
     }
 }
 
 void MapColumnWriter::mergeStripeStatsIntoFileStats() {
     ColumnWriter::mergeStripeStatsIntoFileStats();
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->mergeStripeStatsIntoFileStats();
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->mergeStripeStatsIntoFileStats();
     }
 }
 
 void MapColumnWriter::getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getFileStatistics(stats);
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->getFileStatistics(stats);
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->getFileStatistics(stats);
     }
 }
 
 void MapColumnWriter::mergeRowGroupStatsIntoStripeStats() {
     ColumnWriter::mergeRowGroupStatsIntoStripeStats();
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->mergeRowGroupStatsIntoStripeStats();
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->mergeRowGroupStatsIntoStripeStats();
     }
 }
 
 void MapColumnWriter::createRowIndexEntry() {
     ColumnWriter::createRowIndexEntry();
-    if (keyWriter.get()) {
+    if (keyWriter) {
         keyWriter->createRowIndexEntry();
     }
-    if (elemWriter.get()) {
+    if (elemWriter) {
         elemWriter->createRowIndexEntry();
     }
 }
@@ -2454,23 +2454,23 @@ void UnionColumnWriter::flush(std::vector<proto::Stream>& streams) {
     stream.set_length(rleEncoder->flush());
     streams.push_back(stream);
 
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->flush(streams);
+    for (auto& i : children) {
+        i->flush(streams);
     }
 }
 
 void UnionColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
     ColumnWriter::writeIndex(streams);
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->writeIndex(streams);
+    for (const auto& i : children) {
+        i->writeIndex(streams);
     }
 }
 
 uint64_t UnionColumnWriter::getEstimatedSize() const {
     uint64_t size = ColumnWriter::getEstimatedSize();
     size += rleEncoder->getBufferSize();
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        size += children[i]->getEstimatedSize();
+    for (const auto& i : children) {
+        size += i->getEstimatedSize();
     }
     return size;
 }
@@ -2483,43 +2483,43 @@ void UnionColumnWriter::getColumnEncoding(std::vector<proto::ColumnEncoding>& en
         encoding.set_bloomencoding(BloomFilterVersion::UTF8);
     }
     encodings.push_back(encoding);
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->getColumnEncoding(encodings);
+    for (const auto& i : children) {
+        i->getColumnEncoding(encodings);
     }
 }
 
 void UnionColumnWriter::getStripeStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getStripeStatistics(stats);
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->getStripeStatistics(stats);
+    for (const auto& i : children) {
+        i->getStripeStatistics(stats);
     }
 }
 
 void UnionColumnWriter::mergeStripeStatsIntoFileStats() {
     ColumnWriter::mergeStripeStatsIntoFileStats();
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->mergeStripeStatsIntoFileStats();
+    for (auto& i : children) {
+        i->mergeStripeStatsIntoFileStats();
     }
 }
 
 void UnionColumnWriter::getFileStatistics(std::vector<proto::ColumnStatistics>& stats) const {
     ColumnWriter::getFileStatistics(stats);
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->getFileStatistics(stats);
+    for (const auto& i : children) {
+        i->getFileStatistics(stats);
     }
 }
 
 void UnionColumnWriter::mergeRowGroupStatsIntoStripeStats() {
     ColumnWriter::mergeRowGroupStatsIntoStripeStats();
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->mergeRowGroupStatsIntoStripeStats();
+    for (auto& i : children) {
+        i->mergeRowGroupStatsIntoStripeStats();
     }
 }
 
 void UnionColumnWriter::createRowIndexEntry() {
     ColumnWriter::createRowIndexEntry();
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->createRowIndexEntry();
+    for (auto& i : children) {
+        i->createRowIndexEntry();
     }
 }
 
@@ -2530,14 +2530,14 @@ void UnionColumnWriter::recordPosition() const {
 
 void UnionColumnWriter::reset() {
     ColumnWriter::reset();
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->reset();
+    for (auto& i : children) {
+        i->reset();
     }
 }
 
 void UnionColumnWriter::writeDictionary() {
-    for (uint32_t i = 0; i < children.size(); ++i) {
-        children[i]->writeDictionary();
+    for (auto& i : children) {
+        i->writeDictionary();
     }
 }
 

@@ -218,8 +218,7 @@ Status TabletsChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
 
     size_t column_index = 0;
     _chunk_meta.types.resize(pb_chunk.is_nulls().size());
-    for (size_t i = 0; i < _row_desc->tuple_descriptors().size(); i++) {
-        TupleDescriptor* tuple_desc = _row_desc->tuple_descriptors()[i];
+    for (auto tuple_desc : _row_desc->tuple_descriptors()) {
         const std::vector<SlotDescriptor*>& slots = tuple_desc->slots();
         for (const auto& kv : _chunk_meta.slot_id_to_index) {
             for (auto slot : slots) {

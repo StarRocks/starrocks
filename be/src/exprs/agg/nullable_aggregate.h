@@ -531,13 +531,13 @@ public:
         data_columns.reserve(src.size());
 
         bool has_nullable_column = false;
-        for (int i = 0; i < src.size(); ++i) {
-            if (src[i]->is_nullable()) {
+        for (const auto& i : src) {
+            if (i->is_nullable()) {
                 has_nullable_column = true;
 
-                const auto* nullable_column = down_cast<const NullableColumn*>(src[i].get());
+                const auto* nullable_column = down_cast<const NullableColumn*>(i.get());
                 data_columns.emplace_back(nullable_column->data_column());
-                if (src[i]->has_null()) {
+                if (i->has_null()) {
                     const NullData& src_null_data = nullable_column->immutable_null_column_data();
 
                     // for one row, every columns should be probing to obtain null column.
@@ -546,7 +546,7 @@ public:
                     }
                 }
             } else {
-                data_columns.emplace_back(src[i]);
+                data_columns.emplace_back(i);
             }
         }
 

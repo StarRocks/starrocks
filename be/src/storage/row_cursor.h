@@ -136,7 +136,8 @@ private:
     char* _variable_buf = nullptr;
     size_t _variable_len{0};
 
-    DISALLOW_COPY_AND_ASSIGN(RowCursor);
+    RowCursor(const RowCursor&) = delete;
+    const RowCursor& operator=(const RowCursor&) = delete;
 };
 } // namespace starrocks
 

@@ -117,7 +117,8 @@ private:
     const KeyCoder* _validx_key_coder;
     const BlockCompressionCodec* _compress_codec;
 
-    DISALLOW_COPY_AND_ASSIGN(IndexedColumnWriter);
+    IndexedColumnWriter(const IndexedColumnWriter&) = delete;
+    const IndexedColumnWriter& operator=(const IndexedColumnWriter&) = delete;
 };
 
 } // namespace segment_v2

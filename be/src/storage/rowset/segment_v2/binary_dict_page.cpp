@@ -32,8 +32,7 @@
 #include "util/slice.h" // for Slice
 #include "util/unaligned_access.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 using strings::Substitute;
 
@@ -283,5 +282,4 @@ Status BinaryDictPageDecoder<Type>::next_dict_codes(size_t* n, vectorized::Colum
 template class BinaryDictPageDecoder<OLAP_FIELD_TYPE_CHAR>;
 template class BinaryDictPageDecoder<OLAP_FIELD_TYPE_VARCHAR>;
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

@@ -152,7 +152,7 @@ StringDictionary::StringDictionary(MemoryPool& pool) : dictionaryBlob(pool), dic
 }
 
 EncodedStringVectorBatch::EncodedStringVectorBatch(uint64_t _capacity, MemoryPool& pool)
-        : StringVectorBatch(_capacity, pool), dictionary(), index(pool, _capacity) {
+        : StringVectorBatch(_capacity, pool), index(pool, _capacity) {
     // PASS
 }
 
@@ -229,16 +229,16 @@ StructVectorBatch::StructVectorBatch(uint64_t cap, MemoryPool& pool) : ColumnVec
 }
 
 StructVectorBatch::~StructVectorBatch() {
-    for (uint64_t i = 0; i < this->fields.size(); i++) {
-        delete this->fields[i];
+    for (auto& field : this->fields) {
+        delete field;
     }
 }
 
 std::string StructVectorBatch::toString() const {
     std::ostringstream buffer;
     buffer << "Struct vector <" << numElements << " of " << capacity << "; ";
-    for (std::vector<ColumnVectorBatch*>::const_iterator ptr = fields.begin(); ptr != fields.end(); ++ptr) {
-        buffer << (*ptr)->toString() << "; ";
+    for (auto field : fields) {
+        buffer << field->toString() << "; ";
     }
     buffer << ">";
     return buffer.str();
@@ -249,23 +249,23 @@ void StructVectorBatch::resize(uint64_t cap) {
 }
 
 void StructVectorBatch::clear() {
-    for (size_t i = 0; i < fields.size(); i++) {
-        fields[i]->clear();
+    for (auto& field : fields) {
+        field->clear();
     }
     numElements = 0;
 }
 
 uint64_t StructVectorBatch::getMemoryUsage() {
     uint64_t memory = ColumnVectorBatch::getMemoryUsage();
-    for (unsigned int i = 0; i < fields.size(); i++) {
-        memory += fields[i]->getMemoryUsage();
+    for (auto& field : fields) {
+        memory += field->getMemoryUsage();
     }
     return memory;
 }
 
 bool StructVectorBatch::hasVariableLength() {
-    for (unsigned int i = 0; i < fields.size(); i++) {
-        if (fields[i]->hasVariableLength()) {
+    for (auto& field : fields) {
+        if (field->hasVariableLength()) {
             return true;
         }
     }
@@ -366,8 +366,8 @@ UnionVectorBatch::UnionVectorBatch(uint64_t cap, MemoryPool& pool)
 }
 
 UnionVectorBatch::~UnionVectorBatch() {
-    for (uint64_t i = 0; i < children.size(); i++) {
-        delete children[i];
+    for (auto& i : children) {
+        delete i;
     }
 }
 
@@ -393,8 +393,8 @@ void UnionVectorBatch::resize(uint64_t cap) {
 }
 
 void UnionVectorBatch::clear() {
-    for (size_t i = 0; i < children.size(); i++) {
-        children[i]->clear();
+    for (auto& i : children) {
+        i->clear();
     }
     numElements = 0;
 }
@@ -403,15 +403,15 @@ uint64_t UnionVectorBatch::getMemoryUsage() {
     uint64_t memory =
             ColumnVectorBatch::getMemoryUsage() +
             static_cast<uint64_t>(tags.capacity() * sizeof(unsigned char) + offsets.capacity() * sizeof(uint64_t));
-    for (size_t i = 0; i < children.size(); ++i) {
-        memory += children[i]->getMemoryUsage();
+    for (auto& i : children) {
+        memory += i->getMemoryUsage();
     }
     return memory;
 }
 
 bool UnionVectorBatch::hasVariableLength() {
-    for (size_t i = 0; i < children.size(); ++i) {
-        if (children[i]->hasVariableLength()) {
+    for (auto& i : children) {
+        if (i->hasVariableLength()) {
             return true;
         }
     }

@@ -102,7 +102,7 @@ public class MetaService {
             try {
                 Storage currentStorageInfo = new Storage(imageDir.getAbsolutePath());
                 StorageInfo storageInfo = new StorageInfo(currentStorageInfo.getClusterID(),
-                        currentStorageInfo.getImageSeq(), currentStorageInfo.getEditsSeq());
+                        currentStorageInfo.getImageJournalId());
 
                 response.setContentType("application/json");
                 Gson gson = new Gson();
@@ -214,6 +214,8 @@ public class MetaService {
                 writeResponse(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
                 return;
             }
+
+            Catalog.getCurrentCatalog().setImageJournalId(version);
 
             // Delete old image files
             MetaCleaner cleaner = new MetaCleaner(Config.meta_dir + "/image");

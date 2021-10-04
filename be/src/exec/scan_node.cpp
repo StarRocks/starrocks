@@ -56,7 +56,10 @@ Status ScanNode::prepare(RuntimeState* state) {
             ADD_CHILD_TIMER(runtime_profile(), _s_materialize_tuple_timer, _s_scanner_thread_total_wallclock_time);
     _per_read_thread_throughput_counter = runtime_profile()->add_derived_counter(
             _s_per_read_thread_throughput_counter, TUnit::BYTES_PER_SECOND,
-            std::bind<int64_t>(&RuntimeProfile::units_per_second, _bytes_read_counter, _read_timer), "");
+            [capture0 = _bytes_read_counter, capture1 = _read_timer] {
+                return RuntimeProfile::units_per_second(capture0, capture1);
+            },
+            "");
     _num_disks_accessed_counter = ADD_COUNTER(runtime_profile(), _s_num_disks_accessed_counter, TUnit::UNIT);
 
     return Status::OK();

@@ -11,8 +11,7 @@
 #include "util/thrift_util.h"
 #include "util/types.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 const int STATISTIC_DATA_VERSION1 = 1;
 
@@ -136,5 +135,4 @@ Status StatisticResultWriter::close() {
     return Status::OK();
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

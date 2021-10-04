@@ -76,8 +76,9 @@ private:
 
 class SortSinkOperatorFactory final : public OperatorFactory {
 public:
-    SortSinkOperatorFactory(int32_t id, int32_t plan_node_id, std::shared_ptr<vectorized::ChunksSorter> chunks_sorter,
-                            const SortExecExprs& sort_exec_exprs, const std::vector<OrderByType>& order_by_types,
+    SortSinkOperatorFactory(int32_t id, int32_t plan_node_id,
+                            const std::shared_ptr<vectorized::ChunksSorter>& chunks_sorter,
+                            SortExecExprs& sort_exec_exprs, const std::vector<OrderByType>& order_by_types,
                             TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
                             const RowDescriptor& parent_node_child_row_desc)
             : OperatorFactory(id, plan_node_id),
@@ -97,11 +98,14 @@ public:
         return ope;
     }
 
+    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
+    void close(RuntimeState* state) override;
+
 private:
     std::shared_ptr<vectorized::ChunksSorter> _chunks_sorter;
 
     // _sort_exec_exprs contains the ordering expressions
-    const SortExecExprs& _sort_exec_exprs;
+    SortExecExprs& _sort_exec_exprs;
     const std::vector<OrderByType>& _order_by_types;
 
     // Cached descriptor for the materialized tuple. Assigned in Prepare().

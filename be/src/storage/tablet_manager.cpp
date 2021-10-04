@@ -334,7 +334,7 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(const AlterTable
             break;
         }
         is_tablet_added = true;
-    } while (0);
+    } while (false);
 
     if (status.ok()) {
         return tablet;
@@ -1258,7 +1258,7 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
                 LOG(WARNING) << "failed to add rowset for tablet " << tablet->full_name();
                 break;
             }
-        } while (0);
+        } while (false);
 
         // Unregister index and delete files(index and data) if failed
         if (res != OLAP_SUCCESS) {

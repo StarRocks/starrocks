@@ -52,8 +52,7 @@ void ConjunctivePredicates::evaluate_and(const Chunk* chunk, uint8_t* selection,
 
 inline void ConjunctivePredicates::_evaluate_and(const Chunk* chunk, uint8_t* selection, uint16_t from,
                                                  uint16_t to) const {
-    for (size_t i = 0; i < _vec_preds.size(); i++) {
-        const ColumnPredicate* pred = _vec_preds[i];
+    for (auto pred : _vec_preds) {
         const Column* col = chunk->get_column_by_id(pred->column_id()).get();
         pred->evaluate_and(col, selection, from, to);
     }

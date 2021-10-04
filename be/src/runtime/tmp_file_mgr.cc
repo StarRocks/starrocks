@@ -56,7 +56,7 @@ const uint64_t _s_available_space_threshold_mb = 1024;
 const std::string TMP_FILE_MGR_ACTIVE_SCRATCH_DIRS = "tmp_file_mgr.active_scratch_dirs";
 const std::string TMP_FILE_MGR_ACTIVE_SCRATCH_DIRS_LIST = "tmp_file_mgr.active_scratch_dirs.list";
 
-TmpFileMgr::TmpFileMgr(ExecEnv* exec_env) : _exec_env(exec_env), _initialized(false), _dir_status_lock(), _tmp_dirs() {}
+TmpFileMgr::TmpFileMgr(ExecEnv* exec_env) : _exec_env(exec_env), _initialized(false) {}
 // _num_active_scratch_dirs_metric(NULL), _active_scratch_dirs_metric(NULL) {}
 
 Status TmpFileMgr::init(MetricRegistry* metrics) {
@@ -76,9 +76,8 @@ Status TmpFileMgr::init_custom(const vector<string>& tmp_dirs, bool one_dir_per_
     vector<bool> is_tmp_dir_on_disk(DiskInfo::num_disks(), false);
     // For each tmp directory, find the disk it is on,
     // so additional tmp directories on the same disk can be skipped.
-    for (int i = 0; i < tmp_dirs.size(); ++i) {
-        std::filesystem::path tmp_path =
-                std::filesystem::absolute(boost::trim_right_copy_if(tmp_dirs[i], is_any_of("/")));
+    for (const auto& tmp_dir : tmp_dirs) {
+        std::filesystem::path tmp_path = std::filesystem::absolute(boost::trim_right_copy_if(tmp_dir, is_any_of("/")));
         std::filesystem::path scratch_subdir_path(tmp_path / _s_tmp_sub_dir_name);
         // tmp_path must be a writable directory.
         Status status = FileSystemUtil::verify_is_directory(tmp_path.string());
@@ -190,8 +189,8 @@ int TmpFileMgr::num_active_tmp_devices() {
     DCHECK(_initialized);
     std::lock_guard<SpinLock> l(_dir_status_lock);
     int num_active = 0;
-    for (int device_id = 0; device_id < _tmp_dirs.size(); ++device_id) {
-        if (!_tmp_dirs[device_id].is_blacklisted()) {
+    for (auto& _tmp_dir : _tmp_dirs) {
+        if (!_tmp_dir.is_blacklisted()) {
             ++num_active;
         }
     }

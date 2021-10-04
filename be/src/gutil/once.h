@@ -111,7 +111,8 @@ public:
 
 private:
     Atomic32 state_{GOOGLE_ONCE_INTERNAL_INIT};
-    DISALLOW_COPY_AND_ASSIGN(GoogleOnceDynamic);
+    GoogleOnceDynamic(const GoogleOnceDynamic&) = delete;
+    const GoogleOnceDynamic& operator=(const GoogleOnceDynamic&) = delete;
 };
 
 #endif // BASE_ONCE_H_

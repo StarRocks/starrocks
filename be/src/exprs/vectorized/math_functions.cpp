@@ -8,8 +8,7 @@
 #include "exprs/expr.h"
 #include "util/time.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // ==== basic check rules =========
 DEFINE_UNARY_FN_WITH_IMPL(NegativeCheck, value) {
@@ -509,5 +508,4 @@ ColumnPtr MathFunctions::rand_seed(FunctionContext* context, const Columns& colu
     return rand(context, columns);
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

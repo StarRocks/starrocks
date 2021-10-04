@@ -287,7 +287,8 @@ private:
 
     Data data_;
 
-    DISALLOW_COPY_AND_ASSIGN(gscoped_ptr_impl);
+    gscoped_ptr_impl(const gscoped_ptr_impl&) = delete;
+    const gscoped_ptr_impl& operator=(const gscoped_ptr_impl&) = delete;
 };
 
 } // namespace internal

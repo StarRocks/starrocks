@@ -91,7 +91,7 @@ Status SchemaScanNode::prepare(RuntimeState* state) {
     // new one scanner
     _schema_scanner.reset(SchemaScanner::create(schema_table->schema_table_type()));
 
-    if (nullptr == _schema_scanner.get()) {
+    if (nullptr == _schema_scanner) {
         return Status::InternalError("schema scanner get nullptr pointer.");
     }
 
@@ -284,8 +284,8 @@ void SchemaScanNode::debug_string(int indentation_level, std::stringstream* out)
     *out << "SchemaScanNode(tupleid=" << _tuple_id << " table=" << _table_name;
     *out << ")" << std::endl;
 
-    for (int i = 0; i < _children.size(); ++i) {
-        _children[i]->debug_string(indentation_level + 1, out);
+    for (auto i : _children) {
+        i->debug_string(indentation_level + 1, out);
     }
 }
 

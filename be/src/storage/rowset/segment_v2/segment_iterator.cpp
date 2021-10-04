@@ -38,8 +38,7 @@
 
 using strings::Substitute;
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, const Schema& schema)
         : _segment(std::move(segment)),
@@ -493,5 +492,4 @@ Status SegmentIterator::next_batch(RowBlockV2* block) {
     return Status::OK();
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

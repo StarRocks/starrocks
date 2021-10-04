@@ -1,10 +1,4 @@
 [sql]
-select @@enable_cbo;
-[result]
-VALUES (true)
-[end]
-
-[sql]
 select database();
 [result]
 VALUES (DATABASE(test, 0))

@@ -7,8 +7,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 #define CASE_TYPE_COLUMN(NODE_TYPE, CHECK_TYPE, LITERAL_VALUE)                              \
     case NODE_TYPE: {                                                                       \
@@ -133,5 +132,4 @@ std::string VectorizedLiteral::debug_string() const {
 
 VectorizedLiteral::~VectorizedLiteral() = default;
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

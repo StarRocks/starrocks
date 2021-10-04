@@ -11,7 +11,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LiteralExpr;
@@ -350,16 +349,24 @@ public class HdfsScanNode extends ScanNode {
         }
 
         long start = System.currentTimeMillis();
+        List<PartitionKey> partitionKeys = Lists.newArrayList();
+        List<DescriptorTable.ReferencedPartitionInfo> partitionInfos = Lists.newArrayList();
         for (long partitionId : selectedPartitionIds) {
             PartitionKey partitionKey = idToPartitionKey.get(partitionId);
-            descTbl.addReferencedPartitions(hiveTable, new ReferencedPartitionInfo(partitionId, partitionKey));
-            HivePartition partition = hiveTable.getPartition(partitionKey);
-            for (HdfsFileDesc fileDesc : partition.getFiles()) {
+            partitionKeys.add(partitionKey);
+            partitionInfos.add(new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey));
+        }
+        List<HivePartition> hivePartitions = hiveTable.getPartitions(partitionKeys);
+
+        for (int i = 0; i < hivePartitions.size(); i++) {
+            descTbl.addReferencedPartitions(hiveTable, partitionInfos.get(i));
+            for (HdfsFileDesc fileDesc : hivePartitions.get(i).getFiles()) {
                 totalBytes += fileDesc.getLength();
                 for (HdfsFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
-                    addScanRangeLocations(partitionId, fileDesc, blockDesc, partition.getFormat());
+                    addScanRangeLocations(partitionInfos.get(i).getId(), fileDesc, blockDesc,
+                            hivePartitions.get(i).getFormat());
                     LOG.debug("add scan range success. partition: {}, file: {}, block: {}-{}",
-                            partition.getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
+                            hivePartitions.get(i).getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
                             blockDesc.getLength());
                 }
             }

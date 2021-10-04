@@ -36,8 +36,7 @@
 #include "util/faststring.h"
 #include "util/slice.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 namespace {
 
@@ -71,7 +70,7 @@ public:
     using MemoryIndexType = typename BitmapIndexTraits<CppType>::MemoryIndexType;
 
     explicit BitmapIndexWriterImpl(TypeInfoPtr type_info)
-            : _typeinfo(std::move(type_info)), _reverted_index_size(0), _tracker(), _pool(&_tracker) {}
+            : _typeinfo(std::move(type_info)), _reverted_index_size(0), _pool(&_tracker) {}
 
     ~BitmapIndexWriterImpl() override = default;
 
@@ -249,5 +248,4 @@ Status BitmapIndexWriter::create(const TypeInfoPtr& typeinfo, std::unique_ptr<Bi
     return Status::OK();
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

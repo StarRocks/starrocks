@@ -47,8 +47,7 @@
 #include "util/faststring.h"
 #include "util/rle_encoding.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 #define INDEX_ADD_VALUES(index, data, size) \
     do {                                    \
@@ -908,5 +907,4 @@ Status StringColumnWriter::finish() {
     return _scalar_column_writer->finish();
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

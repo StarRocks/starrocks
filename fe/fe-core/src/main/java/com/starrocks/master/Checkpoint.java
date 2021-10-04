@@ -78,7 +78,7 @@ public class Checkpoint extends MasterDaemon {
         try {
             storage = new Storage(imageDir);
             // get max image version
-            imageVersion = storage.getImageSeq();
+            imageVersion = storage.getImageJournalId();
             // get max finalized journal id
             checkPointVersion = editLog.getFinalizedJournalId();
             LOG.info("checkpoint imageVersion {}, checkPointVersion {}", imageVersion, checkPointVersion);
@@ -113,6 +113,7 @@ public class Checkpoint extends MasterDaemon {
             if (MetricRepo.isInit) {
                 MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
             }
+            Catalog.getServingCatalog().setImageJournalId(checkPointVersion);
             LOG.info("checkpoint finished save image.{}", replayedJournalId);
         } catch (Exception e) {
             e.printStackTrace();

@@ -37,6 +37,19 @@ public:
         return down_cast<SourceOperatorFactory*>(_op_factories[0].get());
     }
 
+    Status prepare(RuntimeState* state, MemTracker* mem_tracker) {
+        for (auto& op : _op_factories) {
+            RETURN_IF_ERROR(op->prepare(state, mem_tracker));
+        }
+        return Status::OK();
+    }
+
+    void close(RuntimeState* state) {
+        for (auto& op : _op_factories) {
+            op->close(state);
+        }
+    }
+
 private:
     uint32_t _id = 0;
     OpFactories _op_factories;

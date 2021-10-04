@@ -68,7 +68,7 @@ public class HiveMetaClient {
     private long hostId = 0;
     private final Map<Integer, Long> storageHashToId = new ConcurrentHashMap<>();
     private long storageId = 0;
-    private final int UNKNOWN_STORAGE_ID = -1;
+    private static final int UNKNOWN_STORAGE_ID = -1;
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     // Required for creating an instance of RetryingMetaStoreClient.
@@ -458,7 +458,8 @@ public class HiveMetaClient {
             String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
             BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
             List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
-            fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(), ImmutableList.copyOf(fileBlockDescs)));
+            fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
+                    ImmutableList.copyOf(fileBlockDescs)));
         }
         return fileDescs;
     }

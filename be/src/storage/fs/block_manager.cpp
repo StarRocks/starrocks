@@ -26,8 +26,7 @@
 
 #include "common/logging.h"
 
-namespace starrocks {
-namespace fs {
+namespace starrocks::fs {
 
 // Controls when to pre-flush a block. Valid values are 'finalize',
 // 'close', or 'never'.
@@ -52,5 +51,4 @@ namespace fs {
 // TODO(lingbin): move it to conf later, to allow adjust dynamicaly.
 const std::string BlockManager::block_manager_preflush_control = "finalize";
 
-} // namespace fs
-} // namespace starrocks
+} // namespace starrocks::fs

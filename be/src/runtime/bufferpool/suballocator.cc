@@ -29,10 +29,6 @@
 
 namespace starrocks {
 
-constexpr int Suballocator::LOG_MAX_ALLOCATION_BYTES;
-constexpr int64_t Suballocator::MAX_ALLOCATION_BYTES;
-constexpr int Suballocator::LOG_MIN_ALLOCATION_BYTES;
-constexpr int64_t Suballocator::MIN_ALLOCATION_BYTES;
 //const int Suballocator::NUM_FREE_LISTS;
 
 Suballocator::Suballocator(BufferPool* pool, BufferPool::ClientHandle* client, int64_t min_buffer_len)
@@ -41,8 +37,8 @@ Suballocator::Suballocator(BufferPool* pool, BufferPool::ClientHandle* client, i
 Suballocator::~Suballocator() {
     // All allocations should be free and buffers deallocated.
     DCHECK_EQ(allocated_, 0);
-    for (int i = 0; i < NUM_FREE_LISTS; ++i) {
-        DCHECK(free_lists_[i] == nullptr);
+    for (auto& free_list : free_lists_) {
+        DCHECK(free_list == nullptr);
     }
 }
 

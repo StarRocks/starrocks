@@ -534,7 +534,7 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         // local file, current only for test
         auto* env = Env::Default();
         std::unique_ptr<RandomAccessFile> file;
-        env->new_random_access_file(native_file_path.c_str(), &file);
+        env->new_random_access_file(native_file_path, &file);
 
         auto* hdfs_file_desc = _pool->add(new HdfsFileDesc());
         hdfs_file_desc->hdfs_fs = nullptr;

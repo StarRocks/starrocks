@@ -46,8 +46,6 @@ public class InsertIntoValuesDecimalV3Test {
                         "PROPERTIES( \"replication_num\" = \"1\", \"in_memory\" = \"false\", \"storage_format\" = \"DEFAULT\" )";
 
         ctx = UtFrameUtils.createDefaultCtx();
-        Config.enable_decimal_v3 = true;
-        ctx.getSessionVariable().disableNewPlanner();
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr);
@@ -89,9 +87,11 @@ public class InsertIntoValuesDecimalV3Test {
 
     @Test
     public void testInsertArray() throws Exception {
-        String sql = "explain insert into tarray values (1, 2, []) ";
-        String plan = UtFrameUtils.getSQLPlanOrErrorMsg(ctx, sql);
-        Assert.assertFalse(plan.contains("Unexpected exception: null"));
+        String sql = "insert into tarray values (1, 2, []) ";
+        try {
+            String plan = UtFrameUtils.getNewFragmentPlan(ctx, sql);
+        } catch (NullPointerException ignored) {
+        }
     }
 }
 

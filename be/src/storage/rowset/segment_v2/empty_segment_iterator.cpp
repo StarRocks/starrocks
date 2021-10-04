@@ -17,8 +17,7 @@
 
 #include "storage/row_block2.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 EmptySegmentIterator::EmptySegmentIterator(const starrocks::Schema& schema) : _schema(schema) {}
 
@@ -28,5 +27,4 @@ Status EmptySegmentIterator::next_batch(RowBlockV2* block) {
     return Status::EndOfFile("no more data in segment");
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

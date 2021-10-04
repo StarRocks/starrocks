@@ -322,7 +322,8 @@ private:
     std::atomic<int32_t> _newly_created_rowset_num{0};
     std::atomic<int64_t> _last_checkpoint_time{0};
 
-    DISALLOW_COPY_AND_ASSIGN(Tablet);
+    Tablet(const Tablet&) = delete;
+    const Tablet& operator=(const Tablet&) = delete;
 };
 
 inline bool Tablet::init_succeeded() {
