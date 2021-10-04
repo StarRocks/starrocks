@@ -265,6 +265,9 @@ public:
         ctx->impl()->add_mem_usage(mem_usage);
     }
 
+    // The following two functions are specialized because of performance issue.
+    // We have found out that by precomputing and prefetching hash values, we can boost peformance of hash table by a lot.
+    // And this is a quite useful pattern for phmap::flat_hash_table.
     void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
                                    AggDataPtr state) const override {
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
@@ -281,6 +284,7 @@ public:
             size_t hash_value = agg_state.set.hash_function()(container_data[i]);
             cache[i] = CacheEntry{hash_value};
         }
+        // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
         size_t prefetch_index = 16;
 
         MemPool* mem_pool = ctx->impl()->mem_pool();
@@ -299,6 +303,9 @@ public:
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
         size_t mem_usage = 0;
 
+        // We find that agg_states are scatterd in `states`, we can collect them together with hash value,
+        // so there will be good cache locality. We can also collect column data into this `CacheEntry` to
+        // exploit cache locality further, but I don't see much steady performance gain by doing that.
         struct CacheEntry {
             TDistinctAggState<PT>* agg_state;
             size_t hash_value;
@@ -312,6 +319,7 @@ public:
             size_t hash_value = agg_state.set.hash_function()(container_data[i]);
             cache[i] = CacheEntry{&agg_state, hash_value};
         }
+        // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
         size_t prefetch_index = 16;
 
         MemPool* mem_pool = ctx->impl()->mem_pool();
