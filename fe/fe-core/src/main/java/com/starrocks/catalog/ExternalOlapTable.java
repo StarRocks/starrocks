@@ -173,7 +173,6 @@ public class ExternalOlapTable extends OlapTable {
         setType(TableType.OLAP_EXTERNAL);
         dbId = -1;
         sourceDbId = sourceDb;
-        LOG.info("new external table, dbid: {}", sourceDb);
         lastExternalMeta = null;
 
         externalTableInfo = new ExternalTableInfo();
