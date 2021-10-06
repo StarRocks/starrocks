@@ -1074,8 +1074,7 @@ public:
     raw_hash_set(raw_hash_set&& that, const allocator_type& a)
             : ctrl_(EmptyGroup()),
               slots_(nullptr),
-              size_(0),
-              capacity_(0),
+
               settings_(0, that.hash_ref(), that.eq_ref(), a) {
         if (a == that.alloc_ref()) {
             std::swap(ctrl_, that.ctrl_);

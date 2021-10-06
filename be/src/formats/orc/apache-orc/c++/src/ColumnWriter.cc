@@ -792,7 +792,7 @@ public:
         size_t length;
     };
 
-    SortedStringDictionary() : totalLength(0) {}
+    SortedStringDictionary() {}
 
     // insert a new string into dictionary, return its insertion order
     size_t insert(const char* data, size_t len);
@@ -827,7 +827,7 @@ private:
 
     std::map<DictEntry, size_t, LessThan> dict;
     std::vector<std::vector<char>> data;
-    uint64_t totalLength;
+    uint64_t totalLength{0};
 
     // use friend class here to avoid being bothered by const function calls
     friend class StringColumnWriter;

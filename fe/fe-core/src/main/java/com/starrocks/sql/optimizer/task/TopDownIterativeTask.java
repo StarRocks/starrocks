@@ -1,5 +1,4 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
-
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Preconditions;
@@ -16,26 +15,32 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.List;
 
 /**
- * TopDownRewriteTask performs a top-down rewrite logic operator pass.
+ * TopDownIterativeTask performs a top-down rewrite logic operator pass.
  * <p>
  * This class modify from CMU noisepage project TopDownRewrite class
  */
-public class TopDownRewriteTask extends OptimizerTask {
+public class TopDownIterativeTask extends OptimizerTask {
     private final Group group;
-    private final RuleSetType ruleSetType;
+    private final List<Rule> candidateRules;
 
-    public TopDownRewriteTask(TaskContext context, Group group, RuleSetType ruleSetType) {
+    public TopDownIterativeTask(TaskContext context, Group group, List<Rule> ruleSet) {
         super(context);
         this.group = group;
-        this.ruleSetType = ruleSetType;
+        this.candidateRules = ruleSet;
+    }
+
+    public TopDownIterativeTask(TaskContext context, Group group, Rule rule) {
+        this(context, group, Lists.newArrayList(rule));
+    }
+
+    public TopDownIterativeTask(TaskContext context, Group group, RuleSetType ruleSetType) {
+        this(context, group, context.getOptimizerContext().getRuleSet().
+                getRewriteRulesByType(ruleSetType));
     }
 
     @Override
     public void execute() {
         List<Rule> validRules = Lists.newArrayListWithCapacity(RuleType.NUM_RULES.id());
-        List<Rule> candidateRules = context.getOptimizerContext().getRuleSet().
-                getRewriteRulesByType(ruleSetType);
-
         Preconditions.checkState(group.isValidInitState());
 
         GroupExpression curGroupExpression = group.getLogicalExpressions().get(0);
@@ -60,17 +65,17 @@ public class TopDownRewriteTask extends OptimizerTask {
                             group, newExpressions.get(0));
                     // This group has been merged
                     if (group.getLogicalExpressions().isEmpty()) {
-                        continue;
+                        return;
                     }
-
-                    curGroupExpression = group.getFirstLogicalExpression();
+                    pushTask(new TopDownIterativeTask(context, group, candidateRules));
+                    return;
                 }
                 extractExpr = binder.next();
             }
         }
 
-        for (Group childGroup : group.getFirstLogicalExpression().getInputs()) {
-            pushTask(new TopDownRewriteTask(context, childGroup, ruleSetType));
+        for (Group childGroup : curGroupExpression.getInputs()) {
+            pushTask(new TopDownIterativeTask(context, childGroup, candidateRules));
         }
     }
 }

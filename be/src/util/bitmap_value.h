@@ -942,7 +942,7 @@ inline Roaring64MapSetBitForwardIterator Roaring64Map::end() const {
 class BitmapValue {
 public:
     // Construct an empty bitmap.
-    BitmapValue() : _type(EMPTY) {}
+    BitmapValue() {}
 
     BitmapValue(const BitmapValue& other)
             : _bitmap(other._bitmap == nullptr ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap)),
@@ -1731,7 +1731,7 @@ private:
     std::shared_ptr<detail::Roaring64Map> _bitmap = nullptr;
     phmap::flat_hash_set<uint64_t> _set;
     uint64_t _sv = 0; // store the single value when _type == SINGLE
-    BitmapDataType _type;
+    BitmapDataType _type{EMPTY};
 };
 
 } // namespace starrocks

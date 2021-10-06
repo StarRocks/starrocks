@@ -20,8 +20,7 @@ SchemaScanner::ColumnDesc SchemaTablePrivilegesScanner::_s_table_privs_columns[]
 };
 
 SchemaTablePrivilegesScanner::SchemaTablePrivilegesScanner()
-        : SchemaScanner(_s_table_privs_columns, sizeof(_s_table_privs_columns) / sizeof(SchemaScanner::ColumnDesc)),
-          _table_priv_index(0) {}
+        : SchemaScanner(_s_table_privs_columns, sizeof(_s_table_privs_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
 SchemaTablePrivilegesScanner::~SchemaTablePrivilegesScanner() = default;
 

@@ -7,7 +7,6 @@ import com.starrocks.common.Config;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.scalar.ArithmeticCommutativeRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ExtractCommonPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
@@ -30,8 +29,7 @@ public class ScalarOperatorRewriter {
             new NormalizePredicateRule(),
             new FoldConstantsRule(),
             new SimplifiedPredicateRule(),
-            new ExtractCommonPredicateRule(),
-            new ArithmeticCommutativeRule()
+            new ExtractCommonPredicateRule()
     );
 
     private final ScalarOperatorRewriteContext context;

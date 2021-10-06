@@ -35,8 +35,7 @@ ProgressUpdater::ProgressUpdater(std::string label, int64_t total, int period)
           _num_complete(0),
           _last_output_percentage(0) {}
 
-ProgressUpdater::ProgressUpdater()
-        : _logging_level(2), _total(0), _update_period(0), _num_complete(0), _last_output_percentage(0) {}
+ProgressUpdater::ProgressUpdater() {}
 
 void ProgressUpdater::update(int64_t delta) {
     DCHECK_GE(delta, 0);

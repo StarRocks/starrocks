@@ -32,7 +32,7 @@ protected:
     bool Release() const;
 
 private:
-    mutable int ref_count_;
+    mutable int ref_count_{0};
 #ifndef NDEBUG
     mutable bool in_dtor_;
 #endif
@@ -56,7 +56,7 @@ protected:
     bool Release() const;
 
 private:
-    mutable AtomicRefCount ref_count_;
+    mutable AtomicRefCount ref_count_{0};
 #ifndef NDEBUG
     mutable bool in_dtor_;
 #endif

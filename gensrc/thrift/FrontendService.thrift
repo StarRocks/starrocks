@@ -729,8 +729,20 @@ struct TIndexInfo {
     4: optional string comment
 }
 
+struct TColumnMeta {
+  1: optional string columnName
+  2: optional Types.TTypeDesc columnType
+  3: optional i32 columnLength
+  4: optional i32 columnPrecision
+  5: optional i32 columnScale
+  6: optional string columnKey
+  7: optional bool key
+  8: optional string aggregationType
+  9: optional string comment
+}
+
 struct TSchemaMeta {
-    1: optional list<TColumnDef> columns
+    1: optional list<TColumnMeta> columns
     2: optional i32 schema_version
     3: optional i32 schema_hash
     4: optional i16 short_key_col_count

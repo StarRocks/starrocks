@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
@@ -106,16 +107,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private static final Logger LOG = LogManager.getLogger(StatisticsCalculator.class);
 
     private final ExpressionContext expressionContext;
-    private final ColumnRefSet requiredCols;
     private final ColumnRefFactory columnRefFactory;
     private final DumpInfo dumpInfo;
 
     public StatisticsCalculator(ExpressionContext expressionContext,
-                                ColumnRefSet requiredCols,
                                 ColumnRefFactory columnRefFactory,
                                 DumpInfo dumpInfo) {
         this.expressionContext = expressionContext;
-        this.requiredCols = requiredCols;
         this.columnRefFactory = columnRefFactory;
         this.dumpInfo = dumpInfo;
     }
@@ -196,34 +194,32 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalHiveScan(LogicalHiveScanOperator node, ExpressionContext context) {
-        return computeHiveScanNode(node, context, node.getTable());
+        return computeHiveScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalHiveScan(PhysicalHiveScanOperator node, ExpressionContext context) {
-        return computeHiveScanNode(node, context, node.getTable());
+        return computeHiveScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
-    public Void computeHiveScanNode(Operator node, ExpressionContext context, Table table) {
+    public Void computeHiveScanNode(Operator node, ExpressionContext context, Table table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Preconditions.checkState(context.arity() == 0);
 
         // 1. get table row count
         long tableRowCount = getTableRowCount(table, node);
         // 2. get required columns statistics
-        Statistics.Builder builder = estimateHiveScanColumns((HiveTable) table, tableRowCount);
+        Statistics.Builder builder = estimateHiveScanColumns((HiveTable) table, tableRowCount, colRefToColumnMetaMap);
 
         builder.setOutputRowCount(tableRowCount);
         // 3. estimate cardinality
         return visitOperator(node, context, builder);
     }
 
-    private Statistics.Builder estimateHiveScanColumns(HiveTable table, long tableRowCount) {
+    private Statistics.Builder estimateHiveScanColumns(HiveTable table, long tableRowCount, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Statistics.Builder builder = Statistics.builder();
-        List<ColumnRefOperator> requiredColumns = new ArrayList<>();
-        for (int columnId : requiredCols.getColumnIds()) {
-            ColumnRefOperator columnRefOperator = columnRefFactory.getColumnRef(columnId);
-            requiredColumns.add(columnRefOperator);
-        }
+
+        List<ColumnRefOperator> requiredColumns = new ArrayList<>(colRefToColumnMetaMap.keySet());
+
         List<ColumnStatistic> columnStatisticList;
         try {
             Map<String, HiveColumnStats> hiveColumnStatisticMap =
@@ -492,6 +488,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         builder.setOutputRowCount(inputStatistics.getOutputRowCount());
 
         // if required columns is nothing, such as select count(*) from lineitems, project node use child statistics
+        /*
         if (requiredCols.cardinality() == 0) {
             for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : inputStatistics.getColumnStatistics()
                     .entrySet()) {
@@ -500,9 +497,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             context.setStatistics(builder.build());
             return visitOperator(context.getOp(), context);
         }
-
-        for (int columnId : requiredCols.getColumnIds()) {
-            ColumnRefOperator requiredColumnRefOperator = columnRefFactory.getColumnRef(columnId);
+         */
+        Preconditions.checkState(!columnRefMap.isEmpty());
+        
+        for (ColumnRefOperator requiredColumnRefOperator : columnRefMap.keySet()) {
             // derive stats from child
             // use clone here because it will be rewrite later
             ScalarOperator mapOperator = columnRefMap.get(requiredColumnRefOperator).clone();
@@ -582,9 +580,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
+        Projection projection = node.getProjection();
+        Preconditions.checkState(projection != null);
         return computeJoinNode(context, node.getJoinPredicate(), node.getPredicate(), node.getJoinType(),
                 node.getLimit(),
-                node.getPruneOutputColumns());
+                projection.getOutputColumns());
     }
 
     private Void computeJoinNode(ExpressionContext context, ScalarOperator joinOnPredicate, ScalarOperator predicate,

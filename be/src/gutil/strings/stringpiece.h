@@ -128,8 +128,8 @@
 
 class StringPiece {
 private:
-    const char* ptr_;
-    int length_;
+    const char* ptr_{nullptr};
+    int length_{0};
 
 public:
     // We provide non-explicit singleton constructors so users can pass
@@ -138,7 +138,7 @@ public:
     //
     // Style guide exception granted:
     // http://goto/style-guide-exception-20978288
-    StringPiece() : ptr_(nullptr), length_(0) {}
+    StringPiece() {}
     StringPiece(const char* str) // NOLINT(runtime/explicit)
             : ptr_(str), length_(0) {
         if (str != nullptr) {

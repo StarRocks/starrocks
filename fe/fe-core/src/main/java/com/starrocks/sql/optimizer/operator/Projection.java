@@ -4,7 +4,9 @@ package com.starrocks.sql.optimizer.operator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -25,6 +27,10 @@ public class Projection {
         } else {
             this.commonSubOperatorMap = commonSubOperatorMap;
         }
+    }
+
+    public List<ColumnRefOperator> getOutputColumns() {
+        return new ArrayList<>(columnRefMap.keySet());
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {

@@ -90,7 +90,7 @@ private:
 
 class NullMapRLEBuilder {
 public:
-    NullMapRLEBuilder() : _has_null(false), _bitmap_buf(512), _rle_encoder(&_bitmap_buf, 1) {}
+    NullMapRLEBuilder() : _bitmap_buf(512), _rle_encoder(&_bitmap_buf, 1) {}
 
     explicit NullMapRLEBuilder(size_t reserve_bits)
             : _has_null(false), _bitmap_buf(BitmapSize(reserve_bits)), _rle_encoder(&_bitmap_buf, 1) {}
@@ -116,14 +116,14 @@ public:
     uint64_t size() { return _bitmap_buf.size(); }
 
 private:
-    bool _has_null;
+    bool _has_null{false};
     faststring _bitmap_buf;
     RleEncoder<bool> _rle_encoder;
 };
 
 class NullMapBitshuffleBuilder {
 public:
-    NullMapBitshuffleBuilder() : _has_null(false), _null_map(32 * 1024) {}
+    NullMapBitshuffleBuilder() : _null_map(32 * 1024) {}
 
     explicit NullMapBitshuffleBuilder(size_t reserve_bits) : _has_null(false), _null_map(reserve_bits) {}
 
@@ -162,7 +162,7 @@ public:
     }
 
 private:
-    bool _has_null;
+    bool _has_null{false};
     faststring _null_map;
     faststring _encode_buf;
 };
