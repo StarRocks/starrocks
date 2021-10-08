@@ -445,9 +445,9 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
         // load src header
         std::string header_file = strings::Substitute("$0/$1.hdr", clone_dir, tablet->tablet_id());
         TabletMeta cloned_tablet_meta(&mem_tracker);
-        if (cloned_tablet_meta.create_from_file(header_file) != OLAP_SUCCESS) {
+        res = cloned_tablet_meta.create_from_file(header_file);
+        if (!res.ok()) {
             LOG(WARNING) << "Fail to load load tablet meta from " << header_file;
-            res = Status::InternalError("fail to load tablet meta from header file");
             break;
         }
 
