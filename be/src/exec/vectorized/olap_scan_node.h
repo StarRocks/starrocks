@@ -10,7 +10,7 @@
 #include "column/chunk.h"
 #include "exec/olap_common.h"
 #include "exec/scan_node.h"
-#include "exec/vectorized/olap_scanner.h"
+#include "exec/vectorized/tablet_scanner.h"
 
 namespace starrocks {
 class DescriptorTbl;
@@ -21,14 +21,14 @@ class TupleDescriptor;
 namespace starrocks::vectorized {
 
 // OlapScanNode fetch records from storage engine and pass them to the parent node.
-// It will submit many OlapScanner to a global-shared thread pool to execute concurrently.
+// It will submit many TabletScanner to a global-shared thread pool to execute concurrently.
 //
 // Execution flow:
 // 1. OlapScanNode creates many empty chunks and put them into _chunk_pool.
 // 2. OlapScanNode submit many OlapScanners to a global-shared thread pool.
-// 3. OlapScanner fetch an empty Chunk from _chunk_pool and fill it with the records retrieved
+// 3. TabletScanner fetch an empty Chunk from _chunk_pool and fill it with the records retrieved
 //    from storage engine.
-// 4. OlapScanner put the non-empty Chunk into _result_chunks.
+// 4. TabletScanner put the non-empty Chunk into _result_chunks.
 // 5. OlapScanNode receive chunk from _result_chunks and put an new empty chunk into _chunk_pool.
 //
 // If _chunk_pool is empty, OlapScanners will quit the thread pool and put themself to the
@@ -60,7 +60,7 @@ public:
             pipeline::PipelineBuilderContext* context) override;
 
 private:
-    friend class OlapScanner;
+    friend class TabletScanner;
 
     constexpr static const int kMaxConcurrency = 50;
 
@@ -93,7 +93,7 @@ private:
 
     Status _start_scan(RuntimeState* state);
     Status _start_scan_thread(RuntimeState* state);
-    void _scanner_thread(OlapScanner* scanner);
+    void _scanner_thread(TabletScanner* scanner);
 
     void _init_counter(RuntimeState* state);
 
@@ -101,7 +101,7 @@ private:
     Status _get_status();
 
     void _fill_chunk_pool(int count, bool force_column_pool);
-    bool _submit_scanner(OlapScanner* scanner, bool blockable);
+    bool _submit_scanner(TabletScanner* scanner, bool blockable);
     void _close_pending_scanners();
     int _compute_priority(int32_t num_submitted_tasks);
 
@@ -133,7 +133,7 @@ private:
     // _mtx protects _chunk_pool and _pending_scanners.
     std::mutex _mtx;
     Stack<Chunk*> _chunk_pool;
-    Stack<OlapScanner*> _pending_scanners;
+    Stack<TabletScanner*> _pending_scanners;
 
     UnboundedBlockingQueue<Chunk*> _result_chunks;
 

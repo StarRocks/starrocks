@@ -19,7 +19,7 @@ namespace starrocks::vectorized {
 
 class OlapScanNode;
 
-struct OlapScannerParams {
+struct TabletScannerParams {
     const TInternalScanRange* scan_range = nullptr;
     const std::vector<OlapScanRange*>* key_ranges = nullptr;
     const std::vector<ExprContext*>* conjunct_ctxs = nullptr;
@@ -28,17 +28,17 @@ struct OlapScannerParams {
     bool need_agg_finalize = true;
 };
 
-class OlapScanner {
+class TabletScanner {
 public:
-    explicit OlapScanner(OlapScanNode* parent);
-    ~OlapScanner() = default;
+    explicit TabletScanner(OlapScanNode* parent);
+    ~TabletScanner() = default;
 
-    OlapScanner(const OlapScanner&) = delete;
-    OlapScanner(OlapScanner&&) = delete;
-    void operator=(const OlapScanner&) = delete;
-    void operator=(OlapScanner&&) = delete;
+    TabletScanner(const TabletScanner&) = delete;
+    TabletScanner(TabletScanner&&) = delete;
+    void operator=(const TabletScanner&) = delete;
+    void operator=(TabletScanner&&) = delete;
 
-    Status init(RuntimeState* runtime_state, const OlapScannerParams& params);
+    Status init(RuntimeState* runtime_state, const TabletScannerParams& params);
     Status open([[maybe_unused]] RuntimeState* runtime_state);
     Status get_chunk([[maybe_unused]] RuntimeState* state, Chunk* chunk);
     Status close(RuntimeState* state);
@@ -46,7 +46,7 @@ public:
     RuntimeState* runtime_state() { return _runtime_state; }
     int64_t raw_rows_read() const { return _raw_rows_read; }
 
-    // REQUIRES: `init(RuntimeState*, const OlapScannerParams&)` has been called.
+    // REQUIRES: `init(RuntimeState*, const TabletScannerParams&)` has been called.
     const Schema& chunk_schema() const { return _prj_iter->schema(); }
 
     void set_keep_priority(bool v) { _keep_priority = v; }
@@ -83,7 +83,7 @@ private:
     TabletSharedPtr _tablet;
     int64_t _version = 0;
 
-    // output columns of `this` OlapScanner, i.e, the final output columns of `get_chunk`.
+    // output columns of `this` TabletScanner, i.e, the final output columns of `get_chunk`.
     std::vector<uint32_t> _scanner_columns;
     // columns fetched from |_reader|.
     std::vector<uint32_t> _reader_columns;
