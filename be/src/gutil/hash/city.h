@@ -21,7 +21,7 @@
 #ifndef UTIL_HASH_CITY_H_
 #define UTIL_HASH_CITY_H_
 
-#include <stddef.h> // for size_t.
+#include <cstddef> // for size_t.
 
 #include "gutil/int128.h"
 #include "gutil/integral_types.h"

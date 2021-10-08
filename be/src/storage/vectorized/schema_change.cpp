@@ -652,7 +652,7 @@ bool ChunkMerger::_pop_heap() {
     return true;
 }
 
-bool LinkedSchemaChange::process(vectorized::Reader* reader, RowsetWriter* new_rowset_writer,
+bool LinkedSchemaChange::process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer,
                                  TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
     OLAPStatus status =
             new_rowset_writer->add_rowset_for_linked_schema_change(rowset, _chunk_changer.get_schema_mapping());
@@ -667,7 +667,7 @@ bool LinkedSchemaChange::process(vectorized::Reader* reader, RowsetWriter* new_r
     return true;
 }
 
-bool SchemaChangeDirectly::process(vectorized::Reader* reader, RowsetWriter* new_rowset_writer,
+bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer,
                                    TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
     bool result = true;
 
@@ -739,7 +739,7 @@ SchemaChangeWithSorting::~SchemaChangeWithSorting() {
     SAFE_DELETE(_chunk_allocator);
 }
 
-bool SchemaChangeWithSorting::process(vectorized::Reader* reader, RowsetWriter* new_rowset_writer,
+bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer,
                                       TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
     bool result = true;
 
@@ -1011,18 +1011,18 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 
     Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema(), return_columns);
     Version delete_predicates_version(0, max_rowset->version().second);
-    ReaderParams read_params;
+    TabletReaderParams read_params;
     read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
 
-    std::vector<vectorized::Reader*> readers;
+    std::vector<vectorized::TabletReader*> readers;
     for (auto rowset : rowsets_to_change) {
-        vectorized::Reader* rowset_reader = new Reader(base_tablet, rowset->version(), base_schema);
-        rowset_reader->set_delete_predicates_version(delete_predicates_version);
-        RETURN_IF_ERROR(rowset_reader->prepare());
-        RETURN_IF_ERROR(rowset_reader->open(read_params));
-        readers.emplace_back(rowset_reader);
+        vectorized::TabletReader* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
+        tablet_rowset_reader->set_delete_predicates_version(delete_predicates_version);
+        RETURN_IF_ERROR(tablet_rowset_reader->prepare());
+        RETURN_IF_ERROR(tablet_rowset_reader->open(read_params));
+        readers.emplace_back(tablet_rowset_reader);
     }
 
     SchemaChangeParams sc_params;

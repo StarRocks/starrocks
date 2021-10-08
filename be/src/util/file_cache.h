@@ -37,7 +37,7 @@ class Env;
 template <class FileType>
 class OpenedFileHandle {
 public:
-    OpenedFileHandle() : _cache(nullptr), _handle(nullptr) {}
+    OpenedFileHandle() {}
 
     // A opened file handle
     explicit OpenedFileHandle(Cache* cache, Cache::Handle* handle) : _cache(cache), _handle(handle) {}
@@ -66,8 +66,8 @@ public:
     }
 
 private:
-    Cache* _cache;
-    Cache::Handle* _handle;
+    Cache* _cache{nullptr};
+    Cache::Handle* _handle{nullptr};
 };
 
 // Cache of open files.
@@ -107,7 +107,7 @@ public:
     // the number of files open at any given time.
     // for this constructor, _is_cache_own is set to true, indicating that _cache
     // is only owned by this.
-    FileCache(const std::string& cache_name, int max_open_files);
+    FileCache(std::string cache_name, int max_open_files);
 
     // Creates a new file cache with given cache.
     //
@@ -116,7 +116,7 @@ public:
     // with other.
     // for this constructor, _is_cache_own is set to false, indicating that _cache
     // is sharing with other (In most case, sharing _cache with storage engine).
-    FileCache(const std::string& cache_name, std::shared_ptr<Cache> cache);
+    FileCache(std::string cache_name, std::shared_ptr<Cache> cache);
 
     // Destroys the file cache.
     ~FileCache() {
@@ -147,7 +147,8 @@ private:
     // this case, _is_cache_own is set to false.
     bool _is_cache_own = false;
 
-    DISALLOW_COPY_AND_ASSIGN(FileCache);
+    FileCache(const FileCache&) = delete;
+    const FileCache& operator=(const FileCache&) = delete;
 };
 
 } // namespace starrocks

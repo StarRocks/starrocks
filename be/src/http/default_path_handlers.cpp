@@ -191,11 +191,17 @@ void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* pro
     web_page_handler->register_page("/varz", "Configs", config_handler, true /* is_on_nav_bar */);
     web_page_handler->register_page(
             "/memz", "Memory",
-            std::bind<void>(&mem_usage_handler, process_mem_tracker, std::placeholders::_1, std::placeholders::_2),
+            [process_mem_tracker](auto&& PH1, auto&& PH2) {
+                return mem_usage_handler(process_mem_tracker, std::forward<decltype(PH1)>(PH1),
+                                         std::forward<decltype(PH2)>(PH2));
+            },
             true /* is_on_nav_bar */);
     web_page_handler->register_page(
             "/mem_tracker", "MemTracker",
-            std::bind<void>(&mem_tracker_handler, process_mem_tracker, std::placeholders::_1, std::placeholders::_2),
+            [process_mem_tracker](auto&& PH1, auto&& PH2) {
+                return mem_tracker_handler(process_mem_tracker, std::forward<decltype(PH1)>(PH1),
+                                           std::forward<decltype(PH2)>(PH2));
+            },
             true);
 }
 

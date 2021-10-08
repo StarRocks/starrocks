@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "exec/pipeline/operator.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/mysql_result_writer.h"
@@ -14,8 +16,8 @@ namespace pipeline {
 class ResultSinkOperator final : public Operator {
 public:
     ResultSinkOperator(int32_t id, int32_t plan_node_id, TResultSinkType::type sink_type,
-                       const std::vector<TExpr>& t_output_expr)
-            : Operator(id, "result_sink", plan_node_id), _sink_type(sink_type), _t_output_expr(t_output_expr) {}
+                       const std::vector<ExprContext*>& output_expr_ctxs)
+            : Operator(id, "result_sink", plan_node_id), _sink_type(sink_type), _output_expr_ctxs(output_expr_ctxs) {}
 
     ~ResultSinkOperator() override = default;
 
@@ -39,8 +41,6 @@ public:
 
 private:
     TResultSinkType::type _sink_type;
-    const std::vector<TExpr>& _t_output_expr;
-
     std::vector<ExprContext*> _output_expr_ctxs;
     std::shared_ptr<BufferControlBlock> _sender;
     std::shared_ptr<ResultWriter> _writer;
@@ -53,18 +53,23 @@ private:
 class ResultSinkOperatorFactory final : public OperatorFactory {
 public:
     ResultSinkOperatorFactory(int32_t id, int32_t plan_node_id, TResultSinkType::type sink_type,
-                              const std::vector<TExpr>& t_output_expr)
-            : OperatorFactory(id, plan_node_id), _sink_type(sink_type), _t_output_expr(t_output_expr) {}
+                              std::vector<TExpr> t_output_expr)
+            : OperatorFactory(id, plan_node_id), _sink_type(sink_type), _t_output_expr(std::move(t_output_expr)) {}
 
     ~ResultSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<ResultSinkOperator>(_id, _plan_node_id, _sink_type, _t_output_expr);
+        return std::make_shared<ResultSinkOperator>(_id, _plan_node_id, _sink_type, _output_expr_ctxs);
     }
+
+    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
+
+    void close(RuntimeState* state) override;
 
 private:
     TResultSinkType::type _sink_type;
     std::vector<TExpr> _t_output_expr;
+    std::vector<ExprContext*> _output_expr_ctxs;
 };
 
 } // namespace pipeline

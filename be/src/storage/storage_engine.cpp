@@ -22,15 +22,16 @@
 #include "storage/storage_engine.h"
 
 #include <rapidjson/document.h>
-#include <signal.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
+#include <csignal>
 #include <cstdio>
 #include <filesystem>
+#include <memory>
 #include <new>
 #include <queue>
 #include <random>
@@ -105,15 +106,14 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _available_storage_medium_type_count(0),
           _effective_cluster_id(-1),
           _is_all_cluster_id_exist(true),
-          _index_stream_lru_cache(nullptr),
+
           _file_cache(nullptr),
           _tablet_manager(new TabletManager(options.tablet_meta_mem_tracker, config::tablet_map_shard_size)),
           _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size)),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
           _block_manager(nullptr),
-          _update_manager(new UpdateManager(options.update_mem_tracker)),
-          _heartbeat_flags(nullptr) {
+          _update_manager(new UpdateManager(options.update_mem_tracker)) {
     if (_s_instance == nullptr) {
         _s_instance = this;
     }
@@ -162,7 +162,7 @@ Status StorageEngine::_open() {
     fs::BlockManagerOptions bm_opts;
     bm_opts.read_only = false;
     // |_block_manager| depend on |_file_cache|.
-    _block_manager.reset(new fs::FileBlockManager(Env::Default(), std::move(bm_opts)));
+    _block_manager = std::make_unique<fs::FileBlockManager>(Env::Default(), std::move(bm_opts));
 
     // |_update_manager| depend on |_block_manager|.
     // |fs::fs_util::block_manager| depends on ExecEnv's storage engine
@@ -173,7 +173,7 @@ Status StorageEngine::_open() {
     // `load_data_dirs` depend on |_update_manager|.
     load_data_dirs(dirs);
 
-    _memtable_flush_executor.reset(new MemTableFlushExecutor());
+    _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init memtable_flush_executor failed");
 
     return Status::OK();
@@ -393,7 +393,7 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
     //  TODO(lingbin): should it be a global util func?
     std::random_device rd;
     srand(rd());
-    std::random_shuffle(stores.begin(), stores.end());
+    std::shuffle(stores.begin(), stores.end(), std::mt19937(std::random_device()()));
     return stores;
 }
 
@@ -417,7 +417,7 @@ DataDir* StorageEngine::get_store(int64_t path_hash) {
 }
 
 static bool too_many_disks_are_failed(uint32_t unused_num, uint32_t total_num) {
-    return ((total_num == 0) || (unused_num * 100 / total_num > config::max_percentage_of_error_disk));
+    return total_num == 0 || unused_num * 100 / total_num > config::max_percentage_of_error_disk;
 }
 
 bool StorageEngine::_delete_tablets_on_unused_root_path() {

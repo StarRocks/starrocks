@@ -22,7 +22,7 @@ public:
     VectorizedInIteratorPredicate(const VectorizedInIteratorPredicate& other)
             : Predicate(other), _is_not_in(other._is_not_in) {}
 
-    ~VectorizedInIteratorPredicate() override {}
+    ~VectorizedInIteratorPredicate() override = default;
 
     Expr* clone(ObjectPool* pool) const override {
         return pool->add(new VectorizedInIteratorPredicate(*this));

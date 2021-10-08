@@ -36,7 +36,7 @@ class QueryStatisticsRecvr;
 // or plan's statistics and QueryStatisticsRecvr is responsible for collecting it.
 class QueryStatistics {
 public:
-    QueryStatistics() : scan_rows(0), scan_bytes(0), returned_rows(0) {}
+    QueryStatistics() {}
 
     void merge(const QueryStatistics& other) {
         scan_rows += other.scan_rows;
@@ -76,11 +76,11 @@ public:
     }
 
 private:
-    int64_t scan_rows;
-    int64_t scan_bytes;
+    int64_t scan_rows{0};
+    int64_t scan_bytes{0};
     // number rows returned by query.
     // only set once by result sink when closing.
-    int64_t returned_rows;
+    int64_t returned_rows{0};
     std::vector<QueryStatisticsItemPB> _stats_items;
 };
 

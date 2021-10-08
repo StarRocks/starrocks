@@ -51,7 +51,7 @@ EngineBatchLoadTask::EngineBatchLoadTask(TPushReq& push_req, std::vector<TTablet
                                          AgentStatus* res_status)
         : _push_req(push_req), _tablet_infos(tablet_infos), _signature(signature), _res_status(res_status) {}
 
-EngineBatchLoadTask::~EngineBatchLoadTask() {}
+EngineBatchLoadTask::~EngineBatchLoadTask() = default;
 
 OLAPStatus EngineBatchLoadTask::execute() {
     AgentStatus status = STARROCKS_SUCCESS;

@@ -15,12 +15,11 @@
 #include "common/status.h"
 #include "rapidjson/error/en.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // static const re2::RE2 JSON_PATTERN("^([a-zA-Z0-9_\\-\\:\\s#\\|\\.]*)(?:\\[([0-9]+)\\])?");
 // json path cannot contains: ", [, ]
-static const re2::RE2 JSON_PATTERN("^([^\\\"\\[\\]]*)(?:\\[([0-9]+|\\*)\\])?");
+static const re2::RE2 JSON_PATTERN(R"(^([^\"\[\]]*)(?:\[([0-9]+|\*)\])?)");
 
 void JsonFunctions::get_parsed_paths(const std::vector<std::string>& path_exprs, std::vector<JsonPath>* parsed_paths) {
     if (path_exprs[0] != "$") {
@@ -389,5 +388,4 @@ std::string JsonFunctions::get_raw_json_string(const rapidjson::Value& value) {
     return std::string(buffer.GetString());
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

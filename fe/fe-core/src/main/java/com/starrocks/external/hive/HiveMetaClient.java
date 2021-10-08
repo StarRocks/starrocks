@@ -18,7 +18,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
@@ -66,10 +68,8 @@ public class HiveMetaClient {
     private long hostId = 0;
     private final Map<Integer, Long> storageHashToId = new ConcurrentHashMap<>();
     private long storageId = 0;
-    private final int UNKNOWN_STORAGE_ID = -1;
+    private static final int UNKNOWN_STORAGE_ID = -1;
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
-
-    private long baseEventId;
 
     // Required for creating an instance of RetryingMetaStoreClient.
     private static final HiveMetaHookLoader dummyHookLoader = tbl -> null;
@@ -444,17 +444,22 @@ public class HiveMetaClient {
     private List<HdfsFileDesc> getHdfsFileDescs(String dirPath) throws Exception {
         URI uri = new URI(dirPath);
         FileSystem fileSystem = getFileSystem(uri);
-        FileStatus[] files = fileSystem.listStatus(new Path(uri.getPath()));
+        // fileSystem.listLocatedStatus is an api to list all statuses and
+        // block locations of the files in the given path in one operation.
+        // The performance is better than getting status and block location one by one.
+        RemoteIterator<LocatedFileStatus> blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
 
-        for (FileStatus fileStatus : files) {
-            if (!isValidDataFile(fileStatus)) {
+        while (blockIterator.hasNext()) {
+            LocatedFileStatus locatedFileStatus = blockIterator.next();
+            if (!isValidDataFile(locatedFileStatus)) {
                 continue;
             }
-            String fileName = Utils.getSuffixName(dirPath, fileStatus.getPath().toString());
-            BlockLocation[] blockLocations = fileSystem.getFileBlockLocations(fileStatus, 0, fileStatus.getLen());
+            String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
+            BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
             List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
-            fileDescs.add(new HdfsFileDesc(fileName, "", fileStatus.getLen(), ImmutableList.copyOf(fileBlockDescs)));
+            fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
+                    ImmutableList.copyOf(fileBlockDescs)));
         }
         return fileDescs;
     }

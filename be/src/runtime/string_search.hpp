@@ -68,11 +68,11 @@ namespace starrocks {
 class StringSearch {
 
 public:
-    virtual ~StringSearch() {}
-    StringSearch() : _pattern(nullptr), _mask(0) {}
+    virtual ~StringSearch() = default;
+    StringSearch()  {}
 
     // Initialize/Precompute a StringSearch object from the pattern
-    StringSearch(const StringValue* pattern) : _pattern(pattern), _mask(0), _skip(0) {
+    StringSearch(const StringValue* pattern) : _pattern(pattern), _mask(0) {
         // Special cases
         if (_pattern->len <= 1) {
             return;
@@ -166,8 +166,8 @@ private:
         return _mask & (1UL << (c & (BLOOM_WIDTH - 1)));
     }
 
-    const StringValue* _pattern;
-    int64_t _mask;
+    const StringValue* _pattern{nullptr};
+    int64_t _mask{0};
     int64_t _skip = 0;
 };
 

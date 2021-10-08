@@ -35,8 +35,8 @@ public class StatisticUtils {
         context.setCluster(SystemInfoService.DEFAULT_CLUSTER);
         context.setDatabase(Constants.StatisticsDBName);
         context.setCatalog(Catalog.getCurrentCatalog());
-        context.setCurrentUserIdentity(UserIdentity.ADMIN);
-        context.setQualifiedUser(UserIdentity.ADMIN.getQualifiedUser());
+        context.setCurrentUserIdentity(UserIdentity.ROOT);
+        context.setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
         context.setQueryId(UUIDUtil.genUUID());
         context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
         context.setThreadLocalInfo();

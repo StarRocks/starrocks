@@ -16,7 +16,7 @@
 #ifndef UTIL_GTL_CHARMAP_H_
 #define UTIL_GTL_CHARMAP_H_
 
-#include <string.h>
+#include <cstring>
 
 #include "gutil/basictypes.h"
 #include "gutil/integral_types.h"

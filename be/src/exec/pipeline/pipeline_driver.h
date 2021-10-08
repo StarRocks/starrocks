@@ -69,11 +69,8 @@ static inline std::string ds_to_string(DriverState ds) {
 class DriverAcct {
 public:
     DriverAcct()
-            : schedule_times(0),
-              last_time_spent(0),
-              last_chunks_moved(0),
-              accumulated_time_spent(0),
-              accumulated_chunk_moved(0) {}
+
+    {}
     //TODO:
     // get_level return a non-negative value that is a hint used by DriverQueue to choose
     // the target internal queue for put_back.
@@ -93,11 +90,11 @@ public:
     void increment_schedule_times() { this->schedule_times += 1; }
 
 private:
-    int64_t schedule_times;
-    int64_t last_time_spent;
-    int64_t last_chunks_moved;
-    int64_t accumulated_time_spent;
-    int64_t accumulated_chunk_moved;
+    int64_t schedule_times{0};
+    int64_t last_time_spent{0};
+    int64_t last_chunks_moved{0};
+    int64_t accumulated_time_spent{0};
+    int64_t accumulated_chunk_moved{0};
 };
 
 class PipelineDriver {
@@ -132,6 +129,9 @@ public:
     DriverState driver_state() { return _state; }
     void set_driver_state(DriverState state) { _state = state; }
     SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
+
+    void cancel(RuntimeState* state);
+
     Operator* sink_operator() { return _operators.back().get(); }
     bool is_finished() {
         return _state == DriverState::FINISH || _state == DriverState::CANCELED ||

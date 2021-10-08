@@ -10,8 +10,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     if (_state == DriverState::NOT_READY) {
         source_operator()->add_morsel_queue(_morsel_queue);
@@ -140,7 +139,14 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
     }
 }
 
+void PipelineDriver::cancel(RuntimeState* state) {
+    for (auto i = _first_unfinished; i < _operators.size(); ++i) {
+        _operators[i]->finish(state);
+    }
+}
+
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
+    VLOG_ROW << "[Driver] finalize, driver=" << this;
     if (state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR) {
         auto num_operators = _operators.size();
         for (auto i = _first_unfinished; i < num_operators; ++i) {
@@ -187,5 +193,4 @@ std::string PipelineDriver::to_debug_string() const {
     ss << "]";
     return ss.str();
 }
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

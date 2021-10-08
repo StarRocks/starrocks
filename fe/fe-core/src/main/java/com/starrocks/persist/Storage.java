@@ -32,9 +32,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
@@ -51,7 +48,6 @@ public class Storage {
     public static final String TOKEN = "token";
     public static final String FRONTEND_ROLE = "role";
     public static final String NODE_NAME = "name";
-    public static final String EDITS = "edits";
     public static final String IMAGE = "image";
     public static final String IMAGE_NEW = "image.ckpt";
     public static final String VERSION_FILE = "VERSION";
@@ -61,10 +57,8 @@ public class Storage {
     private String token;
     private FrontendNodeType role = FrontendNodeType.UNKNOWN;
     private String nodeName;
-    private long editsSeq;
-    private long imageSeq;
+    private long imageJournalId;
     private String metaDir;
-    private List<Long> editsFileSequenceNumbers;
 
     public Storage(int clusterID, String token, String metaDir) {
         this.clusterID = clusterID;
@@ -72,24 +66,17 @@ public class Storage {
         this.metaDir = metaDir;
     }
 
-    public Storage(int clusterID, String token, long imageSeq, long editsSeq, String metaDir) {
+    public Storage(int clusterID, String token, long imageJournalId, String metaDir) {
         this.clusterID = clusterID;
         this.token = token;
-        this.editsSeq = editsSeq;
-        this.imageSeq = imageSeq;
+        this.imageJournalId = imageJournalId;
         this.metaDir = metaDir;
     }
 
     public Storage(String metaDir) throws IOException {
-        this.editsFileSequenceNumbers = new ArrayList<Long>();
         this.metaDir = metaDir;
 
         reload();
-    }
-
-    public List<Long> getEditsFileSequenceNumbers() {
-        Collections.sort(editsFileSequenceNumbers);
-        return this.editsFileSequenceNumbers;
     }
 
     public void reload() throws IOException {
@@ -125,22 +112,14 @@ public class Storage {
             for (File child : children) {
                 String name = child.getName();
                 try {
-                    if (!name.equals(EDITS) && !name.equals(IMAGE_NEW)
-                            && !name.endsWith(".part") && name.contains(".")) {
-                        if (name.startsWith(IMAGE)) {
-                            imageSeq = Math.max(Long.parseLong(name.substring(name.lastIndexOf('.') + 1)), imageSeq);
-                        } else if (name.startsWith(EDITS)) {
-                            // Just record the sequence part of the file name
-                            editsFileSequenceNumbers.add(Long.parseLong(name.substring(name.lastIndexOf('.') + 1)));
-                            editsSeq = Math.max(Long.parseLong(name.substring(name.lastIndexOf('.') + 1)), editsSeq);
-                        }
+                    if (!name.equals(IMAGE_NEW) && name.startsWith(IMAGE) && name.contains(".")) {
+                        imageJournalId = Math.max(Long.parseLong(name.substring(name.lastIndexOf('.') + 1)), imageJournalId);
                     }
                 } catch (Exception e) {
                     LOG.warn(name + " is not a validate meta file, ignore it");
                 }
             }
         }
-
     }
 
     public int getClusterID() {
@@ -175,20 +154,12 @@ public class Storage {
         this.metaDir = metaDir;
     }
 
-    public long getImageSeq() {
-        return imageSeq;
+    public long getImageJournalId() {
+        return imageJournalId;
     }
 
-    public void setImageSeq(long imageSeq) {
-        this.imageSeq = imageSeq;
-    }
-
-    public void setEditsSeq(long editsSeq) {
-        this.editsSeq = editsSeq;
-    }
-
-    public long getEditsSeq() {
-        return editsSeq;
+    public void setImageJournalId(long imageJournalId) {
+        this.imageJournalId = imageJournalId;
     }
 
     public static int newClusterID() {
@@ -283,7 +254,7 @@ public class Storage {
     }
 
     public File getCurrentImageFile() {
-        return getImageFile(imageSeq);
+        return getImageFile(imageJournalId);
     }
 
     public File getImageFile(long version) {
@@ -301,27 +272,5 @@ public class Storage {
     public final File getRoleFile() {
         return new File(metaDir, ROLE_FILE);
     }
-
-    public File getCurrentEditsFile() {
-        return new File(metaDir, EDITS);
-    }
-
-    public static File getCurrentEditsFile(File dir) {
-        return new File(dir, EDITS);
-    }
-
-    public File getEditsFile(long seq) {
-        return getEditsFile(new File(metaDir), seq);
-    }
-
-    public static File getEditsFile(File dir, long seq) {
-        return new File(dir, EDITS + "." + seq);
-    }
-
-    public static long getMetaSeq(File file) {
-        String filename = file.getName();
-        return Long.parseLong(filename.substring(filename.lastIndexOf('.') + 1));
-    }
-
 }
 

@@ -51,8 +51,7 @@ void DiskIoMgr::RequestContext::cancel(const Status& status) {
 
         // Cancel all scan ranges for this reader. Each range could be one one of
         // four queues.
-        for (int i = 0; i < _disk_states.size(); ++i) {
-            RequestContext::PerDiskState& state = _disk_states[i];
+        for (auto& state : _disk_states) {
             RequestRange* range = nullptr;
             while ((range = state.in_flight_ranges()->dequeue()) != nullptr) {
                 if (range->request_type() == RequestType::READ) {
@@ -181,8 +180,8 @@ void DiskIoMgr::RequestContext::reset(MemTracker* tracker) {
     DCHECK(_blocked_ranges.empty());
     DCHECK(_cached_ranges.empty());
 
-    for (int i = 0; i < _disk_states.size(); ++i) {
-        _disk_states[i].reset();
+    for (auto& _disk_state : _disk_states) {
+        _disk_state.reset();
     }
 }
 

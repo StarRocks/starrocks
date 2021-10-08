@@ -35,9 +35,10 @@ DIAGNOSTIC_POP
 #include <s2/s2polyline.h>
 #include <s2/util/coding/coder.h>
 #include <s2/util/units/length-units.h>
-#include <stdio.h>
 
+#include <cstdio>
 #include <iomanip>
+#include <memory>
 #include <sstream>
 
 #include "geo/wkt_parse.h"
@@ -114,7 +115,7 @@ static GeoParseStatus to_s2loop(const GeoCoordinateList& coords, std::unique_ptr
     if (points.size() < 3) {
         return GEO_PARSE_LOOP_LACK_VERTICES;
     }
-    loop->reset(new S2Loop(points));
+    *loop = std::make_unique<S2Loop>(points);
     if (!(*loop)->IsValid()) {
         return GEO_PARSE_LOOP_INVALID;
     }
@@ -137,7 +138,7 @@ static GeoParseStatus to_s2polyline(const GeoCoordinateList& coords, std::unique
     if (points.size() < 2) {
         return GEO_PARSE_POLYLINE_LACK_VERTICES;
     }
-    polyline->reset(new S2Polyline(points));
+    *polyline = std::make_unique<S2Polyline>(points);
     if (!(*polyline)->IsValid()) {
         return GEO_PARSE_POLYLINE_INVALID;
     }
@@ -155,7 +156,7 @@ static GeoParseStatus to_s2polygon(const GeoCoordinateListList& coords_list, std
             return GEO_PARSE_POLYGON_NOT_HOLE;
         }
     }
-    polygon->reset(new S2Polygon(std::move(loops)));
+    *polygon = std::make_unique<S2Polygon>(std::move(loops));
     return GEO_PARSE_OK;
 }
 
@@ -191,19 +192,19 @@ GeoShape* GeoShape::from_encoded(const void* ptr, size_t size) {
     std::unique_ptr<GeoShape> shape;
     switch (((const char*)ptr)[1]) {
     case GEO_SHAPE_POINT: {
-        shape.reset(new GeoPoint());
+        shape = std::make_unique<GeoPoint>();
         break;
     }
     case GEO_SHAPE_LINE_STRING: {
-        shape.reset(new GeoLine());
+        shape = std::make_unique<GeoLine>();
         break;
     }
     case GEO_SHAPE_POLYGON: {
-        shape.reset(new GeoPolygon());
+        shape = std::make_unique<GeoPolygon>();
         break;
     }
     case GEO_SHAPE_CIRCLE: {
-        shape.reset(new GeoCircle());
+        shape = std::make_unique<GeoCircle>();
         break;
     }
     default:
@@ -217,7 +218,7 @@ GeoShape* GeoShape::from_encoded(const void* ptr, size_t size) {
 }
 
 GeoPoint::GeoPoint() : _point(new S2Point()) {}
-GeoPoint::~GeoPoint() {}
+GeoPoint::~GeoPoint() = default;
 
 bool GeoPoint::st_distance_sphere(double x_lng, double x_lat, double y_lng, double y_lat, double* result) {
     S2LatLng x = S2LatLng::FromDegrees(x_lat, x_lng);
@@ -274,8 +275,8 @@ std::string GeoPoint::as_wkt() const {
     return ss.str();
 }
 
-GeoLine::GeoLine() {}
-GeoLine::~GeoLine() {}
+GeoLine::GeoLine() = default;
+GeoLine::~GeoLine() = default;
 
 GeoParseStatus GeoLine::from_coords(const GeoCoordinateList& list) {
     return to_s2polyline(list, &_polyline);
@@ -289,12 +290,12 @@ void GeoLine::encode(std::string* buf) {
 
 bool GeoLine::decode(const void* data, size_t size) {
     Decoder decoder(data, size);
-    _polyline.reset(new S2Polyline());
+    _polyline = std::make_unique<S2Polyline>();
     return _polyline->Decode(&decoder);
 }
 
-GeoPolygon::GeoPolygon() {}
-GeoPolygon::~GeoPolygon() {}
+GeoPolygon::GeoPolygon() = default;
+GeoPolygon::~GeoPolygon() = default;
 
 GeoParseStatus GeoPolygon::from_coords(const GeoCoordinateListList& list) {
     return to_s2polygon(list, &_polygon);
@@ -308,7 +309,7 @@ void GeoPolygon::encode(std::string* buf) {
 
 bool GeoPolygon::decode(const void* data, size_t size) {
     Decoder decoder(data, size);
-    _polygon.reset(new S2Polygon());
+    _polygon = std::make_unique<S2Polygon>();
     return _polygon->Decode(&decoder);
 }
 
@@ -403,8 +404,8 @@ bool GeoPolygon::contains(const GeoShape* rhs) const {
     }
 }
 
-GeoCircle::GeoCircle() {}
-GeoCircle::~GeoCircle() {}
+GeoCircle::GeoCircle() = default;
+GeoCircle::~GeoCircle() = default;
 
 GeoParseStatus GeoCircle::init(double lng, double lat, double radius_meter) {
     S2Point center;
@@ -413,7 +414,7 @@ GeoParseStatus GeoCircle::init(double lng, double lat, double radius_meter) {
         return status;
     }
     S1Angle radius = S2Earth::ToAngle(util::units::Meters(radius_meter));
-    _cap.reset(new S2Cap(center, radius));
+    _cap = std::make_unique<S2Cap>(center, radius);
     if (!_cap->is_valid()) {
         return GEO_PARSE_CIRCLE_INVALID;
     }
@@ -482,7 +483,7 @@ void GeoCircle::encode(std::string* buf) {
 
 bool GeoCircle::decode(const void* data, size_t size) {
     Decoder decoder(data, size);
-    _cap.reset(new S2Cap());
+    _cap = std::make_unique<S2Cap>();
     return _cap->Decode(&decoder);
 }
 

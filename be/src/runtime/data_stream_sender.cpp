@@ -29,6 +29,7 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <random>
 
 #include "column/chunk.h"
 #include "common/logging.h"
@@ -483,7 +484,7 @@ DataStreamSender::DataStreamSender(ObjectPool* pool, bool is_vectorized, int sen
                                    const TDataStreamSink& sink,
                                    const std::vector<TPlanFragmentDestination>& destinations,
                                    int per_channel_buffer_size, bool send_query_statistics_with_every_batch)
-        : _is_vectorized(is_vectorized),
+        : _is_vectorized(true),
           _sender_id(sender_id),
           _pool(pool),
           _row_desc(row_desc),
@@ -593,7 +594,7 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     if (_part_type == TPartitionType::UNPARTITIONED || _part_type == TPartitionType::RANDOM) {
         // Randomize the order we open/transmit to channels to avoid thundering herd problems.
         srand(reinterpret_cast<uint64_t>(this));
-        std::random_shuffle(_channels.begin(), _channels.end());
+        std::shuffle(_channels.begin(), _channels.end(), std::mt19937(std::random_device()()));
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
         RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, _row_desc, _expr_mem_tracker.get()));
@@ -615,10 +616,12 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     _shuffle_hash_timer = ADD_TIMER(profile(), "ShuffleHashTime");
     _overall_throughput = profile()->add_derived_counter(
             "OverallThroughput", TUnit::BYTES_PER_SECOND,
-            std::bind<int64_t>(&RuntimeProfile::units_per_second, _bytes_sent_counter, profile()->total_time_counter()),
+            [capture0 = _bytes_sent_counter, capture1 = profile()->total_time_counter()] {
+                return RuntimeProfile::units_per_second(capture0, capture1);
+            },
             "");
-    for (int i = 0; i < _channels.size(); ++i) {
-        RETURN_IF_ERROR(_channels[i]->init(state));
+    for (auto& _channel : _channels) {
+        RETURN_IF_ERROR(_channel->init(state));
     }
 
     // set eos for all channels.
@@ -907,18 +910,18 @@ Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
         _chunk_request.set_eos(true);
         butil::IOBuf attachment;
         construct_brpc_attachment(&_chunk_request, &attachment);
-        for (int i = 0; i < _channels.size(); ++i) {
-            _channels[i]->send_chunk_request(&_chunk_request, attachment);
+        for (auto& _channel : _channels) {
+            _channel->send_chunk_request(&_chunk_request, attachment);
         }
     } else {
-        for (int i = 0; i < _channels.size(); ++i) {
-            _channels[i]->close(state);
+        for (auto& _channel : _channels) {
+            _channel->close(state);
         }
     }
 
     // wait all channels to finish
-    for (int i = 0; i < _channels.size(); ++i) {
-        _channels[i]->close_wait(state);
+    for (auto& _channel : _channels) {
+        _channel->close_wait(state);
     }
     for (auto iter : _partition_infos) {
         auto st = iter->close(state);
@@ -1029,8 +1032,8 @@ int64_t DataStreamSender::get_num_data_bytes_sent() const {
     // atomic?
     int64_t result = 0;
 
-    for (int i = 0; i < _channels.size(); ++i) {
-        result += _channels[i]->num_data_bytes_sent();
+    for (auto _channel : _channels) {
+        result += _channel->num_data_bytes_sent();
     }
 
     return result;

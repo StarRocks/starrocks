@@ -21,10 +21,9 @@
 
 #include "runtime/datetime_value.h"
 
-#include <ctype.h>
-#include <string.h>
-#include <time.h>
-
+#include <cctype>
+#include <cstring>
+#include <ctime>
 #include <limits>
 #include <sstream>
 
@@ -63,7 +62,7 @@ static uint32_t calc_days_in_year(uint32_t year) {
 
 DateTimeValue DateTimeValue::_s_min_datetime_value(0, TIME_DATETIME, 0, 0, 0, 0, 0, 1, 1);
 DateTimeValue DateTimeValue::_s_max_datetime_value(0, TIME_DATETIME, 23, 59, 59, 0, 9999, 12, 31);
-RE2 DateTimeValue::time_zone_offset_format_reg("^[+-]{1}\\d{2}\\:\\d{2}$");
+RE2 DateTimeValue::time_zone_offset_format_reg(R"(^[+-]{1}\d{2}\:\d{2}$)");
 
 bool DateTimeValue::check_range() const {
     return _year > 9999 || _month > 12 || _day > 31 || _hour > (_type == TIME_TIME ? TIME_MAX_HOUR : 23) ||
@@ -1394,7 +1393,7 @@ bool DateTimeValue::from_date_format_str(const char* format, int format_len, con
     }
     if (sub_val_end) {
         *sub_val_end = val;
-        return 0;
+        return false;
     }
     // Year day
     if (yearday > 0) {

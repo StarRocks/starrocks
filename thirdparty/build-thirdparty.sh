@@ -501,7 +501,6 @@ build_arrow() {
     export ARROW_ZLIB_URL=${TP_SOURCE_DIR}/${ZLIB_NAME}
     export ARROW_FLATBUFFERS_URL=${TP_SOURCE_DIR}/${FLATBUFFERS_NAME}
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
-    export ARROW_JEMALLOC_URL=${TP_SOURCE_DIR}/${JEMALLOC_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
 
     ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_SHARED=OFF \
@@ -510,6 +509,7 @@ build_arrow() {
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DARROW_BOOST_USE_SHARED=OFF -DARROW_GFLAGS_USE_SHARED=OFF -DBoost_NO_BOOST_CMAKE=ON -DBOOST_ROOT=$TP_INSTALL_DIR \
+    -Dzstd_SOURCE=BUNDLED \
     -Dgflags_ROOT=$TP_INSTALL_DIR/ \
     -DSnappy_ROOT=$TP_INSTALL_DIR/ \
     -DGLOG_ROOT=$TP_INSTALL_DIR/ \
@@ -684,7 +684,7 @@ build_breakpad() {
 #hadoop
 build_hadoop() {
     check_if_source_exist $HADOOP_SOURCE
-    cp -r $TP_SOURCE_DIR/$HADOOP_SOURCE $TP_INSTALL_DIR/
+    cp -r $TP_SOURCE_DIR/$HADOOP_SOURCE $TP_INSTALL_DIR/hadoop
     mkdir -p $TP_INSTALL_DIR/include/hdfs
     cp $TP_SOURCE_DIR/$HADOOP_SOURCE/include/hdfs.h $TP_INSTALL_DIR/include/hdfs
     cp $TP_SOURCE_DIR/$HADOOP_SOURCE/lib/native/libhdfs.a $TP_INSTALL_DIR/lib
@@ -693,7 +693,7 @@ build_hadoop() {
 #jdk
 build_jdk() {
     check_if_source_exist $JDK_SOURCE
-    cp -r $TP_SOURCE_DIR/$JDK_SOURCE $TP_INSTALL_DIR/
+    cp -r $TP_SOURCE_DIR/$JDK_SOURCE $TP_INSTALL_DIR/open_jdk
 }
 
 # ragel
@@ -707,12 +707,8 @@ build_ragel() {
 
 #hyperscan
 build_hyperscan() {
-    HYPERSCAN_TARGET=$HYPERSCAN_SOURCE
-    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-        HYPERSCAN_TARGET=$HYPERSCAN_AARCH64_SOURCE
-    fi
-    check_if_source_exist $HYPERSCAN_TARGET
-    cd $TP_SOURCE_DIR/$HYPERSCAN_TARGET
+    check_if_source_exist $HYPERSCAN_SOURCE
+    cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
     export PATH=$TP_INSTALL_DIR/bin:$PATH
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
           -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc  -DCMAKE_INSTALL_LIBDIR=lib

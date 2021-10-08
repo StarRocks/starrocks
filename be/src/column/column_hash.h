@@ -2,7 +2,9 @@
 
 #pragma once
 
+#if defined(__x86_64__)
 #include <nmmintrin.h>
+#endif
 
 #include "util/hash_util.hpp"
 #include "util/slice.h"
@@ -251,12 +253,25 @@ public:
 };
 
 inline uint64_t crc_hash_uint64(uint64_t value, uint64_t seed) {
+#if defined(__x86_64__)
     return _mm_crc32_u64(seed, value);
+#elif defined(__aarch64__)
+    return __crc32cd(seed, value);
+#else
+#error "Not supported architecture"
+#endif
 }
 
 inline uint64_t crc_hash_uint128(uint64_t value0, uint64_t value1, uint64_t seed) {
+#if defined(__x86_64__)
     uint64_t hash = _mm_crc32_u64(seed, value0);
     hash = _mm_crc32_u64(hash, value1);
+#elif defined(__aarch64__)
+    uint64_t hash = __crc32cd(seed, value0);
+    hash = __crc32cd(hash, value1);
+#else
+#error "Not supported architecture"
+#endif
     return hash;
 }
 

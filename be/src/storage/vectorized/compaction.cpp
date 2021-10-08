@@ -8,7 +8,7 @@
 #include "runtime/current_thread.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/reader.h"
+#include "storage/vectorized/tablet_reader.h"
 #include "util/defer_op.h"
 #include "util/time.h"
 #include "util/trace.h"
@@ -28,7 +28,7 @@ Compaction::Compaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
     _mem_tracker = std::make_unique<MemTracker>(config::compaction_mem_limit, "", mem_tracker, true);
 }
 
-Compaction::~Compaction() {}
+Compaction::~Compaction() = default;
 
 Status Compaction::init(int concurreny) {
     _concurrency_sem.set_count(concurreny);
@@ -151,8 +151,8 @@ Status Compaction::construct_output_rowset_writer() {
 Status Compaction::merge_rowsets(MemTracker* mem_tracker, Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
-    Reader reader(_tablet, _output_rs_writer->version(), schema);
-    ReaderParams reader_params;
+    TabletReader reader(_tablet, _output_rs_writer->version(), schema);
+    TabletReaderParams reader_params;
     reader_params.reader_type = compaction_type();
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
 
@@ -198,7 +198,7 @@ Status Compaction::merge_rowsets(MemTracker* mem_tracker, Statistics* stats_outp
 
         ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
 
-        OLAPStatus olap_status = _output_rs_writer->add_chunk(*chunk.get());
+        OLAPStatus olap_status = _output_rs_writer->add_chunk(*chunk);
         if (olap_status != OLAP_SUCCESS) {
             LOG(WARNING) << "writer add_chunk error, err=" << olap_status;
             return Status::InternalError("writer add_chunk error.");

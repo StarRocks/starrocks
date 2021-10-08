@@ -11,8 +11,7 @@
 #include "util/thrift_util.h"
 #include "util/types.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 const int STATISTIC_DATA_VERSION1 = 1;
 
@@ -21,7 +20,7 @@ StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              starrocks::RuntimeProfile* parent_profile)
         : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {}
 
-StatisticResultWriter::~StatisticResultWriter() {}
+StatisticResultWriter::~StatisticResultWriter() = default;
 
 Status StatisticResultWriter::init(RuntimeState* state) {
     _init_profile();
@@ -136,5 +135,4 @@ Status StatisticResultWriter::close() {
     return Status::OK();
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

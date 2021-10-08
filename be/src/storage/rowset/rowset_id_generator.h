@@ -31,8 +31,8 @@ namespace starrocks {
 // all implementations must be thread-safe
 class RowsetIdGenerator {
 public:
-    RowsetIdGenerator() {}
-    virtual ~RowsetIdGenerator() {}
+    RowsetIdGenerator() = default;
+    virtual ~RowsetIdGenerator() = default;
 
     // generate and return the next global unique rowset id
     virtual RowsetId next_id() = 0;

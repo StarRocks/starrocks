@@ -131,8 +131,7 @@ private:
 template <typename T>
 class ForDecoder {
 public:
-    explicit ForDecoder(const uint8_t* in_buffer, size_t buffer_len)
-            : _buffer(in_buffer), _buffer_len(buffer_len), _parsed(false) {}
+    explicit ForDecoder(const uint8_t* in_buffer, size_t buffer_len) : _buffer(in_buffer), _buffer_len(buffer_len) {}
 
     // read footer metadata
     bool init();

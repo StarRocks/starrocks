@@ -3,8 +3,7 @@
 #include "exec/pipeline/pipeline_driver_dispatcher.h"
 
 #include "gutil/strings/substitute.h"
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool)
         : _driver_queue(new QuerySharedDriverQueue()),
           _thread_pool(std::move(thread_pool)),
@@ -29,12 +28,11 @@ void GlobalDriverDispatcher::change_num_threads(int32_t num_threads) {
     }
 }
 
-void GlobalDriverDispatcher::finalize_driver(DriverPtr& driver, RuntimeState* runtime_state, DriverState state) {
+void GlobalDriverDispatcher::finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
     DCHECK(driver);
     driver->finalize(runtime_state, state);
     if (driver->query_ctx()->is_finished()) {
         auto query_id = driver->query_ctx()->query_id();
-        driver.reset();
         QueryContextManager::instance()->remove(query_id);
     }
 }
@@ -53,7 +51,9 @@ void GlobalDriverDispatcher::run() {
         auto* runtime_state = fragment_ctx->runtime_state();
 
         if (fragment_ctx->is_canceled()) {
-            VLOG_ROW << "[Driver] Canceled: error=" << fragment_ctx->final_status().to_string();
+            VLOG_ROW << "[Driver] Canceled: driver=" << driver
+                     << ", error=" << fragment_ctx->final_status().to_string();
+            driver->cancel(runtime_state);
             if (driver->source_operator()->pending_finish()) {
                 driver->set_driver_state(DriverState::PENDING_FINISH);
                 _blocked_driver_poller->add_blocked_driver(driver);
@@ -75,6 +75,7 @@ void GlobalDriverDispatcher::run() {
         if (!status.ok()) {
             VLOG_ROW << "[Driver] Process error: error=" << status.status().to_string();
             query_ctx->cancel(status.status());
+            driver->cancel(runtime_state);
             if (driver->source_operator()->pending_finish()) {
                 driver->set_driver_state(DriverState::PENDING_FINISH);
                 _blocked_driver_poller->add_blocked_driver(driver);
@@ -115,7 +116,7 @@ void GlobalDriverDispatcher::run() {
     }
 }
 
-void GlobalDriverDispatcher::dispatch(DriverPtr driver) {
+void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
     this->_driver_queue->put_back(driver);
 }
 
@@ -136,5 +137,4 @@ void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, co
 
     this->_exec_state_reporter->submit(std::move(report_task));
 }
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

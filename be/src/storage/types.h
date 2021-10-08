@@ -74,7 +74,8 @@ private:
     // item_type_info -> list_type_info
     std::unordered_map<FieldType, std::unique_ptr<ScalarTypeInfo>, std::hash<size_t>> _mapping;
 
-    DISALLOW_COPY_AND_ASSIGN(ScalarTypeInfoResolver);
+    ScalarTypeInfoResolver(const ScalarTypeInfoResolver&) = delete;
+    const ScalarTypeInfoResolver& operator=(const ScalarTypeInfoResolver&) = delete;
 };
 
 class TypeInfo {

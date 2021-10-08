@@ -38,13 +38,8 @@ class StreamLoadPipe : public MessageBodySink, public FileReader {
 public:
     StreamLoadPipe(size_t max_buffered_bytes = 1024 * 1024, size_t min_chunk_size = 64 * 1024,
                    int64_t total_length = -1)
-            : _buffered_bytes(0),
-              _max_buffered_bytes(max_buffered_bytes),
-              _min_chunk_size(min_chunk_size),
-              _total_length(total_length),
-              _finished(false),
-              _cancelled(false) {}
-    ~StreamLoadPipe() override {}
+            : _max_buffered_bytes(max_buffered_bytes), _min_chunk_size(min_chunk_size), _total_length(total_length) {}
+    ~StreamLoadPipe() override = default;
 
     Status open() override { return Status::OK(); }
 
@@ -237,7 +232,7 @@ private:
 
     // Blocking queue
     std::mutex _lock;
-    size_t _buffered_bytes;
+    size_t _buffered_bytes{0};
     size_t _max_buffered_bytes;
     size_t _min_chunk_size;
     // The total amount of data expected to be read.
@@ -252,8 +247,8 @@ private:
     std::condition_variable _put_cond;
     std::condition_variable _get_cond;
 
-    bool _finished;
-    bool _cancelled;
+    bool _finished{false};
+    bool _cancelled{false};
 
     ByteBufferPtr _write_buf;
 };

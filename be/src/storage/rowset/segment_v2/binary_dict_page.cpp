@@ -32,8 +32,7 @@
 #include "util/slice.h" // for Slice
 #include "util/unaligned_access.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 using strings::Substitute;
 
@@ -179,7 +178,7 @@ Status BinaryDictPageDecoder<Type>::init() {
         const TypeInfoPtr& type_info = get_type_info(OLAP_FIELD_TYPE_INT);
 
         RETURN_IF_ERROR(ColumnVectorBatch::create(0, false, type_info, nullptr, &_batch));
-        _data_page_decoder.reset(new BitShufflePageDecoder<OLAP_FIELD_TYPE_INT>(_data, _options));
+        _data_page_decoder = std::make_unique<BitShufflePageDecoder<OLAP_FIELD_TYPE_INT>>(_data, _options);
     } else if (_encoding_type == PLAIN_ENCODING) {
         DCHECK_EQ(_encoding_type, PLAIN_ENCODING);
         _data_page_decoder.reset(new BinaryPlainPageDecoder<Type>(_data, _options));
@@ -283,5 +282,4 @@ Status BinaryDictPageDecoder<Type>::next_dict_codes(size_t* n, vectorized::Colum
 template class BinaryDictPageDecoder<OLAP_FIELD_TYPE_CHAR>;
 template class BinaryDictPageDecoder<OLAP_FIELD_TYPE_VARCHAR>;
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

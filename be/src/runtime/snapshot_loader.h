@@ -22,8 +22,7 @@
 #ifndef STARROCKS_BE_SRC_RUNTIME_SNAPSHOT_LOADER_H
 #define STARROCKS_BE_SRC_RUNTIME_SNAPSHOT_LOADER_H
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>

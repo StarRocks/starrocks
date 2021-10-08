@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include <float.h>
-#include <stdint.h>
+#include <cfloat>
+#include <cstdint>
 
 namespace starrocks {
 

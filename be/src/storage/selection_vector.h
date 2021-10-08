@@ -103,7 +103,8 @@ private:
     size_t _n_rows;
     size_t _n_bytes;
     std::unique_ptr<uint8_t[]> _bitmap;
-    DISALLOW_COPY_AND_ASSIGN(SelectionVector);
+    SelectionVector(const SelectionVector&) = delete;
+    const SelectionVector& operator=(const SelectionVector&) = delete;
 };
 
 inline bool SelectionVector::any_selected() const {

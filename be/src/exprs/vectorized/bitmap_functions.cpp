@@ -12,8 +12,7 @@
 #include "gutil/strings/substitute.h"
 #include "util/string_parser.hpp"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
@@ -339,5 +338,4 @@ ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starr
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

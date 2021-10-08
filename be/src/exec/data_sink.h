@@ -45,7 +45,7 @@ class RowDescriptor;
 // Superclass of all data sinks.
 class DataSink {
 public:
-    DataSink() : _closed(false) {}
+    DataSink() {}
     virtual ~DataSink() = default;
 
     virtual Status init(const TDataSink& thrift_sink);
@@ -89,7 +89,7 @@ public:
 protected:
     // Set to true after close() has been called. subclasses should check and set this in
     // close().
-    bool _closed;
+    bool _closed{false};
     std::unique_ptr<MemTracker> _expr_mem_tracker;
 
     // Maybe this will be transferred to BufferControlBlock.

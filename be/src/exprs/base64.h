@@ -22,8 +22,8 @@
 #ifndef STARROCKS_BE_EXPRS_BASE64_H
 #define STARROCKS_BE_EXPRS_BASE64_H
 
-#include <stdint.h>
-#include <stdio.h>
+#include <cstdint>
+#include <cstdio>
 
 namespace starrocks {
 

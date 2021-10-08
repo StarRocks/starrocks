@@ -22,7 +22,7 @@
 #ifndef STARROCKS_BE_SRC_QUERY_EXEC_OLAP_UTILS_H
 #define STARROCKS_BE_SRC_QUERY_EXEC_OLAP_UTILS_H
 
-#include <math.h>
+#include <cmath>
 
 #include "common/logging.h"
 #include "gen_cpp/Opcodes_types.h"
@@ -89,7 +89,7 @@ static const char* POSITIVE_INFINITY = "+oo";
 
 typedef struct OlapScanRange {
 public:
-    OlapScanRange() : begin_include(true), end_include(true) {
+    OlapScanRange() {
         begin_scan_range.add_value(NEGATIVE_INFINITY);
         end_scan_range.add_value(POSITIVE_INFINITY);
     }
@@ -97,8 +97,8 @@ public:
                   const std::vector<std::string>& end_range)
             : begin_include(begin), end_include(end), begin_scan_range(begin_range), end_scan_range(end_range) {}
 
-    bool begin_include;
-    bool end_include;
+    bool begin_include{true};
+    bool end_include{true};
     OlapTuple begin_scan_range;
     OlapTuple end_scan_range;
 } OlapScanRange;

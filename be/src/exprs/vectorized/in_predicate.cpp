@@ -6,8 +6,7 @@
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/in_iterator_predicate.hpp"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 #define CASE_TYPE(TYPE, CLASS)        \
     case TYPE: {                      \
@@ -67,5 +66,4 @@ Expr* VectorizedInPredicateFactory::from_thrift(const TExprNode& node) {
 #undef SWITCH_ALL_TYPE
 #undef CASE_TYPE
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

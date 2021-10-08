@@ -9,11 +9,9 @@
 #include "storage/update_manager.h"
 #include "storage/vectorized/chunk_helper.h"
 
-namespace starrocks {
+namespace starrocks::vectorized {
 
-namespace vectorized {
-
-CompactionState::CompactionState() {}
+CompactionState::CompactionState() = default;
 
 CompactionState::~CompactionState() {
     StorageEngine::instance()->update_manager()->compaction_state_mem_tracker()->release(_memory_usage);
@@ -124,6 +122,4 @@ Status CompactionState::_do_load(Rowset* rowset) {
     return Status::OK();
 }
 
-} // namespace vectorized
-
-} // namespace starrocks
+} // namespace starrocks::vectorized

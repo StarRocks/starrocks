@@ -40,7 +40,7 @@ class faststring {
 public:
     enum { kInitialCapacity = 32 };
 
-    faststring() : data_(initial_data_), len_(0), capacity_(kInitialCapacity) {}
+    faststring() : data_(initial_data_) {}
 
     // Construct a string with the given capacity, in bytes.
     explicit faststring(size_t capacity) : data_(initial_data_), len_(0), capacity_(kInitialCapacity) {
@@ -234,7 +234,8 @@ public:
     }
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(faststring);
+    faststring(const faststring&) = delete;
+    const faststring& operator=(const faststring&) = delete;
 
     // If necessary, expand the buffer to fit at least 'count' more bytes.
     // If the array has to be grown, it is grown by at least 50%.
@@ -260,10 +261,10 @@ private:
 
     uint8_t* data_;
     uint8_t initial_data_[kInitialCapacity];
-    size_t len_;
+    size_t len_{0};
     // NOTE: we will make a initial buffer as part of the object, so the smallest
     // possible value of capacity_ is kInitialCapacity.
-    size_t capacity_;
+    size_t capacity_{kInitialCapacity};
 };
 
 } // namespace starrocks

@@ -22,8 +22,7 @@
 #ifndef STARROCKS_BE_SRC_COMMON_CONFIGBASE_H
 #define STARROCKS_BE_SRC_COMMON_CONFIGBASE_H
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>

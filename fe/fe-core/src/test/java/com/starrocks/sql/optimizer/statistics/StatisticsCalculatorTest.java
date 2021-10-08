@@ -9,6 +9,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -187,8 +188,16 @@ public class StatisticsCalculatorTest {
             partition.getBaseIndex().setRowCount(1000);
         }
 
-        LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table);
-        olapScanOperator.getSelectedPartitionId().addAll(partitionIds);
+        LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
+                Lists.newArrayList(),
+                Maps.newHashMap(), Maps.newHashMap(),
+                null, -1, null,
+                ((OlapTable) table).getBaseIndexId(),
+                partitionIds,
+                null,
+                Lists.newArrayList(),
+                Lists.newArrayList());
+
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
@@ -230,10 +239,15 @@ public class StatisticsCalculatorTest {
         ColumnRefOperator id_date = columnRefFactory.create("id_date", Type.DATE, true);
 
         Catalog catalog = connectContext.getCatalog();
-        OlapTable table = (OlapTable) catalog.getDb("default_cluster:test").getTable("test_all_type");
+        Table table = catalog.getDb("default_cluster:test").getTable("test_all_type");
 
         new Expectations() {
             {
+                cachedStatisticStorage.getColumnStatistics(table, Lists.newArrayList("id_date"));
+                result = new ColumnStatistic(0, Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 01, 0, 0, 0)),
+                        0, 0, 30);
+                minTimes = 0;
+
                 cachedStatisticStorage.getColumnStatistic(table, "id_date");
                 result = new ColumnStatistic(0, Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 01, 0, 0, 0)),
                         0, 0, 30);
@@ -241,7 +255,7 @@ public class StatisticsCalculatorTest {
             }
         };
 
-        Collection<Partition> partitions = table.getPartitions();
+        Collection<Partition> partitions = ((OlapTable) table).getPartitions();
         // select partition p1
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p1")).
                 mapToLong(Partition::getId).boxed().collect(Collectors.toList());
@@ -249,13 +263,19 @@ public class StatisticsCalculatorTest {
             partition.getBaseIndex().setRowCount(1000);
         }
 
-        LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
-                Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of(new Column("id_date", Type.DATE, true),
-                id_date.getId()));
-        olapScanOperator.getSelectedPartitionId().addAll(partitionIds);
-
-        olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
-                id_date, ConstantOperator.createDate(LocalDateTime.of(2013, 12, 30, 0, 0, 0))));
+        LogicalOlapScanOperator olapScanOperator =
+                new LogicalOlapScanOperator(table,
+                        Lists.newArrayList(),
+                        ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
+                        ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date),
+                        null, -1,
+                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                                id_date, ConstantOperator.createDate(LocalDateTime.of(2013, 12, 30, 0, 0, 0))),
+                        ((OlapTable) table).getBaseIndexId(),
+                        partitionIds,
+                        null,
+                        Lists.newArrayList(),
+                        Lists.newArrayList());
 
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
@@ -274,12 +294,18 @@ public class StatisticsCalculatorTest {
         partitionIds.clear();
         partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                 mapToLong(Partition::getId).boxed().collect(Collectors.toList());
-        olapScanOperator = new LogicalOlapScanOperator(table,
-                Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of(new Column("id_date", Type.DATE, true),
-                id_date.getId()));
+        olapScanOperator =
+                new LogicalOlapScanOperator(table,
+                        Lists.newArrayList(),
+                        ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
+                        ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date),
+                        null, -1, null, ((OlapTable) table).getBaseIndexId(),
+                        partitionIds,
+                        null,
+                        Lists.newArrayList(),
+                        Lists.newArrayList());
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
                 id_date, ConstantOperator.createDate(LocalDateTime.of(2014, 5, 1, 0, 0, 0))));
-        olapScanOperator.getSelectedPartitionId().addAll(partitionIds);
 
         groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
@@ -333,6 +359,11 @@ public class StatisticsCalculatorTest {
 
         new Expectations() {
             {
+                cachedStatisticStorage.getColumnStatistics(table, Lists.newArrayList("id_date"));
+                result = new ColumnStatistic(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 23, 0, 0, 0)),
+                        Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 25, 0, 0, 0)), 0, 0, 3);
+                minTimes = 0;
+
                 cachedStatisticStorage.getColumnStatistic(table, "id_date");
                 result = new ColumnStatistic(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 23, 0, 0, 0)),
                         Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 25, 0, 0, 0)), 0, 0, 3);
@@ -348,10 +379,15 @@ public class StatisticsCalculatorTest {
             partition.getBaseIndex().setRowCount(1000);
         }
 
-        LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
-                Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of(new Column("id_date", Type.DATE, true),
-                id_date.getId()));
-        olapScanOperator.getSelectedPartitionId().addAll(partitionIds);
+        LogicalOlapScanOperator olapScanOperator =
+                new LogicalOlapScanOperator(table, Lists.newArrayList(id_date),
+                        ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
+                        ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date), null, -1, null,
+                        ((OlapTable) table).getBaseIndexId(),
+                        partitionIds,
+                        null,
+                        Lists.newArrayList(),
+                        Lists.newArrayList());
 
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
@@ -372,12 +408,17 @@ public class StatisticsCalculatorTest {
         partitionIds.clear();
         partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                 mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
-        olapScanOperator = new LogicalOlapScanOperator(table,
-                Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of(new Column("id_date", Type.DATE, true),
-                id_date.getId()));
+        olapScanOperator =
+                new LogicalOlapScanOperator(table, Lists.newArrayList(id_date),
+                        ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
+                        ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date), null, -1, null,
+                        ((OlapTable) table).getBaseIndexId(),
+                        partitionIds,
+                        null,
+                        Lists.newArrayList(),
+                        Lists.newArrayList());
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
                 id_date, ConstantOperator.createDate(LocalDateTime.of(2020, 04, 24, 0, 0, 0))));
-        olapScanOperator.getSelectedPartitionId().addAll(partitionIds);
 
         groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));

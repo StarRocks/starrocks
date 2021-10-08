@@ -21,6 +21,7 @@
 
 #include "exec/tablet_info.h"
 
+#include <memory>
 #include <utility>
 
 #include "runtime/mem_pool.h"
@@ -168,7 +169,7 @@ OlapTablePartitionParam::OlapTablePartitionParam(std::shared_ptr<OlapTableSchema
           _mem_tracker(new MemTracker()),
           _mem_pool(new MemPool(_mem_tracker.get())) {}
 
-OlapTablePartitionParam::~OlapTablePartitionParam() {}
+OlapTablePartitionParam::~OlapTablePartitionParam() = default;
 
 Status OlapTablePartitionParam::init() {
     std::map<std::string, SlotDescriptor*> slots_map;
@@ -195,8 +196,8 @@ Status OlapTablePartitionParam::init() {
         }
     }
 
-    _partitions_map.reset(new std::map<Tuple*, OlapTablePartition*, OlapTablePartKeyComparator>(
-            OlapTablePartKeyComparator(_partition_slot_descs)));
+    _partitions_map = std::make_unique<std::map<Tuple*, OlapTablePartition*, OlapTablePartKeyComparator>>(
+            OlapTablePartKeyComparator(_partition_slot_descs));
     if (_t_param.__isset.distributed_columns) {
         for (auto& col : _t_param.distributed_columns) {
             auto it = slots_map.find(col);
@@ -209,8 +210,7 @@ Status OlapTablePartitionParam::init() {
         }
     }
     // initial partitions
-    for (int i = 0; i < _t_param.partitions.size(); ++i) {
-        const TOlapTablePartition& t_part = _t_param.partitions[i];
+    for (auto& t_part : _t_param.partitions) {
         OlapTablePartition* part = _obj_pool.add(new OlapTablePartition());
         part->id = t_part.id;
 

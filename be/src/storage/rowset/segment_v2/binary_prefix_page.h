@@ -21,10 +21,9 @@
 
 #pragma once
 
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
-
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <map>
 #include <string>
 #include <vector>
@@ -107,7 +106,7 @@ private:
 template <FieldType Type>
 class BinaryPrefixPageDecoder final : public PageDecoder {
 public:
-    BinaryPrefixPageDecoder(Slice data, const PageDecoderOptions& options) : _data(data), _parsed(false) {}
+    BinaryPrefixPageDecoder(Slice data, const PageDecoderOptions& options) : _data(data) {}
 
     Status init() override;
 

@@ -21,8 +21,7 @@
 
 #pragma once
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <memory>
 
 #include "common/status.h"
@@ -36,7 +35,7 @@ namespace starrocks {
 // TODO: Remove old query executor related codes before 2021-09-30
 class FileReader {
 public:
-    virtual ~FileReader() {}
+    virtual ~FileReader() = default;
     virtual Status open() = 0;
     // Read content to 'buf', 'buf_len' is the max size of this buffer.
     // Return ok when read success, and 'buf_len' is set to size of read content

@@ -25,11 +25,9 @@ SchemaScanner::ColumnDesc SchemaViewsScanner::_s_tbls_columns[] = {
 };
 
 SchemaViewsScanner::SchemaViewsScanner()
-        : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)),
-          _db_index(0),
-          _table_index(0) {}
+        : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
-SchemaViewsScanner::~SchemaViewsScanner() {}
+SchemaViewsScanner::~SchemaViewsScanner() = default;
 
 Status SchemaViewsScanner::start(RuntimeState* state) {
     if (!_is_init) {

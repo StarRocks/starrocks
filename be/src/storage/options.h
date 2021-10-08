@@ -22,6 +22,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "storage/olap_define.h"
@@ -32,14 +33,14 @@ namespace starrocks {
 class MemTracker;
 
 struct StorePath {
-    StorePath() : capacity_bytes(-1), storage_medium(TStorageMedium::HDD) {}
-    StorePath(const std::string& path_, int64_t capacity_bytes_)
-            : path(path_), capacity_bytes(capacity_bytes_), storage_medium(TStorageMedium::HDD) {}
-    StorePath(const std::string& path_, int64_t capacity_bytes_, TStorageMedium::type storage_medium_)
-            : path(path_), capacity_bytes(capacity_bytes_), storage_medium(storage_medium_) {}
+    StorePath() {}
+    StorePath(std::string path_, int64_t capacity_bytes_)
+            : path(std::move(path_)), capacity_bytes(capacity_bytes_), storage_medium(TStorageMedium::HDD) {}
+    StorePath(std::string path_, int64_t capacity_bytes_, TStorageMedium::type storage_medium_)
+            : path(std::move(path_)), capacity_bytes(capacity_bytes_), storage_medium(storage_medium_) {}
     std::string path;
-    int64_t capacity_bytes;
-    TStorageMedium::type storage_medium;
+    int64_t capacity_bytes{-1};
+    TStorageMedium::type storage_medium{TStorageMedium::HDD};
 };
 
 // parse a single root path of storage_root_path

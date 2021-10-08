@@ -21,11 +21,11 @@
 
 #include "runtime/mem_tracker.h"
 
-#include <stdint.h>
-
 #include <boost/algorithm/string/join.hpp>
+#include <cstdint>
 #include <limits>
 #include <memory>
+#include <utility>
 
 #include "exec/exec_node.h"
 #include "gutil/strings/substitute.h"
@@ -44,11 +44,10 @@ namespace starrocks {
 
 const std::string MemTracker::COUNTER_NAME = "PeakMemoryUsage";
 
-MemTracker::MemTracker(int64_t byte_limit, const std::string& label, MemTracker* parent, bool auto_unregister,
+MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent, bool auto_unregister,
                        bool log_usage_if_zero)
-        : _type(NO_SET),
-          _limit(byte_limit),
-          _label(label),
+        : _limit(byte_limit),
+          _label(std::move(label)),
           _parent(parent),
           _consumption(&_local_counter),
           _local_counter(TUnit::BYTES),
@@ -58,11 +57,11 @@ MemTracker::MemTracker(int64_t byte_limit, const std::string& label, MemTracker*
     Init();
 }
 
-MemTracker::MemTracker(Type type, int64_t byte_limit, const std::string& label, MemTracker* parent,
-                       bool auto_unregister, bool log_usage_if_zero)
+MemTracker::MemTracker(Type type, int64_t byte_limit, std::string label, MemTracker* parent, bool auto_unregister,
+                       bool log_usage_if_zero)
         : _type(type),
           _limit(byte_limit),
-          _label(label),
+          _label(std::move(label)),
           _parent(parent),
           _consumption(&_local_counter),
           _local_counter(TUnit::BYTES),
@@ -72,11 +71,11 @@ MemTracker::MemTracker(Type type, int64_t byte_limit, const std::string& label, 
     Init();
 }
 
-MemTracker::MemTracker(RuntimeProfile* profile, int64_t byte_limit, const std::string& label, MemTracker* parent,
+MemTracker::MemTracker(RuntimeProfile* profile, int64_t byte_limit, std::string label, MemTracker* parent,
                        bool auto_unregister)
         : _type(NO_SET),
           _limit(byte_limit),
-          _label(label),
+          _label(std::move(label)),
           _parent(parent),
           _consumption(profile->AddHighWaterMarkCounter(COUNTER_NAME, TUnit::BYTES)),
           _local_counter(TUnit::BYTES),
@@ -259,13 +258,13 @@ bool MemTracker::GcMemory(int64_t max_consumption) {
 
     int64_t curr_consumption = pre_gc_consumption;
     // Try to free up some memory
-    for (int i = 0; i < _gc_functions.size(); ++i) {
+    for (auto& _gc_function : _gc_functions) {
         // Try to free up the amount we are over plus some extra so that we don't have to
         // immediately GC again. Don't free all the memory since that can be unnecessarily
         // expensive.
         const int64_t EXTRA_BYTES_TO_FREE = 512L * 1024L * 1024L;
         int64_t bytes_to_free = curr_consumption - max_consumption + EXTRA_BYTES_TO_FREE;
-        _gc_functions[i](bytes_to_free);
+        _gc_function(bytes_to_free);
         if (_consumption_metric != nullptr) RefreshConsumptionFromMetric();
         curr_consumption = consumption();
         if (max_consumption - curr_consumption <= EXTRA_BYTES_TO_FREE) break;

@@ -21,7 +21,9 @@
 
 #include "storage/rowset/segment_v2/indexed_column_writer.h"
 
+#include <memory>
 #include <string>
+#include <utility>
 
 #include "common/logging.h"
 #include "env/env.h"
@@ -37,13 +39,12 @@
 #include "util/block_compression.h"
 #include "util/coding.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
-IndexedColumnWriter::IndexedColumnWriter(const IndexedColumnWriterOptions& options, const TypeInfoPtr& typeinfo,
+IndexedColumnWriter::IndexedColumnWriter(const IndexedColumnWriterOptions& options, TypeInfoPtr typeinfo,
                                          fs::WritableBlock* wblock)
         : _options(options),
-          _typeinfo(typeinfo),
+          _typeinfo(std::move(typeinfo)),
           _wblock(wblock),
           _mem_tracker(-1),
           _mem_pool(&_mem_tracker),
@@ -69,10 +70,10 @@ Status IndexedColumnWriter::init() {
     _data_page_builder.reset(data_page_builder);
 
     if (_options.write_ordinal_index) {
-        _ordinal_index_builder.reset(new IndexPageBuilder(_options.index_page_size, true));
+        _ordinal_index_builder = std::make_unique<IndexPageBuilder>(_options.index_page_size, true);
     }
     if (_options.write_value_index) {
-        _value_index_builder.reset(new IndexPageBuilder(_options.index_page_size, true));
+        _value_index_builder = std::make_unique<IndexPageBuilder>(_options.index_page_size, true);
         _validx_key_coder = get_key_coder(_typeinfo->type());
     }
 
@@ -167,5 +168,4 @@ Status IndexedColumnWriter::_flush_index(IndexPageBuilder* index_builder, BTreeM
     return Status::OK();
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

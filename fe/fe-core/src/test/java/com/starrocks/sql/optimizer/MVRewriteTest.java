@@ -61,7 +61,6 @@ public class MVRewriteTest {
         UtFrameUtils.createMinStarRocksCluster(runningDir);
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withEnableMV().withDatabase(HR_DB_NAME).useDatabase(HR_DB_NAME);
-        starRocksAssert.enableNewPlanner();
     }
 
     @Before
@@ -94,6 +93,36 @@ public class MVRewriteTest {
     @AfterClass
     public static void afterClass() throws Exception {
         UtFrameUtils.cleanStarRocksFeDir(baseDir);
+    }
+
+    @Test
+    public void testCountMV1() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select time, sum(salary) from "
+                + EMPS_TABLE_NAME + " group by time;";
+        String query = "select time, count(1) from " + EMPS_TABLE_NAME + " group by time;";
+        starRocksAssert.withMaterializedView(createMVSQL);
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+
+        query = "select count(1) from " + EMPS_TABLE_NAME + " group by time;";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+
+        query = "select count(1) from " + EMPS_TABLE_NAME;
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+    }
+
+    @Test
+    public void testCountMV2() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select time, sum(salary) from "
+                + EMPS_TABLE_NAME + " group by time;";
+        String query = "select time, count(*) from " + EMPS_TABLE_NAME + " group by time;";
+        starRocksAssert.withMaterializedView(createMVSQL);
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+
+        query = "select count(*) from " + EMPS_TABLE_NAME + " group by time;";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+
+        query = "select count(*) from " + EMPS_TABLE_NAME;
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
     }
 
     @Test
@@ -785,6 +814,17 @@ public class MVRewriteTest {
     }
 
     @Test
+    public void testPercentile2() throws Exception {
+        String createUserTagMVSql = "create materialized view " + EMPS_MV_NAME + " as select empid, " +
+                "percentile_union(percentile_hash(salary)), percentile_union(percentile_hash(commission)) from " +
+                EMPS_TABLE_NAME + " group by empid;";
+        starRocksAssert.withMaterializedView(createUserTagMVSql);
+        String query =
+                "select empid, percentile_approx(salary, 1), percentile_approx(commission, 1) from emps group by empid";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
     public void testPercentileDouble() throws Exception {
         String createTableSql = "CREATE TABLE `duplicate_table_with_null` (\n" +
                 "  `k1` date NULL COMMENT \"\",\n" +
@@ -860,6 +900,61 @@ public class MVRewriteTest {
                 " union all select empid from"
                 + " " + EMPS_TABLE_NAME + " where deptno < 200) a group by a.empid";
         starRocksAssert.withMaterializedView(createMVSQL).query(union).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testUnionQueryOnAggMV1() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid from " +
+                EMPS_TABLE_NAME + " group by deptno,empid;";
+        String union = "select a.cnt from (select count(1) as cnt from " + EMPS_TABLE_NAME + " where deptno > 300" +
+                " union all select count(1) as cnt from"
+                + " " + EMPS_TABLE_NAME + " where deptno < 200) a ";
+        starRocksAssert.withMaterializedView(createMVSQL).query(union).explainContains(QUERY_USE_EMPS);
+    }
+
+    @Test
+    public void testUnionQueryOnAggMV2() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid from " +
+                EMPS_TABLE_NAME + " group by deptno,empid;";
+        String union = "select a.empid, a.deptno from (select empid, deptno from " + EMPS_TABLE_NAME +
+                " where deptno > 300 group by empid, deptno" +
+                " union all select empid, deptno from"
+                + " " + EMPS_TABLE_NAME + " where deptno < 200 group by empid, deptno) a ";
+        starRocksAssert.withMaterializedView(createMVSQL).query(union).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testUnionQueryOnAggMV3() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid from " +
+                EMPS_TABLE_NAME + " group by deptno,empid;";
+        String union = "select a.empid, count(1) from (select empid, deptno from " + EMPS_TABLE_NAME +
+                " where deptno > 300 group by empid, deptno" +
+                " union all select empid, deptno from"
+                + " " + EMPS_TABLE_NAME + " where deptno < 200 group by empid, deptno) a group by a.empid";
+        starRocksAssert.withMaterializedView(createMVSQL).query(union).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testUnionQueryOnAggMV4() throws Exception {
+        String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid from " +
+                EMPS_TABLE_NAME + " group by deptno,empid;";
+        String union = "select a.empid, sum(cnt) from (select empid, deptno as cnt from " + EMPS_TABLE_NAME +
+                " where deptno > 300 group by empid, deptno" +
+                " union all select empid, count(1) as cnt from"
+                + " " + EMPS_TABLE_NAME + " where deptno < 200 group by empid) a group by a.empid";
+        String plan = starRocksAssert.withMaterializedView(createMVSQL).query(union).explainQuery();
+        Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
+                "     TABLE: emps\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: deptno > 300\n" +
+                "     partitions=1/1\n" +
+                "     rollup: emps_mv"));
+        Assert.assertTrue(plan.contains("7:OlapScanNode\n" +
+                "     TABLE: emps\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 13: deptno < 200\n" +
+                "     partitions=1/1\n" +
+                "     rollup: emps"));
     }
 
     @Test
@@ -955,7 +1050,8 @@ public class MVRewriteTest {
     @Test
     public void testJoinProjectRewrite() throws Exception {
         String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME +
-                " as select time, empid, bitmap_union(to_bitmap(deptno)),hll_union(hll_hash(salary)) from " + EMPS_TABLE_NAME + " group by time, empid";
+                " as select time, empid, bitmap_union(to_bitmap(deptno)),hll_union(hll_hash(salary)) from " +
+                EMPS_TABLE_NAME + " group by time, empid";
         starRocksAssert.withMaterializedView(createEmpsMVSQL);
         String query = "select count(distinct emps.deptno) from emps, depts";
         starRocksAssert.query(query).explainContains("emps_mv", "bitmap_union_count(7: mv_bitmap_union_deptno)");
@@ -964,12 +1060,14 @@ public class MVRewriteTest {
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
 
         query = "select count(distinct emps.deptno) from emps, depts where emps.time = depts.time";
+        System.out.println("FIXME : " + starRocksAssert.query(query).explainQuery());
         starRocksAssert.query(query).explainContains(EMPS_MV_NAME);
 
         query = "select count(distinct emps.deptno) from emps left outer join depts on emps.time = depts.time";
         starRocksAssert.query(query).explainContains("emps_mv");
 
-        query = "select emps.time, count(distinct emps.deptno) from emps, depts where emps.time = depts.time group by emps.time";
+        query =
+                "select emps.time, count(distinct emps.deptno) from emps, depts where emps.time = depts.time group by emps.time";
         starRocksAssert.query(query).explainContains("emps_mv");
 
         query = "select unnest, count(distinct deptno) from " +

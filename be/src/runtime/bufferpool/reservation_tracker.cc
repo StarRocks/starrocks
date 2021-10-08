@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <memory>
 
 #include "common/object_pool.h"
 #include "gutil/strings/substitute.h"
@@ -33,7 +34,7 @@
 
 namespace starrocks {
 
-ReservationTracker::ReservationTracker() {}
+ReservationTracker::ReservationTracker() = default;
 
 ReservationTracker::~ReservationTracker() {
     DCHECK(!initialized_);
@@ -98,7 +99,7 @@ void ReservationTracker::InitChildTracker(RuntimeProfile* profile, ReservationTr
 
 void ReservationTracker::InitCounters(RuntimeProfile* profile, int64_t reservation_limit) {
     if (profile == nullptr) {
-        dummy_profile_.reset(new DummyProfile);
+        dummy_profile_ = std::make_unique<DummyProfile>();
         profile = dummy_profile_->profile();
     }
 

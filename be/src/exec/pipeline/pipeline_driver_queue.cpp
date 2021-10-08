@@ -3,9 +3,8 @@
 #include "exec/pipeline/pipeline_driver_queue.h"
 
 #include "gutil/strings/substitute.h"
-namespace starrocks {
-namespace pipeline {
-void QuerySharedDriverQueue::put_back(const DriverPtr& driver) {
+namespace starrocks::pipeline {
+void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
     int level = driver->driver_acct().get_level();
     {
         std::unique_lock<std::mutex> lock(_global_mutex);
@@ -17,11 +16,11 @@ void QuerySharedDriverQueue::put_back(const DriverPtr& driver) {
     }
 }
 
-DriverPtr QuerySharedDriverQueue::take(size_t* queue_index) {
+DriverRawPtr QuerySharedDriverQueue::take(size_t* queue_index) {
     // -1 means no candidates; else has candidate.
     int queue_idx = -1;
     double target_accu_time = 0;
-    DriverPtr driver_ptr;
+    DriverRawPtr driver_ptr;
 
     {
         std::unique_lock<std::mutex> lock(_global_mutex);
@@ -60,5 +59,4 @@ SubQuerySharedDriverQueue* QuerySharedDriverQueue::get_sub_queue(size_t index) {
     return _queues + index;
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

@@ -23,10 +23,10 @@
 #define STARROCKS_BE_RUNTIME_DATETIME_VALUE_H
 
 #include <re2/re2.h>
-#include <stdint.h>
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 
 #include "cctz/civil_time.h"
@@ -61,16 +61,16 @@ enum TimeUnit {
 };
 
 struct TimeInterval {
-    int32_t year;
-    int32_t month;
-    int32_t day;
-    int32_t hour;
-    int32_t minute;
-    int32_t second;
-    int32_t microsecond;
-    bool is_neg;
+    int32_t year{0};
+    int32_t month{0};
+    int32_t day{0};
+    int32_t hour{0};
+    int32_t minute{0};
+    int32_t second{0};
+    int32_t microsecond{0};
+    bool is_neg{false};
 
-    TimeInterval() : year(0), month(0), day(0), hour(0), minute(0), second(0), microsecond(0), is_neg(false) {}
+    TimeInterval() {}
 
     TimeInterval(TimeUnit unit, int count, bool is_neg_param)
             : year(0), month(0), day(0), hour(0), minute(0), second(0), microsecond(0), is_neg(is_neg_param) {
@@ -131,16 +131,7 @@ uint8_t mysql_week_mode(uint32_t mode);
 class DateTimeValue {
 public:
     // Constructor
-    DateTimeValue()
-            : _neg(0),
-              _type(TIME_DATETIME),
-              _hour(0),
-              _minute(0),
-              _second(0),
-              _year(0),
-              _month(0),
-              _day(0),
-              _microsecond(0) {}
+    DateTimeValue() : _neg(0), _type(TIME_DATETIME), _hour(0) {}
 
     DateTimeValue(TimeType type, int year, int month, int day, int hour, int minute, int second, int microsec)
             : _neg(0),
@@ -511,13 +502,13 @@ private:
     uint16_t _neg : 1;  // Used for time value.
     uint16_t _type : 3; // Which type of this value.
     uint16_t _hour : 12;
-    uint8_t _minute;
-    uint8_t _second;
-    uint16_t _year;
-    uint8_t _month;
-    uint8_t _day;
+    uint8_t _minute{0};
+    uint8_t _second{0};
+    uint16_t _year{0};
+    uint8_t _month{0};
+    uint8_t _day{0};
     // TODO(zc): used for nothing
-    uint64_t _microsecond;
+    uint64_t _microsecond{0};
 
     DateTimeValue(uint8_t neg, uint8_t type, uint8_t hour, uint8_t minute, uint8_t second, uint32_t microsecond,
                   uint16_t year, uint8_t month, uint8_t day)

@@ -17,6 +17,8 @@
 
 #include "runtime/vectorized_row_batch.h"
 
+#include <memory>
+
 #include "common/logging.h"
 #include "storage/row_block.h"
 
@@ -27,8 +29,8 @@ VectorizedRowBatch::VectorizedRowBatch(const TabletSchema* schema, const std::ve
     _selected_in_use = false;
     _size = 0;
 
-    _tracker.reset(new MemTracker(-1));
-    _mem_pool.reset(new MemPool(_tracker.get()));
+    _tracker = std::make_unique<MemTracker>(-1);
+    _mem_pool = std::make_unique<MemPool>(_tracker.get());
 
     _selected = reinterpret_cast<uint16_t*>(new char[sizeof(uint16_t) * _capacity]);
 

@@ -22,6 +22,8 @@
 #ifndef STARROCKS_BE_SRC_QUERY_RUNTIME_TMP_FILE_MGR_H
 #define STARROCKS_BE_SRC_QUERY_RUNTIME_TMP_FILE_MGR_H
 
+#include <utility>
+
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
 // #include "util/collection_metrics.h"
@@ -88,7 +90,7 @@ public:
         // directory. A warning is issued if available space is less than this threshold.
         const static uint64_t _s_available_space_threshold_mb;
 
-        File(TmpFileMgr* mgr, DeviceId device_id, const std::string& path);
+        File(TmpFileMgr* mgr, DeviceId device_id, std::string path);
 
         // TmpFileMgr this belongs to.
         TmpFileMgr* _mgr;
@@ -113,7 +115,7 @@ public:
     };
 
     TmpFileMgr(ExecEnv* exec_env);
-    TmpFileMgr() {}
+    TmpFileMgr() = default;
 
     ~TmpFileMgr() {
         // do nothing.
@@ -163,7 +165,7 @@ private:
         friend class TmpFileMgr;
 
         // path should be a absolute path to a writable scratch directory.
-        Dir(const std::string& path, bool blacklisted) : _path(path), _blacklisted(blacklisted) {}
+        Dir(std::string path, bool blacklisted) : _path(std::move(path)), _blacklisted(blacklisted) {}
 
         std::string _path;
 

@@ -21,9 +21,8 @@
 
 #include "plugin/plugin_zip.h"
 
-#include <string.h>
-
 #include <boost/algorithm/string/predicate.hpp>
+#include <cstring>
 
 #include "env/env.h"
 #include "gutil/strings/substitute.h"

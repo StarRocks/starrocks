@@ -23,9 +23,9 @@
 
 namespace starrocks {
 
-NullLoadErrorHub::NullLoadErrorHub() {}
+NullLoadErrorHub::NullLoadErrorHub() = default;
 
-NullLoadErrorHub::~NullLoadErrorHub() {}
+NullLoadErrorHub::~NullLoadErrorHub() = default;
 
 Status NullLoadErrorHub::prepare() {
     _is_valid = true;

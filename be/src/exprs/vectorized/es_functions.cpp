@@ -6,8 +6,7 @@
 #include "column/column_viewer.h"
 #include "udf/udf_internal.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 ColumnPtr ESFunctions::match(FunctionContext* context, const Columns& columns) {
     ColumnBuilder<TYPE_BOOLEAN> result;
@@ -19,5 +18,4 @@ ColumnPtr ESFunctions::match(FunctionContext* context, const Columns& columns) {
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

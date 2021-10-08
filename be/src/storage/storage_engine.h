@@ -320,7 +320,8 @@ private:
 
     HeartbeatFlags* _heartbeat_flags = nullptr;
 
-    DISALLOW_COPY_AND_ASSIGN(StorageEngine);
+    StorageEngine(const StorageEngine&) = delete;
+    const StorageEngine& operator=(const StorageEngine&) = delete;
 };
 
 } // namespace starrocks

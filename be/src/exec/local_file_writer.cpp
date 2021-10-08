@@ -21,12 +21,14 @@
 
 #include "exec/local_file_writer.h"
 
+#include <utility>
+
 #include "util/error_util.h"
 
 namespace starrocks {
 
-LocalFileWriter::LocalFileWriter(const std::string& path, int64_t start_offset)
-        : _path(path), _start_offset(start_offset), _fp(nullptr) {}
+LocalFileWriter::LocalFileWriter(std::string path, int64_t start_offset)
+        : _path(std::move(path)), _start_offset(start_offset), _fp(nullptr) {}
 
 LocalFileWriter::~LocalFileWriter() {
     close();

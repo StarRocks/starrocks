@@ -126,10 +126,6 @@ public class BackendTabletsInfo implements Writable {
         } else {
             replicaPersistInfos = Lists.newArrayList();
         }
-
-        if (in.readBoolean()) {
-
-        }
     }
 
 }

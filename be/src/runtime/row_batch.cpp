@@ -22,7 +22,9 @@
 #include "runtime/row_batch.h"
 
 #include <snappy/snappy.h>
-#include <stdint.h> // for intptr_t
+
+#include <cstdint> // for intptr_t
+#include <memory>
 
 #include "runtime/buffered_tuple_stream2.inline.h"
 #include "runtime/exec_env.h"
@@ -214,14 +216,13 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch, 
 
     // convert input_batch.tuple_offsets into pointers
     int tuple_idx = 0;
-    for (vector<int32_t>::const_iterator offset = input_batch.tuple_offsets.begin();
-         offset != input_batch.tuple_offsets.end(); ++offset) {
-        if (*offset == -1) {
+    for (int tuple_offset : input_batch.tuple_offsets) {
+        if (tuple_offset == -1) {
             _tuple_ptrs[tuple_idx++] = nullptr;
         } else {
             // _tuple_ptrs[tuple_idx++] =
             //     reinterpret_cast<Tuple*>(_tuple_data_pool->get_data_ptr(*offset));
-            _tuple_ptrs[tuple_idx++] = reinterpret_cast<Tuple*>(tuple_data + *offset);
+            _tuple_ptrs[tuple_idx++] = reinterpret_cast<Tuple*>(tuple_data + tuple_offset);
         }
     }
 
@@ -272,9 +273,9 @@ void RowBatch::clear() {
     }
 
     _tuple_data_pool->free_all();
-    _agg_object_pool.reset(new ObjectPool());
-    for (int i = 0; i < _io_buffers.size(); ++i) {
-        _io_buffers[i]->return_buffer();
+    _agg_object_pool = std::make_unique<ObjectPool>();
+    for (auto& _io_buffer : _io_buffers) {
+        _io_buffer->return_buffer();
     }
 
     for (BufferInfo& buffer_info : _buffers) {
@@ -282,8 +283,8 @@ void RowBatch::clear() {
     }
 
     close_tuple_streams();
-    for (int i = 0; i < _blocks.size(); ++i) {
-        _blocks[i]->del();
+    for (auto& _block : _blocks) {
+        _block->del();
     }
     if (config::enable_partitioned_aggregation) {
         DCHECK(_tuple_ptrs != nullptr);
@@ -474,9 +475,9 @@ void RowBatch::reset() {
 
     // TODO: Change this to Clear() and investigate the repercussions.
     _tuple_data_pool->free_all();
-    _agg_object_pool.reset(new ObjectPool());
-    for (int i = 0; i < _io_buffers.size(); ++i) {
-        _io_buffers[i]->return_buffer();
+    _agg_object_pool = std::make_unique<ObjectPool>();
+    for (auto& _io_buffer : _io_buffers) {
+        _io_buffer->return_buffer();
     }
     _io_buffers.clear();
 
@@ -486,8 +487,8 @@ void RowBatch::reset() {
     _buffers.clear();
 
     close_tuple_streams();
-    for (int i = 0; i < _blocks.size(); ++i) {
-        _blocks[i]->del();
+    for (auto& _block : _blocks) {
+        _block->del();
     }
     _blocks.clear();
     _auxiliary_mem_usage = 0;
@@ -500,9 +501,9 @@ void RowBatch::reset() {
 }
 
 void RowBatch::close_tuple_streams() {
-    for (int i = 0; i < _tuple_streams.size(); ++i) {
-        _tuple_streams[i]->close();
-        delete _tuple_streams[i];
+    for (auto& _tuple_stream : _tuple_streams) {
+        _tuple_stream->close();
+        delete _tuple_stream;
     }
     _tuple_streams.clear();
 }
@@ -511,8 +512,7 @@ void RowBatch::transfer_resource_ownership(RowBatch* dest) {
     dest->_auxiliary_mem_usage += _tuple_data_pool->total_allocated_bytes();
     dest->_tuple_data_pool->acquire_data(_tuple_data_pool.get(), false);
     dest->_agg_object_pool->acquire_data(_agg_object_pool.get());
-    for (int i = 0; i < _io_buffers.size(); ++i) {
-        DiskIoMgr::BufferDescriptor* buffer = _io_buffers[i];
+    for (auto buffer : _io_buffers) {
         dest->_io_buffers.push_back(buffer);
         dest->_auxiliary_mem_usage += buffer->buffer_len();
         buffer->set_mem_tracker(dest->_mem_tracker);
@@ -524,18 +524,18 @@ void RowBatch::transfer_resource_ownership(RowBatch* dest) {
     }
     _buffers.clear();
 
-    for (int i = 0; i < _tuple_streams.size(); ++i) {
-        dest->_tuple_streams.push_back(_tuple_streams[i]);
-        dest->_auxiliary_mem_usage += _tuple_streams[i]->byte_size();
+    for (auto& _tuple_stream : _tuple_streams) {
+        dest->_tuple_streams.push_back(_tuple_stream);
+        dest->_auxiliary_mem_usage += _tuple_stream->byte_size();
     }
     // Resource release should be done by dest RowBatch. if we don't clear the corresponding resources.
     // This Rowbatch calls the reset() method, dest Rowbatch will also call the reset() method again,
     // which will cause the core problem of double delete
     _tuple_streams.clear();
 
-    for (int i = 0; i < _blocks.size(); ++i) {
-        dest->_blocks.push_back(_blocks[i]);
-        dest->_auxiliary_mem_usage += _blocks[i]->buffer_len();
+    for (auto& _block : _blocks) {
+        dest->_blocks.push_back(_block);
+        dest->_auxiliary_mem_usage += _block->buffer_len();
     }
     _blocks.clear();
 
@@ -573,8 +573,7 @@ void RowBatch::acquire_state(RowBatch* src) {
     DCHECK(!_has_in_flight_row);
     DCHECK_EQ(_num_rows, 0);
 
-    for (int i = 0; i < src->_io_buffers.size(); ++i) {
-        DiskIoMgr::BufferDescriptor* buffer = src->_io_buffers[i];
+    for (auto buffer : src->_io_buffers) {
         _io_buffers.push_back(buffer);
         _auxiliary_mem_usage += buffer->buffer_len();
         buffer->set_mem_tracker(_mem_tracker);

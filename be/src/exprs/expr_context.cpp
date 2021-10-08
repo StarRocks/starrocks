@@ -23,6 +23,7 @@
 
 #include <gperftools/profiler.h>
 
+#include <memory>
 #include <sstream>
 
 #include "exprs/anyval_util.h"
@@ -48,8 +49,8 @@ ExprContext::ExprContext(Expr* root)
 
 ExprContext::~ExprContext() {
     DCHECK(!_prepared || _closed) << ". expr context address = " << this;
-    for (int i = 0; i < _fn_contexts.size(); ++i) {
-        delete _fn_contexts[i];
+    for (auto& _fn_context : _fn_contexts) {
+        delete _fn_context;
     }
 }
 
@@ -63,7 +64,7 @@ Status ExprContext::prepare(RuntimeState* state, const RowDescriptor& row_desc, 
     _prepared = true;
     // TODO: use param tracker to replace instance_mem_tracker
     // _pool.reset(new MemPool(new MemTracker(-1)));
-    _pool.reset(new MemPool(state->instance_mem_tracker()));
+    _pool = std::make_unique<MemPool>(state->instance_mem_tracker());
     return _root->prepare(state, row_desc, this);
 }
 
@@ -81,8 +82,8 @@ Status ExprContext::open(RuntimeState* state) {
 }
 
 Status ExprContext::open(std::vector<ExprContext*> evals, RuntimeState* state) {
-    for (int i = 0; i < evals.size(); ++i) {
-        RETURN_IF_ERROR(evals[i]->open(state));
+    for (auto& eval : evals) {
+        RETURN_IF_ERROR(eval->open(state));
     }
     return Status::OK();
 }
@@ -96,8 +97,8 @@ void ExprContext::close(RuntimeState* state) {
             _is_clone ? FunctionContext::THREAD_LOCAL : FunctionContext::FRAGMENT_LOCAL;
     _root->close(state, this, scope);
 
-    for (int i = 0; i < _fn_contexts.size(); ++i) {
-        _fn_contexts[i]->impl()->close();
+    for (auto& _fn_context : _fn_contexts) {
+        _fn_context->impl()->close();
     }
     // _pool can be nullptr if Prepare() was never called
     if (_pool != nullptr) {
@@ -120,9 +121,9 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx) {
     DCHECK(*new_ctx == nullptr);
 
     *new_ctx = state->obj_pool()->add(new ExprContext(_root));
-    (*new_ctx)->_pool.reset(new MemPool(_pool->mem_tracker()));
-    for (int i = 0; i < _fn_contexts.size(); ++i) {
-        (*new_ctx)->_fn_contexts.push_back(_fn_contexts[i]->impl()->clone((*new_ctx)->_pool.get()));
+    (*new_ctx)->_pool = std::make_unique<MemPool>(_pool->mem_tracker());
+    for (auto& _fn_context : _fn_contexts) {
+        (*new_ctx)->_fn_contexts.push_back(_fn_context->impl()->clone((*new_ctx)->_pool.get()));
     }
     (*new_ctx)->_fn_contexts_ptr = &((*new_ctx)->_fn_contexts[0]);
 
@@ -139,9 +140,9 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx, Expr* root
     DCHECK(*new_ctx == nullptr);
 
     *new_ctx = state->obj_pool()->add(new ExprContext(root));
-    (*new_ctx)->_pool.reset(new MemPool(_pool->mem_tracker()));
-    for (int i = 0; i < _fn_contexts.size(); ++i) {
-        (*new_ctx)->_fn_contexts.push_back(_fn_contexts[i]->impl()->clone((*new_ctx)->_pool.get()));
+    (*new_ctx)->_pool = std::make_unique<MemPool>(_pool->mem_tracker());
+    for (auto& _fn_context : _fn_contexts) {
+        (*new_ctx)->_fn_contexts.push_back(_fn_context->impl()->clone((*new_ctx)->_pool.get()));
     }
     (*new_ctx)->_fn_contexts_ptr = &((*new_ctx)->_fn_contexts[0]);
 
@@ -157,17 +158,17 @@ void ExprContext::free_local_allocations() {
 }
 
 void ExprContext::free_local_allocations(const std::vector<ExprContext*>& ctxs) {
-    for (int i = 0; i < ctxs.size(); ++i) {
-        ctxs[i]->free_local_allocations();
+    for (auto ctx : ctxs) {
+        ctx->free_local_allocations();
     }
 }
 
 void ExprContext::free_local_allocations(const std::vector<FunctionContext*>& fn_ctxs) {
-    for (int i = 0; i < fn_ctxs.size(); ++i) {
-        if (fn_ctxs[i]->impl()->closed()) {
+    for (auto fn_ctx : fn_ctxs) {
+        if (fn_ctx->impl()->closed()) {
             continue;
         }
-        fn_ctxs[i]->impl()->free_local_allocations();
+        fn_ctx->impl()->free_local_allocations();
     }
 }
 

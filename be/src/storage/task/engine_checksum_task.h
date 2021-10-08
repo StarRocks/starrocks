@@ -38,7 +38,7 @@ public:
     EngineChecksumTask(TTabletId tablet_id, TSchemaHash schema_hash, TVersion version, TVersionHash version_hash,
                        uint32_t* checksum);
 
-    ~EngineChecksumTask() override {}
+    ~EngineChecksumTask() override = default;
 
 private:
     OLAPStatus _compute_checksum();

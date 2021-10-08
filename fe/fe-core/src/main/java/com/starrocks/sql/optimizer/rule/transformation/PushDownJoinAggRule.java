@@ -190,9 +190,9 @@ public class PushDownJoinAggRule extends TransformationRule {
                                                GroupExpression groupExpression) {
         if (OperatorType.LOGICAL_OLAP_SCAN.equals(groupExpression.getOp().getOpType())) {
             LogicalOlapScanOperator loso = (LogicalOlapScanOperator) groupExpression.getOp();
-            Map<ColumnRefOperator, Column> askColumnsMap = loso.getColumnRefMap();
+            Map<ColumnRefOperator, Column> askColumnsMap = loso.getColRefToColumnMetaMap();
 
-            List<String> keyColumns = getTpchMockPrimaryKeys(loso.getOlapTable().getName());
+            List<String> keyColumns = getTpchMockPrimaryKeys(loso.getTable().getName());
 
             if (keyColumns.isEmpty()) {
                 return false;

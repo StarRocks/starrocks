@@ -22,6 +22,7 @@
 #include "runtime/routine_load/routine_load_task_executor.h"
 
 #include <functional>
+#include <memory>
 #include <thread>
 
 #include "common/status.h"
@@ -59,7 +60,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
     }
     t_info.__set_properties(properties);
 
-    ctx.kafka_info.reset(new KafkaLoadInfo(t_info));
+    ctx.kafka_info = std::make_unique<KafkaLoadInfo>(t_info);
     ctx.need_rollback = false;
 
     std::shared_ptr<DataConsumer> consumer;
@@ -94,7 +95,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetPro
     }
     t_info.__set_properties(properties);
 
-    ctx.kafka_info.reset(new KafkaLoadInfo(t_info));
+    ctx.kafka_info = std::make_unique<KafkaLoadInfo>(t_info);
     ctx.need_rollback = false;
 
     // convert pb repeated value to vector
@@ -170,7 +171,7 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     // set source related params
     switch (task.type) {
     case TLoadSourceType::KAFKA:
-        ctx->kafka_info.reset(new KafkaLoadInfo(task.kafka_load_info));
+        ctx->kafka_info = std::make_unique<KafkaLoadInfo>(task.kafka_load_info);
         break;
     default:
         LOG(WARNING) << "unknown load source type: " << task.type;
@@ -184,17 +185,15 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     _task_map[ctx->id] = ctx;
 
     // offer the task to thread pool
-    if (!_thread_pool.offer(std::bind<void>(&RoutineLoadTaskExecutor::exec_task, this, ctx, &_data_consumer_pool,
-                                            [this](StreamLoadContext* ctx) {
-                                                std::unique_lock<std::mutex> l(_lock);
-                                                _task_map.erase(ctx->id);
-                                                LOG(INFO) << "finished routine load task " << ctx->brief()
-                                                          << ", status: " << ctx->status.get_error_msg()
-                                                          << ", current tasks num: " << _task_map.size();
-                                                if (ctx->unref()) {
-                                                    delete ctx;
-                                                }
-                                            }))) {
+    if (!_thread_pool.offer([this, ctx, capture0 = &_data_consumer_pool, capture1 = [this](StreamLoadContext* ctx) {
+            std::unique_lock<std::mutex> l(_lock);
+            _task_map.erase(ctx->id);
+            LOG(INFO) << "finished routine load task " << ctx->brief() << ", status: " << ctx->status.get_error_msg()
+                      << ", current tasks num: " << _task_map.size();
+            if (ctx->unref()) {
+                delete ctx;
+            }
+        }] { exec_task(ctx, capture0, capture1); })) {
         // failed to submit task, clear and return
         LOG(WARNING) << "failed to submit routine load task: " << ctx->brief();
         _task_map.erase(ctx->id);
@@ -306,7 +305,7 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
             std::for_each(topic_partitions.begin(), topic_partitions.end(),
                           [](RdKafka::TopicPartition* tp1) { delete tp1; });
         };
-        DeferOp delete_tp(std::bind<void>(tp_deleter));
+        DeferOp delete_tp([tp_deleter] { return tp_deleter(); });
     } break;
     default:
         return;
@@ -321,11 +320,9 @@ void RoutineLoadTaskExecutor::err_handler(StreamLoadContext* ctx, const Status& 
         _exec_env->stream_load_executor()->rollback_txn(ctx);
         ctx->need_rollback = false;
     }
-    if (ctx->body_sink.get() != nullptr) {
+    if (ctx->body_sink != nullptr) {
         ctx->body_sink->cancel();
     }
-
-    return;
 }
 
 // for test only

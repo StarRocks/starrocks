@@ -518,9 +518,7 @@ public class SelectStmt extends QueryStmt {
             sqlString_ = toSql();
         }
 
-        if (analyzer.getContext().getSessionVariable().useVectorizedEngineEnable()) {
-            tryConvertOuterJoinToInnerJoin(analyzer);
-        }
+        tryConvertOuterJoinToInnerJoin(analyzer);
 
         // 1. If disable_join_reorder is set, disable join reorder
         // 2. If we are analyzing with clause, disable join reorder, because which is unnecessary.

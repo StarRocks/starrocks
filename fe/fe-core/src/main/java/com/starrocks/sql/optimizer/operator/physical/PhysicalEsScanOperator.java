@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Objects;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.external.elasticsearch.EsShardPartitions;
@@ -14,26 +13,17 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
-public class PhysicalEsScanOperator extends PhysicalOperator {
-    private final Table table;
-    private final Map<ColumnRefOperator, Column> columnRefMap;
+public class PhysicalEsScanOperator extends PhysicalScanOperator {
     private final List<EsShardPartitions> selectedIndex;
 
-    public PhysicalEsScanOperator(Table table, Map<ColumnRefOperator, Column> columnRefMap,
+    public PhysicalEsScanOperator(Table table,
+                                  List<ColumnRefOperator> outputColumns,
+                                  Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                   List<EsShardPartitions> selectedIndex) {
-        super(OperatorType.PHYSICAL_ES_SCAN);
-        this.table = table;
-        this.columnRefMap = columnRefMap;
+        super(OperatorType.PHYSICAL_ES_SCAN, table, outputColumns, colRefToColumnMetaMap);
         this.selectedIndex = selectedIndex;
-    }
-
-    public Table getTable() {
-        return table;
-    }
-
-    public Map<ColumnRefOperator, Column> getColumnRefMap() {
-        return columnRefMap;
     }
 
     public List<EsShardPartitions> getSelectedIndex() {
@@ -58,13 +48,15 @@ public class PhysicalEsScanOperator extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (!super.equals(o)) {
+            return false;
+        }
         PhysicalEsScanOperator that = (PhysicalEsScanOperator) o;
-        return Objects.equal(table, that.table) && Objects.equal(columnRefMap, that.columnRefMap) &&
-                Objects.equal(selectedIndex, that.selectedIndex);
+        return Objects.equals(selectedIndex, that.selectedIndex);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(table, columnRefMap, selectedIndex);
+        return Objects.hash(super.hashCode(), selectedIndex);
     }
 }

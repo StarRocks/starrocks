@@ -22,6 +22,7 @@
 #include "storage/memtable_flush_executor.h"
 
 #include <functional>
+#include <memory>
 
 #include "storage/memtable.h"
 #include "storage/vectorized/memtable.h"
@@ -42,7 +43,7 @@ std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
 // its reference count is not 0.
 OLAPStatus FlushToken::submit(const std::shared_ptr<MemTable>& memtable) {
     RETURN_NOT_OK(_flush_status.load());
-    _flush_token->submit_func(std::bind(&FlushToken::_flush_memtable, this, memtable));
+    _flush_token->submit_func([this, memtable] { _flush_memtable(memtable); });
     return OLAP_SUCCESS;
 }
 
@@ -52,7 +53,7 @@ Status FlushToken::submit(const std::shared_ptr<vectorized::MemTable>& memtable)
         ss << "tablet_id = " << memtable->tablet_id() << " flush_status error ";
         return Status::InternalError(ss.str());
     }
-    _flush_token->submit_func(std::bind(&FlushToken::_flush_vectorized_memtable, this, memtable));
+    _flush_token->submit_func([this, memtable] { _flush_vectorized_memtable(memtable); });
     return Status::OK();
 }
 
@@ -118,7 +119,7 @@ Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
 // NOTE: we use SERIAL mode here to ensure all mem-tables from one tablet are flushed in order.
 OLAPStatus MemTableFlushExecutor::create_flush_token(std::unique_ptr<FlushToken>* flush_token,
                                                      ThreadPool::ExecutionMode execution_mode) {
-    flush_token->reset(new FlushToken(_flush_pool->new_token(execution_mode)));
+    *flush_token = std::make_unique<FlushToken>(_flush_pool->new_token(execution_mode));
     return OLAP_SUCCESS;
 }
 

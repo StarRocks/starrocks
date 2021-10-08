@@ -30,8 +30,9 @@ private:
     std::mutex _lock;
     HdfsFsMap _cache;
 
-    HdfsFsCache() {}
-    DISALLOW_COPY_AND_ASSIGN(HdfsFsCache);
+    HdfsFsCache() = default;
+    HdfsFsCache(const HdfsFsCache&) = delete;
+    const HdfsFsCache& operator=(const HdfsFsCache&) = delete;
 };
 
 } // namespace starrocks

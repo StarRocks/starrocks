@@ -4,10 +4,9 @@
 
 #include "gutil/cpu.h"
 
-#include <stdlib.h>
-#include <string.h>
-
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <streambuf>
@@ -52,28 +51,7 @@ std::tuple<int, int, int, int> ComputeX86FamilyAndModel(const std::string& vendo
 }
 } // namespace internal
 #endif // defined(ARCH_CPU_X86_FAMILY)
-CPU::CPU()
-        : signature_(0),
-          type_(0),
-          family_(0),
-          model_(0),
-          stepping_(0),
-          ext_model_(0),
-          ext_family_(0),
-          has_mmx_(false),
-          has_sse_(false),
-          has_sse2_(false),
-          has_sse3_(false),
-          has_ssse3_(false),
-          has_sse41_(false),
-          has_sse42_(false),
-          has_popcnt_(false),
-          has_avx_(false),
-          has_avx2_(false),
-          has_aesni_(false),
-          has_non_stop_time_stamp_counter_(false),
-          is_running_in_vm_(false),
-          cpu_vendor_("unknown") {
+CPU::CPU() : cpu_vendor_("unknown") {
     Initialize();
 }
 namespace {

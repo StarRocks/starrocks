@@ -23,6 +23,7 @@
 
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <mutex>
 
 #include "common/config.h"
@@ -113,7 +114,7 @@ private:
     /// The data structures for each power-of-two size of buffers/pages.
     /// All members are protected by FreeBufferArena::lock_ unless otherwise mentioned.
     struct PerSizeLists {
-        PerSizeLists() {}
+        PerSizeLists() = default;
 
         /// Helper to add a free buffer and increment the counter.
         /// FreeBufferArena::lock_ must be held by the caller.
@@ -200,7 +201,7 @@ BufferPool::BufferAllocator::BufferAllocator(BufferPool* pool, int64_t min_buffe
     DCHECK_LE(max_buffer_len_, std::max(system_bytes_limit_, min_buffer_len_));
 
     for (std::unique_ptr<FreeBufferArena>& arena : per_core_arenas_) {
-        arena.reset(new FreeBufferArena(this));
+        arena = std::make_unique<FreeBufferArena>(this);
     }
 }
 
@@ -713,7 +714,9 @@ std::string BufferPool::FreeBufferArena::DebugString() {
            << " free buffers: " << lists.num_free_buffers.load(std::memory_order_acquire)
            << " low water mark: " << lists.low_water_mark
            << " clean pages: " << lists.num_clean_pages.load(std::memory_order_acquire) << " ";
-        lists.clean_pages.iterate(std::bind<bool>(Page::DebugStringCallback, &ss, std::placeholders::_1));
+        lists.clean_pages.iterate([capture0 = &ss](auto&& PH1) {
+            return Page::DebugStringCallback(capture0, std::forward<decltype(PH1)>(PH1));
+        });
 
         ss << "\n";
     }

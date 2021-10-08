@@ -21,6 +21,8 @@
 
 #include "beta_rowset_reader.h"
 
+#include <memory>
+
 #include "storage/delete_handler.h"
 #include "storage/generic_iterators.h"
 #include "storage/row_block.h"
@@ -103,10 +105,10 @@ OLAPStatus BetaRowsetReader::init(RowsetReaderContext* read_context) {
     _iterator.reset(final_iterator);
 
     // init input block
-    _input_block.reset(new RowBlockV2(schema, read_context->chunk_size));
+    _input_block = std::make_unique<RowBlockV2>(schema, read_context->chunk_size);
 
     // init output block and row
-    _output_block.reset(new RowBlock(read_context->tablet_schema));
+    _output_block = std::make_unique<RowBlock>(read_context->tablet_schema);
     RowBlockInfo output_block_info;
     output_block_info.row_num = read_context->chunk_size;
     output_block_info.null_supported = true;
@@ -114,7 +116,7 @@ OLAPStatus BetaRowsetReader::init(RowsetReaderContext* read_context) {
     // TODO(hkp): this should be optimized to use return_columns
     output_block_info.column_ids = *(_context->seek_columns);
     RETURN_NOT_OK(_output_block->init(output_block_info));
-    _row.reset(new RowCursor());
+    _row = std::make_unique<RowCursor>();
     RETURN_NOT_OK(_row->init(*(read_context->tablet_schema), *(_context->seek_columns)));
 
     return OLAP_SUCCESS;

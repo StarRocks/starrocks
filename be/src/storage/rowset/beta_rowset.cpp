@@ -21,10 +21,10 @@
 
 #include "storage/rowset/beta_rowset.h"
 
-#include <stdio.h>  // for remove()
 #include <unistd.h> // for link()
 #include <util/file_utils.h>
 
+#include <cstdio> // for remove()
 #include <memory>
 #include <set>
 

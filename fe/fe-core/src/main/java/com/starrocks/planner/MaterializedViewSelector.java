@@ -41,7 +41,6 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.rewrite.mvrewrite.MVExprEquivalent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -175,18 +174,7 @@ public class MaterializedViewSelector {
         OlapTable tbl = scanNode.getOlapTable();
         Long v2RollupIndexId = tbl.getSegmentV2FormatIndexId();
         if (v2RollupIndexId != null) {
-            ConnectContext connectContext = ConnectContext.get();
-            if (connectContext != null && connectContext.getSessionVariable().isUseV2Rollup()) {
-                // if user set `use_v2_rollup` variable to true, and there is a segment v2 rollup,
-                // just return the segment v2 rollup, because user want to check the v2 format data.
-                if (candidateIndexIdToSchema.containsKey(v2RollupIndexId)) {
-                    return v2RollupIndexId;
-                }
-            } else {
-                // `use_v2_rollup` is not set, so v2 format rollup should not be selected, remove it from
-                // candidateIndexIdToSchema
-                candidateIndexIdToSchema.remove(v2RollupIndexId);
-            }
+            candidateIndexIdToSchema.remove(v2RollupIndexId);
         }
 
         // Step1: the candidate indexes that satisfies the most prefix index

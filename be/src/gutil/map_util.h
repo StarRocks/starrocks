@@ -63,8 +63,8 @@
 #define UTIL_GTL_MAP_UTIL_H_
 
 #include <glog/logging.h>
-#include <stddef.h>
 
+#include <cstddef>
 #include <tuple>
 #include <utility>
 #include <vector>

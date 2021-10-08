@@ -23,6 +23,7 @@
 
 #include <atomic>
 #include <list>
+#include <memory>
 #include <mutex>
 
 #include "gutil/dynamic_annotations.h"
@@ -122,8 +123,8 @@ void ChunkAllocator::init_instance(size_t reserve_limit) {
 
 ChunkAllocator::ChunkAllocator(size_t reserve_limit)
         : _reserve_bytes_limit(reserve_limit), _reserved_bytes(0), _arenas(CpuInfo::get_max_num_cores()) {
-    for (int i = 0; i < _arenas.size(); ++i) {
-        _arenas[i].reset(new ChunkArena());
+    for (auto& _arena : _arenas) {
+        _arena = std::make_unique<ChunkArena>();
     }
 }
 

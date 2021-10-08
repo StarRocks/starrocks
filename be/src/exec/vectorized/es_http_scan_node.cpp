@@ -4,6 +4,8 @@
 
 #include <fmt/format.h>
 
+#include <memory>
+
 #include "common/config.h"
 #include "exec/es/es_predicate.h"
 #include "exec/es/es_query_builder.h"
@@ -22,7 +24,7 @@ EsHttpScanNode::EsHttpScanNode(ObjectPool* pool, const TPlanNode& tnode, const D
           _scan_finished(false),
           _result_chunks(config::doris_scanner_queue_size) {}
 
-EsHttpScanNode::~EsHttpScanNode() {}
+EsHttpScanNode::~EsHttpScanNode() = default;
 
 Status EsHttpScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
@@ -126,8 +128,8 @@ Status EsHttpScanNode::close(RuntimeState* state) {
     _result_chunks.shutdown();
 
     // wait thread
-    for (int i = 0; i < _scanner_threads.size(); ++i) {
-        _scanner_threads[i].join();
+    for (auto& _scanner_thread : _scanner_threads) {
+        _scanner_thread.join();
     }
 
     DCHECK_EQ(_num_running_scanners, 0);
@@ -180,9 +182,9 @@ Status EsHttpScanNode::_build_conjuncts() {
 
 void EsHttpScanNode::_try_skip_constant_conjuncts() {
     // TODO: skip constant true
-    for (int i = 0; i < _conjunct_ctxs.size(); ++i) {
-        if (_conjunct_ctxs[i]->root()->is_constant()) {
-            void* value = _conjunct_ctxs[i]->get_value(nullptr);
+    for (auto& _conjunct_ctx : _conjunct_ctxs) {
+        if (_conjunct_ctx->root()->is_constant()) {
+            void* value = _conjunct_ctx->get_value(nullptr);
             if (value == nullptr || *reinterpret_cast<bool*>(value) == false) {
                 _eos = true;
             }
@@ -272,8 +274,8 @@ Status EsHttpScanNode::_create_scanner(int scanner_idx, std::unique_ptr<EsHttpSc
     properties[ESScanReader::KEY_QUERY] =
             ESScrollQueryBuilder::build(properties, _column_names, _predicates, _docvalue_context, &doc_value_mode);
 
-    res->reset(new EsHttpScanner(_runtime_state, runtime_profile(), _tuple_id, std::move(properties), scanner_expr_ctxs,
-                                 _docvalue_context, doc_value_mode));
+    *res = std::make_unique<EsHttpScanner>(_runtime_state, runtime_profile(), _tuple_id, std::move(properties),
+                                           scanner_expr_ctxs, _docvalue_context, doc_value_mode);
     return Status::OK();
 }
 

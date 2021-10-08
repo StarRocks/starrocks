@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "exec/olap_common.h"
 #include "exec/olap_utils.h"
 #include "exec/pipeline/chunk_source.h"
@@ -11,8 +13,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/conjunctive_predicates.h"
-#include "storage/vectorized/reader.h"
-#include "storage/vectorized/reader_params.h"
+#include "storage/vectorized/tablet_reader.h"
 
 namespace starrocks {
 class SlotDescriptor;
@@ -23,14 +24,14 @@ namespace pipeline {
 
 class OlapChunkSource final : public ChunkSource {
 public:
-    OlapChunkSource(MorselPtr&& morsel, int32_t tuple_id, const std::vector<ExprContext*>& conjunct_ctxs,
+    OlapChunkSource(MorselPtr&& morsel, int32_t tuple_id, std::vector<ExprContext*> conjunct_ctxs,
                     const vectorized::RuntimeFilterProbeCollector& runtime_filters,
-                    const std::vector<std::string>& key_column_names, bool skip_aggregation)
+                    std::vector<std::string> key_column_names, bool skip_aggregation)
             : ChunkSource(std::move(morsel)),
               _tuple_id(tuple_id),
-              _conjunct_ctxs(conjunct_ctxs),
+              _conjunct_ctxs(std::move(conjunct_ctxs)),
               _runtime_filters(runtime_filters),
-              _key_column_names(key_column_names),
+              _key_column_names(std::move(key_column_names)),
               _skip_aggregation(skip_aggregation) {
         OlapMorsel* olap_morsel = (OlapMorsel*)_morsel.get();
         _scan_range = olap_morsel->get_scan_range();
@@ -52,7 +53,7 @@ private:
     Status _get_tablet(const TInternalScanRange* scan_range);
     Status _init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
                                const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns,
-                               vectorized::ReaderParams* params);
+                               vectorized::TabletReaderParams* params);
     Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns);
     Status _init_olap_reader(RuntimeState* state);
     Status _build_scan_range(RuntimeState* state);
@@ -89,7 +90,7 @@ private:
     std::vector<TCondition> _olap_filter;
     std::vector<TCondition> _is_null_vector;
 
-    std::shared_ptr<vectorized::Reader> _reader;
+    std::shared_ptr<vectorized::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<vectorized::ChunkIterator> _prj_iter;
 

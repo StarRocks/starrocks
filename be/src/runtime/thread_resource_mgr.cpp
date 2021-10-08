@@ -115,9 +115,7 @@ void ThreadResourceMgr::update_pool_quotas(ResourcePool* new_pool) {
 
     _per_pool_quota = ceil(static_cast<double>(_system_threads_quota) / _pools.size());
 
-    for (Pools::iterator it = _pools.begin(); it != _pools.end(); ++it) {
-        ResourcePool* pool = *it;
-
+    for (auto pool : _pools) {
         if (pool == new_pool) {
             continue;
         }

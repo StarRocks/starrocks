@@ -41,7 +41,7 @@ public:
     virtual OLAPStatus finish() { return OLAP_SUCCESS; }
     virtual OLAPStatus cancel() { return OLAP_SUCCESS; }
     virtual void get_related_tablets(std::vector<TabletInfo>* tablet_infos) {}
-    virtual ~EngineTask() {}
+    virtual ~EngineTask() = default;
 };
 
 } // end namespace starrocks

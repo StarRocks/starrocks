@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <math.h>
+#include <cmath>
 
 #include "column/column_helper.h"
 #include "column/type_traits.h"

@@ -61,7 +61,7 @@ static GoogleOnceType once = GOOGLE_ONCE_INIT;
 // auditing. Used only by Thread.
 class ThreadMgr {
 public:
-    ThreadMgr() : _threads_started_metric(0), _threads_running_metric(0) {}
+    ThreadMgr() {}
 
     ~ThreadMgr() {
         std::lock_guard lock(_lock);
@@ -83,7 +83,7 @@ private:
     // TODO: Track fragment ID.
     class ThreadDescriptor {
     public:
-        ThreadDescriptor() {}
+        ThreadDescriptor() = default;
         ThreadDescriptor(std::string category, std::string name, int64_t thread_id)
                 : _name(std::move(name)), _category(std::move(category)), _thread_id(thread_id) {}
 
@@ -113,10 +113,11 @@ private:
 
     // Counters to track all-time total number of threads, and the
     // current number of running threads.
-    uint64_t _threads_started_metric;
-    uint64_t _threads_running_metric;
+    uint64_t _threads_started_metric{0};
+    uint64_t _threads_running_metric{0};
 
-    DISALLOW_COPY_AND_ASSIGN(ThreadMgr);
+    ThreadMgr(const ThreadMgr&) = delete;
+    const ThreadMgr& operator=(const ThreadMgr&) = delete;
 };
 
 void ThreadMgr::set_thread_name(const std::string& name, int64_t tid) {
@@ -201,7 +202,7 @@ const std::string& Thread::category() const {
 }
 
 std::string Thread::to_string() const {
-    return strings::Substitute("Thread $0 (name: \"$1\", category: \"$2\")", tid(), _name, _category);
+    return strings::Substitute(R"(Thread $0 (name: "$1", category: "$2"))", tid(), _name, _category);
 }
 
 Thread* Thread::current_thread() {

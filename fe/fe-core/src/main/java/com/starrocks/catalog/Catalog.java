@@ -96,6 +96,7 @@ import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.RollupRenameClause;
 import com.starrocks.analysis.ShowAlterStmt.AlterType;
 import com.starrocks.analysis.SingleRangePartitionDesc;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TableRenameClause;
@@ -430,6 +431,8 @@ public class Catalog {
     private AnalyzeManager analyzeManager;
 
     private StatisticStorage statisticStorage;
+
+    private long imageJournalId;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
@@ -1392,12 +1395,12 @@ public class Catalog {
     private void getNewImage(Pair<String, Integer> helperNode) throws IOException {
         long localImageVersion = 0;
         Storage storage = new Storage(this.imageDir);
-        localImageVersion = storage.getImageSeq();
+        localImageVersion = storage.getImageJournalId();
 
         try {
             URL infoUrl = new URL("http://" + helperNode.first + ":" + Config.http_port + "/info");
             StorageInfo info = getStorageInfo(infoUrl);
-            long version = info.getImageSeq();
+            long version = info.getImageJournalId();
             if (version > localImageVersion) {
                 String url = "http://" + helperNode.first + ":" + Config.http_port
                         + "/image?version=" + version;
@@ -1459,7 +1462,7 @@ public class Catalog {
             LOG.info("image does not exist: {}", curFile.getAbsolutePath());
             return;
         }
-        replayedJournalId.set(storage.getImageSeq());
+        replayedJournalId.set(storage.getImageJournalId());
         LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(), Catalog.isCheckpointThread());
         long loadImageStartTime = System.currentTimeMillis();
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
@@ -1509,6 +1512,7 @@ public class Catalog {
         Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
         long loadImageEndTime = System.currentTimeMillis();
+        this.imageJournalId = storage.getImageJournalId();
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
     }
 
@@ -3045,13 +3049,18 @@ public class Catalog {
             } finally {
                 db.readUnlock();
             }
-            CreateTableStmt parsedCreateTableStmt =
-                    (CreateTableStmt) SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
-            parsedCreateTableStmt.setTableName(stmt.getTableName());
-            if (stmt.isSetIfNotExists()) {
-                parsedCreateTableStmt.setIfNotExists();
+            StatementBase statementBase = SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+            if (statementBase instanceof CreateTableStmt) {
+                CreateTableStmt parsedCreateTableStmt =
+                        (CreateTableStmt) SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+                parsedCreateTableStmt.setTableName(stmt.getTableName());
+                if (stmt.isSetIfNotExists()) {
+                    parsedCreateTableStmt.setIfNotExists();
+                }
+                createTable(parsedCreateTableStmt);
+            } else if (statementBase instanceof CreateViewStmt) {
+                ErrorReport.reportDdlException(ErrorCode.ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW);
             }
-            createTable(parsedCreateTableStmt);
         } catch (UserException e) {
             throw new DdlException("Failed to execute CREATE TABLE LIKE " + stmt.getExistedTableName() + ". Reason: " +
                     e.getMessage());
@@ -3679,7 +3688,7 @@ public class Catalog {
         long tableId = Catalog.getCurrentCatalog().getNextId();
         OlapTable olapTable = null;
         if (stmt.isExternal()) {
-            olapTable = new ExternalOlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
+            olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                                               distributionInfo, indexes, stmt.getProperties());
         } else {
             olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
@@ -6779,7 +6788,7 @@ public class Catalog {
             // check partitions
             for (Map.Entry<String, Long> entry : origPartitions.entrySet()) {
                 Partition partition = copiedTbl.getPartition(entry.getValue());
-                if (partition == null || !partition.getName().equals(entry.getKey())) {
+                if (partition == null || !partition.getName().equalsIgnoreCase(entry.getKey())) {
                     throw new DdlException("Partition [" + entry.getKey() + "] is changed");
                 }
             }
@@ -7252,5 +7261,12 @@ public class Catalog {
         }
     }
 
+    public long getImageJournalId() {
+        return imageJournalId;
+    }
+
+    public void setImageJournalId(long imageJournalId) {
+        this.imageJournalId = imageJournalId;
+    }
 }
 

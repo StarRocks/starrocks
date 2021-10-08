@@ -24,6 +24,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "common/status.h"
@@ -34,9 +35,10 @@ namespace starrocks {
 
 class PluginLoader {
 public:
-    PluginLoader(const std::string& name, int type) : _name(name), _type(type), _close(false) {}
+    PluginLoader(std::string name, int type) : _name(std::move(name)), _type(type), _close(false) {}
 
-    virtual ~PluginLoader(){};
+    virtual ~PluginLoader() = default;
+    ;
 
     virtual Status install() = 0;
 
@@ -65,12 +67,12 @@ protected:
 
 class DynamicPluginLoader : public PluginLoader {
 public:
-    DynamicPluginLoader(const std::string& name, int type, const std::string& source, const std::string& so_name,
-                        const std::string& install_path)
+    DynamicPluginLoader(const std::string& name, int type, std::string source, std::string so_name,
+                        std::string install_path)
             : PluginLoader(name, type),
-              _source(source),
-              _so_name(so_name),
-              _install_path(install_path),
+              _source(std::move(source)),
+              _so_name(std::move(so_name)),
+              _install_path(std::move(install_path)),
               _plugin_handler(nullptr){};
 
     ~DynamicPluginLoader() override {

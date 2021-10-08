@@ -16,7 +16,7 @@ class RowIdColumnIterator final : public starrocks::segment_v2::ColumnIterator {
     using ColumnIterator = starrocks::segment_v2::ColumnIterator;
 
 public:
-    RowIdColumnIterator() : _current_rowid(0) {}
+    RowIdColumnIterator() {}
 
     ~RowIdColumnIterator() override = default;
 

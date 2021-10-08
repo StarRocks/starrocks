@@ -31,14 +31,15 @@ namespace debug {
 // While this object is alive, calls to "new" will not be checked for leaks.
 class ScopedLeakCheckDisabler {
 public:
-    ScopedLeakCheckDisabler() {}
+    ScopedLeakCheckDisabler() = default;
 
 private:
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER)
     ScopedLSANDisabler lsan_disabler;
 #endif
 
-    DISALLOW_COPY_AND_ASSIGN(ScopedLeakCheckDisabler);
+    ScopedLeakCheckDisabler(const ScopedLeakCheckDisabler&) = delete;
+    const ScopedLeakCheckDisabler& operator=(const ScopedLeakCheckDisabler&) = delete;
 };
 
 } // namespace debug

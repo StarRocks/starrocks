@@ -50,9 +50,8 @@
 #include <byteswap.h> // IWYU pragma: export
 #endif
 
-#include <string.h>
-
 #include <cstdint>
+#include <cstring>
 
 #include "phmap_config.h"
 

@@ -21,9 +21,8 @@
 
 #pragma once
 
-#include <string.h>
-
 #include <cstddef>
+#include <cstring>
 #include <memory>
 
 #include "common/logging.h"

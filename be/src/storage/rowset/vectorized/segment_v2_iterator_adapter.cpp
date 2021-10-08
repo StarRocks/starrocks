@@ -2,6 +2,8 @@
 
 #include "storage/rowset/vectorized/segment_v2_iterator_adapter.h"
 
+#include <memory>
+
 #include "storage/row_block2.h"
 
 namespace starrocks::vectorized {
@@ -11,7 +13,7 @@ SegmentV2IteratorAdapter::SegmentV2IteratorAdapter(const TabletSchema& tablet_sc
                                                    const ::starrocks::Schema& out_schema)
         : _tablet_schema(tablet_schema), _new_types(new_types), _out_schema(out_schema) {}
 
-SegmentV2IteratorAdapter::~SegmentV2IteratorAdapter() {}
+SegmentV2IteratorAdapter::~SegmentV2IteratorAdapter() = default;
 
 Status SegmentV2IteratorAdapter::init(const ::starrocks::StorageReadOptions& options) {
     // rewrite schema
@@ -35,7 +37,7 @@ Status SegmentV2IteratorAdapter::init(const ::starrocks::StorageReadOptions& opt
 Status SegmentV2IteratorAdapter::next_batch(RowBlockV2* block) {
     if (_in_block == nullptr) {
         // init row_block
-        _in_block.reset(new ::starrocks::RowBlockV2(*_in_schema, block->capacity()));
+        _in_block = std::make_unique<::starrocks::RowBlockV2>(*_in_schema, block->capacity());
     }
     _in_block->clear();
 

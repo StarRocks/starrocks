@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/column.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -130,21 +132,25 @@ private:
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {
 public:
-    ExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id, const std::shared_ptr<SinkBuffer>& buffer,
+    ExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id, std::shared_ptr<SinkBuffer> buffer,
                                 TPartitionType::type part_type,
                                 const std::vector<TPlanFragmentDestination>& destinations, int sender_id,
-                                PlanNodeId dest_node_id, const std::vector<ExprContext*>& partition_expr_ctxs)
+                                PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs)
             : OperatorFactory(id, plan_node_id),
-              _buffer(buffer),
+              _buffer(std::move(buffer)),
               _part_type(part_type),
               _destinations(destinations),
               _sender_id(sender_id),
               _dest_node_id(dest_node_id),
-              _partition_expr_ctxs(partition_expr_ctxs) {}
+              _partition_expr_ctxs(std::move(partition_expr_ctxs)) {}
 
     ~ExchangeSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
+
+    void close(RuntimeState* state) override;
 
 private:
     std::shared_ptr<SinkBuffer> _buffer;

@@ -41,7 +41,7 @@ import java.util.concurrent.ExecutorService;
  * mysql protocol implementation based on nio.
  */
 public class NMysqlServer extends MysqlServer {
-    private final Logger LOG = LogManager.getLogger(this.getClass());
+    private static final Logger LOG = LogManager.getLogger(NMysqlServer.class);
 
     private XnioWorker xnioWorker;
 

@@ -21,8 +21,7 @@
 
 #include "util/error_util.h"
 
-#include <errno.h>
-
+#include <cerrno>
 #include <cstring>
 #include <sstream>
 

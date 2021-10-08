@@ -94,8 +94,8 @@ struct ColumnVectorBatch {
     virtual void filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size);
 
 private:
-    ColumnVectorBatch(const ColumnVectorBatch&);
-    ColumnVectorBatch& operator=(const ColumnVectorBatch&);
+    ColumnVectorBatch(const ColumnVectorBatch&) = delete;
+    ColumnVectorBatch& operator=(const ColumnVectorBatch&) = delete;
 };
 
 struct LongVectorBatch : public ColumnVectorBatch {
@@ -264,7 +264,7 @@ struct Decimal {
 
     std::string toString(bool trimTrailingZeros = false) const;
     Int128 value;
-    int32_t scale;
+    int32_t scale{0};
 };
 
 struct Decimal64VectorBatch : public ColumnVectorBatch {

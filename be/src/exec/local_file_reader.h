@@ -22,7 +22,7 @@
 #pragma once
 
 #define _FILE_OFFSET_BITS 64
-#include <stdio.h>
+#include <cstdio>
 
 #include "exec/file_reader.h"
 
@@ -30,7 +30,7 @@ namespace starrocks {
 
 class LocalFileReader : public FileReader {
 public:
-    LocalFileReader(const std::string& path, int64_t start_offset);
+    LocalFileReader(std::string path, int64_t start_offset);
     ~LocalFileReader() override;
 
     Status open() override;

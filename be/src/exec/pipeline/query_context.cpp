@@ -3,8 +3,7 @@
 
 #include "exec/pipeline/fragment_context.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()), _num_fragments(0), _num_active_fragments(0) {}
 
@@ -16,8 +15,8 @@ void QueryContext::cancel(const Status& status) {
     _fragment_mgr->cancel(status);
 }
 
-QueryContextManager::QueryContextManager() {}
-QueryContextManager::~QueryContextManager() {}
+QueryContextManager::QueryContextManager() = default;
+QueryContextManager::~QueryContextManager() = default;
 QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
     std::lock_guard lock(_lock);
     auto iter = _contexts.find(query_id);
@@ -56,5 +55,4 @@ QueryContextPtr QueryContextManager::remove(const TUniqueId& query_id) {
     }
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

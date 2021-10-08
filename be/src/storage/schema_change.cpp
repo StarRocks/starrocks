@@ -21,10 +21,10 @@
 
 #include "storage/schema_change.h"
 
-#include <signal.h>
 #include <util/defer_op.h>
 
 #include <algorithm>
+#include <csignal>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -199,7 +199,8 @@ private:
     typedef std::pair<FieldType, FieldType> convert_type_pair;
     std::unordered_set<convert_type_pair, ConvertTypeMapHash> _convert_type_set;
 
-    DISALLOW_COPY_AND_ASSIGN(ConvertTypeResolver);
+    ConvertTypeResolver(const ConvertTypeResolver&) = delete;
+    const ConvertTypeResolver& operator=(const ConvertTypeResolver&) = delete;
 };
 
 ConvertTypeResolver::ConvertTypeResolver() {
@@ -259,7 +260,7 @@ ConvertTypeResolver::ConvertTypeResolver() {
     add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL128>();
 }
 
-ConvertTypeResolver::~ConvertTypeResolver() {}
+ConvertTypeResolver::~ConvertTypeResolver() = default;
 
 bool to_bitmap(RowCursor* read_helper, RowCursor* write_helper, const TabletColumn& ref_column, int field_idx,
                int ref_field_idx, MemPool* mem_pool) {
@@ -913,7 +914,7 @@ RowBlockMerger::RowBlockMerger(MemTracker* mem_tracker, TabletSharedPtr tablet) 
     _mem_tracker = std::make_unique<MemTracker>(-1, "block_merger", mem_tracker);
 }
 
-RowBlockMerger::~RowBlockMerger() {}
+RowBlockMerger::~RowBlockMerger() = default;
 
 bool RowBlockMerger::merge(const std::vector<RowBlock*>& row_block_arr, RowsetWriter* rowset_writer,
                            uint64_t* merged_rows) {
@@ -1323,8 +1324,8 @@ bool SchemaChangeWithSorting::process(RowsetReaderSharedPtr rowset_reader, Rowse
 
             src_rowsets.push_back(rowset);
 
-            for (vector<RowBlock*>::iterator it = row_block_arr.begin(); it != row_block_arr.end(); ++it) {
-                _row_block_allocator->release(*it);
+            for (auto& it : row_block_arr) {
+                _row_block_allocator->release(it);
             }
 
             row_block_arr.clear();
@@ -1700,7 +1701,7 @@ OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterT
             rs_reader->init(&_reader_context);
         }
 
-    } while (0);
+    } while (false);
 
     new_tablet->release_header_lock();
     base_tablet->release_header_lock();
@@ -1758,7 +1759,7 @@ OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterT
             break;
         }
         new_tablet->save_meta();
-    } while (0);
+    } while (false);
 
     if (res == OLAP_SUCCESS) {
         // _validate_alter_result should be outside the above while loop.
@@ -1786,8 +1787,8 @@ OLAPStatus SchemaChangeHandler::_get_versions_to_be_changed(const TabletSharedPt
 
     std::vector<Version> span_versions;
     RETURN_NOT_OK(base_tablet->capture_consistent_versions(Version(0, rowset->version().second), &span_versions));
-    for (uint32_t i = 0; i < span_versions.size(); i++) {
-        versions_to_be_changed->push_back(span_versions[i]);
+    for (auto& span_version : span_versions) {
+        versions_to_be_changed->push_back(span_version);
     }
 
     return OLAP_SUCCESS;
@@ -1800,9 +1801,9 @@ OLAPStatus SchemaChangeHandler::_convert_historical_rowsets(const SchemaChangePa
 
     // find end version
     int32_t end_version = -1;
-    for (size_t i = 0; i < sc_params.ref_rowset_readers.size(); ++i) {
-        if (sc_params.ref_rowset_readers[i]->version().second > end_version) {
-            end_version = sc_params.ref_rowset_readers[i]->version().second;
+    for (const auto& ref_rowset_reader : sc_params.ref_rowset_readers) {
+        if (ref_rowset_reader->version().second > end_version) {
+            end_version = ref_rowset_reader->version().second;
         }
     }
 

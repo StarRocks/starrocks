@@ -32,10 +32,9 @@
 #ifndef UTIL_GTL_STL_UTIL_H_
 #define UTIL_GTL_STL_UTIL_H_
 
-#include <stddef.h>
-#include <string.h> // for memcpy
-
 #include <algorithm>
+#include <cstddef>
+#include <cstring> // for memcpy
 using std::copy;
 using std::max;
 using std::min;
@@ -420,13 +419,14 @@ void STLDeleteValues(T* v) {
 // directly.
 class BaseDeleter {
 public:
-    virtual ~BaseDeleter() {}
+    virtual ~BaseDeleter() = default;
 
 protected:
-    BaseDeleter() {}
+    BaseDeleter() = default;
 
 private:
-    DISALLOW_EVIL_CONSTRUCTORS(BaseDeleter);
+    BaseDeleter(const BaseDeleter&) = delete;
+    const BaseDeleter& operator=(const BaseDeleter&) = delete;
 };
 
 // Given a pointer to an STL container, this class will delete all the element
@@ -442,7 +442,8 @@ public:
 private:
     STLContainer* container_ptr_;
 
-    DISALLOW_EVIL_CONSTRUCTORS(TemplatedElementDeleter);
+    TemplatedElementDeleter(const TemplatedElementDeleter&) = delete;
+    const TemplatedElementDeleter& operator=(const TemplatedElementDeleter&) = delete;
 };
 
 // Like TemplatedElementDeleter, this class will delete element pointers from a
@@ -458,7 +459,8 @@ public:
 private:
     BaseDeleter* deleter_;
 
-    DISALLOW_EVIL_CONSTRUCTORS(ElementDeleter);
+    ElementDeleter(const ElementDeleter&) = delete;
+    const ElementDeleter& operator=(const ElementDeleter&) = delete;
 };
 
 // Given a pointer to an STL container this class will delete all the value
@@ -474,7 +476,8 @@ public:
 private:
     STLContainer* container_ptr_;
 
-    DISALLOW_EVIL_CONSTRUCTORS(TemplatedValueDeleter);
+    TemplatedValueDeleter(const TemplatedValueDeleter&) = delete;
+    const TemplatedValueDeleter& operator=(const TemplatedValueDeleter&) = delete;
 };
 
 // Similar to ElementDeleter, but wraps a TemplatedValueDeleter rather than an
@@ -489,7 +492,8 @@ public:
 private:
     BaseDeleter* deleter_;
 
-    DISALLOW_EVIL_CONSTRUCTORS(ValueDeleter);
+    ValueDeleter(const ValueDeleter&) = delete;
+    const ValueDeleter& operator=(const ValueDeleter&) = delete;
 };
 
 // STLElementDeleter and STLValueDeleter are similar to ElementDeleter and
@@ -637,7 +641,7 @@ bool STLIncludes(const SortedSTLContainerA& a, const SortedSTLContainerB& b) {
 template <typename Pair, typename UnaryOp>
 class UnaryOperateOnFirst : public std::unary_function<Pair, typename UnaryOp::result_type> {
 public:
-    UnaryOperateOnFirst() {}
+    UnaryOperateOnFirst() = default;
 
     UnaryOperateOnFirst(const UnaryOp& f) : f_(f) { // TODO(user): explicit?
     }
@@ -656,7 +660,7 @@ UnaryOperateOnFirst<Pair, UnaryOp> UnaryOperate1st(const UnaryOp& f) {
 template <typename Pair, typename UnaryOp>
 class UnaryOperateOnSecond : public std::unary_function<Pair, typename UnaryOp::result_type> {
 public:
-    UnaryOperateOnSecond() {}
+    UnaryOperateOnSecond() = default;
 
     UnaryOperateOnSecond(const UnaryOp& f) : f_(f) { // TODO(user): explicit?
     }
@@ -675,7 +679,7 @@ UnaryOperateOnSecond<Pair, UnaryOp> UnaryOperate2nd(const UnaryOp& f) {
 template <typename Pair, typename BinaryOp>
 class BinaryOperateOnFirst : public std::binary_function<Pair, Pair, typename BinaryOp::result_type> {
 public:
-    BinaryOperateOnFirst() {}
+    BinaryOperateOnFirst() = default;
 
     BinaryOperateOnFirst(const BinaryOp& f) : f_(f) { // TODO(user): explicit?
     }
@@ -695,7 +699,7 @@ BinaryOperateOnFirst<Pair, BinaryOp> BinaryOperate1st(const BinaryOp& f) {
 template <typename Pair, typename BinaryOp>
 class BinaryOperateOnSecond : public std::binary_function<Pair, Pair, typename BinaryOp::result_type> {
 public:
-    BinaryOperateOnSecond() {}
+    BinaryOperateOnSecond() = default;
 
     BinaryOperateOnSecond(const BinaryOp& f) : f_(f) {}
 
@@ -760,7 +764,7 @@ public:
     typedef typename Alloc::pointer pointer;
     typedef typename Alloc::size_type size_type;
 
-    STLCountingAllocator() : bytes_used_(nullptr) {}
+    STLCountingAllocator() {}
     STLCountingAllocator(int64* b) : bytes_used_(b) {} // TODO(user): explicit?
 
     // Constructor used for rebinding
@@ -788,7 +792,7 @@ public:
     int64* bytes_used() const { return bytes_used_; }
 
 private:
-    int64* bytes_used_;
+    int64* bytes_used_{nullptr};
 };
 
 // Even though a struct has no data members, it cannot have zero size

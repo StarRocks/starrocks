@@ -426,7 +426,7 @@ private:
     std::atomic<int32_t> _initial_reservation_refcnt{0};
 
     // prohibit copies
-    RuntimeState(const RuntimeState&);
+    RuntimeState(const RuntimeState&) = delete;
 
     RuntimeFilterPort* _runtime_filter_port;
 };

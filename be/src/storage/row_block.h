@@ -38,11 +38,11 @@ namespace starrocks {
 class ExprContext;
 
 struct RowBlockInfo {
-    RowBlockInfo() : checksum(0), row_num(0) {}
+    RowBlockInfo() {}
     RowBlockInfo(uint32_t value, uint32_t num) : checksum(value), row_num(num) {}
 
-    uint32_t checksum;
-    uint32_t row_num;
+    uint32_t checksum{0};
+    uint32_t row_num{0};
     bool null_supported = false;
     std::vector<uint32_t> column_ids;
 };
@@ -129,7 +129,8 @@ private:
     std::unique_ptr<MemTracker> _tracker;
     std::unique_ptr<MemPool> _mem_pool;
 
-    DISALLOW_COPY_AND_ASSIGN(RowBlock);
+    RowBlock(const RowBlock&) = delete;
+    const RowBlock& operator=(const RowBlock&) = delete;
 };
 
 } // namespace starrocks

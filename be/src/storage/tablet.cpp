@@ -24,10 +24,11 @@
 #include <pthread.h>
 #include <rapidjson/prettywriter.h>
 #include <rapidjson/stringbuffer.h>
-#include <stdio.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <map>
+#include <memory>
 #include <utility>
 
 #include "storage/olap_common.h"
@@ -75,7 +76,7 @@ Tablet::~Tablet() {
 OLAPStatus Tablet::_init_once_action() {
     VLOG(3) << "begin to load tablet. tablet=" << full_name() << ", version_size=" << _tablet_meta->version_count();
     if (keys_type() == PRIMARY_KEYS) {
-        _updates.reset(new TabletUpdates(*this));
+        _updates = std::make_unique<TabletUpdates>(*this);
         Status st = _updates->init();
         LOG_IF(WARNING, !st.ok()) << "Fail to init updates: " << st;
         return st.ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
@@ -164,7 +165,7 @@ OLAPStatus Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& ro
             break;
         }
         _tablet_meta = new_tablet_meta;
-    } while (0);
+    } while (false);
 
     for (auto& version : versions_to_delete) {
         auto it = _rs_version_map.find(version);
@@ -382,7 +383,7 @@ void Tablet::delete_expired_inc_rowsets() {
         double diff = ::difftime(now, rs_meta->creation_time());
         if (diff >= config::inc_rowset_expired_sec) {
             Version version(rs_meta->version());
-            expired_versions.push_back(std::make_pair(version, rs_meta->version_hash()));
+            expired_versions.emplace_back(version, rs_meta->version_hash());
             VLOG(3) << "find expire incremental rowset. tablet=" << full_name() << ", version=" << version
                     << ", version_hash=" << rs_meta->version_hash() << ", exist_sec=" << diff;
         }
@@ -622,7 +623,7 @@ OLAPStatus Tablet::_capture_consistent_rowsets_unlocked(const std::vector<Versio
                 rowsets->push_back(it_expired->second);
                 break;
             }
-        } while (0);
+        } while (false);
 
         if (!is_find) {
             LOG(WARNING) << "fail to find Rowset for version. tablet=" << full_name() << ", version='" << version;
@@ -851,11 +852,11 @@ Version Tablet::_max_continuous_version_from_beginning_unlocked() const {
                   return left.first.first < right.first.first;
               });
     Version max_continuous_version = {-1, 0};
-    for (int i = 0; i < existing_versions.size(); ++i) {
-        if (existing_versions[i].first.first > max_continuous_version.second + 1) {
+    for (auto& existing_version : existing_versions) {
+        if (existing_version.first.first > max_continuous_version.second + 1) {
             break;
         }
-        max_continuous_version = existing_versions[i].first;
+        max_continuous_version = existing_version.first;
     }
     return max_continuous_version;
 }

@@ -207,7 +207,7 @@ template <typename T, typename Container = std::deque<T>, typename Lock = std::m
           typename CV = std::condition_variable>
 class UnboundedBlockingQueue {
 public:
-    UnboundedBlockingQueue() : _shutdown(false) {}
+    UnboundedBlockingQueue()  {}
 
     // Return false iff empty *AND* has been shutdown.
     bool blocking_get(T* out) {
@@ -281,7 +281,7 @@ protected:
     mutable Lock _lock;
     CV _not_empty;
     Container _items;
-    bool _shutdown;
+    bool _shutdown{false};
 };
 
 template <typename T>

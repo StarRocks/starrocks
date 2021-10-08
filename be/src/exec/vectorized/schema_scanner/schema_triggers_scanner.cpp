@@ -36,6 +36,6 @@ SchemaScanner::ColumnDesc SchemaTriggersScanner::_s_cols_triggers[] = {
 SchemaTriggersScanner::SchemaTriggersScanner()
         : SchemaScanner(_s_cols_triggers, sizeof(_s_cols_triggers) / sizeof(SchemaScanner::ColumnDesc)) {}
 
-SchemaTriggersScanner::~SchemaTriggersScanner() {}
+SchemaTriggersScanner::~SchemaTriggersScanner() = default;
 
 } // namespace starrocks::vectorized

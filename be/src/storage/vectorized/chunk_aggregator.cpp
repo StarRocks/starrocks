@@ -125,12 +125,11 @@ ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, ui
     }
 
     // column aggregator
-    for (int i = 0; i < _num_fields; ++i) {
-        if (i < _key_fields) {
-            _column_aggregator.emplace_back(ColumnAggregatorFactory::create_key_column_aggregator(_schema->field(i)));
-        } else {
-            _column_aggregator.emplace_back(ColumnAggregatorFactory::create_value_column_aggregator(_schema->field(i)));
-        }
+    for (int i = 0; i < _key_fields; ++i) {
+        _column_aggregator.emplace_back(ColumnAggregatorFactory::create_key_column_aggregator(_schema->field(i)));
+    }
+    for (int i = _key_fields; i < _num_fields; ++i) {
+        _column_aggregator.emplace_back(ColumnAggregatorFactory::create_value_column_aggregator(_schema->field(i)));
     }
 
     aggregate_reset();

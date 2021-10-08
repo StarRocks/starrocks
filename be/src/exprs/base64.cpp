@@ -21,9 +21,8 @@
 
 #include "base64.h"
 
-#include <math.h>
-#include <stdint.h>
-
+#include <cmath>
+#include <cstdint>
 #include <string>
 
 static char s_encoding_table[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',

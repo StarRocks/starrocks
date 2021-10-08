@@ -25,6 +25,7 @@
 
 #include <condition_variable>
 #include <deque>
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -387,8 +388,7 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
 
     size_t column_index = 0;
     _chunk_meta.types.resize(pb_chunk.is_nulls().size());
-    for (size_t i = 0; i < _recvr->_row_desc.tuple_descriptors().size(); i++) {
-        TupleDescriptor* tuple_desc = _recvr->_row_desc.tuple_descriptors()[i];
+    for (auto tuple_desc : _recvr->_row_desc.tuple_descriptors()) {
         const std::vector<SlotDescriptor*>& slots = tuple_desc->slots();
         for (const auto& kv : _chunk_meta.slot_id_to_index) {
             //TODO: performance?
@@ -535,8 +535,9 @@ void DataStreamRecvr::SenderQueue::decrement_senders(int be_number) {
     _sender_eos_set.insert(be_number);
     DCHECK_GT(_num_remaining_senders, 0);
     _num_remaining_senders--;
-    VLOG_FILE << "decremented senders: fragment_instance_id=" << _recvr->fragment_instance_id()
-              << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders;
+    VLOG_FILE << "decremented senders: fragment_instance_id=" << print_id(_recvr->fragment_instance_id())
+              << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders
+              << " be_number=" << be_number;
     if (_num_remaining_senders == 0) {
         _data_arrival_cv.notify_one();
     }
@@ -580,8 +581,8 @@ void DataStreamRecvr::SenderQueue::close() {
     }
 
     // Delete any batches queued in _batch_queue
-    for (RowBatchQueue::iterator it = _batch_queue.begin(); it != _batch_queue.end(); ++it) {
-        delete it->second;
+    for (auto& it : _batch_queue) {
+        delete it.second;
     }
 
     _current_batch.reset();
@@ -593,7 +594,7 @@ Status DataStreamRecvr::create_merger(const TupleRowComparator& less_than) {
     input_batch_suppliers.reserve(_sender_queues.size());
 
     // Create the merger that will a single stream of sorted rows.
-    _merger.reset(new SortedRunMerger(less_than, &_row_desc, _profile.get(), false));
+    _merger = std::make_unique<SortedRunMerger>(less_than, &_row_desc, _profile.get(), false);
 
     for (SenderQueue* q : _sender_queues) {
         auto f = [q](RowBatch** batch) -> Status { return q->get_batch(batch); };
@@ -687,7 +688,7 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_t
     (void)parent_tracker;
     // TODO: Now the parent tracker may cause problem when we need spill to disk, so we
     // replace parent_tracker with nullptr, fix future
-    _mem_tracker.reset(new MemTracker(_profile.get(), -1, "DataStreamRecvr", nullptr));
+    _mem_tracker = std::make_unique<MemTracker>(_profile.get(), -1, "DataStreamRecvr", nullptr);
     // _mem_tracker.reset(new MemTracker(_profile.get(), -1, "DataStreamRecvr", parent_tracker));
 
     // Create one queue per sender if is_merging is true.
@@ -761,14 +762,14 @@ void DataStreamRecvr::remove_sender(int sender_id, int be_number) {
 }
 
 void DataStreamRecvr::cancel_stream() {
-    for (int i = 0; i < _sender_queues.size(); ++i) {
-        _sender_queues[i]->cancel();
+    for (auto& _sender_queue : _sender_queues) {
+        _sender_queue->cancel();
     }
 }
 
 void DataStreamRecvr::close() {
-    for (int i = 0; i < _sender_queues.size(); ++i) {
-        _sender_queues[i]->close();
+    for (auto& _sender_queue : _sender_queues) {
+        _sender_queue->close();
     }
     // Remove this receiver from the DataStreamMgr that created it.
     // TODO: log error msg

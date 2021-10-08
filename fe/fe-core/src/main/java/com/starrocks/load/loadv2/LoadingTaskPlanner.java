@@ -131,23 +131,9 @@ public class LoadingTaskPlanner {
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(nextNodeId++), tupleDesc, "FileScanNode",
                 fileStatusesList, filesAdded);
         scanNode.setLoadInfo(loadJobId, txnId, table, brokerDesc, fileGroups, strictMode, parallelInstanceNum);
-        // If load job has orc and csv files, or column mapping expr is not vectorized, we can not use new planner. So
-        // firstly, try to use vectorized load planner to init and finalize scan node if Config.vectorized_load_enable.
-        // secondly, use old load planner to init and finalize scan node if scan node is not vectorized in first step.
-        boolean useVectorizedLoad = Config.vectorized_load_enable;
-        if (useVectorizedLoad) {
-            scanNode.setUseVectorizedLoad(true);
-            scanNode.init(analyzer);
-            scanNode.finalize(analyzer);
-        }
-        if (useVectorizedLoad && scanNode.isVectorized()) {
-            scanNode.setUseVectorized(true);
-        } else {
-            scanNode.setUseVectorizedLoad(false);
-            scanNode.init(analyzer);
-            scanNode.finalize(analyzer);
-            scanNode.setUseVectorized(false);
-        }
+        scanNode.setUseVectorizedLoad(true);
+        scanNode.init(analyzer);
+        scanNode.finalize(analyzer);
         LOG.info("use vectorized load: {}, load job id: {}", scanNode.isUseVectorized(), loadJobId);
         scanNodes.add(scanNode);
         descTable.computeMemLayout();

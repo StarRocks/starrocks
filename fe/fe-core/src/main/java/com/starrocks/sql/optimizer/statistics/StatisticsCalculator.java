@@ -158,34 +158,35 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalOlapScan(LogicalOlapScanOperator node, ExpressionContext context) {
-        return computeOlapScanNode(node, context, node.getOlapTable(), node.getSelectedPartitionId(),
-                node.getColumnToIds());
+        return computeOlapScanNode(node, context, node.getTable(), node.getSelectedPartitionId(),
+                node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
         return computeOlapScanNode(node, context, node.getTable(), node.getSelectedPartitionId(),
-                node.getColumnToIds());
+                node.getColRefToColumnMetaMap());
     }
 
     private Void computeOlapScanNode(Operator node, ExpressionContext context, Table table,
                                      Collection<Long> selectedPartitionIds,
-                                     Map<Column, Integer> columnToIds) {
+                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Preconditions.checkState(context.arity() == 0);
         // 1. get table row count
         long tableRowCount = getTableRowCount(table, node);
         // 2. get required columns statistics
-        Statistics.Builder builder = estimateScanColumns(table);
+        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
         // 3. deal with column statistics for partition prune
         OlapTable olapTable = (OlapTable) table;
         ColumnStatistic partitionStatistic = adjustPartitionStatistic(selectedPartitionIds, olapTable);
         if (partitionStatistic != null) {
             String partitionColumnName = Lists.newArrayList(olapTable.getPartitionColumnNames()).get(0);
-            Optional<Map.Entry<Column, Integer>> partitionColumnEntry = columnToIds.entrySet().stream().
-                    filter(column -> column.getKey().getName().equalsIgnoreCase(partitionColumnName)).findAny();
-            Preconditions.checkState(partitionColumnEntry.isPresent());
-            builder.addColumnStatistic(columnRefFactory.getColumnRef(partitionColumnEntry.get().getValue()),
-                    partitionStatistic);
+            Optional<Map.Entry<ColumnRefOperator, Column>> partitionColumnEntry =
+                    colRefToColumnMetaMap.entrySet().stream().
+                            filter(column -> column.getValue().getName().equalsIgnoreCase(partitionColumnName))
+                            .findAny();
+            // partition prune maybe because partition has none data
+            partitionColumnEntry.ifPresent(entry -> builder.addColumnStatistic(entry.getKey(), partitionStatistic));
         }
 
         builder.setOutputRowCount(tableRowCount);
@@ -262,13 +263,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return hiveColumnStats;
     }
 
-    private Statistics.Builder estimateScanColumns(Table table) {
+    private Statistics.Builder estimateScanColumns(Table table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Statistics.Builder builder = Statistics.builder();
-        List<ColumnRefOperator> requiredColumns = new ArrayList<>();
-        for (int columnId : requiredCols.getColumnIds()) {
-            ColumnRefOperator columnRefOperator = columnRefFactory.getColumnRef(columnId);
-            requiredColumns.add(columnRefOperator);
-        }
+        List<ColumnRefOperator> requiredColumns = new ArrayList<>(colRefToColumnMetaMap.keySet());
         List<ColumnStatistic> columnStatisticList = Catalog.getCurrentStatisticStorage().getColumnStatistics(table,
                 requiredColumns.stream().map(ColumnRefOperator::getName).collect(Collectors.toList()));
         Preconditions.checkState(requiredColumns.size() == columnStatisticList.size());
@@ -282,32 +279,34 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalMysqlScan(LogicalMysqlScanOperator node, ExpressionContext context) {
-        return computeMysqlScanNode(node, context, node.getTable());
+        return computeMysqlScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
-        return computeMysqlScanNode(node, context, node.getTable());
+        return computeMysqlScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
-    private Void computeMysqlScanNode(Operator node, ExpressionContext context, Table table) {
-        Statistics.Builder builder = estimateScanColumns(table);
+    private Void computeMysqlScanNode(Operator node, ExpressionContext context, Table table,
+                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
         builder.setOutputRowCount(1);
         return visitOperator(node, context, builder);
     }
 
     @Override
     public Void visitLogicalEsScan(LogicalEsScanOperator node, ExpressionContext context) {
-        return computeEsScanNode(node, context, node.getTable());
+        return computeEsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
     @Override
     public Void visitPhysicalEsScan(PhysicalEsScanOperator node, ExpressionContext context) {
-        return computeEsScanNode(node, context, node.getTable());
+        return computeEsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
-    private Void computeEsScanNode(Operator node, ExpressionContext context, Table table) {
-        Statistics.Builder builder = estimateScanColumns(table);
+    private Void computeEsScanNode(Operator node, ExpressionContext context, Table table,
+                                   Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
         builder.setOutputRowCount(1);
         return visitOperator(node, context, builder);
     }
@@ -315,7 +314,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitLogicalSchemaScan(LogicalSchemaScanOperator node, ExpressionContext context) {
         Table table = node.getTable();
-        Statistics.Builder builder = estimateScanColumns(table);
+        Statistics.Builder builder = estimateScanColumns(table, node.getColRefToColumnMetaMap());
         builder.setOutputRowCount(1);
         return visitOperator(node, context, builder);
     }
@@ -323,7 +322,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalSchemaScan(PhysicalSchemaScanOperator node, ExpressionContext context) {
         Table table = node.getTable();
-        Statistics.Builder builder = estimateScanColumns(table);
+        Statistics.Builder builder = estimateScanColumns(table, node.getColRefToColumnMetaMap());
         builder.setOutputRowCount(1);
         return visitOperator(node, context, builder);
     }
@@ -462,10 +461,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (selectedPartitionIds.isEmpty()) {
             return 0;
         }
-        for (long partitionId : selectedPartitionIds) {
-            PartitionKey partitionKey = idToPartitionKey.get(partitionId);
-            HivePartition partition = hiveTable.getPartition(partitionKey);
-            for (HdfsFileDesc fileDesc : partition.getFiles()) {
+
+        List<HivePartition> hivePartitions = hiveTable.getPartitions(partitions);
+        for (HivePartition hivePartition : hivePartitions) {
+            for (HdfsFileDesc fileDesc : hivePartition.getFiles()) {
                 totalBytes += fileDesc.getLength();
             }
         }

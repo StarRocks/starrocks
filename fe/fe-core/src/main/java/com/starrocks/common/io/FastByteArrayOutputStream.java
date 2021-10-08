@@ -67,15 +67,6 @@ public class FastByteArrayOutputStream extends OutputStream {
         return size;
     }
 
-    /**
-     * Returns the byte array containing the written data. Note that this
-     * array will almost always be larger than the amount of data actually
-     * written.
-     */
-    public byte[] getByteArray() {
-        return buf;
-    }
-
     public final void write(byte[] b) {
         verifyBufferSize(size + b.length);
         System.arraycopy(b, 0, buf, size, b.length);

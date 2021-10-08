@@ -86,7 +86,7 @@ void DiskInfo::get_device_names() {
         if (it == _s_disk_name_to_disk_id.end()) {
             // First time seeing this disk
             disk_id = _s_disks.size();
-            _s_disks.push_back(Disk(name, disk_id));
+            _s_disks.emplace_back(name, disk_id);
             _s_disk_name_to_disk_id[name] = disk_id;
         } else {
             disk_id = it->second;
@@ -102,22 +102,22 @@ void DiskInfo::get_device_names() {
     if (_s_disks.empty()) {
         // If all else fails, return 1
         LOG(WARNING) << "Could not determine number of disks on this machine.";
-        _s_disks.push_back(Disk("sda", 0));
+        _s_disks.emplace_back("sda", 0);
     }
 
     // Determine if the disk is rotational or not.
-    for (int i = 0; i < _s_disks.size(); ++i) {
+    for (auto& _s_disk : _s_disks) {
         // We can check if it is rotational by reading:
         // /sys/block/<device>/queue/rotational
         // If the file is missing or has unexpected data, default to rotational.
         std::stringstream ss;
-        ss << "/sys/block/" << _s_disks[i].name << "/queue/rotational";
+        ss << "/sys/block/" << _s_disk.name << "/queue/rotational";
         std::ifstream rotational(ss.str().c_str(), std::ios::in);
         if (rotational.good()) {
             std::string line;
             getline(rotational, line);
             if (line == "0") {
-                _s_disks[i].is_rotational = false;
+                _s_disk.is_rotational = false;
             }
         }
         if (rotational.is_open()) {

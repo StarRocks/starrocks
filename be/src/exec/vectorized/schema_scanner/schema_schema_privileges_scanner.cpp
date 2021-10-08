@@ -19,10 +19,9 @@ SchemaScanner::ColumnDesc SchemaSchemaPrivilegesScanner::_s_db_privs_columns[] =
 };
 
 SchemaSchemaPrivilegesScanner::SchemaSchemaPrivilegesScanner()
-        : SchemaScanner(_s_db_privs_columns, sizeof(_s_db_privs_columns) / sizeof(SchemaScanner::ColumnDesc)),
-          _db_priv_index(0) {}
+        : SchemaScanner(_s_db_privs_columns, sizeof(_s_db_privs_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
-SchemaSchemaPrivilegesScanner::~SchemaSchemaPrivilegesScanner() {}
+SchemaSchemaPrivilegesScanner::~SchemaSchemaPrivilegesScanner() = default;
 
 Status SchemaSchemaPrivilegesScanner::start(RuntimeState* state) {
     if (!_is_init) {

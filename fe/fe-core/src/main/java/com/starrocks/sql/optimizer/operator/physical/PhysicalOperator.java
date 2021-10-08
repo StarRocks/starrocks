@@ -56,8 +56,4 @@ public abstract class PhysicalOperator extends Operator {
 
         return result;
     }
-
-    public abstract boolean equals(Object o);
-
-    public abstract int hashCode();
 }

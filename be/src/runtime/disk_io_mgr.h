@@ -235,7 +235,7 @@ public:
     class BufferDescriptor {
     public:
         // a null dtor to pass codestyle check
-        ~BufferDescriptor() {}
+        ~BufferDescriptor() = default;
 
         ScanRange* scan_range() { return _scan_range; }
         char* buffer() { return _buffer; }
@@ -504,7 +504,7 @@ public:
     class WriteRange : public RequestRange {
     public:
         // a null dtor to pass codestyle check
-        ~WriteRange() override {}
+        ~WriteRange() override = default;
 
         // This callback is invoked on each WriteRange after the write is complete or the
         // context is cancelled. The status returned by the callback parameter indicates
@@ -717,11 +717,11 @@ private:
     boost::thread_group _disk_thread_group;
 
     // Options object for cached hdfs reads. Set on startup and never modified.
-    struct hadoopRzOptions* _cached_read_options;
+    struct hadoopRzOptions* _cached_read_options{nullptr};
 
     // True if the IoMgr should be torn down. Worker threads watch for this to
     // know to terminate. This variable is read/written to by different threads.
-    volatile bool _shut_down;
+    volatile bool _shut_down{false};
 
     // Total bytes read by the IoMgr.
     RuntimeProfile::Counter _total_bytes_read_counter;

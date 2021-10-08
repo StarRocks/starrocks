@@ -36,8 +36,7 @@ using std::vector;
 using strings::SkipEmpty;
 using strings::Split;
 
-namespace starrocks {
-namespace path_util {
+namespace starrocks::path_util {
 
 const string kTmpInfix = ".starrockstmp";
 
@@ -98,5 +97,4 @@ std::string file_extension(const string& path) {
     return pos == string::npos ? "" : file_name.substr(pos);
 }
 
-} // namespace path_util
-} // namespace starrocks
+} // namespace starrocks::path_util

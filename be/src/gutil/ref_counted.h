@@ -32,14 +32,15 @@ protected:
     bool Release() const;
 
 private:
-    mutable int ref_count_;
+    mutable int ref_count_{0};
 #ifndef NDEBUG
     mutable bool in_dtor_;
 #endif
 
     DFAKE_MUTEX(add_release_);
 
-    DISALLOW_COPY_AND_ASSIGN(RefCountedBase);
+    RefCountedBase(const RefCountedBase&) = delete;
+    const RefCountedBase& operator=(const RefCountedBase&) = delete;
 };
 
 class RefCountedThreadSafeBase {
@@ -56,12 +57,13 @@ protected:
     bool Release() const;
 
 private:
-    mutable AtomicRefCount ref_count_;
+    mutable AtomicRefCount ref_count_{0};
 #ifndef NDEBUG
     mutable bool in_dtor_;
 #endif
 
-    DISALLOW_COPY_AND_ASSIGN(RefCountedThreadSafeBase);
+    RefCountedThreadSafeBase(const RefCountedThreadSafeBase&) = delete;
+    const RefCountedThreadSafeBase& operator=(const RefCountedThreadSafeBase&) = delete;
 };
 
 } // namespace subtle
@@ -83,7 +85,7 @@ private:
 template <class T>
 class RefCounted : public subtle::RefCountedBase {
 public:
-    RefCounted() {}
+    RefCounted() = default;
 
     void AddRef() const { subtle::RefCountedBase::AddRef(); }
 
@@ -94,10 +96,11 @@ public:
     }
 
 protected:
-    ~RefCounted() {}
+    ~RefCounted() = default;
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(RefCounted<T>);
+    RefCounted(const RefCounted&) = delete;
+    const RefCounted& operator=(const RefCounted&) = delete;
 };
 
 // Forward declaration.
@@ -131,7 +134,7 @@ struct DefaultRefCountedThreadSafeTraits {
 template <class T, typename Traits = DefaultRefCountedThreadSafeTraits<T> >
 class RefCountedThreadSafe : public subtle::RefCountedThreadSafeBase {
 public:
-    RefCountedThreadSafe() {}
+    RefCountedThreadSafe() = default;
 
     void AddRef() const { subtle::RefCountedThreadSafeBase::AddRef(); }
 
@@ -142,13 +145,14 @@ public:
     }
 
 protected:
-    ~RefCountedThreadSafe() {}
+    ~RefCountedThreadSafe() = default;
 
 private:
     friend struct DefaultRefCountedThreadSafeTraits<T>;
     static void DeleteInternal(const T* x) { delete x; }
 
-    DISALLOW_COPY_AND_ASSIGN(RefCountedThreadSafe);
+    RefCountedThreadSafe(const RefCountedThreadSafe&) = delete;
+    const RefCountedThreadSafe& operator=(const RefCountedThreadSafe&) = delete;
 };
 
 //
@@ -165,7 +169,7 @@ public:
 
 private:
     friend class starrocks::RefCountedThreadSafe<starrocks::RefCountedData<T> >;
-    ~RefCountedData() {}
+    ~RefCountedData() = default;
 };
 
 } // namespace starrocks

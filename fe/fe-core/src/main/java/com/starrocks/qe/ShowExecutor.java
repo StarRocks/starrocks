@@ -1480,10 +1480,10 @@ public class ShowExecutor {
 
         List<List<String>> rows = new ArrayList<List<String>>();
         for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
-            List<String> one_sql = new ArrayList<String>();
-            one_sql.add(String.valueOf(entry.getValue().id));
-            one_sql.add(entry.getKey());
-            rows.add(one_sql);
+            List<String> oneSql = new ArrayList<String>();
+            oneSql.add(String.valueOf(entry.getValue().id));
+            oneSql.add(entry.getKey());
+            rows.add(oneSql);
         }
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }

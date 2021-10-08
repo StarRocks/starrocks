@@ -21,6 +21,7 @@
 
 #include "storage/reader.h"
 
+#include <memory>
 #include <sstream>
 #include <utility>
 
@@ -200,9 +201,9 @@ void CollectIterator::init(Reader* reader) {
         _merge = false;
         _heap.reset(nullptr);
     } else if (_reader->_tablet->keys_type() == KeysType::UNIQUE_KEYS) {
-        _heap.reset(new MergeHeap(ChildCtxComparator(true)));
+        _heap = std::make_unique<MergeHeap>(ChildCtxComparator(true));
     } else {
-        _heap.reset(new MergeHeap());
+        _heap = std::make_unique<MergeHeap>();
     }
 }
 
@@ -300,8 +301,8 @@ void CollectIterator::clear() {
 }
 
 Reader::Reader() {
-    _tracker.reset(new MemTracker(-1));
-    _predicate_mem_pool.reset(new MemPool(_tracker.get()));
+    _tracker = std::make_unique<MemTracker>(-1);
+    _predicate_mem_pool = std::make_unique<MemPool>(_tracker.get());
 }
 
 Reader::~Reader() {
@@ -1038,15 +1039,15 @@ void Reader::_init_load_bf_columns(const ReaderParams& read_params) {
 
     // remove columns which have same value between start_key and end_key
     int min_scan_key_len = _tablet->tablet_schema().num_columns();
-    for (int i = 0; i < read_params.start_key.size(); ++i) {
-        if (read_params.start_key[i].size() < min_scan_key_len) {
-            min_scan_key_len = read_params.start_key[i].size();
+    for (const auto& i : read_params.start_key) {
+        if (i.size() < min_scan_key_len) {
+            min_scan_key_len = i.size();
         }
     }
 
-    for (int i = 0; i < read_params.end_key.size(); ++i) {
-        if (read_params.end_key[i].size() < min_scan_key_len) {
-            min_scan_key_len = read_params.end_key[i].size();
+    for (const auto& i : read_params.end_key) {
+        if (i.size() < min_scan_key_len) {
+            min_scan_key_len = i.size();
         }
     }
 

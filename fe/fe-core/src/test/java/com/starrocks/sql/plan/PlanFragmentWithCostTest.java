@@ -3,8 +3,10 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
@@ -81,7 +83,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testAggWithLowCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
-                mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V2));
+                mockedStatisticStorage.getColumnStatistics((Table) any, Lists.newArrayList("v2"));
                 result = ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 100));
             }
         };
@@ -101,7 +103,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testAggWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
-                mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V2));
+                mockedStatisticStorage.getColumnStatistics((Table) any, Lists.newArrayList("v2"));
                 result = ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 7000));
             }
         };
@@ -121,7 +123,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testSortWithLowCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
-                mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V1, V2));
+                mockedStatisticStorage.getColumnStatistics((Table) any, ImmutableList.of(V1, V2));
                 result = ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 100),
                         new ColumnStatistic(0.0, 100, 0.0, 10, 100));
             }
@@ -138,7 +140,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testSortWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
-                mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V1, V2));
+                mockedStatisticStorage.getColumnStatistics((Table) any, ImmutableList.of(V1, V2));
                 result = ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 7000),
                         new ColumnStatistic(0.0, 100, 0.0, 10, 7000));
             }
@@ -155,7 +157,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testTopNWithLowCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
-                mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V1, V2));
+                mockedStatisticStorage.getColumnStatistics((Table) any, ImmutableList.of(V1, V2));
                 result = ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 100),
                         new ColumnStatistic(0.0, 100, 0.0, 10, 100));
             }
@@ -172,7 +174,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testTopNWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
-                mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V1, V2));
+                mockedStatisticStorage.getColumnStatistics((Table) any, ImmutableList.of(V1, V2));
                 result = ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 7000),
                         new ColumnStatistic(0.0, 100, 0.0, 10, 7000));
             }
@@ -192,7 +194,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(4);
         new Expectations() {
             {
-                mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V1, V2));
+                mockedStatisticStorage.getColumnStatistics((Table) any, ImmutableList.of(V1, V2));
                 result = ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 100),
                         new ColumnStatistic(0.0, 100, 0.0, 10, 100));
             }
@@ -219,7 +221,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(1);
         new Expectations() {
             {
-                mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V1, V2));
+                mockedStatisticStorage.getColumnStatistics((Table) any, ImmutableList.of(V1, V2));
                 result = ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 7000),
                         new ColumnStatistic(0.0, 100, 0.0, 10, 7000));
             }
@@ -238,7 +240,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(3);
         new Expectations() {
             {
-                mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V2, V3));
+                mockedStatisticStorage.getColumnStatistics((Table) any, ImmutableList.of(V2, V3));
                 result = ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 50),
                         new ColumnStatistic(0.0, 100, 0.0, 10, 50));
             }
@@ -258,7 +260,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             throws Exception {
         new Expectations() {
             {
-                mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V2, V3));
+                mockedStatisticStorage.getColumnStatistics((Table) any, ImmutableList.of(V2, V3));
                 result = ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 7000),
                         new ColumnStatistic(0.0, 100, 0.0, 10, 7000));
             }
@@ -276,7 +278,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             throws Exception {
         new Expectations() {
             {
-                mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V2, V3));
+                mockedStatisticStorage.getColumnStatistics((Table) any, ImmutableList.of(V2, V3));
                 result = ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 10),
                         new ColumnStatistic(0.0, 100, 0.0, 10, 10));
             }
@@ -293,7 +295,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             @Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
-                mockedStatisticStorage.getColumnStatistics((OlapTable) any, ImmutableList.of(V2, V3));
+                mockedStatisticStorage.getColumnStatistics((Table) any, ImmutableList.of(V2, V3));
                 result = ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 7000),
                         new ColumnStatistic(0.0, 100, 0.0, 10, 7000));
             }
@@ -313,7 +315,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(table1, 10000);
         OlapTable table2 = (OlapTable) catalog.getDb("default_cluster:test").getTable("test_all_type");
         setTableStatistics(table2, 5000);
-        connectContext.getSessionVariable().setPreferJoinMethod("shuffle");
         String sql = "SELECT v2,t1d from t0 join test_all_type on t0.v2 = test_all_type.t1d ;";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  4:HASH JOIN\n"
@@ -414,11 +415,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         sql = "select count(*) from test_mv group by event_day;";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: r3"));
+        Assert.assertTrue(planFragment.contains("rollup: test_mv"));
 
         sql = "select count(*), event_day from test_mv group by event_day;";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("rollup: r3"));
+        Assert.assertTrue(planFragment.contains("rollup: test_mv"));
 
         sql = "select event_day from test_mv where citycode = 1 group by event_day;";
         planFragment = getFragmentPlan(sql);
@@ -466,8 +467,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         String sql = "select count(distinct k7), count(distinct k8) from duplicate_table_with_null;";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("OUTPUT EXPRS:16: count(distinct 7: k7) | 17: count(distinct 8: k8)"));
-        Assert.assertTrue(planFragment.contains("  |  <slot 14> : 14: mv_bitmap_union_k7\n" +
-                "  |  <slot 15> : 15: mv_bitmap_union_k8"));
+        Assert.assertTrue(planFragment.contains("14: mv_bitmap_union_k7"));
+        Assert.assertTrue(planFragment.contains("15: mv_bitmap_union_k8"));
         Assert.assertTrue(planFragment.contains("rollup: bitmap_mv"));
     }
 
@@ -486,7 +487,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: S_NATIONKEY = 9: N_NATIONKEY"));
-        Assert.assertTrue(plan.contains("18:HASH JOIN\n" +
+        Assert.assertTrue(plan.contains("19:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +

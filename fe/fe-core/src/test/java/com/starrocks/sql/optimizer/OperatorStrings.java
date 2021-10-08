@@ -178,7 +178,7 @@ public class OperatorStrings {
         public OperatorStr visitPhysicalOlapScan(OptExpression optExpression, Integer step) {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("SCAN (");
-            sb.append("columns").append(scan.getOutputColumns());
+            sb.append("columns").append(scan.getColRefToColumnMetaMap().keySet());
             sb.append(" predicate[").append(scan.getPredicate()).append("]");
             sb.append(")");
             if (scan.getLimit() >= 0) {

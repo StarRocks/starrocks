@@ -20,7 +20,9 @@
 // under the License.
 #include <functional>
 #include <limits>
+#include <memory>
 #include <sstream>
+#include <utility>
 
 #include "gutil/strings/substitute.h"
 #include "runtime/bufferpool/buffer_allocator.h"
@@ -37,9 +39,6 @@
 //    "obtain the target number of scratch write I/Os per query.");
 
 namespace starrocks {
-
-constexpr int BufferPool::LOG_MAX_BUFFER_BYTES;
-constexpr int64_t BufferPool::MAX_BUFFER_BYTES;
 
 void BufferPool::BufferHandle::Open(uint8_t* data, int64_t len, int home_core) {
     DCHECK_LE(0, home_core);
@@ -114,7 +113,7 @@ BufferPool::BufferPool(int64_t min_buffer_len, int64_t buffer_bytes_limit, int64
     DCHECK_EQ(min_buffer_len, BitUtil::RoundUpToPowerOfTwo(min_buffer_len));
 }
 
-BufferPool::~BufferPool() {}
+BufferPool::~BufferPool() = default;
 
 Status BufferPool::RegisterClient(const string& name, //TmpFileMgr::FileGroup* file_group,
                                   ReservationTracker* parent_reservation, MemTracker* mem_tracker,
@@ -345,11 +344,11 @@ bool BufferPool::ClientHandle::has_unpinned_pages() const {
 }
 
 BufferPool::SubReservation::SubReservation(ClientHandle* client) {
-    tracker_.reset(new ReservationTracker);
+    tracker_ = std::make_unique<ReservationTracker>();
     tracker_->InitChildTracker(nullptr, client->impl_->reservation(), nullptr, numeric_limits<int64_t>::max());
 }
 
-BufferPool::SubReservation::~SubReservation() {}
+BufferPool::SubReservation::~SubReservation() = default;
 
 int64_t BufferPool::SubReservation::GetReservation() const {
     return tracker_->GetReservation();
@@ -365,11 +364,11 @@ void BufferPool::SubReservation::Close() {
 }
 
 BufferPool::Client::Client(BufferPool* pool, //TmpFileMgr::FileGroup* file_group,
-                           const string& name, ReservationTracker* parent_reservation, MemTracker* mem_tracker,
+                           string name, ReservationTracker* parent_reservation, MemTracker* mem_tracker,
                            int64_t reservation_limit, RuntimeProfile* profile)
         : pool_(pool),
           //file_group_(file_group),
-          name_(name),
+          name_(std::move(name)),
           debug_write_delay_ms_(0),
           num_pages_(0),
           buffers_allocated_bytes_(0) {
@@ -689,11 +688,17 @@ string BufferPool::Client::DebugString() {
        << " in_flight_write_bytes: " << in_flight_write_pages_.bytes()
        << " reservation: " << reservation_.DebugString();
     ss << "\n  " << pinned_pages_.size() << " pinned pages: ";
-    pinned_pages_.iterate(std::bind<bool>(Page::DebugStringCallback, &ss, std::placeholders::_1));
+    pinned_pages_.iterate([capture0 = &ss](auto&& PH1) {
+        return Page::DebugStringCallback(capture0, std::forward<decltype(PH1)>(PH1));
+    });
     ss << "\n  " << dirty_unpinned_pages_.size() << " dirty unpinned pages: ";
-    dirty_unpinned_pages_.iterate(std::bind<bool>(Page::DebugStringCallback, &ss, std::placeholders::_1));
+    dirty_unpinned_pages_.iterate([capture0 = &ss](auto&& PH1) {
+        return Page::DebugStringCallback(capture0, std::forward<decltype(PH1)>(PH1));
+    });
     ss << "\n  " << in_flight_write_pages_.size() << " in flight write pages: ";
-    in_flight_write_pages_.iterate(std::bind<bool>(Page::DebugStringCallback, &ss, std::placeholders::_1));
+    in_flight_write_pages_.iterate([capture0 = &ss](auto&& PH1) {
+        return Page::DebugStringCallback(capture0, std::forward<decltype(PH1)>(PH1));
+    });
     return ss.str();
 }
 

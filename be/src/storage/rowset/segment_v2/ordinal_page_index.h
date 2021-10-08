@@ -57,7 +57,8 @@ public:
     Status finish(fs::WritableBlock* wblock, ColumnIndexMetaPB* meta);
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(OrdinalIndexWriter);
+    OrdinalIndexWriter(const OrdinalIndexWriter&) = delete;
+    const OrdinalIndexWriter& operator=(const OrdinalIndexWriter&) = delete;
     std::unique_ptr<IndexPageBuilder> _page_builder;
     PagePointer _last_pp;
 };
@@ -101,7 +102,7 @@ private:
 
 class OrdinalPageIndexIterator {
 public:
-    OrdinalPageIndexIterator() : _index(nullptr), _cur_idx(-1) {}
+    OrdinalPageIndexIterator() {}
     OrdinalPageIndexIterator(OrdinalIndexReader* index) : _index(index), _cur_idx(0) {}
     OrdinalPageIndexIterator(OrdinalIndexReader* index, int cur_idx) : _index(index), _cur_idx(cur_idx) {}
     bool valid() const { return _cur_idx < _index->_num_pages; }
@@ -115,8 +116,8 @@ public:
     ordinal_t last_ordinal() const { return _index->get_last_ordinal(_cur_idx); }
 
 private:
-    OrdinalIndexReader* _index;
-    int32_t _cur_idx;
+    OrdinalIndexReader* _index{nullptr};
+    int32_t _cur_idx{-1};
 };
 
 OrdinalPageIndexIterator OrdinalIndexReader::begin() {

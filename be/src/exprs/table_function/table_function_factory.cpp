@@ -20,12 +20,12 @@ struct TableFunctionMapHash {
         std::hash<std::string> hasher;
 
         size_t fn_hash = hasher(std::get<0>(quadruple));
-        for (int i = 0; i < std::get<1>(quadruple).size(); ++i) {
-            fn_hash = fn_hash ^ std::get<1>(quadruple)[i];
+        for (auto i : std::get<1>(quadruple)) {
+            fn_hash = fn_hash ^ i;
         }
 
-        for (int i = 0; i < std::get<2>(quadruple).size(); ++i) {
-            fn_hash = fn_hash ^ std::get<2>(quadruple)[i];
+        for (auto i : std::get<2>(quadruple)) {
+            fn_hash = fn_hash ^ i;
         }
 
         return fn_hash;
@@ -54,7 +54,8 @@ private:
     std::unordered_map<std::tuple<std::string, std::vector<PrimitiveType>, std::vector<PrimitiveType>>,
                        TableFunctionPtr, TableFunctionMapHash>
             _infos_mapping;
-    DISALLOW_COPY_AND_ASSIGN(TableFunctionResolver);
+    TableFunctionResolver(const TableFunctionResolver&) = delete;
+    const TableFunctionResolver& operator=(const TableFunctionResolver&) = delete;
 };
 
 TableFunctionResolver::TableFunctionResolver() {

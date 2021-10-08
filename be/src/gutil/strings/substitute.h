@@ -1,7 +1,6 @@
 // Copyright 2008 Google Inc.  All rights reserved.
 
-#include <string.h>
-
+#include <cstring>
 #include <string>
 using std::string;
 
@@ -134,10 +133,10 @@ public:
     static const SubstituteArg NoArg;
 
 private:
-    inline SubstituteArg() : text_(nullptr), size_(-1) {}
+    inline SubstituteArg() {}
 
-    const char* text_;
-    int size_;
+    const char* text_{nullptr};
+    int size_{-1};
     char scratch_[kFastToBufferSize];
 };
 
