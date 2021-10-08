@@ -78,7 +78,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM = "parallel_fragment_exec_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String ENABLE_SPILLING = "enable_spilling";
-    public static final String PREFER_JOIN_METHOD = "prefer_join_method";
     // if set to true, some of stmt will be forwarded to master FE to get result
     public static final String FORWARD_TO_MASTER = "forward_to_master";
     // user can set instance num after exchange, no need to be equal to nums of before exchange
@@ -101,9 +100,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_SCAN_KEY_NUM = "max_scan_key_num";
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
 
-    // vectorized engine flag
-    public static final String ENABLE_VECTORIZED_ENGINE = "enable_vectorized_engine";
-
     // use new execution engine instead of the old one if enable_pipeline_engine is true,
     // the new execution engine split a fragment into pipelines, then create several drivers
     // from the pipeline for parallel executing, threads from global pool pick out the
@@ -120,9 +116,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PIPELINE_SCAN_MODE = "pipeline_scan_mode";
 
     public static final String PIPELINE_QUERY_EXPIRE_SECONDS = "pipeline_query_expire_seconds";
-
-    // vectorized insert flag
-    public static final String ENABLE_VECTORIZED_INSERT = "enable_vectorized_insert";
 
     // hash join right table push down
     public static final String HASH_JOIN_PUSH_DOWN_RIGHT_TABLE = "hash_join_push_down_right_table";
@@ -342,10 +335,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DISABLE_JOIN_REORDER)
     private boolean disableJoinReorder = false;
 
-    // TODO(kks): Remove this variable after 2021-10-07
-    @VariableMgr.VarAttr(name = "enable_cbo")
-    private boolean enableCbo = true;
-
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
 
@@ -401,6 +390,31 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     //the alias will be used as the groupby column if set to true.
     @VariableMgr.VarAttr(name = ENABLE_GROUPBY_USE_OUTPUT_ALIAS)
     private boolean enableGroupbyUseOutputAlias = false;
+
+    // The following variables are deprecated and invisible //
+    // ----------------------------------------------------------------------------//
+
+    @VariableMgr.VarAttr(name = "enable_cbo", flag = VariableMgr.INVISIBLE)
+    @Deprecated
+    private boolean enableCbo = true;
+
+    @VariableMgr.VarAttr(name = "enable_vectorized_engine", alias = "vectorized_engine_enable",
+            flag = VariableMgr.INVISIBLE)
+    @Deprecated
+    private boolean vectorizedEngineEnable = true;
+
+    @VariableMgr.VarAttr(name = "enable_vectorized_insert", alias = "vectorized_insert_enable",
+            flag = VariableMgr.INVISIBLE)
+    @Deprecated
+    private boolean vectorizedInsertEnable = true;
+
+    @VariableMgr.VarAttr(name = "prefer_join_method", flag = VariableMgr.INVISIBLE)
+    @Deprecated
+    private String preferJoinMethod = "broadcast";
+
+    @VariableMgr.VarAttr(name = "rewrite_count_distinct_to_bitmap_hll", flag = VariableMgr.INVISIBLE)
+    @Deprecated
+    private boolean rewriteCountDistinct = true;
 
     public long getMaxExecMemByte() {
         return maxExecMemByte;
