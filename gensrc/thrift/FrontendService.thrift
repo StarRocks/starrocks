@@ -808,8 +808,8 @@ struct TGetTableMetaResponse {
 }
 
 struct TBeginRemoteTxnRequest {
-    1: optional string db_name
-    2: optional list<string> table_name
+    1: optional i64 db_id
+    2: optional list<i64> table_ids
     3: optional string label
     4: optional i32 source_type
     5: optional i64 timeout_second

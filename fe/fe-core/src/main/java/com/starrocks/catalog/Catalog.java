@@ -3679,7 +3679,7 @@ public class Catalog {
         long tableId = Catalog.getCurrentCatalog().getNextId();
         OlapTable olapTable = null;
         if (stmt.isExternal()) {
-            olapTable = new ExternalOlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
+            olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                                               distributionInfo, indexes, stmt.getProperties());
         } else {
             olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,

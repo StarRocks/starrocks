@@ -1140,7 +1140,7 @@ public class MasterImpl {
 
     public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {
         TBeginRemoteTxnResponse response = new TBeginRemoteTxnResponse();
-        Database db = Catalog.getCurrentCatalog().getDb(request.getDb_name());
+        Database db = Catalog.getCurrentCatalog().getDb(request.getDb_id());
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist"));
@@ -1148,25 +1148,12 @@ public class MasterImpl {
             return response;
         }
 
-        List tableIds = Lists.newArrayList();
-        for (String tableName : request.getTable_name()) {
-            Table table = db.getTable(tableName);
-            if (table == null) {
-                TStatus status = new TStatus(TStatusCode.NOT_FOUND);
-                String errMsg = "table " + "'" + tableName + "' not exist";
-                status.setError_msgs(Lists.newArrayList(errMsg));
-                response.setStatus(status);
-                return response;
-            }
-            tableIds.add(table.getId());
-        }
-
         long txnId;
         try {
             txnId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
-                tableIds, request.getLabel(),
-                new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
+                    request.getTable_ids(), request.getLabel(),
+                    new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                    LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
         } catch (Exception e) {
             LOG.info("begin remote txn error, label {}, msg {}", request.getLabel(), e.getStackTrace());
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
