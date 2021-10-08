@@ -3046,12 +3046,10 @@ public class Catalog {
             } finally {
                 db.readUnlock();
             }
-            StatementBase statementBase =
-                    SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+            StatementBase statementBase = SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
             if (statementBase instanceof CreateTableStmt) {
                 CreateTableStmt parsedCreateTableStmt =
-                        (CreateTableStmt) SqlParserUtils
-                                .parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
+                        (CreateTableStmt) SqlParserUtils.parseAndAnalyzeStmt(createTableStmt.get(0), ConnectContext.get());
                 parsedCreateTableStmt.setTableName(stmt.getTableName());
                 if (stmt.isSetIfNotExists()) {
                     parsedCreateTableStmt.setIfNotExists();
@@ -3688,10 +3686,10 @@ public class Catalog {
         OlapTable olapTable = null;
         if (stmt.isExternal()) {
             olapTable = new ExternalOlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
-                    distributionInfo, indexes, stmt.getProperties());
+                                              distributionInfo, indexes, stmt.getProperties());
         } else {
             olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
-                    distributionInfo, indexes);
+                                      distributionInfo, indexes);
         }
         olapTable.setComment(stmt.getComment());
 
@@ -3896,16 +3894,15 @@ public class Catalog {
                     RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                     for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
                         DataProperty dataProperty = rangePartitionInfo.getDataProperty(entry.getValue());
-                        Partition partition =
-                                createPartitionWithIndices(db.getClusterName(), db.getId(), olapTable.getId(),
-                                        olapTable.getBaseIndexId(), entry.getValue(), entry.getKey(),
-                                        olapTable.getIndexIdToMeta(), distributionInfo,
-                                        dataProperty.getStorageMedium(),
-                                        partitionInfo.getReplicationNum(entry.getValue()),
-                                        versionInfo, bfColumns, bfFpp,
-                                        tabletIdSet, olapTable.getCopiedIndexes(),
-                                        isInMemory, storageFormat,
-                                        rangePartitionInfo.getTabletType(entry.getValue()));
+                        Partition partition = createPartitionWithIndices(db.getClusterName(), db.getId(), olapTable.getId(),
+                                olapTable.getBaseIndexId(), entry.getValue(), entry.getKey(),
+                                olapTable.getIndexIdToMeta(), distributionInfo,
+                                dataProperty.getStorageMedium(),
+                                partitionInfo.getReplicationNum(entry.getValue()),
+                                versionInfo, bfColumns, bfFpp,
+                                tabletIdSet, olapTable.getCopiedIndexes(),
+                                isInMemory, storageFormat,
+                                rangePartitionInfo.getTabletType(entry.getValue()));
                         olapTable.addPartition(partition);
                     }
                 } else {
@@ -5580,23 +5577,17 @@ public class Catalog {
         short replicationNum = Short.valueOf(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
         boolean isInMemory = partitionInfo.getIsInMemory(partition.getId());
         DataProperty newDataProperty = partitionInfo.getDataProperty(partition.getId());
+        partitionInfo.setReplicationNum(partition.getId(), replicationNum);
+
         // update table default replication num
-        List<Backend> clusterBackends = systemInfo.getClusterBackends(SystemInfoService.DEFAULT_CLUSTER);
-        if (replicationNum <= clusterBackends.size()) {
-            partitionInfo.setReplicationNum(partition.getId(), replicationNum);
-            table.setReplicationNum(replicationNum);
-            //log
-            ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), table.getId(), partition.getId(),
-                    newDataProperty, replicationNum, isInMemory);
-            editLog.logModifyPartition(info);
-            LOG.info("modify partition[{}-{}-{}] replication num to {}", db.getFullName(), table.getName(),
-                    partition.getName(), replicationNum);
-        } else {
-            throw new DdlException(
-                    "Failed to find enough backends , current backends num is : " + clusterBackends.size() +
-                            ". replication  num is : " + replicationNum
-            );
-        }
+        table.setReplicationNum(replicationNum);
+
+        // log
+        ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), table.getId(), partition.getId(),
+                newDataProperty, replicationNum, isInMemory);
+        editLog.logModifyPartition(info);
+        LOG.info("modify partition[{}-{}-{}] replication num to {}", db.getFullName(), table.getName(),
+                partition.getName(), replicationNum);
     }
 
     /**
