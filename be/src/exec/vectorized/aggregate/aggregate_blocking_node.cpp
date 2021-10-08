@@ -28,10 +28,11 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
 
     VLOG_ROW << "group_by_expr_ctxs size " << _aggregator->group_by_expr_ctxs().size() << " _needs_finalize "
              << _aggregator->needs_finalize();
-    bool group_by_with_limit = (!_aggregator->is_none_group_by_exprs() &&     // has group by
-                                _limit != -1 &&                               // has limit
-                                _conjunct_ctxs.empty() &&                     // no 'having' clause
-                                _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
+    bool agg_group_by_with_limit =
+            (!_aggregator->is_none_group_by_exprs() &&     // has group by
+             _limit != -1 &&                               // has limit
+             _conjunct_ctxs.empty() &&                     // no 'having' clause
+             _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
     while (true) {
         bool eos = false;
         RETURN_IF_CANCELLED(state);
@@ -49,6 +50,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
 
         _aggregator->evaluate_exprs(chunk.get());
 
+        size_t chunk_size = chunk->num_rows();
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
             if (!_aggregator->is_none_group_by_exprs()) {
@@ -57,7 +59,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
 #define HASH_MAP_METHOD(NAME)                                                                          \
     else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME)                       \
             _aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, chunk->num_rows(), group_by_with_limit);
+                    *_aggregator->hash_map_variant().NAME, chunk_size, agg_group_by_with_limit);
                 APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
 
@@ -65,21 +67,23 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
                 _aggregator->try_convert_to_two_level_map();
             }
             if (_aggregator->is_none_group_by_exprs()) {
-                _aggregator->compute_single_agg_state(chunk->num_rows());
+                _aggregator->compute_single_agg_state(chunk_size);
             } else {
-                if (group_by_with_limit) {
-                    size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection().data(), chunk->num_rows());
-                    if (zero_count == chunk->num_rows()) {
-                        _aggregator->compute_batch_agg_states(chunk->num_rows());
+                if (agg_group_by_with_limit) {
+                    // use `_aggregator->streaming_selection()` here to mark whether needs to filter key when compute agg states,
+                    // it's generated in `build_hash_map`
+                    size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection().data(), chunk_size);
+                    if (zero_count == chunk_size) {
+                        _aggregator->compute_batch_agg_states(chunk_size);
                     } else {
-                        _aggregator->compute_batch_agg_states_with_limit(chunk->num_rows());
+                        _aggregator->compute_batch_agg_states_with_limit(chunk_size);
                     }
                 } else {
-                    _aggregator->compute_batch_agg_states(chunk->num_rows());
+                    _aggregator->compute_batch_agg_states(chunk_size);
                 }
             }
 
-            _aggregator->update_num_input_rows(chunk->num_rows());
+            _aggregator->update_num_input_rows(chunk_size);
         }
     }
 

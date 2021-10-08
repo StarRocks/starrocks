@@ -112,7 +112,7 @@ public:
     void compute_single_agg_state(size_t chunk_size);
     // For aggregate with group by
     void compute_batch_agg_states(size_t chunk_size);
-    // For aggregate with group by + limit
+    // For aggregate with group by + aggregate functions + limit
     void compute_batch_agg_states_with_limit(size_t chunk_size);
     void compute_batch_agg_states_with_selection(size_t chunk_size);
 
@@ -250,8 +250,8 @@ private:
 
 public:
     template <typename HashMapWithKey>
-    void build_hash_map(HashMapWithKey& hash_map_with_key, size_t chunk_size, bool group_by_with_limit = false) {
-        if (group_by_with_limit) {
+    void build_hash_map(HashMapWithKey& hash_map_with_key, size_t chunk_size, bool agg_group_by_with_limit = false) {
+        if (agg_group_by_with_limit) {
             if (hash_map_with_key.hash_map.size() >= _limit) {
                 build_hash_map_with_selection(hash_map_with_key, chunk_size);
                 return;
