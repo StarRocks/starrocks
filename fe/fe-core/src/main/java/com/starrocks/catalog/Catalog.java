@@ -3629,6 +3629,7 @@ public class Catalog {
                         numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
                     }
                 }
+                countDownLatch.await();
                 if (countDownLatch.getStatus().ok()) {
                     taskSignatures.clear();
                 }
