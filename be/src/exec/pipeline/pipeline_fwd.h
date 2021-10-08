@@ -18,6 +18,7 @@ using PipelinePtr = std::shared_ptr<Pipeline>;
 using Pipelines = std::vector<PipelinePtr>;
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
+using DriverRawPtr = PipelineDriver*;
 using Drivers = std::vector<DriverPtr>;
 class DriverDispatcher;
 using DriverDispatcherPtr = std::shared_ptr<DriverDispatcher>;
