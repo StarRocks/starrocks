@@ -13,13 +13,13 @@ using DriverQueuePtr = std::unique_ptr<DriverQueue>;
 
 class SubQuerySharedDriverQueue {
 public:
-    void update_accu_time(const DriverPtr& driver) {
+    void update_accu_time(const DriverRawPtr driver) {
         _accu_consume_time.fetch_add(driver->driver_acct().get_last_time_spent());
     }
 
     double accu_time_after_divisor() { return _accu_consume_time.load() / factor_for_normal; }
 
-    std::queue<DriverPtr> queue;
+    std::queue<DriverRawPtr> queue;
     // factor for normalization
     double factor_for_normal = 0;
 
@@ -29,8 +29,8 @@ private:
 
 class DriverQueue {
 public:
-    virtual void put_back(const DriverPtr& driver) = 0;
-    virtual DriverPtr take(size_t* queue_index) = 0;
+    virtual void put_back(const DriverRawPtr driver) = 0;
+    virtual DriverRawPtr take(size_t* queue_index) = 0;
     virtual ~DriverQueue() = default;
     ;
     virtual SubQuerySharedDriverQueue* get_sub_queue(size_t) = 0;
@@ -55,8 +55,8 @@ public:
     static const size_t QUEUE_SIZE = 8;
     // maybe other value for ratio.
     static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.7;
-    void put_back(const DriverPtr& driver) override;
-    DriverPtr take(size_t* queue_index) override;
+    void put_back(const DriverRawPtr driver) override;
+    DriverRawPtr take(size_t* queue_index) override;
     SubQuerySharedDriverQueue* get_sub_queue(size_t) override;
 
 private:
