@@ -124,7 +124,7 @@ public class HaAction extends WebBaseAction {
             Storage storage = new Storage(Config.meta_dir + "/image");
             buffer.append("<h2>Checkpoint Info</h2>");
             buffer.append("<pre>");
-            buffer.append("<p>last checkpoint version:" + storage.getImageSeq() + "</p>");
+            buffer.append("<p>last checkpoint version:" + storage.getImageJournalId() + "</p>");
             long lastCheckpointTime = storage.getCurrentImageFile().lastModified();
             Date date = new Date(lastCheckpointTime);
             buffer.append("<p>last checkpoint time: " + date + "</p>");

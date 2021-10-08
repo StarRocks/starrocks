@@ -34,7 +34,7 @@ class Schema;
 
 struct EditVersion {
     uint128_t value = 0;
-    EditVersion() {}
+    EditVersion() = default;
     EditVersion(int64_t major, int64_t minor) { value = (((uint128_t)major) << 64) | minor; }
     int64_t major() const { return value >> 64; }
     int64_t minor() const { return (int64_t)(value & 0xffffffffUL); }
@@ -315,7 +315,8 @@ private:
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
 
-    DISALLOW_COPY_AND_ASSIGN(TabletUpdates);
+    TabletUpdates(const TabletUpdates&) = delete;
+    const TabletUpdates& operator=(const TabletUpdates&) = delete;
 };
 
 } // namespace starrocks

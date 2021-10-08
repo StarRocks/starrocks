@@ -573,7 +573,7 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
             agent_task_req = worker_pool_this->_tasks[index];
             push_req = agent_task_req.push_req;
             worker_pool_this->_tasks.erase(worker_pool_this->_tasks.begin() + index);
-        } while (0);
+        } while (false);
 
 #ifndef BE_TEST
         if (index < 0) {
@@ -1015,7 +1015,7 @@ void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_t
                 }
                 finish_task_request.__set_finish_tablet_infos(tablet_infos);
             }
-        } while (0);
+        } while (false);
 
         task_status.__set_status_code(status_code);
         task_status.__set_error_msgs(error_msgs);
@@ -1218,7 +1218,7 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_all_tablets_requests_failed.increment(1);
-            LOG(WARNING) << "Fail to report olap table state to"
+            LOG(WARNING) << "Fail to report olap table state to "
                          << worker_pool_this->_master_info.network_address.hostname << ":"
                          << worker_pool_this->_master_info.network_address.port << ", err=" << status;
         }

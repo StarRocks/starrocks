@@ -75,7 +75,7 @@ struct IndexedColumnWriterOptions {
 // TODO test with empty input
 class IndexedColumnWriter {
 public:
-    explicit IndexedColumnWriter(const IndexedColumnWriterOptions& options, const TypeInfoPtr& typeinfo,
+    explicit IndexedColumnWriter(const IndexedColumnWriterOptions& options, TypeInfoPtr typeinfo,
                                  fs::WritableBlock* wblock);
 
     ~IndexedColumnWriter();
@@ -117,7 +117,8 @@ private:
     const KeyCoder* _validx_key_coder;
     const BlockCompressionCodec* _compress_codec;
 
-    DISALLOW_COPY_AND_ASSIGN(IndexedColumnWriter);
+    IndexedColumnWriter(const IndexedColumnWriter&) = delete;
+    const IndexedColumnWriter& operator=(const IndexedColumnWriter&) = delete;
 };
 
 } // namespace segment_v2

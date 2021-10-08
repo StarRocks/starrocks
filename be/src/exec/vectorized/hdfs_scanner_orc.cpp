@@ -340,6 +340,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     _orc_adapter = std::make_unique<OrcScannerAdapter>(_src_slot_descriptors);
     _orc_row_reader_filter =
             std::make_shared<OrcRowReaderFilter>(_scanner_params, _file_read_param, _orc_adapter.get());
+    _orc_adapter->disable_broker_load_mode();
     _orc_adapter->set_row_reader_filter(_orc_row_reader_filter);
     _orc_adapter->set_read_chunk_size(config::vector_chunk_size);
     _orc_adapter->set_runtime_state(runtime_state);

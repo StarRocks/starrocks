@@ -30,9 +30,6 @@ import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.DropTableStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -40,21 +37,14 @@ import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.planner.Planner;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryState;
-import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.TExplainLevel;
 import org.apache.commons.lang.StringUtils;
 import org.junit.Assert;
 
 import java.io.IOException;
-import java.io.StringReader;
-import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -82,13 +72,7 @@ public class StarRocksAssert {
         return this;
     }
 
-    public StarRocksAssert disableNewPlanner() {
-        ctx.getSessionVariable().disableNewPlanner();
-        return this;
-    }
-
     public StarRocksAssert enableNewPlanner() {
-        ctx.getSessionVariable().enableNewPlanner();
         return this;
     }
 
@@ -130,6 +114,13 @@ public class StarRocksAssert {
     public StarRocksAssert withView(String sql) throws Exception {
         CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
         Catalog.getCurrentCatalog().createView(createTableStmt);
+        return this;
+    }
+
+    public StarRocksAssert dropView(String viewName) throws Exception {
+        DropTableStmt dropViewStmt =
+                (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt("drop view " + viewName + ";", ctx);
+        Catalog.getCurrentCatalog().dropTable(dropViewStmt);
         return this;
     }
 
@@ -209,10 +200,7 @@ public class StarRocksAssert {
         }
 
         public String explainQuery() throws Exception {
-            if (connectContext.getSessionVariable().isEnableNewPlanner()) {
-                return UtFrameUtils.getNewFragmentPlan(connectContext, sql);
-            }
-            return internalExecute("explain " + sql);
+            return UtFrameUtils.getNewFragmentPlan(connectContext, sql);
         }
 
         public void analysisError(String keywords) {
@@ -225,33 +213,6 @@ public class StarRocksAssert {
                 Assert.fail();
             }
             Assert.fail();
-        }
-
-        private String internalExecute(String sql) throws Exception {
-            StmtExecutor stmtExecutor = new StmtExecutor(connectContext, sql);
-            stmtExecutor.execute();
-            QueryState queryState = connectContext.getState();
-            if (queryState.getStateType() == QueryState.MysqlStateType.ERR) {
-                switch (queryState.getErrType()) {
-                    case ANALYSIS_ERR:
-                        throw new AnalysisException(queryState.getErrorMessage());
-                    case OTHER_ERR:
-                    default:
-                        throw new Exception(queryState.getErrorMessage());
-                }
-            }
-            Planner planner = stmtExecutor.planner();
-            return planner.getExplainString(planner.getFragments(), TExplainLevel.NORMAL);
-        }
-
-        public Planner internalExecuteOneAndGetPlan() throws Exception {
-            SqlScanner input = new SqlScanner(new StringReader(sql), ctx.getSessionVariable().getSqlMode());
-            SqlParser parser = new SqlParser(input);
-            List<StatementBase> stmts = SqlParserUtils.getMultiStmts(parser);
-            StmtExecutor stmtExecutor = new StmtExecutor(connectContext, stmts.get(0));
-            stmtExecutor.execute();
-
-            return stmtExecutor.planner();
         }
     }
 }

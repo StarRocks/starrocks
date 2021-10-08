@@ -93,7 +93,7 @@ private:
     template <class T>
     friend class ClientCache;
     // Private constructor so that only ClientCache can instantiate this class.
-    ClientCacheHelper() : _metrics_enabled(false), _max_cache_size_per_host(-1) {}
+    ClientCacheHelper() {}
 
     explicit ClientCacheHelper(int max_cache_size_per_host)
             : _metrics_enabled(false), _max_cache_size_per_host(max_cache_size_per_host) {}
@@ -112,10 +112,10 @@ private:
     ClientMap _client_map;
 
     // MetricRegistry
-    bool _metrics_enabled;
+    bool _metrics_enabled{false};
 
     // max connections per host in this cache, -1 means unlimited
-    int _max_cache_size_per_host;
+    int _max_cache_size_per_host{-1};
 
     // Number of clients 'checked-out' from the cache
     std::unique_ptr<IntGauge> _used_clients;
@@ -196,8 +196,7 @@ public:
     typedef ThriftClient<T> Client;
 
     ClientCache()
-            : _client_cache_helper(),
-              _client_factory(std::bind<ThriftClientImpl*>(std::mem_fn(&ClientCache::make_client), this,
+            : _client_factory(std::bind<ThriftClientImpl*>(std::mem_fn(&ClientCache::make_client), this,
                                                            std::placeholders::_1, std::placeholders::_2)) {}
 
     ClientCache(int max_cache_size)

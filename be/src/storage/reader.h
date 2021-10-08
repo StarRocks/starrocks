@@ -229,7 +229,8 @@ private:
     uint64_t _merged_rows = 0;
     OlapReaderStatistics _stats;
 
-    DISALLOW_COPY_AND_ASSIGN(Reader);
+    Reader(const Reader&) = delete;
+    const Reader& operator=(const Reader&) = delete;
 };
 
 } // namespace starrocks

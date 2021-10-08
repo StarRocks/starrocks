@@ -38,11 +38,9 @@ SchemaScanner::ColumnDesc SchemaTablesScanner::_s_tbls_columns[] = {
 };
 
 SchemaTablesScanner::SchemaTablesScanner()
-        : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)),
-          _db_index(0),
-          _table_index(0) {}
+        : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
-SchemaTablesScanner::~SchemaTablesScanner() {}
+SchemaTablesScanner::~SchemaTablesScanner() = default;
 
 Status SchemaTablesScanner::start(RuntimeState* state) {
     if (!_is_init) {

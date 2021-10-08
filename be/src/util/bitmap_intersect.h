@@ -171,7 +171,7 @@ inline void read_from(const char** src, StringValue* result) {
 template <typename T>
 struct BitmapIntersect {
 public:
-    BitmapIntersect() {}
+    BitmapIntersect() = default;
 
     explicit BitmapIntersect(const char* src) { deserialize(src); }
 

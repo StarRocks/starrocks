@@ -41,7 +41,8 @@ class ThriftServer;
 class HeartbeatServer : public HeartbeatServiceIf {
 public:
     explicit HeartbeatServer(TMasterInfo* master_info);
-    ~HeartbeatServer() override{};
+    ~HeartbeatServer() override = default;
+    ;
 
     virtual void init_cluster_id();
 
@@ -65,7 +66,8 @@ private:
     TMasterInfo* _master_info;
     int64_t _epoch;
 
-    DISALLOW_COPY_AND_ASSIGN(HeartbeatServer);
+    HeartbeatServer(const HeartbeatServer&) = delete;
+    const HeartbeatServer& operator=(const HeartbeatServer&) = delete;
 }; // class HeartBeatServer
 
 AgentStatus create_heartbeat_server(ExecEnv* exec_env, uint32_t heartbeat_server_port, ThriftServer** heart_beat_server,

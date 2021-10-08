@@ -36,7 +36,7 @@ using RowsetReaderSharedPtr = std::shared_ptr<RowsetReader>;
 
 class RowsetReader {
 public:
-    virtual ~RowsetReader() {}
+    virtual ~RowsetReader() = default;
 
     // reader init
     virtual OLAPStatus init(RowsetReaderContext* read_context) = 0;

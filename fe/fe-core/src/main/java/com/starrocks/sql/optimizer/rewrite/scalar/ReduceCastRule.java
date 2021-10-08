@@ -40,7 +40,12 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         }
 
         // remove same type cast
-        if (operator.getType().matchesType(operator.getChild(0).getType())) {
+        if (operator.getType().isDecimalOfAnyVersion()) {
+            if (operator.getType().getPrimitiveType().equals(operator.getChild(0).getType().getPrimitiveType())
+                    && operator.getType().equals(operator.getChild(0).getType())) {
+                return operator.getChild(0);
+            }
+        } else if (operator.getType().matchesType(operator.getChild(0).getType())) {
             return operator.getChild(0);
         }
 
@@ -51,6 +56,11 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         int parentSlotSize = parent.getSlotSize();
         int childSlotSize = child.getSlotSize();
         int grandChildSlotSize = grandChild.getSlotSize();
+
+        if (parent.isDecimalOfAnyVersion() || child.isDecimalOfAnyVersion() || grandChild.isDecimalOfAnyVersion()) {
+            return false;
+        }
+
         if (parentSlotSize > childSlotSize && grandChildSlotSize > childSlotSize) {
             return false;
         }

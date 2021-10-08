@@ -8,8 +8,7 @@
 #include "gutil/strings/substitute.h"
 #include "util/string_parser.hpp"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 ColumnPtr PercentileFunctions::percentile_hash(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_DOUBLE> viewer(columns[0]);
@@ -48,5 +47,4 @@ ColumnPtr PercentileFunctions::percentile_approx_raw(FunctionContext* context, c
     return builder.build(columns[0]->is_constant());
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

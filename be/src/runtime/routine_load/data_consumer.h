@@ -46,7 +46,7 @@ public:
               _cancelled(false),
               _last_visit_time(0) {}
 
-    virtual ~DataConsumer() {}
+    virtual ~DataConsumer() = default;
 
     // init the consumer with the given parameters
     virtual Status init(StreamLoadContext* ctx) = 0;

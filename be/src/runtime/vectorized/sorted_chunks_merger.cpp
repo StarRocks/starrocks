@@ -8,7 +8,7 @@ namespace starrocks::vectorized {
 
 SortedChunksMerger::SortedChunksMerger(bool is_pipeline) : _is_pipeline(is_pipeline) {}
 
-SortedChunksMerger::~SortedChunksMerger() {}
+SortedChunksMerger::~SortedChunksMerger() = default;
 
 Status SortedChunksMerger::init(const ChunkSuppliers& chunk_suppliers, const ChunkProbeSuppliers& chunk_probe_suppliers,
                                 const ChunkHasSuppliers& chunk_has_suppliers,

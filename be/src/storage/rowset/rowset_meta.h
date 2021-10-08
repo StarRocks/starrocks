@@ -41,7 +41,7 @@ using RowsetMetaSharedPtr = std::shared_ptr<RowsetMeta>;
 
 class RowsetMeta {
 public:
-    ~RowsetMeta() {}
+    ~RowsetMeta() = default;
 
     bool init(const std::string_view& pb_rowset_meta) {
         bool ret = _deserialize_from_pb(pb_rowset_meta);

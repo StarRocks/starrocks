@@ -369,7 +369,8 @@ public:
     std::string DebugString() const;
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(BufferedTupleStream3);
+    BufferedTupleStream3(const BufferedTupleStream3&) = delete;
+    const BufferedTupleStream3& operator=(const BufferedTupleStream3&) = delete;
     friend class ArrayTupleStreamTest_TestArrayDeepCopy_Test;
     friend class ArrayTupleStreamTest_TestComputeRowSize_Test;
     friend class MultiNullableTupleStreamTest_TestComputeRowSize_Test;
@@ -377,7 +378,7 @@ private:
 
     /// Wrapper around BufferPool::PageHandle that tracks additional info about the page.
     struct Page {
-        Page() : num_rows(0), retrieved_buffer(true) {}
+        Page() {}
 
         inline int len() const { return handle.len(); }
         inline bool is_pinned() const { return handle.is_pinned(); }
@@ -392,12 +393,12 @@ private:
         BufferPool::PageHandle handle;
 
         /// Number of rows written to the page.
-        int num_rows;
+        int num_rows{0};
 
         /// Whether we called GetBuffer() on the page since it was last pinned. This means
         /// that GetBuffer() and ExtractBuffer() cannot fail and that GetNext() may have
         /// returned rows referencing the page's buffer.
-        bool retrieved_buffer;
+        bool retrieved_buffer{true};
     };
 
     /// Runtime state instance used to check for cancellation. Not owned.

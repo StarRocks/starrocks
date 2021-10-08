@@ -6,7 +6,7 @@
 
 namespace starrocks::vectorized {
 
-ReaderParams::ReaderParams() {}
+ReaderParams::ReaderParams() = default;
 
 std::string ReaderParams::to_string() const {
     std::stringstream ss;

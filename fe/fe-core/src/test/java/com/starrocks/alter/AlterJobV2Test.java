@@ -46,10 +46,9 @@ import java.util.UUID;
 public class AlterJobV2Test {
     // use a unique dir so that it won't be conflict with other unit test which
     // may also start a Mocked Frontend
-    private static String runningDir = "fe/mocked/AlterJobV2Test/" + UUID.randomUUID().toString() + "/";
+    private static final String runningDir = "fe/mocked/AlterJobV2Test/" + UUID.randomUUID().toString() + "/";
 
     private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -61,8 +60,7 @@ public class AlterJobV2Test {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setQueryId(UUIDUtil.genUUID());
-        connectContext.getSessionVariable().disableNewPlanner();
-        starRocksAssert = new StarRocksAssert(connectContext);
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable(
@@ -166,7 +164,7 @@ public class AlterJobV2Test {
         checkTableStateToNormal(tbl);
 
         String sql = "select k2, sum(v1) from test.segmentv2 group by k2";
-        String explainString = UtFrameUtils.getSQLPlanOrErrorMsg(connectContext, "explain " + sql);
+        String explainString = UtFrameUtils.getNewFragmentPlan(connectContext, "explain " + sql);
         Assert.assertTrue(explainString.contains("rollup: r1"));
 
         // 2. create a rollup with segment v2
@@ -184,15 +182,10 @@ public class AlterJobV2Test {
             Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
         }
 
-        explainString = UtFrameUtils.getSQLPlanOrErrorMsg(connectContext, "explain " + sql);
+        explainString = UtFrameUtils.getNewFragmentPlan(connectContext, "explain " + sql);
         Assert.assertTrue(explainString.contains("rollup: r1"));
 
         checkTableStateToNormal(tbl);
-
-        // set use_v2_rollup = true;
-        connectContext.getSessionVariable().setUseV2Rollup(true);
-        explainString = UtFrameUtils.getSQLPlanOrErrorMsg(connectContext, "explain " + sql);
-        Assert.assertTrue(explainString.contains("rollup: __v2_segmentv2"));
 
         // 3. process alter segment v2
         alterStmtStr = "alter table test.segmentv2 set ('storage_format' = 'v2');";

@@ -44,7 +44,8 @@ private:
     size_t _memory_usage = 0;
     int64_t _tablet_id = 0;
 
-    DISALLOW_COPY_AND_ASSIGN(RowsetUpdateState);
+    RowsetUpdateState(const RowsetUpdateState&) = delete;
+    const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetUpdateState& o) {

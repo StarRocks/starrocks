@@ -15,7 +15,7 @@ namespace starrocks::vectorized {
 
 class ColumnAggregatorBase {
 public:
-    ColumnAggregatorBase() : _source_column(nullptr), _aggregate_column(nullptr) {}
+    ColumnAggregatorBase() : _source_column(nullptr) {}
 
     virtual ~ColumnAggregatorBase() = default;
 
@@ -33,7 +33,7 @@ public:
 
 public:
     ColumnPtr _source_column;
-    Column* _aggregate_column;
+    Column* _aggregate_column{nullptr};
 };
 
 template <typename ColumnType>
@@ -115,11 +115,7 @@ private:
 class ValueNullableColumnAggregator final : public ValueColumnAggregatorBase {
 public:
     explicit ValueNullableColumnAggregator(ValueColumnAggregatorPtr child)
-            : ValueColumnAggregatorBase(),
-              _child(std::move(child)),
-              _aggregate_nulls(nullptr),
-              _source_nulls_data(nullptr),
-              _row_is_null(0) {}
+            : _child(std::move(child)), _aggregate_nulls(nullptr), _source_nulls_data(nullptr), _row_is_null(0) {}
 
     void update_source(const ColumnPtr& src) override {
         _source_column = src;

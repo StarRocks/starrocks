@@ -438,7 +438,8 @@ public:
 
 private:
     std::unordered_map<Quadruple, AggregateFunctionPtr, AggregateFuncMapHash> _infos_mapping;
-    DISALLOW_COPY_AND_ASSIGN(AggregateFuncResolver);
+    AggregateFuncResolver(const AggregateFuncResolver&) = delete;
+    const AggregateFuncResolver& operator=(const AggregateFuncResolver&) = delete;
 };
 
 #define ADD_ALL_TYPE(FUNCTIONNAME)                                       \

@@ -70,7 +70,7 @@ private:
     // when fe crush, this thread clear the buffer avoid memory leak in this backend
     void cancel_thread();
 
-    bool _is_stop;
+    bool _is_stop{false};
     // lock for buffer map
     std::mutex _lock;
     // buffer block map

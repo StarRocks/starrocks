@@ -1,10 +1,4 @@
 [sql]
-select @@enable_cbo;
-[result]
-VALUES (true)
-[end]
-
-[sql]
 select database();
 [result]
 VALUES (DATABASE(test, 0))
@@ -68,7 +62,7 @@ use vectorized: true
 [sql]
 select * from t0 where v1 in (1.1, 2, null)
 [result]
-SCAN (columns[1: v1, 2: v2, 3: v3] predicate[cast(1: v1 as decimal(20, 1)) IN (1.1, 2, null)])
+SCAN (columns[1: v1, 2: v2, 3: v3] predicate[cast(1: v1 as decimal128(20, 1)) IN (1.1, 2, null)])
 [end]
 
 [sql]

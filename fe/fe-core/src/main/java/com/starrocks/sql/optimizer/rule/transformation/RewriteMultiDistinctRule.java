@@ -46,7 +46,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
 
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
-                .filter(call -> call.isDistinct()).collect(Collectors.toList());
+                .filter(CallOperator::isDistinct).collect(Collectors.toList());
 
         boolean hasMultiColumns = false;
         for (CallOperator callOperator : distinctAggOperatorList) {
@@ -130,14 +130,16 @@ public class RewriteMultiDistinctRule extends TransformationRule {
 
         if (hasAvg) {
             OptExpression aggOpt = OptExpression
-                    .create(new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(), newAggMapWithAvg),
+                    .create(new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(),
+                                    newAggMapWithAvg),
                             input.getInputs());
             aggregationOperator.getGroupingKeys().forEach(c -> projections.put(c, c));
             return Lists.newArrayList(
                     OptExpression.create(new LogicalProjectOperator(projections), Lists.newArrayList(aggOpt)));
         } else {
             OptExpression aggOpt = OptExpression
-                    .create(new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(), newAggMap),
+                    .create(new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(),
+                                    newAggMap),
                             input.getInputs());
             return Lists.newArrayList(aggOpt);
         }

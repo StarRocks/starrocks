@@ -204,8 +204,8 @@ void ClientCacheHelper::test_shutdown() {
         }
     }
 
-    for (std::vector<TNetworkAddress>::iterator it = hostports.begin(); it != hostports.end(); ++it) {
-        close_connections(*it);
+    for (auto& hostport : hostports) {
+        close_connections(hostport);
     }
 }
 

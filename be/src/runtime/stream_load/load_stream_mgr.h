@@ -42,7 +42,7 @@ public:
             return _stream_map.size();
         });
     }
-    ~LoadStreamMgr() {}
+    ~LoadStreamMgr() = default;
 
     Status put(const UniqueId& id, const std::shared_ptr<StreamLoadPipe>& stream) {
         std::lock_guard<std::mutex> l(_lock);
@@ -73,7 +73,6 @@ public:
             _stream_map.erase(it);
             VLOG(3) << "remove stream load pipe: " << id;
         }
-        return;
     }
 
 private:

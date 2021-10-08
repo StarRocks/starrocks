@@ -75,7 +75,7 @@ class TabletUpdates;
 
 class AlterTabletTask {
 public:
-    AlterTabletTask() {}
+    AlterTabletTask() = default;
     void init_from_pb(const AlterTabletPB& alter_task);
     void to_alter_pb(AlterTabletPB* alter_task);
 

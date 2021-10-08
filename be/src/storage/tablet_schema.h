@@ -98,7 +98,7 @@ private:
     std::string _col_name;
     FieldType _type;
     bool _is_key = false;
-    FieldAggregationMethod _aggregation;
+    FieldAggregationMethod _aggregation{OLAP_FIELD_AGGREGATION_NONE};
     bool _is_nullable = false;
 
     bool _has_default_value = false;

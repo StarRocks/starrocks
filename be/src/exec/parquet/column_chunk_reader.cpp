@@ -20,7 +20,7 @@ class RandomAccessFileWrapper : public RandomAccessFile {
 public:
     RandomAccessFileWrapper(RandomAccessFile* file, vectorized::HdfsScanStats* stats) : _file(file), _stats(stats) {}
 
-    ~RandomAccessFileWrapper() override {}
+    ~RandomAccessFileWrapper() override = default;
 
     Status read(uint64_t offset, Slice* res) const override {
         Status st;

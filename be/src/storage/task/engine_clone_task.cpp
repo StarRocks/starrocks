@@ -501,7 +501,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
         if (!incremental_clone && res.ok()) {
             tablet->set_cumulative_layer_point(-1);
         }
-    } while (0);
+    } while (false);
 
     // clear linked files if errors happen
     if (!res.ok()) {

@@ -212,7 +212,7 @@ public class ConfigBase {
 
     public static Map<String, Field> getAllMutableConfigs() {
         Map<String, Field> mutableConfigs = Maps.newHashMap();
-        Field fields[] = ConfigBase.confClass.getFields();
+        Field[] fields = ConfigBase.confClass.getFields();
         for (Field field : fields) {
             ConfField confField = field.getAnnotation(ConfField.class);
             if (confField == null) {
@@ -227,7 +227,7 @@ public class ConfigBase {
         return mutableConfigs;
     }
 
-    public synchronized static void setMutableConfig(String key, String value) throws DdlException {
+    public static synchronized void setMutableConfig(String key, String value) throws DdlException {
         Map<String, Field> mutableConfigs = getAllMutableConfigs();
         Field field = mutableConfigs.get(key);
         if (field == null) {
@@ -243,7 +243,7 @@ public class ConfigBase {
         LOG.info("set config {} to {}", key, value);
     }
 
-    public synchronized static List<List<String>> getConfigInfo(PatternMatcher matcher) throws DdlException {
+    public static synchronized List<List<String>> getConfigInfo(PatternMatcher matcher) throws DdlException {
         List<List<String>> configs = Lists.newArrayList();
         Field[] fields = confClass.getFields();
         for (Field f : fields) {
@@ -276,7 +276,7 @@ public class ConfigBase {
         return configs;
     }
 
-    public synchronized static boolean checkIsMasterOnly(String key) {
+    public static synchronized boolean checkIsMasterOnly(String key) {
         Map<String, Field> mutableConfigs = getAllMutableConfigs();
         Field f = mutableConfigs.get(key);
         if (f == null) {

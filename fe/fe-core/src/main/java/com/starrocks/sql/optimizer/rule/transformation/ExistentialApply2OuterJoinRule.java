@@ -166,7 +166,8 @@ public class ExistentialApply2OuterJoinRule extends BaseApply2OuterJoinRule {
         Map<ColumnRefOperator, CallOperator> aggregates = Maps.newHashMap();
         aggregates.put(count, countOp);
         OptExpression aggregateExpression =
-                OptExpression.create(new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(), aggregates), limitExpression);
+                OptExpression.create(new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(), aggregates),
+                        limitExpression);
 
         // cross join
         OptExpression joinExpression = new OptExpression(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null));

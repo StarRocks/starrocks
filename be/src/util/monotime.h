@@ -241,7 +241,7 @@ private:
     explicit MonoTime(const struct timespec& ts);
     explicit MonoTime(int64_t nanos);
     double ToSeconds() const;
-    int64_t nanos_;
+    int64_t nanos_{0};
 };
 
 /// Sleep for an interval specified by a MonoDelta instance.

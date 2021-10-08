@@ -202,7 +202,7 @@ public:
     static inline int64 Now();
 
 private:
-    CycleClock();
+    CycleClock() = delete;
 };
 
 // inline method bodies

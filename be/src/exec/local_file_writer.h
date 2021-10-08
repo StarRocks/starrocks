@@ -32,7 +32,7 @@ class RuntimeState;
 
 class LocalFileWriter : public FileWriter {
 public:
-    LocalFileWriter(const std::string& path, int64_t start_offset);
+    LocalFileWriter(std::string path, int64_t start_offset);
     ~LocalFileWriter() override;
 
     Status open() override;

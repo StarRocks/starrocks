@@ -106,15 +106,14 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _available_storage_medium_type_count(0),
           _effective_cluster_id(-1),
           _is_all_cluster_id_exist(true),
-          _index_stream_lru_cache(nullptr),
+
           _file_cache(nullptr),
           _tablet_manager(new TabletManager(options.tablet_meta_mem_tracker, config::tablet_map_shard_size)),
           _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size)),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
           _block_manager(nullptr),
-          _update_manager(new UpdateManager(options.update_mem_tracker)),
-          _heartbeat_flags(nullptr) {
+          _update_manager(new UpdateManager(options.update_mem_tracker)) {
     if (_s_instance == nullptr) {
         _s_instance = this;
     }
@@ -418,7 +417,7 @@ DataDir* StorageEngine::get_store(int64_t path_hash) {
 }
 
 static bool too_many_disks_are_failed(uint32_t unused_num, uint32_t total_num) {
-    return ((total_num == 0) || (unused_num * 100 / total_num > config::max_percentage_of_error_disk));
+    return total_num == 0 || unused_num * 100 / total_num > config::max_percentage_of_error_disk;
 }
 
 bool StorageEngine::_delete_tablets_on_unused_root_path() {

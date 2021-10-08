@@ -474,8 +474,8 @@ TreeNode SearchArgumentBuilderImpl::convertToCNF(TreeNode root) {
     return root;
 }
 
-SearchArgumentImpl::SearchArgumentImpl(TreeNode root, const std::vector<PredicateLeaf>& leaves)
-        : mExpressionTree(std::move(root)), mLeaves(leaves) {
+SearchArgumentImpl::SearchArgumentImpl(TreeNode root, std::vector<PredicateLeaf> leaves)
+        : mExpressionTree(std::move(root)), mLeaves(std::move(leaves)) {
     // PASS
 }
 

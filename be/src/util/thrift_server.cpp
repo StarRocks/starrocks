@@ -36,6 +36,7 @@
 #include <condition_variable>
 #include <memory>
 #include <sstream>
+#include <utility>
 
 namespace starrocks {
 
@@ -47,7 +48,7 @@ public:
     ThriftServerEventProcessor(ThriftServer* thrift_server) : _thrift_server(thrift_server), _signal_fired(false) {}
 
     // friendly to code style
-    ~ThriftServerEventProcessor() override {}
+    ~ThriftServerEventProcessor() override = default;
 
     // Called by TNonBlockingServer when server has acquired its resources and is ready to
     // serve, and signals to StartAndWaitForServer that start-up is finished.
@@ -254,8 +255,8 @@ void ThriftServer::ThriftServerEventProcessor::deleteContext(
     }
 }
 
-ThriftServer::ThriftServer(const std::string& name, const std::shared_ptr<apache::thrift::TProcessor>& processor,
-                           int port, MetricRegistry* metrics, int num_worker_threads, ServerType server_type)
+ThriftServer::ThriftServer(const std::string& name, std::shared_ptr<apache::thrift::TProcessor> processor, int port,
+                           MetricRegistry* metrics, int num_worker_threads, ServerType server_type)
         : _started(false),
           _port(port),
           _num_worker_threads(num_worker_threads),
@@ -263,7 +264,7 @@ ThriftServer::ThriftServer(const std::string& name, const std::shared_ptr<apache
           _name(name),
           _server_thread(nullptr),
           _server(nullptr),
-          _processor(processor),
+          _processor(std::move(processor)),
           _session_handler(nullptr) {
     if (metrics != nullptr) {
         _metrics_enabled = true;
@@ -301,7 +302,7 @@ Status ThriftServer::start() {
 
     switch (_server_type) {
     case NON_BLOCKING: {
-        if (transport_factory.get() == nullptr) {
+        if (transport_factory == nullptr) {
             transport_factory.reset(new apache::thrift::transport::TTransportFactory());
         }
 
@@ -315,7 +316,7 @@ Status ThriftServer::start() {
     case THREAD_POOL:
         fe_server_transport.reset(new apache::thrift::transport::TServerSocket(_port));
 
-        if (transport_factory.get() == nullptr) {
+        if (transport_factory == nullptr) {
             transport_factory.reset(new apache::thrift::transport::TBufferedTransportFactory());
         }
 
@@ -328,7 +329,7 @@ Status ThriftServer::start() {
         //      server_socket->setAcceptTimeout(500);
         fe_server_transport.reset(server_socket);
 
-        if (transport_factory.get() == nullptr) {
+        if (transport_factory == nullptr) {
             transport_factory.reset(new apache::thrift::transport::TBufferedTransportFactory());
         }
 

@@ -26,7 +26,7 @@ package com.starrocks.common;
  * Subclasses of Id should be able to create a generator for their Id type.
  */
 public abstract class IdGenerator<IdType extends Id<IdType>> {
-    protected int nextId_ = 0;
+    protected int nextId = 0;
 
     public abstract IdType getNextId();
 

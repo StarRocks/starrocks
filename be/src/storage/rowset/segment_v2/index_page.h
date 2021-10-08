@@ -73,7 +73,8 @@ public:
     }
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(IndexPageBuilder);
+    IndexPageBuilder(const IndexPageBuilder&) = delete;
+    const IndexPageBuilder& operator=(const IndexPageBuilder&) = delete;
     const size_t _index_page_size;
     const bool _is_leaf;
     bool _finished = false;
@@ -84,7 +85,7 @@ private:
 class IndexPageIterator;
 class IndexPageReader {
 public:
-    IndexPageReader() : _parsed(false) {}
+    IndexPageReader() {}
 
     Status parse(const Slice& body, const IndexPageFooterPB& footer);
 
@@ -119,7 +120,7 @@ public:
     }
 
 private:
-    bool _parsed;
+    bool _parsed{false};
 
     IndexPageFooterPB _footer;
     std::vector<Slice> _keys;

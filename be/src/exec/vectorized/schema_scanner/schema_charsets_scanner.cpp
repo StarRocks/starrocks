@@ -23,9 +23,9 @@ SchemaCharsetsScanner::CharsetStruct SchemaCharsetsScanner::_s_charsets[] = {
 };
 
 SchemaCharsetsScanner::SchemaCharsetsScanner()
-        : SchemaScanner(_s_css_columns, sizeof(_s_css_columns) / sizeof(SchemaScanner::ColumnDesc)), _index(0) {}
+        : SchemaScanner(_s_css_columns, sizeof(_s_css_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
 
-SchemaCharsetsScanner::~SchemaCharsetsScanner() {}
+SchemaCharsetsScanner::~SchemaCharsetsScanner() = default;
 
 Status SchemaCharsetsScanner::fill_chunk(ChunkPtr* chunk) {
     // variables names

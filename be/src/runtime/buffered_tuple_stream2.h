@@ -165,7 +165,7 @@ public:
     BufferedTupleStream2(RuntimeState* state, const RowDescriptor& row_desc, BufferedBlockMgr2* block_mgr,
                          BufferedBlockMgr2::Client* client, bool use_initial_small_buffers, bool read_write);
     // A null dtor to pass codestyle check
-    ~BufferedTupleStream2() {}
+    ~BufferedTupleStream2() = default;
 
     // Initializes the tuple stream object on behalf of node 'node_id'. Must be called
     // once before any of the other APIs.

@@ -102,7 +102,8 @@ public:
     static constexpr int64_t MIN_ALLOCATION_BYTES = 1L << LOG_MIN_ALLOCATION_BYTES;
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(Suballocator);
+    Suballocator(const Suballocator&) = delete;
+    const Suballocator& operator=(const Suballocator&) = delete;
 
     /// Compute the index for allocations of size 'bytes' in 'free_lists_'. 'bytes' is
     /// rounded up to the next power-of-two if it is not already a power-of-two.
@@ -178,17 +179,18 @@ public:
 private:
     friend class Suballocator;
 
-    DISALLOW_COPY_AND_ASSIGN(Suballocation);
+    Suballocation(const Suballocation&) = delete;
+    const Suballocation& operator=(const Suballocation&) = delete;
 
     /// Static constructor for Suballocation. Can fail if new fails to allocate memory.
     static Status Create(std::unique_ptr<Suballocation>* new_suballocation);
 
     // The actual constructor - Create() is used for its better error handling.
-    Suballocation() : data_(nullptr), len_(-1), buddy_(nullptr), prev_free_(nullptr), in_use_(false) {}
+    Suballocation() {}
 
     /// The allocation's data and its length.
-    uint8_t* data_;
-    int64_t len_;
+    uint8_t* data_{nullptr};
+    int64_t len_{-1};
 
     /// The buffer backing the Suballocation, if the Suballocation is backed by an entire
     /// buffer. Otherwise uninitialized. 'buffer_' is open iff 'buddy_' is nullptr.
@@ -202,7 +204,7 @@ private:
     /// The buddy allocation of this allocation. The buddy's memory buffer is the same
     /// size and adjacent in memory. Two buddy Suballocation objects have the same
     /// lifetime: they are created in SplitToSize() and destroyed in CoalesceBuddies().
-    Suballocation* buddy_;
+    Suballocation* buddy_{nullptr};
 
     /// If this is in a free list, the next element in the list. nullptr if this is the last
     /// element in the free list. This pointer owns the next element in the linked list,
@@ -211,11 +213,11 @@ private:
 
     /// If this is in a free list, the previous element in the list. nullptr if this is the
     /// first element. If non-nullptr, this Suballocation is owned by 'prev_free_'.
-    Suballocation* prev_free_;
+    Suballocation* prev_free_{nullptr};
 
     /// True if was returned from Allocate() and hasn't been freed yet, or if it has been
     /// split into two child Suballocations.
-    bool in_use_;
+    bool in_use_{false};
 };
 } // namespace starrocks
 

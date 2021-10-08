@@ -148,8 +148,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String FORCE_SCHEDULE_LOCAL = "force_schedule_local";
 
     // --------  New planner session variables start --------
-    public static final String ENABLE_CBO = "enable_cbo";
-    public static final String ENABLE_CBO_META = "enable_cbo_meta";
     public static final String ENABLE_NEW_PLANNER_PUSH_DOWN_JOIN_TO_AGG =
             "enable_new_planner_push_down_join_to_agg";
     public static final String NEW_PLANER_AGG_STAGE = "new_planner_agg_stage";
@@ -368,6 +366,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DISABLE_JOIN_REORDER)
     private boolean disableJoinReorder = false;
 
+    // TODO(kks): Remove this variable after 2021-10-07
+    @VariableMgr.VarAttr(name = "enable_cbo")
+    private boolean enableCbo = true;
+
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
 
@@ -389,9 +391,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = FORCE_SCHEDULE_LOCAL)
     private boolean forceScheduleLocal = false;
-
-    @VariableMgr.VarAttr(name = ENABLE_CBO_META, alias = ENABLE_CBO, show = ENABLE_CBO)
-    private boolean enableCbo = true;
 
     @VariableMgr.VarAttr(name = ENABLE_NEW_PLANNER_PUSH_DOWN_JOIN_TO_AGG)
     private boolean enableNewPlannerPushDownJoinToAgg = false;
@@ -656,18 +655,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isForceScheduleLocal() {
         return forceScheduleLocal;
-    }
-
-    public boolean isEnableNewPlanner() {
-        return enableCbo;
-    }
-
-    public void disableNewPlanner() {
-        this.enableCbo = false;
-    }
-
-    public void enableNewPlanner() {
-        this.enableCbo = true;
     }
 
     public boolean isEnableNewPlannerPushDownJoinToAgg() {

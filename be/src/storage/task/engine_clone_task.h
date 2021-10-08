@@ -39,7 +39,7 @@ public:
                     int64_t _signature, vector<string>* error_msgs, vector<TTabletInfo>* tablet_infos,
                     AgentStatus* _res_status);
 
-    ~EngineCloneTask() override {}
+    ~EngineCloneTask() override = default;
 
     OLAPStatus execute() override;
 

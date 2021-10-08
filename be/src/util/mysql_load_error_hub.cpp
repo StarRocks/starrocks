@@ -29,7 +29,7 @@ namespace starrocks {
 
 MysqlLoadErrorHub::MysqlLoadErrorHub(const TMysqlErrorHubInfo& info) : _info(info) {}
 
-MysqlLoadErrorHub::~MysqlLoadErrorHub() {}
+MysqlLoadErrorHub::~MysqlLoadErrorHub() = default;
 
 Status MysqlLoadErrorHub::prepare() {
     _is_valid = true;
@@ -74,7 +74,7 @@ Status MysqlLoadErrorHub::write_mysql() {
         return st;
     }
 
-    DeferOp close_mysql_conn(std::bind<void>(&mysql_close, my_conn));
+    DeferOp close_mysql_conn([my_conn] { return mysql_close(my_conn); });
 
     Status status;
     std::stringstream sql_stream;

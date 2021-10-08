@@ -24,6 +24,7 @@
 #include <map>
 #include <memory>
 #include <roaring/roaring.hh>
+#include <utility>
 
 #include "env/env.h"
 #include "runtime/mem_pool.h"
@@ -35,8 +36,7 @@
 #include "util/faststring.h"
 #include "util/slice.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 namespace {
 
@@ -69,8 +69,8 @@ public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
     using MemoryIndexType = typename BitmapIndexTraits<CppType>::MemoryIndexType;
 
-    explicit BitmapIndexWriterImpl(const TypeInfoPtr& type_info)
-            : _typeinfo(type_info), _reverted_index_size(0), _tracker(), _pool(&_tracker) {}
+    explicit BitmapIndexWriterImpl(TypeInfoPtr type_info)
+            : _typeinfo(std::move(type_info)), _reverted_index_size(0), _pool(&_tracker) {}
 
     ~BitmapIndexWriterImpl() override = default;
 
@@ -248,5 +248,4 @@ Status BitmapIndexWriter::create(const TypeInfoPtr& typeinfo, std::unique_ptr<Bi
     return Status::OK();
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

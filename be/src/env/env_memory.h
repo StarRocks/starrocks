@@ -64,7 +64,7 @@ private:
 
 class StringSequentialFile final : public SequentialFile {
 public:
-    explicit StringSequentialFile(std::string str) : _offset(0), _random_file(std::move(str)) {}
+    explicit StringSequentialFile(std::string str) : _random_file(std::move(str)) {}
     ~StringSequentialFile() override = default;
 
     Status read(Slice* res) override {

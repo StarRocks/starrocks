@@ -69,7 +69,7 @@ enum RowsetState {
 
 class RowsetStateMachine {
 public:
-    RowsetStateMachine() : _rowset_state(ROWSET_UNLOADED) {}
+    RowsetStateMachine() {}
 
     Status on_load() {
         switch (_rowset_state) {
@@ -112,7 +112,7 @@ public:
     RowsetState rowset_state() { return _rowset_state; }
 
 private:
-    RowsetState _rowset_state;
+    RowsetState _rowset_state{ROWSET_UNLOADED};
 };
 
 class Rowset : public std::enable_shared_from_this<Rowset> {
@@ -265,7 +265,8 @@ public:
 protected:
     friend class RowsetFactory;
 
-    DISALLOW_COPY_AND_ASSIGN(Rowset);
+    Rowset(const Rowset&) = delete;
+    const Rowset& operator=(const Rowset&) = delete;
     // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
     Rowset(MemTracker* mem_tracker, const TabletSchema* schema, std::string rowset_path,
            RowsetMetaSharedPtr rowset_meta);

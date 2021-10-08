@@ -25,6 +25,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include "runtime/buffered_block_mgr2.h"
 #include "runtime/row_batch.h"
@@ -240,7 +241,7 @@ private:
 // instance to check for cancellation during an in-memory sort.
 class SpillSorter::TupleSorter {
 public:
-    TupleSorter(const TupleRowComparator& less_than_comp, int64_t block_size, int tuple_size, RuntimeState* state);
+    TupleSorter(TupleRowComparator less_than_comp, int64_t block_size, int tuple_size, RuntimeState* state);
 
     ~TupleSorter();
 
@@ -278,7 +279,7 @@ private:
             _current_tuple = _buffer_start + block_offset + past_end_bytes;
         }
 
-        ~TupleIterator() {}
+        ~TupleIterator() = default;
 
         // Sets _current_tuple to point to the next tuple in the run. Increments
         // block_index and resets buffer if the next tuple is in the next block.
@@ -580,8 +581,7 @@ Status SpillSorter::Run::unpin_all_blocks() {
         DCHECK(_var_len_copy_block == nullptr);
     }
 
-    for (int i = 0; i < _fixed_len_blocks.size(); ++i) {
-        BufferedBlockMgr2::Block* cur_fixed_block = _fixed_len_blocks[i];
+    for (auto cur_fixed_block : _fixed_len_blocks) {
         if (has_var_len_blocks()) {
             for (int block_offset = 0; block_offset < cur_fixed_block->valid_data_len();
                  block_offset += _sort_tuple_size) {
@@ -664,7 +664,7 @@ Status SpillSorter::Run::prepare_read() {
 }
 
 Status SpillSorter::Run::get_next_batch(RowBatch** output_batch) {
-    if (_buffered_batch.get() != nullptr) {
+    if (_buffered_batch != nullptr) {
         _buffered_batch->reset();
         // Fill more rows into _buffered_batch.
         bool eos = false;
@@ -855,12 +855,11 @@ void SpillSorter::Run::copy_var_len_data_convert_offset(char* dest, int64_t offs
 }
 
 // SpillSorter::TupleSorter methods.
-SpillSorter::TupleSorter::TupleSorter(const TupleRowComparator& comp, int64_t block_size, int tuple_size,
-                                      RuntimeState* state)
+SpillSorter::TupleSorter::TupleSorter(TupleRowComparator comp, int64_t block_size, int tuple_size, RuntimeState* state)
         : _tuple_size(tuple_size),
           _block_capacity(block_size / tuple_size),
           _last_tuple_block_offset(tuple_size * ((block_size / tuple_size) - 1)),
-          _less_than_comp(comp),
+          _less_than_comp(std::move(comp)),
           _state(state) {
     _temp_tuple_buffer = new uint8_t[tuple_size];
     _temp_tuple_row = reinterpret_cast<TupleRow*>(&_temp_tuple_buffer);
@@ -1004,11 +1003,11 @@ inline void SpillSorter::TupleSorter::swap(uint8_t* left, uint8_t* right) {
 }
 
 // SpillSorter methods
-SpillSorter::SpillSorter(const TupleRowComparator& compare_less_than,
-                         const vector<ExprContext*>& slot_materialize_expr_ctxs, RowDescriptor* output_row_desc,
-                         MemTracker* mem_tracker, RuntimeProfile* profile, RuntimeState* state)
+SpillSorter::SpillSorter(TupleRowComparator compare_less_than, const vector<ExprContext*>& slot_materialize_expr_ctxs,
+                         RowDescriptor* output_row_desc, MemTracker* mem_tracker, RuntimeProfile* profile,
+                         RuntimeState* state)
         : _state(state),
-          _compare_less_than(compare_less_than),
+          _compare_less_than(std::move(compare_less_than)),
           _in_mem_tuple_sorter(nullptr),
           _block_mgr(state->block_mgr2()),
           _block_mgr_client(nullptr),
@@ -1026,11 +1025,11 @@ SpillSorter::SpillSorter(const TupleRowComparator& compare_less_than,
 
 SpillSorter::~SpillSorter() {
     // Delete blocks from the block mgr.
-    for (deque<Run*>::iterator it = _sorted_runs.begin(); it != _sorted_runs.end(); ++it) {
-        (*it)->delete_all_blocks();
+    for (auto& _sorted_run : _sorted_runs) {
+        _sorted_run->delete_all_blocks();
     }
-    for (deque<Run*>::iterator it = _merging_runs.begin(); it != _merging_runs.end(); ++it) {
-        (*it)->delete_all_blocks();
+    for (auto& _merging_run : _merging_runs) {
+        _merging_run->delete_all_blocks();
     }
     if (_unsorted_run != nullptr) {
         _unsorted_run->delete_all_blocks();
@@ -1272,8 +1271,8 @@ Status SpillSorter::create_merger(int num_runs) {
     DCHECK_GT(num_runs, 1);
 
     // Clean up the runs from the previous merge.
-    for (deque<Run*>::iterator it = _merging_runs.begin(); it != _merging_runs.end(); ++it) {
-        (*it)->delete_all_blocks();
+    for (auto& _merging_run : _merging_runs) {
+        _merging_run->delete_all_blocks();
     }
     _merging_runs.clear();
     _merger = std::make_unique<SortedRunMerger>(_compare_less_than, _output_row_desc, _profile, true);

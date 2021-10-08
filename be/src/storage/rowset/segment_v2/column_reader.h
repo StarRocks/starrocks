@@ -25,6 +25,7 @@
 #include <cstddef> // for size_t
 #include <cstdint> // for uint32_t
 #include <memory>  // for unique_ptr
+#include <utility>
 
 #include "column/datum.h"
 #include "column/fixed_length_column.h"
@@ -534,11 +535,11 @@ private:
 class DefaultValueColumnIterator final : public ColumnIterator {
 public:
     DefaultValueColumnIterator(bool has_default_value, std::string default_value, bool is_nullable,
-                               const TypeInfoPtr& type_info, size_t schema_length, ordinal_t num_rows)
+                               TypeInfoPtr type_info, size_t schema_length, ordinal_t num_rows)
             : _has_default_value(has_default_value),
               _default_value(std::move(default_value)),
               _is_nullable(is_nullable),
-              _type_info(type_info),
+              _type_info(std::move(type_info)),
               _schema_length(schema_length),
               _is_default_value_null(false),
               _type_size(0),

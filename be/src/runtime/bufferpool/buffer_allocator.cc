@@ -114,7 +114,7 @@ private:
     /// The data structures for each power-of-two size of buffers/pages.
     /// All members are protected by FreeBufferArena::lock_ unless otherwise mentioned.
     struct PerSizeLists {
-        PerSizeLists() {}
+        PerSizeLists() = default;
 
         /// Helper to add a free buffer and increment the counter.
         /// FreeBufferArena::lock_ must be held by the caller.
@@ -714,7 +714,9 @@ std::string BufferPool::FreeBufferArena::DebugString() {
            << " free buffers: " << lists.num_free_buffers.load(std::memory_order_acquire)
            << " low water mark: " << lists.low_water_mark
            << " clean pages: " << lists.num_clean_pages.load(std::memory_order_acquire) << " ";
-        lists.clean_pages.iterate(std::bind<bool>(Page::DebugStringCallback, &ss, std::placeholders::_1));
+        lists.clean_pages.iterate([capture0 = &ss](auto&& PH1) {
+            return Page::DebugStringCallback(capture0, std::forward<decltype(PH1)>(PH1));
+        });
 
         ss << "\n";
     }

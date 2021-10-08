@@ -21,11 +21,9 @@
 
 #include "util/stack_util.h"
 
-namespace google {
-namespace glog_internal_namespace_ {
+namespace google::glog_internal_namespace_ {
 void DumpStackTraceToString(std::string* stacktrace);
-}
-} // namespace google
+} // namespace google::glog_internal_namespace_
 
 namespace starrocks {
 

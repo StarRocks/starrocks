@@ -24,6 +24,7 @@ class FragmentContext {
 public:
     FragmentContext() : _cancel_flag(false) {}
     ~FragmentContext() {
+        close_all_pipelines();
         if (_plan != nullptr) {
             _plan->close(_runtime_state.get());
         }
@@ -62,9 +63,8 @@ public:
             return;
         }
         Status* old_status = nullptr;
-        static Status s_status;
-        if (_final_status.compare_exchange_strong(old_status, &s_status)) {
-            s_status = status;
+        if (_final_status.compare_exchange_strong(old_status, &_s_status)) {
+            _s_status = status;
         }
     }
 
@@ -83,6 +83,19 @@ public:
     bool is_canceled() { return _cancel_flag.load(std::memory_order_acquire) == true; }
 
     MorselQueueMap& morsel_queues() { return _morsel_queues; }
+
+    Status prepare_all_pipelines() {
+        for (auto& pipe : _pipelines) {
+            RETURN_IF_ERROR(pipe->prepare(_runtime_state.get(), _mem_tracker.get()));
+        }
+        return Status::OK();
+    }
+
+    void close_all_pipelines() {
+        for (auto& pipe : _pipelines) {
+            pipe->close(_runtime_state.get());
+        }
+    }
 
 private:
     // Id of this query
@@ -112,6 +125,7 @@ private:
     std::atomic<size_t> _num_drivers;
     std::atomic<Status*> _final_status;
     std::atomic<bool> _cancel_flag;
+    Status _s_status;
 };
 class FragmentContextManager {
 public:

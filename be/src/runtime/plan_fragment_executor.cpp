@@ -22,6 +22,7 @@
 #include "runtime/plan_fragment_executor.h"
 
 #include <memory>
+#include <utility>
 
 #include "common/logging.h"
 #include "common/object_pool.h"
@@ -46,9 +47,9 @@
 
 namespace starrocks {
 
-PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, const report_status_callback& report_status_cb)
+PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb)
         : _exec_env(exec_env),
-          _report_status_cb(report_status_cb),
+          _report_status_cb(std::move(report_status_cb)),
           _done(false),
           _prepared(false),
           _closed(false),
@@ -64,7 +65,6 @@ PlanFragmentExecutor::~PlanFragmentExecutor() {
 
 Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     const TPlanFragmentExecParams& params = request.params;
-    _is_vectorized = params.use_vectorized;
     _query_id = params.query_id;
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(_query_id)
@@ -171,8 +171,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     VLOG(1) << "scan_nodes.size()=" << scan_nodes.size();
     VLOG(1) << "params.per_node_scan_ranges.size()=" << params.per_node_scan_ranges.size();
 
-    for (int i = 0; i < scan_nodes.size(); ++i) {
-        ScanNode* scan_node = down_cast<ScanNode*>(scan_nodes[i]);
+    for (auto& i : scan_nodes) {
+        ScanNode* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
         scan_node->set_scan_ranges(scan_ranges);
@@ -211,7 +211,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     _prepared = true;
 
     _query_statistics.reset(new QueryStatistics());
-    if (_sink.get() != nullptr) {
+    if (_sink != nullptr) {
         _sink->set_query_statistics(_query_statistics);
     }
 
@@ -246,7 +246,7 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
         RETURN_IF_ERROR(_plan->open(_runtime_state.get()));
     }
 
-    if (_sink.get() == nullptr) {
+    if (_sink == nullptr) {
         return Status::OK();
     }
     RETURN_IF_ERROR(_sink->open(runtime_state()));
@@ -458,13 +458,13 @@ void PlanFragmentExecutor::close() {
     }
 
     // Prepare may not have been called, which sets _runtime_state
-    if (_runtime_state.get() != nullptr) {
+    if (_runtime_state != nullptr) {
         // _runtime_state init failed
         if (_plan != nullptr) {
             _plan->close(_runtime_state.get());
         }
 
-        if (_sink.get() != nullptr) {
+        if (_sink != nullptr) {
             if (_prepared) {
                 Status status;
                 {

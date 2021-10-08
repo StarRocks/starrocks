@@ -61,13 +61,11 @@ struct AggHashSetOfOneNumberKey {
     using ResultVector = typename ColumnType::Container;
     using FieldType = RunTimeCppType<primitive_type>;
     HashSet hash_set;
-
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
         DCHECK(!key_columns[0]->is_nullable());
         auto* column = down_cast<ColumnType*>(key_columns[0].get());
-
         const size_t row_num = column->size();
         for (size_t i = 0; i < row_num; ++i) {
             hash_set.emplace(column->get_data()[i]);

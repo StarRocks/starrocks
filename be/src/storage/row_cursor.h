@@ -130,13 +130,14 @@ private:
     std::unique_ptr<Schema> _schema;
 
     char* _fixed_buf = nullptr; // point to fixed buf
-    size_t _fixed_len;
+    size_t _fixed_len{0};
     char* _owned_fixed_buf = nullptr; // point to buf allocated in init function
 
     char* _variable_buf = nullptr;
-    size_t _variable_len;
+    size_t _variable_len{0};
 
-    DISALLOW_COPY_AND_ASSIGN(RowCursor);
+    RowCursor(const RowCursor&) = delete;
+    const RowCursor& operator=(const RowCursor&) = delete;
 };
 } // namespace starrocks
 

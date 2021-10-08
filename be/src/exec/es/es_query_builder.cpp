@@ -22,6 +22,7 @@
 #include "exec/es/es_query_builder.h"
 
 #include <boost/algorithm/string/replace.hpp>
+#include <utility>
 
 #include "common/logging.h"
 #include "rapidjson/rapidjson.h"
@@ -30,7 +31,7 @@
 
 namespace starrocks {
 
-ESQueryBuilder::ESQueryBuilder(const std::string& es_query_str) : _es_query_str(es_query_str) {}
+ESQueryBuilder::ESQueryBuilder(std::string es_query_str) : _es_query_str(std::move(es_query_str)) {}
 ESQueryBuilder::ESQueryBuilder(const ExtFunction& es_query) {
     auto first = es_query.values.front();
     _es_query_str = first->to_string();
@@ -53,7 +54,8 @@ void ESQueryBuilder::to_json(rapidjson::Document* document, rapidjson::Value* qu
     query->AddMember(query_key, query_value, allocator);
 }
 
-TermQueryBuilder::TermQueryBuilder(const std::string& field, const std::string& term) : _field(field), _term(term) {}
+TermQueryBuilder::TermQueryBuilder(std::string field, std::string term)
+        : _field(std::move(field)), _term(std::move(term)) {}
 
 TermQueryBuilder::TermQueryBuilder(const ExtBinaryPredicate& binary_predicate)
         : _field(binary_predicate.col.name), _term(binary_predicate.value->to_string()) {}
@@ -168,7 +170,7 @@ void ExistsQueryBuilder::to_json(rapidjson::Document* document, rapidjson::Value
     query->AddMember("exists", term_node, allocator);
 }
 
-BooleanQueryBuilder::BooleanQueryBuilder() {}
+BooleanQueryBuilder::BooleanQueryBuilder() = default;
 BooleanQueryBuilder::~BooleanQueryBuilder() {
     for (auto clause : _must_clauses) {
         delete clause;

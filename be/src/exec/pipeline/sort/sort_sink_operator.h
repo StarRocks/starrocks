@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/operator.h"
 #include "exec/sort_exec_exprs.h"
@@ -23,12 +25,12 @@ namespace pipeline {
 class SortSinkOperator final : public Operator {
 public:
     SortSinkOperator(int32_t id, int32_t plan_node_id, std::shared_ptr<vectorized::ChunksSorter> chunks_sorter,
-                     const SortExecExprs& sort_exec_exprs, const std::vector<OrderByType>& order_by_types,
+                     SortExecExprs sort_exec_exprs, const std::vector<OrderByType>& order_by_types,
                      TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
                      const RowDescriptor& parent_node_child_row_desc)
             : Operator(id, "sort_sink", plan_node_id),
               _chunks_sorter(std::move(chunks_sorter)),
-              _sort_exec_exprs(sort_exec_exprs),
+              _sort_exec_exprs(std::move(sort_exec_exprs)),
               _order_by_types(order_by_types),
               _materialized_tuple_desc(materialized_tuple_desc),
               _parent_node_row_desc(parent_node_row_desc),
@@ -76,11 +78,11 @@ class SortSinkOperatorFactory final : public OperatorFactory {
 public:
     SortSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                             const std::shared_ptr<vectorized::ChunksSorter>& chunks_sorter,
-                            const SortExecExprs& sort_exec_exprs, const std::vector<OrderByType>& order_by_types,
+                            SortExecExprs& sort_exec_exprs, const std::vector<OrderByType>& order_by_types,
                             TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
                             const RowDescriptor& parent_node_child_row_desc)
             : OperatorFactory(id, plan_node_id),
-              _chunks_sorter(chunks_sorter),
+              _chunks_sorter(std::move(chunks_sorter)),
               _sort_exec_exprs(sort_exec_exprs),
               _order_by_types(order_by_types),
               _materialized_tuple_desc(materialized_tuple_desc),
@@ -96,11 +98,14 @@ public:
         return ope;
     }
 
+    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
+    void close(RuntimeState* state) override;
+
 private:
     std::shared_ptr<vectorized::ChunksSorter> _chunks_sorter;
 
     // _sort_exec_exprs contains the ordering expressions
-    const SortExecExprs& _sort_exec_exprs;
+    SortExecExprs& _sort_exec_exprs;
     const std::vector<OrderByType>& _order_by_types;
 
     // Cached descriptor for the materialized tuple. Assigned in Prepare().

@@ -49,8 +49,7 @@ using std::string;
 
 using strings::Substitute;
 
-namespace starrocks {
-namespace fs {
+namespace starrocks::fs {
 
 namespace internal {
 
@@ -96,7 +95,8 @@ public:
     Status flush_data_async();
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(FileWritableBlock);
+    FileWritableBlock(const FileWritableBlock&) = delete;
+    const FileWritableBlock& operator=(const FileWritableBlock&) = delete;
 
     enum SyncMode { SYNC, NO_SYNC };
 
@@ -289,7 +289,8 @@ private:
     // this must be an atomic primitive.
     std::atomic_bool _closed;
 
-    DISALLOW_COPY_AND_ASSIGN(FileReadableBlock);
+    FileReadableBlock(const FileReadableBlock&) = delete;
+    const FileReadableBlock& operator=(const FileReadableBlock&) = delete;
 };
 
 FileReadableBlock::FileReadableBlock(FileBlockManager* block_manager, string path,
@@ -379,7 +380,7 @@ FileBlockManager::FileBlockManager(Env* env, BlockManagerOptions opts)
 #endif
 }
 
-FileBlockManager::~FileBlockManager() {}
+FileBlockManager::~FileBlockManager() = default;
 
 Status FileBlockManager::open() {
     // TODO(lingbin)
@@ -442,5 +443,4 @@ Status FileBlockManager::_sync_metadata(const string& path) {
     return Status::OK();
 }
 
-} // namespace fs
-} // namespace starrocks
+} // namespace starrocks::fs

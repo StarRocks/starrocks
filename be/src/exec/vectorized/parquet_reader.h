@@ -53,7 +53,7 @@ public:
     enum State { UNINITIALIZED, INITIALIZED, END_OF_FILE };
 
     ParquetChunkReader(std::shared_ptr<ParquetReaderWrap>&& parquet_reader,
-                       const std::vector<SlotDescriptor*>& src_slot_descs, const std::string& time_zone);
+                       const std::vector<SlotDescriptor*>& src_slot_descs, std::string time_zone);
     ~ParquetChunkReader();
     Status next_batch(RecordBatchPtr* batch);
 

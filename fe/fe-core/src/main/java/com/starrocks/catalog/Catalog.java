@@ -432,6 +432,8 @@ public class Catalog {
 
     private StatisticStorage statisticStorage;
 
+    private long imageJournalId;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
@@ -1393,12 +1395,12 @@ public class Catalog {
     private void getNewImage(Pair<String, Integer> helperNode) throws IOException {
         long localImageVersion = 0;
         Storage storage = new Storage(this.imageDir);
-        localImageVersion = storage.getImageSeq();
+        localImageVersion = storage.getImageJournalId();
 
         try {
             URL infoUrl = new URL("http://" + helperNode.first + ":" + Config.http_port + "/info");
             StorageInfo info = getStorageInfo(infoUrl);
-            long version = info.getImageSeq();
+            long version = info.getImageJournalId();
             if (version > localImageVersion) {
                 String url = "http://" + helperNode.first + ":" + Config.http_port
                         + "/image?version=" + version;
@@ -1460,7 +1462,7 @@ public class Catalog {
             LOG.info("image does not exist: {}", curFile.getAbsolutePath());
             return;
         }
-        replayedJournalId.set(storage.getImageSeq());
+        replayedJournalId.set(storage.getImageJournalId());
         LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(), Catalog.isCheckpointThread());
         long loadImageStartTime = System.currentTimeMillis();
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
@@ -1510,6 +1512,7 @@ public class Catalog {
         Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
         long loadImageEndTime = System.currentTimeMillis();
+        this.imageJournalId = storage.getImageJournalId();
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
     }
 
@@ -7258,5 +7261,12 @@ public class Catalog {
         }
     }
 
+    public long getImageJournalId() {
+        return imageJournalId;
+    }
+
+    public void setImageJournalId(long imageJournalId) {
+        this.imageJournalId = imageJournalId;
+    }
 }
 

@@ -137,16 +137,16 @@ public:
 
     // This object has the same lifetime as the disk IoMgr.
     ~RequestContextCache() {
-        for (list<RequestContext*>::iterator it = _all_contexts.begin(); it != _all_contexts.end(); ++it) {
-            delete *it;
+        for (auto& _all_context : _all_contexts) {
+            delete _all_context;
         }
     }
 
     // Validates that all readers are cleaned up and in the inactive state.  No locks
     // are taken since this is only called from the disk IoMgr destructor.
     bool validate_all_inactive() {
-        for (list<RequestContext*>::iterator it = _all_contexts.begin(); it != _all_contexts.end(); ++it) {
-            if ((*it)->_state != RequestContext::Inactive) {
+        for (auto& _all_context : _all_contexts) {
+            if (_all_context->_state != RequestContext::Inactive) {
                 return false;
             }
         }
@@ -172,9 +172,9 @@ private:
 string DiskIoMgr::RequestContextCache::debug_string() {
     std::lock_guard<std::mutex> l(_lock);
     stringstream ss;
-    for (list<RequestContext*>::iterator it = _all_contexts.begin(); it != _all_contexts.end(); ++it) {
-        std::unique_lock<std::mutex> lock((*it)->_lock);
-        ss << (*it)->debug_string() << endl;
+    for (auto& _all_context : _all_contexts) {
+        std::unique_lock<std::mutex> lock(_all_context->_lock);
+        ss << _all_context->debug_string() << endl;
     }
     return ss.str();
 }
@@ -184,12 +184,12 @@ string DiskIoMgr::debug_string() {
     ss << "RequestContexts: " << endl << _request_context_cache->debug_string() << endl;
 
     ss << "Disks: " << endl;
-    for (int i = 0; i < _disk_queues.size(); ++i) {
-        std::unique_lock<std::mutex> lock(_disk_queues[i]->lock);
-        ss << "  " << (void*)_disk_queues[i] << ":";
-        if (!_disk_queues[i]->request_contexts.empty()) {
+    for (auto& _disk_queue : _disk_queues) {
+        std::unique_lock<std::mutex> lock(_disk_queue->lock);
+        ss << "  " << (void*)_disk_queue << ":";
+        if (!_disk_queue->request_contexts.empty()) {
             ss << " Readers: ";
-            for (auto* req_context : _disk_queues[i]->request_contexts) {
+            for (auto* req_context : _disk_queue->request_contexts) {
                 ss << (void*)req_context;
             }
         }
@@ -266,8 +266,7 @@ DiskIoMgr::DiskIoMgr()
         : _num_threads_per_disk(config::num_threads_per_disk),
           _max_buffer_size(config::read_size),
           _min_buffer_size(config::min_buffer_size),
-          _cached_read_options(nullptr),
-          _shut_down(false),
+
           _total_bytes_read_counter(TUnit::BYTES),
           _read_timer(TUnit::TIME_NS)
 // _read_timer(TUnit::TIME_NS),
@@ -306,27 +305,27 @@ DiskIoMgr::DiskIoMgr(int num_local_disks, int threads_per_disk, int min_buffer_s
 DiskIoMgr::~DiskIoMgr() {
     _shut_down = true;
     // Notify all worker threads and shut them down.
-    for (int i = 0; i < _disk_queues.size(); ++i) {
-        if (_disk_queues[i] == nullptr) {
+    for (auto& _disk_queue : _disk_queues) {
+        if (_disk_queue == nullptr) {
             continue;
         }
         {
             // This lock is necessary to properly use the condition var to notify
             // the disk worker threads.  The readers also grab this lock so updates
             // to _shut_down are protected.
-            std::unique_lock<std::mutex> disk_lock(_disk_queues[i]->lock);
+            std::unique_lock<std::mutex> disk_lock(_disk_queue->lock);
         }
-        _disk_queues[i]->work_available.notify_all();
+        _disk_queue->work_available.notify_all();
     }
     _disk_thread_group.join_all();
 
-    for (int i = 0; i < _disk_queues.size(); ++i) {
-        if (_disk_queues[i] == nullptr) {
+    for (auto& _disk_queue : _disk_queues) {
+        if (_disk_queue == nullptr) {
             continue;
         }
-        int disk_id = _disk_queues[i]->disk_id;
-        for (list<RequestContext*>::iterator it = _disk_queues[i]->request_contexts.begin();
-             it != _disk_queues[i]->request_contexts.end(); ++it) {
+        int disk_id = _disk_queue->disk_id;
+        for (list<RequestContext*>::iterator it = _disk_queue->request_contexts.begin();
+             it != _disk_queue->request_contexts.end(); ++it) {
             DCHECK_EQ((*it)->_disk_states[disk_id].num_threads_in_op(), 0);
             DCHECK((*it)->_disk_states[disk_id].done());
             (*it)->decrement_disk_ref_count();
@@ -340,14 +339,14 @@ DiskIoMgr::~DiskIoMgr() {
 
     // Delete all allocated buffers
     int num_free_buffers = 0;
-    for (int idx = 0; idx < _free_buffers.size(); ++idx) {
-        num_free_buffers += _free_buffers[idx].size();
+    for (auto& _free_buffer : _free_buffers) {
+        num_free_buffers += _free_buffer.size();
     }
     DCHECK_EQ(_num_allocated_buffers, num_free_buffers);
     gc_io_buffers();
 
-    for (int i = 0; i < _disk_queues.size(); ++i) {
-        delete _disk_queues[i];
+    for (auto& _disk_queue : _disk_queues) {
+        delete _disk_queue;
     }
 
     /*
@@ -379,7 +378,8 @@ Status DiskIoMgr::init(MemTracker* process_mem_tracker) {
             ss << "work-loop(Disk: " << i << ", Thread: " << j << ")";
             // _disk_thread_group.AddThread(new Thread("disk-io-mgr", ss.str(),
             //             &DiskIoMgr::work_loop, this, _disk_queues[i]));
-            _disk_thread_group.add_thread(new boost::thread(std::bind(&DiskIoMgr::work_loop, this, _disk_queues[i])));
+            _disk_thread_group.add_thread(
+                    new boost::thread([this, capture0 = _disk_queues[i]] { work_loop(capture0); }));
         }
     }
     _request_context_cache = std::make_unique<RequestContextCache>(this);
@@ -519,9 +519,9 @@ Status DiskIoMgr::add_scan_ranges(RequestContext* reader, const vector<ScanRange
     }
 
     // Validate and initialize all ranges
-    for (int i = 0; i < ranges.size(); ++i) {
-        RETURN_IF_ERROR(validate_scan_range(ranges[i]));
-        ranges[i]->init_internal(this, reader);
+    for (auto range : ranges) {
+        RETURN_IF_ERROR(validate_scan_range(range));
+        range->init_internal(this, reader);
     }
 
     // disks that this reader needs to be scheduled on.
@@ -534,10 +534,10 @@ Status DiskIoMgr::add_scan_ranges(RequestContext* reader, const vector<ScanRange
     }
 
     // Add each range to the queue of the disk the range is on
-    for (int i = 0; i < ranges.size(); ++i) {
+    for (auto i : ranges) {
         // Don't add empty ranges.
-        DCHECK_NE(ranges[i]->len(), 0);
-        ScanRange* range = ranges[i];
+        DCHECK_NE(i->len(), 0);
+        ScanRange* range = i;
 
         /*
          * if (range->_try_cache) {

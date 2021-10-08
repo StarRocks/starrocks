@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "common/status.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/segment_v2/common.h" // for ordinal_t
@@ -32,11 +34,11 @@ namespace starrocks {
 // struct that contains column data(null bitmap), data array in sub class.
 class ColumnVectorBatch {
 public:
-    explicit ColumnVectorBatch(const TypeInfoPtr& type_info, bool is_nullable)
-            : _type_info(type_info),
+    explicit ColumnVectorBatch(TypeInfoPtr type_info, bool is_nullable)
+            : _type_info(std::move(type_info)),
               _capacity(0),
               _delete_state(DEL_NOT_SATISFIED),
-              _null_signs(),
+
               _nullable(is_nullable) {}
 
     virtual ~ColumnVectorBatch();

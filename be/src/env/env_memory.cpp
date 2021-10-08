@@ -80,8 +80,7 @@ private:
 
 class MemorySequentialFile final : public SequentialFile {
 public:
-    MemorySequentialFile(std::string path, InodePtr inode)
-            : _offset(0), _random_file(std::move(path), std::move(inode)) {}
+    MemorySequentialFile(std::string path, InodePtr inode) : _random_file(std::move(path), std::move(inode)) {}
 
     ~MemorySequentialFile() override = default;
 

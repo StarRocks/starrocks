@@ -98,7 +98,8 @@ public:
     virtual bool all_dict_encoded() const { return false; }
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(PageBuilder);
+    PageBuilder(const PageBuilder&) = delete;
+    const PageBuilder& operator=(const PageBuilder&) = delete;
 };
 
 } // namespace segment_v2

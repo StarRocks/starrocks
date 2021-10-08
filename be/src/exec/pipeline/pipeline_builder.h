@@ -22,7 +22,7 @@ public:
         _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipe_id(), operators));
     }
 
-    void maybe_interpolate_local_exchange(OpFactories& pred_operators);
+    OpFactories maybe_interpolate_local_exchange(OpFactories& pred_operators);
 
     uint32_t next_pipe_id() { return _next_pipeline_id++; }
 

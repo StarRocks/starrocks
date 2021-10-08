@@ -45,7 +45,7 @@ class DescriptorTblBuilder {
 public:
     DescriptorTblBuilder(ObjectPool* object_pool);
     // a null dtor to pass codestyle check
-    ~DescriptorTblBuilder() {}
+    ~DescriptorTblBuilder() = default;
 
     TupleDescBuilder& declare_tuple();
     DescriptorTbl* build();

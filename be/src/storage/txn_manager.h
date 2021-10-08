@@ -62,7 +62,7 @@ struct TabletTxnInfo {
     TabletTxnInfo(PUniqueId load_id, RowsetSharedPtr rowset)
             : load_id(std::move(load_id)), rowset(std::move(rowset)), creation_time(UnixSeconds()) {}
 
-    TabletTxnInfo() {}
+    TabletTxnInfo() = default;
 };
 
 // txn manager is used to manage mapping between tablet and txns
@@ -191,7 +191,8 @@ private:
     std::shared_mutex* _txn_map_locks;
 
     std::mutex* _txn_mutex;
-    DISALLOW_COPY_AND_ASSIGN(TxnManager);
+    TxnManager(const TxnManager&) = delete;
+    const TxnManager& operator=(const TxnManager&) = delete;
 }; // TxnManager
 
 inline std::shared_mutex& TxnManager::_get_txn_map_lock(TTransactionId transactionId) {

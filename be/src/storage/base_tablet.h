@@ -82,7 +82,8 @@ protected:
     std::string _tablet_path;
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(BaseTablet);
+    BaseTablet(const BaseTablet&) = delete;
+    const BaseTablet& operator=(const BaseTablet&) = delete;
 };
 
 inline DataDir* BaseTablet::data_dir() const {

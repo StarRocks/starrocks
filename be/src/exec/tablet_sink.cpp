@@ -512,7 +512,7 @@ void NodeChannel::clear_all_batches() {
     }
 }
 
-IndexChannel::~IndexChannel() {}
+IndexChannel::~IndexChannel() = default;
 
 Status IndexChannel::init(RuntimeState* state, const std::vector<TTabletWithPartition>& tablets) {
     for (const auto& tablet : tablets) {
@@ -570,7 +570,7 @@ bool IndexChannel::has_intolerable_failure() {
 
 OlapTableSink::OlapTableSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& texprs,
                              Status* status, bool is_vectorized)
-        : _pool(pool), _input_row_desc(row_desc), _filter_bitmap(1024), _is_vectorized(is_vectorized) {
+        : _pool(pool), _input_row_desc(row_desc), _filter_bitmap(1024) {
     if (!texprs.empty()) {
         *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs);
     }
@@ -944,8 +944,7 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
         int64_t be_id = it.first;
         _node_select_idx.clear();
         _node_select_idx.reserve(selection_idx.size());
-        for (uint32_t j = 0; j < selection_idx.size(); ++j) {
-            uint16_t selection = selection_idx[j];
+        for (unsigned short selection : selection_idx) {
             std::vector<int64_t>& be_ids = channel->_tablet_to_be.find(_tablet_ids[selection])->second;
             if (std::find(be_ids.begin(), be_ids.end(), be_id) != be_ids.end()) {
                 _node_select_idx.emplace_back(selection);
@@ -1378,8 +1377,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
 
 void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
-    for (int i = 0; i < _output_tuple_desc->slots().size(); ++i) {
-        SlotDescriptor* desc = _output_tuple_desc->slots()[i];
+    for (auto desc : _output_tuple_desc->slots()) {
         if (desc->type().type == TYPE_CHAR) {
             vectorized::Column* column = chunk->get_column_by_slot_id(desc->id()).get();
             vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);

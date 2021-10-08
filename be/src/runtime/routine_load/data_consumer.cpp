@@ -49,7 +49,7 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
 
     // conf has to be deleted finally
     auto conf_deleter = [conf]() { delete conf; };
-    DeferOp delete_conf(std::bind<void>(conf_deleter));
+    DeferOp delete_conf([conf_deleter] { return conf_deleter(); });
 
     std::stringstream ss;
     ss << BackendOptions::get_localhost() << "_";
@@ -148,7 +148,7 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
         std::for_each(topic_partitions.begin(), topic_partitions.end(),
                       [](RdKafka::TopicPartition* tp1) { delete tp1; });
     };
-    DeferOp delete_tp(std::bind<void>(tp_deleter));
+    DeferOp delete_tp([tp_deleter] { return tp_deleter(); });
 
     // assign partition
     RdKafka::ErrorCode err = _k_consumer->assign(topic_partitions);
@@ -259,7 +259,7 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
     // create topic conf
     RdKafka::Conf* tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
     auto conf_deleter = [tconf]() { delete tconf; };
-    DeferOp delete_conf(std::bind<void>(conf_deleter));
+    DeferOp delete_conf([conf_deleter] { return conf_deleter(); });
 
     // create topic
     std::string errstr;
@@ -271,7 +271,7 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
         return Status::InternalError(ss.str());
     }
     auto topic_deleter = [topic]() { delete topic; };
-    DeferOp delete_topic(std::bind<void>(topic_deleter));
+    DeferOp delete_topic([topic_deleter] { return topic_deleter(); });
 
     // get topic metadata
     RdKafka::Metadata* metadata = nullptr;
@@ -283,7 +283,7 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
         return Status::InternalError(ss.str());
     }
     auto meta_deleter = [metadata]() { delete metadata; };
-    DeferOp delete_meta(std::bind<void>(meta_deleter));
+    DeferOp delete_meta([meta_deleter] { return meta_deleter(); });
 
     // get partition ids
     RdKafka::Metadata::TopicMetadataIterator it;
