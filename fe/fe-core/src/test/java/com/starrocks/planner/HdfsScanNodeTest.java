@@ -250,7 +250,6 @@ public class HdfsScanNodeTest {
         scanNode.finalize(analyzer);
 
         Assert.assertTrue(scanNode.isVectorized());
-        scanNode.setUseVectorized(true);
         TPlanNode tPlanNode = new TPlanNode();
         scanNode.toThrift(tPlanNode);
         System.out.println(tPlanNode);

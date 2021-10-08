@@ -51,7 +51,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.planner.AdapterNode.insertAdapterNodeToFragment;
+import static com.starrocks.planner.AdapterNode.checkPlanIsVectorized;
 
 public class InsertPlanner {
     public ExecPlan plan(Relation relation, ConnectContext session) {
@@ -106,7 +106,7 @@ public class InsertPlanner {
         }
         olapTuple.computeMemLayout();
 
-        insertAdapterNodeToFragment(execPlan.getFragments(), execPlan.getPlanCtx());
+        checkPlanIsVectorized(execPlan.getFragments());
 
         OlapTableSink dataSink = new OlapTableSink((OlapTable) insertRelation.getTargetTable(), olapTuple,
                 insertRelation.getTargetPartitionIds());

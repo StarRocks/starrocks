@@ -67,7 +67,6 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert withEnableMV() {
-        ctx.getSessionVariable().setTestMaterializedView(true);
         Config.enable_materialized_view = true;
         return this;
     }

@@ -889,11 +889,9 @@ public class DistributedPlanner {
                 partitionExprs = groupingExprs;
             }
 
-            if (ctx_.getRootAnalyzer().getContext().getSessionVariable().useVectorizedEngineEnable()) {
-                if (couldDoOnePhaseAggregate(node, childFragment, groupingExprs)) {
-                    childFragment.addPlanRoot(node);
-                    return childFragment;
-                }
+            if (couldDoOnePhaseAggregate(node, childFragment, groupingExprs)) {
+                childFragment.addPlanRoot(node);
+                return childFragment;
             }
 
             // substitute grouping exprs to reference the *output* of the agg, not the input

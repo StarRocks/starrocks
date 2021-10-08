@@ -997,7 +997,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "        AND (subt0.v3 <= subt0.v3 < subt1.v6) = (subt1.v5)\n";
 
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 4: v4 = 1: v1\n"
                 + "  |  equal join conjunct: 5: v5 = 2: v2\n"
@@ -1130,7 +1129,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testEquivalenceTest() throws Exception {
         String sql = "select * from t0 as x1 join t0 as x2 on x1.v2 = x2.v2 where x2.v2 = 'zxcv';";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n"
                 + "     TABLE: t0\n"
                 + "     PREAGGREGATION: ON\n"
@@ -1200,7 +1198,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql =
                 "select t3.v1 from t3 inner join test_all_type on t3.v2 = test_all_type.id_decimal and t3.v2 > true";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n"
                 + "     TABLE: t3\n"
                 + "     PREAGGREGATION: ON\n"
@@ -1592,7 +1589,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testAggregateConst() throws Exception {
         String sql = "select 'a', v2, sum(v1) from t0 group by 'a', v2; ";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  2:Project\n"
                 + "  |  <slot 2> : 2: v2\n"
                 + "  |  <slot 5> : 5: sum(1: v1)\n"
@@ -1609,7 +1605,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testAggregateAllConst() throws Exception {
         String sql = "select 'a', 'b' from t0 group by 'a', 'b'; ";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  3:Project\n"
                 + "  |  <slot 4> : 4: expr\n"
                 + "  |  <slot 6> : 'b'\n"
@@ -1657,7 +1652,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testUsingJoin() throws Exception {
         String sql = "select * from t0 as x0 join t0 as x1 using(v1);";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  2:HASH JOIN\n"
                 + "  |  join op: INNER JOIN (COLOCATE)\n"
                 + "  |  hash predicates:\n"
@@ -1741,7 +1735,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testInformationSchema1() throws Exception {
         String sql = "select column_name, UPPER(DATA_TYPE) from information_schema.columns;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  1:Project\n"
                 + "  |  <slot 4> : 4: COLUMN_NAME\n"
                 + "  |  <slot 25> : upper(8: DATA_TYPE)\n"
@@ -2032,7 +2025,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testArrayElementWithFunction() throws Exception {
         String sql = "select v1, sum(v3[1]) from tarray group by v1";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 4> : 3: v3[1]"));
@@ -2357,7 +2349,6 @@ public class PlanFragmentTest extends PlanTestBase {
 
         String sql10 = "select 499 union select 670 except select 499";
         String plan = getFragmentPlan(sql10);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  10:UNION\n" +
                 "     constant exprs: \n" +
                 "         499"));
@@ -2398,7 +2389,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 ") t\n" +
                 "WHERE IF(k2 IS NULL, 'ALL', k2) = 'ALL'";
         String plan = getFragmentPlan(sql1);
-        System.out.println(plan);
 
         Assert.assertTrue(plan.contains("  4:Project\n" +
                 "  |  <slot 5> : 5: sum(4: k4)\n" +
@@ -2432,7 +2422,6 @@ public class PlanFragmentTest extends PlanTestBase {
                         ") t\n" +
                         "WHERE IF(k2 IS NULL, 'ALL', k2) = 'ALL'";
         plan = getFragmentPlan(sql2);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  2:Project\n" +
                 "  |  <slot 5> : 5: sum(4: k4)\n" +
                 "  |  <slot 6> : if(2: k2 IS NULL, 'ALL', 2: k2)\n" +
