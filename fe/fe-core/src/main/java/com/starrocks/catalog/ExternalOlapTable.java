@@ -3,6 +3,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.IndexDef;
@@ -37,6 +39,18 @@ import java.util.Map;
 public class ExternalOlapTable extends OlapTable {
     private static final Logger LOG = LogManager.getLogger(ExternalOlapTable.class);
 
+    private static final String JSON_KEY_HOST = "host";
+    private static final String JSON_KEY_PORT = "port";
+    private static final String JSON_KEY_USER = "user";
+    private static final String JSON_KEY_PASSWORD = "password";
+    private static final String JSON_KEY_TABLE_NAME = "table_name";
+    private static final String JSON_KEY_DB_ID = "db_id";
+    private static final String JSON_KEY_TABLE_ID = "table_id";
+    private static final String JSON_KEY_SOURCE_DB_NAME = "source_db_name";
+    private static final String JSON_KEY_SOURCE_DB_ID = "source_db_id";
+    private static final String JSON_KEY_SOURCE_TABLE_ID = "source_table_id";
+    private static final String JSON_KEY_SOURCE_TABLE_NAME = "source_table_name";
+
     public class ExternalTableInfo {
         // remote doris cluster fe addr
         private String host;
@@ -49,6 +63,9 @@ public class ExternalOlapTable extends OlapTable {
         private String dbName;
         private String tableName;
 
+        private long dbId;
+        private long tableId;
+
         public ExternalTableInfo() {
             this.host = "";
             this.port = 0;
@@ -56,6 +73,8 @@ public class ExternalOlapTable extends OlapTable {
             this.password = "";
             this.dbName = "";
             this.tableName = "";
+            this.dbId = -1;
+            this.tableId = -1;
         }
 
         public String getHost() {
@@ -82,22 +101,42 @@ public class ExternalOlapTable extends OlapTable {
             return tableName;
         }
 
-        public void write(DataOutput out) throws IOException {
-            Text.writeString(out, host);
-            out.writeInt(port);
-            Text.writeString(out, user);
-            Text.writeString(out, password);
-            Text.writeString(out, dbName);
-            Text.writeString(out, tableName);
+        public long getDbId() {
+            return dbId;
         }
 
-        public void read(DataInput in) throws IOException {
-            host = Text.readString(in);
-            port = in.readInt();
-            user = Text.readString(in);
-            password = Text.readString(in);
-            dbName = Text.readString(in);
-            tableName = Text.readString(in);
+        public void setDbId(long dbId) {
+            this.dbId = dbId;
+        }
+
+        public long getTableId() {
+            return tableId;
+        }
+
+        public void setTableId(long tableId) {
+            this.tableId = tableId;
+        }
+
+        public void toJsonObj(JsonObject obj) {
+            obj.addProperty(JSON_KEY_HOST, host);
+            obj.addProperty(JSON_KEY_PORT, port);
+            obj.addProperty(JSON_KEY_USER, user);
+            obj.addProperty(JSON_KEY_PASSWORD, password);
+            obj.addProperty(JSON_KEY_SOURCE_DB_NAME, dbName);
+            obj.addProperty(JSON_KEY_SOURCE_DB_ID, dbId);
+            obj.addProperty(JSON_KEY_SOURCE_TABLE_NAME, tableName);
+            obj.addProperty(JSON_KEY_SOURCE_TABLE_ID, tableId);
+        }
+
+        public void fromJsonObj(JsonObject obj) {
+            host = obj.getAsJsonPrimitive(JSON_KEY_HOST).getAsString();
+            port = obj.getAsJsonPrimitive(JSON_KEY_PORT).getAsInt();
+            user = obj.getAsJsonPrimitive(JSON_KEY_USER).getAsString();
+            password = obj.getAsJsonPrimitive(JSON_KEY_PASSWORD).getAsString();
+            dbName = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_DB_NAME).getAsString();
+            dbId = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_DB_ID).getAsLong();
+            tableName = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_TABLE_NAME).getAsString();
+            tableId = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_TABLE_ID).getAsLong();
         }
 
         public void parseFromProperties(Map<String, String> properties) throws DdlException {
@@ -152,7 +191,6 @@ public class ExternalOlapTable extends OlapTable {
     }
 
     private long dbId;
-    private long sourceDbId;
     private TTableMeta lastExternalMeta;
     private ExternalTableInfo externalTableInfo;
 
@@ -160,19 +198,18 @@ public class ExternalOlapTable extends OlapTable {
         super();
         setType(TableType.OLAP_EXTERNAL);
         dbId = -1;
-        sourceDbId = -1;
+        // sourceDbId = -1;
         lastExternalMeta = null;
         externalTableInfo = null;
     }
 
-    public ExternalOlapTable(long sourceDb, long tableId, String tableName, List<Column> baseSchema, KeysType keysType,
+    public ExternalOlapTable(long dbId, long tableId, String tableName, List<Column> baseSchema, KeysType keysType,
                              PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
                              TableIndexes indexes, Map<String, String> properties)
         throws DdlException {
         super(tableId, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, indexes);
         setType(TableType.OLAP_EXTERNAL);
-        dbId = -1;
-        sourceDbId = sourceDb;
+        this.dbId = dbId;
         lastExternalMeta = null;
 
         externalTableInfo = new ExternalTableInfo();
@@ -183,12 +220,36 @@ public class ExternalOlapTable extends OlapTable {
         return dbId;
     }
 
-    public long getSourceDbId() {
-        return sourceDbId;
+    public long getSourceTableDbId() {
+        return externalTableInfo.getDbId();
     }
 
-    public ExternalTableInfo getExternalInfo() {
-        return externalTableInfo;
+    public String getSourceTableDbName() {
+        return externalTableInfo.getDbName();
+    }
+
+    public long getSourceTableId() {
+        return externalTableInfo.getTableId();
+    }
+
+    public String getSourceTableName() {
+        return externalTableInfo.getTableName();
+    }
+
+    public String getSourceTableHost() {
+        return externalTableInfo.getHost();
+    }
+
+    public int getSourceTablePort() {
+        return externalTableInfo.getPort();
+    }
+
+    public String getSourceTableUser() {
+        return externalTableInfo.getUser();
+    }
+
+    public String getSourceTablePassword() {
+        return externalTableInfo.getPassword();
     }
 
     @Override
@@ -203,21 +264,26 @@ public class ExternalOlapTable extends OlapTable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, type.name());
-        out.writeLong(id);
-        Text.writeString(out, name);
-        out.writeLong(sourceDbId);
-        externalTableInfo.write(out);
+        super.write(out);
+
+        JsonObject obj = new JsonObject();
+        obj.addProperty(JSON_KEY_TABLE_ID, id);
+        obj.addProperty(JSON_KEY_TABLE_NAME, name);
+        obj.addProperty(JSON_KEY_DB_ID, dbId);
+        externalTableInfo.toJsonObj(obj);
+        Text.writeString(out, obj.toString());
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
-        this.id = in.readLong();
-        this.name = Text.readString(in);
-        this.sourceDbId = in.readLong();
-
+        super.readFields(in);
+        String jsonStr = Text.readString(in);
+        JsonObject obj = JsonParser.parseString(jsonStr).getAsJsonObject();
+        id = obj.getAsJsonPrimitive(JSON_KEY_TABLE_ID).getAsLong();
+        name = obj.getAsJsonPrimitive(JSON_KEY_TABLE_NAME).getAsString();
+        dbId = obj.getAsJsonPrimitive(JSON_KEY_DB_ID).getAsLong();
         externalTableInfo = new ExternalTableInfo();
-        externalTableInfo.read(in);
+        externalTableInfo.fromJsonObj(obj);
     }
 
     public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas) throws DdlException {
@@ -228,11 +294,12 @@ public class ExternalOlapTable extends OlapTable {
         }
 
         clusterId = meta.getCluster_id();
-        dbId = meta.getDb_id();
+        externalTableInfo.setDbId(meta.getDb_id());
+        externalTableInfo.setTableId(meta.getTable_id());
 
-        Database db = Catalog.getCurrentCatalog().getDb(sourceDbId);
+        Database db = Catalog.getCurrentCatalog().getDb(dbId);
         if (db == null) {
-            throw new DdlException("database " + sourceDbId + " does not exist");
+            throw new DdlException("database " + dbId + " does not exist");
         }
         db.writeLock();
 

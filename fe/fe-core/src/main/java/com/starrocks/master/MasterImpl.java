@@ -1141,23 +1141,10 @@ public class MasterImpl {
             return response;
         }
 
-        List tableIds = Lists.newArrayList();
-        for (String tableName : request.getTable_name()) {
-            Table table = db.getTable(tableName);
-            if (table == null) {
-                TStatus status = new TStatus(TStatusCode.NOT_FOUND);
-                String errMsg = "table " + "'" + tableName + "' not exist";
-                status.setError_msgs(Lists.newArrayList(errMsg));
-                response.setStatus(status);
-                return response;
-            }
-            tableIds.add(table.getId());
-        }
-
         long txnId;
         try {
             txnId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
-                    tableIds, request.getLabel(),
+                    request.getTable_ids(), request.getLabel(),
                     new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                     LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
         } catch (Exception e) {
