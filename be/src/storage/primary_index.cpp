@@ -11,7 +11,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
 #include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/reader.h"
+#include "storage/vectorized/tablet_reader.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -856,8 +856,6 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     MonotonicStopWatch timer;
     timer.start();
     using vectorized::ChunkHelper;
-    using TabletReader = vectorized::Reader;
-    using ReaderParams = vectorized::ReaderParams;
 
     const TabletSchema& tablet_schema = tablet->tablet_schema();
     vector<ColumnId> pk_columns(tablet_schema.num_key_columns());

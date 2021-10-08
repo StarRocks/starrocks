@@ -18,9 +18,9 @@ namespace vectorized {
 
 class ColumnPredicate;
 
-// Params for reader
-struct ReaderParams {
-    ReaderParams();
+// Params for TabletReader
+struct TabletReaderParams {
+    TabletReaderParams();
 
     ReaderType reader_type = READER_QUERY;
 

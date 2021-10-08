@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
-#include "storage/vectorized/reader.h"
+#include "storage/vectorized/tablet_reader.h"
 
 #include <column/datum_convert.h>
 
@@ -20,10 +20,10 @@
 
 namespace starrocks::vectorized {
 
-Reader::Reader(TabletSharedPtr tablet, const Version& version, Schema schema)
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema)
         : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version), _mempool(&_memtracker) {}
 
-void Reader::close() {
+void TabletReader::close() {
     if (_collect_iter != nullptr) {
         _collect_iter->close();
         _collect_iter.reset();
@@ -31,7 +31,7 @@ void Reader::close() {
     STLDeleteElements(&_predicate_free_list);
 }
 
-Status Reader::prepare() {
+Status TabletReader::prepare() {
     _tablet->obtain_header_rdlock();
     auto res = _tablet->capture_consistent_rowsets(_version, &_rowsets);
     _tablet->release_header_lock();
@@ -43,7 +43,7 @@ Status Reader::prepare() {
     }
 }
 
-Status Reader::open(const ReaderParams& read_params) {
+Status TabletReader::open(const TabletReaderParams& read_params) {
     if (read_params.reader_type != ReaderType::READER_QUERY && !is_compaction(read_params.reader_type)) {
         return Status::NotSupported("reader type not supported now");
     }
@@ -52,11 +52,11 @@ Status Reader::open(const ReaderParams& read_params) {
     return st;
 }
 
-Status Reader::do_get_next(Chunk* chunk) {
+Status TabletReader::do_get_next(Chunk* chunk) {
     return _collect_iter->get_next(chunk);
 }
 
-Status Reader::_get_segment_iterators(const RowsetReadOptions& options, std::vector<ChunkIteratorPtr>* iters) {
+Status TabletReader::_get_segment_iterators(const RowsetReadOptions& options, std::vector<ChunkIteratorPtr>* iters) {
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
         RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), options, iters));
@@ -64,7 +64,7 @@ Status Reader::_get_segment_iterators(const RowsetReadOptions& options, std::vec
     return Status::OK();
 }
 
-Status Reader::_init_collector(const ReaderParams& params) {
+Status TabletReader::_init_collector(const TabletReaderParams& params) {
     RowsetReadOptions rs_opts;
     KeysType keys_type = _tablet->tablet_schema().keys_type();
     RETURN_IF_ERROR(_init_predicates(params));
@@ -193,14 +193,14 @@ Status Reader::_init_collector(const ReaderParams& params) {
     return Status::OK();
 }
 
-Status Reader::_init_predicates(const ReaderParams& params) {
+Status TabletReader::_init_predicates(const TabletReaderParams& params) {
     for (const ColumnPredicate* pred : params.predicates) {
         _pushdown_predicates[pred->column_id()].emplace_back(pred);
     }
     return Status::OK();
 }
 
-Status Reader::_init_delete_predicates(const ReaderParams& params, DeletePredicates* dels) {
+Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
     PredicateParser pred_parser(_tablet->tablet_schema());
 
     _tablet->obtain_header_rdlock();
@@ -267,7 +267,7 @@ Status Reader::_init_delete_predicates(const ReaderParams& params, DeletePredica
 }
 
 // convert an OlapTuple to SeekTuple.
-Status Reader::_to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple) {
+Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple) {
     Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
@@ -285,7 +285,7 @@ Status Reader::_to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple
 }
 
 // convert vector<OlapTuple> to vector<SeekRange>
-Status Reader::_parse_seek_range(const ReaderParams& read_params, std::vector<SeekRange>* ranges) {
+Status TabletReader::_parse_seek_range(const TabletReaderParams& read_params, std::vector<SeekRange>* ranges) {
     if (read_params.start_key.empty()) {
         return {};
     }
