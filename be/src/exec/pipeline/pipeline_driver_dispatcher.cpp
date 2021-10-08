@@ -28,12 +28,11 @@ void GlobalDriverDispatcher::change_num_threads(int32_t num_threads) {
     }
 }
 
-void GlobalDriverDispatcher::finalize_driver(DriverPtr& driver, RuntimeState* runtime_state, DriverState state) {
+void GlobalDriverDispatcher::finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
     DCHECK(driver);
     driver->finalize(runtime_state, state);
     if (driver->query_ctx()->is_finished()) {
         auto query_id = driver->query_ctx()->query_id();
-        driver.reset();
         QueryContextManager::instance()->remove(query_id);
     }
 }
@@ -52,7 +51,7 @@ void GlobalDriverDispatcher::run() {
         auto* runtime_state = fragment_ctx->runtime_state();
 
         if (fragment_ctx->is_canceled()) {
-            VLOG_ROW << "[Driver] Canceled: driver=" << driver.get()
+            VLOG_ROW << "[Driver] Canceled: driver=" << driver
                      << ", error=" << fragment_ctx->final_status().to_string();
             driver->cancel(runtime_state);
             if (driver->source_operator()->pending_finish()) {
@@ -117,7 +116,7 @@ void GlobalDriverDispatcher::run() {
     }
 }
 
-void GlobalDriverDispatcher::dispatch(DriverPtr driver) {
+void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
     this->_driver_queue->put_back(driver);
 }
 
