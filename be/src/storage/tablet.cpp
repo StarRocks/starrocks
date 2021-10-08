@@ -121,8 +121,8 @@ OLAPStatus Tablet::init() {
 // should save tablet meta to remote meta store
 // if it's a primary replica
 void Tablet::save_meta() {
-    auto res = _tablet_meta->save_meta(_data_dir);
-    CHECK_EQ(res, OLAP_SUCCESS) << "fail to save tablet_meta. res=" << res << ", root=" << _data_dir->path();
+    auto st = _tablet_meta->save_meta(_data_dir);
+    CHECK(st.ok()) << "fail to save tablet_meta: " << st;
 }
 
 OLAPStatus Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
@@ -159,7 +159,7 @@ OLAPStatus Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& ro
         VLOG(3) << "load rowsets successfully when clone. tablet=" << full_name()
                 << ", added rowset size=" << rowsets_to_clone.size();
         // save and reload tablet_meta
-        res = new_tablet_meta->save_meta(_data_dir);
+        res = new_tablet_meta->save_meta(_data_dir).ok() ? OLAP_SUCCESS : OLAP_ERR_IO_ERROR;
         if (res != OLAP_SUCCESS) {
             LOG(WARNING) << "failed to save new local tablet_meta when clone. res:" << res;
             break;
@@ -211,7 +211,9 @@ OLAPStatus Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) 
     // Otherwise, the version shoud be not contained in any existing rowset.
     RETURN_NOT_OK(_contains_version(rowset->version()));
 
-    RETURN_NOT_OK(_tablet_meta->add_rs_meta(rowset->rowset_meta()));
+    if (Status st = _tablet_meta->add_rs_meta(rowset->rowset_meta()); !st.ok()) {
+        return OLAP_ERR_OTHER_ERROR;
+    }
     _rs_version_map[rowset->version()] = rowset;
     _timestamped_version_tracker.add_version(rowset->version());
 
@@ -335,13 +337,17 @@ OLAPStatus Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
     }
     RETURN_NOT_OK(_contains_version(rowset->version()));
 
-    RETURN_NOT_OK(_tablet_meta->add_rs_meta(rowset->rowset_meta()));
+    if (Status st = _tablet_meta->add_rs_meta(rowset->rowset_meta()); !st.ok()) {
+        return OLAP_ERR_OTHER_ERROR;
+    }
     _rs_version_map[rowset->version()] = rowset;
     _inc_rs_version_map[rowset->version()] = rowset;
 
     _timestamped_version_tracker.add_version(rowset->version());
 
-    RETURN_NOT_OK(_tablet_meta->add_inc_rs_meta(rowset->rowset_meta()));
+    if (Status st = _tablet_meta->add_inc_rs_meta(rowset->rowset_meta()); !st.ok()) {
+        return OLAP_ERR_OTHER_ERROR;
+    }
 
     // warm-up this rowset
     auto st = rowset->load();
@@ -704,7 +710,7 @@ void Tablet::delete_alter_task() {
 }
 
 OLAPStatus Tablet::set_alter_state(AlterTabletState state) {
-    return _tablet_meta->set_alter_state(state);
+    return _tablet_meta->set_alter_state(state).ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
 }
 
 bool Tablet::check_migrate(const TabletSharedPtr& tablet) {
@@ -1039,7 +1045,7 @@ OLAPStatus Tablet::_contains_version(const Version& version) {
 }
 
 OLAPStatus Tablet::set_partition_id(int64_t partition_id) {
-    return _tablet_meta->set_partition_id(partition_id);
+    return _tablet_meta->set_partition_id(partition_id).ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
 }
 
 TabletInfo Tablet::get_tablet_info() const {

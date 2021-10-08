@@ -211,7 +211,7 @@ static TabletSharedPtr load_same_tablet_from_store(const TabletSharedPtr& tablet
 
     // Parse tablet meta.
     auto tablet_meta = std::make_shared<TabletMeta>(tablet->mem_tracker());
-    CHECK_EQ(OLAP_SUCCESS, tablet_meta->deserialize(serialized_meta));
+    CHECK(tablet_meta->deserialize(serialized_meta).ok());
 
     // Create a new tablet instance from the latest snapshot.
     auto tablet1 = Tablet::create_tablet_from_meta(tablet->mem_tracker(), tablet_meta, data_dir);

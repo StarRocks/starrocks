@@ -755,7 +755,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
                                             bool check_path) {
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
     TabletMetaSharedPtr tablet_meta(new TabletMeta(_mem_tracker));
-    if (tablet_meta->deserialize(meta_binary) != OLAP_SUCCESS) {
+    if (Status st = tablet_meta->deserialize(meta_binary); !st.ok()) {
         LOG(WARNING) << "Fail to load tablet because can not parse meta_binary string. "
                      << "tablet_id=" << tablet_id << " path=" << data_dir->path();
         return Status::InternalError("Invalid serialized tablet meta");
@@ -840,7 +840,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
     int32_t shard = stol(shard_str);
     // load dir is called by clone, restore, storage migration
     // should change tablet uid when tablet object changed
-    if (TabletMeta::reset_tablet_uid(header_path) != OLAP_SUCCESS) {
+    if (Status st = TabletMeta::reset_tablet_uid(header_path); !st.ok()) {
         LOG(WARNING) << "Fail to set tablet uid when copied meta file. header_path=" << header_path;
         return Status::InternalError("reset tablet uid failed");
     }
@@ -851,7 +851,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
     }
 
     TabletMetaSharedPtr tablet_meta(new TabletMeta(_mem_tracker));
-    if (tablet_meta->create_from_file(header_path) != OLAP_SUCCESS) {
+    if (Status st = tablet_meta->create_from_file(header_path); !st.ok()) {
         LOG(WARNING) << "Fail to load tablet_meta. file_path=" << header_path;
         return Status::InternalError("fail to create tablet meta from file");
     }
@@ -1319,11 +1319,8 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
     }
 
     RowsetTypePB rowset_type = RowsetTypePB::BETA_ROWSET;
-    if (TabletMeta::create(_mem_tracker, request, TabletUid::gen_uid(), shard_id, next_unique_id, col_idx_to_unique_id,
-                           rowset_type, tablet_meta) != OLAP_SUCCESS) {
-        return Status::InternalError("fail to create tablet meta");
-    }
-    return Status::OK();
+    return TabletMeta::create(_mem_tracker, request, TabletUid::gen_uid(), shard_id, next_unique_id,
+                              col_idx_to_unique_id, rowset_type, tablet_meta);
 }
 
 Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, SchemaHash schema_hash, bool keep_state) {

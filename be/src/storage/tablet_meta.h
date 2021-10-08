@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "common/status.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/delete_handler.h"
 #include "storage/olap_common.h"
@@ -80,7 +81,7 @@ public:
     void to_alter_pb(AlterTabletPB* alter_task);
 
     inline const AlterTabletState& alter_state() const { return _alter_state; }
-    OLAPStatus set_alter_state(AlterTabletState alter_state);
+    Status set_alter_state(AlterTabletState alter_state);
 
     inline int64_t related_tablet_id() const { return _related_tablet_id; }
     inline int32_t related_schema_hash() const { return _related_schema_hash; }
@@ -109,10 +110,10 @@ using AlterTabletTaskSharedPtr = std::shared_ptr<AlterTabletTask>;
 // The concurrency control is handled in Tablet Class, not in this class.
 class TabletMeta {
 public:
-    static OLAPStatus create(MemTracker* mem_tracker, const TCreateTabletReq& request, const TabletUid& tablet_uid,
-                             uint64_t shard_id, uint32_t next_unique_id,
-                             const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                             RowsetTypePB rowset_type, TabletMetaSharedPtr* tablet_meta);
+    static Status create(MemTracker* mem_tracker, const TCreateTabletReq& request, const TabletUid& tablet_uid,
+                         uint64_t shard_id, uint32_t next_unique_id,
+                         const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
+                         RowsetTypePB rowset_type, TabletMetaSharedPtr* tablet_meta);
 
     explicit TabletMeta(MemTracker* mem_tracker);
     TabletMeta(MemTracker* mem_tracker, int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash,
@@ -123,15 +124,15 @@ public:
 
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
-    OLAPStatus create_from_file(const std::string& file_path);
-    OLAPStatus save(const std::string& file_path);
-    static OLAPStatus save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
-    static OLAPStatus reset_tablet_uid(const std::string& file_path);
+    Status create_from_file(const std::string& file_path);
+    Status save(const std::string& file_path);
+    static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
+    static Status reset_tablet_uid(const std::string& file_path);
     static std::string construct_header_file_path(const std::string& schema_hash_path, int64_t tablet_id);
-    OLAPStatus save_meta(DataDir* data_dir);
+    Status save_meta(DataDir* data_dir);
 
-    OLAPStatus serialize(std::string* meta_binary);
-    OLAPStatus deserialize(const std::string& meta_binary);
+    Status serialize(std::string* meta_binary);
+    Status deserialize(const std::string& meta_binary);
     void init_from_pb(TabletMetaPB* ptablet_meta_pb);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb);
@@ -174,7 +175,7 @@ public:
     inline std::shared_ptr<TabletSchema>& mutable_tablet_schema() { return _schema; }
 
     inline const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
-    OLAPStatus add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
+    Status add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
     void delete_rs_meta_by_version(const Version& version, std::vector<RowsetMetaSharedPtr>* deleted_rs_metas);
     void modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
                          const std::vector<RowsetMetaSharedPtr>& to_delete);
@@ -183,7 +184,7 @@ public:
     void revise_inc_rs_metas(std::vector<RowsetMetaSharedPtr> rs_metas);
     inline const std::vector<RowsetMetaSharedPtr>& all_inc_rs_metas() const;
     inline const std::vector<RowsetMetaSharedPtr>& all_stale_rs_metas() const;
-    OLAPStatus add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta);
+    Status add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta);
     void delete_inc_rs_meta_by_version(const Version& version);
     RowsetMetaSharedPtr acquire_inc_rs_meta_by_version(const Version& version) const;
     void delete_stale_rs_meta_by_version(const Version& version);
@@ -196,11 +197,11 @@ public:
     AlterTabletTaskSharedPtr alter_task();
     void add_alter_task(const AlterTabletTask& alter_task);
     void delete_alter_task();
-    OLAPStatus set_alter_state(AlterTabletState alter_state);
+    Status set_alter_state(AlterTabletState alter_state);
 
     std::string full_name() const;
 
-    OLAPStatus set_partition_id(int64_t partition_id);
+    Status set_partition_id(int64_t partition_id);
 
     RowsetTypePB preferred_rowset_type() const { return _preferred_rowset_type; }
 
@@ -217,7 +218,7 @@ public:
     }
 
 private:
-    OLAPStatus _save_meta(DataDir* data_dir);
+    Status _save_meta(DataDir* data_dir);
 
     static int64_t calc_mem_usage_of_rs_metas(const std::vector<RowsetMetaSharedPtr>& rs_metas) {
         int64_t mem_usage = 0;
