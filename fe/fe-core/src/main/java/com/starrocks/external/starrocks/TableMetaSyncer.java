@@ -21,8 +21,8 @@ public class TableMetaSyncer {
     private static final Logger LOG = LogManager.getLogger(TableMetaSyncer.class);
 
     public void syncTable(ExternalOlapTable table) {
-        String host = table.getExternalInfo().getHost();
-        int port = table.getExternalInfo().getPort();
+        String host = table.getSourceTableHost();
+        int port = table.getSourceTablePort();
         TNetworkAddress addr = new TNetworkAddress(host, port);
         FrontendService.Client client = null;
         try {
@@ -33,11 +33,11 @@ public class TableMetaSyncer {
         }
 
         TGetTableMetaRequest request = new TGetTableMetaRequest();
-        request.setDb_name(table.getExternalInfo().getDbName());
-        request.setTable_name(table.getName());
+        request.setDb_name(table.getSourceTableDbName());
+        request.setTable_name(table.getSourceTableName());
         TAuthenticateParams authInfo = new TAuthenticateParams();
-        authInfo.setUser(table.getExternalInfo().getUser());
-        authInfo.setPasswd(table.getExternalInfo().getPassword());
+        authInfo.setUser(table.getSourceTableUser());
+        authInfo.setPasswd(table.getSourceTablePassword());
         request.setAuth_info(authInfo);
         boolean returnToPool = false;
         try {
