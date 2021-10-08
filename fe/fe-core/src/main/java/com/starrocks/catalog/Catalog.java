@@ -244,6 +244,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.codehaus.jackson.map.ObjectMapper;
@@ -3070,8 +3071,7 @@ public class Catalog {
             throws DdlException, AnalysisException {
         PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
         if (partitionDesc instanceof SingleRangePartitionDesc) {
-            addPartitions(db, tableName,
-                    ImmutableList.of((SingleRangePartitionDesc) partitionDesc), addPartitionClause);
+            addPartitions(db, tableName, ImmutableList.of((SingleRangePartitionDesc) partitionDesc), addPartitionClause);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
             db.readLock();
             RangePartitionInfo rangePartitionInfo;
@@ -3578,9 +3578,12 @@ public class Catalog {
         for (int i = 0; i < partitions.size(); i += partitionGroupSize) {
             int endIndex = Math.min(partitions.size(), i + partitionGroupSize);
             List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partitions.subList(i, endIndex));
-            int indexCount = partitions.get(i).getVisibleMaterializedIndicesCount();
+            int partitionCount = endIndex - i;
+            int indexCountPerPartition = partitions.get(i).getVisibleMaterializedIndicesCount();
             int timeout = Config.tablet_create_timeout_second * countMaxTasksPerBackend(tasks);
-            int maxTimeout = (endIndex - i) * Config.max_create_table_timeout_second * indexCount;
+            // Compatible with older versions, `Config.max_create_table_timeout_second` is the timeout time for a single index.
+            // Here we assume that all partitions have the same number of indexes.
+            int maxTimeout = partitionCount * indexCountPerPartition * Config.max_create_table_timeout_second;
             try {
                 sendCreateReplicaTasksAndWaitForFinished(tasks, Math.min(timeout, maxTimeout));
                 tasks.clear();
@@ -3614,12 +3617,14 @@ public class Catalog {
                 sendCreateReplicaTasks(tasks, countDownLatch);
                 numSendedTasks += tasks.size();
                 numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
+                // Since there is no mechanism to cancel tasks, if we send a lot of tasks at once and some error or timeout
+                // occurs in the middle of the process, it will create a lot of useless replicas that will be deleted soon and
+                // waste machine resources. Sending a lot of tasks at once may also block other users' tasks for a long time.
+                // To avoid these situations, new tasks are sent only when the average number of tasks on each node is less
+                // than 200.
                 while (numSendedTasks - numFinishedTasks > 200 * numBackends) {
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
+                    // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Number of tasks that have been sent but not yet finished.
+                    ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
                     numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
                 }
             }
@@ -3642,9 +3647,6 @@ public class Catalog {
     }
 
     private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, List<Partition> partitions) {
-        if (partitions.size() == 1) {
-            return buildCreateReplicaTasks(dbId, table, partitions.get(0));
-        }
         List<CreateReplicaTask> tasks = new ArrayList<>();
         for (Partition partition : partitions) {
             tasks.addAll(buildCreateReplicaTasks(dbId, table, partition));
@@ -3653,12 +3655,8 @@ public class Catalog {
     }
 
     private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, Partition partition) {
-        List<MaterializedIndex> indexList = partition.getMaterializedIndices(IndexExtState.VISIBLE);
-        if (indexList.size() == 1) {
-            return buildCreateReplicaTasks(dbId, table, partition, indexList.get(0));
-        }
         ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) partition.getReplicaCount());
-        for (MaterializedIndex index : indexList) {
+        for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
             tasks.addAll(buildCreateReplicaTasks(dbId, table, partition, index));
         }
         return tasks;
