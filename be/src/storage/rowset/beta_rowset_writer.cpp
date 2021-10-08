@@ -287,7 +287,6 @@ Status BetaRowsetWriter::_final_merge() {
         } else if (_context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
             itr = new_aggregate_iterator(new_merge_iterator(seg_iterators), 0);
         } else {
-            //itr = new_union_iterator(seg_iterators);
             for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
                 auto old_path =
                         BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);

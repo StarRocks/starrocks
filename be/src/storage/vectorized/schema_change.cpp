@@ -435,7 +435,6 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
             }
         }
     }
-    //delete mempool;
     return true;
 }
 
@@ -856,7 +855,7 @@ bool SchemaChangeWithSorting::_internal_sorting(std::vector<ChunkPtr>& chunk_arr
     return true;
 }
 
-OLAPStatus SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& request) {
+Status SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& request) {
     LOG(INFO) << "begin to do request alter tablet: base_tablet_id=" << request.base_tablet_id
               << ", base_schema_hash=" << request.base_schema_hash << ", new_tablet_id=" << request.new_tablet_id
               << ", new_schema_hash=" << request.new_schema_hash << ", alter_version=" << request.alter_version
@@ -869,23 +868,23 @@ OLAPStatus SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2&
     if (!StorageEngine::instance()->tablet_manager()->try_schema_change_lock(request.base_tablet_id)) {
         LOG(WARNING) << "failed to obtain schema change lock. "
                      << "base_tablet=" << request.base_tablet_id;
-        return OLAP_ERR_TRY_LOCK_FAILED;
+        return Status::InternalError("failed to obtain schema change lock");
     }
 
-    OLAPStatus res = _do_process_alter_tablet_v2(request);
+    Status status = _do_process_alter_tablet_v2(request);
     StorageEngine::instance()->tablet_manager()->release_schema_change_lock(request.base_tablet_id);
-    LOG(INFO) << "finished alter tablet process, res=" << res << " duration: " << timer.elapsed_time() / 1000000
+    LOG(INFO) << "finished alter tablet process, status=" << status.to_string() << " duration: " << timer.elapsed_time() / 1000000
               << "ms";
-    return res;
+    return status;
 }
 
-OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2& request) {
+Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2& request) {
     TabletSharedPtr base_tablet =
             StorageEngine::instance()->tablet_manager()->get_tablet(request.base_tablet_id, request.base_schema_hash);
     if (base_tablet == nullptr) {
         LOG(WARNING) << "fail to find base tablet. base_tablet=" << request.base_tablet_id
                      << ", base_schema_hash=" << request.base_schema_hash;
-        return OLAP_ERR_TABLE_NOT_FOUND;
+        return Status::InternalError("failed to find base tablet");
     }
 
     // new tablet has to exist
@@ -894,7 +893,7 @@ OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletRe
     if (new_tablet == nullptr) {
         LOG(WARNING) << "fail to find new tablet."
                      << " new_tablet=" << request.new_tablet_id << ", new_schema_hash=" << request.new_schema_hash;
-        return OLAP_ERR_TABLE_NOT_FOUND;
+        return Status::InternalError("failed to find new tablet");
     }
 
     // check if tablet's state is not_ready, if it is ready, it means the tablet already finished
@@ -904,7 +903,7 @@ OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletRe
         LOG(INFO) << "tablet's state=" << new_tablet->tablet_state()
                   << " the convert job alreay finished, check its version"
                   << " res=" << st.to_string();
-        return OLAP_ERR_META_INVALID_ARGUMENT;
+        return Status::InternalError("new tablet's meta is invalid");
     }
 
     LOG(INFO) << "finish to validate alter tablet request. begin to convert data from base tablet "
@@ -913,25 +912,27 @@ OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletRe
 
     std::shared_lock base_migration_rlock(base_tablet->get_migration_lock(), std::try_to_lock);
     if (!base_migration_rlock.owns_lock()) {
-        return OLAP_ERR_RWLOCK_ERROR;
+        return Status::InternalError("base tablet get migration r_lock failed");
     }
     std::shared_lock new_migration_rlock(new_tablet->get_migration_lock(), std::try_to_lock);
     if (!new_migration_rlock.owns_lock()) {
-        return OLAP_ERR_RWLOCK_ERROR;
+        return Status::InternalError("new tablet get migration r_lock failed");
     }
 
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         Status st = new_tablet->updates()->load_from_base_tablet(request.alter_version, base_tablet.get());
         if (!st.ok()) {
             LOG(WARNING) << "schema change new tablet load snapshot error " << st.to_string();
-            return OLAP_ERR_OTHER_ERROR;
+            return st;
+            //return OLAP_ERR_OTHER_ERROR;
         }
-        return OLAP_SUCCESS;
+        return Status::OK();
     } else {
-        if (_do_process_alter_tablet_v2_normal(request, base_tablet, new_tablet).ok()) {
-            return OLAP_SUCCESS;
+        Status st = _do_process_alter_tablet_v2_normal(request, base_tablet, new_tablet);
+        if (st.ok()) {
+            return Status::OK();
         } else {
-            return OLAP_ERR_OTHER_ERROR;
+            return st;
         }
     }
 }
@@ -939,9 +940,7 @@ OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletRe
 Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTabletReqV2& request,
                                                                const TabletSharedPtr& base_tablet,
                                                                const TabletSharedPtr& new_tablet) {
-    Status status;
     OLAPStatus res = OLAP_SUCCESS;
-
     // begin to find deltas to convert from base tablet to new tablet so that
     // obtain base tablet and new tablet's push lock and header write lock to prevent loading data
     base_tablet->obtain_push_lock();
@@ -953,10 +952,10 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     // if it has alter task, it means it is under old alter process
 
     std::vector<Version> versions_to_be_changed;
-    res = _get_versions_to_be_changed(base_tablet, &versions_to_be_changed);
-    if (res != OLAP_SUCCESS) {
+    Status status = _get_versions_to_be_changed(base_tablet, &versions_to_be_changed);
+    if (!status.ok()) {
         LOG(WARNING) << "fail to get version to be changed. res=" << res;
-        return Status::InternalError("failed to get verison to be changed");
+        return status;
     }
     LOG(INFO) << "versions to be changed size:" << versions_to_be_changed.size();
     std::vector<RowsetSharedPtr> rowsets_to_change;
@@ -979,8 +978,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         LOG(WARNING) << "base tablet's max version=" << (max_rowset == nullptr ? 0 : max_rowset->end_version())
                      << " is less than request version=" << request.alter_version;
 
-        Status st = Status::InternalError("base tablet's max version is less than request version");
-        return st;
+        return Status::InternalError("base tablet's max version is less than request version");
     }
 
     LOG(INFO) << "begin to remove all data from new tablet to prevent rewrite."
@@ -1071,7 +1069,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     }
     status = _convert_historical_rowsets(sc_params);
     if (!status.ok()) {
-        return Status::InternalError("convert historical rowsets failed");
+        return status;
     }
 
     {
@@ -1082,7 +1080,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
             LOG(WARNING) << "failed to alter tablet. base_tablet=" << base_tablet->full_name()
                          << ", drop new_tablet=" << new_tablet->full_name();
             // do not drop the new tablet and its data. GC thread will
-            return Status::InternalError("failed to alter tablet");
+            return Status::InternalError("failed to set tablet state");
         }
         new_tablet->save_meta();
     }
@@ -1093,31 +1091,34 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         status = _validate_alter_result(new_tablet, request);
     }
 
-    if (res != OLAP_SUCCESS || !status.ok()) {
+    if (!status.ok()) {
         LOG(WARNING) << "failed to alter tablet. base_tablet=" << base_tablet->full_name()
                      << ", drop new_tablet=" << new_tablet->full_name();
         // do not drop the new tablet and its data. GC thread will
-        return Status::InternalError("failed to alter tablet");
+        return status;
     }
     LOG(INFO) << "success to alter tablet. base_tablet=" << base_tablet->full_name();
     return Status::OK();
 }
 
-OLAPStatus SchemaChangeHandler::_get_versions_to_be_changed(TabletSharedPtr base_tablet,
+Status SchemaChangeHandler::_get_versions_to_be_changed(TabletSharedPtr base_tablet,
                                                             std::vector<Version>* versions_to_be_changed) {
     RowsetSharedPtr rowset = base_tablet->rowset_with_max_version();
     if (rowset == nullptr) {
         LOG(WARNING) << "Tablet has no version. base_tablet=" << base_tablet->full_name();
-        return OLAP_ERR_ALTER_DELTA_DOES_NOT_EXISTS;
+        return Status::InternalError("tablet alter version does not exists");
     }
 
     std::vector<Version> span_versions;
-    RETURN_NOT_OK(base_tablet->capture_consistent_versions(Version(0, rowset->version().second), &span_versions));
+    if (base_tablet->capture_consistent_versions(Version(0, rowset->version().second), &span_versions) != OLAP_SUCCESS) {
+        return Status::InternalError("capture consistent versions failed");
+    }
+
     for (uint32_t i = 0; i < span_versions.size(); i++) {
         versions_to_be_changed->push_back(span_versions[i]);
     }
 
-    return OLAP_SUCCESS;
+    return Status::OK();
 }
 
 Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_params) {

@@ -1503,7 +1503,7 @@ bool SchemaChangeWithSorting::_external_sorting(vector<RowsetSharedPtr>& src_row
     return true;
 }
 
-OLAPStatus SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& request) {
+Status SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& request) {
     LOG(INFO) << "begin to do request alter tablet: base_tablet_id=" << request.base_tablet_id
               << ", base_schema_hash=" << request.base_schema_hash << ", new_tablet_id=" << request.new_tablet_id
               << ", new_schema_hash=" << request.new_schema_hash << ", alter_version=" << request.alter_version
@@ -1516,14 +1516,18 @@ OLAPStatus SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2&
     if (!StorageEngine::instance()->tablet_manager()->try_schema_change_lock(request.base_tablet_id)) {
         LOG(WARNING) << "failed to obtain schema change lock. "
                      << "base_tablet=" << request.base_tablet_id;
-        return OLAP_ERR_TRY_LOCK_FAILED;
+        return Status::InternalError("try lock failed");
+        //return OLAP_ERR_TRY_LOCK_FAILED;
     }
 
     OLAPStatus res = _do_process_alter_tablet_v2(request);
     LOG(INFO) << "finished alter tablet process, res=" << res << " duration: " << timer.elapsed_time() / 1000000
               << "ms";
     StorageEngine::instance()->tablet_manager()->release_schema_change_lock(request.base_tablet_id);
-    return res;
+    if (res != OLAP_SUCCESS) {
+        return Status::InternalError("alter tablet failed");
+    }
+    return Status::OK();
 }
 
 // In the past schema change and rollup will create new tablet  and will wait for txns starting before the task to finished

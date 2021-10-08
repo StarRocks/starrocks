@@ -40,18 +40,21 @@ OLAPStatus EngineAlterTabletTask::execute() {
     StarRocksMetrics::instance()->create_rollup_requests_total.increment(1);
 
     vectorized::SchemaChangeHandler handler;
-    OLAPStatus res = handler.process_alter_tablet_v2(_alter_tablet_req);
+    //OLAPStatus res = handler.process_alter_tablet_v2(_alter_tablet_req);
 
-    if (res != OLAP_SUCCESS) {
-        LOG(WARNING) << "failed to do alter task. res=" << res << " base_tablet_id=" << _alter_tablet_req.base_tablet_id
+    Status res = handler.process_alter_tablet_v2(_alter_tablet_req);
+
+    if (!res.ok()) {
+        LOG(WARNING) << "failed to do alter task. status=" << res.to_string() << " base_tablet_id=" << _alter_tablet_req.base_tablet_id
                      << ", base_schema_hash=" << _alter_tablet_req.base_schema_hash
                      << ", new_tablet_id=" << _alter_tablet_req.new_tablet_id
                      << ", new_schema_hash=" << _alter_tablet_req.new_schema_hash;
         StarRocksMetrics::instance()->create_rollup_requests_failed.increment(1);
-        return res;
+        return OLAP_ERR_OTHER_ERROR;
     }
+
     LOG(INFO) << "success to do alter task. base_tablet_id=" << _alter_tablet_req.base_tablet_id;
-    return res;
+    return OLAP_SUCCESS;
 } // execute
 
 } // namespace starrocks

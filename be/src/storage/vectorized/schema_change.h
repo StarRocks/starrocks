@@ -170,10 +170,10 @@ public:
     virtual ~SchemaChangeHandler() {}
 
     // schema change v2, it will not set alter task in base tablet
-    OLAPStatus process_alter_tablet_v2(const TAlterTabletReqV2& request);
+    Status process_alter_tablet_v2(const TAlterTabletReqV2& request);
 
 private:
-    OLAPStatus _get_versions_to_be_changed(TabletSharedPtr base_tablet, std::vector<Version>* versions_to_be_changed);
+    Status _get_versions_to_be_changed(TabletSharedPtr base_tablet, std::vector<Version>* versions_to_be_changed);
 
     struct AlterMaterializedViewParam {
         std::string column_name;
@@ -195,7 +195,7 @@ public:
     };
 
 private:
-    OLAPStatus _do_process_alter_tablet_v2(const TAlterTabletReqV2& request);
+    Status _do_process_alter_tablet_v2(const TAlterTabletReqV2& request);
 
     Status _do_process_alter_tablet_v2_normal(const TAlterTabletReqV2& request, const TabletSharedPtr& base_tablet,
                                               const TabletSharedPtr& new_tablet);
