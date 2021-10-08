@@ -468,9 +468,9 @@ public class StmtExecutor {
                         if (insertStmt.getTargetTable() instanceof ExternalOlapTable) {
                             ExternalOlapTable externalTable = (ExternalOlapTable) (insertStmt.getTargetTable());
                             Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
-                                    externalTable.getDbId(), insertStmt.getTransactionId(),
-                                    externalTable.getExternalInfo().getHost(),
-                                    externalTable.getExternalInfo().getPort(),
+                                    externalTable.getSourceTableDbId(), insertStmt.getTransactionId(),
+                                    externalTable.getSourceTableHost(),
+                                    externalTable.getSourceTablePort(),
                                     errMsg == null ? "unknown reason" : errMsg);
                         } else {
                             Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
@@ -922,9 +922,9 @@ public class StmtExecutor {
                 if (insertStmt.getTargetTable() instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) (insertStmt.getTargetTable());
                     Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
-                            externalTable.getDbId(), insertStmt.getTransactionId(),
-                            externalTable.getExternalInfo().getHost(),
-                            externalTable.getExternalInfo().getPort(),
+                            externalTable.getSourceTableDbId(), insertStmt.getTransactionId(),
+                            externalTable.getSourceTableHost(),
+                            externalTable.getSourceTablePort(),
                             TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
                 } else {
                     Catalog.getCurrentGlobalTransactionMgr().abortTransaction(insertStmt.getDbObj().getId(),
@@ -937,9 +937,9 @@ public class StmtExecutor {
             if (insertStmt.getTargetTable() instanceof ExternalOlapTable) {
                 ExternalOlapTable externalTable = (ExternalOlapTable) (insertStmt.getTargetTable());
                 if (Catalog.getCurrentGlobalTransactionMgr().commitRemoteTransaction(
-                        externalTable.getDbId(), insertStmt.getTransactionId(),
-                        externalTable.getExternalInfo().getHost(),
-                        externalTable.getExternalInfo().getPort(),
+                        externalTable.getSourceTableDbId(), insertStmt.getTransactionId(),
+                        externalTable.getSourceTableHost(),
+                        externalTable.getSourceTablePort(),
                         coord.getCommitInfos())) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
@@ -975,9 +975,9 @@ public class StmtExecutor {
                 if (insertStmt.getTargetTable() instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) (insertStmt.getTargetTable());
                     Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
-                            externalTable.getDbId(), insertStmt.getTransactionId(),
-                            externalTable.getExternalInfo().getHost(),
-                            externalTable.getExternalInfo().getPort(),
+                            externalTable.getSourceTableDbId(), insertStmt.getTransactionId(),
+                            externalTable.getSourceTableHost(),
+                            externalTable.getSourceTablePort(),
                             t.getMessage() == null ? "unknown reason" : t.getMessage());
                 } else {
                     Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
@@ -1308,10 +1308,10 @@ public class StmtExecutor {
         long transactionId = -1;
         if (targetTable instanceof ExternalOlapTable) {
             ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-            transactionId = Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(database.getFullName(),
-                    Lists.newArrayList(targetTable.getName()), label,
-                    externalTable.getExternalInfo().getHost(),
-                    externalTable.getExternalInfo().getPort(),
+            transactionId = Catalog.getCurrentGlobalTransactionMgr().beginRemoteTransaction(externalTable.getSourceTableDbId(),
+                    Lists.newArrayList(externalTable.getSourceTableId()), label,
+                    externalTable.getSourceTableHost(),
+                    externalTable.getSourceTablePort(),
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                             FrontendOptions.getLocalHostAddress()),
                     sourceType,
@@ -1390,9 +1390,9 @@ public class StmtExecutor {
                 if (stmt.getTargetTable() instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) (stmt.getTargetTable());
                     Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
-                            externalTable.getDbId(), transactionId,
-                            externalTable.getExternalInfo().getHost(),
-                            externalTable.getExternalInfo().getPort(),
+                            externalTable.getSourceTableDbId(), transactionId,
+                            externalTable.getSourceTableHost(),
+                            externalTable.getSourceTablePort(),
                             TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
                 } else {
                     Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
@@ -1408,9 +1408,9 @@ public class StmtExecutor {
             if (targetTable instanceof ExternalOlapTable) {
                 ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
                 if (Catalog.getCurrentGlobalTransactionMgr().commitRemoteTransaction(
-                        externalTable.getDbId(), transactionId,
-                        externalTable.getExternalInfo().getHost(),
-                        externalTable.getExternalInfo().getPort(),
+                        externalTable.getSourceTableDbId(), transactionId,
+                        externalTable.getSourceTableHost(),
+                        externalTable.getSourceTablePort(),
                         coord.getCommitInfos())) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
@@ -1444,9 +1444,9 @@ public class StmtExecutor {
                 if (stmt.getTargetTable() instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) (stmt.getTargetTable());
                     Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
-                            externalTable.getDbId(), stmt.getTransactionId(),
-                            externalTable.getExternalInfo().getHost(),
-                            externalTable.getExternalInfo().getPort(),
+                            externalTable.getSourceTableDbId(), stmt.getTransactionId(),
+                            externalTable.getSourceTableHost(),
+                            externalTable.getSourceTablePort(),
                             t.getMessage() == null ? "Unknown reason" : t.getMessage());
                 } else {
                     Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
