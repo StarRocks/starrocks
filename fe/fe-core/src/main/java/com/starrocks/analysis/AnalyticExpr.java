@@ -624,41 +624,6 @@ public class AnalyticExpr extends Expr {
             return;
         }
 
-        if (!analyzer.getContext().getSessionVariable().useVectorizedEngineEnable()
-                && analyticFnName.getFunction().equalsIgnoreCase(FIRSTVALUE)
-                && window != null
-                && window.getLeftBoundary().getType() != BoundaryType.UNBOUNDED_PRECEDING) {
-            if (window.getLeftBoundary().getType() != BoundaryType.PRECEDING) {
-                window = new AnalyticWindow(window.getType(), window.getLeftBoundary(),
-                        window.getLeftBoundary());
-                fnCall = new FunctionCallExpr(new FunctionName(LASTVALUE),
-                        getFnCall().getParams());
-            } else {
-                List<Expr> paramExprs = Expr.cloneList(getFnCall().getParams().exprs());
-
-                if (window.getRightBoundary().getType() == BoundaryType.PRECEDING) {
-                    // The number of rows preceding for the end bound determines the number of
-                    // rows at the beginning of each partition that should have a NULL value.
-                    paramExprs.add(window.getRightBoundary().getExpr());
-                } else {
-                    // -1 indicates that no NULL values are inserted even though we set the end
-                    // bound to the start bound (which is PRECEDING) below; this is different from
-                    // the default behavior of windows with an end bound PRECEDING.
-                    paramExprs.add(new IntLiteral(-1, Type.BIGINT));
-                }
-
-                window = new AnalyticWindow(window.getType(),
-                        new Boundary(BoundaryType.UNBOUNDED_PRECEDING, null),
-                        window.getLeftBoundary());
-                fnCall = new FunctionCallExpr("FIRST_VALUE_REWRITE",
-                        new FunctionParams(paramExprs));
-            }
-
-            fnCall.setIsAnalyticFnCall(true);
-            fnCall.analyzeNoThrow(analyzer);
-            analyticFnName = getFnCall().getFnName();
-        }
-
         // Reverse the ordering and window for windows ending with UNBOUNDED FOLLOWING,
         // and and not starting with UNBOUNDED PRECEDING.
         if (window != null

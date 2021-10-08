@@ -139,7 +139,6 @@ public class FileScanNodeTest {
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.setUseVectorized(true);
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 
@@ -200,7 +199,6 @@ public class FileScanNodeTest {
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 4);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.setUseVectorized(true);
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 
@@ -253,7 +251,6 @@ public class FileScanNodeTest {
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 5);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.setUseVectorized(true);
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 
@@ -302,7 +299,6 @@ public class FileScanNodeTest {
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.setUseVectorized(true);
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 
@@ -336,7 +332,6 @@ public class FileScanNodeTest {
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.setUseVectorized(true);
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 

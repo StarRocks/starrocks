@@ -259,31 +259,6 @@ public class SortNode extends PlanNode {
     }
 
     @Override
-    public void setUseVectorized(boolean flag) {
-        this.useVectorized = flag;
-
-        for (Expr expr : conjuncts) {
-            expr.setUseVectorized(flag);
-        }
-
-        for (PlanNode node : getChildren()) {
-            node.setUseVectorized(flag);
-        }
-
-        for (Expr expr : info.getSortTupleSlotExprs()) {
-            expr.setUseVectorized(flag);
-        }
-
-        for (Expr expr : info.getOrderingExprs()) {
-            expr.setUseVectorized(flag);
-        }
-
-        for (Expr expr : resolvedTupleExprs) {
-            expr.setUseVectorized(flag);
-        }
-    }
-
-    @Override
     public boolean isVectorized() {
         for (Expr expr : resolvedTupleExprs) {
             if (!expr.isVectorized()) {

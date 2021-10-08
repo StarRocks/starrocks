@@ -108,7 +108,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
-import static com.starrocks.planner.AdapterNode.insertAdapterNodeToFragment;
+import static com.starrocks.planner.AdapterNode.checkPlanIsVectorized;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
@@ -132,7 +132,7 @@ public class PlanFragmentBuilder {
                 fragment.finalize(null, false);
             }
             Collections.reverse(fragments);
-            insertAdapterNodeToFragment(fragments, execPlan.getPlanCtx());
+            checkPlanIsVectorized(fragments);
         } catch (UserException e) {
             throw new StarRocksPlannerException("Create fragment fail, " + e.getMessage(), INTERNAL_ERROR);
         }
@@ -153,7 +153,6 @@ public class PlanFragmentBuilder {
             fragment.finalizeForStatistic(isStatistic);
         }
         Collections.reverse(fragments);
-        insertAdapterNodeToFragment(fragments, execPlan.getPlanCtx());
         return execPlan;
     }
 
