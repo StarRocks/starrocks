@@ -43,6 +43,7 @@ public class DeepCopy {
     // the param "c" is the implementation class of "dest".
     // And the "dest" class must has method "readFields(DataInput)"
     public static boolean copy(Writable orig, Writable dest, Class c) {
+        MetaContext oldContext = MetaContext.get();
         MetaContext metaContext = new MetaContext();
         metaContext.setMetaVersion(FeConstants.meta_version);
         metaContext.setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
@@ -65,7 +66,11 @@ public class DeepCopy {
             LOG.warn("failed to copy object.", e);
             return false;
         } finally {
-            MetaContext.remove();
+            if (oldContext != null) {
+                oldContext.setThreadLocalInfo();
+            } else {
+                MetaContext.remove();
+            }
         }
         return true;
     }
