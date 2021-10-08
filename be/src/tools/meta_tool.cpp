@@ -111,8 +111,8 @@ std::string get_usage(const std::string& progname) {
 void show_meta() {
     auto mem_tracker = std::make_unique<MemTracker>();
     TabletMeta tablet_meta(mem_tracker.get());
-    OLAPStatus s = tablet_meta.create_from_file(FLAGS_pb_meta_path);
-    if (s != OLAP_SUCCESS) {
+    Status s = tablet_meta.create_from_file(FLAGS_pb_meta_path);
+    if (!s.ok()) {
         std::cout << "load pb meta file:" << FLAGS_pb_meta_path << " failed"
                   << ", status:" << s << std::endl;
         return;
