@@ -125,7 +125,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
             // before we submit a new scanner to run, check whether it can fetch
             // at least _chunks_per_scanner chunks from _chunk_pool.
             if (_chunk_pool.size() >= (num_running + 1) * _chunks_per_scanner) {
-                OlapScanner* scanner = _pending_scanners.pop();
+                TabletScanner* scanner = _pending_scanners.pop();
                 l.unlock();
                 (void)_submit_scanner(scanner, true);
             }
@@ -219,7 +219,7 @@ void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
     }
 }
 
-void OlapScanNode::_scanner_thread(OlapScanner* scanner) {
+void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
     CurrentThread::set_query_id(scanner->runtime_state()->query_id());
     CurrentThread::set_mem_tracker(mem_tracker());
 
@@ -430,7 +430,7 @@ int OlapScanNode::_compute_priority(int32_t num_submitted_tasks) {
     return 0;
 }
 
-bool OlapScanNode::_submit_scanner(OlapScanner* scanner, bool blockable) {
+bool OlapScanNode::_submit_scanner(TabletScanner* scanner, bool blockable) {
     PriorityThreadPool* thread_pool = _runtime_state->exec_env()->thread_pool();
     int delta = !scanner->keep_priority();
     int32_t num_submit = _scanner_submit_count.fetch_add(delta, std::memory_order_relaxed);
@@ -487,13 +487,13 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
                 scanner_ranges.push_back(cond_ranges[i].get());
             }
 
-            OlapScannerParams scanner_params;
+            TabletScannerParams scanner_params;
             scanner_params.scan_range = scan_range.get();
             scanner_params.key_ranges = &scanner_ranges;
             scanner_params.conjunct_ctxs = &predicates;
             scanner_params.skip_aggregation = _olap_scan_node.is_preaggregation;
             scanner_params.need_agg_finalize = true;
-            auto* scanner = _obj_pool.add(new OlapScanner(this));
+            auto* scanner = _obj_pool.add(new TabletScanner(this));
             RETURN_IF_ERROR(scanner->init(state, scanner_params));
             // Assume all scanners have the same schema.
             _chunk_schema = &scanner->chunk_schema();
@@ -541,7 +541,7 @@ Status OlapScanNode::_get_status() {
 void OlapScanNode::_close_pending_scanners() {
     std::lock_guard<std::mutex> l(_mtx);
     while (!_pending_scanners.empty()) {
-        OlapScanner* scanner = _pending_scanners.pop();
+        TabletScanner* scanner = _pending_scanners.pop();
         scanner->close(_runtime_state);
         _closed_scanners.fetch_add(1, std::memory_order_release);
     }

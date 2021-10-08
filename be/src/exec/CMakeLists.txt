@@ -63,7 +63,7 @@ set(EXEC_FILES
     vectorized/analytic_node.cpp
     vectorized/analytor.cpp
     vectorized/csv_scanner.cpp
-    vectorized/olap_scanner.cpp
+    vectorized/tablet_scanner.cpp
     vectorized/olap_scan_node.cpp
     vectorized/hash_join_node.cpp
     vectorized/join_hash_map.cpp
