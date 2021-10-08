@@ -105,10 +105,10 @@ TEST(TabletMetaTest, test_create) {
 
     auto mem_tracker = std::make_unique<MemTracker>();
     TabletMetaSharedPtr tablet_meta;
-    OLAPStatus st = TabletMeta::create(mem_tracker.get(), request, TabletUid(321, 456), 987 /*shared_id*/,
-                                       20000 /*next_unique_id*/, col_ordinal_to_unique_id, RowsetTypePB::BETA_ROWSET,
-                                       &tablet_meta);
-    ASSERT_EQ(OLAP_SUCCESS, st);
+    Status st = TabletMeta::create(mem_tracker.get(), request, TabletUid(321, 456), 987 /*shared_id*/,
+                                   20000 /*next_unique_id*/, col_ordinal_to_unique_id, RowsetTypePB::BETA_ROWSET,
+                                   &tablet_meta);
+    ASSERT_TRUE(st.ok());
     ASSERT_TRUE(tablet_meta != nullptr);
 
     ASSERT_EQ(TabletUid(321, 456), tablet_meta->tablet_uid());

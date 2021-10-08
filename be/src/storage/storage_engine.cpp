@@ -879,7 +879,7 @@ OLAPStatus StorageEngine::load_header(const string& shard_path, const TCloneReq&
     // reset tablet uid here
 
     string header_path = TabletMeta::construct_header_file_path(schema_hash_path_stream.str(), request.tablet_id);
-    res = TabletMeta::reset_tablet_uid(header_path);
+    res = TabletMeta::reset_tablet_uid(header_path).ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
     if (res != OLAP_SUCCESS) {
         LOG(WARNING) << "Fail to reset tablet uid, "
                      << "tablet_id=" << request.tablet_id << " file path=" << header_path << " res=" << res;

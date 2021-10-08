@@ -147,8 +147,8 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     } else {
         MemTracker mem_tracker;
         TabletMeta cloned_tablet_meta(&mem_tracker);
-        if (cloned_tablet_meta.create_from_file(cloned_header_file) != OLAP_SUCCESS) {
-            LOG(WARNING) << "Fail to create rowset meta from " << cloned_header_file;
+        if (Status st = cloned_tablet_meta.create_from_file(cloned_header_file); !st.ok()) {
+            LOG(WARNING) << "Fail to create rowset meta from " << cloned_header_file << ": " << st;
             return Status::RuntimeError("fail to load cloned header file");
         }
         cloned_tablet_meta.to_meta_pb(&cloned_tablet_meta_pb);
@@ -207,11 +207,7 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
         rowset_meta->set_tablet_schema_hash(schema_hash);
     }
 
-    if (TabletMeta::save(cloned_header_file, new_tablet_meta_pb) != OLAP_SUCCESS) {
-        LOG(WARNING) << "Fail to save new tablet meta to directory " << clone_dir;
-        return Status::RuntimeError("fail to save new tablet meta");
-    }
-    return Status::OK();
+    return TabletMeta::save(cloned_header_file, new_tablet_meta_pb);
 }
 
 Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path,
@@ -350,8 +346,7 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
         snapshot_tablet_meta->revise_inc_rs_metas(std::move(snapshot_rowset_metas));
         snapshot_tablet_meta->revise_rs_metas(std::vector<RowsetMetaSharedPtr>());
         std::string header_path = _get_header_full_path(tablet, snapshot_dir);
-        auto ost = snapshot_tablet_meta->save(header_path);
-        if (ost != OLAP_SUCCESS) {
+        if (Status st = snapshot_tablet_meta->save(header_path); !st.ok()) {
             LOG(WARNING) << "Fail to save tablet meta to " << header_path;
             (void)FileUtils::remove_all(snapshot_id_path);
             return Status::RuntimeError("Fail to save tablet meta to header file");
@@ -416,8 +411,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
         snapshot_tablet_meta->revise_inc_rs_metas(vector<RowsetMetaSharedPtr>());
         snapshot_tablet_meta->revise_rs_metas(std::move(snapshot_rowset_metas));
         std::string header_path = _get_header_full_path(tablet, snapshot_dir);
-        ost = snapshot_tablet_meta->save(header_path);
-        if (ost != OLAP_SUCCESS) {
+        if (Status st = snapshot_tablet_meta->save(header_path); !st.ok()) {
             LOG(WARNING) << "Fail to save tablet meta to " << header_path;
             (void)FileUtils::remove_all(snapshot_id_path);
             return Status::RuntimeError("Fail to save tablet meta to header file");

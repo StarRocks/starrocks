@@ -222,14 +222,14 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
         }
 
         new_meta_file = schema_hash_path + "/" + std::to_string(_tablet_id) + ".hdr";
-        res = new_tablet_meta->save(new_meta_file);
+        res = new_tablet_meta->save(new_meta_file).ok() ? OLAP_SUCCESS : OLAP_ERR_IO_ERROR;
         if (res != OLAP_SUCCESS) {
             LOG(WARNING) << "failed to save meta to path. file=" << new_meta_file;
             need_remove_new_path = true;
             break;
         }
 
-        res = TabletMeta::reset_tablet_uid(new_meta_file);
+        res = TabletMeta::reset_tablet_uid(new_meta_file).ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
         if (res != OLAP_SUCCESS) {
             LOG(WARNING) << "errors while set tablet uid. file=" << new_meta_file;
             need_remove_new_path = true;
