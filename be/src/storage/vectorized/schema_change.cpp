@@ -873,8 +873,8 @@ Status SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& req
 
     Status status = _do_process_alter_tablet_v2(request);
     StorageEngine::instance()->tablet_manager()->release_schema_change_lock(request.base_tablet_id);
-    LOG(INFO) << "finished alter tablet process, status=" << status.to_string() << " duration: " << timer.elapsed_time() / 1000000
-              << "ms";
+    LOG(INFO) << "finished alter tablet process, status=" << status.to_string()
+              << " duration: " << timer.elapsed_time() / 1000000 << "ms";
     return status;
 }
 
@@ -1102,7 +1102,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 }
 
 Status SchemaChangeHandler::_get_versions_to_be_changed(TabletSharedPtr base_tablet,
-                                                            std::vector<Version>* versions_to_be_changed) {
+                                                        std::vector<Version>* versions_to_be_changed) {
     RowsetSharedPtr rowset = base_tablet->rowset_with_max_version();
     if (rowset == nullptr) {
         LOG(WARNING) << "Tablet has no version. base_tablet=" << base_tablet->full_name();
@@ -1110,7 +1110,8 @@ Status SchemaChangeHandler::_get_versions_to_be_changed(TabletSharedPtr base_tab
     }
 
     std::vector<Version> span_versions;
-    if (base_tablet->capture_consistent_versions(Version(0, rowset->version().second), &span_versions) != OLAP_SUCCESS) {
+    if (base_tablet->capture_consistent_versions(Version(0, rowset->version().second), &span_versions) !=
+        OLAP_SUCCESS) {
         return Status::InternalError("capture consistent versions failed");
     }
 
