@@ -229,6 +229,10 @@ public class Column implements Writable {
         this.isAllowNull = isAllowNull;
     }
 
+    public void setDefaultValue(String defaultValue) {
+        this.defaultValue = defaultValue;
+    }
+
     public String getDefaultValue() {
         return this.defaultValue;
     }

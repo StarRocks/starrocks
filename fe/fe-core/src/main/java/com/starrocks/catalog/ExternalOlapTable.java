@@ -354,6 +354,9 @@ public class ExternalOlapTable extends OlapTable {
                         if (columnMeta.isSetComment()) {
                             column.setComment(columnMeta.getComment());
                         }
+                        if (columnMeta.isSetDefault_value()) {
+                            column.setDefaultValue(columnMeta.getDefault_value());
+                        }
                         columns.add(column);
                     }
                     partitionInfo = new RangePartitionInfo(columns);
@@ -412,6 +415,9 @@ public class ExternalOlapTable extends OlapTable {
                     }
                     if (columnMeta.isSetComment()) {
                         column.setComment(columnMeta.getComment());
+                    }
+                    if (columnMeta.isSetDefault_value()) {
+                        column.setDefaultValue(columnMeta.getDefault_value());
                     }
                     columns.add(column);
                 }

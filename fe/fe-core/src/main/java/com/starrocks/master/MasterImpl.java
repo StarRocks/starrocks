@@ -1117,6 +1117,7 @@ public class MasterImpl {
                             columnMeta.setAggregationType(column.getAggregationType().name());
                         }
                         columnMeta.setComment(column.getComment());
+                        columnMeta.setDefault_value(column.getDefaultValue());
                         schemaMeta.addToColumns(columnMeta);
                     }
                     indexMeta.setSchema_meta(schemaMeta);

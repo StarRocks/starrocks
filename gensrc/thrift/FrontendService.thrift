@@ -741,6 +741,7 @@ struct TColumnMeta {
   8: optional string aggregationType
   9: optional string comment
   10: optional bool allow_null
+  11: optional string default_value
 }
 
 struct TSchemaMeta {
