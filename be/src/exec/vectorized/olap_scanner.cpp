@@ -29,7 +29,7 @@ Status OlapScanner::init(RuntimeState* runtime_state, const OlapScannerParams& p
     RETURN_IF_ERROR(_init_reader_params(params.key_ranges));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
     Schema child_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, _reader_columns);
-    _reader = std::make_shared<Reader>(_tablet, Version(0, _version), std::move(child_schema));
+    _reader = std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema));
     if (_reader_columns.size() == _scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
