@@ -3,8 +3,7 @@
 #include "pipeline_driver_poller.h"
 
 #include <chrono>
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 void PipelineDriverPoller::start() {
     DCHECK(this->_polling_thread == nullptr);
@@ -62,6 +61,7 @@ void PipelineDriverPoller::run_internal() {
                 // there are not any drivers belonging to a query context can make progress for a expiration period
                 // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
                 // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
+                driver->cancel(driver->fragment_ctx()->runtime_state());
                 if (driver->source_operator()->pending_finish()) {
                     driver->set_driver_state(DriverState::PENDING_FINISH);
                     ++driver_it;
@@ -109,5 +109,4 @@ void PipelineDriverPoller::add_blocked_driver(const DriverPtr& driver) {
     this->_cond.notify_one();
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

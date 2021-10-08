@@ -100,7 +100,7 @@ private:
 
         bool is_rotational = false;
 
-        Disk() : name("") {}
+        Disk() {}
         Disk(std::string name) : name(std::move(name)), id(0), is_rotational(true) {}
         Disk(std::string name, int id) : name(std::move(name)), id(id), is_rotational(true) {}
         Disk(std::string name, int id, bool is_rotational)

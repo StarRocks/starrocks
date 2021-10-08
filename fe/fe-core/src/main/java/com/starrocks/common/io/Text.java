@@ -34,9 +34,6 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CodingErrorAction;
-import java.nio.charset.MalformedInputException;
-import java.text.CharacterIterator;
-import java.text.StringCharacterIterator;
 
 /**
  * This class stores text using standard UTF8 encoding. It provides methods to
@@ -231,23 +228,6 @@ public class Text implements Writable {
         length += len;
     }
 
-    /**
-     * Append a range of bytes to the end of the given text, and adjust
-     * underlying buffer to reduce mem copy times
-     *
-     * @param utf8  the data to copy from
-     * @param start the first position to append from utf8
-     * @param len   the number of bytes to append
-     */
-    public void appendAdjust(byte[] utf8, int start, int len) {
-        int newLen = length + len;
-        if (bytes == null || bytes.length < newLen) {
-            setCapacity(newLen * 2, true);
-        }
-        System.arraycopy(utf8, start, bytes, length, len);
-        length += len;
-    }
-
     // Clear the string to empty.
     public void clear() {
         length = 0;
@@ -422,106 +402,6 @@ public class Text implements Writable {
         return length;
     }
 
-    // //// states for validateUTF8
-
-    private static final int LEAD_BYTE = 0;
-
-    private static final int TRAIL_BYTE_1 = 1;
-
-    private static final int TRAIL_BYTE = 2;
-
-    /**
-     * Check if a byte array contains valid utf-8
-     *
-     * @param utf8 byte array
-     * @throws MalformedInputException if the byte array contains invalid utf-8
-     */
-    public static void validateUTF8(byte[] utf8) throws MalformedInputException {
-        validateUTF8(utf8, 0, utf8.length);
-    }
-
-    /**
-     * Check to see if a byte array is valid utf-8
-     *
-     * @param utf8  the array of bytes
-     * @param start the offset of the first byte in the array
-     * @param len   the length of the byte sequence
-     * @throws MalformedInputException if the byte array contains invalid bytes
-     */
-    public static void validateUTF8(byte[] utf8, int start, int len)
-            throws MalformedInputException {
-        int count = start;
-        int leadByte = 0;
-        int length = 0;
-        int state = LEAD_BYTE;
-        while (count < start + len) {
-            int aByte = ((int) utf8[count] & 0xFF);
-
-            switch (state) {
-                case LEAD_BYTE:
-                    leadByte = aByte;
-                    length = bytesFromUTF8[aByte];
-
-                    switch (length) {
-                        case 0: // check for ASCII
-                            if (leadByte > 0x7F) {
-                                throw new MalformedInputException(count);
-                            }
-                            break;
-                        case 1:
-                            if (leadByte < 0xC2 || leadByte > 0xDF) {
-                                throw new MalformedInputException(count);
-                            }
-                            state = TRAIL_BYTE_1;
-                            break;
-                        case 2:
-                            if (leadByte < 0xE0 || leadByte > 0xEF) {
-                                throw new MalformedInputException(count);
-                            }
-                            state = TRAIL_BYTE_1;
-                            break;
-                        case 3:
-                            if (leadByte < 0xF0 || leadByte > 0xF4) {
-                                throw new MalformedInputException(count);
-                            }
-                            state = TRAIL_BYTE_1;
-                            break;
-                        default:
-                            // too long! Longest valid UTF-8 is 4 bytes (lead + three)
-                            // or if < 0 we got a trail byte in the lead byte position
-                            throw new MalformedInputException(count);
-                    } // switch (length)
-                    break;
-
-                case TRAIL_BYTE_1:
-                    if (leadByte == 0xF0 && aByte < 0x90) {
-                        throw new MalformedInputException(count);
-                    }
-                    if (leadByte == 0xF4 && aByte > 0x8F) {
-                        throw new MalformedInputException(count);
-                    }
-                    if (leadByte == 0xE0 && aByte < 0xA0) {
-                        throw new MalformedInputException(count);
-                    }
-                    if (leadByte == 0xED && aByte > 0x9F) {
-                        throw new MalformedInputException(count);
-                    }
-                    // falls through to regular trail-byte test!!
-                case TRAIL_BYTE:
-                    if (aByte < 0x80 || aByte > 0xBF) {
-                        throw new MalformedInputException(count);
-                    }
-                    if (--length == 0) {
-                        state = LEAD_BYTE;
-                    } else {
-                        state = TRAIL_BYTE;
-                    }
-                    break;
-            } // switch (state)
-            count++;
-        }
-    }
-
     /**
      * Magic numbers for UTF-8. These are the number of bytes that
      * <em>follow</em> a given lead byte. Trailing bytes have the value -1. The
@@ -588,42 +468,6 @@ public class Text implements Writable {
         return ch;
     }
 
-    static final int offsetsFromUTF8[] = {0x00000000, 0x00003080, 0x000E2080,
+    static final int[] offsetsFromUTF8 = {0x00000000, 0x00003080, 0x000E2080,
             0x03C82080, 0xFA082080, 0x82082080};
-
-    /**
-     * For the given string, returns the number of UTF-8 bytes required to
-     * encode the string.
-     *
-     * @param string text to encode
-     * @return number of UTF-8 bytes required to encode
-     */
-    public static int utf8Length(String string) {
-        CharacterIterator iter = new StringCharacterIterator(string);
-        char ch = iter.first();
-        int size = 0;
-        while (ch != CharacterIterator.DONE) {
-            if ((ch >= 0xD800) && (ch < 0xDC00)) {
-                // surrogate pair?
-                char trail = iter.next();
-                if ((trail > 0xDBFF) && (trail < 0xE000)) {
-                    // valid pair
-                    size += 4;
-                } else {
-                    // invalid pair
-                    size += 3;
-                    iter.previous(); // rewind one
-                }
-            } else if (ch < 0x80) {
-                size++;
-            } else if (ch < 0x800) {
-                size += 2;
-            } else {
-                // ch < 0x10000, that is, the largest char value
-                size += 3;
-            }
-            ch = iter.next();
-        }
-        return size;
-    }
 }

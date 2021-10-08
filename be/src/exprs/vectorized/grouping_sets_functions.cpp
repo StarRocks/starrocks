@@ -6,8 +6,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 ColumnPtr GroupingSetsFunctions::grouping_id(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
@@ -19,5 +18,4 @@ ColumnPtr GroupingSetsFunctions::grouping(FunctionContext* context, const Column
     return columns[0];
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

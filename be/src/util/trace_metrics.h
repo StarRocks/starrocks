@@ -72,7 +72,8 @@ private:
     mutable SpinLock lock_;
     std::map<const char*, int64_t> counters_;
 
-    DISALLOW_COPY_AND_ASSIGN(TraceMetrics);
+    TraceMetrics(const TraceMetrics&) = delete;
+    const TraceMetrics& operator=(const TraceMetrics&) = delete;
 };
 
 inline void TraceMetrics::Increment(const char* name, int64_t amount) {

@@ -81,6 +81,9 @@ public:
                                                                  _limit);
     }
 
+    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
+    void close(RuntimeState* state) override;
+
 private:
     int32_t _num_sender;
     const RowDescriptor& _row_desc;

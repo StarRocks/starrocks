@@ -299,15 +299,15 @@ public class BrokerLoadJob extends BulkLoadJob {
             loadingStatus.travelTableCounters(kv -> {
                 TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(kv.getKey());
                 if (kv.getValue().containsKey(TableMetricsEntity.TABLE_LOAD_BYTES)) {
-                    entity.COUNTER_BROKER_LOAD_BYTES_TOTAL
+                    entity.counterBrokerLoadBytesTotal
                             .increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_BYTES));
                 }
                 if (kv.getValue().containsKey(TableMetricsEntity.TABLE_LOAD_ROWS)) {
-                    entity.COUNTER_BROKER_LOAD_ROWS_TOTAL
+                    entity.counterBrokerLoadRowsTotal
                             .increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_ROWS));
                 }
                 if (kv.getValue().containsKey(TableMetricsEntity.TABLE_LOAD_FINISHED)) {
-                    entity.COUNTER_BROKER_LOAD_FINISHED_TOTAL
+                    entity.counterBrokerLoadFinishedTotal
                             .increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_FINISHED));
                 }
             });
@@ -356,7 +356,7 @@ public class BrokerLoadJob extends BulkLoadJob {
             loadingStatus.increaseTableCounter(tableId, TableMetricsEntity.TABLE_LOAD_BYTES,
                     Long.parseLong(attachment.getCounter(LOADED_BYTES)));
         }
-        loadingStatus.increaseTableCounter(tableId, TableMetricsEntity.TABLE_LOAD_FINISHED, 1l);
+        loadingStatus.increaseTableCounter(tableId, TableMetricsEntity.TABLE_LOAD_FINISHED, 1L);
     }
 
     private String increaseCounter(String key, String deltaValue) {

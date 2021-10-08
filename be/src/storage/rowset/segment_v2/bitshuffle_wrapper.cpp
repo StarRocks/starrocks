@@ -40,8 +40,7 @@
 
 using base::CPU;
 
-namespace starrocks {
-namespace bitshuffle {
+namespace starrocks::bitshuffle {
 
 // Function pointers which will be assigned the correct implementation
 // for the runtime architecture.
@@ -84,5 +83,4 @@ size_t compress_lz4_bound(size_t size, size_t elem_size, size_t block_size) {
     return g_bshuf_compress_lz4_bound(size, elem_size, block_size);
 }
 
-} // namespace bitshuffle
-} // namespace starrocks
+} // namespace starrocks::bitshuffle

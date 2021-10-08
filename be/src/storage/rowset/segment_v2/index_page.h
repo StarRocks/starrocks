@@ -73,7 +73,8 @@ public:
     }
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(IndexPageBuilder);
+    IndexPageBuilder(const IndexPageBuilder&) = delete;
+    const IndexPageBuilder& operator=(const IndexPageBuilder&) = delete;
     const size_t _index_page_size;
     const bool _is_leaf;
     bool _finished = false;

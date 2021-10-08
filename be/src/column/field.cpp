@@ -9,8 +9,7 @@
 #include "storage/types.h"
 #include "storage/vectorized/chunk_helper.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 Field::Field(ColumnId id, std::string name, FieldType type, int precision, int scale, bool nullable)
         : _id(id), _name(std::move(name)), _type(get_type_info(type, precision, scale)), _is_nullable(nullable) {}
@@ -65,5 +64,4 @@ std::string Field::to_string() const {
     return os.str();
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

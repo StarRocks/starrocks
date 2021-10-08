@@ -12,19 +12,11 @@
 namespace starrocks::pipeline {
 Status ProjectOperator::prepare(RuntimeState* state) {
     Operator::prepare(state);
-    RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc, get_memtracker()));
-    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state, row_desc, get_memtracker()));
-
-    RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));
 
     return Status::OK();
 }
 
 Status ProjectOperator::close(RuntimeState* state) {
-    Expr::close(_expr_ctxs, state);
-    Expr::close(_common_sub_expr_ctxs, state);
     Operator::close(state);
     return Status::OK();
 }
@@ -71,5 +63,20 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkP
     }
     DCHECK_CHUNK(_cur_chunk);
     return Status::OK();
+}
+
+Status ProjectOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+    RowDescriptor row_desc;
+    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc, mem_tracker));
+    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state, row_desc, mem_tracker));
+
+    RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));
+    return Status::OK();
+}
+
+void ProjectOperatorFactory::close(RuntimeState* state) {
+    Expr::close(_expr_ctxs, state);
+    Expr::close(_common_sub_expr_ctxs, state);
 }
 } // namespace starrocks::pipeline

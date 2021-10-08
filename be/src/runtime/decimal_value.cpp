@@ -720,7 +720,7 @@ int do_div_mod(const DecimalValue& value1, const DecimalValue& value2, DecimalVa
                 *buff0++ = *start1++;
             }
         }
-    } while (0);
+    } while (false);
 
     delete[] tmp1;
     int32_t to_int_length = 0;
@@ -1216,7 +1216,7 @@ int DecimalValue::round(DecimalValue* to, int scale, DecimalRoundMode mode) {
                 int32_t* p0 = to->_buffer + frac0 + 1;
                 to->_int_length = 1;
                 to->_frac_length = std::max(scale, 0);
-                to->_sign = 0;
+                to->_sign = false;
                 for (buf1 = to->_buffer; buf1 < p0; buf1++) {
                     *buf1 = 0;
                 }

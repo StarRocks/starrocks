@@ -720,13 +720,13 @@ public class SparkLoadJob extends BulkLoadJob {
         loadingStatus.travelTableCounters(kv -> {
             TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(kv.getKey());
             if (kv.getValue().containsKey(TableMetricsEntity.TABLE_LOAD_BYTES)) {
-                entity.COUNTER_SPARK_LOAD_BYTES_TOTAL.increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_BYTES));
+                entity.counterSparkLoadBytesTotal.increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_BYTES));
             }
             if (kv.getValue().containsKey(TableMetricsEntity.TABLE_LOAD_ROWS)) {
-                entity.COUNTER_SPARK_LOAD_ROWS_TOTAL.increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_ROWS));
+                entity.counterSparkLoadRowsTotal.increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_ROWS));
             }
             if (kv.getValue().containsKey(TableMetricsEntity.TABLE_LOAD_FINISHED)) {
-                entity.COUNTER_SPARK_LOAD_FINISHED_TOTAL
+                entity.counterSparkLoadFinishedTotal
                         .increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_FINISHED));
             }
         });

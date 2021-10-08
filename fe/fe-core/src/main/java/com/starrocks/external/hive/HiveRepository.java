@@ -3,6 +3,7 @@
 package com.starrocks.external.hive;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
@@ -10,13 +11,20 @@ import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Resource.ResourceType;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ThreadPoolManager;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -30,6 +38,10 @@ public class HiveRepository {
     ReadWriteLock metaCachesLock = new ReentrantReadWriteLock();
 
     Executor executor = Executors.newFixedThreadPool(100);
+    private static final Logger LOG = LogManager.getLogger(HiveRepository.class);
+    private final ExecutorService partitionDaemonExecutor =
+            ThreadPoolManager.newDaemonFixedThreadPool(Config.hive_meta_load_concurrency,
+                    Integer.MAX_VALUE, "hive-meta-concurrency-pool", true);
 
     public HiveMetaClient getClient(String resourceName) throws DdlException {
         HiveMetaClient client;
@@ -112,6 +124,28 @@ public class HiveRepository {
         return metaCache.getPartition(dbName, tableName, partitionKey);
     }
 
+    public List<HivePartition> getPartitions(String resourceName, String dbName, String tableName,
+                                             List<PartitionKey> partitionKeys)
+            throws DdlException {
+        HiveMetaCache metaCache = getMetaCache(resourceName);
+        List<Future<HivePartition>> futures = Lists.newArrayList();
+        for (PartitionKey partitionKey : partitionKeys) {
+            Future<HivePartition> future = partitionDaemonExecutor
+                    .submit(() -> metaCache.getPartition(dbName, tableName, partitionKey));
+            futures.add(future);
+        }
+        List<HivePartition> result = Lists.newArrayList();
+        for (Future<HivePartition> future : futures) {
+            try {
+                result.add(future.get());
+            } catch (InterruptedException | ExecutionException e) {
+                LOG.warn("get table {}.{} partition meta info failed.", dbName, tableName,  e);
+                throw new DdlException("get table " + dbName + "." + tableName + " partition meta info failed.", e);
+            }
+        }
+        return result;
+    }
+
     public HiveTableStats getTableStats(String resourceName, String dbName, String tableName) throws DdlException {
         HiveMetaCache metaCache = getMetaCache(resourceName);
         return metaCache.getTableStats(dbName, tableName);
@@ -121,6 +155,27 @@ public class HiveRepository {
                                                 String tableName, PartitionKey partitionKey) throws DdlException {
         HiveMetaCache metaCache = getMetaCache(resourceName);
         return metaCache.getPartitionStats(dbName, tableName, partitionKey);
+    }
+
+    public List<HivePartitionStats> getPartitionsStats(String resourceName, String dbName,
+                                                String tableName, List<PartitionKey> partitionKeys) throws DdlException {
+        HiveMetaCache metaCache = getMetaCache(resourceName);
+        List<Future<HivePartitionStats>> futures = Lists.newArrayList();
+        for (PartitionKey partitionKey : partitionKeys) {
+            Future<HivePartitionStats> future = partitionDaemonExecutor.
+                    submit(() -> metaCache.getPartitionStats(dbName, tableName, partitionKey));
+            futures.add(future);
+        }
+        List<HivePartitionStats> result = Lists.newArrayList();
+        for (Future<HivePartitionStats> future : futures) {
+            try {
+                result.add(future.get());
+            } catch (InterruptedException | ExecutionException e) {
+                LOG.warn("get table {}.{} partition stats meta info failed.", dbName, tableName,  e);
+                throw new DdlException("get table " + dbName + "." + tableName + " partition meta info failed.", e);
+            }
+        }
+        return result;
     }
 
     public ImmutableMap<String, HiveColumnStats> getTableLevelColumnStats(String resourceName, String dbName,

@@ -38,12 +38,12 @@ ExpressionTree::ExpressionTree(Operator op, std::initializer_list<TreeNode> chil
 }
 
 ExpressionTree::ExpressionTree(size_t leaf)
-        : mOperator(Operator::LEAF), mChildren(), mLeaf(leaf), mConstant(TruthValue::YES_NO_NULL) {
+        : mOperator(Operator::LEAF), mLeaf(leaf), mConstant(TruthValue::YES_NO_NULL) {
     // PASS
 }
 
 ExpressionTree::ExpressionTree(TruthValue constant)
-        : mOperator(Operator::CONSTANT), mChildren(), mLeaf(UNUSED_LEAF), mConstant(constant) {
+        : mOperator(Operator::CONSTANT), mLeaf(UNUSED_LEAF), mConstant(constant) {
     // PASS
 }
 

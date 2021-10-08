@@ -198,7 +198,7 @@ Status Compaction::merge_rowsets(MemTracker* mem_tracker, Statistics* stats_outp
 
         ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
 
-        OLAPStatus olap_status = _output_rs_writer->add_chunk(*chunk.get());
+        OLAPStatus olap_status = _output_rs_writer->add_chunk(*chunk);
         if (olap_status != OLAP_SUCCESS) {
             LOG(WARNING) << "writer add_chunk error, err=" << olap_status;
             return Status::InternalError("writer add_chunk error.");

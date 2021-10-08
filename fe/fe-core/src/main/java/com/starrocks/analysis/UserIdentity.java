@@ -50,13 +50,10 @@ public class UserIdentity implements Writable {
     private boolean isAnalyzed = false;
 
     public static final UserIdentity ROOT;
-    public static final UserIdentity ADMIN;
 
     static {
         ROOT = new UserIdentity(Auth.ROOT_USER, "%");
         ROOT.setIsAnalyzed();
-        ADMIN = new UserIdentity(Auth.ADMIN_USER, "%");
-        ADMIN.setIsAnalyzed();
     }
 
     private UserIdentity() {

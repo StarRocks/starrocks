@@ -209,10 +209,10 @@ ExchangeSinkOperator::ExchangeSinkOperator(int32_t id, int32_t plan_node_id, con
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(partition_expr_ctxs) {
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
-    for (int i = 0; i < destinations.size(); ++i) {
-        const auto& fragment_instance_id = destinations[i].fragment_instance_id;
+    for (const auto& destination : destinations) {
+        const auto& fragment_instance_id = destination.fragment_instance_id;
         if (fragment_id_to_channel_index.find(fragment_instance_id.lo) == fragment_id_to_channel_index.end()) {
-            _channels.emplace_back(new Channel(this, destinations[i].brpc_server, fragment_instance_id, dest_node_id));
+            _channels.emplace_back(new Channel(this, destination.brpc_server, fragment_instance_id, dest_node_id));
             fragment_id_to_channel_index.insert({fragment_instance_id.lo, _channels.size() - 1});
         } else {
             _channels.emplace_back(_channels[fragment_id_to_channel_index[fragment_instance_id.lo]]);
@@ -256,9 +256,6 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
         _partitions_columns.resize(_partition_expr_ctxs.size());
-        RowDescriptor row_desc;
-        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, row_desc, get_memtracker()));
-        RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
     } else {
         DCHECK(false) << "shouldn't go to here";
     }
@@ -272,10 +269,12 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _wait_response_timer = ADD_TIMER(profile(), "WaitResponseTime");
     _overall_throughput = profile()->add_derived_counter(
             "OverallThroughput", TUnit::BYTES_PER_SECOND,
-            std::bind<int64_t>(&RuntimeProfile::units_per_second, _bytes_sent_counter, profile()->total_time_counter()),
+            [capture0 = _bytes_sent_counter, capture1 = profile()->total_time_counter()] {
+                return RuntimeProfile::units_per_second(capture0, capture1);
+            },
             "");
-    for (int i = 0; i < _channels.size(); ++i) {
-        RETURN_IF_ERROR(_channels[i]->init(state));
+    for (auto& _channel : _channels) {
+        RETURN_IF_ERROR(_channel->init(state));
     }
 
     // set eos for all channels.
@@ -389,14 +388,13 @@ void ExchangeSinkOperator::finish(RuntimeState* state) {
     }
 
     _is_finished = true;
-    for (int i = 0; i < _channels.size(); ++i) {
-        _channels[i]->close(state);
+    for (auto& _channel : _channels) {
+        _channel->close(state);
     }
 }
 
 Status ExchangeSinkOperator::close(RuntimeState* state) {
     ScopedTimer<MonotonicStopWatch> close_timer(_profile != nullptr ? _profile->total_time_counter() : nullptr);
-    Expr::close(_partition_expr_ctxs, state);
     Operator::close(state);
     return _close_status;
 }
@@ -481,6 +479,20 @@ OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, i
         DCHECK(false) << " Shouldn't reach here!";
         return nullptr;
     }
+}
+
+Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+    if (_part_type == TPartitionType::HASH_PARTITIONED ||
+        _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
+        RowDescriptor row_desc;
+        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, row_desc, mem_tracker));
+        RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
+    }
+    return Status::OK();
+}
+
+void ExchangeSinkOperatorFactory::close(RuntimeState* state) {
+    Expr::close(_partition_expr_ctxs, state);
 }
 
 } // namespace starrocks::pipeline

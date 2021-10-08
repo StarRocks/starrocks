@@ -13,9 +13,7 @@
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 
-namespace starrocks {
-
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class RowsetMerger {
 public:
@@ -235,12 +233,12 @@ public:
             }
         }
         size_t total_input_size = 0;
-        for (int i = 0; i < rowsets.size(); i++) {
-            total_input_size += rowsets[i]->data_disk_size();
+        for (const auto& i : rowsets) {
+            total_input_size += i->data_disk_size();
             _entries.emplace_back(new MergeEntry<T>());
             MergeEntry<T>& entry = *_entries.back();
-            entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowsets[i]);
-            auto rowset = rowsets[i].get();
+            entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(i);
+            auto rowset = i.get();
             auto beta_rowset = down_cast<BetaRowset*>(rowset);
             auto res = beta_rowset->get_segment_iterators2(schema, tablet.data_dir()->get_meta(), version, &stats);
             if (!res.ok()) {
@@ -370,6 +368,4 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
     return merger->do_merge(tablet, version, schema, rowsets, writer, cfg);
 }
 
-} // namespace vectorized
-
-} // namespace starrocks
+} // namespace starrocks::vectorized

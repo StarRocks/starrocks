@@ -126,4 +126,14 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
     return Status::OK();
 }
 
+Status ExchangeMergeSortSourceOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+    RETURN_IF_ERROR(_sort_exec_exprs->prepare(state, _row_desc, _row_desc, mem_tracker));
+    RETURN_IF_ERROR(_sort_exec_exprs->open(state));
+    return Status::OK();
+}
+
+void ExchangeMergeSortSourceOperatorFactory::close(RuntimeState* state) {
+    _sort_exec_exprs->close(state);
+}
+
 } // namespace starrocks::pipeline

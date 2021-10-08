@@ -306,6 +306,12 @@ public class Config extends ConfigBase {
     public static int max_agent_task_threads_num = 4096;
 
     /**
+     * num of thread to handle hive meta load concurrency.
+     */
+    @ConfField
+    public static int hive_meta_load_concurrency = 4;
+
+    /**
      * the max txn number which bdbje can rollback when trying to rejoin the group
      */
     @ConfField

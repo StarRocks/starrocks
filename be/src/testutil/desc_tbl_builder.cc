@@ -74,8 +74,8 @@ DescriptorTbl* DescriptorTblBuilder::build() {
     int tuple_id = 0;
     int slot_id = 0;
 
-    for (int i = 0; i < _tuples_descs.size(); ++i) {
-        build_tuple(_tuples_descs[i]->slot_types(), &thrift_desc_tbl, &tuple_id, &slot_id);
+    for (auto& _tuples_desc : _tuples_descs) {
+        build_tuple(_tuples_desc->slot_types(), &thrift_desc_tbl, &tuple_id, &slot_id);
     }
 
     Status status = DescriptorTbl::create(_obj_pool, thrift_desc_tbl, &desc_tbl);

@@ -100,12 +100,12 @@ Status PluginMgr::get_plugin(const std::string& name, int type, std::shared_ptr<
 }
 
 Status PluginMgr::get_plugin(const std::string& name, std::shared_ptr<Plugin>* plugin) {
-    for (int i = 0; i < PLUGIN_TYPE_MAX; ++i) {
+    for (auto& _plugin : _plugins) {
         std::lock_guard<std::mutex> l(_lock);
 
-        auto iter = _plugins[i].find(name);
+        auto iter = _plugin.find(name);
 
-        if (iter != _plugins[i].end()) {
+        if (iter != _plugin.end()) {
             *plugin = iter->second->plugin();
             return Status::OK();
         }
@@ -150,8 +150,8 @@ Status PluginMgr::register_builtin_plugin(const std::string& name, int type, con
 }
 
 Status PluginMgr::get_all_plugin_info(std::vector<TPluginInfo>* plugin_info_list) {
-    for (int i = 0; i < PLUGIN_TYPE_MAX; ++i) {
-        for (const auto& [_, plugin_loader] : _plugins[i]) {
+    for (auto& _plugin : _plugins) {
+        for (const auto& [_, plugin_loader] : _plugin) {
             TPluginInfo info;
             info.__set_plugin_name(plugin_loader->name());
             info.__set_type(plugin_loader->type());

@@ -302,7 +302,7 @@ Status ThriftServer::start() {
 
     switch (_server_type) {
     case NON_BLOCKING: {
-        if (transport_factory.get() == nullptr) {
+        if (transport_factory == nullptr) {
             transport_factory.reset(new apache::thrift::transport::TTransportFactory());
         }
 
@@ -316,7 +316,7 @@ Status ThriftServer::start() {
     case THREAD_POOL:
         fe_server_transport.reset(new apache::thrift::transport::TServerSocket(_port));
 
-        if (transport_factory.get() == nullptr) {
+        if (transport_factory == nullptr) {
             transport_factory.reset(new apache::thrift::transport::TBufferedTransportFactory());
         }
 
@@ -329,7 +329,7 @@ Status ThriftServer::start() {
         //      server_socket->setAcceptTimeout(500);
         fe_server_transport.reset(server_socket);
 
-        if (transport_factory.get() == nullptr) {
+        if (transport_factory == nullptr) {
             transport_factory.reset(new apache::thrift::transport::TBufferedTransportFactory());
         }
 
