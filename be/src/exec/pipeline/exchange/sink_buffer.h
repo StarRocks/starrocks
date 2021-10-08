@@ -21,13 +21,13 @@ public:
         for (size_t i = 0; i < channel_number; ++i) {
             auto _chunk_closure = new CallBackClosure<PTransmitChunkResult>();
             _chunk_closure->ref();
-            _chunk_closure->addFailedHandler([this]() {
+            _chunk_closure->addFailedHandler([this]() noexcept {
                 _in_flight_rpc_num--;
                 _is_cancelled = true;
                 LOG(WARNING) << " transmit chunk rpc failed, ";
             });
 
-            _chunk_closure->addSuccessHandler([this](const PTransmitChunkResult& result) {
+            _chunk_closure->addSuccessHandler([this](const PTransmitChunkResult& result) noexcept {
                 _in_flight_rpc_num--;
                 Status status(result.status());
                 if (!status.ok()) {
@@ -37,8 +37,13 @@ public:
             });
             _closures.push_back(_chunk_closure);
         }
-
-        _thread = std::thread{&SinkBuffer::process, this};
+        try {
+            _thread = std::thread{&SinkBuffer::process, this};
+        } catch (const std::exception& exp) {
+            LOG(FATAL) << "[ExchangeSinkOperator] create thread: " << exp.what();
+        } catch (...) {
+            LOG(FATAL) << "[ExchangeSinkOperator] create thread: unknown";
+        }
     }
 
     ~SinkBuffer() {
@@ -57,21 +62,27 @@ public:
     }
 
     void process() {
-        while (true) {
-            // If the head closure has flight rpc, means all closures are busy
-            if (_closures.front()->has_in_flight_rpc()) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                continue;
-            }
+        try {
+            while (true) {
+                // If the head closure has flight rpc, means all closures are busy
+                if (_closures.front()->has_in_flight_rpc()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                    continue;
+                }
 
-            TransmitChunkInfo info;
-            if (!_pending_chunks.blocking_get(&info)) {
-                break;
-            }
-            _send_rpc(info);
+                TransmitChunkInfo info;
+                if (!_pending_chunks.blocking_get(&info)) {
+                    break;
+                }
+                _send_rpc(info);
 
-            // The original design is bad, we must release_finst_id here!
-            info.params.release_finst_id();
+                // The original design is bad, we must release_finst_id here!
+                info.params.release_finst_id();
+            }
+        } catch (const std::exception& exp) {
+            LOG(FATAL) << "[ExchangeSinkOperator] sink_buffer::process: " << exp.what();
+        } catch (...) {
+            LOG(FATAL) << "[ExchangeSinkOperator] sink_buffer::process: UNKNOWN";
         }
     }
 
