@@ -3603,40 +3603,46 @@ public class Catalog {
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(numReplicas);
         Thread t = new Thread(() -> {
             Map<Long, List<Long>> taskSignatures = new HashMap<>();
-            int numFinishedTasks;
-            int numSendedTasks = 0;
-            for (Partition partition : partitions) {
-                if (!countDownLatch.getStatus().ok()) {
-                    break;
-                }
-                List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition);
-                for (CreateReplicaTask task : tasks) {
-                    List<Long> signatures = taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
-                    signatures.add(task.getSignature());
-                }
-                sendCreateReplicaTasks(tasks, countDownLatch);
-                numSendedTasks += tasks.size();
-                numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
-                // Since there is no mechanism to cancel tasks, if we send a lot of tasks at once and some error or timeout
-                // occurs in the middle of the process, it will create a lot of useless replicas that will be deleted soon and
-                // waste machine resources. Sending a lot of tasks at once may also block other users' tasks for a long time.
-                // To avoid these situations, new tasks are sent only when the average number of tasks on each node is less
-                // than 200.
-                while (numSendedTasks - numFinishedTasks > 200 * numBackends) {
-                    // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Number of tasks that have been sent but not yet finished.
-                    ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
+            try {
+                int numFinishedTasks;
+                int numSendedTasks = 0;
+                for (Partition partition : partitions) {
+                    if (!countDownLatch.getStatus().ok()) {
+                        break;
+                    }
+                    List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition);
+                    for (CreateReplicaTask task : tasks) {
+                        List<Long> signatures = taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
+                        signatures.add(task.getSignature());
+                    }
+                    sendCreateReplicaTasks(tasks, countDownLatch);
+                    numSendedTasks += tasks.size();
                     numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
+                    // Since there is no mechanism to cancel tasks, if we send a lot of tasks at once and some error or timeout
+                    // occurs in the middle of the process, it will create a lot of useless replicas that will be deleted soon and
+                    // waste machine resources. Sending a lot of tasks at once may also block other users' tasks for a long time.
+                    // To avoid these situations, new tasks are sent only when the average number of tasks on each node is less
+                    // than 200.
+                    while (numSendedTasks - numFinishedTasks > 200 * numBackends) {
+                        // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Number of tasks that have been sent but not yet finished.
+                        ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
+                        numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
+                    }
+                }
+                if (countDownLatch.getStatus().ok()) {
+                    taskSignatures.clear();
+                }
+            } catch (Exception e) {
+                LOG.warn(e);
+                countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.toString()));
+            } finally {
+                for (Map.Entry<Long, List<Long>> entry : taskSignatures.entrySet()) {
+                    for (Long signature : entry.getValue()) {
+                        AgentTaskQueue.removeTask(entry.getKey(), TTaskType.CREATE, signature);
+                    }
                 }
             }
-            if (countDownLatch.getStatus().ok()) {
-                taskSignatures.clear();
-            }
-            for (Map.Entry<Long, List<Long>> entry : taskSignatures.entrySet()) {
-                for (Long signature : entry.getValue()) {
-                    AgentTaskQueue.removeTask(entry.getKey(), TTaskType.CREATE, signature);
-                }
-            }
-        });
+        }, "partition-build");
         t.start();
         try {
             waitForFinished(countDownLatch, Math.min(timeout, maxTimeout));
