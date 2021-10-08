@@ -13,8 +13,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/conjunctive_predicates.h"
-#include "storage/vectorized/reader.h"
-#include "storage/vectorized/reader_params.h"
+#include "storage/vectorized/tablet_reader.h"
 
 namespace starrocks {
 class SlotDescriptor;
@@ -54,7 +53,7 @@ private:
     Status _get_tablet(const TInternalScanRange* scan_range);
     Status _init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
                                const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns,
-                               vectorized::ReaderParams* params);
+                               vectorized::TabletReaderParams* params);
     Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns);
     Status _init_olap_reader(RuntimeState* state);
     Status _build_scan_range(RuntimeState* state);
@@ -91,7 +90,7 @@ private:
     std::vector<TCondition> _olap_filter;
     std::vector<TCondition> _is_null_vector;
 
-    std::shared_ptr<vectorized::Reader> _reader;
+    std::shared_ptr<vectorized::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<vectorized::ChunkIterator> _prj_iter;
 

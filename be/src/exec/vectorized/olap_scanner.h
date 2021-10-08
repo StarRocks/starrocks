@@ -13,8 +13,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/conjunctive_predicates.h"
-#include "storage/vectorized/reader.h"
-#include "storage/vectorized/reader_params.h"
+#include "storage/vectorized/tablet_reader.h"
 
 namespace starrocks::vectorized {
 
@@ -78,8 +77,8 @@ private:
     bool _need_agg_finalize = false;
     bool _has_update_counter = false;
 
-    ReaderParams _params;
-    std::shared_ptr<Reader> _reader;
+    TabletReaderParams _params;
+    std::shared_ptr<TabletReader> _reader;
 
     TabletSharedPtr _tablet;
     int64_t _version = 0;

@@ -112,7 +112,8 @@ Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
 
 Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
                                             const std::vector<uint32_t>& scanner_columns,
-                                            std::vector<uint32_t>& reader_columns, vectorized::ReaderParams* params) {
+                                            std::vector<uint32_t>& reader_columns,
+                                            vectorized::TabletReaderParams* params) {
     params->reader_type = READER_QUERY;
     params->skip_aggregation = _skip_aggregation;
     params->profile = _scan_profile;
@@ -201,7 +202,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> scanner_columns;
     // columns fetched from |_reader|.
     std::vector<uint32_t> reader_columns;
-    vectorized::ReaderParams params;
+    vectorized::TabletReaderParams params;
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
@@ -209,7 +210,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
     starrocks::vectorized::Schema child_schema =
             ChunkHelper::convert_schema_to_format_v2(tablet_schema, reader_columns);
-    _reader = std::make_shared<Reader>(_tablet, Version(0, _version), std::move(child_schema));
+    _reader = std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema));
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {

@@ -8,7 +8,7 @@
 #include "runtime/current_thread.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/reader.h"
+#include "storage/vectorized/tablet_reader.h"
 #include "util/defer_op.h"
 #include "util/time.h"
 #include "util/trace.h"
@@ -151,8 +151,8 @@ Status Compaction::construct_output_rowset_writer() {
 Status Compaction::merge_rowsets(MemTracker* mem_tracker, Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
-    Reader reader(_tablet, _output_rs_writer->version(), schema);
-    ReaderParams reader_params;
+    TabletReader reader(_tablet, _output_rs_writer->version(), schema);
+    TabletReaderParams reader_params;
     reader_params.reader_type = compaction_type();
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
 
