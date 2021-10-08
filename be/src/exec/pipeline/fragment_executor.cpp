@@ -203,7 +203,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
         RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
     }
     for (const auto& driver : _fragment_ctx->drivers()) {
-        exec_env->driver_dispatcher()->dispatch(driver);
+        exec_env->driver_dispatcher()->dispatch(driver.get());
     }
     return Status::OK();
 }
