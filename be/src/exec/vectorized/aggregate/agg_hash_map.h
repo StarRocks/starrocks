@@ -124,9 +124,15 @@ struct AggHashMapWithOneNumberKey {
             PREFETCH_HASH_VALUE();
 
             FieldType key = column->get_data()[i];
-            auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i],
-                                                        [&](const auto& ctor) { ctor(key, allocate_func()); });
-            (*agg_states)[i] = iter->second;
+            if (auto iter = hash_map.find(key, hash_values[i]); iter != hash_map.end()) { // found
+                (*agg_states)[i] = iter->second;
+            } else if (hash_map.size() >= limit) { // not found but reached limit
+                (*not_founds)[i] = 1;
+            } else { // not reached limit
+                auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i],
+                                                            [&](const auto& ctor) { ctor(key, allocate_func()); });
+                (*agg_states)[i] = iter->second;
+            }
         }
     }
 
