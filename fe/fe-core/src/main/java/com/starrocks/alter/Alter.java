@@ -67,6 +67,8 @@ import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -535,10 +537,19 @@ public class Alter {
                     throw new DdlException(
                             "table " + olapTable.getName() + " is colocate table, cannot change replicationNum");
                 }
-                partitionInfo.setReplicationNum(partition.getId(), newReplicationNum);
-                // update default replication num if this table is unpartitioned table
-                if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                    olapTable.setReplicationNum(newReplicationNum);
+                List<Backend> clusterBackends =
+                        Catalog.getCurrentSystemInfo().getClusterBackends(SystemInfoService.DEFAULT_CLUSTER);
+                if (newReplicationNum <= clusterBackends.size()) {
+                    partitionInfo.setReplicationNum(partition.getId(), newReplicationNum);
+                    // update default replication num if this table is unpartitioned table
+                    if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                        olapTable.setReplicationNum(newReplicationNum);
+                    }
+                } else {
+                    throw new DdlException(
+                            "Failed to find enough backends , current backends num is : " + clusterBackends.size() +
+                                    ". replication  num is : " + newReplicationNum
+                    );
                 }
             }
             // 3. in memory
