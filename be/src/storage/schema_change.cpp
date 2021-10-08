@@ -1517,7 +1517,6 @@ Status SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& req
         LOG(WARNING) << "failed to obtain schema change lock. "
                      << "base_tablet=" << request.base_tablet_id;
         return Status::InternalError("try lock failed");
-        //return OLAP_ERR_TRY_LOCK_FAILED;
     }
 
     OLAPStatus res = _do_process_alter_tablet_v2(request);

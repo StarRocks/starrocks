@@ -924,16 +924,10 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         if (!st.ok()) {
             LOG(WARNING) << "schema change new tablet load snapshot error " << st.to_string();
             return st;
-            //return OLAP_ERR_OTHER_ERROR;
         }
         return Status::OK();
     } else {
-        Status st = _do_process_alter_tablet_v2_normal(request, base_tablet, new_tablet);
-        if (st.ok()) {
-            return Status::OK();
-        } else {
-            return st;
-        }
+        return _do_process_alter_tablet_v2_normal(request, base_tablet, new_tablet);
     }
 }
 
