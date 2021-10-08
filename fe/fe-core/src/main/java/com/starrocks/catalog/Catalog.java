@@ -3623,8 +3623,8 @@ public class Catalog {
                     // waste machine resources. Sending a lot of tasks at once may also block other users' tasks for a long time.
                     // To avoid these situations, new tasks are sent only when the average number of tasks on each node is less
                     // than 200.
+                    // (numSendedTasks - numFinishedTasks) is number of tasks that have been sent but not yet finished.
                     while (numSendedTasks - numFinishedTasks > 200 * numBackends) {
-                        // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Number of tasks that have been sent but not yet finished.
                         ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
                         numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
                     }
