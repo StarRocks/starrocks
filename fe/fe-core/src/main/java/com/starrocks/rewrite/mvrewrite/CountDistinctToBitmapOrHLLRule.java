@@ -27,7 +27,6 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.rewrite.ExprRewriteRule;
 
 /**
@@ -52,10 +51,6 @@ public class CountDistinctToBitmapOrHLLRule implements ExprRewriteRule {
 
     @Override
     public Expr apply(Expr expr, Analyzer analyzer) throws AnalysisException {
-        if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isRewriteCountDistinct()) {
-            return expr;
-        }
-
         // meet condition
         if (!(expr instanceof FunctionCallExpr)) {
             return expr;

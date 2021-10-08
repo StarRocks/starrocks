@@ -37,7 +37,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.UserException;
-import com.starrocks.qe.ConnectContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -69,17 +68,6 @@ public final class RollupSelector {
             Collection<Long> partitionIds, List<Expr> conjuncts, boolean isPreAggregation)
             throws UserException {
         Preconditions.checkArgument(partitionIds != null, "Paritition can't be null.");
-
-        ConnectContext connectContext = ConnectContext.get();
-        if (connectContext != null && connectContext.getSessionVariable().isUseV2Rollup()) {
-            // if user set `use_v2_rollup` variable to true, and there is a segment v2 rollup,
-            // just return the segment v2 rollup, because user want to check the v2 format data.
-            String v2RollupIndexName = MaterializedViewHandler.NEW_STORAGE_FORMAT_INDEX_NAME_PREFIX + table.getName();
-            Long v2RollupIndexId = table.getIndexIdByName(v2RollupIndexName);
-            if (v2RollupIndexId != null) {
-                return v2RollupIndexId;
-            }
-        }
         // Get first partition to select best prefix index rollups, because MaterializedIndex ids in one rollup's partitions are all same.
         final List<Long> bestPrefixIndexRollups = selectBestPrefixIndexRollup(conjuncts, isPreAggregation);
         return selectBestRowCountRollup(bestPrefixIndexRollups, partitionIds);

@@ -697,12 +697,4 @@ public class FileScanNode extends LoadScanNode {
 
         return useVectorizedLoad;
     }
-
-    @Override
-    public void setUseVectorized(boolean flag) {
-        this.useVectorized = flag;
-        for (Expr expr : conjuncts) {
-            expr.setUseVectorized(flag);
-        }
-    }
 }
