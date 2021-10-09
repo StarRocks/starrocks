@@ -33,14 +33,13 @@ void TabletReader::close() {
 
 Status TabletReader::prepare() {
     _tablet->obtain_header_rdlock();
-    auto res = _tablet->capture_consistent_rowsets(_version, &_rowsets);
+    auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
     _tablet->release_header_lock();
-    if (res == OLAP_SUCCESS) {
-        return Status::OK();
-    } else {
-        return Status::InternalError(
+    if (!st.ok()) {
+        st = Status::InternalError(
                 strings::Substitute("fail to find rowset of version $0-$1", _version.first, _version.second));
     }
+    return st;
 }
 
 Status TabletReader::open(const TabletReaderParams& read_params) {

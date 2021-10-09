@@ -278,10 +278,9 @@ OLAPStatus PushHandler::_convert(const TabletSharedPtr& cur_tablet, RowsetShared
         context.segments_overlap = OVERLAP_UNKNOWN;
 
         std::unique_ptr<RowsetWriter> rowset_writer;
-        res = RowsetFactory::create_rowset_writer(context, &rowset_writer);
-        if (OLAP_SUCCESS != res) {
+        if (Status st = RowsetFactory::create_rowset_writer(context, &rowset_writer); !st.ok()) {
             LOG(WARNING) << "failed to init rowset writer, tablet=" << cur_tablet->full_name()
-                         << ", txn_id=" << _request.transaction_id << ", res=" << res;
+                         << ", txn_id=" << _request.transaction_id << ", status=" << st;
             break;
         }
 
@@ -342,7 +341,7 @@ OLAPStatus PushHandler::_convert_v2(const TabletSharedPtr& cur_tablet, RowsetSha
         context.segments_overlap = OVERLAP_UNKNOWN;
 
         std::unique_ptr<RowsetWriter> rowset_writer;
-        res = RowsetFactory::create_rowset_writer(context, &rowset_writer);
+        res = RowsetFactory::create_rowset_writer(context, &rowset_writer).ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
         if (OLAP_SUCCESS != res) {
             LOG(WARNING) << "failed to init rowset writer, tablet=" << cur_tablet->full_name()
                          << ", txn_id=" << _request.transaction_id << ", res=" << res;

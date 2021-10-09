@@ -438,10 +438,10 @@ Status PushHandler::_convert(const TabletSharedPtr& cur_tablet, const TabletShar
     context.segments_overlap = NONOVERLAPPING;
 
     std::unique_ptr<RowsetWriter> rowset_writer;
-    OLAPStatus res = RowsetFactory::create_rowset_writer(context, &rowset_writer);
-    if (OLAP_SUCCESS != res) {
+    st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
+    if (!st.ok()) {
         LOG(WARNING) << "failed to init rowset writer, tablet=" << cur_tablet->full_name()
-                     << ", txn_id=" << _request.transaction_id << ", res=" << res;
+                     << ", txn_id=" << _request.transaction_id << ", res=" << st;
         return Status::InternalError("Fail to init rowset writer");
     }
 
@@ -481,9 +481,9 @@ Status PushHandler::_convert(const TabletSharedPtr& cur_tablet, const TabletShar
                     break;
                 }
 
-                if (OLAP_SUCCESS != (res = rowset_writer->add_chunk(*chunk))) {
+                if (auto ost = rowset_writer->add_chunk(*chunk); ost != OLAP_SUCCESS) {
                     LOG(WARNING) << "fail to add chunk to rowset writer"
-                                 << ". res=" << res << ", tablet=" << cur_tablet->full_name()
+                                 << ". res=" << ost << ", tablet=" << cur_tablet->full_name()
                                  << ", read_rows=" << num_rows;
                     return Status::InternalError("Fail to add chunk to rowset writer");
                 }
