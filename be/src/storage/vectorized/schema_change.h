@@ -93,24 +93,8 @@ public:
     virtual bool process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
                          TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
 
-    void add_filtered_rows(uint64_t filtered_rows) { _filtered_rows += filtered_rows; }
-
-    void add_merged_rows(uint64_t merged_rows) { _merged_rows += merged_rows; }
-
-    uint64_t filtered_rows() const { return _filtered_rows; }
-
-    uint64_t merged_rows() const { return _merged_rows; }
-
-    void reset_filtered_rows() { _filtered_rows = 0; }
-
-    void reset_merged_rows() { _merged_rows = 0; }
-
 protected:
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
-
-private:
-    uint64_t _filtered_rows;
-    uint64_t _merged_rows;
 };
 
 class LinkedSchemaChange : public SchemaChange {

@@ -2,9 +2,7 @@
 #include "column/datum_convert.h"
 
 #include "gutil/strings/substitute.h"
-#include "runtime/decimalv2_value.h"
 #include "runtime/mem_pool.h"
-#include "storage/types.h"
 
 namespace starrocks::vectorized {
 

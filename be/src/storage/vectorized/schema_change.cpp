@@ -111,7 +111,7 @@ private:
     TabletSharedPtr _tablet;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     std::priority_queue<MergeElement> _heap;
-    ChunkAggregator* _aggregator;
+    std::unique_ptr<ChunkAggregator> _aggregator;
 };
 
 ChunkChanger::ChunkChanger(const TabletSchema& tablet_schema) {
@@ -361,6 +361,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
                     new_col = base_col;
                 }
             } else if (ConvertTypeResolver::instance()->get_convert_type_info(ref_type, new_type)) {
+                LOG(INFO) << "src type is " << ref_type << ", new type is " << new_type;
                 auto converter = vectorized::get_type_converter(ref_type, new_type);
                 if (converter == nullptr) {
                     LOG(WARNING) << "failed to get type converter, from_type=" << ref_type << ", to_type" << new_type;
@@ -586,7 +587,7 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
     ChunkPtr tmp_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
     _mem_tracker->consume(tmp_chunk->memory_usage());
     if (_tablet->keys_type() == KeysType::AGG_KEYS) {
-        _aggregator = new ChunkAggregator(&new_schema, config::vector_chunk_size, 0);
+        _aggregator = std::make_unique<ChunkAggregator>(&new_schema, config::vector_chunk_size, 0);
     }
 
     while (!_heap.empty()) {

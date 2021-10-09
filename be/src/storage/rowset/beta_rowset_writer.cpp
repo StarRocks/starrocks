@@ -281,6 +281,9 @@ Status BetaRowsetWriter::_final_merge() {
     }
 
     ChunkIteratorPtr itr = nullptr;
+    // schema change vecotrized
+    // schema change with sorting create temporary segment files first
+    // merge them and create final segment files if _context.write_tmp is true
     if (_context.write_tmp) {
         if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS) {
             itr = new_merge_iterator(seg_iterators);

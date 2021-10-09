@@ -21,6 +21,7 @@
 
 #include "storage/task/engine_alter_tablet_task.h"
 
+#include "storage/schema_change.h"
 #include "storage/vectorized/schema_change.h"
 
 namespace starrocks {
@@ -39,10 +40,14 @@ EngineAlterTabletTask::EngineAlterTabletTask(const TAlterTabletReqV2& request, i
 OLAPStatus EngineAlterTabletTask::execute() {
     StarRocksMetrics::instance()->create_rollup_requests_total.increment(1);
 
-    vectorized::SchemaChangeHandler handler;
-
-    Status res = handler.process_alter_tablet_v2(_alter_tablet_req);
-
+    Status res;
+    if (config::enable_schema_change_vectorized) {
+        vectorized::SchemaChangeHandler handler;
+        res = handler.process_alter_tablet_v2(_alter_tablet_req);
+    } else {
+        SchemaChangeHandler handler;
+        res = handler.process_alter_tablet_v2(_alter_tablet_req);
+    }
     if (!res.ok()) {
         LOG(WARNING) << "failed to do alter task. status=" << res.to_string()
                      << " base_tablet_id=" << _alter_tablet_req.base_tablet_id
