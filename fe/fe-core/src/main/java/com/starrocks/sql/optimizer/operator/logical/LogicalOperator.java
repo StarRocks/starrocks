@@ -14,8 +14,8 @@ public abstract class LogicalOperator extends Operator {
         super(opType);
     }
 
-    protected LogicalOperator(OperatorType opType, long limit, ScalarOperator predicate) {
-        super(opType, limit, predicate);
+    protected LogicalOperator(OperatorType operatorType, long limit, ScalarOperator predicate) {
+        super(operatorType, limit, predicate);
     }
 
     @Override

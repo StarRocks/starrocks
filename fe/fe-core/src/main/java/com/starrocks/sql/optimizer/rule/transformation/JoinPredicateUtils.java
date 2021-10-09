@@ -157,14 +157,11 @@ public class JoinPredicateUtils {
         OptExpression root;
         if (joinPredicate == null) {
             if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {
-                LogicalJoinOperator crossJoin =
-                        new LogicalJoinOperator(JoinOperator.CROSS_JOIN,
-                                null,
-                                join.getJoinHint(),
-                                join.getLimit(),
-                                postJoinPredicate,
-                                join.getPruneOutputColumns(),
-                                join.isHasPushDownJoinOnClause());
+                LogicalJoinOperator crossJoin = new LogicalJoinOperator.Builder().withOperator(join)
+                        .setJoinType(JoinOperator.CROSS_JOIN)
+                        .setOnPredicate(null)
+                        .setPredicate(postJoinPredicate)
+                        .build();
                 root = OptExpression.create(crossJoin, input.getInputs());
             } else {
                 throw new SemanticException("No equal on predicate in " + join.getJoinType() + " is not supported");
@@ -172,21 +169,15 @@ public class JoinPredicateUtils {
         } else {
             LogicalJoinOperator newJoin;
             if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {
-                newJoin = new LogicalJoinOperator(JoinOperator.INNER_JOIN,
-                        Utils.compoundAnd(joinPredicate, postJoinPredicate),
-                        join.getJoinHint(),
-                        join.getLimit(),
-                        join.getPredicate(),
-                        join.getPruneOutputColumns(),
-                        false);
+                newJoin = new LogicalJoinOperator.Builder().withOperator(join)
+                        .setJoinType(JoinOperator.INNER_JOIN)
+                        .setOnPredicate(Utils.compoundAnd(joinPredicate, postJoinPredicate))
+                        .build();
             } else {
-                newJoin = new LogicalJoinOperator(join.getJoinType(),
-                        Utils.compoundAnd(joinPredicate, postJoinPredicate),
-                        join.getJoinHint(),
-                        join.getLimit(),
-                        join.getPredicate(),
-                        join.getPruneOutputColumns(),
-                        false);
+                newJoin = new LogicalJoinOperator.Builder().withOperator(join)
+                        .setJoinType(join.getJoinType())
+                        .setOnPredicate(Utils.compoundAnd(joinPredicate, postJoinPredicate))
+                        .build();
             }
             root = OptExpression.create(newJoin, input.getInputs());
         }

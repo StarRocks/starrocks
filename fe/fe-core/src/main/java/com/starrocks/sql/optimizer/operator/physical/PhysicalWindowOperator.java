@@ -23,13 +23,20 @@ public class PhysicalWindowOperator extends PhysicalOperator {
     private final List<Ordering> orderByElements;
     private final AnalyticWindow analyticWindow;
 
-    public PhysicalWindowOperator(Map<ColumnRefOperator, CallOperator> analyticCall, List<ScalarOperator> partitionExpressions,
-                                  List<Ordering> orderByElements, AnalyticWindow analyticWindow) {
+    public PhysicalWindowOperator(Map<ColumnRefOperator, CallOperator> analyticCall,
+                                  List<ScalarOperator> partitionExpressions,
+                                  List<Ordering> orderByElements,
+                                  AnalyticWindow analyticWindow,
+                                  long limit,
+                                  ScalarOperator predicate) {
         super(PHYSICAL_WINDOW);
         this.analyticCall = analyticCall;
         this.partitionExpressions = partitionExpressions;
         this.orderByElements = orderByElements;
         this.analyticWindow = analyticWindow;
+
+        this.limit = limit;
+        this.predicate = predicate;
     }
 
     public Map<ColumnRefOperator, CallOperator> getAnalyticCall() {

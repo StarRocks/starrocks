@@ -12,6 +12,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -110,5 +111,31 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), table.getId(), outputColumns, colRefToColumnMetaMap.keySet());
+    }
+
+    abstract static class Builder<O extends LogicalScanOperator, B extends LogicalScanOperator.Builder>
+            extends Operator.Builder<O, B> {
+        protected Table table;
+        protected ImmutableList<ColumnRefOperator> outputColumns;
+        protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
+        protected ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap;
+        protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
+
+        @Override
+        public B withOperator(O scanOperator) {
+            super.withOperator(scanOperator);
+
+            this.table = scanOperator.table;
+            this.outputColumns = scanOperator.outputColumns;
+            this.colRefToColumnMetaMap = scanOperator.colRefToColumnMetaMap;
+            this.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
+            this.columnFilters = scanOperator.columnFilters;
+            return (B) this;
+        }
+
+        public B setTable(Table table) {
+            this.table = table;
+            return (B) this;
+        }
     }
 }
