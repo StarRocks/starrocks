@@ -75,7 +75,7 @@ public:
     virtual void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
                               AggDataPtr* states) const = 0;
 
-    // selection[i] = 0, will be update
+    // filter[i] = 0, will be update
     virtual void update_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset,
                                           const Column** columns, AggDataPtr* states,
                                           const std::vector<uint8_t>& filter) const = 0;
@@ -96,6 +96,11 @@ public:
     // and do a single call to "merge_batch" for devirtualization and inlining.
     virtual void merge_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
                              AggDataPtr* states) const = 0;
+
+    // filter[i] = 0, will be merged
+    virtual void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset,
+                                         const Column* column, AggDataPtr* states,
+                                         const std::vector<uint8_t>& filter) const = 0;
 
     // merge result to single state
     virtual void merge_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column* column,
@@ -148,6 +153,16 @@ class AggregateFunctionBatchHelper : public AggregateFunctionStateHelper<State> 
                      AggDataPtr* states) const override {
         for (size_t i = 0; i < batch_size; ++i) {
             static_cast<const Derived*>(this)->merge(ctx, column, states[i] + state_offset, i);
+        }
+    }
+
+    void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
+                                 AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+        for (size_t i = 0; i < batch_size; i++) {
+            // TODO: optimize with simd ?
+            if (filter[i] == 0) {
+                static_cast<const Derived*>(this)->merge(ctx, column, states[i] + state_offset, i);
+            }
         }
     }
 
