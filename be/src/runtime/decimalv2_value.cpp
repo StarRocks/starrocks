@@ -209,7 +209,7 @@ int128_t div(const int128_t& x, const int128_t& y) {
 
     if (!is_positive) result = -result;
 
-    return DecimalV2Value(result);
+    return result;
 }
 
 DecimalV2Value operator/(const DecimalV2Value& v1, const DecimalV2Value& v2) {
