@@ -22,6 +22,7 @@
 namespace cpp starrocks
 namespace java com.starrocks.thrift
 
+include "Data.thrift"
 include "Types.thrift"
 include "Exprs.thrift"
 include "DataSinks.thrift"
@@ -65,6 +66,7 @@ struct TPlanFragment {
   // sink) in a single instance of this fragment. This is used for an optimization in
   // InitialReservation. Measured in bytes. required in V1
   8: optional i64 initial_reservation_total_claims
+  20: optional list<Data.TGlobalDict> global_dicts
 }
 
 // location information for a single scan range
