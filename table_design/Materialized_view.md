@@ -30,11 +30,12 @@ FROM  database_name.base_table
 GROUP BY id
 ~~~
 
- 物化视图的创建当前为异步操作。创建物化视图的语法会立即返回结果，但物化视图的生成操作可能仍在运行。用户可以使用DESC "base\_table\_name" ALL命令查看当前BASE表的物化视图。可以使用 SHOW ALTER TABLE MATERIALIZED VIEW FROM "database\_name"命令查看当前以及历史物化视图的处理状态。
+ 物化视图的创建当前为异步操作。创建物化视图的语法会立即返回结果，但物化视图的生成操作可能仍在运行。用户可以使用DESC "base_table_name" ALL命令查看当前BASE表的物化视图。可以使用 SHOW ALTER TABLE MATERIALIZED VIEW FROM "database_name"命令查看当前以及历史物化视图的处理状态。
 
 * **限制：**
 
   * base表中的分区列，必须存在于创建物化视图的group by聚合列中
+    >列如：base表按天分区，物化视图则只能按天分区列做group by聚合。不能够建立按月粒度group by的物化视图。
   * 目前只支持对单表进行构建物化视图，不支持多表JOIN
   * 聚合类型表（Aggregation)，不支持对key列执行聚合算子操作，仅支持对value列进行聚合，且聚合算子类型不能改变。
   * 物化视图中至少包含一个KEY列
