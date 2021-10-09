@@ -278,9 +278,10 @@ OLAPStatus PushHandler::_convert(const TabletSharedPtr& cur_tablet, RowsetShared
         context.segments_overlap = OVERLAP_UNKNOWN;
 
         std::unique_ptr<RowsetWriter> rowset_writer;
-        if (Status st = RowsetFactory::create_rowset_writer(context, &rowset_writer); !st.ok()) {
+        res = RowsetFactory::create_rowset_writer(context, &rowset_writer).ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
+        if (res != OLAP_SUCCESS) {
             LOG(WARNING) << "failed to init rowset writer, tablet=" << cur_tablet->full_name()
-                         << ", txn_id=" << _request.transaction_id << ", status=" << st;
+                         << ", txn_id=" << _request.transaction_id << ", res=" << res;
             break;
         }
 
