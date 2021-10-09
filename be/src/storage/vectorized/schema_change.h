@@ -85,9 +85,7 @@ private:
 
 class SchemaChange {
 public:
-    SchemaChange(MemTracker* mem_tracker) : _filtered_rows(0), _merged_rows(0) {
-        _mem_tracker = std::make_unique<MemTracker>(-1, "", mem_tracker, true);
-    }
+    SchemaChange(MemTracker* mem_tracker) { _mem_tracker = std::make_unique<MemTracker>(-1, "", mem_tracker, true); }
     virtual ~SchemaChange() {}
 
     virtual bool process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
