@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.optimizer.transformer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
@@ -35,7 +36,7 @@ import java.util.List;
 
 public class SubqueryTransformer {
     public OptExprBuilder handleSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt, Expr expression) {
-        FilterWithSubqueryHandler handler = new FilterWithSubqueryHandler(columnRefFactory, false);
+        FilterWithSubqueryHandler handler = new FilterWithSubqueryHandler(columnRefFactory);
         subOpt = expression.accept(handler, new SubqueryContext(subOpt, true));
 
         return subOpt;
@@ -44,8 +45,8 @@ public class SubqueryTransformer {
     // Only support scalar-subquery in `SELECT` clause
     public OptExprBuilder handleScalarSubqueries(ColumnRefFactory columnRefFactory, OptExprBuilder subOpt,
                                                  Expr expression) {
-        FilterWithSubqueryHandler handler = new FilterWithSubqueryHandler(columnRefFactory, true);
-        subOpt = expression.accept(handler, new SubqueryContext(subOpt, true));
+        FilterWithSubqueryHandler handler = new FilterWithSubqueryHandler(columnRefFactory);
+        subOpt = expression.accept(handler, new SubqueryContext(subOpt, false));
 
         return subOpt;
     }
@@ -81,31 +82,19 @@ public class SubqueryTransformer {
 
     private static class SubqueryContext {
         public OptExprBuilder builder;
-        public boolean isAndScope;
+        public boolean useSemiAnti;
 
-        public SubqueryContext(OptExprBuilder builder, boolean isAndScope) {
+        public SubqueryContext(OptExprBuilder builder, boolean useSemiAnti) {
             this.builder = builder;
-            this.isAndScope = isAndScope;
+            this.useSemiAnti = useSemiAnti;
         }
     }
 
     private static class FilterWithSubqueryHandler extends ExprVisitor<OptExprBuilder, SubqueryContext> {
         private final ColumnRefFactory columnRefFactory;
 
-        /*
-         * Will forbidden handle IN/EXIST subquery, for
-         * 1. Only support scalar subquery in SELECT-clause
-         * 2. Only support scalar subquery when the subquery combine with other expression, such as:
-         *  select 123, (select xxx from ...) / 2;
-         *  select * from t1 where case when (select xx from xxx) > 2 then xxx ...
-         *
-         *  like sql `select * from t1 where case when xxx in (select xx from xxx) > 2 then xxx` is can't work
-         */
-        private boolean onlySupportScalarSubquery;
-
-        public FilterWithSubqueryHandler(ColumnRefFactory columnRefFactory, boolean onlySupportScalarSubquery) {
+        public FilterWithSubqueryHandler(ColumnRefFactory columnRefFactory) {
             this.columnRefFactory = columnRefFactory;
-            this.onlySupportScalarSubquery = onlySupportScalarSubquery;
         }
 
         private LogicalPlan getLogicalPlan(Relation relation, ExpressionMapping outer) {
@@ -124,20 +113,17 @@ public class SubqueryTransformer {
 
         @Override
         public OptExprBuilder visitExpression(Expr node, SubqueryContext context) {
-            boolean tmp = onlySupportScalarSubquery;
-            onlySupportScalarSubquery = true;
-
+            OptExprBuilder builder = context.builder;
             for (Expr child : node.getChildren()) {
-                visit(child, context);
+                builder = visit(child, new SubqueryContext(builder, false));
             }
 
-            onlySupportScalarSubquery = tmp;
-            return context.builder;
+            return builder;
         }
 
         @Override
         public OptExprBuilder visitInPredicate(InPredicate inPredicate, SubqueryContext context) {
-            if (onlySupportScalarSubquery || !(inPredicate.getChild(1) instanceof Subquery)) {
+            if (!(inPredicate.getChild(1) instanceof Subquery)) {
                 return context.builder;
             }
 
@@ -166,7 +152,7 @@ public class SubqueryTransformer {
 
             LogicalApplyOperator applyOperator =
                     new LogicalApplyOperator(outputPredicateRef, inPredicateOperator, subqueryPlan.getCorrelation(),
-                            context.isAndScope);
+                            context.useSemiAnti);
             context.builder =
                     new OptExprBuilder(applyOperator, Arrays.asList(context.builder, subqueryPlan.getRootBuilder()),
                             context.builder.getExpressionMapping());
@@ -176,9 +162,7 @@ public class SubqueryTransformer {
 
         @Override
         public OptExprBuilder visitExistsPredicate(ExistsPredicate existsPredicate, SubqueryContext context) {
-            if (onlySupportScalarSubquery) {
-                return context.builder;
-            }
+            Preconditions.checkState(existsPredicate.getChild(0) instanceof Subquery);
 
             QueryRelation qb = ((Subquery) existsPredicate.getChild(0)).getQueryBlock();
             LogicalPlan subqueryPlan = getLogicalPlan(qb, context.builder.getExpressionMapping());
@@ -194,7 +178,7 @@ public class SubqueryTransformer {
 
             LogicalApplyOperator applyOperator =
                     new LogicalApplyOperator(outputPredicateRef, existsPredicateOperator, subqueryPlan.getCorrelation(),
-                            context.isAndScope);
+                            context.useSemiAnti);
             context.builder =
                     new OptExprBuilder(applyOperator, Arrays.asList(context.builder, subqueryPlan.getRootBuilder()),
                             context.builder.getExpressionMapping());
@@ -227,8 +211,10 @@ public class SubqueryTransformer {
                 builder = node.getChild(1).accept(this, new SubqueryContext(builder, false));
             } else if (CompoundPredicate.Operator.AND == node.getOp()) {
                 // And Scope extend from parents
-                builder = node.getChild(0).accept(this, new SubqueryContext(builder, context.isAndScope));
-                builder = node.getChild(1).accept(this, new SubqueryContext(builder, context.isAndScope));
+                builder = node.getChild(0).accept(this, new SubqueryContext(builder, context.useSemiAnti));
+                builder = node.getChild(1).accept(this, new SubqueryContext(builder, context.useSemiAnti));
+            } else {
+                builder = node.getChild(0).accept(this, new SubqueryContext(builder, false));
             }
 
             return builder;
@@ -273,7 +259,7 @@ public class SubqueryTransformer {
             // The Apply's output column is the subquery's result
             LogicalApplyOperator applyOperator =
                     new LogicalApplyOperator(outputPredicateRef, subqueryOutput, subqueryPlan.getCorrelation(),
-                            context.isAndScope);
+                            context.useSemiAnti);
             context.builder =
                     new OptExprBuilder(applyOperator, Arrays.asList(context.builder, subqueryPlan.getRootBuilder()),
                             context.builder.getExpressionMapping());

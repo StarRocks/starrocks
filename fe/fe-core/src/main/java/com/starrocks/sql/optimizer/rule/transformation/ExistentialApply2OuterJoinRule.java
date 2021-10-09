@@ -39,7 +39,7 @@ public class ExistentialApply2OuterJoinRule extends BaseApply2OuterJoinRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
-        return !apply.isFromAndScope() && apply.isExistential()
+        return !apply.isUseSemiAnti() && apply.isExistential()
                 && !Utils.containsCorrelationSubquery(input.getGroupExpression());
     }
 
