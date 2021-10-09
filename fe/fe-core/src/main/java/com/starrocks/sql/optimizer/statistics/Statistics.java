@@ -14,11 +14,20 @@ import static java.lang.Double.NaN;
 public class Statistics {
     private final double outputRowCount;
     private final Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
+    // This flag set true if get table row count from Catalog LE 1
+    private boolean tableRowCountMayNotAccurate;
 
     public Statistics(double outputRowCount,
                       Map<ColumnRefOperator, ColumnStatistic> columnStatistics) {
+        this(outputRowCount, columnStatistics, false);
+    }
+
+    public Statistics(double outputRowCount,
+                      Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
+                      boolean tableRowCountMayNotAccurate) {
         this.outputRowCount = outputRowCount;
         this.columnStatistics = columnStatistics;
+        this.tableRowCountMayNotAccurate = tableRowCountMayNotAccurate;
     }
 
     public double getOutputRowCount() {
@@ -40,6 +49,10 @@ public class Statistics {
         return columnStatistics;
     }
 
+    public boolean isTableRowCountMayNotAccurate() {
+        return this.tableRowCountMayNotAccurate;
+    }
+
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet usedColumns = new ColumnRefSet();
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
@@ -59,6 +72,7 @@ public class Statistics {
     public static final class Builder {
         private double outputRowCount;
         private final Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
+        private boolean tableRowCountMayNotAccurate = false;
 
         public Builder() {
             this(NaN, new HashMap<>());
@@ -71,6 +85,11 @@ public class Statistics {
 
         public Builder setOutputRowCount(double outputRowCount) {
             this.outputRowCount = outputRowCount;
+            return this;
+        }
+
+        public Builder setTableRowCountMayNotAccurate(boolean tableRowCountMayNotAccurate) {
+            this.tableRowCountMayNotAccurate = tableRowCountMayNotAccurate;
             return this;
         }
 
@@ -90,7 +109,7 @@ public class Statistics {
         }
 
         public Statistics build() {
-            return new Statistics(outputRowCount, columnStatistics);
+            return new Statistics(outputRowCount, columnStatistics, tableRowCountMayNotAccurate);
         }
     }
 }
