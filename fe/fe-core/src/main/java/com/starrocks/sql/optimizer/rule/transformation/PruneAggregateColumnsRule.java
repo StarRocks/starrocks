@@ -76,16 +76,10 @@ public class PruneAggregateColumnsRule extends TransformationRule {
         if (newAggregations.keySet().equals(aggregations.keySet())) {
             return Collections.emptyList();
         }
-
-        LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(
-                AggType.GLOBAL,
-                aggOperator.getGroupingKeys(),
-                aggOperator.getPartitionByColumns(),
-                newAggregations,
-                false,
-                -1,
-                aggOperator.getLimit(),
-                aggOperator.getPredicate());
+        LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator.Builder().withOperator(aggOperator)
+                .setType(AggType.GLOBAL)
+                .setAggregations(newAggregations)
+                .build();
 
         return Lists.newArrayList(OptExpression.create(newAggOperator, input.getInputs()));
     }

@@ -8,6 +8,8 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 public class PhysicalAssertOneRowOperator extends PhysicalOperator {
     private final AssertNumRowsElement.Assertion assertion;
@@ -16,11 +18,17 @@ public class PhysicalAssertOneRowOperator extends PhysicalOperator {
 
     private final String tips;
 
-    public PhysicalAssertOneRowOperator(AssertNumRowsElement.Assertion assertion, long checkRows, String tips) {
+    public PhysicalAssertOneRowOperator(AssertNumRowsElement.Assertion assertion, long checkRows, String tips,
+                                        long limit,
+                                        ScalarOperator predicate,
+                                        Projection projection) {
         super(OperatorType.PHYSICAL_ASSERT_ONE_ROW);
         this.assertion = assertion;
         this.checkRows = checkRows;
         this.tips = tips;
+        this.limit = limit;
+        this.predicate = predicate;
+        this.projection = projection;
     }
 
     public AssertNumRowsElement.Assertion getAssertion() {

@@ -9,7 +9,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
@@ -21,8 +23,11 @@ public class PhysicalEsScanOperator extends PhysicalScanOperator {
     public PhysicalEsScanOperator(Table table,
                                   List<ColumnRefOperator> outputColumns,
                                   Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                  List<EsShardPartitions> selectedIndex) {
-        super(OperatorType.PHYSICAL_ES_SCAN, table, outputColumns, colRefToColumnMetaMap);
+                                  List<EsShardPartitions> selectedIndex,
+                                  long limit,
+                                  ScalarOperator predicate,
+                                  Projection projection) {
+        super(OperatorType.PHYSICAL_ES_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate, projection);
         this.selectedIndex = selectedIndex;
     }
 

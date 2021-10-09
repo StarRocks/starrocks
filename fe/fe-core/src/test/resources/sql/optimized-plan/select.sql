@@ -212,7 +212,7 @@ INTERSECT
 [sql]
 select v1,v2,b from t0 inner join (select 1 as a,2 as b) t on v1 = a
 [result]
-INNER JOIN (join-predicate [1: v1 = cast(4: expr as bigint(20))] post-join-predicate [null])
+INNER JOIN (join-predicate [1: v1 = 6: cast] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     VALUES (1,2)
 [fragment]

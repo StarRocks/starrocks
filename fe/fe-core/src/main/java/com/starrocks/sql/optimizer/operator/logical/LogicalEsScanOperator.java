@@ -9,8 +9,10 @@ import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.external.elasticsearch.EsShardPartitions;
 import com.starrocks.external.elasticsearch.EsTablePartitions;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -26,15 +28,28 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
                                  Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                  Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                  long limit,
-                                 ScalarOperator predicate) {
+                                 ScalarOperator predicate,
+                                 Projection projection) {
         super(OperatorType.LOGICAL_ES_SCAN,
                 table,
                 outputColumns,
                 colRefToColumnMetaMap,
                 columnMetaToColRefMap,
-                limit, predicate);
+                limit, predicate, projection);
         Preconditions.checkState(table instanceof EsTable);
         this.esTablePartitions = ((EsTable) table).getEsTablePartitions();
+    }
+
+    private LogicalEsScanOperator(Builder builder) {
+        super(OperatorType.LOGICAL_ES_SCAN,
+                builder.table,
+                builder.outputColumns,
+                builder.colRefToColumnMetaMap,
+                builder.columnMetaToColRefMap,
+                builder.getLimit(), builder.getPredicate(), builder.getProjection());
+        Preconditions.checkState(builder.table instanceof EsTable);
+        this.esTablePartitions = builder.esTablePartitions;
+        this.selectedIndex.addAll(builder.selectedIndex);
     }
 
     public EsTablePartitions getEsTablePartitions() {
@@ -48,5 +63,25 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalEsScan(this, context);
+    }
+
+    static public class Builder extends LogicalScanOperator.Builder {
+        private EsTablePartitions esTablePartitions;
+        private List<EsShardPartitions> selectedIndex = Lists.newArrayList();
+
+        @Override
+        public LogicalEsScanOperator build() {
+            return new LogicalEsScanOperator(this);
+        }
+
+        @Override
+        public LogicalEsScanOperator.Builder withOperator(Operator operator) {
+            super.withOperator(operator);
+
+            LogicalEsScanOperator scanOperator = (LogicalEsScanOperator) operator;
+            this.esTablePartitions = scanOperator.esTablePartitions;
+            this.selectedIndex = scanOperator.selectedIndex;
+            return this;
+        }
     }
 }

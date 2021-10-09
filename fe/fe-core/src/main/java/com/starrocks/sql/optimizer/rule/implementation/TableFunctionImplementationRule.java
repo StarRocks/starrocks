@@ -27,10 +27,10 @@ public class TableFunctionImplementationRule extends ImplementationRule {
                 logicalTableFunctionOperator.getFnResultColumnRefSet(),
                 logicalTableFunctionOperator.getFn(),
                 new ColumnRefSet(new ArrayList(logicalTableFunctionOperator.getFnParamColumnProjectMap().keySet())),
-                logicalTableFunctionOperator.getOuterColumnRefSet());
-        physicalLateral.setLimit(logicalTableFunctionOperator.getLimit());
-        physicalLateral.setPredicate(logicalTableFunctionOperator.getPredicate());
-        physicalLateral.setProjection(logicalTableFunctionOperator.getProjection());
+                logicalTableFunctionOperator.getOuterColumnRefSet(),
+                logicalTableFunctionOperator.getLimit(),
+                logicalTableFunctionOperator.getPredicate(),
+                logicalTableFunctionOperator.getProjection());
         return Lists.newArrayList(OptExpression.create(physicalLateral, input.getInputs()));
     }
 }

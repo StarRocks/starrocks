@@ -8,8 +8,10 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
@@ -42,7 +44,10 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
                                          List<ColumnRefOperator> partitionByColumns,
                                          Map<ColumnRefOperator, CallOperator> aggregations,
                                          int singleDistinctFunctionPos,
-                                         boolean isSplit) {
+                                         boolean isSplit,
+                                         long limit,
+                                         ScalarOperator predicate,
+                                         Projection projection) {
         super(OperatorType.PHYSICAL_HASH_AGG);
         this.type = type;
         this.groupBys = groupBys;
@@ -50,6 +55,9 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.aggregations = aggregations;
         this.singleDistinctFunctionPos = singleDistinctFunctionPos;
         this.isSplit = isSplit;
+        this.limit = limit;
+        this.predicate = predicate;
+        this.projection = projection;
     }
 
     public List<ColumnRefOperator> getGroupBys() {

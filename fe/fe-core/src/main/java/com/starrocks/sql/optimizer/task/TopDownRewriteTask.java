@@ -22,20 +22,28 @@ import java.util.List;
  */
 public class TopDownRewriteTask extends OptimizerTask {
     private final Group group;
-    private final RuleSetType ruleSetType;
+    private final List<Rule> candidateRules;
 
-    public TopDownRewriteTask(TaskContext context, Group group, RuleSetType ruleSetType) {
+    public TopDownRewriteTask(TaskContext context, Group group, List<Rule> ruleSet) {
         super(context);
         this.group = group;
-        this.ruleSetType = ruleSetType;
+        this.candidateRules = ruleSet;
     }
+
+    public TopDownRewriteTask(TaskContext context, Group group, Rule rule) {
+        this(context, group, Lists.newArrayList(rule));
+    }
+
+    public TopDownRewriteTask(TaskContext context, Group group, RuleSetType ruleSetType) {
+        this(context, group, context.getOptimizerContext().getRuleSet().
+                getRewriteRulesByType(ruleSetType));
+    }
+
+
 
     @Override
     public void execute() {
         List<Rule> validRules = Lists.newArrayListWithCapacity(RuleType.NUM_RULES.id());
-        List<Rule> candidateRules = context.getOptimizerContext().getRuleSet().
-                getRewriteRulesByType(ruleSetType);
-
         Preconditions.checkState(group.isValidInitState());
 
         GroupExpression curGroupExpression = group.getLogicalExpressions().get(0);
@@ -70,7 +78,7 @@ public class TopDownRewriteTask extends OptimizerTask {
         }
 
         for (Group childGroup : group.getFirstLogicalExpression().getInputs()) {
-            pushTask(new TopDownRewriteTask(context, childGroup, ruleSetType));
+            pushTask(new TopDownRewriteTask(context, childGroup, candidateRules));
         }
     }
 }

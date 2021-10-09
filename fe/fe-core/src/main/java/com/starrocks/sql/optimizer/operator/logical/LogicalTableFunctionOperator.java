@@ -6,6 +6,7 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -37,6 +38,14 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
     public LogicalTableFunctionOperator(ColumnRefSet fnResultColumnRefSet, TableFunction fn,
                                         Map<ColumnRefOperator, ScalarOperator> fnParamColumnProjectMap) {
         this(fnResultColumnRefSet, fn, fnParamColumnProjectMap, new ColumnRefSet());
+    }
+
+    private LogicalTableFunctionOperator(Builder builder) {
+        super(OperatorType.LOGICAL_TABLE_FUNCTION, builder.getLimit(), builder.getPredicate(), builder.getProjection());
+        this.fnResultColumnRefSet = builder.fnResultColumnRefSet;
+        this.fn = builder.fn;
+        this.fnParamColumnProjectMap = builder.fnParamColumnProjectMap;
+        this.outerColumnRefSet = builder.outerColumnRefSet;
     }
 
     public ColumnRefSet getFnResultColumnRefSet() {
@@ -100,5 +109,29 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), fn, fnResultColumnRefSet, outerColumnRefSet, fnParamColumnProjectMap);
+    }
+
+    static public class Builder extends LogicalOperator.Builder {
+        private TableFunction fn;
+        private ColumnRefSet fnResultColumnRefSet;
+        private ColumnRefSet outerColumnRefSet;
+        private Map<ColumnRefOperator, ScalarOperator> fnParamColumnProjectMap;
+
+        @Override
+        public LogicalTableFunctionOperator build() {
+            return new LogicalTableFunctionOperator(this);
+        }
+
+        @Override
+        public LogicalTableFunctionOperator.Builder withOperator(Operator operator) {
+            super.withOperator(operator);
+
+            LogicalTableFunctionOperator tableFunctionOperator = (LogicalTableFunctionOperator) operator;
+            this.fnResultColumnRefSet = tableFunctionOperator.fnResultColumnRefSet;
+            this.fn = tableFunctionOperator.fn;
+            this.fnParamColumnProjectMap = tableFunctionOperator.fnParamColumnProjectMap;
+            this.outerColumnRefSet = tableFunctionOperator.outerColumnRefSet;
+            return this;
+        }
     }
 }

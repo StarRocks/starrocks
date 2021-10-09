@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -20,6 +19,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneWindowRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
@@ -77,6 +77,7 @@ public class Optimizer {
         // because of the Filter node needs to be merged first to avoid the Limit node
         // cannot merge
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+        ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         ruleRewriteIterative(memo, rootTaskContext, new PruneWindowRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
@@ -135,7 +136,7 @@ public class Optimizer {
             }
         }
          */
-
+        //System.out.println(Utils.countInnerJoinNodeSize(tree));
         context.getRuleSet().addJoinTransformationRules();
         //if (connectContext.getSessionVariable().isEnableNewPlannerPushDownJoinToAgg()) {
        //     context.getRuleSet().addPushDownJoinToAggRule();
@@ -149,7 +150,7 @@ public class Optimizer {
 
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
 
-        System.out.println("Memo size : " + memo.getGroups().size());
+        //System.out.println("Memo size : " + memo.getGroups().size());
 
         OptExpression result = extractBestPlan(requiredProperty, memo.getRootGroup());
         tryOpenPreAggregate(result);
@@ -223,6 +224,12 @@ public class Optimizer {
     void ruleRewriteOnlyOnce(Memo memo, TaskContext rootTaskContext, RuleSetType ruleSetType) {
         context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
                 memo.getRootGroup(), ruleSetType));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+    }
+
+    void ruleRewriteOnlyOnce(Memo memo, TaskContext rootTaskContext, Rule rule) {
+        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
+                memo.getRootGroup(), rule));
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
     }
 }

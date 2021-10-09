@@ -6,6 +6,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -16,10 +17,16 @@ public class PhysicalValuesOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> columnRefSet;
     private final List<List<ScalarOperator>> rows;
 
-    public PhysicalValuesOperator(List<ColumnRefOperator> columnRefSet, List<List<ScalarOperator>> rows) {
+    public PhysicalValuesOperator(List<ColumnRefOperator> columnRefSet, List<List<ScalarOperator>> rows,
+                                  long limit,
+                                  ScalarOperator predicate,
+                                  Projection projection) {
         super(OperatorType.PHYSICAL_VALUES);
         this.columnRefSet = columnRefSet;
         this.rows = rows;
+        this.limit = limit;
+        this.predicate = predicate;
+        this.projection = projection;
     }
 
     public List<ColumnRefOperator> getColumnRefSet() {

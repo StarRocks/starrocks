@@ -76,7 +76,8 @@ public class PushDownPredicateScanRule extends TransformationRule {
                     esScanOperator.getColRefToColumnMetaMap(),
                     esScanOperator.getColumnMetaToColRefMap(),
                     esScanOperator.getLimit(),
-                    predicates);
+                    predicates,
+                    esScanOperator.getProjection());
 
             Map<ColumnRefOperator, ScalarOperator> projectMap =
                     newScanOperator.getOutputColumns().stream()

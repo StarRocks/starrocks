@@ -70,7 +70,6 @@ import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
-import com.starrocks.sql.optimizer.operator.NodeOperator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
@@ -206,7 +205,7 @@ public class PlanFragmentBuilder {
 
         public PlanFragment visit(OptExpression optExpression, ExecPlan context) {
             PlanFragment fragment = optExpression.getOp().accept(this, optExpression, context);
-            Projection projection = ((NodeOperator) optExpression.getOp()).getProjection();
+            Projection projection = (optExpression.getOp()).getProjection();
 
             if (projection == null) {
                 return fragment;

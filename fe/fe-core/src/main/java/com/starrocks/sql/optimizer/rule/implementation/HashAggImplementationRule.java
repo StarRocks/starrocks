@@ -27,10 +27,10 @@ public class HashAggImplementationRule extends ImplementationRule {
                 logical.getPartitionByColumns(),
                 logical.getAggregations(),
                 logical.getSingleDistinctFunctionPos(),
-                logical.isSplit());
-        physical.setPredicate(logical.getPredicate());
-        physical.setLimit(logical.getLimit());
-        physical.setProjection(logical.getProjection());
+                logical.isSplit(),
+                logical.getLimit(),
+                logical.getPredicate(),
+                logical.getProjection());
         OptExpression result = OptExpression.create(physical, input.getInputs());
         return Lists.newArrayList(result);
     }

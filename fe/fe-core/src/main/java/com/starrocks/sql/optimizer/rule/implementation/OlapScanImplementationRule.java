@@ -26,13 +26,13 @@ public class OlapScanImplementationRule extends ImplementationRule {
                 scan.getTable(),
                 scan.getOutputColumns(),
                 scan.getColRefToColumnMetaMap(),
-                scan.getDistributionSpec());
-
-        physicalOlapScan.setSelectedIndexId(scan.getSelectedIndexId());
-        physicalOlapScan.setSelectedPartitionId(Lists.newArrayList(scan.getSelectedPartitionId()));
-        physicalOlapScan.setSelectedTabletId(Lists.newArrayList(scan.getSelectedTabletId()));
-        physicalOlapScan.setPredicate(scan.getPredicate());
-        physicalOlapScan.setLimit(scan.getLimit());
+                scan.getDistributionSpec(),
+                scan.getLimit(),
+                scan.getPredicate(),
+                scan.getSelectedIndexId(),
+                scan.getSelectedPartitionId(),
+                scan.getSelectedTabletId(),
+                scan.getProjection());
 
         OptExpression result = new OptExpression(physicalOlapScan);
         return Lists.newArrayList(result);

@@ -79,7 +79,10 @@ public class PushDownJoinOnExpressionToChildProject extends TransformationRule {
         Rewriter leftRewriter = new Rewriter(leftProjectMaps);
         Rewriter rightRewriter = new Rewriter(rightProjectMaps);
         ScalarOperator newJoinOnPredicate = onPredicate.accept(leftRewriter, null).accept(rightRewriter, null);
-        joinOperator.setOnPredicate(newJoinOnPredicate);
+
+        OptExpression newJoinOpt = OptExpression.create(new LogicalJoinOperator.Builder().withOperator(joinOperator)
+                .setOnPredicate(newJoinOnPredicate)
+                .build(), input.getInputs());
 
         if (!leftProjectMaps.isEmpty()) {
             leftProjectMaps.putAll(leftOutputColumns.getStream().boxed()
@@ -88,7 +91,7 @@ public class PushDownJoinOnExpressionToChildProject extends TransformationRule {
 
             LogicalProjectOperator leftProject = new LogicalProjectOperator(leftProjectMaps);
             OptExpression leftProjectOpt = OptExpression.create(leftProject, input.inputAt(0));
-            input.setChild(0, leftProjectOpt);
+            newJoinOpt.setChild(0, leftProjectOpt);
         }
 
         if (!rightProjectMaps.isEmpty()) {
@@ -98,13 +101,13 @@ public class PushDownJoinOnExpressionToChildProject extends TransformationRule {
 
             LogicalProjectOperator rightProject = new LogicalProjectOperator(rightProjectMaps);
             OptExpression rightProjectOpt = OptExpression.create(rightProject, input.inputAt(1));
-            input.setChild(1, rightProjectOpt);
+            newJoinOpt.setChild(1, rightProjectOpt);
         }
 
         if (leftProjectMaps.isEmpty() && rightProjectMaps.isEmpty()) {
             return Collections.emptyList();
         } else {
-            return Lists.newArrayList(input);
+            return Lists.newArrayList(newJoinOpt);
         }
     }
 

@@ -3,7 +3,9 @@ package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.ArrayList;
@@ -15,8 +17,9 @@ public abstract class LogicalSetOperator extends LogicalOperator {
     protected List<List<ColumnRefOperator>> childOutputColumns;
 
     public LogicalSetOperator(OperatorType type, List<ColumnRefOperator> result,
-                              List<List<ColumnRefOperator>> childOutputColumns) {
-        super(type);
+                              List<List<ColumnRefOperator>> childOutputColumns,
+                              Projection projection) {
+        super(type, -1, null, projection);
         this.outputColumnRefOp = result;
         this.childOutputColumns = childOutputColumns;
     }
@@ -56,5 +59,31 @@ public abstract class LogicalSetOperator extends LogicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), outputColumnRefOp);
+    }
+
+    abstract static public class Builder<O extends LogicalSetOperator, B extends LogicalSetOperator.Builder>
+            extends Operator.Builder<O, B> {
+        protected List<ColumnRefOperator> outputColumnRefOp;
+        protected List<List<ColumnRefOperator>> childOutputColumns;
+
+        @Override
+        public  B withOperator(O setOperator) {
+            super.withOperator(setOperator);
+            this.outputColumnRefOp = setOperator.outputColumnRefOp;
+            this.childOutputColumns = setOperator.childOutputColumns;
+            return (B) this;
+        }
+
+        public B setOutputColumnRefOp(
+                List<ColumnRefOperator> outputColumnRefOp) {
+            this.outputColumnRefOp = outputColumnRefOp;
+            return (B) this;
+        }
+
+        public B setChildOutputColumns(
+                List<List<ColumnRefOperator>> childOutputColumns) {
+            this.childOutputColumns = childOutputColumns;
+            return (B) this;
+        }
     }
 }

@@ -52,7 +52,7 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
                 colRefToColumnMetaMap,
                 columnMetaToColRefMap,
                 limit,
-                predicate);
+                predicate, null);
 
         Preconditions.checkState(table instanceof HiveTable);
         this.tableType = tableType;

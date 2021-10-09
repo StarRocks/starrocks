@@ -2,24 +2,35 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Objects;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+
+import java.util.Objects;
 
 public class PhysicalHashJoinOperator extends PhysicalOperator {
     private final JoinOperator joinType;
     private final ScalarOperator joinPredicate;
-    private String joinHint;
+    private final String joinHint;
 
-    public PhysicalHashJoinOperator(JoinOperator joinType, ScalarOperator joinPredicate) {
+    public PhysicalHashJoinOperator(JoinOperator joinType,
+                                    ScalarOperator joinPredicate,
+                                    String joinHint,
+                                    long limit,
+                                    ScalarOperator predicate,
+                                    Projection projection) {
         super(OperatorType.PHYSICAL_HASH_JOIN);
         this.joinType = joinType;
         this.joinPredicate = joinPredicate;
+        this.joinHint = joinHint;
+        this.limit = limit;
+        this.predicate = predicate;
+        this.projection = projection;
     }
 
     public JoinOperator getJoinType() {
@@ -28,10 +39,6 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
 
     public ScalarOperator getJoinPredicate() {
         return joinPredicate;
-    }
-
-    public void setJoinHint(String joinHint) {
-        this.joinHint = joinHint;
     }
 
     public String getJoinHint() {
@@ -72,13 +79,15 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (!super.equals(o)) {
+            return false;
+        }
         PhysicalHashJoinOperator that = (PhysicalHashJoinOperator) o;
-        return joinType == that.joinType && Objects.equal(joinPredicate, that.joinPredicate) &&
-                Objects.equal(joinHint, that.joinHint) && Objects.equal(projection, that.projection);
+        return joinType == that.joinType && Objects.equals(joinPredicate, that.joinPredicate);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(joinType, joinPredicate, joinHint, projection);
+        return Objects.hash(super.hashCode(), joinType, joinPredicate);
     }
 }

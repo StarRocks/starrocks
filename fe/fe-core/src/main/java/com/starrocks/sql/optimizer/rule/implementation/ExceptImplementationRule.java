@@ -22,9 +22,8 @@ public class ExceptImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalSetOperator setOperator = (LogicalSetOperator) input.getOp();
         PhysicalExceptOperator physicalExcept =
-                new PhysicalExceptOperator(setOperator.getOutputColumnRefOp(), setOperator.getChildOutputColumns());
-        physicalExcept.setLimit(setOperator.getLimit());
-        physicalExcept.setProjection(setOperator.getProjection());
+                new PhysicalExceptOperator(setOperator.getOutputColumnRefOp(), setOperator.getChildOutputColumns(),
+                        setOperator.getLimit(), setOperator.getPredicate(), setOperator.getProjection());
         return Lists.newArrayList(OptExpression.create(physicalExcept, input.getInputs()));
     }
 }

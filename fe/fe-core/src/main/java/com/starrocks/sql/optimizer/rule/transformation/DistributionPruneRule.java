@@ -60,19 +60,10 @@ public class DistributionPruneRule extends TransformationRule {
             return Collections.emptyList();
         }
 
-        return Lists.newArrayList(OptExpression.create(new LogicalOlapScanOperator(
-                olapScanOperator.getTable(),
-                olapScanOperator.getOutputColumns(),
-                olapScanOperator.getColRefToColumnMetaMap(),
-                olapScanOperator.getColumnMetaToColRefMap(),
-                olapScanOperator.getDistributionSpec(),
-                olapScanOperator.getLimit(),
-                olapScanOperator.getPredicate(),
-                olapScanOperator.getSelectedIndexId(),
-                olapScanOperator.getSelectedPartitionId(),
-                olapScanOperator.getPartitionNames(),
-                result,
-                olapScanOperator.getHintsTabletIds()), input.getInputs()));
+        LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+        return Lists.newArrayList(OptExpression.create(
+                builder.withOperator(olapScanOperator).setSelectedTabletId(result).build(),
+                input.getInputs()));
     }
 
     private Collection<Long> distributionPrune(MaterializedIndex index, DistributionInfo distributionInfo,

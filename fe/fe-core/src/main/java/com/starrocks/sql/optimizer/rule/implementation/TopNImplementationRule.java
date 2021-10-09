@@ -30,8 +30,9 @@ public class TopNImplementationRule extends ImplementationRule {
                         logicalTopN.getOffset(),
                         logicalTopN.getSortPhase(),
                         logicalTopN.isSplit(),
-                        false);
-        physicalTopN.setProjection(logicalTopN.getProjection());
+                        false,
+                        logicalTopN.getPredicate(),
+                        logicalTopN.getProjection());
         return Lists.newArrayList(OptExpression.create(physicalTopN, input.getInputs()));
     }
 }

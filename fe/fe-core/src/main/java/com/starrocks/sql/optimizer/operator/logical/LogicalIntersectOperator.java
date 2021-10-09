@@ -5,13 +5,13 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-
-import java.util.List;
 
 public class LogicalIntersectOperator extends LogicalSetOperator {
-    public LogicalIntersectOperator(List<ColumnRefOperator> result, List<List<ColumnRefOperator>> childOutputColumns) {
-        super(OperatorType.LOGICAL_INTERSECT, result, childOutputColumns);
+    private LogicalIntersectOperator(LogicalIntersectOperator.Builder builder) {
+        super(OperatorType.LOGICAL_INTERSECT,
+                builder.outputColumnRefOp,
+                builder.childOutputColumns,
+                builder.getProjection());
     }
 
     @Override
@@ -22,6 +22,20 @@ public class LogicalIntersectOperator extends LogicalSetOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalIntersect(optExpression, context);
+    }
+
+    static public class Builder
+            extends LogicalSetOperator.Builder<LogicalIntersectOperator, LogicalIntersectOperator.Builder> {
+        @Override
+        public LogicalIntersectOperator build() {
+            return new LogicalIntersectOperator(this);
+        }
+
+        @Override
+        public LogicalIntersectOperator.Builder withOperator(LogicalIntersectOperator operator) {
+            super.withOperator(operator);
+            return this;
+        }
     }
 }
 

@@ -11,6 +11,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -40,8 +41,11 @@ public class PhysicalHiveScanOperator extends PhysicalScanOperator {
                                     List<ScalarOperator> noEvalPartitionConjuncts,
                                     List<ScalarOperator> nonPartitionConjuncts,
                                     List<ScalarOperator> minMaxConjuncts,
-                                    Map<ColumnRefOperator, Column> minMaxColumnRefMap) {
-        super(OperatorType.PHYSICAL_HIVE_SCAN, table, outputColumns, columnRefMap);
+                                    Map<ColumnRefOperator, Column> minMaxColumnRefMap,
+                                    long limit,
+                                    ScalarOperator predicate,
+                                    Projection projection) {
+        super(OperatorType.PHYSICAL_HIVE_SCAN, table, outputColumns, columnRefMap, limit, predicate, projection);
         this.selectedPartitionIds = selectedPartitionIds;
         this.idToPartitionKey = idToPartitionKey;
         this.noEvalPartitionConjuncts = noEvalPartitionConjuncts;

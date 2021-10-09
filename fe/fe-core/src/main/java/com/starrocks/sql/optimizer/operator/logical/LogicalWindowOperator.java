@@ -7,6 +7,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -32,6 +33,14 @@ public class LogicalWindowOperator extends LogicalOperator {
         this.partitionExpressions = partitionExpressions;
         this.orderByElements = orderByElements;
         this.analyticWindow = analyticWindow;
+    }
+
+    public LogicalWindowOperator(Builder builder) {
+        super(OperatorType.LOGICAL_WINDOW);
+        this.windowCall = builder.windowCall;
+        this.partitionExpressions = builder.partitionExpressions;
+        this.orderByElements = builder.orderByElements;
+        this.analyticWindow = builder.analyticWindow;
     }
 
     public Map<ColumnRefOperator, CallOperator> getWindowCall() {
@@ -93,5 +102,29 @@ public class LogicalWindowOperator extends LogicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), windowCall, partitionExpressions, orderByElements, analyticWindow);
+    }
+
+    static public class Builder extends LogicalOperator.Builder {
+        private Map<ColumnRefOperator, CallOperator> windowCall;
+        private List<ScalarOperator> partitionExpressions;
+        private List<Ordering> orderByElements;
+        private AnalyticWindow analyticWindow;
+
+        @Override
+        public LogicalWindowOperator build() {
+            return new LogicalWindowOperator(this);
+        }
+
+        @Override
+        public LogicalWindowOperator.Builder withOperator(Operator operator) {
+            super.withOperator(operator);
+
+            LogicalWindowOperator windowOperator = (LogicalWindowOperator) operator;
+            this.windowCall = windowOperator.windowCall;
+            this.partitionExpressions = windowOperator.partitionExpressions;
+            this.orderByElements = windowOperator.orderByElements;
+            this.analyticWindow = windowOperator.analyticWindow;
+            return this;
+        }
     }
 }

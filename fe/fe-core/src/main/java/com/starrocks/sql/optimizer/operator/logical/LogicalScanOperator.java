@@ -12,7 +12,9 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -38,8 +40,9 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
             Map<Column, ColumnRefOperator> columnMetaToColRefMap,
             long limit,
-            ScalarOperator predicate) {
-        super(type, limit, predicate);
+            ScalarOperator predicate,
+            Projection projection) {
+        super(type, limit, predicate, projection);
         this.table = Objects.requireNonNull(table, "table is null");
         this.outputColumns = ImmutableList.copyOf(outputColumns);
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
@@ -75,6 +78,9 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
+        if (projection != null) {
+            return new ColumnRefSet(projection.getOutputColumns());
+        }
         return new ColumnRefSet(this.outputColumns);
     }
 
@@ -112,24 +118,29 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), table.getId(), outputColumns, colRefToColumnMetaMap.keySet());
     }
 
-    class Builder {
-        private LogicalScanOperator scanOperator;
+    abstract static class Builder<O extends LogicalScanOperator, B extends LogicalScanOperator.Builder>
+            extends Operator.Builder<O, B> {
+        protected Table table;
+        protected ImmutableList<ColumnRefOperator> outputColumns;
+        protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
+        protected ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap;
+        protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
 
-        public Builder() {
+        @Override
+        public B withOperator(O scanOperator) {
+            super.withOperator(scanOperator);
 
+            this.table = scanOperator.table;
+            this.outputColumns = scanOperator.outputColumns;
+            this.colRefToColumnMetaMap = scanOperator.colRefToColumnMetaMap;
+            this.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
+            this.columnFilters = scanOperator.columnFilters;
+            return (B) this;
         }
 
-        Builder withOperator(LogicalScanOperator scanOperator) {
-            this.scanOperator.table = scanOperator.table;
-            return this;
-        }
-
-        public LogicalScanOperator build() {
-            return scanOperator;
-        }
-
-        public void setTable(Table table) {
-            scanOperator.table = table;
+        public B setTable(Table table) {
+            this.table = table;
+            return (B) this;
         }
     }
 }

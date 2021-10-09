@@ -212,26 +212,6 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
         }
 
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) optExpression.getOp();
-        List<ColumnRefOperator> pruneOutputColumns = joinOperator.getPruneOutputColumns();
-
-        List<ColumnRefOperator> newPruneOutputColumns = new ArrayList<>();
-        for (ColumnRefOperator c : pruneOutputColumns) {
-            if (c.equals(context.queryColumnRef)) {
-                newPruneOutputColumns.add(context.mvColumnRef);
-            } else {
-                newPruneOutputColumns.add(c);
-            }
-        }
-
-        LogicalJoinOperator newJoinOperator = new LogicalJoinOperator(
-                joinOperator.getJoinType(),
-                joinOperator.getOnPredicate(),
-                joinOperator.getJoinHint(),
-                joinOperator.getLimit(),
-                joinOperator.getPredicate(),
-                newPruneOutputColumns,
-                joinOperator.isHasPushDownJoinOnClause());
-
-        return OptExpression.create(newJoinOperator, optExpression.getInputs());
+        return OptExpression.create(joinOperator, optExpression.getInputs());
     }
 }
