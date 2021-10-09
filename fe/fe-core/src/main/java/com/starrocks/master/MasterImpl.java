@@ -86,6 +86,7 @@ import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TBackendMeta;
+import com.starrocks.thrift.TBasePartitionDesc;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
 import com.starrocks.thrift.TColumnMeta;
@@ -105,10 +106,12 @@ import com.starrocks.thrift.TPartitionInfo;
 import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TRandomDistributionInfo;
+import com.starrocks.thrift.TRange;
 import com.starrocks.thrift.TRangePartitionDesc;
 import com.starrocks.thrift.TReplicaMeta;
 import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TSchemaMeta;
+import com.starrocks.thrift.TSinglePartitionDesc;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableMeta;
@@ -1005,40 +1008,8 @@ public class MasterImpl {
                 tableMeta.putToProperties(property.getKey(), property.getValue());
             }
 
-            TPartitionInfo tPartitionInfo = new TPartitionInfo();
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-            tPartitionInfo.setType(partitionInfo.getType().name());
-            if (partitionInfo.getType() == PartitionType.RANGE) {
-                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-                for (Column column : rangePartitionInfo.getPartitionColumns()) {
-                    TColumnMeta columnMeta = new TColumnMeta();
-                    columnMeta.setColumnName(column.getName());
-                    columnMeta.setColumnType(column.getType().toThrift());
-                    columnMeta.setKey(column.isKey());
-                    if (column.getAggregationType() != null) {
-                        columnMeta.setAggregationType(column.getAggregationType().name());
-                    }
-                    columnMeta.setComment(column.getComment());
-                    tPartitionInfo.addToColumns(columnMeta);
-                }
-                Map<Long, Range<PartitionKey>> ranges = rangePartitionInfo.getIdToRange(false);
-                // ranges.sort(Comparator.comparing(o -> o.getValue().upperEndpoint()));
-                for (Map.Entry<Long, Range<PartitionKey>> range : ranges.entrySet()) {
-                    TRangePartitionDesc desc = new TRangePartitionDesc();
-                    desc.setPartition_id(range.getKey());
-                    ByteArrayOutputStream output = new ByteArrayOutputStream();
-                    DataOutputStream stream = new DataOutputStream(output);
-                    range.getValue().lowerEndpoint().write(stream);
-                    desc.setStart_key(output.toByteArray());
-
-                    output = new ByteArrayOutputStream();
-                    stream = new DataOutputStream(output);
-                    range.getValue().upperEndpoint().write(stream);
-                    desc.setEnd_key(output.toByteArray());
-                    tPartitionInfo.putToPartition_desc(range.getKey(), desc);
-                }
-            }
-
+            TBasePartitionDesc basePartitionDesc = new TBasePartitionDesc();
             // fill partition meta info
             for (Partition partition : olapTable.getAllPartitions()) {
                 TPartitionMeta partitionMeta = new TPartitionMeta();
@@ -1054,14 +1025,57 @@ public class MasterImpl {
                 tableMeta.addToPartitions(partitionMeta);
                 Short replicaNum = partitionInfo.getReplicationNum(partition.getId());
                 boolean inMemory = partitionInfo.getIsInMemory(partition.getId());
-                tPartitionInfo.putToReplica_num_map(partition.getId(), replicaNum);
-                tPartitionInfo.putToIn_memory_map(partition.getId(), inMemory);
+                basePartitionDesc.putToReplica_num_map(partition.getId(), replicaNum);
+                basePartitionDesc.putToIn_memory_map(partition.getId(), inMemory);
                 DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
                 TDataProperty thriftDataProperty = new TDataProperty();
                 thriftDataProperty.setStorage_medium(dataProperty.getStorageMedium());
                 thriftDataProperty.setCold_time(dataProperty.getCooldownTimeMs());
-                tPartitionInfo.putToData_property(partition.getId(), thriftDataProperty);
+                basePartitionDesc.putToData_property(partition.getId(), thriftDataProperty);
             }
+
+            TPartitionInfo tPartitionInfo = new TPartitionInfo();
+            tPartitionInfo.setType(partitionInfo.getType().toThrift());
+            if (partitionInfo.getType() == PartitionType.RANGE) {
+                TRangePartitionDesc rangePartitionDesc = new TRangePartitionDesc();
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                for (Column column : rangePartitionInfo.getPartitionColumns()) {
+                    TColumnMeta columnMeta = new TColumnMeta();
+                    columnMeta.setColumnName(column.getName());
+                    columnMeta.setColumnType(column.getType().toThrift());
+                    columnMeta.setKey(column.isKey());
+                    if (column.getAggregationType() != null) {
+                        columnMeta.setAggregationType(column.getAggregationType().name());
+                    }
+                    columnMeta.setComment(column.getComment());
+                    rangePartitionDesc.addToColumns(columnMeta);
+                }
+                Map<Long, Range<PartitionKey>> ranges = rangePartitionInfo.getIdToRange(false);
+                for (Map.Entry<Long, Range<PartitionKey>> range : ranges.entrySet()) {
+                    TRange tRange = new TRange();
+                    tRange.setPartition_id(range.getKey());
+                    ByteArrayOutputStream output = new ByteArrayOutputStream();
+                    DataOutputStream stream = new DataOutputStream(output);
+                    range.getValue().lowerEndpoint().write(stream);
+                    tRange.setStart_key(output.toByteArray());
+
+                    output = new ByteArrayOutputStream();
+                    stream = new DataOutputStream(output);
+                    range.getValue().upperEndpoint().write(stream);
+                    tRange.setEnd_key(output.toByteArray());
+                    tRange.setBase_desc(basePartitionDesc);
+                    rangePartitionDesc.putToRanges(range.getKey(), tRange);
+                }
+                tPartitionInfo.setRange_partition_desc(rangePartitionDesc);
+            } else if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                TSinglePartitionDesc singlePartitionDesc = new TSinglePartitionDesc();
+                singlePartitionDesc.setBase_desc(basePartitionDesc);
+                tPartitionInfo.setSingle_partition_desc(singlePartitionDesc);
+            } else {
+                LOG.info("invalid partition type {}", partitionInfo.getType());
+                return null;
+            }
+
             tableMeta.setPartition_info(tPartitionInfo);
 
             // fill index meta info
@@ -1082,7 +1096,7 @@ public class MasterImpl {
                     TIndexMeta indexMeta = new TIndexMeta();
                     indexMeta.setIndex_id(index.getId());
                     indexMeta.setPartition_id(partition.getId());
-                    indexMeta.setIndex_state(index.getState().name());
+                    indexMeta.setIndex_state(index.getState().toThrift());
                     indexMeta.setRow_count(index.getRowCount());
                     indexMeta.setRollup_index_id(index.getRollupIndexId());
                     indexMeta.setRollup_finished_version(index.getRollupFinishedVersion());

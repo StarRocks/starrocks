@@ -24,6 +24,7 @@ namespace java com.starrocks.thrift
 
 include "Status.thrift"
 include "Types.thrift"
+include "Partitions.thrift"
 include "InternalService.thrift"
 include "PlanNodes.thrift"
 include "Planner.thrift"
@@ -751,10 +752,15 @@ struct TSchemaMeta {
     6: optional string keys_type
 }
 
+enum TIndexState {
+    NORMAL,
+    SHADOW,
+}
+
 struct TIndexMeta {
     1: optional i64 index_id
     2: optional i64 partition_id
-    3: optional string index_state
+    3: optional TIndexState index_state
     4: optional i64 row_count
     5: optional i64 rollup_index_id
     6: optional i64 rollup_finished_version
@@ -763,23 +769,39 @@ struct TIndexMeta {
 }
 
 struct TDataProperty {
-    1: Types.TStorageMedium storage_medium
-    2: i64 cold_time
+    1: optional Types.TStorageMedium storage_medium
+    2: optional i64 cold_time
+}
+
+struct TBasePartitionDesc {
+    1: optional map<i64, i16> replica_num_map
+    2: optional map<i64, bool> in_memory_map
+    3: optional map<i64, TDataProperty> data_property
+}
+
+struct TSinglePartitionDesc {
+    1: optional TBasePartitionDesc base_desc
+}
+
+// one single partition range
+struct TRange {
+    1: optional i64 partition_id
+    2: optional TBasePartitionDesc base_desc
+    3: optional binary start_key
+    4: optional binary end_key
 }
 
 struct TRangePartitionDesc {
-    1: optional i64 partition_id
-    2: optional binary start_key
-    3: optional binary end_key
+    // partition keys
+    1: optional list<TColumnMeta> columns
+    // partition ranges
+    2: optional map<i64, TRange> ranges
 }
 
 struct TPartitionInfo {
-    1: optional string type
-    2: optional map<i64, i16> replica_num_map
-    3: optional map<i64, bool> in_memory_map
-    4: optional list<TColumnMeta> columns
-    5: optional map<i64, TRangePartitionDesc> partition_desc
-    6: optional map<i64, TDataProperty> data_property
+    1: optional Partitions.TPartitionType type
+    2: optional TSinglePartitionDesc single_partition_desc
+    3: optional TRangePartitionDesc  range_partition_desc
 }
 
 struct TPartitionMeta {

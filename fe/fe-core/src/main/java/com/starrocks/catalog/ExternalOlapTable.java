@@ -25,8 +25,10 @@ import com.starrocks.thrift.TIndexInfo;
 import com.starrocks.thrift.TIndexMeta;
 import com.starrocks.thrift.TPartitionInfo;
 import com.starrocks.thrift.TPartitionMeta;
+import com.starrocks.thrift.TRange;
 import com.starrocks.thrift.TRangePartitionDesc;
 import com.starrocks.thrift.TReplicaMeta;
+import com.starrocks.thrift.TSinglePartitionDesc;
 import com.starrocks.thrift.TTableMeta;
 import com.starrocks.thrift.TTabletMeta;
 import org.apache.logging.log4j.LogManager;
@@ -335,11 +337,12 @@ public class ExternalOlapTable extends OlapTable {
             }
 
             TPartitionInfo tPartitionInfo = meta.getPartition_info();
-            PartitionType partitionType = PartitionType.valueOf(tPartitionInfo.getType());
+            PartitionType partitionType = PartitionType.fromThrift(tPartitionInfo.getType());
             switch (partitionType) {
                 case RANGE:
+                    TRangePartitionDesc rangePartitionDesc = tPartitionInfo.getRange_partition_desc();
                     List<Column> columns = new ArrayList<Column>();
-                    for (TColumnMeta columnMeta : tPartitionInfo.getColumns()) {
+                    for (TColumnMeta columnMeta : rangePartitionDesc.getColumns()) {
                         Type type = Type.fromThrift(columnMeta.getColumnType());
                         Column column = new Column(columnMeta.getColumnName(), type);
                         if (columnMeta.isSetKey()) {
@@ -355,21 +358,19 @@ public class ExternalOlapTable extends OlapTable {
                     }
                     partitionInfo = new RangePartitionInfo(columns);
 
-                    for (Map.Entry<Long, TRangePartitionDesc> entry : tPartitionInfo.getPartition_desc().entrySet()) {
-                        TRangePartitionDesc desc = entry.getValue();
-                        long partitionId = desc.getPartition_id();
-                        ByteArrayInputStream stream = new ByteArrayInputStream(desc.getStart_key());
+                    for (Map.Entry<Long, TRange> entry : rangePartitionDesc.getRanges().entrySet()) {
+                        TRange tRange = entry.getValue();
+                        long partitionId = tRange.getPartition_id();
+                        ByteArrayInputStream stream = new ByteArrayInputStream(tRange.getStart_key());
                         DataInputStream input = new DataInputStream(stream);
                         PartitionKey startKey = PartitionKey.read(input);
-                        stream = new ByteArrayInputStream(desc.getEnd_key());
+                        stream = new ByteArrayInputStream(tRange.getEnd_key());
                         input = new DataInputStream(stream);
                         PartitionKey endKey = PartitionKey.read(input);
-                        // TODO(wulei): is closed or open or openClosed or closedOpen
                         Range<PartitionKey> range = Range.closedOpen(startKey, endKey);
-                        LOG.info("new range {}", range);
-                        short replicaNum = tPartitionInfo.getReplica_num_map().get(partitionId);
-                        boolean inMemory = tPartitionInfo.getIn_memory_map().get(partitionId);
-                        TDataProperty thriftDataProperty = tPartitionInfo.getData_property().get(partitionId);
+                        short replicaNum = tRange.getBase_desc().getReplica_num_map().get(partitionId);
+                        boolean inMemory = tRange.getBase_desc().getIn_memory_map().get(partitionId);
+                        TDataProperty thriftDataProperty = tRange.getBase_desc().getData_property().get(partitionId);
                         DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
                                                                      thriftDataProperty.getCold_time());
                         // TODO: confirm false is ok
@@ -379,11 +380,12 @@ public class ExternalOlapTable extends OlapTable {
                     break;
                 case UNPARTITIONED:
                     partitionInfo = new SinglePartitionInfo();
-                    for (Map.Entry<Long, Short> entry : tPartitionInfo.getReplica_num_map().entrySet()) {
+                    TSinglePartitionDesc singePartitionDesc = tPartitionInfo.getSingle_partition_desc();
+                    for (Map.Entry<Long, Short> entry : singePartitionDesc.getBase_desc().getReplica_num_map().entrySet()) {
                         long partitionId = entry.getKey();
-                        short replicaNum = tPartitionInfo.getReplica_num_map().get(partitionId);
-                        boolean inMemory = tPartitionInfo.getIn_memory_map().get(partitionId);
-                        TDataProperty thriftDataProperty = tPartitionInfo.getData_property().get(partitionId);
+                        short replicaNum = singePartitionDesc.getBase_desc().getReplica_num_map().get(partitionId);
+                        boolean inMemory = singePartitionDesc.getBase_desc().getIn_memory_map().get(partitionId);
+                        TDataProperty thriftDataProperty = singePartitionDesc.getBase_desc().getData_property().get(partitionId);
                         DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
                                                                      thriftDataProperty.getCold_time());
                         partitionInfo.addPartition(partitionId, dataProperty, replicaNum, inMemory);
@@ -451,7 +453,7 @@ public class ExternalOlapTable extends OlapTable {
                                                             partitionMeta.getVisible_time());
                 for (TIndexMeta indexMeta : meta.getIndexes()) {
                     MaterializedIndex index = new MaterializedIndex(indexMeta.getIndex_id(),
-                                                                    IndexState.valueOf(indexMeta.getIndex_state()));
+                                                                    IndexState.fromThrift(indexMeta.getIndex_state()));
                     index.setRowCount(indexMeta.getRow_count());
                     index.setRollupIndexInfo(indexMeta.getRollup_index_id(), indexMeta.getRollup_finished_version());
                     for (TTabletMeta tTabletMeta : indexMeta.getTablets()) {
