@@ -217,8 +217,9 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
     rowset_meta->init_from_pb(rs_meta_pb);
     RowsetSharedPtr org_rowset;
-    if (RowsetFactory::create_rowset(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), &tablet_schema, new_path,
-                                     rowset_meta, &org_rowset) != OLAP_SUCCESS) {
+    if (!RowsetFactory::create_rowset(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), &tablet_schema, new_path,
+                                      rowset_meta, &org_rowset)
+                 .ok()) {
         return Status::RuntimeError("fail to create rowset");
     }
     // do not use cache to load index
@@ -242,7 +243,7 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     context.segments_overlap = rowset_meta->segments_overlap();
 
     std::unique_ptr<RowsetWriter> rs_writer;
-    if (RowsetFactory::create_rowset_writer(context, &rs_writer) != OLAP_SUCCESS) {
+    if (!RowsetFactory::create_rowset_writer(context, &rs_writer).ok()) {
         return Status::RuntimeError("fail to create rowset writer");
     }
 
@@ -375,12 +376,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     if (snapshot_version == 0) {
         snapshot_version = tablet->max_version().second;
     }
-    auto ost = tablet->capture_consistent_rowsets(Version(0, snapshot_version), &snapshot_rowsets);
-    if (ost == OLAP_ERR_VERSION_ALREADY_MERGED) {
-        return Status::VersionAlreadyMerged("version already merged");
-    } else if (ost != OLAP_SUCCESS) {
-        return Status::RuntimeError("fail to capture_consistent_rowsets");
-    }
+    RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, snapshot_version), &snapshot_rowsets));
     tablet->generate_tablet_meta_copy_unlocked(snapshot_tablet_meta);
     snapshot_tablet_meta->delete_alter_task();
     rdlock.unlock();

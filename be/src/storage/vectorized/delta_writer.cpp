@@ -137,10 +137,10 @@ Status DeltaWriter::init() {
     writer_context.txn_id = _req.txn_id;
     writer_context.load_id = _req.load_id;
     writer_context.segments_overlap = OVERLAPPING;
-    OLAPStatus olap_status = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
-    if (olap_status != OLAPStatus::OLAP_SUCCESS) {
+    Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
+    if (!st.ok()) {
         std::stringstream ss;
-        ss << "Fail to create rowset writer. tablet_id=" << _req.tablet_id << " err=" << olap_status;
+        ss << "Fail to create rowset writer. tablet_id=" << _req.tablet_id << " err=" << st;
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
@@ -149,7 +149,7 @@ Status DeltaWriter::init() {
     _reset_mem_table();
 
     // create flush handler
-    olap_status = _storage_engine->memtable_flush_executor()->create_flush_token(&_flush_token);
+    OLAPStatus olap_status = _storage_engine->memtable_flush_executor()->create_flush_token(&_flush_token);
     if (olap_status != OLAPStatus::OLAP_SUCCESS) {
         std::stringstream ss;
         ss << "Fail to create flush token. tablet_id=" << _req.tablet_id;

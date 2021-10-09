@@ -47,7 +47,7 @@ public:
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
-        EXPECT_EQ(OLAP_SUCCESS, RowsetFactory::create_rowset_writer(writer_context, &writer));
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
@@ -216,7 +216,7 @@ static TabletSharedPtr load_same_tablet_from_store(const TabletSharedPtr& tablet
     // Create a new tablet instance from the latest snapshot.
     auto tablet1 = Tablet::create_tablet_from_meta(tablet->mem_tracker(), tablet_meta, data_dir);
     CHECK(tablet1 != nullptr);
-    CHECK_EQ(OLAP_SUCCESS, tablet1->init());
+    CHECK(tablet1->init().ok());
     CHECK(tablet1->init_succeeded());
     return tablet1;
 }
