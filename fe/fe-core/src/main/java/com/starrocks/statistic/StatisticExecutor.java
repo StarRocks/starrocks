@@ -55,7 +55,6 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
 import java.time.format.DateTimeFormatter;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -114,7 +113,7 @@ public class StatisticExecutor {
         DEFAULT_VELOCITY_ENGINE.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
     }
 
-    public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) {
+    public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
         String sql = buildQuerySQL(dbId, tableId, columnNames);
         Map<String, Database> dbs = Maps.newHashMap();
 
@@ -125,7 +124,7 @@ public class StatisticExecutor {
             ((QueryStmt) parsedStmt).getDbs(context, dbs);
         } catch (Exception e) {
             LOG.warn("Parse statistic table query fail.", e);
-            return Collections.emptyList();
+            throw e;
         }
 
         try {
@@ -134,9 +133,8 @@ public class StatisticExecutor {
             return deserializerStatisticData(sqlResult);
         } catch (Exception e) {
             LOG.warn("Execute statistic table query fail.", e);
+            throw e;
         }
-
-        return Collections.emptyList();
     }
 
     private List<TStatisticData> deserializerStatisticData(List<TResultBatch> sqlResult) throws TException {
