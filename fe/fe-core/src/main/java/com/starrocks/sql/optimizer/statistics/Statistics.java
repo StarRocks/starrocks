@@ -15,7 +15,9 @@ public class Statistics {
     private final double outputRowCount;
     private final Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
     // This flag set true if get table row count from Catalog LE 1
-    private boolean tableRowCountMayNotAccurate;
+    // Table row count in FE depends on BE reporting，but FE may not get report from BE which just started，
+    // this causes the table row count stored in FE to be inaccurate.
+    private boolean tableRowCountMayInaccurate;
 
     public Statistics(double outputRowCount,
                       Map<ColumnRefOperator, ColumnStatistic> columnStatistics) {
@@ -24,10 +26,10 @@ public class Statistics {
 
     public Statistics(double outputRowCount,
                       Map<ColumnRefOperator, ColumnStatistic> columnStatistics,
-                      boolean tableRowCountMayNotAccurate) {
+                      boolean tableRowCountMayInaccurate) {
         this.outputRowCount = outputRowCount;
         this.columnStatistics = columnStatistics;
-        this.tableRowCountMayNotAccurate = tableRowCountMayNotAccurate;
+        this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
     }
 
     public double getOutputRowCount() {
@@ -49,8 +51,8 @@ public class Statistics {
         return columnStatistics;
     }
 
-    public boolean isTableRowCountMayNotAccurate() {
-        return this.tableRowCountMayNotAccurate;
+    public boolean isTableRowCountMayInaccurate() {
+        return this.tableRowCountMayInaccurate;
     }
 
     public ColumnRefSet getUsedColumns() {
@@ -72,7 +74,7 @@ public class Statistics {
     public static final class Builder {
         private double outputRowCount;
         private final Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
-        private boolean tableRowCountMayNotAccurate = false;
+        private boolean tableRowCountMayInaccurate = false;
 
         public Builder() {
             this(NaN, new HashMap<>());
@@ -88,8 +90,8 @@ public class Statistics {
             return this;
         }
 
-        public Builder setTableRowCountMayNotAccurate(boolean tableRowCountMayNotAccurate) {
-            this.tableRowCountMayNotAccurate = tableRowCountMayNotAccurate;
+        public Builder setTableRowCountMayInaccurate(boolean tableRowCountMayInaccurate) {
+            this.tableRowCountMayInaccurate = tableRowCountMayInaccurate;
             return this;
         }
 
@@ -109,7 +111,7 @@ public class Statistics {
         }
 
         public Statistics build() {
-            return new Statistics(outputRowCount, columnStatistics, tableRowCountMayNotAccurate);
+            return new Statistics(outputRowCount, columnStatistics, tableRowCountMayInaccurate);
         }
     }
 }

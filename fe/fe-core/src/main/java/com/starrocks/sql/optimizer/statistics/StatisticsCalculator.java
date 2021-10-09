@@ -177,7 +177,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         // 2. get required columns statistics
         Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
         if (tableRowCount <= 1) {
-            builder.setTableRowCountMayNotAccurate(true);
+            builder.setTableRowCountMayInaccurate(true);
         }
         // 3. deal with column statistics for partition prune
         OlapTable olapTable = (OlapTable) table;

@@ -275,7 +275,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
             // 2. check default column statistics or child output row may not be accurate
             if (groupExpression.getGroup().getStatistics().getColumnStatistics().values().stream()
                     .allMatch(ColumnStatistic::isUnknown) ||
-                    childBestExpr.getGroup().getStatistics().isTableRowCountMayNotAccurate()) {
+                    childBestExpr.getGroup().getStatistics().isTableRowCountMayInaccurate()) {
                 // 3. check child expr distribution, if it is shuffle or gather without limit, could disable this plan
                 PhysicalDistributionOperator distributionOperator =
                         (PhysicalDistributionOperator) childBestExpr.getOp();
