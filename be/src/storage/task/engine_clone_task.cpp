@@ -634,7 +634,7 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
             LOG(WARNING) << "failed to remove rowset " << rs_meta_ptr->rowset_id().to_string() << ", res=" << ost;
         }
     }
-    return st.ok() ? Status::OK() : Status::InternalError("fail to revise tablet meta");
+    return st;
 }
 
 Status EngineCloneTask::_finish_clone_updatable(Tablet* tablet, const std::string& clone_dir, int64_t committed_version,

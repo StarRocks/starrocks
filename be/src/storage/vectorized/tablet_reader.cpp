@@ -35,10 +35,6 @@ Status TabletReader::prepare() {
     _tablet->obtain_header_rdlock();
     auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
     _tablet->release_header_lock();
-    if (!st.ok()) {
-        st = Status::InternalError(
-                strings::Substitute("fail to find rowset of version $0-$1", _version.first, _version.second));
-    }
     return st;
 }
 
