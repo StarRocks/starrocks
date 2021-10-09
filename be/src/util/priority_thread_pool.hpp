@@ -161,6 +161,7 @@ private:
     }
 
     void remove_thread(int tid) {
+        std::lock_guard<std::mutex> l(_lock);
         auto res = std::find_if(_threads_holder.begin(), _threads_holder.end(),
                                 [=](const auto& val) { return tid == val.second; });
         if (res != _threads_holder.end()) {
