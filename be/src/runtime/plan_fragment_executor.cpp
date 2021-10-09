@@ -393,8 +393,7 @@ void PlanFragmentExecutor::update_status(const Status& new_status) {
             }
             _status = new_status;
             if (_runtime_state->query_options().query_type == TQueryType::EXTERNAL) {
-                TUniqueId fragment_instance_id = _runtime_state->fragment_instance_id();
-                _exec_env->result_queue_mgr()->update_queue_status(fragment_instance_id, new_status);
+                _exec_env->result_queue_mgr()->update_queue_status(_runtime_state->fragment_instance_id(), new_status);
             }
         }
     }

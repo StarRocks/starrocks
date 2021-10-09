@@ -23,7 +23,11 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.task.AgentBatchTask;
@@ -55,7 +59,7 @@ public class PublishVersionDaemon extends MasterDaemon {
         }
     }
 
-    private void publishVersion() throws UserException {
+    private void publishVersion() throws UserException, DdlException {
         GlobalTransactionMgr globalTransactionMgr = Catalog.getCurrentGlobalTransactionMgr();
         List<TransactionState> readyTransactionStates = globalTransactionMgr.getReadyToPublishTransactions();
         if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
@@ -76,6 +80,28 @@ public class PublishVersionDaemon extends MasterDaemon {
         AgentBatchTask batchTask = new AgentBatchTask();
         // traverse all ready transactions and dispatch the publish version task to all backends
         for (TransactionState transactionState : readyTransactionStates) {
+            boolean skipTransactionState = false;
+            long dbId = transactionState.getDbId();
+            Database db = Catalog.getCurrentCatalog().getDb(dbId);
+            if (db == null) {
+                LOG.warn("db[{}] does not exist", dbId);
+                return;
+            }
+            List<Long> tableIds = transactionState.getTableIdList();
+            long transactionId = transactionState.getTransactionId();
+            for (Long tableId : tableIds) {
+                Table tbl = db.getTable(tableId);
+                if (tbl == null || tbl.getType() != TableType.OLAP) {
+                    throw new DdlException(String.format("Table[{}] does not exist or is not OLAP table", tableId));
+                }
+                skipTransactionState = tbl.skipTransactionStateUntilTwice(transactionId);
+                if (skipTransactionState) {
+                    continue;
+                }
+            }
+            if (skipTransactionState) {
+                continue;
+            }
             List<PublishVersionTask> tasks = transactionState.createPublishVersionTask();
             for (PublishVersionTask task : tasks) {
                 AgentTaskQueue.addTask(task);

@@ -27,7 +27,6 @@
 #include <sstream>
 
 #include "common/status.h"
-#include "common/statusor.h"
 #include "gutil/stl_util.h"
 #include "runtime/exec_env.h"
 #include "storage/primary_key_encoder.h"

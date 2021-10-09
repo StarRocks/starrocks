@@ -170,15 +170,14 @@ public class DeleteHandler implements Writable {
                         throw new DdlException("Partition does not exist. name: " + partitionName);
                     }
                     partitions.add(partition);
-                    short replicationNum = ((OlapTable) table).getPartitionInfo().getReplicationNum(partition.getId());
+                    short replicationNum = olapTable.getPartitionInfo().getReplicationNum(partition.getId());
                     partitionReplicaNum.put(partition.getId(), replicationNum);
                 }
 
                 List<String> deleteConditions = Lists.newArrayList();
 
                 // pre check
-                boolean hasValidCondition = checkDeleteV2(olapTable, partitions, conditions, deleteConditions);
-                if (!hasValidCondition) {
+                if (!checkDeleteV2(olapTable, partitions, conditions, deleteConditions)) {
                     return;
                 }
 
@@ -191,6 +190,8 @@ public class DeleteHandler implements Writable {
                         Lists.newArrayList(table.getId()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         TransactionState.LoadJobSourceType.FRONTEND, jobId, Config.stream_load_default_timeout_second);
+
+                table.addDeletingTransaction(transactionId, 1);
 
                 MultiDeleteInfo deleteInfo =
                         new MultiDeleteInfo(db.getId(), olapTable.getId(), tableName, deleteConditions);
@@ -254,12 +255,10 @@ public class DeleteHandler implements Writable {
                         }
                     }
                 }
-
                 // submit push tasks
                 if (batchTask.getTaskNum() > 0) {
                     AgentTaskExecutor.submit(batchTask);
                 }
-
             } catch (Throwable t) {
                 LOG.warn("error occurred during delete process", t);
                 // if transaction has been begun, need to abort it

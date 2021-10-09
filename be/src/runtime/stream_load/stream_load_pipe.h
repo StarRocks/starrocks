@@ -123,7 +123,6 @@ public:
             while (!_cancelled && !_finished && _buf_queue.empty()) {
                 _get_cond.wait(l);
             }
-            // cancelled
             if (_cancelled) {
                 return Status::InternalError("cancelled");
             }
@@ -196,7 +195,6 @@ private:
         while (!_cancelled && !_finished && _buf_queue.empty()) {
             _get_cond.wait(l);
         }
-        // cancelled
         if (_cancelled) {
             return Status::InternalError("cancelled");
         }

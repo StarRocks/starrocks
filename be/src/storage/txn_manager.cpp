@@ -291,8 +291,7 @@ OLAPStatus TxnManager::publish_txn(KVStore* meta, TPartitionId partition_id, TTr
 OLAPStatus TxnManager::publish_txn2(TTransactionId transaction_id, TPartitionId partition_id,
                                     const TabletSharedPtr& tablet, int64_t version) {
     pair<int64_t, int64_t> key(partition_id, transaction_id);
-    TabletUid tablet_uid = tablet->tablet_uid();
-    TabletInfo tablet_info(tablet->tablet_id(), tablet->schema_hash(), tablet_uid);
+    TabletInfo tablet_info(tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid());
     RowsetSharedPtr rowset_ptr = nullptr;
     std::lock_guard txn_lock(_get_txn_lock(transaction_id));
     {

@@ -48,6 +48,8 @@ import java.util.Map;
 public class Table extends MetaObject implements Writable {
     private static final Logger LOG = LogManager.getLogger(Table.class);
 
+    private Map<Long, Long> transactionIds;
+
     public enum TableType {
         MYSQL,
         OLAP,
@@ -101,6 +103,7 @@ public class Table extends MetaObject implements Writable {
         this.type = type;
         this.fullSchema = Lists.newArrayList();
         this.nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        this.transactionIds = Maps.newHashMap();
     }
 
     public Table(long id, String tableName, TableType type, List<Column> fullSchema) {
@@ -121,6 +124,7 @@ public class Table extends MetaObject implements Writable {
             Preconditions.checkArgument(type == TableType.VIEW, "Table has no columns");
         }
         this.createTime = Instant.now().getEpochSecond();
+        this.transactionIds = Maps.newHashMap();
     }
 
     public boolean isTypeRead() {
@@ -145,6 +149,39 @@ public class Table extends MetaObject implements Writable {
 
     public TableType getType() {
         return type;
+    }
+
+    public void addDeletingTransaction(long transaction_id, long times) {
+        transactionIds.put(transaction_id, times);
+    }
+
+    public boolean containsDeletingTransaction(long transaction_id) {
+        return transactionIds.containsKey(transaction_id);
+    }
+    
+    public boolean skipTransactionStateUntilTwice(long transaction_id) {
+        if (transactionIds.get(transaction_id) == null) {
+            return false;
+        } else if (transactionIds.get(transaction_id) == 1) {
+            this.addDeletingTransaction(transaction_id, 2);
+            return true;
+        } else if (transactionIds.get(transaction_id) == 2) {
+            this.removeTransactionId(transaction_id);
+            return false;
+        }
+        return false;
+    }
+
+    public boolean noDeletingTransaction() {
+        return transactionIds.isEmpty();
+    }
+
+    public void removeTransactionId(long transaction_id) {
+        transactionIds.remove(transaction_id);
+    }
+
+    public void clearTransactionId() {
+        transactionIds.clear();
     }
 
     public List<Column> getFullSchema() {
