@@ -37,9 +37,9 @@ struct BlockManagerMetrics {
     // Number of data blocks currently open for writing
     IntGauge* blocks_open_writing;
 
-    // Number of data blocks opened for writing since service start
-    IntCounter* total_readable_blocks;
     // Number of data blocks opened for reading since service start
+    IntCounter* total_readable_blocks;
+    // Number of data blocks opened for writing since service start
     IntCounter* total_writable_blocks;
     // Number of data blocks that were created since service start
     IntCounter* total_blocks_created;
