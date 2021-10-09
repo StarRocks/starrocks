@@ -138,10 +138,10 @@ Status Compaction::construct_output_rowset_writer() {
     context.version = _output_version;
     context.version_hash = _output_version_hash;
     context.segments_overlap = NONOVERLAPPING;
-    OLAPStatus olap_status = RowsetFactory::create_rowset_writer(context, &_output_rs_writer);
-    if (olap_status != OLAPStatus::OLAP_SUCCESS) {
+    Status st = RowsetFactory::create_rowset_writer(context, &_output_rs_writer);
+    if (!st.ok()) {
         std::stringstream ss;
-        ss << "Fail to create rowset writer. tablet_id=" << context.tablet_id << " err=" << olap_status;
+        ss << "Fail to create rowset writer. tablet_id=" << context.tablet_id << " err=" << st;
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
