@@ -329,7 +329,7 @@ void Aggregator::compute_batch_agg_states(size_t chunk_size) {
     }
 }
 
-void Aggregator::compute_batch_agg_states_with_limit(size_t chunk_size) {
+void Aggregator::compute_batch_agg_states_with_selection(size_t chunk_size) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         if (!_is_merge_funcs[i]) {
             _agg_functions[i]->update_batch_selectively(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
@@ -341,14 +341,6 @@ void Aggregator::compute_batch_agg_states_with_limit(size_t chunk_size) {
                                                        _agg_states_offsets[i], _agg_intput_columns[i][0].get(),
                                                        _tmp_agg_states.data(), _streaming_selection);
         }
-    }
-}
-
-void Aggregator::compute_batch_agg_states_with_selection(size_t chunk_size) {
-    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        _agg_functions[i]->update_batch_selectively(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
-                                                    _agg_input_raw_columns[i].data(), _tmp_agg_states.data(),
-                                                    _streaming_selection);
     }
 }
 

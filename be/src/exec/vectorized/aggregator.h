@@ -112,8 +112,6 @@ public:
     void compute_single_agg_state(size_t chunk_size);
     // For aggregate with group by
     void compute_batch_agg_states(size_t chunk_size);
-    // For aggregate with group by + aggregate functions + limit
-    void compute_batch_agg_states_with_limit(size_t chunk_size);
     void compute_batch_agg_states_with_selection(size_t chunk_size);
 
     // Convert one row agg states to chunk
