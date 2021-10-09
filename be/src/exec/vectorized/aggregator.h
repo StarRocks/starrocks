@@ -84,6 +84,7 @@ public:
     void update_num_input_rows(int64_t increment) { _num_input_rows += increment; }
     int64_t num_pass_through_rows() { return _num_pass_through_rows; }
     void set_aggr_phase(AggrPhase aggr_phase) { _aggr_phase = aggr_phase; }
+    AggrPhase get_aggr_phase() { return _aggr_phase; }
 
     TStreamingPreaggregationMode::type streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
     const vectorized::HashMapVariant& hash_map_variant() { return _hash_map_variant; }
@@ -247,7 +248,15 @@ private:
 
 public:
     template <typename HashMapWithKey>
-    void build_hash_map(HashMapWithKey& hash_map_with_key, size_t chunk_size) {
+    void build_hash_map(HashMapWithKey& hash_map_with_key, size_t chunk_size, bool agg_group_by_with_limit = false) {
+        if (agg_group_by_with_limit) {
+            if (hash_map_with_key.hash_map.size() >= _limit) {
+                build_hash_map_with_selection(hash_map_with_key, chunk_size);
+                return;
+            } else {
+                _streaming_selection.assign(chunk_size, 0);
+            }
+        }
         hash_map_with_key.compute_agg_states(
                 chunk_size, _group_by_columns, _mem_pool.get(),
                 [this]() {
