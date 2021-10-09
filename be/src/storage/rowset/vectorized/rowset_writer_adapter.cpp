@@ -23,7 +23,8 @@ RowsetWriterAdapter::RowsetWriterAdapter(const RowsetWriterContext& context) {
     } else {
         RowsetWriterContext rowset_context = context;
         rowset_context.memory_format_version = rowset_context.storage_format_version;
-        _status = RowsetFactory::create_rowset_writer(rowset_context, &_writer);
+        _status = RowsetFactory::create_rowset_writer(rowset_context, &_writer).ok() ? OLAP_SUCCESS
+                                                                                     : OLAP_ERR_OTHER_ERROR;
     }
 }
 

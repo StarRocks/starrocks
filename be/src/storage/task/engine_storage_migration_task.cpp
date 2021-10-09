@@ -105,7 +105,9 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
             }
 
             end_version = lastest_version->end_version();
-            res = tablet->capture_consistent_rowsets(Version(0, end_version), &consistent_rowsets);
+            res = tablet->capture_consistent_rowsets(Version(0, end_version), &consistent_rowsets).ok()
+                          ? OLAP_SUCCESS
+                          : OLAP_ERR_OTHER_ERROR;
             if (res != OLAP_SUCCESS || consistent_rowsets.empty()) {
                 LOG(WARNING) << "fail to capture consistent rowsets. version=" << end_version;
                 return OLAP_ERR_VERSION_NOT_EXIST;

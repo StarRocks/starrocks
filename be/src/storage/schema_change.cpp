@@ -1465,7 +1465,7 @@ bool SchemaChangeWithSorting::_internal_sorting(const std::vector<RowBlock*>& ro
             << ", block_row_size=" << new_tablet->num_rows_per_row_block();
 
     std::unique_ptr<RowsetWriter> rowset_writer;
-    if (RowsetFactory::create_rowset_writer(context, &rowset_writer) != OLAP_SUCCESS) {
+    if (!RowsetFactory::create_rowset_writer(context, &rowset_writer).ok()) {
         return false;
     }
 
@@ -1783,7 +1783,10 @@ OLAPStatus SchemaChangeHandler::_get_versions_to_be_changed(const TabletSharedPt
     }
 
     std::vector<Version> span_versions;
-    RETURN_NOT_OK(base_tablet->capture_consistent_versions(Version(0, rowset->version().second), &span_versions));
+    if (Status st = base_tablet->capture_consistent_versions(Version(0, rowset->version().second), &span_versions);
+        !st.ok()) {
+        return OLAP_ERR_OTHER_ERROR;
+    }
     for (auto& span_version : span_versions) {
         versions_to_be_changed->push_back(span_version);
     }
@@ -1874,7 +1877,9 @@ OLAPStatus SchemaChangeHandler::_convert_historical_rowsets(const SchemaChangePa
         writer_context.segments_overlap = rs_reader->rowset()->rowset_meta()->segments_overlap();
 
         std::unique_ptr<RowsetWriter> rowset_writer;
-        OLAPStatus status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
+        OLAPStatus status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok()
+                                    ? OLAP_SUCCESS
+                                    : OLAP_ERR_OTHER_ERROR;
         if (status != OLAP_SUCCESS) {
             res = OLAP_ERR_ROWSET_BUILDER_INIT;
             goto PROCESS_ALTER_EXIT;
@@ -1895,19 +1900,20 @@ OLAPStatus SchemaChangeHandler::_convert_historical_rowsets(const SchemaChangePa
             sc_params.new_tablet->release_push_lock();
             goto PROCESS_ALTER_EXIT;
         }
-        res = sc_params.new_tablet->add_rowset(new_rowset, false);
-        if (res == OLAP_ERR_PUSH_VERSION_ALREADY_EXIST) {
+        auto st = sc_params.new_tablet->add_rowset(new_rowset, false);
+        if (st.is_already_exist()) {
             LOG(WARNING) << "version already exist, version revert occured. "
                          << "tablet=" << sc_params.new_tablet->full_name() << ", version='"
                          << rs_reader->version().first << "-" << rs_reader->version().second;
             StorageEngine::instance()->add_unused_rowset(new_rowset);
             res = OLAP_SUCCESS;
-        } else if (res != OLAP_SUCCESS) {
+        } else if (!st.ok()) {
             LOG(WARNING) << "failed to register new version. "
                          << " tablet=" << sc_params.new_tablet->full_name()
                          << ", version=" << rs_reader->version().first << "-" << rs_reader->version().second;
             StorageEngine::instance()->add_unused_rowset(new_rowset);
             sc_params.new_tablet->release_push_lock();
+            res = OLAP_ERR_OTHER_ERROR;
             goto PROCESS_ALTER_EXIT;
         } else {
             VLOG(3) << "register new version. tablet=" << sc_params.new_tablet->full_name()
@@ -1927,7 +1933,7 @@ PROCESS_ALTER_EXIT : {
 }
     if (res == OLAP_SUCCESS) {
         Version test_version(0, end_version);
-        res = sc_params.new_tablet->check_version_integrity(test_version);
+        res = sc_params.new_tablet->check_version_integrity(test_version).ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
     }
     SAFE_DELETE(sc_procedure);
 

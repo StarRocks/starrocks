@@ -379,8 +379,8 @@ RowsetSharedPtr BetaRowsetWriter::build() {
     auto status =
             RowsetFactory::create_rowset(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _context.tablet_schema,
                                          _context.rowset_path_prefix, _rowset_meta, &rowset);
-    if (status != OLAP_SUCCESS) {
-        LOG(WARNING) << "Fail to create rowset, err=" << status;
+    if (!status.ok()) {
+        LOG(WARNING) << "Fail to create rowset: " << status;
         return nullptr;
     }
     _already_built = true;

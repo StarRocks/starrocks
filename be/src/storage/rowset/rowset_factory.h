@@ -33,15 +33,15 @@ class RowsetWriterContext;
 
 class RowsetFactory {
 public:
-    // return OLAP_SUCCESS and set inited rowset in `*rowset`.
-    // return others if failed to create or init rowset.
-    static OLAPStatus create_rowset(MemTracker* mem_tracker, const TabletSchema* schema, const std::string& rowset_path,
-                                    const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset);
+    // return OK on success and set inited rowset in `*rowset`.
+    // return error if failed to create or init rowset.
+    static Status create_rowset(MemTracker* mem_tracker, const TabletSchema* schema, const std::string& rowset_path,
+                                const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset);
 
     // create and init rowset writer.
-    // return OLAP_SUCCESS and set `*output` to inited rowset writer.
-    // return others if failed
-    static OLAPStatus create_rowset_writer(const RowsetWriterContext& context, std::unique_ptr<RowsetWriter>* output);
+    // return OK on success and set `*output` to inited rowset writer.
+    // return error if failed
+    static Status create_rowset_writer(const RowsetWriterContext& context, std::unique_ptr<RowsetWriter>* output);
 };
 
 } // namespace starrocks
