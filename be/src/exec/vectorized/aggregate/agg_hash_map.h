@@ -710,7 +710,6 @@ struct AggHashMapWithSerializedKeyFixedSize {
     Buffer<uint32_t> slice_sizes;
     std::unique_ptr<MemTracker> tracker;
     std::unique_ptr<MemPool> mem_pool;
-    uint8_t* buffer;
     ResultVector results;
     std::vector<Slice> tmp_slices;
 };
