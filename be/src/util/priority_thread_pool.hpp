@@ -143,10 +143,8 @@ private:
     }
 
     void decrease_thr(int num_thread) {
-        std::lock_guard<std::mutex> l(_lock);
-        for (int i = 0; i < num_thread; ++i) {
-            _should_decrease++;
-        }
+        _should_decrease += num_thread;
+
         for (int i = 0; i < num_thread; ++i) {
             PriorityThreadPool::Task empty_task = {0, []() {}};
             _work_queue.try_put(empty_task);
