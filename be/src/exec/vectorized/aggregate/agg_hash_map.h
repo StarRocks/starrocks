@@ -609,15 +609,13 @@ struct AggHashMapWithSerializedKeyFixedSize {
             key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_fixed_size);
         }
 
-        if (!has_null_column) {
-            for (size_t i = 0; i < chunk_size; i++) {
-                caches[i].hashval = hash_map.hash_function()(caches[i].key);
-            }
-        } else {
+        if (has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 caches[i].key.u.size = slice_sizes[i];
-                caches[i].hashval = hash_map.hash_function()(caches[i].key);
             }
+        }
+        for (size_t i = 0; i < chunk_size; i++) {
+            caches[i].hashval = hash_map.hash_function()(caches[i].key);
         }
 
         size_t __prefetch_index = AGG_HASH_MAP_DEFAULT_PREFETCH_DIST;
@@ -655,15 +653,13 @@ struct AggHashMapWithSerializedKeyFixedSize {
 
         not_founds->assign(chunk_size, 0);
 
-        if (!has_null_column) {
-            for (size_t i = 0; i < chunk_size; i++) {
-                caches[i].hashval = hash_map.hash_function()(caches[i].key);
-            }
-        } else {
+        if (has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 caches[i].key.u.size = slice_sizes[i];
-                caches[i].hashval = hash_map.hash_function()(caches[i].key);
             }
+        }
+        for (size_t i = 0; i < chunk_size; i++) {
+            caches[i].hashval = hash_map.hash_function()(caches[i].key);
         }
 
         size_t __prefetch_index = AGG_HASH_MAP_DEFAULT_PREFETCH_DIST;
