@@ -409,7 +409,7 @@ public class RangePartitionInfo extends PartitionInfo {
                 break;
             }
             short curPartitionReplicationNum = tblPartitionInfo.getReplicationNum(entry.getKey());
-            if(curPartitionReplicationNum != replicationNum) {
+            if (curPartitionReplicationNum != replicationNum) {
                 sb.append("(").append("\"replication_num\" = \"").append(curPartitionReplicationNum).append("\")");
             }
             if (idx != entries.size() - 1) {
