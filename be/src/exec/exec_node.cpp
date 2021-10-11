@@ -48,12 +48,14 @@
 #include "exec/vectorized/intersect_node.h"
 #include "exec/vectorized/mysql_scan_node.h"
 #include "exec/vectorized/olap_scan_node.h"
+#include "exec/vectorized/olap_meta_scan_node.h"
 #include "exec/vectorized/project_node.h"
 #include "exec/vectorized/repeat_node.h"
 #include "exec/vectorized/schema_scan_node.h"
 #include "exec/vectorized/table_function_node.h"
 #include "exec/vectorized/topn_node.h"
 #include "exec/vectorized/union_node.h"
+#include "exec/vectorized/dict_decode_node.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
@@ -114,9 +116,9 @@ int ExecNode::RowBatchQueue::Cleanup() {
     // }
 
     std::lock_guard<std::mutex> l(lock_);
-    for (auto& it : cleanup_queue_) {
+    for (std::list<RowBatch*>::iterator it = cleanup_queue_.begin(); it != cleanup_queue_.end(); ++it) {
         // num_io_buffers += (*it)->num_io_buffers();
-        delete it;
+        delete *it;
     }
     cleanup_queue_.clear();
     return num_io_buffers;
@@ -141,12 +143,12 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
     init_runtime_profile(print_plan_node_type(tnode.node_type));
 }
 
-ExecNode::~ExecNode() = default;
+ExecNode::~ExecNode() {}
 
 void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) {
     if (_type != TPlanNodeType::AGGREGATION_NODE) {
-        for (auto& i : _children) {
-            i->push_down_predicate(state, expr_ctxs, is_vectorized);
+        for (int i = 0; i < _children.size(); ++i) {
+            _children[i]->push_down_predicate(state, expr_ctxs, is_vectorized);
             if (expr_ctxs->size() == 0) {
                 return;
             }
@@ -177,8 +179,8 @@ void ExecNode::push_down_join_runtime_filter(RuntimeState* state, vectorized::Ru
 
 void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state,
                                                          vectorized::RuntimeFilterProbeCollector* collector) {
-    for (auto& i : _children) {
-        i->push_down_join_runtime_filter(state, collector);
+    for (int i = 0; i < _children.size(); ++i) {
+        _children[i]->push_down_join_runtime_filter(state, collector);
         if (collector->size() == 0) {
             return;
         }
@@ -218,9 +220,8 @@ Status ExecNode::prepare(RuntimeState* state) {
     _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
     _rows_returned_rate = runtime_profile()->add_derived_counter(
             ROW_THROUGHPUT_COUNTER, TUnit::UNIT_PER_SECOND,
-            [capture0 = _rows_returned_counter, capture1 = runtime_profile()->total_time_counter()] {
-                return RuntimeProfile::units_per_second(capture0, capture1);
-            },
+            std::bind<int64_t>(&RuntimeProfile::units_per_second, _rows_returned_counter,
+                               runtime_profile()->total_time_counter()),
             "");
     _mem_tracker.reset(
             new MemTracker(_runtime_profile.get(), -1, _runtime_profile->name(), state->instance_mem_tracker()));
@@ -232,8 +233,8 @@ Status ExecNode::prepare(RuntimeState* state) {
     // TODO(zc):
     // AddExprCtxsToFree(_conjunct_ctxs);
 
-    for (auto& i : _children) {
-        RETURN_IF_ERROR(i->prepare(state));
+    for (int i = 0; i < _children.size(); ++i) {
+        RETURN_IF_ERROR(_children[i]->prepare(state));
     }
 
     return Status::OK();
@@ -318,8 +319,8 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
 
 Status ExecNode::reset(RuntimeState* state) {
     _num_rows_returned = 0;
-    for (auto& i : _children) {
-        RETURN_IF_ERROR(i->reset(state));
+    for (int i = 0; i < _children.size(); ++i) {
+        RETURN_IF_ERROR(_children[i]->reset(state));
     }
     return Status::OK();
 }
@@ -344,8 +345,8 @@ Status ExecNode::close(RuntimeState* state) {
     }
 
     Status result;
-    for (auto& i : _children) {
-        auto st = i->close(state);
+    for (int i = 0; i < _children.size(); ++i) {
+        auto st = _children[i]->close(state);
         if (result.ok() && !st.ok()) {
             result = st;
         }
@@ -460,6 +461,11 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     case TPlanNodeType::OLAP_SCAN_NODE:
         *node = pool->add(new vectorized::OlapScanNode(pool, tnode, descs));
         return Status::OK();
+    case TPlanNodeType::META_SCAN_NODE:
+        // just for debug
+        std::cout << "create META_SCAN_NODE" << std::endl;
+        *node = pool->add(new vectorized::OlapMetaScanNode(pool, tnode, descs));
+        return Status::OK();
     case TPlanNodeType::AGGREGATION_NODE:
         if (tnode.agg_node.__isset.use_streaming_preaggregation && tnode.agg_node.use_streaming_preaggregation) {
             if (tnode.agg_node.aggregate_functions.size() == 0) {
@@ -536,6 +542,11 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     case TPlanNodeType::SCHEMA_SCAN_NODE:
         *node = pool->add(new vectorized::SchemaScanNode(pool, tnode, descs));
         return Status::OK();
+    case TPlanNodeType::DECODE_NODE:
+        *node = pool->add(new vectorized::DictDecodeNode(pool, tnode, descs));
+        // just for debug
+        std::cout << "create DECODE_NODE" << std::endl;
+        return Status::OK();
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
     }
@@ -548,8 +559,8 @@ void ExecNode::set_debug_options(int node_id, TExecNodePhase::type phase, TDebug
         return;
     }
 
-    for (auto& i : root->_children) {
-        set_debug_options(node_id, phase, action, i);
+    for (int i = 0; i < root->_children.size(); ++i) {
+        set_debug_options(node_id, phase, action, root->_children[i]);
     }
 }
 
@@ -569,9 +580,9 @@ void ExecNode::debug_string(int indentation_level, std::stringstream* out) const
     }
     *out << "]";
 
-    for (auto i : _children) {
+    for (int i = 0; i < _children.size(); ++i) {
         *out << "\n";
-        i->debug_string(indentation_level + 1, out);
+        _children[i]->debug_string(indentation_level + 1, out);
     }
 }
 
@@ -703,9 +714,9 @@ void ExecNode::collect_nodes(TPlanNodeType::type node_type, std::vector<ExecNode
     if (_type == node_type) {
         nodes->push_back(this);
     }
-
-    for (auto& i : _children) {
-        i->collect_nodes(node_type, nodes);
+    
+    for (int i = 0; i < _children.size(); ++i) {
+        _children[i]->collect_nodes(node_type, nodes);
     }
 }
 
@@ -715,6 +726,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::ES_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::ES_HTTP_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::HDFS_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::META_SCAN_NODE, nodes);
 }
 
 bool ExecNode::_check_has_vectorized_scan_child() {
@@ -722,8 +734,8 @@ bool ExecNode::_check_has_vectorized_scan_child() {
         return true;
     }
 
-    for (auto& i : _children) {
-        if (i->_check_has_vectorized_scan_child()) {
+    for (int i = 0; i < _children.size(); ++i) {
+        if (_children[i]->_check_has_vectorized_scan_child()) {
             return true;
         }
     }
