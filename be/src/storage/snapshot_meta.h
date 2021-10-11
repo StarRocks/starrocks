@@ -18,6 +18,7 @@ class WritableFile;
 
 class SnapshotMeta {
 public:
+    Status serialize_to_file(const std::string& file_path);
     Status serialize_to_file(WritableFile* file);
 
     Status parse_from_file(RandomAccessFile* file);
