@@ -132,10 +132,10 @@ Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& v
                                
     std::vector<RowsetSharedPtr> rowsets;
     tablet->obtain_header_rdlock();
-    OLAPStatus acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &rowsets);
+    Status acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &rowsets);
     tablet->release_header_lock();
 
-     if (acquire_rowset_st != OLAP_SUCCESS) {      
+     if (!acquire_rowset_st.ok()) {      
         std::stringstream ss;
         ss << "fail to init reader. tablet=" << tablet->full_name() 
            << "res=" << acquire_rowset_st;
