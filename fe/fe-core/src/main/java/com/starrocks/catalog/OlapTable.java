@@ -558,7 +558,11 @@ public class OlapTable extends Table {
     }
 
     public List<Column> getSchemaByIndexId(Long indexId) {
-        return indexIdToMeta.get(indexId).getSchema();
+        MaterializedIndexMeta meta = indexIdToMeta.get(indexId);
+        if (meta != null) {
+            return meta.getSchema();
+        }
+        return new ArrayList<Column>();
     }
 
     public List<Column> getKeyColumnsByIndexId(Long indexId) {
