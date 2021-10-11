@@ -68,8 +68,7 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                 newProjectMap.put(kv.getKey(), kv.getValue());
             }
         }
-        projectOperator.setColumnRefMap(newProjectMap);
-        return OptExpression.create(projectOperator, optExpression.getInputs());
+        return OptExpression.create(new LogicalProjectOperator(newProjectMap), optExpression.getInputs());
     }
 
     @Override
