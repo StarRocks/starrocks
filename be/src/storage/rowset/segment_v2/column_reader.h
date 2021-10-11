@@ -25,7 +25,6 @@
 #include <cstddef> // for size_t
 #include <cstdint> // for uint32_t
 #include <memory>  // for unique_ptr
-#include <utility>
 
 #include "column/datum.h"
 #include "column/fixed_length_column.h"
@@ -319,6 +318,10 @@ public:
     // otherwise this method will always return false.
     virtual bool all_page_dict_encoded() const { return false; }
 
+    // if all data page of this colum are encoded as dictionary encoding.
+    // return all dictionary words that store in dict page
+    virtual Status fetch_all_dict_words(std::vector<Slice>* words) const { return Status::NotSupported("Not Support dict."); }
+
     // return a non-negative dictionary code of |word| if it exist in this segment file,
     // otherwise -1 is returned.
     // NOTE: this method can be invoked only if `all_page_dict_encoded` returns true.
@@ -397,6 +400,8 @@ public:
 
     bool all_page_dict_encoded() const override { return _all_dict_encoded; }
 
+    Status fetch_all_dict_words(std::vector<Slice>* words) const override;
+
     int dict_lookup(const Slice& word) override;
 
     Status next_dict_codes(size_t* n, vectorized::Column* dst) override;
@@ -410,6 +415,10 @@ public:
     bool is_nullable() { return _reader->is_nullable(); }
 
     int64_t element_ordinal() const { return _element_ordinal; }
+
+    // only work when all_page_dict_encoded was true.
+    // used to acquire load local dict
+    int dict_size();
 
 private:
     static void _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
@@ -427,6 +436,9 @@ private:
 
     template <FieldType Type>
     Status _do_init_dict_decoder();
+
+    template <FieldType Type>
+    Status _fetch_all_dict_words(std::vector<Slice>* words) const;
 
     Status _load_dict_page();
 
@@ -467,6 +479,8 @@ private:
     Status (FileColumnIterator::*_decode_dict_codes_func)(const int32_t* codes, size_t size,
                                                           vectorized::Column* words) = nullptr;
     Status (FileColumnIterator::*_init_dict_decoder_func)() = nullptr;
+
+    Status (FileColumnIterator::*_fetch_all_dict_words_func)(std::vector<Slice>* words) const = nullptr;
 
     // whether all data pages are dict-encoded.
     bool _all_dict_encoded = false;
@@ -535,11 +549,11 @@ private:
 class DefaultValueColumnIterator final : public ColumnIterator {
 public:
     DefaultValueColumnIterator(bool has_default_value, std::string default_value, bool is_nullable,
-                               TypeInfoPtr type_info, size_t schema_length, ordinal_t num_rows)
+                               const TypeInfoPtr& type_info, size_t schema_length, ordinal_t num_rows)
             : _has_default_value(has_default_value),
               _default_value(std::move(default_value)),
               _is_nullable(is_nullable),
-              _type_info(std::move(type_info)),
+              _type_info(type_info),
               _schema_length(schema_length),
               _is_default_value_null(false),
               _type_size(0),
