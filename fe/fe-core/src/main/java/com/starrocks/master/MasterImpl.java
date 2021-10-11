@@ -1112,11 +1112,12 @@ public class MasterImpl {
                         columnMeta.setColumnName(column.getName());
                         columnMeta.setColumnType(column.getType().toThrift());
                         columnMeta.setKey(column.isKey());
-                        columnMeta.setAllow_null(column.isAllowNull());
+                        columnMeta.setAllowNull(column.isAllowNull());
                         if (column.getAggregationType() != null) {
                             columnMeta.setAggregationType(column.getAggregationType().name());
                         }
                         columnMeta.setComment(column.getComment());
+                        columnMeta.setDefaultValue(column.getDefaultValue());
                         schemaMeta.addToColumns(columnMeta);
                     }
                     indexMeta.setSchema_meta(schemaMeta);
