@@ -62,4 +62,6 @@ public class FeConstants {
 
     // use \N to indicate NULL
     public static String null_string = "\\N";
+
+    public static boolean USE_MOCK_DICT_MANAGER = false;
 }
