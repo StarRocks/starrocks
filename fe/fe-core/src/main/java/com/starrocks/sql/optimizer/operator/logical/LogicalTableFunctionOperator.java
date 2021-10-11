@@ -6,7 +6,6 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -111,7 +110,8 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), fn, fnResultColumnRefSet, outerColumnRefSet, fnParamColumnProjectMap);
     }
 
-    public static class Builder extends LogicalOperator.Builder {
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalTableFunctionOperator, LogicalTableFunctionOperator.Builder> {
         private TableFunction fn;
         private ColumnRefSet fnResultColumnRefSet;
         private ColumnRefSet outerColumnRefSet;
@@ -123,10 +123,9 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
         }
 
         @Override
-        public LogicalTableFunctionOperator.Builder withOperator(Operator operator) {
-            super.withOperator(operator);
+        public LogicalTableFunctionOperator.Builder withOperator(LogicalTableFunctionOperator tableFunctionOperator) {
+            super.withOperator(tableFunctionOperator);
 
-            LogicalTableFunctionOperator tableFunctionOperator = (LogicalTableFunctionOperator) operator;
             this.fnResultColumnRefSet = tableFunctionOperator.fnResultColumnRefSet;
             this.fn = tableFunctionOperator.fn;
             this.fnParamColumnProjectMap = tableFunctionOperator.fnParamColumnProjectMap;

@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-
 public class Projection {
     public static Long totalTime = 0L;
 
@@ -18,6 +17,11 @@ public class Projection {
     // Used for common operator compute result reuse, we need to compute
     // common sub operators firstly in BE
     private final Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap;
+
+    public Projection(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
+        this.columnRefMap = columnRefMap;
+        this.commonSubOperatorMap = new HashMap<>();
+    }
 
     public Projection(Map<ColumnRefOperator, ScalarOperator> columnRefMap,
                       Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap) {

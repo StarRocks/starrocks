@@ -2,16 +2,22 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import jersey.repackaged.com.google.common.collect.Lists;
 
-import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class PruneJoinColumnsRule extends TransformationRule {
     public PruneJoinColumnsRule() {
@@ -24,11 +30,25 @@ public class PruneJoinColumnsRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
 
-        ColumnRefSet requiredInputColumns = joinOperator.getRequiredChildInputColumns();
         ColumnRefSet requiredColumns = context.getTaskContext().get(0).getRequiredColumns();
-        // Change the requiredColumns in context
-        requiredColumns.union(requiredInputColumns);
+        List<ColumnRefOperator> newOutputs = joinOperator.getOutputColumns(new ExpressionContext(input)).getStream()
+                .filter(requiredColumns::contains)
+                .mapToObj(id -> context.getColumnRefFactory().getColumnRef(id))
+                .collect(Collectors.toList());
 
-        return Collections.emptyList();
+        if (newOutputs.isEmpty()) {
+            newOutputs.add(Utils.findSmallestColumnRef(input.inputAt(0).getOutputColumns().getStream().
+                    mapToObj(context.getColumnRefFactory()::getColumnRef).collect(Collectors.toList())));
+        }
+
+        LogicalJoinOperator newJoinOperator = new LogicalJoinOperator.Builder().withOperator(joinOperator)
+                .setProjection(new Projection(newOutputs.stream()
+                        .collect(Collectors.toMap(Function.identity(), Function.identity()))))
+                .build();
+
+        // Change the requiredColumns in context
+        requiredColumns.union(newJoinOperator.getRequiredChildInputColumns());
+
+        return Lists.newArrayList(OptExpression.create(newJoinOperator, input.getInputs()));
     }
 }

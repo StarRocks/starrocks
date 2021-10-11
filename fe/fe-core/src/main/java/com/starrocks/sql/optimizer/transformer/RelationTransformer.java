@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.SetQualifier;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
@@ -73,6 +74,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -343,13 +345,12 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
                         .collect(Collectors.toList()));
 
         if (node.getOnPredicate() == null) {
-            return new OptExprBuilder(new LogicalJoinOperator(JoinOperator.CROSS_JOIN,
-                    null,
-                    node.getJoinHint(),
-                    -1,
-                    null,
-                    null,
-                    false), Lists.newArrayList(leftPlan, rightPlan), expressionMapping);
+            return new OptExprBuilder(new LogicalJoinOperator.Builder()
+                    .setJoinType(JoinOperator.CROSS_JOIN)
+                    .setJoinHint(node.getJoinHint())
+                    .setProjection(new Projection(expressionMapping.getFieldMappings().stream()
+                            .collect(Collectors.toMap(Function.identity(), Function.identity()))))
+                    .build(), Lists.newArrayList(leftPlan, rightPlan), expressionMapping);
         }
 
         ScalarOperator onPredicateWithoutRewrite = SqlToScalarOperatorTranslator
@@ -379,28 +380,27 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
             onPredicate = Utils.compoundAnd(Utils.compoundAnd(eqConj), onPredicate);
         }
 
-        Operator root = new LogicalJoinOperator(node.getType(),
-                onPredicate,
-                node.getJoinHint(),
-                -1,
-                null,
-                null,
-                false);
-
-        OptExprBuilder optExprBuilder;
+        ExpressionMapping outputExpressionMapping;
         if (node.getType().isLeftSemiAntiJoin()) {
-            optExprBuilder = new OptExprBuilder(root, Lists.newArrayList(leftPlan, rightPlan),
+            outputExpressionMapping =
                     new ExpressionMapping(new Scope(RelationId.of(node), node.getLeft().getRelationFields()),
-                            Lists.newArrayList(leftPlan.getFieldMappings())));
+                            Lists.newArrayList(leftPlan.getFieldMappings()));
         } else if (node.getType().isRightSemiAntiJoin()) {
-            optExprBuilder = new OptExprBuilder(root, Lists.newArrayList(leftPlan, rightPlan),
+            outputExpressionMapping =
                     new ExpressionMapping(new Scope(RelationId.of(node), node.getRight().getRelationFields()),
-                            Lists.newArrayList(rightPlan.getFieldMappings())));
+                            Lists.newArrayList(rightPlan.getFieldMappings()));
         } else {
-            optExprBuilder = new OptExprBuilder(root, Lists.newArrayList(leftPlan, rightPlan), expressionMapping);
+            outputExpressionMapping = expressionMapping;
         }
 
-        return optExprBuilder;
+        LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder()
+                .setJoinType(node.getType())
+                .setOnPredicate(onPredicate)
+                .setJoinHint(node.getJoinHint())
+                .setProjection(new Projection(outputExpressionMapping.getFieldMappings().stream()
+                        .collect(Collectors.toMap(Function.identity(), Function.identity()))))
+                .build();
+        return new OptExprBuilder(joinOperator, Lists.newArrayList(leftPlan, rightPlan), outputExpressionMapping);
     }
 
     @Override

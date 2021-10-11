@@ -207,7 +207,7 @@ public class JoinPredicateUtils {
                     BinaryPredicateOperator bpo = (BinaryPredicateOperator) so;
 
                     // avoid repeat predicate, like a = b, b = a
-                    if (!allPredicate.contains(bpo) && !allPredicate.contains(bpo.negative())) {
+                    if (!allPredicate.contains(bpo) && !allPredicate.contains(bpo.commutative())) {
                         allPredicate.add(bpo);
                     }
                     continue;

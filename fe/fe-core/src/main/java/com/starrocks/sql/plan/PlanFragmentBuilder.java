@@ -209,7 +209,7 @@ public class PlanFragmentBuilder {
             if (projection == null) {
                 return fragment;
             } else {
-                return buildProjectNode(projection, fragment, context);
+                return buildProjectNode(optExpression, projection, fragment, context);
             }
         }
 
@@ -274,7 +274,7 @@ public class PlanFragmentBuilder {
             return inputFragment;
         }
 
-        public PlanFragment buildProjectNode(Projection node, PlanFragment inputFragment, ExecPlan context) {
+        public PlanFragment buildProjectNode(OptExpression optExpression, Projection node, PlanFragment inputFragment, ExecPlan context) {
             if (node == null) {
                 return inputFragment;
             }
@@ -322,7 +322,7 @@ public class PlanFragmentBuilder {
                             commonSubOperatorMap);
 
             projectNode.setHasNullableGenerateChild();
-            //projectNode.computeStatistics(optExpr.getStatistics());
+            projectNode.computeStatistics(optExpression.getStatistics());
             for (SlotId sid : projectMap.keySet()) {
                 SlotDescriptor slotDescriptor = tupleDescriptor.getSlot(sid.asInt());
                 slotDescriptor.setIsNullable(slotDescriptor.getIsNullable() | projectNode.isHasNullableGenerateChild());

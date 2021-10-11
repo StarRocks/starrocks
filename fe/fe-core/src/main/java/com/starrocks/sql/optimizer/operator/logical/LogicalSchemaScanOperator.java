@@ -6,7 +6,6 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -51,14 +50,15 @@ public class LogicalSchemaScanOperator extends LogicalScanOperator {
         return visitor.visitLogicalSchemaScan(this, context);
     }
 
-    public static class Builder extends LogicalScanOperator.Builder {
+    public static class Builder
+            extends LogicalScanOperator.Builder<LogicalSchemaScanOperator, LogicalSchemaScanOperator.Builder> {
         @Override
         public LogicalSchemaScanOperator build() {
             return new LogicalSchemaScanOperator(this);
         }
 
         @Override
-        public LogicalSchemaScanOperator.Builder withOperator(Operator operator) {
+        public LogicalSchemaScanOperator.Builder withOperator(LogicalSchemaScanOperator operator) {
             super.withOperator(operator);
             return this;
         }

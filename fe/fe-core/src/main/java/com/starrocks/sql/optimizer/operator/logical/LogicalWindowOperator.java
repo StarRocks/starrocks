@@ -7,7 +7,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -35,7 +34,7 @@ public class LogicalWindowOperator extends LogicalOperator {
         this.analyticWindow = analyticWindow;
     }
 
-    public LogicalWindowOperator(Builder builder) {
+    private LogicalWindowOperator(Builder builder) {
         super(OperatorType.LOGICAL_WINDOW);
         this.windowCall = builder.windowCall;
         this.partitionExpressions = builder.partitionExpressions;
@@ -104,7 +103,7 @@ public class LogicalWindowOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), windowCall, partitionExpressions, orderByElements, analyticWindow);
     }
 
-    public static class Builder extends LogicalOperator.Builder {
+    public static class Builder extends LogicalOperator.Builder<LogicalWindowOperator, LogicalWindowOperator.Builder> {
         private Map<ColumnRefOperator, CallOperator> windowCall;
         private List<ScalarOperator> partitionExpressions;
         private List<Ordering> orderByElements;
@@ -116,10 +115,9 @@ public class LogicalWindowOperator extends LogicalOperator {
         }
 
         @Override
-        public LogicalWindowOperator.Builder withOperator(Operator operator) {
-            super.withOperator(operator);
+        public LogicalWindowOperator.Builder withOperator(LogicalWindowOperator windowOperator) {
+            super.withOperator(windowOperator);
 
-            LogicalWindowOperator windowOperator = (LogicalWindowOperator) operator;
             this.windowCall = windowOperator.windowCall;
             this.partitionExpressions = windowOperator.partitionExpressions;
             this.orderByElements = windowOperator.orderByElements;

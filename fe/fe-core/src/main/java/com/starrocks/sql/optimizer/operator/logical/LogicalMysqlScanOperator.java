@@ -6,7 +6,6 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -45,14 +44,15 @@ public class LogicalMysqlScanOperator extends LogicalScanOperator {
         return visitor.visitLogicalMysqlScan(this, context);
     }
 
-    public static class Builder extends LogicalScanOperator.Builder {
+    public static class Builder
+            extends LogicalScanOperator.Builder<LogicalMysqlScanOperator, LogicalMysqlScanOperator.Builder> {
         @Override
         public LogicalMysqlScanOperator build() {
             return new LogicalMysqlScanOperator(this);
         }
 
         @Override
-        public LogicalMysqlScanOperator.Builder withOperator(Operator operator) {
+        public LogicalMysqlScanOperator.Builder withOperator(LogicalMysqlScanOperator operator) {
             super.withOperator(operator);
             return this;
         }

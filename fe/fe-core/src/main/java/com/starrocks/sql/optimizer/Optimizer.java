@@ -3,6 +3,7 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -12,6 +13,7 @@ import com.starrocks.sql.optimizer.rewrite.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
+import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
@@ -85,7 +87,7 @@ public class Optimizer {
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MERGE_LIMIT);
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoAggRule());
         //After the MERGE_LIMIT, ProjectNode that can be merged may appear.
-        //So we do another column cropping
+        //So we do another MergeTwoProjectRule
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
 
@@ -95,10 +97,9 @@ public class Optimizer {
 
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteIterative(memo, rootTaskContext, new PruneProjectRule());
-        ruleRewriteIterative(memo, rootTaskContext, new ScalarOperatorsReuseRule());
-
-        //merge project with child
         ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
+
+        ruleRewriteOnlyOnce(memo, rootTaskContext, new ScalarOperatorsReuseRule());
 
         // Rewrite maybe produce empty groups, we need to remove them.
         memo.removeAllEmptyGroup();
@@ -118,7 +119,6 @@ public class Optimizer {
         // Phase 3: optimize based on memo and group
         tree = memo.getRootGroup().extractLogicalTree();
 
-        /*
         if (!connectContext.getSessionVariable().isDisableJoinReorder()) {
             if (Utils.countInnerJoinNodeSize(tree) >
                     connectContext.getSessionVariable().getCboMaxReorderNodeUseExhaustive()) {
@@ -134,9 +134,7 @@ public class Optimizer {
                 context.getRuleSet().addJoinTransformationRules();
             }
         }
-         */
-        //System.out.println(Utils.countInnerJoinNodeSize(tree));
-        context.getRuleSet().addJoinTransformationRules();
+
         //if (connectContext.getSessionVariable().isEnableNewPlannerPushDownJoinToAgg()) {
         //     context.getRuleSet().addPushDownJoinToAggRule();
         //}

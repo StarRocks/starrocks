@@ -23,7 +23,7 @@ import java.util.Map;
 import java.util.Objects;
 
 public abstract class LogicalScanOperator extends LogicalOperator {
-    protected Table table;
+    protected final Table table;
     protected final ImmutableList<ColumnRefOperator> outputColumns;
     /**
      * colRefToColumnMetaMap is the map from column reference to StarRocks column in meta

@@ -9,7 +9,6 @@ import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.external.elasticsearch.EsShardPartitions;
 import com.starrocks.external.elasticsearch.EsTablePartitions;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -65,7 +64,7 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
         return visitor.visitLogicalEsScan(this, context);
     }
 
-    public static class Builder extends LogicalScanOperator.Builder {
+    public static class Builder extends LogicalScanOperator.Builder<LogicalEsScanOperator, LogicalEsScanOperator.Builder> {
         private EsTablePartitions esTablePartitions;
         private List<EsShardPartitions> selectedIndex = Lists.newArrayList();
 
@@ -75,12 +74,10 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
         }
 
         @Override
-        public LogicalEsScanOperator.Builder withOperator(Operator operator) {
-            super.withOperator(operator);
-
-            LogicalEsScanOperator scanOperator = (LogicalEsScanOperator) operator;
-            this.esTablePartitions = scanOperator.esTablePartitions;
-            this.selectedIndex = scanOperator.selectedIndex;
+        public LogicalEsScanOperator.Builder withOperator(LogicalEsScanOperator esScanOperator) {
+            super.withOperator(esScanOperator);
+            this.esTablePartitions = esScanOperator.esTablePartitions;
+            this.selectedIndex = esScanOperator.selectedIndex;
             return this;
         }
     }

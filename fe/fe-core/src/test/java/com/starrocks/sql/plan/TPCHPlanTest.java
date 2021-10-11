@@ -116,7 +116,7 @@ public class TPCHPlanTest extends PlanTestBase {
 
     @Test
     public void testTPCH8() {
-        //runFileUnitTest("tpch/q8");
+        runFileUnitTest("tpch/q8");
     }
 
     @Test

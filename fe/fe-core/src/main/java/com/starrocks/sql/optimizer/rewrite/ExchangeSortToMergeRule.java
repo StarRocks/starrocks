@@ -10,7 +10,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 /**
  * Rewrite PhysicalDistribute with child topN(FINAL) to
  * two phase topN (partial -> final)
- * TOP-N not split to two phase may be construct by property enforce
+ * TOP-N not split to two phase may be constructed by property enforce
  */
 public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression, Void> {
     public OptExpression rewrite(OptExpression optExpression) {
@@ -39,9 +39,11 @@ public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression,
                 child.setStatistics(optExpr.getStatistics());
 
                 OptExpression newOpt = OptExpression.create(new PhysicalTopNOperator(
-                        topN.getOrderSpec(),
-                        topN.getLimit(), topN.getOffset(),
-                        SortPhase.FINAL, true, false, null, null), Lists.newArrayList(child));
+                                topN.getOrderSpec(),
+                                topN.getLimit(), topN.getOffset(),
+                                SortPhase.FINAL, true, false, null,
+                                topN.getProjection()),
+                        Lists.newArrayList(child));
                 newOpt.setLogicalProperty(optExpr.getLogicalProperty());
                 newOpt.setStatistics(optExpr.getStatistics());
 
