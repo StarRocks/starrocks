@@ -43,7 +43,7 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-18:MERGING-EXCHANGE
+17:MERGING-EXCHANGE
 use vectorized: true
 
 PLAN FRAGMENT 1
@@ -51,20 +51,20 @@ OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 32: substring
 
 STREAM DATA SINK
-EXCHANGE ID: 18
+EXCHANGE ID: 17
 UNPARTITIONED
 
-17:SORT
+16:SORT
 |  order by: <slot 32> 32: substring ASC
 |  offset: 0
 |  use vectorized: true
 |
-16:AGGREGATE (merge finalize)
-|  output: count(33: count()), sum(34: sum(6: C_ACCTBAL))
+15:AGGREGATE (update finalize)
+|  output: count(*), sum(6: C_ACCTBAL)
 |  group by: 32: substring
 |  use vectorized: true
 |
-15:EXCHANGE
+14:EXCHANGE
 use vectorized: true
 
 PLAN FRAGMENT 2
@@ -72,15 +72,9 @@ OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 22: O_CUSTKEY
 
 STREAM DATA SINK
-EXCHANGE ID: 15
+EXCHANGE ID: 14
 HASH_PARTITIONED: 32: substring
 
-14:AGGREGATE (update serialize)
-|  STREAMING
-|  output: count(*), sum(6: C_ACCTBAL)
-|  group by: 32: substring
-|  use vectorized: true
-|
 13:Project
 |  <slot 32> : substring(5: C_PHONE, 1, 2)
 |  <slot 6> : 6: C_ACCTBAL
