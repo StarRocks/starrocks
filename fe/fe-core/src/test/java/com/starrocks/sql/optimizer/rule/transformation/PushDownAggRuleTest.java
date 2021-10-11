@@ -10,6 +10,7 @@ import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -55,7 +56,7 @@ public class PushDownAggRuleTest {
         OptExpression scan =
                 new OptExpression(scanOp);
         OptExpression agg = new OptExpression(
-                new LogicalAggregationOperator(Lists.newArrayList(aggMap.keySet()), Maps.newHashMap()));
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(aggMap.keySet()), Maps.newHashMap()));
 
         filter.getInputs().add(agg);
         agg.getInputs().add(scan);

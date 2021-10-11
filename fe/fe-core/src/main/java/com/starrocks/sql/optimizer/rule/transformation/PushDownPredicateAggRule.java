@@ -26,12 +26,11 @@ public class PushDownPredicateAggRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalFilterOperator lfo = (LogicalFilterOperator) input.getOp();
-        List<ScalarOperator> filters = Utils.extractConjuncts(lfo.getPredicate());
+        LogicalFilterOperator logicalFilterOperator = (LogicalFilterOperator) input.getOp();
+        List<ScalarOperator> filters = Utils.extractConjuncts(logicalFilterOperator.getPredicate());
 
-        OptExpression aggOe = input.getInputs().get(0);
-        LogicalAggregationOperator lao = (LogicalAggregationOperator) aggOe.getOp();
-        List<ColumnRefOperator> groupColumns = lao.getGroupingKeys();
+        LogicalAggregationOperator logicalAggOperator = (LogicalAggregationOperator) input.inputAt(0).getOp();
+        List<ColumnRefOperator> groupColumns = logicalAggOperator.getGroupingKeys();
 
         List<ScalarOperator> pushDownPredicates = Lists.newArrayList();
 
@@ -49,20 +48,27 @@ public class PushDownPredicateAggRule extends TransformationRule {
         }
 
         // merge filter
-        filters.add(lao.getPredicate());
-        lao.setPredicate(Utils.compoundAnd(filters));
+        filters.add(logicalAggOperator.getPredicate());
+        input.setChild(0, OptExpression.create(new LogicalAggregationOperator(
+                logicalAggOperator.getType(),
+                logicalAggOperator.getGroupingKeys(),
+                logicalAggOperator.getPartitionByColumns(),
+                logicalAggOperator.getAggregations(),
+                logicalAggOperator.isSplit(),
+                logicalAggOperator.getSingleDistinctFunctionPos(),
+                logicalAggOperator.getLimit(),
+                Utils.compoundAnd(filters)), input.inputAt(0).getInputs()));
 
         // push down
         if (pushDownPredicates.size() > 0) {
             LogicalFilterOperator newFilter = new LogicalFilterOperator(Utils.compoundAnd(pushDownPredicates));
             OptExpression oe = new OptExpression(newFilter);
-            oe.getInputs().addAll(aggOe.getInputs());
+            oe.getInputs().addAll(input.inputAt(0).getInputs());
 
-            aggOe.getInputs().clear();
-            aggOe.getInputs().add(oe);
+            input.inputAt(0).getInputs().clear();
+            input.inputAt(0).getInputs().add(oe);
         }
 
-        return Lists.newArrayList(aggOe);
+        return Lists.newArrayList(input.inputAt(0));
     }
-
 }

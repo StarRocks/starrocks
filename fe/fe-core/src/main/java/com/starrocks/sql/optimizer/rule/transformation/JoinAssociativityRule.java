@@ -94,15 +94,18 @@ public class JoinAssociativityRule extends TransformationRule {
                 newRightChildColumns.getStream().filter(outputColumns::contains).
                         mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
 
-        LogicalJoinOperator rightChildJoinOperator =
-                new LogicalJoinOperator(JoinOperator.INNER_JOIN, Utils.compoundAnd(newChildConjuncts));
-        rightChildJoinOperator.setPruneOutputColumns(newRightOutputColumns);
+        LogicalJoinOperator rightChildJoinOperator = new LogicalJoinOperator(
+                JoinOperator.INNER_JOIN,
+                Utils.compoundAnd(newChildConjuncts),
+                "", -1, null, newRightOutputColumns, false);
         OptExpression newRightChildJoin = OptExpression.create(rightChildJoinOperator, leftChild2, rightChild);
 
         LogicalJoinOperator topJoinOperator =
                 new LogicalJoinOperator(JoinOperator.INNER_JOIN, Utils.compoundAnd(newParentConjuncts),
-                        parentJoin.getLimit(), "");
-        topJoinOperator.setPruneOutputColumns(parentJoin.getPruneOutputColumns());
+                        "", parentJoin.getLimit(),
+                        parentJoin.getPredicate(),
+                        parentJoin.getPruneOutputColumns(),
+                        parentJoin.isHasPushDownJoinOnClause());
         OptExpression topJoin = OptExpression.create(
                 topJoinOperator,
                 leftChild1,

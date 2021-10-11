@@ -17,8 +17,8 @@ import java.util.List;
 import java.util.Objects;
 
 public class LogicalJoinOperator extends LogicalOperator {
-    private JoinOperator joinType;
-    private ScalarOperator onPredicate;
+    private final JoinOperator joinType;
+    private final ScalarOperator onPredicate;
     private final String joinHint;
     // For mark the node has been push  down join on clause, avoid dead-loop
     private boolean hasPushDownJoinOnClause = false;
@@ -29,29 +29,28 @@ public class LogicalJoinOperator extends LogicalOperator {
     private List<ColumnRefOperator> pruneOutputColumns;
 
     public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate) {
-        this(joinType, onPredicate, "");
+        this(joinType, onPredicate, "", -1, null, null, false);
     }
 
-    public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate, String joinHint) {
-        super(OperatorType.LOGICAL_JOIN);
+    public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate, String joinHint,
+                               long limit,
+                               ScalarOperator predicate,
+                               List<ColumnRefOperator> pruneOutputColumns,
+                               boolean hasPushDownJoinOnClause) {
+        super(OperatorType.LOGICAL_JOIN, limit, predicate);
         this.joinType = joinType;
         this.onPredicate = onPredicate;
         Preconditions.checkNotNull(joinHint);
         this.joinHint = joinHint;
-    }
 
-    public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate, long limit, String joinHint) {
-        super(OperatorType.LOGICAL_JOIN);
-        this.joinType = joinType;
-        this.onPredicate = onPredicate;
-        this.limit = limit;
-        Preconditions.checkNotNull(joinHint);
-        this.joinHint = joinHint;
+        this.pruneOutputColumns = pruneOutputColumns;
+        this.hasPushDownJoinOnClause = hasPushDownJoinOnClause;
     }
 
     // Constructor for UT, don't use this ctor except ut
     public LogicalJoinOperator() {
         super(OperatorType.LOGICAL_JOIN);
+        this.onPredicate = null;
         this.joinType = JoinOperator.INNER_JOIN;
         this.joinHint = "";
     }
@@ -72,16 +71,8 @@ public class LogicalJoinOperator extends LogicalOperator {
         return joinType.isInnerJoin() || joinType.isCrossJoin();
     }
 
-    public void setJoinType(JoinOperator joinType) {
-        this.joinType = joinType;
-    }
-
     public ScalarOperator getOnPredicate() {
         return onPredicate;
-    }
-
-    public void setOnPredicate(ScalarOperator onPredicate) {
-        this.onPredicate = onPredicate;
     }
 
     public String getJoinHint() {
@@ -128,22 +119,26 @@ public class LogicalJoinOperator extends LogicalOperator {
 
     @Override
     public boolean equals(Object o) {
-        if (!(o instanceof LogicalJoinOperator)) {
+        if (this == o) {
+            return true;
+        }
+
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
             return false;
         }
 
         LogicalJoinOperator rhs = (LogicalJoinOperator) o;
-        if (this == rhs) {
-            return true;
-        }
-        return joinType == rhs.joinType && Objects.equals(onPredicate, rhs.onPredicate)
-                && Objects.equals(predicate, rhs.predicate) &&
+
+        return joinType == rhs.joinType && Objects.equals(onPredicate, rhs.onPredicate) &&
                 Objects.equals(pruneOutputColumns, rhs.pruneOutputColumns);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(opType, joinType, onPredicate, predicate);
+        return Objects.hash(super.hashCode(), opType, joinType, onPredicate);
     }
 
     @Override

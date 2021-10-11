@@ -54,12 +54,14 @@ public class JoinCommutativityRule extends TransformationRule {
         }
 
         List<OptExpression> newChildren = Lists.newArrayList(input.inputAt(1), input.inputAt(0));
-        LogicalJoinOperator newJoin =
-                new LogicalJoinOperator(commuteMap.get(oldJoin.getJoinType()),
-                        oldJoin.getOnPredicate(),
-                        oldJoin.getLimit(), "");
-        newJoin.setPruneOutputColumns(oldJoin.getPruneOutputColumns());
-        newJoin.setPredicate(oldJoin.getPredicate());
+        LogicalJoinOperator newJoin = new LogicalJoinOperator(
+                commuteMap.get(oldJoin.getJoinType()),
+                oldJoin.getOnPredicate(),
+                "",
+                oldJoin.getLimit(),
+                oldJoin.getPredicate(),
+                oldJoin.getPruneOutputColumns(),
+                oldJoin.isHasPushDownJoinOnClause());
         OptExpression result = OptExpression.create(newJoin, newChildren);
         return Lists.newArrayList(result);
     }

@@ -9,6 +9,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -63,6 +64,7 @@ public class RewriteHllCountDistinctRule extends TransformationRule {
             }
         }
         return Lists.newArrayList(OptExpression.create(
-                new LogicalAggregationOperator(aggregationOperator.getGroupingKeys(), newAggMap), input.getInputs()));
+                new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(), newAggMap),
+                input.getInputs()));
     }
 }
