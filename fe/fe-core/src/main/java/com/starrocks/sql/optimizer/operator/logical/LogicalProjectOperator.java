@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.optimizer.operator.logical;
 
-import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -11,19 +10,25 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
 public final class LogicalProjectOperator extends LogicalOperator {
-    private Map<ColumnRefOperator, ScalarOperator> columnRefMap;
+    private final Map<ColumnRefOperator, ScalarOperator> columnRefMap;
     // Used for common operator compute result reuse, we need to compute
     // common sub operators firstly in BE
-    private final Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap =
-            Maps.newHashMap();
+    private final Map<ColumnRefOperator, ScalarOperator> commonSubOperatorMap;
 
     public LogicalProjectOperator(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
+        this(columnRefMap, new HashMap<>());
+    }
+
+    public LogicalProjectOperator(Map<ColumnRefOperator, ScalarOperator> newMap,
+                                  Map<ColumnRefOperator, ScalarOperator> commonSubOperators) {
         super(OperatorType.LOGICAL_PROJECT);
-        this.columnRefMap = columnRefMap;
+        this.columnRefMap = newMap;
+        this.commonSubOperatorMap = commonSubOperators;
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
@@ -32,11 +37,6 @@ public final class LogicalProjectOperator extends LogicalOperator {
 
     public Map<ColumnRefOperator, ScalarOperator> getCommonSubOperatorMap() {
         return commonSubOperatorMap;
-    }
-
-    // Could only use when rewrite
-    public void setColumnRefMap(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
-        this.columnRefMap = columnRefMap;
     }
 
     @Override

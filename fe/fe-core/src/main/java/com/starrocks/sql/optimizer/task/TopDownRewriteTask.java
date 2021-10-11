@@ -1,5 +1,4 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
-
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Preconditions;
@@ -10,7 +9,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Binder;
 import com.starrocks.sql.optimizer.rule.Rule;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -20,22 +18,18 @@ import java.util.List;
  * <p>
  * This class modify from CMU noisepage project TopDownRewrite class
  */
-public class TopDownRewriteTask extends OptimizerTask {
-    private final Group group;
-    private final RuleSetType ruleSetType;
+public abstract class TopDownRewriteTask extends OptimizerTask {
+    protected final Group group;
+    protected final List<Rule> candidateRules;
 
-    public TopDownRewriteTask(TaskContext context, Group group, RuleSetType ruleSetType) {
+    public TopDownRewriteTask(TaskContext context, Group group, List<Rule> ruleSet) {
         super(context);
         this.group = group;
-        this.ruleSetType = ruleSetType;
+        this.candidateRules = ruleSet;
     }
 
-    @Override
-    public void execute() {
+    public void doExecute(boolean rewriteOnlyOnce) {
         List<Rule> validRules = Lists.newArrayListWithCapacity(RuleType.NUM_RULES.id());
-        List<Rule> candidateRules = context.getOptimizerContext().getRuleSet().
-                getRewriteRulesByType(ruleSetType);
-
         Preconditions.checkState(group.isValidInitState());
 
         GroupExpression curGroupExpression = group.getLogicalExpressions().get(0);
@@ -62,15 +56,24 @@ public class TopDownRewriteTask extends OptimizerTask {
                     if (group.getLogicalExpressions().isEmpty()) {
                         return;
                     }
-                    pushTask(new TopDownRewriteTask(context, group, ruleSetType));
-                    return;
+
+                    if (rewriteOnlyOnce) {
+                        curGroupExpression = group.getFirstLogicalExpression();
+                    } else {
+                        pushTask(new TopDownRewriteIterativeTask(context, group, candidateRules));
+                        return;
+                    }
                 }
                 extractExpr = binder.next();
             }
         }
 
-        for (Group childGroup : curGroupExpression.getInputs()) {
-            pushTask(new TopDownRewriteTask(context, childGroup, ruleSetType));
+        for (Group childGroup : group.getFirstLogicalExpression().getInputs()) {
+            if (rewriteOnlyOnce) {
+                pushTask(new TopDownRewriteOnceTask(context, childGroup, candidateRules));
+            } else {
+                pushTask(new TopDownRewriteIterativeTask(context, childGroup, candidateRules));
+            }
         }
     }
 }
