@@ -188,4 +188,12 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains("AGGREGATE (merge finalize)"));
         Assert.assertTrue(replayPair.second.contains("AGGREGATE (update serialize)"));
     }
+
+    @Test
+    public void testGroupByLimit() throws Exception {
+        // check can generate 1 phase with limit 1
+        // This test has column statistics and accurate table row count
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"));
+        Assert.assertTrue(replayPair.second.contains("2:AGGREGATE (update finalize)"));
+    }
 }
