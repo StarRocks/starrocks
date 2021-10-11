@@ -4,7 +4,6 @@
 
 #include <atomic>
 #include <chrono>
-#include <future>
 #include <mutex>
 #include <unordered_map>
 
@@ -79,14 +78,12 @@ class QueryContextManager {
 public:
     QueryContext* get_or_register(const TUniqueId& query_id);
     QueryContextPtr get(const TUniqueId& query_id);
-    QueryPromisePtr get_promise(const TUniqueId& query_id);
     QueryContextPtr remove(const TUniqueId& query_id);
 
 private:
     //TODO(by satanson)
     // A multi-shard map may be more efficient
     std::mutex _lock;
-    std::unordered_map<TUniqueId, QueryPromisePtr> _promises;
     std::unordered_map<TUniqueId, QueryContextPtr> _contexts;
 };
 

@@ -181,8 +181,7 @@ TEST_F(TestPipelineControlFlow, test_two_operatories) {
 
     start_test();
 
-    QueryFuture future = _query_promise->get_future();
-    ASSERT_TRUE(future.wait_for(std::chrono::seconds(3)) == std::future_status::ready);
+    ASSERT_TRUE(_fragment_future.wait_for(std::chrono::seconds(3)) == std::future_status::ready);
     assert_counter(sourceCounter, 1, 0);
     assert_counter(sinkCounter, 0, 1);
 }
@@ -205,8 +204,7 @@ TEST_F(TestPipelineControlFlow, test_three_operatories) {
 
     start_test();
 
-    QueryFuture future = _query_promise->get_future();
-    ASSERT_TRUE(future.wait_for(std::chrono::seconds(3)) == std::future_status::ready);
+    ASSERT_TRUE(_fragment_future.wait_for(std::chrono::seconds(3)) == std::future_status::ready);
     assert_counter(sourceCounter, 1, 0);
     assert_counter(normalCounter, 1, 1);
     assert_counter(sinkCounter, 0, 1);

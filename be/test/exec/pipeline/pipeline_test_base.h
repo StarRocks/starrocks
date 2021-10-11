@@ -24,7 +24,7 @@ protected:
     ExecEnv* _exec_env = nullptr;
     QueryContext* _query_ctx = nullptr;
     FragmentContext* _fragment_ctx = nullptr;
-    QueryPromisePtr _query_promise = nullptr;
+    FragmentFuture _fragment_future;
     RuntimeState* _runtime_state = nullptr;
     ObjectPool* _obj_pool = nullptr;
 

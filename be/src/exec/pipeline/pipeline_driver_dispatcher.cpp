@@ -48,11 +48,11 @@ void GlobalDriverDispatcher::run() {
         }
 
         size_t queue_index;
-        auto take_driver = this->_driver_queue->take(&queue_index);
-        if (take_driver.status().is_cancelled()) {
+        auto maybe_driver = this->_driver_queue->take(&queue_index);
+        if (maybe_driver.status().is_cancelled()) {
             return;
         }
-        auto driver = take_driver.value();
+        auto driver = maybe_driver.value();
         DCHECK(driver != nullptr);
 
         auto* query_ctx = driver->query_ctx();

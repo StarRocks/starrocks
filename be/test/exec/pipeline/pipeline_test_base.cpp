@@ -39,8 +39,7 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(_request, _request.query_options, _request.query_globals, _exec_env));
 
-    _query_promise = QueryContextManager::instance()->get_promise(params.query_id);
-
+    _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
 
     int64_t bytes_limit = _request.query_options.mem_limit;
