@@ -1128,7 +1128,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
 
     bool sc_sorting = false;
     bool sc_directly = false;
-    SchemaChange* sc_procedure = nullptr;
+    std::unique_ptr<SchemaChange> sc_procedure;
     MemTracker* mem_tracker = ExecEnv::GetInstance()->schema_change_mem_tracker();
 
     // a. parse Alter request
@@ -1147,28 +1147,21 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
     if (sc_sorting) {
         size_t memory_limitation = config::memory_limitation_per_thread_for_schema_change;
         LOG(INFO) << "doing schema change with sorting for base_tablet " << sc_params.base_tablet->full_name();
-        sc_procedure = new (nothrow)
-                SchemaChangeWithSorting(mem_tracker, chunk_changer, memory_limitation * 1024 * 1024 * 1024);
+        sc_procedure = std::make_unique<SchemaChangeWithSorting>(mem_tracker, chunk_changer,
+                                                                 memory_limitation * 1024 * 1024 * 1024);
     } else if (sc_directly) {
-        LOG(INFO) << "doing schema change directly for base_tablet " << sc_params.base_tablet->full_name();
-        sc_procedure = new (nothrow) SchemaChangeDirectly(mem_tracker, chunk_changer);
+        sc_procedure = std::make_unique<SchemaChangeDirectly>(mem_tracker, chunk_changer);
     } else {
         LOG(INFO) << "doing linked schema change for base_tablet " << sc_params.base_tablet->full_name();
-        sc_procedure = new (nothrow) LinkedSchemaChange(mem_tracker, chunk_changer);
+        sc_procedure = std::make_unique<LinkedSchemaChange>(mem_tracker, chunk_changer);
     }
 
-    if (sc_procedure == nullptr) {
+    if (sc_procedure.get() == nullptr) {
         LOG(WARNING) << "failed to malloc SchemaChange. "
                      << "malloc_size=" << sizeof(SchemaChangeWithSorting);
         status = Status::InternalError("failed to malloc SchemaChange");
         return status;
     }
-
-    DeferOp delete_procedure([&sc_procedure] {
-        if (sc_procedure != nullptr) {
-            delete (sc_procedure);
-        }
-    });
 
     for (int i = 0; i < sc_params.rowset_readers.size(); ++i) {
         LOG(INFO) << "begin to convert a history rowset. version=" << sc_params.rowsets_to_change[i]->version().first
