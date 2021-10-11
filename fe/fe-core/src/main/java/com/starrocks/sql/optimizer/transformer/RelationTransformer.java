@@ -55,6 +55,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -251,18 +252,23 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
 
             HashDistributionDesc hashDistributionDesc =
                     new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
-            scanOperator = new LogicalOlapScanOperator(node.getTable(),
-                    outputVariables,
-                    colRefToColumnMetaMapBuilder.build(),
-                    columnMetaToColRefMap,
-                    DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
-                    -1,
-                    null,
-                    ((OlapTable) node.getTable()).getBaseIndexId(),
-                    null,
-                    node.getPartitionNames(),
-                    Lists.newArrayList(),
-                    node.getTabletIds());
+            if (node.isMetaQuery()) {
+                scanOperator = new LogicalMetaScanOperator(node.getTable(),
+                        outputVariables, colRefToColumnMetaMapBuilder.build());
+            } else  {
+                scanOperator = new LogicalOlapScanOperator(node.getTable(),
+                        outputVariables,
+                        colRefToColumnMetaMapBuilder.build(),
+                        columnMetaToColRefMap,
+                        DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
+                        -1,
+                        null,
+                        ((OlapTable) node.getTable()).getBaseIndexId(),
+                        null,
+                        node.getPartitionNames(),
+                        Lists.newArrayList(),
+                        node.getTabletIds());
+            }
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), node.getTable().getType(), outputVariables,
                     colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap, -1, null);

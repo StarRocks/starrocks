@@ -909,45 +909,6 @@ public class FunctionCallExpr extends Expr {
         return result;
     }
 
-    private boolean isVectorizedAggFn() {
-        return fnName.getFunction().equalsIgnoreCase("avg") ||
-                fnName.getFunction().equalsIgnoreCase("count") ||
-                fnName.getFunction().equalsIgnoreCase("max") ||
-                fnName.getFunction().equalsIgnoreCase("min") ||
-                fnName.getFunction().equalsIgnoreCase("sum") ||
-                fnName.getFunction().equalsIgnoreCase("multi_distinct_count") ||
-                fnName.getFunction().equalsIgnoreCase("multi_distinct_sum") ||
-                fnName.getFunction().equalsIgnoreCase(FunctionSet.BITMAP_UNION_INT) ||
-                fnName.getFunction().equalsIgnoreCase(FunctionSet.BITMAP_UNION) ||
-                fnName.getFunction().equalsIgnoreCase(FunctionSet.BITMAP_UNION_COUNT) ||
-                fnName.getFunction().equalsIgnoreCase("hll_union") ||
-                fnName.getFunction().equalsIgnoreCase("hll_raw_agg") ||
-                fnName.getFunction().equalsIgnoreCase("hll_union_agg") ||
-                fnName.getFunction().equalsIgnoreCase("ndv") ||
-                fnName.getFunction().equalsIgnoreCase("approx_count_distinct") ||
-                fnName.getFunction().equalsIgnoreCase("first_value") ||
-                fnName.getFunction().equalsIgnoreCase("last_value") ||
-                fnName.getFunction().equalsIgnoreCase("lead") ||
-                fnName.getFunction().equalsIgnoreCase("lag") ||
-                fnName.getFunction().equalsIgnoreCase("row_number") ||
-                fnName.getFunction().equalsIgnoreCase("rank") ||
-                fnName.getFunction().equalsIgnoreCase("dense_rank") ||
-                fnName.getFunction().equalsIgnoreCase("percentile_approx") ||
-                fnName.getFunction().equalsIgnoreCase("percentile_union") ||
-                fnName.getFunction().equalsIgnoreCase("variance") ||
-                fnName.getFunction().equalsIgnoreCase("variance_pop") ||
-                fnName.getFunction().equalsIgnoreCase("var_pop") ||
-                fnName.getFunction().equalsIgnoreCase("variance_samp") ||
-                fnName.getFunction().equalsIgnoreCase("var_samp") ||
-                fnName.getFunction().equalsIgnoreCase("stddev") ||
-                fnName.getFunction().equalsIgnoreCase("stddev_samp") ||
-                fnName.getFunction().equalsIgnoreCase("stddev_pop") ||
-                fnName.getFunction().equalsIgnoreCase("std") ||
-                fnName.getFunction().equalsIgnoreCase("group_concat") ||
-                fnName.getFunction().equalsIgnoreCase("intersect_count") ||
-                fnName.getFunction().equalsIgnoreCase("bitmap_intersect");
-    }
-
     @Override
     public boolean isVectorized() {
         for (Expr expr : children) {
@@ -957,7 +918,7 @@ public class FunctionCallExpr extends Expr {
         }
 
         if (fn instanceof AggregateFunction) {
-            return isVectorizedAggFn();
+            return true;
         }
 
         if (fn != null) {
