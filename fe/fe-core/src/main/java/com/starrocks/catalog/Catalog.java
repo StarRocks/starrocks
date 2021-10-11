@@ -133,6 +133,7 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
@@ -242,6 +243,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.codehaus.jackson.map.ObjectMapper;
@@ -258,6 +260,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -3063,8 +3066,7 @@ public class Catalog {
             throws DdlException, AnalysisException {
         PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
         if (partitionDesc instanceof SingleRangePartitionDesc) {
-            addPartitions(db, tableName,
-                    ImmutableList.of((SingleRangePartitionDesc) partitionDesc), addPartitionClause);
+            addPartitions(db, tableName, ImmutableList.of((SingleRangePartitionDesc) partitionDesc), addPartitionClause);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
             db.readLock();
             RangePartitionInfo rangePartitionInfo;
@@ -3100,16 +3102,9 @@ public class Catalog {
                               AddPartitionClause addPartitionClause) throws DdlException {
         DistributionInfo distributionInfo;
         OlapTable olapTable;
-        Map<Long, MaterializedIndexMeta> indexIdToMeta;
-        Set<String> bfColumns;
+        OlapTable copiedTable;
 
         boolean isTempPartition = addPartitionClause.isTempPartition();
-        /*
-         * NOTE:check for build createPartitionWithIndices outside to avoid db lock
-         * because createPartitionWithIndices will submit batch Task to BE
-         * this will call back masterImpl.finishTask -> finishCreateReplica -> updateBackendReportVersion
-         * if createPartitionWithIndices set db.writeLock , it will cause dead lock.
-         */
         db.readLock();
         try {
             Table table = db.getTable(tableName);
@@ -3176,8 +3171,8 @@ public class Catalog {
                 }
             }
 
-            indexIdToMeta = olapTable.getCopiedIndexIdToMeta();
-            bfColumns = olapTable.getCopiedBfColumns();
+            copiedTable = olapTable.selectiveCopy(null, false, IndexExtState.VISIBLE);
+            copiedTable.setDefaultDistributionInfo(distributionInfo);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         } finally {
@@ -3186,7 +3181,7 @@ public class Catalog {
 
         Preconditions.checkNotNull(distributionInfo);
         Preconditions.checkNotNull(olapTable);
-        Preconditions.checkNotNull(indexIdToMeta);
+        Preconditions.checkNotNull(copiedTable);
 
         // create partition outside db lock
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
@@ -3203,26 +3198,22 @@ public class Catalog {
                 long partitionId = getNextId();
                 DataProperty dataProperty = singleRangePartitionDesc.getPartitionDataProperty();
                 String partitionName = singleRangePartitionDesc.getPartitionName();
+                Pair<Long, Long> versionInfo = singleRangePartitionDesc.getVersionInfo();
                 Set<Long> tabletIdSet = Sets.newHashSet();
-                Partition partition = createPartitionWithIndices(db.getClusterName(), db.getId(),
-                        olapTable.getId(),
-                        olapTable.getBaseIndexId(),
-                        partitionId, partitionName,
-                        indexIdToMeta,
-                        distributionInfo,
-                        dataProperty.getStorageMedium(),
-                        singleRangePartitionDesc.getReplicationNum(),
-                        singleRangePartitionDesc.getVersionInfo(),
-                        bfColumns, olapTable.getBfFpp(),
-                        tabletIdSet, olapTable.getCopiedIndexes(),
-                        singleRangePartitionDesc.isInMemory(),
-                        olapTable.getStorageFormat(),
-                        singleRangePartitionDesc.getTabletType()
-                );
+
+                copiedTable.getPartitionInfo().setDataProperty(partitionId, dataProperty);
+                copiedTable.getPartitionInfo().setTabletType(partitionId, singleRangePartitionDesc.getTabletType());
+                copiedTable.getPartitionInfo().setReplicationNum(partitionId, singleRangePartitionDesc.getReplicationNum());
+                copiedTable.getPartitionInfo().setIsInMemory(partitionId, singleRangePartitionDesc.isInMemory());
+
+                Partition partition = createPartition(db, copiedTable, partitionId, partitionName, versionInfo, tabletIdSet);
+
                 partitionList.add(partition);
                 tabletIdSetForAll.addAll(tabletIdSet);
                 partitionNameToTabletSet.put(partitionName, tabletIdSet);
             }
+
+            buildPartitions(db, copiedTable, partitionList);
 
             // check again
             db.writeLock();
@@ -3246,17 +3237,18 @@ public class Catalog {
                 // rollup index may be added or dropped during add partition operation.
                 // schema may be changed during add partition operation.
                 boolean metaChanged = false;
-                if (olapTable.getIndexNameToId().size() != indexIdToMeta.size()) {
+                if (olapTable.getIndexNameToId().size() != copiedTable.getIndexNameToId().size()) {
                     metaChanged = true;
                 } else {
                     // compare schemaHash
                     for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTable.getIndexIdToMeta().entrySet()) {
                         long indexId = entry.getKey();
-                        if (!indexIdToMeta.containsKey(indexId)) {
+                        if (!copiedTable.getIndexIdToMeta().containsKey(indexId)) {
                             metaChanged = true;
                             break;
                         }
-                        if (indexIdToMeta.get(indexId).getSchemaHash() != entry.getValue().getSchemaHash()) {
+                        if (copiedTable.getIndexIdToMeta().get(indexId).getSchemaHash() !=
+                                entry.getValue().getSchemaHash()) {
                             metaChanged = true;
                             break;
                         }
@@ -3500,130 +3492,270 @@ public class Catalog {
         }
     }
 
-    private Partition createPartitionWithIndices(String clusterName, long dbId, long tableId,
-                                                 long baseIndexId, long partitionId, String partitionName,
-                                                 Map<Long, MaterializedIndexMeta> indexIdToMeta,
-                                                 DistributionInfo distributionInfo,
-                                                 TStorageMedium storageMedium,
-                                                 short replicationNum,
-                                                 Pair<Long, Long> versionInfo,
-                                                 Set<String> bfColumns,
-                                                 double bfFpp,
-                                                 Set<Long> tabletIdSet,
-                                                 List<Index> indexes,
-                                                 boolean isInMemory,
-                                                 TStorageFormat storageFormat,
-                                                 TTabletType tabletType) throws DdlException {
-        // create base index first.
-        Preconditions.checkArgument(baseIndexId != -1);
-        MaterializedIndex baseIndex = new MaterializedIndex(baseIndexId, IndexState.NORMAL);
+    private Partition createPartition(Database db, OlapTable table, long partitionId, String partitionName,
+                                      Pair<Long, Long> versionInfo, Set<Long> tabletIdSet) throws DdlException {
+        return createPartitionCommon(db, table, partitionId, partitionName,
+                table.getPartitionInfo().getReplicationNum(partitionId),
+                table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium(),
+                versionInfo, tabletIdSet);
+    }
 
-        // create partition with base index
-        Partition partition = new Partition(partitionId, partitionName, baseIndex, distributionInfo);
-
-        // add to index map
-        Map<Long, MaterializedIndex> indexMap = new HashMap<Long, MaterializedIndex>();
-        indexMap.put(baseIndexId, baseIndex);
-
-        // create rollup index if has
-        for (long indexId : indexIdToMeta.keySet()) {
-            if (indexId == baseIndexId) {
-                continue;
-            }
-
+    private Partition createPartitionCommon(Database db, OlapTable table, long partitionId, String partitionName,
+                                            short replicationNum, TStorageMedium storageMedium,
+                                            Pair<Long, Long> versionInfo, Set<Long> tabletIdSet) throws DdlException {
+        Map<Long, MaterializedIndex> indexMap = new HashMap<>();
+        for (long indexId : table.getIndexIdToMeta().keySet()) {
             MaterializedIndex rollup = new MaterializedIndex(indexId, IndexState.NORMAL);
             indexMap.put(indexId, rollup);
         }
+        DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
+        Partition partition =
+                new Partition(partitionId, partitionName, indexMap.get(table.getBaseIndexId()), distributionInfo);
 
         // version and version hash
         if (versionInfo != null) {
             partition.updateVisibleVersionAndVersionHash(versionInfo.first, versionInfo.second);
         }
-        long version = partition.getVisibleVersion();
-        long versionHash = partition.getVisibleVersionHash();
 
         for (Map.Entry<Long, MaterializedIndex> entry : indexMap.entrySet()) {
             long indexId = entry.getKey();
             MaterializedIndex index = entry.getValue();
-            MaterializedIndexMeta indexMeta = indexIdToMeta.get(indexId);
+            MaterializedIndexMeta indexMeta = table.getIndexIdToMeta().get(indexId);
 
             // create tablets
-            int schemaHash = indexMeta.getSchemaHash();
-            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, storageMedium);
-            createTablets(clusterName, index, ReplicaState.NORMAL, distributionInfo, version, versionHash,
-                    replicationNum, tabletMeta, tabletIdSet);
-
-            boolean ok = false;
-            String errMsg = null;
-
-            // add create replica task for olap
-            short shortKeyColumnCount = indexMeta.getShortKeyColumnCount();
-            TStorageType storageType = indexMeta.getStorageType();
-            List<Column> schema = indexMeta.getSchema();
-            KeysType keysType = indexMeta.getKeysType();
-            int totalTaskNum = index.getTablets().size() * replicationNum;
-            MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<Long, Long>(totalTaskNum);
-            AgentBatchTask batchTask = new AgentBatchTask();
-            for (Tablet tablet : index.getTablets()) {
-                long tabletId = tablet.getId();
-                for (Replica replica : tablet.getReplicas()) {
-                    long backendId = replica.getBackendId();
-                    countDownLatch.addMark(backendId, tabletId);
-                    CreateReplicaTask task = new CreateReplicaTask(backendId, dbId, tableId,
-                            partitionId, indexId, tabletId,
-                            shortKeyColumnCount, schemaHash,
-                            version, versionHash,
-                            keysType,
-                            storageType, storageMedium,
-                            schema, bfColumns, bfFpp,
-                            countDownLatch,
-                            indexes,
-                            isInMemory,
-                            tabletType);
-                    task.setStorageFormat(storageFormat);
-                    batchTask.addTask(task);
-                    // add to AgentTaskQueue for handling finish report.
-                    // not for resending task
-                    AgentTaskQueue.addTask(task);
-                }
-            }
-            AgentTaskExecutor.submit(batchTask);
-
-            // estimate timeout
-            long timeout = Config.tablet_create_timeout_second * 1000L * totalTaskNum;
-            timeout = Math.min(timeout, Config.max_create_table_timeout_second * 1000);
-            try {
-                ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                LOG.warn("InterruptedException: ", e);
-                ok = false;
-            }
-
-            if (!ok || !countDownLatch.getStatus().ok()) {
-                errMsg = "Failed to create partition[" + partitionName + "]. Timeout.";
-                // clear tasks
-                AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
-
-                if (!countDownLatch.getStatus().ok()) {
-                    errMsg += " Error: " + countDownLatch.getStatus().getErrorMsg();
-                } else {
-                    List<Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
-                    // only show at most 3 results
-                    List<Entry<Long, Long>> subList = unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
-                    if (!subList.isEmpty()) {
-                        errMsg += " Unfinished mark: " + Joiner.on(", ").join(subList);
-                    }
-                }
-                LOG.warn(errMsg);
-                throw new DdlException(errMsg);
-            }
-
-            if (index.getId() != baseIndexId) {
+            TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),
+                                                   storageMedium);
+            createTablets(db.getClusterName(), index, ReplicaState.NORMAL, distributionInfo, partition.getVisibleVersion(),
+                    partition.getVisibleVersionHash(), replicationNum, tabletMeta, tabletIdSet);
+            if (index.getId() != table.getBaseIndexId()) {
                 // add rollup index to partition
                 partition.createRollupIndex(index);
             }
-        } // end for indexMap
+        }
         return partition;
+    }
+
+    private void buildPartitions(Database db, OlapTable table, List<Partition> partitions) throws DdlException {
+        if (partitions.isEmpty()) {
+            return;
+        }
+        int numAliveBackends = systemInfo.getBackendIds(true).size();
+        int numReplicas = 0;
+        for (Partition partition : partitions) {
+            numReplicas += partition.getReplicaCount();
+        }
+
+        if (partitions.size() >= 3 && numAliveBackends >= 3 && numReplicas >= numAliveBackends * 500) {
+            LOG.info("creating {} partitions of table {} concurrently", partitions.size(), table.getName());
+            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
+        } else if (numAliveBackends > 0) {
+            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
+        } else {
+            throw new DdlException("no alive backend");
+        }
+    }
+
+    private int countMaxTasksPerBackend(List<CreateReplicaTask> tasks) {
+        Map<Long, Integer> tasksPerBackend = new HashMap<>();
+        for (CreateReplicaTask task : tasks) {
+            tasksPerBackend.compute(task.getBackendId(), (k, v) -> (v == null) ? 1 : v + 1);
+        }
+        return Collections.max(tasksPerBackend.values());
+    }
+
+    private void buildPartitionsSequentially(long dbId, OlapTable table, List<Partition> partitions, int numReplicas,
+                                             int numBackends) throws DdlException {
+        // Try to bundle at least 200 CreateReplicaTask's in a single AgentBatchTask.
+        // The number 200 is just an experiment value that seems to work without obvious problems, feel free to
+        // change it if you have a better choice.
+        int avgReplicasPerPartition = numReplicas / partitions.size();
+        int partitionGroupSize = Math.max(1, numBackends * 200 / Math.max(1, avgReplicasPerPartition));
+        for (int i = 0; i < partitions.size(); i += partitionGroupSize) {
+            int endIndex = Math.min(partitions.size(), i + partitionGroupSize);
+            List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partitions.subList(i, endIndex));
+            int partitionCount = endIndex - i;
+            int indexCountPerPartition = partitions.get(i).getVisibleMaterializedIndicesCount();
+            int timeout = Config.tablet_create_timeout_second * countMaxTasksPerBackend(tasks);
+            // Compatible with older versions, `Config.max_create_table_timeout_second` is the timeout time for a single index.
+            // Here we assume that all partitions have the same number of indexes.
+            int maxTimeout = partitionCount * indexCountPerPartition * Config.max_create_table_timeout_second;
+            try {
+                sendCreateReplicaTasksAndWaitForFinished(tasks, Math.min(timeout, maxTimeout));
+                tasks.clear();
+            } finally {
+                for (CreateReplicaTask task : tasks) {
+                    AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.CREATE, task.getSignature());
+                }
+            }
+        }
+    }
+
+    private void buildPartitionsConcurrently(long dbId, OlapTable table, List<Partition> partitions, int numReplicas,
+                                             int numBackends) throws DdlException {
+        int timeout = numReplicas / numBackends * Config.tablet_create_timeout_second;
+        int numIndexes = partitions.stream().mapToInt(Partition::getVisibleMaterializedIndicesCount).sum();
+        int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
+        MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(numReplicas);
+        Thread t = new Thread(() -> {
+            Map<Long, List<Long>> taskSignatures = new HashMap<>();
+            try {
+                int numFinishedTasks;
+                int numSendedTasks = 0;
+                for (Partition partition : partitions) {
+                    if (!countDownLatch.getStatus().ok()) {
+                        break;
+                    }
+                    List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition);
+                    for (CreateReplicaTask task : tasks) {
+                        List<Long> signatures = taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
+                        signatures.add(task.getSignature());
+                    }
+                    sendCreateReplicaTasks(tasks, countDownLatch);
+                    numSendedTasks += tasks.size();
+                    numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
+                    // Since there is no mechanism to cancel tasks, if we send a lot of tasks at once and some error or timeout
+                    // occurs in the middle of the process, it will create a lot of useless replicas that will be deleted soon and
+                    // waste machine resources. Sending a lot of tasks at once may also block other users' tasks for a long time.
+                    // To avoid these situations, new tasks are sent only when the average number of tasks on each node is less
+                    // than 200.
+                    // (numSendedTasks - numFinishedTasks) is number of tasks that have been sent but not yet finished.
+                    while (numSendedTasks - numFinishedTasks > 200 * numBackends) {
+                        ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
+                        numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
+                    }
+                }
+                countDownLatch.await();
+                if (countDownLatch.getStatus().ok()) {
+                    taskSignatures.clear();
+                }
+            } catch (Exception e) {
+                LOG.warn(e);
+                countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.toString()));
+            } finally {
+                for (Map.Entry<Long, List<Long>> entry : taskSignatures.entrySet()) {
+                    for (Long signature : entry.getValue()) {
+                        AgentTaskQueue.removeTask(entry.getKey(), TTaskType.CREATE, signature);
+                    }
+                }
+            }
+        }, "partition-build");
+        t.start();
+        try {
+            waitForFinished(countDownLatch, Math.min(timeout, maxTimeout));
+        } catch (Exception e) {
+            countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.getMessage()));
+            throw e;
+        }
+    }
+
+    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, List<Partition> partitions) {
+        List<CreateReplicaTask> tasks = new ArrayList<>();
+        for (Partition partition : partitions) {
+            tasks.addAll(buildCreateReplicaTasks(dbId, table, partition));
+        }
+        return tasks;
+    }
+
+    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, Partition partition) {
+        ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) partition.getReplicaCount());
+        for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+            tasks.addAll(buildCreateReplicaTasks(dbId, table, partition, index));
+        }
+        return tasks;
+    }
+
+    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, Partition partition,
+                                                            MaterializedIndex index) {
+        List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
+        MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
+        for (Tablet tablet : index.getTablets()) {
+            for (Replica replica : tablet.getReplicas()) {
+                CreateReplicaTask task = new CreateReplicaTask(
+                        replica.getBackendId(),
+                        dbId,
+                        table.getId(),
+                        partition.getId(),
+                        index.getId(),
+                        tablet.getId(),
+                        indexMeta.getShortKeyColumnCount(),
+                        indexMeta.getSchemaHash(),
+                        partition.getVisibleVersion(),
+                        partition.getVisibleVersionHash(),
+                        indexMeta.getKeysType(),
+                        indexMeta.getStorageType(),
+                        table.getPartitionInfo().getDataProperty(partition.getId()).getStorageMedium(),
+                        indexMeta.getSchema(),
+                        table.getBfColumns(),
+                        table.getBfFpp(),
+                        null,
+                        table.getIndexes(),
+                        table.getPartitionInfo().getIsInMemory(partition.getId()),
+                        table.getPartitionInfo().getTabletType(partition.getId()));
+                tasks.add(task);
+            }
+        }
+        return tasks;
+    }
+
+    // NOTE: Unfinished tasks will NOT be removed from the AgentTaskQueue.
+    private void sendCreateReplicaTasksAndWaitForFinished(List<CreateReplicaTask> tasks, long timeout)
+            throws DdlException {
+        MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(tasks.size());
+        sendCreateReplicaTasks(tasks, countDownLatch);
+        waitForFinished(countDownLatch, timeout);
+    }
+
+    private void sendCreateReplicaTasks(List<CreateReplicaTask> tasks,
+                                        MarkedCountDownLatch<Long, Long> countDownLatch) {
+        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
+        for (CreateReplicaTask task : tasks) {
+            task.setLatch(countDownLatch);
+            countDownLatch.addMark(task.getBackendId(), task.getTabletId());
+            AgentBatchTask batchTask = batchTaskMap.get(task.getBackendId());
+            if (batchTask == null) {
+                batchTask = new AgentBatchTask();
+                batchTaskMap.put(task.getBackendId(), batchTask);
+            }
+            batchTask.addTask(task);
+        }
+        for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
+            AgentTaskQueue.addBatchTask(entry.getValue());
+            AgentTaskExecutor.submit(entry.getValue());
+        }
+    }
+
+    // REQUIRE: must set countDownLatch to error stat before throw an exception.
+    private void waitForFinished(MarkedCountDownLatch<Long, Long> countDownLatch, long timeout) throws DdlException {
+        try {
+            if (countDownLatch.await(timeout, TimeUnit.SECONDS)) {
+                if (!countDownLatch.getStatus().ok()) {
+                    String errMsg = "fail to create tablet: " + countDownLatch.getStatus().getErrorMsg();
+                    LOG.warn(errMsg);
+                    throw new DdlException(errMsg);
+                }
+            } else { // timed out
+                List<Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
+                List<Entry<Long, Long>> firstThree = unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
+                StringBuilder sb = new StringBuilder("fail to create tablet: timed out. unfinished replicas");
+                sb.append("(").append(firstThree.size()).append("/").append(unfinishedMarks.size()).append("): ");
+                // Show details of the first 3 unfinished tablets.
+                for (Entry<Long, Long> mark : firstThree) {
+                    sb.append(mark.getValue()); // TabletId
+                    sb.append('(');
+                    Backend backend = systemInfo.getBackend(mark.getKey());
+                    sb.append(backend != null ? backend.getHost() : "N/A");
+                    sb.append(") ");
+                }
+                sb.append(" timeout=").append(timeout).append("s");
+                String errMsg = sb.toString();
+                LOG.warn(errMsg);
+                countDownLatch.countDownToZero(new Status(TStatusCode.TIMEOUT, "timed out"));
+                throw new DdlException(errMsg);
+            }
+        } catch (InterruptedException e) {
+            LOG.warn(e);
+            countDownLatch.countDownToZero(new Status(TStatusCode.CANCELLED, "cancelled"));
+        }
     }
 
     // Create olap table and related base index synchronously.
@@ -3854,21 +3986,10 @@ public class Catalog {
             // do not create partition for external table
             if (olapTable.getType() == TableType.OLAP) {
                 if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
-                    // this is a 1-level partitioned table
-                    // use table name as partition name
-                    String partitionName = tableName;
-                    long partitionId = partitionNameToId.get(partitionName);
-                    // create partition
-                    Partition partition = createPartitionWithIndices(db.getClusterName(), db.getId(),
-                            olapTable.getId(), olapTable.getBaseIndexId(),
-                            partitionId, partitionName,
-                            olapTable.getIndexIdToMeta(),
-                            distributionInfo,
-                            partitionInfo.getDataProperty(partitionId).getStorageMedium(),
-                            partitionInfo.getReplicationNum(partitionId),
-                            versionInfo, bfColumns, bfFpp,
-                            tabletIdSet, olapTable.getCopiedIndexes(),
-                            isInMemory, storageFormat, tabletType);
+                    // this is a 1-level partitioned table, use table name as partition name
+                    long partitionId = partitionNameToId.get(tableName);
+                    Partition partition = createPartition(db, olapTable, partitionId, tableName, versionInfo, tabletIdSet);
+                    buildPartitions(db, olapTable, Collections.singletonList(partition));
                     olapTable.addPartition(partition);
                 } else if (partitionInfo.getType() == PartitionType.RANGE) {
                     try {
@@ -3886,18 +4007,15 @@ public class Catalog {
                     }
 
                     // this is a 2-level partitioned tables
-                    RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                    List<Partition> partitions = new ArrayList<>(partitionNameToId.size());
                     for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
-                        DataProperty dataProperty = rangePartitionInfo.getDataProperty(entry.getValue());
-                        Partition partition = createPartitionWithIndices(db.getClusterName(), db.getId(), olapTable.getId(),
-                                olapTable.getBaseIndexId(), entry.getValue(), entry.getKey(),
-                                olapTable.getIndexIdToMeta(), distributionInfo,
-                                dataProperty.getStorageMedium(),
-                                partitionInfo.getReplicationNum(entry.getValue()),
-                                versionInfo, bfColumns, bfFpp,
-                                tabletIdSet, olapTable.getCopiedIndexes(),
-                                isInMemory, storageFormat,
-                                rangePartitionInfo.getTabletType(entry.getValue()));
+                        Partition partition = createPartition(db, olapTable, entry.getValue(), entry.getKey(), versionInfo,
+                                                              tabletIdSet);
+                        partitions.add(partition);
+                    }
+                    // It's ok if partitions is empty.
+                    buildPartitions(db, olapTable, partitions);
+                    for (Partition partition : partitions) {
                         olapTable.addPartition(partition);
                     }
                 } else {
@@ -6694,7 +6812,7 @@ public class Catalog {
 
         // check, and save some info which need to be checked again later
         Map<String, Long> origPartitions = Maps.newHashMap();
-        OlapTable copiedTbl = null;
+        OlapTable copiedTbl;
         Database db = getDb(dbTbl.getDb());
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbTbl.getDb());
@@ -6738,35 +6856,25 @@ public class Catalog {
         }
 
         // 2. use the copied table to create partitions
-        List<Partition> newPartitions = Lists.newArrayList();
+        List<Partition> newPartitions = Lists.newArrayListWithCapacity(origPartitions.size());
         // tabletIdSet to save all newly created tablet ids.
         Set<Long> tabletIdSet = Sets.newHashSet();
         try {
             for (Map.Entry<String, Long> entry : origPartitions.entrySet()) {
-                // the new partition must use new id
-                // If we still use the old partition id, the behavior of current load jobs on this partition
-                // will be undefined.
-                // By using a new id, load job will be aborted(just like partition is dropped),
-                // which is the right behavior.
                 long oldPartitionId = entry.getValue();
                 long newPartitionId = getNextId();
-                Partition newPartition = createPartitionWithIndices(db.getClusterName(),
-                        db.getId(), copiedTbl.getId(), copiedTbl.getBaseIndexId(),
-                        newPartitionId, entry.getKey(),
-                        copiedTbl.getIndexIdToMeta(),
-                        copiedTbl.getDefaultDistributionInfo(),
-                        copiedTbl.getPartitionInfo().getDataProperty(oldPartitionId).getStorageMedium(),
-                        copiedTbl.getPartitionInfo().getReplicationNum(oldPartitionId),
-                        null /* version info */,
-                        copiedTbl.getCopiedBfColumns(),
-                        copiedTbl.getBfFpp(),
-                        tabletIdSet,
-                        copiedTbl.getCopiedIndexes(),
-                        copiedTbl.isInMemory(),
-                        copiedTbl.getStorageFormat(),
-                        copiedTbl.getPartitionInfo().getTabletType(oldPartitionId));
+                String newPartitionName = entry.getKey();
+
+                PartitionInfo partitionInfo = copiedTbl.getPartitionInfo();
+                partitionInfo.setTabletType(newPartitionId, partitionInfo.getTabletType(oldPartitionId));
+                partitionInfo.setIsInMemory(newPartitionId, partitionInfo.getIsInMemory(oldPartitionId));
+                partitionInfo.setReplicationNum(newPartitionId, partitionInfo.getReplicationNum(oldPartitionId));
+                partitionInfo.setDataProperty(newPartitionId, partitionInfo.getDataProperty(oldPartitionId));
+
+                Partition newPartition = createPartition(db, copiedTbl, newPartitionId, newPartitionName, null, tabletIdSet);
                 newPartitions.add(newPartition);
             }
+            buildPartitions(db, copiedTbl, newPartitions);
         } catch (DdlException e) {
             // create partition failed, remove all newly created tablets
             for (Long tabletId : tabletIdSet) {
