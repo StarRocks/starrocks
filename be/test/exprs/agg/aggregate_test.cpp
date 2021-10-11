@@ -15,12 +15,14 @@
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/sum.h"
 #include "exprs/vectorized/arithmetic_operation.h"
+#include "gen_cpp/Data_types.h"
 #include "gutil/casts.h"
 #include "runtime/vectorized/time_types.h"
 #include "testutil/function_utils.h"
 #include "udf/udf_internal.h"
 #include "util/bitmap_value.h"
 #include "util/slice.h"
+#include "util/thrift_util.h"
 #include "util/unaligned_access.h"
 
 namespace starrocks::vectorized {
@@ -655,14 +657,12 @@ TEST_F(AggregateTest, test_dict_merge) {
     ASSERT_EQ(res->size(), 1);
     auto slice = res->get_slice(0);
     std::map<int, std::string> datas;
-    auto buffer_st = slice.data;
-    auto buffer_end = slice.data + slice.size;
-    while (buffer_st < buffer_end) {
-        int key = unaligned_load<int32_t>(buffer_st);
-        int str_sz = unaligned_load<int32_t>(buffer_st + 4);
-        datas.emplace(key, std::string(buffer_st + 8, str_sz));
-        buffer_st += (8 + str_sz);
+    auto dict = from_json_string<TGlobalDict>(std::string(slice.data, slice.size));
+    int sz = dict.ids.size();
+    for (int i = 0; i < sz; ++i) {
+        datas.emplace(dict.ids[i], dict.strings[i]);
     }
+    ASSERT_EQ(dict.ids.size(), dict.strings.size());
 
     std::set<std::string> origin_data;
     std::set<int> ids;
