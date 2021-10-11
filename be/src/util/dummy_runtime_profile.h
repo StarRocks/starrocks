@@ -28,7 +28,7 @@
 namespace starrocks {
 class DummyProfile {
 public:
-    DummyProfile() : _pool(), _profile(new RuntimeProfile("dummy", false)) {}
+    DummyProfile() : _profile(new RuntimeProfile("dummy", false)) {}
     RuntimeProfile* profile() { return _profile; }
     virtual ~DummyProfile() { delete _profile; }
 

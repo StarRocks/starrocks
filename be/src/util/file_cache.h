@@ -147,7 +147,8 @@ private:
     // this case, _is_cache_own is set to false.
     bool _is_cache_own = false;
 
-    DISALLOW_COPY_AND_ASSIGN(FileCache);
+    FileCache(const FileCache&) = delete;
+    const FileCache& operator=(const FileCache&) = delete;
 };
 
 } // namespace starrocks

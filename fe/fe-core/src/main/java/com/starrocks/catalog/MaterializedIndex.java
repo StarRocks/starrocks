@@ -26,6 +26,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.thrift.TIndexState;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -50,6 +51,28 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
 
         public boolean isVisible() {
             return this == IndexState.NORMAL || this == IndexState.SCHEMA_CHANGE;
+        }
+
+        public TIndexState toThrift() {
+            switch (this) {
+                case NORMAL:
+                    return TIndexState.NORMAL;
+                case SHADOW:
+                    return TIndexState.SHADOW;
+                default:
+                    return null;
+            }
+        }
+
+        public static IndexState fromThrift(TIndexState tState) {
+            switch (tState) {
+                case NORMAL:
+                    return IndexState.NORMAL;
+                case SHADOW:
+                    return IndexState.SHADOW;
+                default:
+                    return null;
+            }
         }
     }
 

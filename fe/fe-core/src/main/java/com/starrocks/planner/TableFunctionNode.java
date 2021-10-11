@@ -64,13 +64,4 @@ public class TableFunctionNode extends PlanNode {
 
         return true;
     }
-
-    @Override
-    public void setUseVectorized(boolean flag) {
-        this.useVectorized = flag;
-
-        for (PlanNode node : getChildren()) {
-            node.setUseVectorized(flag);
-        }
-    }
 }

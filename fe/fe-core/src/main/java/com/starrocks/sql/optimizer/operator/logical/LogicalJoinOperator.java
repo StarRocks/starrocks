@@ -164,7 +164,7 @@ public class LogicalJoinOperator extends LogicalOperator {
                 '}';
     }
 
-    static public class Builder extends LogicalOperator.Builder<LogicalJoinOperator, LogicalJoinOperator.Builder> {
+    public static class Builder extends LogicalOperator.Builder<LogicalJoinOperator, LogicalJoinOperator.Builder> {
         private JoinOperator joinType;
         private ScalarOperator onPredicate;
         private String joinHint = "";

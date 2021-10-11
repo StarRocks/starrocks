@@ -36,8 +36,7 @@
 #include "storage/types.h"
 #include "util/slice.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 namespace {
 
@@ -101,7 +100,7 @@ public:
     explicit BloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
             : _bf_options(bf_options),
               _typeinfo(std::move(typeinfo)),
-              _tracker(),
+
               _pool(&_tracker),
               _has_null(false),
               _bf_buffer_size(0) {}
@@ -254,5 +253,4 @@ Status BloomFilterIndexWriter::create(const BloomFilterOptions& bf_options, cons
     return Status::OK();
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

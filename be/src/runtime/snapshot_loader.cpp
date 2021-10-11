@@ -97,9 +97,9 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
     int report_counter = 0;
     int total_num = src_to_dest_path.size();
     int finished_num = 0;
-    for (auto iter = src_to_dest_path.begin(); iter != src_to_dest_path.end(); iter++) {
-        const std::string& src_path = iter->first;
-        const std::string& dest_path = iter->second;
+    for (const auto& iter : src_to_dest_path) {
+        const std::string& src_path = iter.first;
+        const std::string& dest_path = iter.second;
 
         int64_t tablet_id = 0;
         int32_t schema_hash = 0;
@@ -119,10 +119,9 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
         RETURN_IF_ERROR(_get_existing_files_from_local(src_path, &local_files));
 
         // 2.3 iterate local files
-        for (auto it = local_files.begin(); it != local_files.end(); it++) {
+        for (auto& local_file : local_files) {
             RETURN_IF_ERROR(_report_every(10, &report_counter, finished_num, total_num, TTaskType::type::UPLOAD));
 
-            const std::string& local_file = *it;
             // calc md5sum of localfile
             std::string md5sum;
             status = FileUtils::md5sum(src_path + "/" + local_file, &md5sum);
@@ -224,9 +223,9 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
     int report_counter = 0;
     int total_num = src_to_dest_path.size();
     int finished_num = 0;
-    for (auto iter = src_to_dest_path.begin(); iter != src_to_dest_path.end(); iter++) {
-        const std::string& remote_path = iter->first;
-        const std::string& local_path = iter->second;
+    for (const auto& iter : src_to_dest_path) {
+        const std::string& remote_path = iter.first;
+        const std::string& local_path = iter.second;
 
         int64_t local_tablet_id = 0;
         int32_t schema_hash = 0;

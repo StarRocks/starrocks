@@ -139,7 +139,7 @@ public class Optimizer {
         //System.out.println(Utils.countInnerJoinNodeSize(tree));
         context.getRuleSet().addJoinTransformationRules();
         //if (connectContext.getSessionVariable().isEnableNewPlannerPushDownJoinToAgg()) {
-       //     context.getRuleSet().addPushDownJoinToAggRule();
+        //     context.getRuleSet().addPushDownJoinToAggRule();
         //}
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(

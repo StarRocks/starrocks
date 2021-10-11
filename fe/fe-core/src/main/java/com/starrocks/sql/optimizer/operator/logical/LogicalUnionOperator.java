@@ -38,7 +38,7 @@ public class LogicalUnionOperator extends LogicalSetOperator {
         return visitor.visitLogicalUnion(optExpression, context);
     }
 
-    static public class Builder extends LogicalSetOperator.Builder<LogicalUnionOperator, LogicalUnionOperator.Builder> {
+    public static class Builder extends LogicalSetOperator.Builder<LogicalUnionOperator, LogicalUnionOperator.Builder> {
         private boolean isUnionAll;
 
         @Override

@@ -44,24 +44,24 @@ public class LogicalApplyOperator extends LogicalOperator {
     private final boolean needCheckMaxRows;
 
     /**
-     * Mark the subquery isn't appear in AND predicate
+     * Mark the subquery can be cast to Semi/Anti-Join
      */
-    private final boolean fromAndScope;
+    private final boolean useSemiAnti;
 
     public LogicalApplyOperator(ColumnRefOperator output, ScalarOperator subqueryOperator,
-                                List<ColumnRefOperator> correlationColumnRefs, boolean fromAndScope) {
+                                List<ColumnRefOperator> correlationColumnRefs, boolean useSemiAnti) {
         super(OperatorType.LOGICAL_APPLY);
         this.output = output;
         this.subqueryOperator = subqueryOperator;
         this.correlationColumnRefs = correlationColumnRefs;
         this.correlationConjuncts = null;
         this.needCheckMaxRows = isScalar();
-        this.fromAndScope = fromAndScope;
+        this.useSemiAnti = useSemiAnti;
     }
 
     public LogicalApplyOperator(ColumnRefOperator output, ScalarOperator subqueryOperator,
                                 List<ColumnRefOperator> correlationColumnRefs, ScalarOperator correlationConjuncts,
-                                ScalarOperator predicate, boolean needCheckMaxRows, boolean fromAndScope) {
+                                ScalarOperator predicate, boolean needCheckMaxRows, boolean useSemiAnti) {
         super(OperatorType.LOGICAL_APPLY);
         this.output = output;
         this.subqueryOperator = subqueryOperator;
@@ -69,7 +69,7 @@ public class LogicalApplyOperator extends LogicalOperator {
         this.correlationConjuncts = correlationConjuncts;
         this.predicate = predicate;
         this.needCheckMaxRows = needCheckMaxRows;
-        this.fromAndScope = fromAndScope;
+        this.useSemiAnti = useSemiAnti;
     }
 
     public ColumnRefOperator getOutput() {
@@ -104,8 +104,8 @@ public class LogicalApplyOperator extends LogicalOperator {
         return needCheckMaxRows;
     }
 
-    public boolean isFromAndScope() {
-        return fromAndScope;
+    public boolean isUseSemiAnti() {
+        return useSemiAnti;
     }
 
     @Override

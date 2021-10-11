@@ -388,8 +388,7 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
 
     size_t column_index = 0;
     _chunk_meta.types.resize(pb_chunk.is_nulls().size());
-    for (size_t i = 0; i < _recvr->_row_desc.tuple_descriptors().size(); i++) {
-        TupleDescriptor* tuple_desc = _recvr->_row_desc.tuple_descriptors()[i];
+    for (auto tuple_desc : _recvr->_row_desc.tuple_descriptors()) {
         const std::vector<SlotDescriptor*>& slots = tuple_desc->slots();
         for (const auto& kv : _chunk_meta.slot_id_to_index) {
             //TODO: performance?
@@ -582,8 +581,8 @@ void DataStreamRecvr::SenderQueue::close() {
     }
 
     // Delete any batches queued in _batch_queue
-    for (RowBatchQueue::iterator it = _batch_queue.begin(); it != _batch_queue.end(); ++it) {
-        delete it->second;
+    for (auto& it : _batch_queue) {
+        delete it.second;
     }
 
     _current_batch.reset();
@@ -763,14 +762,14 @@ void DataStreamRecvr::remove_sender(int sender_id, int be_number) {
 }
 
 void DataStreamRecvr::cancel_stream() {
-    for (int i = 0; i < _sender_queues.size(); ++i) {
-        _sender_queues[i]->cancel();
+    for (auto& _sender_queue : _sender_queues) {
+        _sender_queue->cancel();
     }
 }
 
 void DataStreamRecvr::close() {
-    for (int i = 0; i < _sender_queues.size(); ++i) {
-        _sender_queues[i]->close();
+    for (auto& _sender_queue : _sender_queues) {
+        _sender_queue->close();
     }
     // Remove this receiver from the DataStreamMgr that created it.
     // TODO: log error msg

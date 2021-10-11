@@ -380,26 +380,6 @@ public class AggregationNode extends PlanNode {
     }
 
     @Override
-    public void setUseVectorized(boolean flag) {
-        this.useVectorized = flag;
-        for (Expr expr : conjuncts) {
-            expr.setUseVectorized(flag);
-        }
-
-        for (Expr expr : aggInfo.getAggregateExprs()) {
-            expr.setUseVectorized(flag);
-        }
-
-        for (Expr expr : aggInfo.getGroupingExprs()) {
-            expr.setUseVectorized(flag);
-        }
-
-        for (PlanNode node : getChildren()) {
-            node.setUseVectorized(flag);
-        }
-    }
-
-    @Override
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
         if (probeExpr.isBoundByTupleIds(getTupleIds())) {
             if (probeExpr instanceof SlotRef) {

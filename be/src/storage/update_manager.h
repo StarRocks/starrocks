@@ -94,7 +94,8 @@ private:
 
     std::unique_ptr<ThreadPool> _apply_thread_pool;
 
-    DISALLOW_COPY_AND_ASSIGN(UpdateManager);
+    UpdateManager(const UpdateManager&) = delete;
+    const UpdateManager& operator=(const UpdateManager&) = delete;
 };
 
 } // namespace starrocks

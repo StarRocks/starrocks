@@ -8,9 +8,7 @@
 
 #include "gutil/atomic_refcount.h"
 
-namespace starrocks {
-
-namespace subtle {
+namespace starrocks::subtle {
 
 RefCountedBase::RefCountedBase()
 #ifndef NDEBUG
@@ -89,6 +87,4 @@ bool RefCountedThreadSafeBase::Release() const {
     return false;
 }
 
-} // namespace subtle
-
-} // namespace starrocks
+} // namespace starrocks::subtle

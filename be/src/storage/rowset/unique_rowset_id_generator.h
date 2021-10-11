@@ -47,7 +47,8 @@ private:
     std::atomic<int64_t> _inc_id;
     std::unordered_set<int64_t> _valid_rowset_id_hi;
 
-    DISALLOW_COPY_AND_ASSIGN(UniqueRowsetIdGenerator);
+    UniqueRowsetIdGenerator(const UniqueRowsetIdGenerator&) = delete;
+    const UniqueRowsetIdGenerator& operator=(const UniqueRowsetIdGenerator&) = delete;
 }; // UniqueRowsetIdGenerator
 
 } // namespace starrocks

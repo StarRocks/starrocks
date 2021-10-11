@@ -102,12 +102,12 @@ bool BufferedTupleStream2::deep_copy_internal(TupleRow* row) {
     // Copy string slots. Note: we do not need to convert the string ptrs to offsets
     // on the write path, only on the read. The tuple data is immediately followed
     // by the string data so only the len information is necessary.
-    for (int i = 0; i < _string_slots.size(); ++i) {
-        Tuple* tuple = row->get_tuple(_string_slots[i].first);
+    for (auto& _string_slot : _string_slots) {
+        Tuple* tuple = row->get_tuple(_string_slot.first);
         if (HasNullableTuple && tuple == nullptr) {
             continue;
         }
-        if (UNLIKELY(!copy_strings(tuple, _string_slots[i].second, &bytes_allocated))) {
+        if (UNLIKELY(!copy_strings(tuple, _string_slot.second, &bytes_allocated))) {
             _write_block->return_allocation(bytes_allocated);
             return false;
         }
@@ -132,8 +132,7 @@ bool BufferedTupleStream2::deep_copy_internal(TupleRow* row) {
 
 bool BufferedTupleStream2::copy_strings(const Tuple* tuple, const vector<SlotDescriptor*>& string_slots,
                                         int* bytes_allocated) {
-    for (int i = 0; i < string_slots.size(); ++i) {
-        const SlotDescriptor* slot_desc = string_slots[i];
+    for (auto slot_desc : string_slots) {
         if (tuple->is_null(slot_desc->null_indicator_offset())) {
             continue;
         }

@@ -421,15 +421,15 @@ void WriterImpl::writeStripe() {
 
     // generate and write stripe footer
     proto::StripeFooter stripeFooter;
-    for (uint32_t i = 0; i < streams.size(); ++i) {
-        *stripeFooter.add_streams() = streams[i];
+    for (auto& stream : streams) {
+        *stripeFooter.add_streams() = stream;
     }
 
     std::vector<proto::ColumnEncoding> encodings;
     columnWriter->getColumnEncoding(encodings);
 
-    for (uint32_t i = 0; i < encodings.size(); ++i) {
-        *stripeFooter.add_columns() = encodings[i];
+    for (auto& encoding : encodings) {
+        *stripeFooter.add_columns() = encoding;
     }
 
     stripeFooter.set_writertimezone(options.getTimezoneName());
@@ -452,12 +452,11 @@ void WriterImpl::writeStripe() {
     // calculate data length and index length
     uint64_t dataLength = 0;
     uint64_t indexLength = 0;
-    for (uint32_t i = 0; i < streams.size(); ++i) {
-        if (streams[i].kind() == proto::Stream_Kind_ROW_INDEX ||
-            streams[i].kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8) {
-            indexLength += streams[i].length();
+    for (auto& stream : streams) {
+        if (stream.kind() == proto::Stream_Kind_ROW_INDEX || stream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8) {
+            indexLength += stream.length();
         } else {
-            dataLength += streams[i].length();
+            dataLength += stream.length();
         }
     }
 
@@ -481,7 +480,7 @@ void WriterImpl::writeMetadata() {
     if (!metadata.SerializeToZeroCopyStream(compressionStream.get())) {
         throw std::logic_error("Failed to write metadata.");
     }
-    postScript.set_metadatalength(compressionStream.get()->flush());
+    postScript.set_metadatalength(compressionStream->flush());
 }
 
 void WriterImpl::writeFileFooter() {

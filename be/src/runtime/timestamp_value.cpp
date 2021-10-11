@@ -700,7 +700,7 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
     }
     if (sub_val_end) {
         *sub_val_end = val;
-        return 0;
+        return false;
     }
     // Year day
     if (yearday > 0) {

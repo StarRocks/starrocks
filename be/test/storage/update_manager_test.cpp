@@ -48,7 +48,7 @@ public:
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
-        EXPECT_EQ(OLAP_SUCCESS, RowsetFactory::create_rowset_writer(writer_context, &writer));
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = vectorized::ChunkHelper::convert_schema(_tablet->tablet_schema());
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();

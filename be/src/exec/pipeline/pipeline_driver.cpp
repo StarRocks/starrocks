@@ -10,8 +10,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     if (_state == DriverState::NOT_READY) {
         source_operator()->add_morsel_queue(_morsel_queue);
@@ -22,6 +21,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     }
     return Status::OK();
 }
+
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
     _state = DriverState::RUNNING;
     size_t total_chunks_moved = 0;
@@ -63,8 +63,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
 
                 // pull chunk from current operator and push the chunk onto next
                 // operator
-                auto pulled_chunk = curr_op->pull_chunk(runtime_state);
-                auto status = pulled_chunk.status();
+                auto maybe_chunk = curr_op->pull_chunk(runtime_state);
+                auto status = maybe_chunk.status();
                 if (!status.ok() && !status.is_end_of_file()) {
                     LOG(WARNING) << " status " << status.to_string();
                     return status;
@@ -76,10 +76,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 }
 
                 if (status.ok()) {
-                    if (pulled_chunk.value() && pulled_chunk.value()->num_rows() > 0) {
-                        VLOG_ROW << "[Driver] transfer chunk(" << pulled_chunk.value()->num_rows() << ") from "
+                    if (maybe_chunk.value() && maybe_chunk.value()->num_rows() > 0) {
+                        VLOG_ROW << "[Driver] transfer chunk(" << maybe_chunk.value()->num_rows() << ") from "
                                  << curr_op->get_name() << " to " << next_op->get_name() << ", driver=" << this;
-                        next_op->push_chunk(runtime_state, pulled_chunk.value());
+                        next_op->push_chunk(runtime_state, maybe_chunk.value());
                     }
                     num_chunk_moved += 1;
                     total_chunks_moved += 1;
@@ -140,6 +140,12 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
     }
 }
 
+void PipelineDriver::cancel(RuntimeState* state) {
+    for (auto i = _first_unfinished; i < _operators.size(); ++i) {
+        _operators[i]->finish(state);
+    }
+}
+
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     VLOG_ROW << "[Driver] finalize, driver=" << this;
     if (state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR) {
@@ -188,5 +194,4 @@ std::string PipelineDriver::to_debug_string() const {
     ss << "]";
     return ss.str();
 }
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

@@ -122,23 +122,6 @@ public class ProjectNode extends PlanNode {
     }
 
     @Override
-    public void setUseVectorized(boolean flag) {
-        this.useVectorized = flag;
-
-        for (PlanNode node : getChildren()) {
-            node.setUseVectorized(flag);
-        }
-
-        for (Expr expr : slotMap.values()) {
-            expr.setUseVectorized(flag);
-        }
-
-        for (Expr expr : commonSlotMap.values()) {
-            expr.setUseVectorized(flag);
-        }
-    }
-
-    @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }

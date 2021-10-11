@@ -67,12 +67,11 @@ void Tuple::deep_copy(Tuple* dst, const TupleDescriptor& desc, MemPool* pool, bo
     memory_copy(dst, this, desc.byte_size());
 
     // allocate in the same pool and then copy all non-null string slots
-    for (std::vector<SlotDescriptor*>::const_iterator i = desc.string_slots().begin(); i != desc.string_slots().end();
-         ++i) {
-        DCHECK((*i)->type().is_string_type());
+    for (auto i : desc.string_slots()) {
+        DCHECK(i->type().is_string_type());
 
-        if (!dst->is_null((*i)->null_indicator_offset())) {
-            StringValue* string_v = dst->get_string_slot((*i)->tuple_offset());
+        if (!dst->is_null(i->null_indicator_offset())) {
+            StringValue* string_v = dst->get_string_slot(i->tuple_offset());
             if (string_v->len != 0) {
                 int offset = pool->total_allocated_bytes();
                 char* string_copy = reinterpret_cast<char*>(pool->allocate(string_v->len));
@@ -153,8 +152,7 @@ void Tuple::materialize_exprs(TupleRow* row, const TupleDescriptor& desc,
     memset(this, 0, desc.num_null_bytes());
     // Evaluate the output_slot_exprs and place the results in the tuples.
     int mat_expr_index = 0;
-    for (int i = 0; i < desc.slots().size(); ++i) {
-        SlotDescriptor* slot_desc = desc.slots()[i];
+    for (auto slot_desc : desc.slots()) {
         if (!slot_desc->is_materialized()) {
             continue;
         }

@@ -275,9 +275,9 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(const AlterTable
         if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
             tablet->tablet_meta()->create_inital_updates_meta();
         }
-        if (tablet->init() != OLAP_SUCCESS) {
-            LOG(WARNING) << "Fail to init tablet name=" << tablet->full_name();
-            status = Status::InternalError("tablet init failed");
+        if (Status st = tablet->init(); !st.ok()) {
+            LOG(WARNING) << "Fail to init tablet " << tablet->full_name() << ": " << st;
+            status = Status::InternalError("tablet init failed: " + st.to_string());
             break;
         }
         // TODO(lingbin): is it needed? because all type of create_tablet will be true.
@@ -334,7 +334,7 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(const AlterTable
             break;
         }
         is_tablet_added = true;
-    } while (0);
+    } while (false);
 
     if (status.ok()) {
         return tablet;
@@ -755,7 +755,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
                                             bool check_path) {
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
     TabletMetaSharedPtr tablet_meta(new TabletMeta(_mem_tracker));
-    if (tablet_meta->deserialize(meta_binary) != OLAP_SUCCESS) {
+    if (Status st = tablet_meta->deserialize(meta_binary); !st.ok()) {
         LOG(WARNING) << "Fail to load tablet because can not parse meta_binary string. "
                      << "tablet_id=" << tablet_id << " path=" << data_dir->path();
         return Status::InternalError("Invalid serialized tablet meta");
@@ -805,9 +805,9 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
         LOG(WARNING) << "Fail to create table, tablet path not exists, path=" << tablet->tablet_path();
         return Status::NotFound("tablet path not exists");
     }
-    if (tablet->init() != OLAP_SUCCESS) {
-        LOG(WARNING) << "Fail to init tablet, tablet=" << tablet->full_name();
-        return Status::InternalError("tablet init failed");
+    if (Status st = tablet->init(); !st.ok()) {
+        LOG(WARNING) << "Fail to init tablet " << tablet->full_name() << ": " << st;
+        return Status::InternalError("tablet init failed: " + st.to_string());
     }
     if (tablet->tablet_state() == TABLET_SHUTDOWN) {
         LOG(INFO) << "Loaded shutdown tablet " << tablet_id;
@@ -840,7 +840,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
     int32_t shard = stol(shard_str);
     // load dir is called by clone, restore, storage migration
     // should change tablet uid when tablet object changed
-    if (TabletMeta::reset_tablet_uid(header_path) != OLAP_SUCCESS) {
+    if (Status st = TabletMeta::reset_tablet_uid(header_path); !st.ok()) {
         LOG(WARNING) << "Fail to set tablet uid when copied meta file. header_path=" << header_path;
         return Status::InternalError("reset tablet uid failed");
     }
@@ -851,7 +851,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
     }
 
     TabletMetaSharedPtr tablet_meta(new TabletMeta(_mem_tracker));
-    if (tablet_meta->create_from_file(header_path) != OLAP_SUCCESS) {
+    if (Status st = tablet_meta->create_from_file(header_path); !st.ok()) {
         LOG(WARNING) << "Fail to load tablet_meta. file_path=" << header_path;
         return Status::InternalError("fail to create tablet meta from file");
     }
@@ -1214,7 +1214,7 @@ void TabletManager::_build_tablet_stat() {
 }
 
 Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& request, Tablet* tablet) {
-    OLAPStatus res = OLAP_SUCCESS;
+    Status st;
     if (request.version < 1) {
         LOG(WARNING) << "init version of tablet should at least 1. req.ver=" << request.version;
         return Status::InvalidArgument("invalid version");
@@ -1241,28 +1241,28 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
             context.segments_overlap = OVERLAP_UNKNOWN;
 
             std::unique_ptr<RowsetWriter> builder;
-            res = RowsetFactory::create_rowset_writer(context, &builder);
-            if (res != OLAP_SUCCESS) {
-                LOG(WARNING) << "failed to init rowset writer for tablet " << tablet->full_name();
+            st = RowsetFactory::create_rowset_writer(context, &builder);
+            if (!st.ok()) {
+                LOG(WARNING) << "failed to init rowset writer for tablet " << tablet->full_name() << ": " << st;
                 break;
             }
-            res = builder->flush();
-            if (res != OLAP_SUCCESS) {
+            if (builder->flush() != OLAP_SUCCESS) {
                 LOG(WARNING) << "failed to flush rowset writer for tablet " << tablet->full_name();
+                st = Status::InternalError("flush rowset failed");
                 break;
             }
 
             new_rowset = builder->build();
-            res = tablet->add_rowset(new_rowset, false);
-            if (res != OLAP_SUCCESS) {
+            st = tablet->add_rowset(new_rowset, false);
+            if (!st.ok()) {
                 LOG(WARNING) << "failed to add rowset for tablet " << tablet->full_name();
                 break;
             }
-        } while (0);
+        } while (false);
 
         // Unregister index and delete files(index and data) if failed
-        if (res != OLAP_SUCCESS) {
-            LOG(WARNING) << "fail to create initial rowset. res=" << res << " version=" << version;
+        if (!st.ok()) {
+            LOG(WARNING) << "fail to create initial rowset: " << st << " version=" << version;
             StorageEngine::instance()->add_unused_rowset(new_rowset);
             return Status::InternalError("fail to create initial rowset");
         }
@@ -1270,7 +1270,7 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
     tablet->set_cumulative_layer_point(request.version + 1);
     // NOTE: should not save tablet meta here, because it will be saved if add to map successfully
 
-    return res == OLAP_SUCCESS ? Status::OK() : Status::InternalError("");
+    return st;
 }
 
 Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& request, DataDir* store,
@@ -1319,11 +1319,8 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
     }
 
     RowsetTypePB rowset_type = RowsetTypePB::BETA_ROWSET;
-    if (TabletMeta::create(_mem_tracker, request, TabletUid::gen_uid(), shard_id, next_unique_id, col_idx_to_unique_id,
-                           rowset_type, tablet_meta) != OLAP_SUCCESS) {
-        return Status::InternalError("fail to create tablet meta");
-    }
-    return Status::OK();
+    return TabletMeta::create(_mem_tracker, request, TabletUid::gen_uid(), shard_id, next_unique_id,
+                              col_idx_to_unique_id, rowset_type, tablet_meta);
 }
 
 Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, SchemaHash schema_hash, bool keep_state) {
@@ -1490,7 +1487,7 @@ Status TabletManager::create_tablet_from_snapshot(DataDir* store, TTabletId tabl
 
     RETURN_IF_ERROR(meta_store->write_batch(&wb));
 
-    if (tablet->init() != OLAP_SUCCESS) {
+    if (!tablet->init().ok()) {
         LOG(WARNING) << "Fail to init cloned tablet " << tablet_id << ", try to clear meta store";
         wb.Clear();
         RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(store, &wb, tablet_id));

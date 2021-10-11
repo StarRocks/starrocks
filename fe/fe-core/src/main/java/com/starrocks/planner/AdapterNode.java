@@ -20,85 +20,32 @@
 // under the License.
 package com.starrocks.planner;
 
-import com.starrocks.analysis.TupleId;
-import com.starrocks.thrift.TAdapterNode;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TPlanNode;
-import com.starrocks.thrift.TPlanNodeType;
 
 import java.util.List;
+
+import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
 /**
  * Used to convert column to row, itself should not change the plan,
  * so most of the logic is consistent with the child node
  */
 public class AdapterNode extends PlanNode {
-
-    protected final TupleId tupleId;
-
     public AdapterNode(PlanNodeId id, PlanNode node) {
         super(id, node.tupleIds, "ADAPTER");
-        this.tupleId = node.tupleIds.get(0);
         this.children.add(node);
         this.setFragment(node.getFragment());
     }
 
     @Override
     protected void toThrift(TPlanNode msg) {
-        msg.adapter_node = new TAdapterNode(tupleId.asInt());
-        msg.node_type = TPlanNodeType.ADAPTER_NODE;
     }
 
-    @Override
-    public boolean isVectorized() {
-        return false;
-    }
-
-    public static void insertAdapterNodeToFragment(List<PlanFragment> fragments, PlannerContext plannerContext) {
+    public static void checkPlanIsVectorized(List<PlanFragment> fragments) {
         for (PlanFragment fragment : fragments) {
-            PlanNode root = fragment.getPlanRoot();
-
-            if (root.isVectorized()) {
-                root.setUseVectorized(true);
-            } else {
-                insertAdapterNodeToPlan(fragment.getPlanRoot(), plannerContext);
-            }
-        }
-
-        // If OUTPUT EXPRS don't support Vectorized, we need to insert a AdapterNode
-        if (fragments.get(0).getPlanRoot().isVectorized()) {
-            if (fragments.get(0).isOutPutExprsVectorized()) {
-                fragments.get(0).setOutPutExprsUseVectorized();
-            } else {
-                fragments.get(0)
-                        .setPlanRoot(new AdapterNode(plannerContext.getNextNodeId(), fragments.get(0).getPlanRoot()));
-            }
-        }
-
-        // If dest exchange node don't support Vectorized, we need to insert a AdapterNode
-        // otherwise, we need to set fragment partition exprs use Vectorized
-        for (PlanFragment fragment : fragments) {
-            if (fragment.getPlanRoot().isVectorized()) {
-                if (!fragment.isDestExchangeNodeVectorized() || !fragment.isOutputPartitionVectorized()) {
-                    fragment.setPlanRoot(new AdapterNode(plannerContext.getNextNodeId(), fragment.getPlanRoot()));
-                } else {
-                    fragment.setOutputPartitionUseVectorized(true);
-                }
-            }
-        }
-    }
-
-    private static void insertAdapterNodeToPlan(PlanNode parent, PlannerContext plannerContext) {
-        for (int i = 0; i < parent.getChildren().size(); i++) {
-            PlanNode child = parent.getChild(i);
-            if (child instanceof AdapterNode) {
-                continue;
-            }
-
-            if (child.isVectorized()) {
-                child.setUseVectorized(true);
-                parent.setChild(i, new AdapterNode(plannerContext.getNextNodeId(), child));
-            } else {
-                insertAdapterNodeToPlan(child, plannerContext);
+            if (!fragment.getPlanRoot().isVectorized()) {
+                throw new StarRocksPlannerException("Don't support non-vectorized plan", INTERNAL_ERROR);
             }
         }
     }

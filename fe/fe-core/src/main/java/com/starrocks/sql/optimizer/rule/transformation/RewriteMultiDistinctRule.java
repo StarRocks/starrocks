@@ -130,14 +130,16 @@ public class RewriteMultiDistinctRule extends TransformationRule {
 
         if (hasAvg) {
             OptExpression aggOpt = OptExpression
-                    .create(new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(), newAggMapWithAvg),
+                    .create(new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(),
+                                    newAggMapWithAvg),
                             input.getInputs());
             aggregationOperator.getGroupingKeys().forEach(c -> projections.put(c, c));
             return Lists.newArrayList(
                     OptExpression.create(new LogicalProjectOperator(projections), Lists.newArrayList(aggOpt)));
         } else {
             OptExpression aggOpt = OptExpression
-                    .create(new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(), newAggMap),
+                    .create(new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(),
+                                    newAggMap),
                             input.getInputs());
             return Lists.newArrayList(aggOpt);
         }

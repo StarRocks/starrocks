@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
-#include "exec/vectorized/olap_scanner.h"
+#include "exec/vectorized/tablet_scanner.h"
 
 #include <memory>
 
@@ -16,9 +16,9 @@
 
 namespace starrocks::vectorized {
 
-OlapScanner::OlapScanner(OlapScanNode* parent) : _parent(parent) {}
+TabletScanner::TabletScanner(OlapScanNode* parent) : _parent(parent) {}
 
-Status OlapScanner::init(RuntimeState* runtime_state, const OlapScannerParams& params) {
+Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParams& params) {
     _runtime_state = runtime_state;
     _skip_aggregation = params.skip_aggregation;
     _need_agg_finalize = params.need_agg_finalize;
@@ -29,7 +29,7 @@ Status OlapScanner::init(RuntimeState* runtime_state, const OlapScannerParams& p
     RETURN_IF_ERROR(_init_reader_params(params.key_ranges));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
     Schema child_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, _reader_columns);
-    _reader = std::make_shared<Reader>(_tablet, Version(0, _version), std::move(child_schema));
+    _reader = std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema));
     if (_reader_columns.size() == _scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -52,7 +52,7 @@ Status OlapScanner::init(RuntimeState* runtime_state, const OlapScannerParams& p
     }
 }
 
-Status OlapScanner::open([[maybe_unused]] RuntimeState* runtime_state) {
+Status TabletScanner::open([[maybe_unused]] RuntimeState* runtime_state) {
     if (_is_open) {
         return Status::OK();
     } else {
@@ -68,7 +68,7 @@ Status OlapScanner::open([[maybe_unused]] RuntimeState* runtime_state) {
     }
 }
 
-Status OlapScanner::close(RuntimeState* state) {
+Status TabletScanner::close(RuntimeState* state) {
     if (_is_closed) {
         return Status::OK();
     }
@@ -82,7 +82,7 @@ Status OlapScanner::close(RuntimeState* state) {
     return Status::OK();
 }
 
-Status OlapScanner::_get_tablet(const TInternalScanRange* scan_range) {
+Status TabletScanner::_get_tablet(const TInternalScanRange* scan_range) {
     TTabletId tablet_id = scan_range->tablet_id;
     SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
@@ -99,7 +99,7 @@ Status OlapScanner::_get_tablet(const TInternalScanRange* scan_range) {
     return Status::OK();
 }
 
-Status OlapScanner::_init_reader_params(const std::vector<OlapScanRange*>* key_ranges) {
+Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key_ranges) {
     _params.reader_type = READER_QUERY;
     _params.skip_aggregation = _skip_aggregation;
     _params.profile = _parent->_scan_profile;
@@ -168,7 +168,7 @@ Status OlapScanner::_init_reader_params(const std::vector<OlapScanRange*>* key_r
     return Status::OK();
 }
 
-Status OlapScanner::_init_return_columns() {
+Status TabletScanner::_init_return_columns() {
     for (auto slot : _parent->_tuple_desc->slots()) {
         if (!slot->is_materialized()) {
             continue;
@@ -192,7 +192,7 @@ Status OlapScanner::_init_return_columns() {
     return Status::OK();
 }
 
-Status OlapScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
+Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
     if (state->is_cancelled()) {
         return Status::Cancelled("canceled state");
     }
@@ -228,7 +228,7 @@ Status OlapScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::OK();
 }
 
-void OlapScanner::_update_realtime_counter() {
+void TabletScanner::_update_realtime_counter() {
     COUNTER_UPDATE(_parent->_read_compressed_counter, _reader->stats().compressed_bytes_read);
     _compressed_bytes_read += _reader->stats().compressed_bytes_read;
     _reader->mutable_stats()->compressed_bytes_read = 0;
@@ -238,7 +238,7 @@ void OlapScanner::_update_realtime_counter() {
     _reader->mutable_stats()->raw_rows_read = 0;
 }
 
-void OlapScanner::update_counter() {
+void TabletScanner::update_counter() {
     if (_has_update_counter) {
         return;
     }

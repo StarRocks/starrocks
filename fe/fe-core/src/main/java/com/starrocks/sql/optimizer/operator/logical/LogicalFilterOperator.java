@@ -67,7 +67,7 @@ public class LogicalFilterOperator extends LogicalOperator {
         return visitor.visitLogicalFilter(optExpression, context);
     }
 
-    static public class Builder
+    public static class Builder
             extends LogicalOperator.Builder<LogicalFilterOperator, LogicalFilterOperator.Builder> {
         @Override
         public LogicalFilterOperator build() {

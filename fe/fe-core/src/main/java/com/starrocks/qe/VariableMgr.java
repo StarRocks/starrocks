@@ -50,7 +50,6 @@ import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -315,12 +314,6 @@ public class VariableMgr {
     }
 
     @Deprecated
-    private static void writeGlobalVariableUpdate(SessionVariable variable, String msg) {
-        EditLog editLog = Catalog.getCurrentCatalog().getEditLog();
-        editLog.logGlobalVariable(variable);
-    }
-
-    @Deprecated
     public static void replayGlobalVariable(SessionVariable variable) throws DdlException {
         wlock.lock();
         try {
@@ -489,6 +482,12 @@ public class VariableMgr {
                 }
                 VarContext ctx = entry.getValue();
 
+                // For session variables, the flag is VariableMgr.SESSION | VariableMgr.INVISIBLE
+                // For global variables, the flag is VariableMgr.GLOBAL | VariableMgr.INVISIBLE
+                if (ctx.getFlag() > VariableMgr.INVISIBLE) {
+                    continue;
+                }
+
                 List<String> row = Lists.newArrayList();
 
                 row.add(name);
@@ -515,12 +514,7 @@ public class VariableMgr {
         }
 
         // Sort all variables by variable name.
-        Collections.sort(rows, new Comparator<List<String>>() {
-            @Override
-            public int compare(List<String> o1, List<String> o2) {
-                return o1.get(0).compareTo(o2.get(0));
-            }
-        });
+        rows.sort(Comparator.comparing(o -> o.get(0)));
 
         return rows;
     }

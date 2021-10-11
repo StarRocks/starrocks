@@ -24,7 +24,7 @@ public class LogicalIntersectOperator extends LogicalSetOperator {
         return visitor.visitLogicalIntersect(optExpression, context);
     }
 
-    static public class Builder
+    public static class Builder
             extends LogicalSetOperator.Builder<LogicalIntersectOperator, LogicalIntersectOperator.Builder> {
         @Override
         public LogicalIntersectOperator build() {

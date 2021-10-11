@@ -78,7 +78,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM = "parallel_fragment_exec_instance_num";
     public static final String ENABLE_INSERT_STRICT = "enable_insert_strict";
     public static final String ENABLE_SPILLING = "enable_spilling";
-    public static final String PREFER_JOIN_METHOD = "prefer_join_method";
     // if set to true, some of stmt will be forwarded to master FE to get result
     public static final String FORWARD_TO_MASTER = "forward_to_master";
     // user can set instance num after exchange, no need to be equal to nums of before exchange
@@ -93,9 +92,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      * Using only the exec_mem_limit variable does not make a good distinction of memory limit between the two parts.
      */
     public static final String LOAD_MEM_LIMIT = "load_mem_limit";
-    public static final String USE_V2_ROLLUP = "use_v2_rollup";
-    public static final String TEST_MATERIALIZED_VIEW = "test_materialized_view";
-    public static final String REWRITE_COUNT_DISTINCT_TO_BITMAP_HLL = "rewrite_count_distinct_to_bitmap_hll";
     public static final String EVENT_SCHEDULER = "event_scheduler";
     public static final String STORAGE_ENGINE = "storage_engine";
     public static final String DIV_PRECISION_INCREMENT = "div_precision_increment";
@@ -103,9 +99,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // see comment of `starrocks_max_scan_key_num` and `max_pushdown_conditions_per_column` in BE config
     public static final String MAX_SCAN_KEY_NUM = "max_scan_key_num";
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
-
-    // vectorized engine flag
-    public static final String ENABLE_VECTORIZED_ENGINE = "enable_vectorized_engine";
 
     // use new execution engine instead of the old one if enable_pipeline_engine is true,
     // the new execution engine split a fragment into pipelines, then create several drivers
@@ -123,9 +116,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PIPELINE_SCAN_MODE = "pipeline_scan_mode";
 
     public static final String PIPELINE_QUERY_EXPIRE_SECONDS = "pipeline_query_expire_seconds";
-
-    // vectorized insert flag
-    public static final String ENABLE_VECTORIZED_INSERT = "enable_vectorized_insert";
 
     // hash join right table push down
     public static final String HASH_JOIN_PUSH_DOWN_RIGHT_TABLE = "hash_join_push_down_right_table";
@@ -148,8 +138,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String FORCE_SCHEDULE_LOCAL = "force_schedule_local";
 
     // --------  New planner session variables start --------
-    public static final String ENABLE_CBO = "enable_cbo";
-    public static final String ENABLE_CBO_META = "enable_cbo_meta";
     public static final String ENABLE_NEW_PLANNER_PUSH_DOWN_JOIN_TO_AGG =
             "enable_new_planner_push_down_join_to_agg";
     public static final String NEW_PLANER_AGG_STAGE = "new_planner_agg_stage";
@@ -174,16 +162,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
 
-    // use vectorized engine
-    @VariableMgr.VarAttr(name = ENABLE_VECTORIZED_ENGINE, alias = "vectorized_engine_enable")
-    private boolean vectorizedEngineEnable = true;
-
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
-
-    // use vectorized insert
-    @VariableMgr.VarAttr(name = ENABLE_VECTORIZED_INSERT, alias = "vectorized_insert_enable")
-    private boolean vectorizedInsertEnable = true;
 
     // max memory used on every backend.
     @VariableMgr.VarAttr(name = EXEC_MEM_LIMIT)
@@ -307,9 +287,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CBO_ENABLE_REPLICATED_JOIN)
     private boolean enableReplicationJoin = true;
 
-    @VariableMgr.VarAttr(name = PREFER_JOIN_METHOD)
-    private String preferJoinMethod = "broadcast";
-
     /*
      * the parallel exec instance num for one Fragment in one BE
      * 1 means disable this feature
@@ -337,16 +314,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = LOAD_MEM_LIMIT)
     private long loadMemLimit = 0L;
-
-    @VariableMgr.VarAttr(name = USE_V2_ROLLUP)
-    private boolean useV2Rollup = false;
-
-    // TODO(ml): remove it after test
-    @VariableMgr.VarAttr(name = TEST_MATERIALIZED_VIEW)
-    private boolean testMaterializedView = false;
-
-    @VariableMgr.VarAttr(name = REWRITE_COUNT_DISTINCT_TO_BITMAP_HLL)
-    private boolean rewriteCountDistinct = true;
 
     // compatible with some mysql client connect, say DataGrip of JetBrains
     @VariableMgr.VarAttr(name = EVENT_SCHEDULER)
@@ -390,9 +357,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = FORCE_SCHEDULE_LOCAL)
     private boolean forceScheduleLocal = false;
 
-    @VariableMgr.VarAttr(name = ENABLE_CBO_META, alias = ENABLE_CBO, show = ENABLE_CBO)
-    private boolean enableCbo = true;
-
     @VariableMgr.VarAttr(name = ENABLE_NEW_PLANNER_PUSH_DOWN_JOIN_TO_AGG)
     private boolean enableNewPlannerPushDownJoinToAgg = false;
 
@@ -426,6 +390,31 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     //the alias will be used as the groupby column if set to true.
     @VariableMgr.VarAttr(name = ENABLE_GROUPBY_USE_OUTPUT_ALIAS)
     private boolean enableGroupbyUseOutputAlias = false;
+
+    // The following variables are deprecated and invisible //
+    // ----------------------------------------------------------------------------//
+
+    @VariableMgr.VarAttr(name = "enable_cbo", flag = VariableMgr.INVISIBLE)
+    @Deprecated
+    private boolean enableCbo = true;
+
+    @VariableMgr.VarAttr(name = "enable_vectorized_engine", alias = "vectorized_engine_enable",
+            flag = VariableMgr.INVISIBLE)
+    @Deprecated
+    private boolean vectorizedEngineEnable = true;
+
+    @VariableMgr.VarAttr(name = "enable_vectorized_insert", alias = "vectorized_insert_enable",
+            flag = VariableMgr.INVISIBLE)
+    @Deprecated
+    private boolean vectorizedInsertEnable = true;
+
+    @VariableMgr.VarAttr(name = "prefer_join_method", flag = VariableMgr.INVISIBLE)
+    @Deprecated
+    private String preferJoinMethod = "broadcast";
+
+    @VariableMgr.VarAttr(name = "rewrite_count_distinct_to_bitmap_hll", flag = VariableMgr.INVISIBLE)
+    @Deprecated
+    private boolean rewriteCountDistinct = true;
 
     public long getMaxExecMemByte() {
         return maxExecMemByte;
@@ -529,10 +518,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return disableColocateJoin;
     }
 
-    public void setPreferJoinMethod(String preferJoinMethod) {
-        this.preferJoinMethod = preferJoinMethod;
-    }
-
     public int getParallelExecInstanceNum() {
         return parallelExecInstanceNum;
     }
@@ -557,49 +542,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return forwardToMaster;
     }
 
-    public boolean isUseV2Rollup() {
-        return useV2Rollup;
-    }
-
-    // for unit test
-    public void setUseV2Rollup(boolean useV2Rollup) {
-        this.useV2Rollup = useV2Rollup;
-    }
-
-    public boolean getTestMaterializedView() {
-        return this.testMaterializedView;
-    }
-
-    public void setTestMaterializedView(boolean testMaterializedView) {
-        this.testMaterializedView = testMaterializedView;
-    }
-
-    public boolean isRewriteCountDistinct() {
-        return rewriteCountDistinct;
-    }
-
-    public void setRewriteCountDistinct(boolean rewriteCountDistinct) {
-        this.rewriteCountDistinct = rewriteCountDistinct;
-    }
-
     public void setMaxScanKeyNum(int maxScanKeyNum) {
         this.maxScanKeyNum = maxScanKeyNum;
     }
 
     public void setMaxPushdownConditionsPerColumn(int maxPushdownConditionsPerColumn) {
         this.maxPushdownConditionsPerColumn = maxPushdownConditionsPerColumn;
-    }
-
-    public boolean useVectorizedEngineEnable() {
-        return vectorizedEngineEnable;
-    }
-
-    public void setVectorizedEngineEnable(boolean vectorizedEngineEnable) {
-        this.vectorizedEngineEnable = vectorizedEngineEnable;
-    }
-
-    public boolean isVectorizedInsertEnable() {
-        return vectorizedInsertEnable;
     }
 
     public boolean isHashJoinPushDownRightTable() {
@@ -656,18 +604,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isForceScheduleLocal() {
         return forceScheduleLocal;
-    }
-
-    public boolean isEnableNewPlanner() {
-        return enableCbo;
-    }
-
-    public void disableNewPlanner() {
-        this.enableCbo = false;
-    }
-
-    public void enableNewPlanner() {
-        this.enableCbo = true;
     }
 
     public boolean isEnableNewPlannerPushDownJoinToAgg() {

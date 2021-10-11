@@ -111,8 +111,8 @@ std::string get_usage(const std::string& progname) {
 void show_meta() {
     auto mem_tracker = std::make_unique<MemTracker>();
     TabletMeta tablet_meta(mem_tracker.get());
-    OLAPStatus s = tablet_meta.create_from_file(FLAGS_pb_meta_path);
-    if (s != OLAP_SUCCESS) {
+    Status s = tablet_meta.create_from_file(FLAGS_pb_meta_path);
+    if (!s.ok()) {
         std::cout << "load pb meta file:" << FLAGS_pb_meta_path << " failed"
                   << ", status:" << s << std::endl;
         return;
@@ -270,7 +270,7 @@ void batch_delete_meta(const std::string& tablet_file) {
     //      /data1/starrocks.HDD,100010
     //      /data2/starrocks.HDD,100010
     std::ifstream infile(tablet_file);
-    std::string line = "";
+    std::string line;
     int err_num = 0;
     int delete_num = 0;
     int total_num = 0;
@@ -347,7 +347,6 @@ void batch_delete_meta(const std::string& tablet_file) {
     }
 
     std::cout << "total: " << total_num << ", delete: " << delete_num << ", error: " << err_num << std::endl;
-    return;
 }
 
 Status get_segment_footer(RandomAccessFile* input_file, SegmentFooterPB* footer) {
@@ -419,7 +418,6 @@ void show_segment_footer(const std::string& file_name) {
         return;
     }
     std::cout << json_footer << std::endl;
-    return;
 }
 
 int meta_tool_main(int argc, char** argv) {

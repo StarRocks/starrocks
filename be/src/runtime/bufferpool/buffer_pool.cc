@@ -40,9 +40,6 @@
 
 namespace starrocks {
 
-constexpr int BufferPool::LOG_MAX_BUFFER_BYTES;
-constexpr int64_t BufferPool::MAX_BUFFER_BYTES;
-
 void BufferPool::BufferHandle::Open(uint8_t* data, int64_t len, int home_core) {
     DCHECK_LE(0, home_core);
     DCHECK_LT(home_core, CpuInfo::get_max_num_cores());
@@ -691,11 +688,17 @@ string BufferPool::Client::DebugString() {
        << " in_flight_write_bytes: " << in_flight_write_pages_.bytes()
        << " reservation: " << reservation_.DebugString();
     ss << "\n  " << pinned_pages_.size() << " pinned pages: ";
-    pinned_pages_.iterate(std::bind<bool>(Page::DebugStringCallback, &ss, std::placeholders::_1));
+    pinned_pages_.iterate([capture0 = &ss](auto&& PH1) {
+        return Page::DebugStringCallback(capture0, std::forward<decltype(PH1)>(PH1));
+    });
     ss << "\n  " << dirty_unpinned_pages_.size() << " dirty unpinned pages: ";
-    dirty_unpinned_pages_.iterate(std::bind<bool>(Page::DebugStringCallback, &ss, std::placeholders::_1));
+    dirty_unpinned_pages_.iterate([capture0 = &ss](auto&& PH1) {
+        return Page::DebugStringCallback(capture0, std::forward<decltype(PH1)>(PH1));
+    });
     ss << "\n  " << in_flight_write_pages_.size() << " in flight write pages: ";
-    in_flight_write_pages_.iterate(std::bind<bool>(Page::DebugStringCallback, &ss, std::placeholders::_1));
+    in_flight_write_pages_.iterate([capture0 = &ss](auto&& PH1) {
+        return Page::DebugStringCallback(capture0, std::forward<decltype(PH1)>(PH1));
+    });
     return ss.str();
 }
 

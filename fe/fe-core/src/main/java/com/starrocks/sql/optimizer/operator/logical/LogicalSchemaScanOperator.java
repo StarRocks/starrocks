@@ -51,7 +51,7 @@ public class LogicalSchemaScanOperator extends LogicalScanOperator {
         return visitor.visitLogicalSchemaScan(this, context);
     }
 
-    static public class Builder extends LogicalScanOperator.Builder {
+    public static class Builder extends LogicalScanOperator.Builder {
         @Override
         public LogicalSchemaScanOperator build() {
             return new LogicalSchemaScanOperator(this);

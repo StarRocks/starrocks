@@ -74,15 +74,9 @@ public class FrontendsProcNode implements ProcNodeInterface {
     }
 
     public static void getFrontendsInfo(Catalog catalog, List<List<String>> infos) {
-        String masterIp = "";
-        int masterPort = -1;
-        try {
-            InetSocketAddress master = catalog.getHaProtocol().getLeader();
-            masterIp = master.getAddress().getHostAddress();
-            masterPort = master.getPort();
-        } catch (Exception e) {
-            // this may happen when majority of FOLLOWERS are down and no MASTER right now.
-            LOG.warn("failed to get leader: {}", e.getMessage());
+        String masterIp = Catalog.getCurrentCatalog().getMasterIp();
+        if (masterIp == null) {
+            masterIp = "";
         }
 
         // get all node which are joined in bdb group
@@ -110,7 +104,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
             }
 
             info.add(fe.getRole().name());
-            info.add(String.valueOf(fe.getHost().equals(masterIp) && fe.getEditLogPort() == masterPort));
+            info.add(String.valueOf(fe.getHost().equals(masterIp)));
 
             info.add(Integer.toString(catalog.getClusterId()));
             info.add(String.valueOf(isJoin(allFeHosts, fe)));

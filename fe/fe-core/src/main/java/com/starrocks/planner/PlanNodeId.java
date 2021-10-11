@@ -33,12 +33,12 @@ public class PlanNodeId extends Id<PlanNodeId> {
         return new IdGenerator<PlanNodeId>() {
             @Override
             public PlanNodeId getNextId() {
-                return new PlanNodeId(nextId_++);
+                return new PlanNodeId(nextId++);
             }
 
             @Override
             public PlanNodeId getMaxId() {
-                return new PlanNodeId(nextId_ - 1);
+                return new PlanNodeId(nextId - 1);
             }
         };
     }

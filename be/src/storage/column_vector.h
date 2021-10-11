@@ -38,7 +38,7 @@ public:
             : _type_info(std::move(type_info)),
               _capacity(0),
               _delete_state(DEL_NOT_SATISFIED),
-              _null_signs(),
+
               _nullable(is_nullable) {}
 
     virtual ~ColumnVectorBatch();

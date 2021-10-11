@@ -27,7 +27,7 @@ public:
     virtual ~DriverDispatcher() = default;
     virtual void initialize(int32_t num_threads) {}
     virtual void change_num_threads(int32_t num_threads) {}
-    virtual void dispatch(DriverPtr driver){};
+    virtual void dispatch(DriverRawPtr driver){};
 
     // When all the root drivers (the drivers have no successors in the same fragment) have finished,
     // just notify FE timely the completeness of fragment via invocation of report_exec_state, but
@@ -40,15 +40,15 @@ public:
 class GlobalDriverDispatcher final : public FactoryMethod<DriverDispatcher, GlobalDriverDispatcher> {
 public:
     explicit GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool);
-    ~GlobalDriverDispatcher() override = default;
+    ~GlobalDriverDispatcher() override;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
-    void dispatch(DriverPtr driver) override;
+    void dispatch(DriverRawPtr driver) override;
     void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) override;
 
 private:
     void run();
-    void finalize_driver(DriverPtr& driver, RuntimeState* runtime_state, DriverState state);
+    void finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
 
 private:
     LimitSetter _num_threads_setter;

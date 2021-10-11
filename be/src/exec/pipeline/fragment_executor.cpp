@@ -124,8 +124,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     plan->collect_scan_nodes(&scan_nodes);
 
     MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
-    for (int i = 0; i < scan_nodes.size(); ++i) {
-        ScanNode* scan_node = down_cast<ScanNode*>(scan_nodes[i]);
+    for (auto& i : scan_nodes) {
+        ScanNode* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
         Morsels morsels = convert_scan_range_to_morsel(scan_ranges, scan_node->id());
@@ -148,6 +148,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         _convert_data_sink_to_operator(params, &context, sink.get());
     }
 
+    RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
     Drivers drivers;
     const auto& pipelines = _fragment_ctx->pipelines();
     const size_t num_pipelines = pipelines.size();
@@ -202,7 +203,7 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
         RETURN_IF_ERROR(driver->prepare(_fragment_ctx->runtime_state()));
     }
     for (const auto& driver : _fragment_ctx->drivers()) {
-        exec_env->driver_dispatcher()->dispatch(driver);
+        exec_env->driver_dispatcher()->dispatch(driver.get());
     }
     return Status::OK();
 }

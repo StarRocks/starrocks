@@ -53,21 +53,10 @@ public:
     void SetUp() override {
         k_add_batch_status = Status::OK();
         _env = ExecEnv::GetInstance();
-        _env->_thread_mgr = new ThreadResourceMgr();
-        _env->_master_info = new TMasterInfo();
-        _env->_load_stream_mgr = new LoadStreamMgr();
-        _env->_brpc_stub_cache = new BrpcStubCache();
-        _env->_buffer_reservation = new ReservationTracker();
-
         config::tablet_writer_open_rpc_timeout_sec = 60;
     }
 
     void TearDown() override {
-        SAFE_DELETE(_env->_brpc_stub_cache);
-        SAFE_DELETE(_env->_load_stream_mgr);
-        SAFE_DELETE(_env->_master_info);
-        SAFE_DELETE(_env->_thread_mgr);
-        SAFE_DELETE(_env->_buffer_reservation);
         if (_server) {
             _server->Stop(100);
             _server->Join();

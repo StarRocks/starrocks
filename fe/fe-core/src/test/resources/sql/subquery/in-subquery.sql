@@ -374,3 +374,36 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [3: v3 = cast(4: expr as bigint(20))] 
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     VALUES (2)
 [end]
+
+[sql]
+select * from t0 where (v3 > 3) = (v3 in (select v7 from t2 where t0.v2 = t2.v8))
+[result]
+LEFT OUTER JOIN (join-predicate [2: v2 = 5: v8 AND 3: v3 = 4: v7] post-join-predicate [3: v3 > 3 = 4: v7 IS NOT NULL AND 5: v8 IS NOT NULL])
+    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
+    EXCHANGE BROADCAST
+        AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: v7, 5: v8]] having [null]
+            AGGREGATE ([LOCAL] aggregate [{}] group by [[4: v7, 5: v8]] having [null]
+                SCAN (columns[4: v7, 5: v8] predicate[null])
+[end]
+
+[sql]
+select case (v3 in (select v7 from t2 where t0.v2 = t2.v8)) when TRUE then 1 when FALSE then 2 end from t0;
+[result]
+LEFT OUTER JOIN (join-predicate [2: v2 = 5: v8 AND 3: v3 = 4: v7] post-join-predicate [null])
+    SCAN (columns[2: v2, 3: v3] predicate[null])
+    EXCHANGE BROADCAST
+        AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: v7, 5: v8]] having [null]
+            AGGREGATE ([LOCAL] aggregate [{}] group by [[4: v7, 5: v8]] having [null]
+                SCAN (columns[4: v7, 5: v8] predicate[null])
+[end]
+
+[sql]
+select not (v3 in (select v7 from t2 where t0.v2 = t2.v8)) from t0;
+[result]
+LEFT OUTER JOIN (join-predicate [2: v2 = 5: v8 AND 3: v3 = 4: v7] post-join-predicate [null])
+    SCAN (columns[2: v2, 3: v3] predicate[null])
+    EXCHANGE BROADCAST
+        AGGREGATE ([GLOBAL] aggregate [{}] group by [[4: v7, 5: v8]] having [null]
+            AGGREGATE ([LOCAL] aggregate [{}] group by [[4: v7, 5: v8]] having [null]
+                SCAN (columns[4: v7, 5: v8] predicate[null])
+[end]

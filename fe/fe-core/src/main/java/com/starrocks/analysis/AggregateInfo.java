@@ -274,17 +274,15 @@ public final class AggregateInfo extends AggregateInfoBase {
             }
         }
 
-        if (analyzer.getContext().getSessionVariable().useVectorizedEngineEnable()) {
-            // For sql: `select count(distinct k1, k2) from baseall group by k3`,
-            // We need to add k1 and k2 to group by columns
-            if (distinctAggExprs.size() == 1 && distinctAggExprs.get(0).getChildren().size() > 1) {
-                return false;
-            }
-            // If there are group by columns, we don't need to add count distinct column to group by column
-            // TODO(KKS): we could improve if group by column is same with count distinct column
-            if (!groupingExprs.isEmpty()) {
-                return true;
-            }
+        // For sql: `select count(distinct k1, k2) from baseall group by k3`,
+        // We need to add k1 and k2 to group by columns
+        if (distinctAggExprs.size() == 1 && distinctAggExprs.get(0).getChildren().size() > 1) {
+            return false;
+        }
+        // If there are group by columns, we don't need to add count distinct column to group by column
+        // TODO(KKS): we could improve if group by column is same with count distinct column
+        if (!groupingExprs.isEmpty()) {
+            return true;
         }
 
         return hasMultiDistinct;

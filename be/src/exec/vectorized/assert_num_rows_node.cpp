@@ -14,7 +14,7 @@ AssertNumRowsNode::AssertNumRowsNode(ObjectPool* pool, const TPlanNode& tnode, c
         : ExecNode(pool, tnode, descs),
           _desired_num_rows(tnode.assert_num_rows_node.desired_num_rows),
           _subquery_string(tnode.assert_num_rows_node.subquery_string),
-          _input_chunks(),
+
           _has_assert(false) {
     if (tnode.assert_num_rows_node.__isset.assertion) {
         _assertion = tnode.assert_num_rows_node.assertion;

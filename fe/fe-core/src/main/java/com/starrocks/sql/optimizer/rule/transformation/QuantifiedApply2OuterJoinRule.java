@@ -25,7 +25,7 @@ public class QuantifiedApply2OuterJoinRule extends BaseApply2OuterJoinRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
-        return !apply.isFromAndScope() && apply.isQuantified()
+        return !apply.isUseSemiAnti() && apply.isQuantified()
                 && !Utils.containsCorrelationSubquery(input.getGroupExpression());
     }
 

@@ -61,13 +61,13 @@ public abstract class LogicalSetOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), outputColumnRefOp);
     }
 
-    abstract static public class Builder<O extends LogicalSetOperator, B extends LogicalSetOperator.Builder>
+    public abstract static class Builder<O extends LogicalSetOperator, B extends LogicalSetOperator.Builder>
             extends Operator.Builder<O, B> {
         protected List<ColumnRefOperator> outputColumnRefOp;
         protected List<List<ColumnRefOperator>> childOutputColumns;
 
         @Override
-        public  B withOperator(O setOperator) {
+        public B withOperator(O setOperator) {
             super.withOperator(setOperator);
             this.outputColumnRefOp = setOperator.outputColumnRefOp;
             this.childOutputColumns = setOperator.childOutputColumns;

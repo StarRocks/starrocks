@@ -158,7 +158,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), type, aggregations, groupingKeys);
     }
 
-    static public class Builder
+    public static class Builder
             extends LogicalOperator.Builder<LogicalAggregationOperator, LogicalAggregationOperator.Builder> {
         private AggType type;
         private boolean isSplit = false;

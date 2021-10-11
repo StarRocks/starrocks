@@ -55,7 +55,8 @@ public:
     virtual AgentStatus report(const TReportRequest& request, TMasterResult* result);
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(MasterServerClient);
+    MasterServerClient(const MasterServerClient&) = delete;
+    const MasterServerClient& operator=(const MasterServerClient&) = delete;
 
     // Not ownder. Reference to the ExecEnv::_master_info
     const TMasterInfo& _master_info;
@@ -93,7 +94,8 @@ public:
     virtual bool write_json_to_file(const std::map<std::string, std::string>& info, const std::string& path);
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(AgentUtils);
+    AgentUtils(const AgentUtils&) = delete;
+    const AgentUtils& operator=(const AgentUtils&) = delete;
 }; // class AgentUtils
 
 } // namespace starrocks

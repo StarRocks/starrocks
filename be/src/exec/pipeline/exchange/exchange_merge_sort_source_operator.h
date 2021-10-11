@@ -64,7 +64,7 @@ public:
                                            const RowDescriptor& row_desc, SortExecExprs* sort_exec_exprs,
                                            const std::vector<bool>& is_asc_order, const std::vector<bool>& nulls_first,
                                            int64_t offset, int64_t limit)
-            : SourceOperatorFactory(id, plan_node_id),
+            : SourceOperatorFactory(id, "exchange_merge_sort_source", plan_node_id),
               _num_sender(num_sender),
               _row_desc(row_desc),
               _sort_exec_exprs(sort_exec_exprs),
@@ -80,6 +80,9 @@ public:
                                                                  _sort_exec_exprs, _is_asc_order, _nulls_first, _offset,
                                                                  _limit);
     }
+
+    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
+    void close(RuntimeState* state) override;
 
 private:
     int32_t _num_sender;

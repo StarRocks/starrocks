@@ -37,7 +37,7 @@ private:
 class LocalExchangeSinkOperatorFactory final : public OperatorFactory {
 public:
     LocalExchangeSinkOperatorFactory(int32_t id, std::shared_ptr<LocalExchanger> exchanger)
-            : OperatorFactory(id, -1), _exchanger(std::move(exchanger)) {}
+            : OperatorFactory(id, "local_exchange_sink", -1), _exchanger(std::move(exchanger)) {}
 
     ~LocalExchangeSinkOperatorFactory() override = default;
 

@@ -681,7 +681,7 @@ struct DecimalVal : public AnyVal {
         memset(buffer, 0, sizeof(int32_t) * 9);
         int_len = 0;
         frac_len = 0;
-        sign = 0;
+        sign = false;
     }
 
     void set_to_abs_value() { sign = false; }
@@ -758,7 +758,7 @@ struct LargeIntVal : public AnyVal {
 // todo(kks): keep HllVal struct only for backward compatibility, we should remove it
 //            when starrocks 0.12 release
 struct HllVal : public StringVal {
-    HllVal() : StringVal() {}
+    HllVal() {}
 
     void init(FunctionContext* ctx);
 

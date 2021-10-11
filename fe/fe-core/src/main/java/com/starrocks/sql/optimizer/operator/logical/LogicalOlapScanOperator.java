@@ -148,7 +148,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 selectedTabletId, hintsTabletIds);
     }
 
-    static public class Builder
+    public static class Builder
             extends LogicalScanOperator.Builder<LogicalOlapScanOperator, LogicalOlapScanOperator.Builder> {
         private HashDistributionSpec hashDistributionSpec;
         private long selectedIndexId;

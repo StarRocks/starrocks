@@ -224,8 +224,7 @@ TEST_F(BetaRowsetTest, BasicFunctionTest) {
         create_rowset_writer_context(&tablet_schema, &writer_context);
 
         std::unique_ptr<RowsetWriter> rowset_writer;
-        s = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
-        ASSERT_EQ(OLAP_SUCCESS, s);
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
         RowCursor input_row;
         input_row.init(tablet_schema);
@@ -424,8 +423,7 @@ TEST_F(BetaRowsetTest, DiscontinuousRowidTest) {
         create_rowset_writer_context(&tablet_schema, &writer_context);
 
         std::unique_ptr<RowsetWriter> rowset_writer;
-        s = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
-        ASSERT_EQ(OLAP_SUCCESS, s);
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
         RowCursor input_row;
         input_row.init(tablet_schema);
@@ -534,8 +532,7 @@ TEST_F(BetaRowsetTest, DiscontinuousRowid1Test) {
         create_rowset_writer_context(&tablet_schema, &writer_context);
 
         std::unique_ptr<RowsetWriter> rowset_writer;
-        s = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
-        ASSERT_EQ(OLAP_SUCCESS, s);
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
         RowCursor input_row;
         input_row.init(tablet_schema);
@@ -648,7 +645,7 @@ TEST_F(BetaRowsetTest, FinalMergeTest) {
         writer_context.segments_overlap = OVERLAP_UNKNOWN;
 
         std::unique_ptr<RowsetWriter> rowset_writer;
-        ASSERT_EQ(OLAP_SUCCESS, RowsetFactory::create_rowset_writer(writer_context, &rowset_writer));
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
         auto schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema);
 

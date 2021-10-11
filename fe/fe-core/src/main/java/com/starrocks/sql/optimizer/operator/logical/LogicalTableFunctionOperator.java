@@ -111,7 +111,7 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), fn, fnResultColumnRefSet, outerColumnRefSet, fnParamColumnProjectMap);
     }
 
-    static public class Builder extends LogicalOperator.Builder {
+    public static class Builder extends LogicalOperator.Builder {
         private TableFunction fn;
         private ColumnRefSet fnResultColumnRefSet;
         private ColumnRefSet outerColumnRefSet;

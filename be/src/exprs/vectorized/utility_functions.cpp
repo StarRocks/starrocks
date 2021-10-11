@@ -10,8 +10,7 @@
 #include "util/monotime.h"
 #include "util/uid_util.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 ColumnPtr UtilityFunctions::version(FunctionContext* context, const Columns& columns) {
     return ColumnHelper::create_const_column<TYPE_VARCHAR>("5.1.0", 1);
@@ -51,5 +50,4 @@ ColumnPtr UtilityFunctions::last_query_id(FunctionContext* context, const Column
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -766,18 +766,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     break;
                 }
                 RLTaskTxnCommitAttachment routineAttachment = (RLTaskTxnCommitAttachment) attachment;
-                entity.COUNTER_ROUTINE_LOAD_FINISHED_TOTAL.increase(1L);
-                entity.COUNTER_ROUTINE_LOAD_BYTES_TOTAL.increase(routineAttachment.getReceivedBytes());
-                entity.COUNTER_ROUTINE_LOAD_ROWS_TOTAL.increase(routineAttachment.getLoadedRows());
+                entity.counterRoutineLoadFinishedTotal.increase(1L);
+                entity.counterRoutineLoadBytesTotal.increase(routineAttachment.getReceivedBytes());
+                entity.counterRoutineLoadRowsTotal.increase(routineAttachment.getLoadedRows());
                 break;
             case MANUAL_LOAD:
                 if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {
                     break;
                 }
                 ManualLoadTxnCommitAttachment streamAttachment = (ManualLoadTxnCommitAttachment) attachment;
-                entity.COUNTER_STREAM_LOAD_FINISHED_TOTAL.increase(1L);
-                entity.COUNTER_STREAM_LOAD_BYTES_TOTAL.increase(streamAttachment.getReceivedBytes());
-                entity.COUNTER_STREAM_LOAD_ROWS_TOTAL.increase(streamAttachment.getLoadedRows());
+                entity.counterStreamLoadFinishedTotal.increase(1L);
+                entity.counterStreamLoadBytesTotal.increase(streamAttachment.getReceivedBytes());
+                entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
                 break;
             default:
                 break;

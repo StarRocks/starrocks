@@ -141,9 +141,9 @@ public:
     int64_t max_batch_size = 100 * 1024 * 1024; // 100MB
 
     // for parse json-data
-    std::string data_format = "";
-    std::string jsonpath_file = "";
-    std::string jsonpath = "";
+    std::string data_format;
+    std::string jsonpath_file;
+    std::string jsonpath;
 
     // only used to check if we receive whole body
     size_t body_bytes = 0;
@@ -182,10 +182,10 @@ public:
     int64_t read_data_cost_nanos = 0;
     int64_t write_data_cost_nanos = 0;
 
-    std::string error_url = "";
+    std::string error_url;
     // if label already be used, set existing job's status here
     // should be RUNNING or FINISHED
-    std::string existing_job_status = "";
+    std::string existing_job_status;
 
     std::unique_ptr<KafkaLoadInfo> kafka_info;
 

@@ -45,7 +45,7 @@ public class LogicalMysqlScanOperator extends LogicalScanOperator {
         return visitor.visitLogicalMysqlScan(this, context);
     }
 
-    static public class Builder extends LogicalScanOperator.Builder {
+    public static class Builder extends LogicalScanOperator.Builder {
         @Override
         public LogicalMysqlScanOperator build() {
             return new LogicalMysqlScanOperator(this);

@@ -129,7 +129,7 @@ public class LogicalTopNOperator extends LogicalOperator {
         return visitor.visitLogicalTopN(optExpression, context);
     }
 
-    static public class Builder
+    public static class Builder
             extends LogicalOperator.Builder<LogicalTopNOperator, LogicalTopNOperator.Builder> {
         private List<Ordering> orderByElements;
         private long offset;

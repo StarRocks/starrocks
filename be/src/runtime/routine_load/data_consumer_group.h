@@ -67,7 +67,7 @@ protected:
 // for kafka
 class KafkaDataConsumerGroup : public DataConsumerGroup {
 public:
-    KafkaDataConsumerGroup() : DataConsumerGroup(), _queue(500) {}
+    KafkaDataConsumerGroup() : _queue(500) {}
 
     ~KafkaDataConsumerGroup() override;
 

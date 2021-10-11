@@ -104,7 +104,7 @@ public class LogicalWindowOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), windowCall, partitionExpressions, orderByElements, analyticWindow);
     }
 
-    static public class Builder extends LogicalOperator.Builder {
+    public static class Builder extends LogicalOperator.Builder {
         private Map<ColumnRefOperator, CallOperator> windowCall;
         private List<ScalarOperator> partitionExpressions;
         private List<Ordering> orderByElements;

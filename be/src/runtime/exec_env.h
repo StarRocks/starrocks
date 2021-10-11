@@ -218,7 +218,7 @@ private:
     std::atomic<size_t> _num_scan_operators;
     PriorityThreadPool* _etl_thread_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
-    starrocks::pipeline::DriverDispatcher* _driver_dispatcher;
+    starrocks::pipeline::DriverDispatcher* _driver_dispatcher = nullptr;
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
     DiskIoMgr* _disk_io_mgr = nullptr;

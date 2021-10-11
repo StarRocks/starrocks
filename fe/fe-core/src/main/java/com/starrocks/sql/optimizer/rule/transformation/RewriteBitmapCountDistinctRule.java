@@ -65,6 +65,7 @@ public class RewriteBitmapCountDistinctRule extends TransformationRule {
             }
         }
         return Lists.newArrayList(OptExpression.create(
-                new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(), newAggMap), input.getInputs()));
+                new LogicalAggregationOperator(AggType.GLOBAL, aggregationOperator.getGroupingKeys(), newAggMap),
+                input.getInputs()));
     }
 }

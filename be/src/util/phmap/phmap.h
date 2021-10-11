@@ -163,8 +163,8 @@ int LeadingZeros(T x) {
 // --------------------------------------------------------------------------
 template <class T, int SignificantBits, int Shift = 0>
 class BitMask {
-    static_assert(std::is_unsigned<T>::value, "");
-    static_assert(Shift == 0 || Shift == 3, "");
+    static_assert(std::is_unsigned<T>::value);
+    static_assert(Shift == 0 || Shift == 3);
 
 public:
     // These are useful for unit tests (gunit).
@@ -945,7 +945,7 @@ public:
 
     raw_hash_set() noexcept(std::is_nothrow_default_constructible<hasher>::value&&
                                     std::is_nothrow_default_constructible<key_equal>::value&&
-                                            std::is_nothrow_default_constructible<allocator_type>::value) = default;
+                                            std::is_nothrow_default_constructible<allocator_type>::value) {}
 
     explicit raw_hash_set(size_t bucket_cnt, const hasher& hashfn = hasher(), const key_equal& eq = key_equal(),
                           const allocator_type& alloc = allocator_type())
@@ -1702,7 +1702,7 @@ private:
     };
 
     template <class K, class... Args>
-    std::pair<iterator, bool> emplace_decomposable(const K& key, size_t hashval, Args&&... args) {
+    std::pair<iterator, bool> emplace_decomposable_with_hash(const K& key, size_t hashval, Args&&... args) {
         auto res = find_or_prepare_insert(key, hashval);
         if (res.second) {
             emplace_at(res.first, std::forward<Args>(args)...);
@@ -1713,7 +1713,7 @@ private:
     struct EmplaceDecomposable {
         template <class K, class... Args>
         std::pair<iterator, bool> operator()(const K& key, Args&&... args) const {
-            return s.emplace_decomposable(key, s.hash(key), std::forward<Args>(args)...);
+            return s.emplace_decomposable_with_hash(key, s.hash(key), std::forward<Args>(args)...);
         }
         raw_hash_set& s;
     };
@@ -1721,7 +1721,7 @@ private:
     struct EmplaceDecomposableHashval {
         template <class K, class... Args>
         std::pair<iterator, bool> operator()(const K& key, Args&&... args) const {
-            return s.emplace_decomposable(key, hashval, std::forward<Args>(args)...);
+            return s.emplace_decomposable_with_hash(key, hashval, std::forward<Args>(args)...);
         }
         raw_hash_set& s;
         size_t hashval;
@@ -2133,10 +2133,10 @@ public:
     template <class K>
     using key_arg = typename KeyArgImpl::template type<K, key_type>;
 
-    static_assert(!std::is_reference<key_type>::value, "");
+    static_assert(!std::is_reference<key_type>::value);
     // TODO(alkis): remove this assertion and verify that reference mapped_type is
     // supported.
-    static_assert(!std::is_reference<mapped_type>::value, "");
+    static_assert(!std::is_reference<mapped_type>::value);
 
     using iterator = typename raw_hash_map::raw_hash_set::iterator;
     using const_iterator = typename raw_hash_map::raw_hash_set::const_iterator;
@@ -2468,9 +2468,9 @@ public:
 
     // ------------------------- c o n s t r u c t o r s ------------------
 
-    parallel_hash_set() noexcept(
-            std::is_nothrow_default_constructible<hasher>::value&& std::is_nothrow_default_constructible<
-                    key_equal>::value&& std::is_nothrow_default_constructible<allocator_type>::value) = default;
+    parallel_hash_set() noexcept(std::is_nothrow_default_constructible<hasher>::value&&
+                                         std::is_nothrow_default_constructible<key_equal>::value&&
+                                                 std::is_nothrow_default_constructible<allocator_type>::value) {}
 
     explicit parallel_hash_set(size_t bucket_cnt, const hasher& hash_param = hasher(),
                                const key_equal& eq = key_equal(), const allocator_type& alloc = allocator_type()) {
@@ -2744,7 +2744,7 @@ public:
         Inner& inner = sets_[subidx(hashval)];
         auto& set = inner.set_;
         typename Lockable::UniqueLock m(inner);
-        return make_rv(&inner, set.emplace_decomposable(key, hashval, std::forward<Args>(args)...));
+        return make_rv(&inner, set.emplace_decomposable_with_hash(key, hashval, std::forward<Args>(args)...));
     }
 
     struct EmplaceDecomposableHashval {
@@ -2812,7 +2812,7 @@ public:
         Inner& inner = sets_[subidx(hashval)];
         auto& set = inner.set_;
         typename Lockable::UniqueLock m(inner);
-        return make_rv(&inner, set.emplace_decomposable(key, hashval, std::forward<Args>(args)...));
+        return make_rv(&inner, set.emplace_decomposable_with_hash(key, hashval, std::forward<Args>(args)...));
     }
 
     struct EmplaceDecomposable {
@@ -3339,10 +3339,10 @@ public:
     template <class K>
     using key_arg = typename KeyArgImpl::template type<K, key_type>;
 
-    static_assert(!std::is_reference<key_type>::value, "");
+    static_assert(!std::is_reference<key_type>::value);
     // TODO(alkis): remove this assertion and verify that reference mapped_type is
     // supported.
-    static_assert(!std::is_reference<mapped_type>::value, "");
+    static_assert(!std::is_reference<mapped_type>::value);
 
     using iterator = typename parallel_hash_map::parallel_hash_set::iterator;
     using const_iterator = typename parallel_hash_map::parallel_hash_set::const_iterator;
@@ -3768,7 +3768,7 @@ struct FlatHashMapPolicy {
 
 template <class Reference, class Policy>
 struct node_hash_policy {
-    static_assert(std::is_lvalue_reference<Reference>::value, "");
+    static_assert(std::is_lvalue_reference<Reference>::value);
 
     using slot_type = typename std::remove_cv<typename std::remove_reference<Reference>::type>::type*;
 

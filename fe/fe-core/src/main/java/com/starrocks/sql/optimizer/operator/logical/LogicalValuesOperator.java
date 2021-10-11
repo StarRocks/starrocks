@@ -77,7 +77,7 @@ public class LogicalValuesOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), columnRefSet, rows);
     }
 
-    static public class Builder extends LogicalOperator.Builder<LogicalValuesOperator, LogicalValuesOperator.Builder> {
+    public static class Builder extends LogicalOperator.Builder<LogicalValuesOperator, LogicalValuesOperator.Builder> {
         private List<ColumnRefOperator> columnRefSet;
         private List<List<ScalarOperator>> rows;
 

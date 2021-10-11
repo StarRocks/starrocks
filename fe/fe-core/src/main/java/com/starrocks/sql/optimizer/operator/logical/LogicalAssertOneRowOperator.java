@@ -93,7 +93,7 @@ public class LogicalAssertOneRowOperator extends LogicalOperator {
         return visitor.visitLogicalAssertOneRow(optExpression, context);
     }
 
-    static public class Builder
+    public static class Builder
             extends LogicalOperator.Builder<LogicalAssertOneRowOperator, LogicalAssertOneRowOperator.Builder> {
         private AssertNumRowsElement.Assertion assertion;
         private long checkRows;

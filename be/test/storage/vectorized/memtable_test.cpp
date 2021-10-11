@@ -202,7 +202,7 @@ public:
         writer_context.tablet_schema = _schema.get();
         writer_context.version.first = 10;
         writer_context.version.second = 10;
-        ASSERT_EQ(OLAP_SUCCESS, RowsetFactory::create_rowset_writer(writer_context, &_writer));
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
         _mem_table.reset(new MemTable(1, _schema.get(), _slots, _writer.get(), _mem_tracker.get()));
     }
 

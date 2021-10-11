@@ -22,7 +22,7 @@ public class LogicalExceptOperator extends LogicalSetOperator {
         return visitor.visitLogicalExcept(optExpression, context);
     }
 
-    static public class Builder
+    public static class Builder
             extends LogicalSetOperator.Builder<LogicalExceptOperator, LogicalExceptOperator.Builder> {
         @Override
         public LogicalExceptOperator build() {

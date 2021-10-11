@@ -38,7 +38,7 @@ private:
 class LocalExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     LocalExchangeSourceOperatorFactory(int32_t id, std::shared_ptr<LocalExchangeMemoryManager> memory_manager)
-            : SourceOperatorFactory(id, -1), _memory_manager(std::move(memory_manager)) {}
+            : SourceOperatorFactory(id, "local_exchange_source", -1), _memory_manager(std::move(memory_manager)) {}
 
     ~LocalExchangeSourceOperatorFactory() override = default;
 

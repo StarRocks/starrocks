@@ -120,7 +120,7 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
 
         // extract group columns
         Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> pair =
-                SubqueryUtils.rewriteCorrelationPredicateAndExtractColumnRefs(correlationPredicate,
+                SubqueryUtils.rewritePredicateAndExtractColumnRefs(correlationPredicate,
                         apply.getCorrelationColumnRefs(), context);
 
         // create new trees
@@ -169,7 +169,7 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
         OptExpression newApplyOptExpression = new OptExpression(
                 new LogicalApplyOperator(apply.getOutput(), apply.getSubqueryOperator(),
                         apply.getCorrelationColumnRefs(), apply.getCorrelationConjuncts(), apply.getPredicate(),
-                        false, apply.isFromAndScope()));
+                        false, apply.isUseSemiAnti()));
 
         newApplyOptExpression.getInputs().add(input.getInputs().get(0));
         newApplyOptExpression.getInputs().add(correlationFilterOptExpression);

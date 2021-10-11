@@ -23,7 +23,6 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.SchemaTable;
 import com.starrocks.common.Config;
@@ -149,15 +148,5 @@ public class SchemaScanNode extends ScanNode {
     @Override
     public boolean isVectorized() {
         return true;
-    }
-
-    @Override
-    public void setUseVectorized(boolean flag) {
-        this.useVectorized = flag;
-
-        // conjuncts is useless in BE, set it in order to make the all slot of mysql scan node is Vectorized
-        for (Expr expr : conjuncts) {
-            expr.setUseVectorized(flag);
-        }
     }
 }

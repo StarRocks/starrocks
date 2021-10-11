@@ -194,7 +194,7 @@ TEST_F(BaseCompactionTest, test_input_rowsets_EQ_2) {
     RowsetWriterContext rowset_writer_context(kDataFormatUnknown, config::storage_format_version);
     create_rowset_writer_context(&rowset_writer_context);
     std::unique_ptr<RowsetWriter> _rowset_writer;
-    ASSERT_EQ(OLAP_SUCCESS, RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer));
+    ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
 
     rowset_writer_add_rows(_rowset_writer);
 
@@ -218,7 +218,7 @@ TEST_F(BaseCompactionTest, test_input_rowsets_EQ_2) {
                 Version(rowset_writer_context.version.second + 1, rowset_writer_context.version.second + 2);
 
         std::unique_ptr<RowsetWriter> _rowset_writer;
-        ASSERT_EQ(OLAP_SUCCESS, RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer));
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
 
         rowset_writer_add_rows(_rowset_writer);
 
@@ -247,7 +247,7 @@ TEST_F(BaseCompactionTest, test_compact_succeed) {
     RowsetWriterContext rowset_writer_context(kDataFormatUnknown, config::storage_format_version);
     create_rowset_writer_context(&rowset_writer_context);
     std::unique_ptr<RowsetWriter> _rowset_writer;
-    ASSERT_EQ(OLAP_SUCCESS, RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer));
+    ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
 
     rowset_writer_add_rows(_rowset_writer);
 
@@ -271,7 +271,7 @@ TEST_F(BaseCompactionTest, test_compact_succeed) {
                 Version(rowset_writer_context.version.second + 1, rowset_writer_context.version.second + 2);
 
         std::unique_ptr<RowsetWriter> _rowset_writer;
-        ASSERT_EQ(OLAP_SUCCESS, RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer));
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
 
         rowset_writer_add_rows(_rowset_writer);
 
@@ -292,7 +292,7 @@ TEST_F(BaseCompactionTest, test_compact_succeed) {
                 Version(rowset_writer_context.version.second + 1, rowset_writer_context.version.second + 2);
 
         std::unique_ptr<RowsetWriter> _rowset_writer;
-        ASSERT_EQ(OLAP_SUCCESS, RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer));
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
 
         rowset_writer_add_rows(_rowset_writer);
 

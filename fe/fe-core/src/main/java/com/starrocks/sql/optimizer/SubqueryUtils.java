@@ -56,7 +56,7 @@ public class SubqueryUtils {
     // e.g.
     // correlation predicate: a = abs(b)
     // return: <a = c, c: abs(b)>
-    public static Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> rewriteCorrelationPredicateAndExtractColumnRefs(
+    public static Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> rewritePredicateAndExtractColumnRefs(
             List<ScalarOperator> correlationPredicate, List<ColumnRefOperator> correlationColumnRefs,
             OptimizerContext context) {
         List<ScalarOperator> newPredicate = Lists.newArrayList();

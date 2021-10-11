@@ -79,6 +79,12 @@ struct TResultBatch {
   10: optional i32 statistic_version
 }
 
+struct TGlobalDict {
+    1: optional i32 columnId
+    2: optional list<string> strings
+    3: optional list<i32> ids
+}
+
 // Statistic data for new planner 
 struct TStatisticData {
     1: optional string updateTime
@@ -92,5 +98,9 @@ struct TStatisticData {
     9: optional string max
     10: optional string min
     11: optional string histogram
+    // global dict for low cardinality string
+    12: optional TGlobalDict dict
+    // the latest partition version for this table
+    13: optional i64 meta_version
 }
 

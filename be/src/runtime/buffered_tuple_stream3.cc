@@ -91,8 +91,7 @@ BufferedTupleStream3::BufferedTupleStream3(RuntimeState* state, const RowDescrip
 
         vector<SlotDescriptor*> tuple_string_slots;
         vector<SlotDescriptor*> tuple_coll_slots;
-        for (int j = 0; j < tuple_desc->slots().size(); ++j) {
-            SlotDescriptor* slot = tuple_desc->slots()[j];
+        for (auto slot : tuple_desc->slots()) {
             if (!slot->type().is_var_len_string_type()) continue;
             if (ext_varlen_slots.find(slot->id()) == ext_varlen_slots.end()) {
                 if (slot->type().is_var_len_string_type()) {
@@ -768,10 +767,10 @@ Status BufferedTupleStream3::GetNextInternal(RowBatch* batch, bool* eos, vector<
         UnflattenTupleRow<HAS_NULLABLE_TUPLE>(&read_ptr_, output_row);
 
         // Update string slot ptrs, skipping external strings.
-        for (int j = 0; j < inlined_string_slots_.size(); ++j) {
-            Tuple* tuple = output_row->get_tuple(inlined_string_slots_[j].first);
+        for (auto& inlined_string_slot : inlined_string_slots_) {
+            Tuple* tuple = output_row->get_tuple(inlined_string_slot.first);
             if (HAS_NULLABLE_TUPLE && tuple == nullptr) continue;
-            FixUpStringsForRead(inlined_string_slots_[j].second, tuple);
+            FixUpStringsForRead(inlined_string_slot.second, tuple);
         }
         /*
     // Update collection slot ptrs, skipping external collections. We traverse the
@@ -844,17 +843,17 @@ int64_t BufferedTupleStream3::ComputeRowSize(TupleRow* row) const noexcept {
             if (row->get_tuple(i) != nullptr) size += fixed_tuple_sizes_[i];
         }
     } else {
-        for (int i = 0; i < fixed_tuple_sizes_.size(); ++i) {
-            size += fixed_tuple_sizes_[i];
+        for (int fixed_tuple_size : fixed_tuple_sizes_) {
+            size += fixed_tuple_size;
         }
     }
-    for (int i = 0; i < inlined_string_slots_.size(); ++i) {
-        Tuple* tuple = row->get_tuple(inlined_string_slots_[i].first);
+    for (const auto& inlined_string_slot : inlined_string_slots_) {
+        Tuple* tuple = row->get_tuple(inlined_string_slot.first);
         if (tuple == nullptr) continue;
-        const vector<SlotDescriptor*>& slots = inlined_string_slots_[i].second;
-        for (auto it = slots.begin(); it != slots.end(); ++it) {
-            if (tuple->is_null((*it)->null_indicator_offset())) continue;
-            size += tuple->get_string_slot((*it)->tuple_offset())->len;
+        const vector<SlotDescriptor*>& slots = inlined_string_slot.second;
+        for (auto slot : slots) {
+            if (tuple->is_null(slot->null_indicator_offset())) continue;
+            size += tuple->get_string_slot(slot->tuple_offset())->len;
         }
     }
 
@@ -979,10 +978,10 @@ bool BufferedTupleStream3::DeepCopyInternal(TupleRow* row, uint8_t** data, const
     // Copy inlined string slots. Note: we do not need to convert the string ptrs to offsets
     // on the write path, only on the read. The tuple data is immediately followed
     // by the string data so only the len information is necessary.
-    for (int i = 0; i < inlined_string_slots_.size(); ++i) {
-        const Tuple* tuple = row->get_tuple(inlined_string_slots_[i].first);
+    for (auto& inlined_string_slot : inlined_string_slots_) {
+        const Tuple* tuple = row->get_tuple(inlined_string_slot.first);
         if (HAS_NULLABLE_TUPLE && tuple == nullptr) continue;
-        if (UNLIKELY(!CopyStrings(tuple, inlined_string_slots_[i].second, &pos, data_end))) return false;
+        if (UNLIKELY(!CopyStrings(tuple, inlined_string_slot.second, &pos, data_end))) return false;
     }
     /*
   // Copy inlined collection slots. We copy collection data in a well-defined order so

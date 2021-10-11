@@ -65,7 +65,7 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
         return visitor.visitLogicalEsScan(this, context);
     }
 
-    static public class Builder extends LogicalScanOperator.Builder {
+    public static class Builder extends LogicalScanOperator.Builder {
         private EsTablePartitions esTablePartitions;
         private List<EsShardPartitions> selectedIndex = Lists.newArrayList();
 

@@ -142,7 +142,8 @@ private:
     static std::mutex _s_task_signatures_lock;
     static std::map<TTaskType::type, std::set<int64_t>> _s_task_signatures;
 
-    DISALLOW_COPY_AND_ASSIGN(TaskWorkerPool);
+    TaskWorkerPool(const TaskWorkerPool&) = delete;
+    const TaskWorkerPool& operator=(const TaskWorkerPool&) = delete;
 }; // class TaskWorkerPool
 } // namespace starrocks
 #endif // STARROCKS_BE_SRC_TASK_WORKER_POOL_H

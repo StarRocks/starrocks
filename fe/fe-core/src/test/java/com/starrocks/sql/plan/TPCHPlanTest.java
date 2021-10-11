@@ -61,7 +61,6 @@ public class TPCHPlanTest extends PlanTestBase {
 
     @Test
     public void testConstant() {
-        connectContext.getSessionVariable().enableNewPlanner();
         runFileUnitTest("optimized-plan/constant-query");
     }
 

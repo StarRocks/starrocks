@@ -189,13 +189,25 @@ public:
     }
 
     template <typename T>
-    static constexpr T float_overflow_indicator = std::numeric_limits<T>::lowest();
+    static constexpr T float_lower_overflow_indicator = std::numeric_limits<T>::max();
+    template <typename T>
+    static constexpr T float_upper_overflow_indicator = std::numeric_limits<T>::min();
+
     template <typename From, typename To>
     static inline bool from_float(FloatType<From> value, DecimalType<To> const& scale_factor,
                                   DecimalType<To>* dec_value) {
         *dec_value = static_cast<To>(scale_factor * static_cast<double>(value));
         if constexpr (is_decimal32<To> || is_decimal64<To>) {
-            return *dec_value == float_overflow_indicator<To>;
+            // Depending on the compiler implement, std::numeric_limits<T>::max() or std::numeric_limits<T>::max() both could be returned,
+            // when overflow is happenning in casting.
+
+            // With GCC-10.3.0, the cast on aarch64 uses fcvtzs instruction, behaving as "carries all overflows to the output precision’s largest finite number with the sign of the result before rounding".
+            // (https://developer.arm.com/documentation/ddi0487/latest)
+
+            // Meanwhile, the cast on x86_64 uses cvttsd2siq instruction, behaving as "the indefinite integer value (80000000H) is returned".
+            // (https://www.felixcloutier.com/x86/cvttsd2si)
+            return (*dec_value == float_lower_overflow_indicator<To>) ||
+                   (*dec_value == float_upper_overflow_indicator<To>);
         } else if constexpr (is_decimal128<To>) {
             // abs(value)<1.0 -> 0: Acceptable
             // abs(value)>=1.0 -> 0 or different sign: Overflow!!

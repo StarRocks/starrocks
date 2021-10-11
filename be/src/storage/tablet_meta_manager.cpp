@@ -299,8 +299,7 @@ Status TabletMetaManager::get_tablet_meta(DataDir* store, TTabletId tablet_id, T
     std::string key = encode_tablet_meta_key(tablet_id, schema_hash);
     std::string value;
     RETURN_IF_ERROR(store->get_meta()->get(META_COLUMN_FAMILY_INDEX, key, &value));
-    OLAPStatus ret = tablet_meta->deserialize(value);
-    return ret == OLAP_SUCCESS ? Status::OK() : Status::Corruption("invalid tablet meta");
+    return tablet_meta->deserialize(value);
 }
 
 Status TabletMetaManager::get_json_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,

@@ -126,7 +126,7 @@ Status RestoreTabletAction::_reload_tablet(const std::string& key, const std::st
         }
         return Status::InternalError("command executor load header failed");
     } else {
-        std::string trash_tablet_schema_hash_dir = "";
+        std::string trash_tablet_schema_hash_dir;
         {
             // get tablet path in trash
             std::lock_guard<std::mutex> l(_tablet_restore_lock);
@@ -151,10 +151,9 @@ Status RestoreTabletAction::_restore(const std::string& key, int64_t tablet_id, 
     std::string original_header_path = latest_tablet_path + "/" + std::to_string(tablet_id) + ".hdr";
     auto mem_tracker = std::make_unique<MemTracker>();
     TabletMeta tablet_meta(mem_tracker.get());
-    OLAPStatus load_status = tablet_meta.create_from_file(original_header_path);
-    if (load_status != OLAP_SUCCESS) {
+    if (Status load_status = tablet_meta.create_from_file(original_header_path); !load_status.ok()) {
         LOG(WARNING) << "header load and init error, header path:" << original_header_path;
-        return Status::InternalError("load header failed");
+        return Status::InternalError(load_status.to_string());
     }
     // latest_tablet_path: /root_path/trash/time_label/tablet_id/schema_hash
     {

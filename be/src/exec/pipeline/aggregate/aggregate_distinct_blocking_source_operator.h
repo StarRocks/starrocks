@@ -34,7 +34,8 @@ private:
 class AggregateDistinctBlockingSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     AggregateDistinctBlockingSourceOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : SourceOperatorFactory(id, plan_node_id), _aggregator(std::move(aggregator)) {}
+            : SourceOperatorFactory(id, "aggregate_distinct_blocking_source", plan_node_id),
+              _aggregator(std::move(aggregator)) {}
 
     ~AggregateDistinctBlockingSourceOperatorFactory() override = default;
 

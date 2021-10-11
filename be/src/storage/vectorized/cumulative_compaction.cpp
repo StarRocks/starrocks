@@ -73,8 +73,7 @@ Status CumulativeCompaction::pick_rowsets_to_compact() {
     // the last delete version we meet when traversing candidate_rowsets
     Version last_delete_version{-1, -1};
 
-    for (size_t i = 0; i < candidate_rowsets.size(); ++i) {
-        RowsetSharedPtr rowset = candidate_rowsets[i];
+    for (auto rowset : candidate_rowsets) {
         if (_tablet->version_for_delete_predicate(rowset->version())) {
             last_delete_version = rowset->version();
             if (!transient_rowsets.empty()) {

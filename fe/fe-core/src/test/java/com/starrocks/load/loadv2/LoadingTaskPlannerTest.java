@@ -303,7 +303,6 @@ public class LoadingTaskPlannerTest {
         Assert.assertEquals(1, nodes.size());
         TPlanNode tPlanNode = nodes.get(0);
         Assert.assertEquals(TPlanNodeType.FILE_SCAN_NODE, tPlanNode.node_type);
-        Assert.assertTrue(tPlanNode.use_vectorized);
 
         // 2. check scan node column expr
         FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);

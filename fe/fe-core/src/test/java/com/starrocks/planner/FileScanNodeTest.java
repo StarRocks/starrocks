@@ -139,7 +139,6 @@ public class FileScanNodeTest {
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.setUseVectorized(true);
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 
@@ -200,7 +199,6 @@ public class FileScanNodeTest {
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 4);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.setUseVectorized(true);
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 
@@ -253,7 +251,6 @@ public class FileScanNodeTest {
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 5);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.setUseVectorized(true);
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 
@@ -300,9 +297,8 @@ public class FileScanNodeTest {
         analyzer = new Analyzer(Catalog.getCurrentCatalog(), new ConnectContext());
         descTable = analyzer.getDescTbl();
         tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
-        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 4);
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 2);
         scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
-        scanNode.setUseVectorized(true);
         scanNode.init(analyzer);
         scanNode.finalize(analyzer);
 
@@ -310,5 +306,41 @@ public class FileScanNodeTest {
         locationsList = scanNode.getScanRangeLocations(0);
         System.out.println(locationsList);
         Assert.assertEquals(2, locationsList.size());
+
+        // case 5
+        // 1 file which size is 0
+        // result: 1 range
+
+        // file groups
+        fileGroups = Lists.newArrayList();
+        files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1");
+        desc = new DataDescription("testTable", null, files, columnNames, null, null, "parquet", false, null);
+        brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        Deencapsulation.setField(brokerFileGroup, "fileFormat", "parquet");
+        fileGroups.add(brokerFileGroup);
+
+        // file status
+        fileStatusesList = Lists.newArrayList();
+        fileStatusList = Lists.newArrayList();
+        fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 0, false));
+        fileStatusesList.add(fileStatusList);
+
+        analyzer = new Analyzer(Catalog.getCurrentCatalog(), new ConnectContext());
+        descTable = analyzer.getDescTbl();
+        tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList, 1);
+        scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+        scanNode.init(analyzer);
+        scanNode.finalize(analyzer);
+
+        // check
+        locationsList = scanNode.getScanRangeLocations(0);
+        System.out.println(locationsList);
+        Assert.assertEquals(1, locationsList.size());
+        List<TBrokerRangeDesc> rangeDescs = locationsList.get(0).scan_range.broker_scan_range.ranges;
+        Assert.assertEquals(1, rangeDescs.size());
+        Assert.assertEquals(0, rangeDescs.get(0).size);
     }
 }

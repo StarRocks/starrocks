@@ -94,7 +94,7 @@ static Status _validate_options(const EngineOptions& options) {
 Status StorageEngine::open(const EngineOptions& options, StorageEngine** engine_ptr) {
     RETURN_IF_ERROR(_validate_options(options));
     LOG(INFO) << "Opening storage engine using uid=" << options.backend_uid.to_string();
-    std::unique_ptr<StorageEngine> engine(new StorageEngine(options));
+    std::unique_ptr<StorageEngine> engine = std::make_unique<StorageEngine>(options);
     RETURN_IF_ERROR_WITH_WARN(engine->_open(), "open engine failed");
     *engine_ptr = engine.release();
     LOG(INFO) << "Opened storage engine";
@@ -417,7 +417,7 @@ DataDir* StorageEngine::get_store(int64_t path_hash) {
 }
 
 static bool too_many_disks_are_failed(uint32_t unused_num, uint32_t total_num) {
-    return ((total_num == 0) || (unused_num * 100 / total_num > config::max_percentage_of_error_disk));
+    return total_num == 0 || unused_num * 100 / total_num > config::max_percentage_of_error_disk;
 }
 
 bool StorageEngine::_delete_tablets_on_unused_root_path() {
@@ -879,7 +879,7 @@ OLAPStatus StorageEngine::load_header(const string& shard_path, const TCloneReq&
     // reset tablet uid here
 
     string header_path = TabletMeta::construct_header_file_path(schema_hash_path_stream.str(), request.tablet_id);
-    res = TabletMeta::reset_tablet_uid(header_path);
+    res = TabletMeta::reset_tablet_uid(header_path).ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
     if (res != OLAP_SUCCESS) {
         LOG(WARNING) << "Fail to reset tablet uid, "
                      << "tablet_id=" << request.tablet_id << " file path=" << header_path << " res=" << res;

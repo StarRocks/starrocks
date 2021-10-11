@@ -8,8 +8,7 @@
 
 #include <util/raw_container.h>
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 NullColumnPtr FunctionHelper::union_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2) {
     // union nullable column
@@ -97,5 +96,4 @@ NullColumnPtr FunctionHelper::union_null_column(const NullColumnPtr& v1, const N
     return null_result;
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

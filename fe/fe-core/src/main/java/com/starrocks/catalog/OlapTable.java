@@ -558,7 +558,11 @@ public class OlapTable extends Table {
     }
 
     public List<Column> getSchemaByIndexId(Long indexId) {
-        return indexIdToMeta.get(indexId).getSchema();
+        MaterializedIndexMeta meta = indexIdToMeta.get(indexId);
+        if (meta != null) {
+            return meta.getSchema();
+        }
+        return new ArrayList<Column>();
     }
 
     public List<Column> getKeyColumnsByIndexId(Long indexId) {
@@ -623,6 +627,10 @@ public class OlapTable extends Table {
             partitionColumnNames.add(column.getName().toLowerCase());
         }
         return partitionColumnNames;
+    }
+
+    public void setDefaultDistributionInfo(DistributionInfo distributionInfo) {
+        defaultDistributionInfo = distributionInfo;
     }
 
     public DistributionInfo getDefaultDistributionInfo() {
@@ -800,6 +808,10 @@ public class OlapTable extends Table {
     // get all partitions' name except the temp partitions
     public Set<String> getPartitionNames() {
         return Sets.newHashSet(nameToPartition.keySet());
+    }
+
+    public Set<String> getBfColumns() {
+        return bfColumns;
     }
 
     public Set<String> getCopiedBfColumns() {
@@ -1600,8 +1612,9 @@ public class OlapTable extends Table {
     }
 
     @Override
-    public void onCreate() { }
-    
+    public void onCreate() {
+    }
+
     @Override
     public void onDrop() {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,

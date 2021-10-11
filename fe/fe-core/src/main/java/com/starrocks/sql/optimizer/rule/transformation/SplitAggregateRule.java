@@ -383,8 +383,8 @@ public class SplitAggregateRule extends TransformationRule {
     }
 
     // The phase concept please refer to AggregateInfo::AggPhase
-    private Map<ColumnRefOperator, CallOperator> createDistinctAggForSecondPhase(AggType aggType,
-                                                                                 Map<ColumnRefOperator, CallOperator> aggregationMap) {
+    private Map<ColumnRefOperator, CallOperator> createDistinctAggForSecondPhase(
+            AggType aggType, Map<ColumnRefOperator, CallOperator> aggregationMap) {
         Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationMap.entrySet()) {
             ColumnRefOperator column = entry.getKey();

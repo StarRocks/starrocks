@@ -174,6 +174,9 @@ UNZIP_CMD="unzip"
 SUFFIX_TGZ="\.(tar\.gz|tgz)$"
 SUFFIX_XZ="\.tar\.xz$"
 SUFFIX_ZIP="\.zip$"
+# temporary directory for unpacking
+# package is unpacked in tmp_dir and then renamed.
+mkdir -p $TP_SOURCE_DIR/tmp_dir
 for TP_ARCH in ${TP_ARCHIVES[*]}
 do
     NAME=$TP_ARCH"_NAME"
@@ -187,27 +190,32 @@ do
         if [[ "${!NAME}" =~ $SUFFIX_TGZ  ]]; then
             echo "$TP_SOURCE_DIR/${!NAME}"
             echo "$TP_SOURCE_DIR/${!SOURCE}"
-            if ! $TAR_CMD xzf "$TP_SOURCE_DIR/${!NAME}" -C "$TP_SOURCE_DIR/"; then
+            if ! $TAR_CMD xzf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
                 echo "Failed to untar ${!NAME}"
                 exit 1
             fi
         elif [[ "${!NAME}" =~ $SUFFIX_XZ ]]; then
             echo "$TP_SOURCE_DIR/${!NAME}"
             echo "$TP_SOURCE_DIR/${!SOURCE}"
-            if ! $TAR_CMD xJf "$TP_SOURCE_DIR/${!NAME}" -C "$TP_SOURCE_DIR/"; then
+            if ! $TAR_CMD xJf "$TP_SOURCE_DIR/${!NAME}" -C $TP_SOURCE_DIR/tmp_dir; then
                 echo "Failed to untar ${!NAME}"
                 exit 1
             fi
         elif [[ "${!NAME}" =~ $SUFFIX_ZIP ]]; then
-            if ! $UNZIP_CMD "$TP_SOURCE_DIR/${!NAME}" -d "$TP_SOURCE_DIR/"; then
+            if ! $UNZIP_CMD "$TP_SOURCE_DIR/${!NAME}" -d $TP_SOURCE_DIR/tmp_dir; then
                 echo "Failed to unzip ${!NAME}"
                 exit 1
             fi
+        else
+            echo "nothing has been done with ${!NAME}"
+            continue
         fi
+        mv $TP_SOURCE_DIR/tmp_dir/* $TP_SOURCE_DIR/${!SOURCE}
     else
         echo "${!SOURCE} already unpacked."
     fi
 done
+rm -r $TP_SOURCE_DIR/tmp_dir
 echo "===== Unpacking all thirdparty archives...done"
 
 echo "===== Patching thirdparty archives..."

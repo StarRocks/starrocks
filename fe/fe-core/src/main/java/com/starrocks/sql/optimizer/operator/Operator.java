@@ -94,7 +94,7 @@ public abstract class Operator {
         return Objects.hash(opType.ordinal(), limit, predicate, projection);
     }
 
-    static public abstract class Builder<O extends Operator, B extends Builder> {
+    public abstract static class Builder<O extends Operator, B extends Builder> {
         protected OperatorType opType;
         protected long limit = -1;
         protected ScalarOperator predicate;
@@ -108,7 +108,7 @@ public abstract class Operator {
             return (B) this;
         }
 
-        abstract public O build();
+        public abstract O build();
 
         public OperatorType getOpType() {
             return opType;

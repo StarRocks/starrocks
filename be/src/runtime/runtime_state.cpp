@@ -61,7 +61,6 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
           _num_rows_load_filtered(0),
           _num_rows_load_unselected(0),
           _num_print_error_rows(0),
-          _error_log_file_path(),
 
           _instance_buffer_reservation(new ReservationTracker) {
     Status status = init(fragment_instance_id, query_options, query_globals, exec_env);
@@ -82,7 +81,6 @@ RuntimeState::RuntimeState(const TExecPlanFragmentParams& fragment_params, const
           _num_rows_load_filtered(0),
           _num_rows_load_unselected(0),
           _num_print_error_rows(0),
-          _error_log_file_path(),
 
           _instance_buffer_reservation(new ReservationTracker) {
     Status status = init(fragment_params.params.fragment_instance_id, query_options, query_globals, exec_env);
@@ -148,12 +146,12 @@ RuntimeState::~RuntimeState() {
     // LogUsage() walks the MemTracker tree top-down when the memory limit is exceeded.
     // Break the link between the instance_mem_tracker and its parent (_query_mem_tracker)
     // before the _instance_mem_tracker and its children are destroyed.
-    if (_instance_mem_tracker.get() != nullptr) {
+    if (_instance_mem_tracker != nullptr) {
         // May be NULL if InitMemTrackers() is not called, for example from tests.
         _instance_mem_tracker->close();
     }
 
-    if (_query_mem_tracker.get() != nullptr) {
+    if (_query_mem_tracker != nullptr) {
         _query_mem_tracker->close();
     }
 #endif

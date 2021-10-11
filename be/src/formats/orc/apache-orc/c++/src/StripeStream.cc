@@ -136,7 +136,7 @@ bool StripeStreamsImpl::getUseWriterTimezone() const {
 }
 
 void StripeInformationImpl::ensureStripeFooterLoaded() const {
-    if (stripeFooter.get() == nullptr) {
+    if (stripeFooter == nullptr) {
         std::unique_ptr<SeekableInputStream> pbStream =
                 createDecompressor(compression,
                                    std::unique_ptr<SeekableInputStream>(new SeekableFileInputStream(

@@ -11,8 +11,7 @@
 #include "runtime/vectorized/Volnitsky.h"
 #include "util/utf8.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 struct LocateCaseSensitiveUTF8 {
     using SearcherInBigHaystack = VolnitskyUTF8;
@@ -242,5 +241,4 @@ ColumnPtr StringFunctions::locate_pos(FunctionContext* context, const Columns& c
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
