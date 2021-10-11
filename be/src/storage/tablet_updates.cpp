@@ -1994,7 +1994,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
                 return Status::InternalError("fail to init rowset meta");
             }
             const auto new_id = rm.rowset_seg_id() + _next_rowset_id;
-            new_next_rowset_id = std::max<uint32_t>(new_next_rowset_id, new_id + rm.num_segments());
+            new_next_rowset_id = std::max<uint32_t>(new_next_rowset_id, new_id + std::max(1L, rm.num_segments()));
             rowset_meta->set_rowset_seg_id(new_id);
             RowsetSharedPtr* rowset = &new_rowsets[new_id];
             auto ost = RowsetFactory::create_rowset(_tablet._mem_tracker, &_tablet.tablet_schema(),

@@ -9,6 +9,15 @@
 
 namespace starrocks {
 
+Status SnapshotMeta::serialize_to_file(const std::string& file_path) {
+    std::unique_ptr<WritableFile> f;
+    RETURN_IF_ERROR(Env::Default()->new_writable_file(file_path, &f));
+    RETURN_IF_ERROR(serialize_to_file(f.get()));
+    RETURN_IF_ERROR(f->sync());
+    RETURN_IF_ERROR(f->close());
+    return Status::OK();
+}
+
 //
 // File format of snapshot meta.
 //
