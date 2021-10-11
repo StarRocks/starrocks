@@ -40,8 +40,8 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithSortRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergePredicateScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
+import com.starrocks.sql.optimizer.rule.transformation.PartitionPredicatePrune;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
-import com.starrocks.sql.optimizer.rule.transformation.PredicatePrune;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneExceptColumnsRule;
@@ -143,7 +143,7 @@ public class RuleSet {
                 new DistributionPruneRule(),
                 new HiveScanPartitionPruneRule(),
                 new EsScanPartitionPruneRule(),
-                new PredicatePrune()
+                new PartitionPredicatePrune()
         ));
 
         rewriteRules.put(RuleSetType.PRUNE_COLUMNS, ImmutableList.of(

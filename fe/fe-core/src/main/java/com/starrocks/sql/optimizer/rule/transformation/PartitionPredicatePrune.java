@@ -45,9 +45,9 @@ import java.util.stream.Collectors;
 //  d >= 2020-04-01 AND d > 2020-09-01, All Prune
 //  d >= 2020-04-01 AND d < 2020-09-01, "d >= 2020-04-01" prune, "d < 2020-09-01" not prune
 //  d IN (2020-05-01, 2020-06-01), None prune
-public class PredicatePrune extends TransformationRule {
-    public PredicatePrune() {
-        super(RuleType.TF_PREDICATE_PRUNE, Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
+public class PartitionPredicatePrune extends TransformationRule {
+    public PartitionPredicatePrune() {
+        super(RuleType.TF_PARTITION_PREDICATE_PRUNE, Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
     }
 
     @Override
