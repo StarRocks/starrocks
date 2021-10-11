@@ -465,6 +465,7 @@ Status SnapshotManager::build_snapshot_meta(SnapshotTypePB snapshot_type, const 
                 int64_t dummy;
                 const uint32_t old_segment_id = old_rsid + i;
                 const uint32_t new_segment_id = new_rsid + i;
+                CHECK(snapshot_meta.delete_vectors().count(new_segment_id) == 0);
                 DelVector* delvec = &snapshot_meta.delete_vectors()[new_segment_id];
                 RETURN_IF_ERROR(TabletMetaManager::get_del_vector(meta_store, tablet_id, old_segment_id,
                                                                   snapshot_version, delvec, &dummy /*latest_version*/));
@@ -487,7 +488,7 @@ Status SnapshotManager::build_snapshot_meta(SnapshotTypePB snapshot_type, const 
         version->set_creation_time(time(NULL));
         for (const auto& rm : snapshot_meta.rowset_metas()) {
             auto rsid = rm.rowset_seg_id();
-            next_segment_id = std::max<uint32_t>(next_segment_id, rsid + rm.num_segments());
+            next_segment_id = std::max<uint32_t>(next_segment_id, rsid + std::max(1L, rm.num_segments()));
             version->add_rowsets(rsid);
         }
         meta_pb.mutable_updates()->set_next_rowset_id(next_segment_id);
