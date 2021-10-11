@@ -629,6 +629,10 @@ public class OlapTable extends Table {
         return partitionColumnNames;
     }
 
+    public void setDefaultDistributionInfo(DistributionInfo distributionInfo) {
+        defaultDistributionInfo = distributionInfo;
+    }
+
     public DistributionInfo getDefaultDistributionInfo() {
         return defaultDistributionInfo;
     }
@@ -804,6 +808,10 @@ public class OlapTable extends Table {
     // get all partitions' name except the temp partitions
     public Set<String> getPartitionNames() {
         return Sets.newHashSet(nameToPartition.keySet());
+    }
+
+    public Set<String> getBfColumns() {
+        return bfColumns;
     }
 
     public Set<String> getCopiedBfColumns() {
