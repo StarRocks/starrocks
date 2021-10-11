@@ -9,8 +9,10 @@ import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.meta.MetaContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -28,10 +30,29 @@ public class StarRocksRepository extends MasterDaemon {
 
     private TableMetaSyncer metaSyncer;
 
+    private boolean inited;
+
     public StarRocksRepository() {
         super("star rocks repository", Config.es_state_sync_interval_second * 1000);
         srTables = Maps.newConcurrentMap();
         metaSyncer = new TableMetaSyncer();
+        inited = false;
+    }
+
+    public void init() {
+        MetaContext metaContext = new MetaContext();
+        metaContext.setMetaVersion(FeConstants.meta_version);
+        metaContext.setStarRocksMetaVersion(FeConstants.starrocks_meta_version);
+        metaContext.setThreadLocalInfo();
+        inited = true;
+    }
+
+    @Override
+    protected final void runOneCycle() {
+        if (!inited) {
+            init();
+        }
+        super.runOneCycle();
     }
 
     public void registerTable(ExternalOlapTable srTable) {
