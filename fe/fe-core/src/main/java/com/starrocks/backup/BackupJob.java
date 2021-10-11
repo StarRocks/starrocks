@@ -404,9 +404,8 @@ public class BackupJob extends AbstractJob {
                             Replica replica = chooseReplica(tablet, visibleVersion);
                             if (replica == null) {
                                 status = new Status(ErrCode.COMMON_ERROR,
-                                        "faild to choose replica to make snapshot for tablet " + tablet.getId()
-                                                + ". visible version: " + visibleVersion
-                                                + ", visible version hash: " + visibleVersionHash);
+                                        "failed to choose replica to make snapshot for tablet " + tablet.getId()
+                                                + ". visible version: " + visibleVersion);
                                 return;
                             }
                             SnapshotTask task = new SnapshotTask(null, replica.getBackendId(), tablet.getId(),
