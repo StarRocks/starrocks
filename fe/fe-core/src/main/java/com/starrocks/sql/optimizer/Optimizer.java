@@ -87,7 +87,7 @@ public class Optimizer {
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MERGE_LIMIT);
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoAggRule());
         //After the MERGE_LIMIT, ProjectNode that can be merged may appear.
-        //So we do another column cropping
+        //So we do another MergeTwoProjectRule
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
 
