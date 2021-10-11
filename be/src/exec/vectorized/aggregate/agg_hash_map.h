@@ -625,7 +625,7 @@ struct AggHashMapWithSerializedKeyFixedSize {
                 hash_map.prefetch_hash(caches[__prefetch_index++].hashval);
             }
             FixedSizeSliceKey& key = caches[i].key;
-            auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
+            auto iter = hash_map.lazy_emplace_with_hash(key, caches[i].hashval, [&](const auto& ctor) {
                 AggDataPtr pv = allocate_func();
                 ctor(key, pv);
             });
@@ -669,7 +669,7 @@ struct AggHashMapWithSerializedKeyFixedSize {
                 hash_map.prefetch_hash(caches[__prefetch_index++].hashval);
             }
             FixedSizeSliceKey& key = caches[i].key;
-            if (auto iter = hash_map.find(key); iter != hash_map.end()) {
+            if (auto iter = hash_map.find(key, caches[i].hashval); iter != hash_map.end()) {
                 (*agg_states)[i] = iter->second;
             } else {
                 (*not_founds)[i] = 1;
