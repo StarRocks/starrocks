@@ -158,8 +158,13 @@ public class JoinPredicateUtils {
         if (joinPredicate == null) {
             if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {
                 LogicalJoinOperator crossJoin =
-                        new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null, join.getJoinHint());
-                crossJoin.setPredicate(postJoinPredicate);
+                        new LogicalJoinOperator(JoinOperator.CROSS_JOIN,
+                                null,
+                                join.getJoinHint(),
+                                join.getLimit(),
+                                postJoinPredicate,
+                                join.getPruneOutputColumns(),
+                                join.isHasPushDownJoinOnClause());
                 root = OptExpression.create(crossJoin, input.getInputs());
             } else {
                 throw new SemanticException("No equal on predicate in " + join.getJoinType() + " is not supported");
@@ -168,12 +173,20 @@ public class JoinPredicateUtils {
             LogicalJoinOperator newJoin;
             if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {
                 newJoin = new LogicalJoinOperator(JoinOperator.INNER_JOIN,
-                        Utils.compoundAnd(joinPredicate, postJoinPredicate), join.getJoinHint());
+                        Utils.compoundAnd(joinPredicate, postJoinPredicate),
+                        join.getJoinHint(),
+                        join.getLimit(),
+                        join.getPredicate(),
+                        join.getPruneOutputColumns(),
+                        false);
             } else {
-                newJoin =
-                        new LogicalJoinOperator(join.getJoinType(), Utils.compoundAnd(joinPredicate, postJoinPredicate),
-                                join.getJoinHint());
-                newJoin.setPredicate(join.getPredicate());
+                newJoin = new LogicalJoinOperator(join.getJoinType(),
+                        Utils.compoundAnd(joinPredicate, postJoinPredicate),
+                        join.getJoinHint(),
+                        join.getLimit(),
+                        join.getPredicate(),
+                        join.getPruneOutputColumns(),
+                        false);
             }
             root = OptExpression.create(newJoin, input.getInputs());
         }

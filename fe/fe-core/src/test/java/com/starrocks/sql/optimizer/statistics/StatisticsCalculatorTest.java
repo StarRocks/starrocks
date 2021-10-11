@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -91,7 +92,7 @@ public class StatisticsCalculatorTest {
         Group childGroup = new Group(0);
         childGroup.setStatistics(builder.build());
 
-        LogicalAggregationOperator aggNode = new LogicalAggregationOperator(groupByColumns, aggCall);
+        LogicalAggregationOperator aggNode = new LogicalAggregationOperator(AggType.GLOBAL, groupByColumns, aggCall);
         GroupExpression groupExpression = new GroupExpression(aggNode, Lists.newArrayList(childGroup));
         groupExpression.setGroup(new Group(1));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
@@ -101,7 +102,7 @@ public class StatisticsCalculatorTest {
         Assert.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
 
         groupByColumns = Lists.newArrayList(v1, v2);
-        aggNode = new LogicalAggregationOperator(groupByColumns, aggCall);
+        aggNode = new LogicalAggregationOperator(AggType.GLOBAL, groupByColumns, aggCall);
         groupExpression = new GroupExpression(aggNode, Lists.newArrayList(childGroup));
         groupExpression.setGroup(new Group(1));
         expressionContext = new ExpressionContext(groupExpression);
