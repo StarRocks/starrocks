@@ -27,7 +27,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/olap")
 
 add_subdirectory(rowset)
 add_subdirectory(fs)
-add_subdirectory(memory)
 
 add_library(Olap STATIC
     aggregate_func.cpp
@@ -139,10 +138,9 @@ add_library(Olap STATIC
     vectorized/predicate_parser.cpp
     vectorized/projection_iterator.cpp
     vectorized/push_handler.cpp
-    vectorized/reader.cpp
-    vectorized/reader.cpp
+    vectorized/tablet_reader.cpp
+    vectorized/tablet_reader_params.cpp
     vectorized/meta_read.cpp
-    vectorized/reader_params.cpp
     vectorized/seek_tuple.cpp
     vectorized/union_iterator.cpp
     vectorized/unique_iterator.cpp
