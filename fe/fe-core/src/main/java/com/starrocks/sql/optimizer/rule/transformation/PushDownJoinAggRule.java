@@ -135,10 +135,13 @@ public class PushDownJoinAggRule extends TransformationRule {
             }
         }
 
-        LogicalJoinOperator newJoin =
-                new LogicalJoinOperator(inputJoinOperator.getJoinType(), Utils.compoundAnd(newJoinOnPredicate),
-                        inputJoinOperator.getJoinHint());
-        newJoin.setPredicate(Utils.compoundAnd(newJoinFilterPredicate));
+        LogicalJoinOperator newJoin = new LogicalJoinOperator(inputJoinOperator.getJoinType(),
+                Utils.compoundAnd(newJoinOnPredicate),
+                inputJoinOperator.getJoinHint(),
+                inputJoinOperator.getLimit(),
+                Utils.compoundAnd(newJoinFilterPredicate),
+                inputJoinOperator.getPruneOutputColumns(),
+                inputJoinOperator.isHasPushDownJoinOnClause());
 
         OptExpression newJoinExpression = new OptExpression(newJoin);
         newJoinExpression.getInputs().add(input.getInputs().get(0));

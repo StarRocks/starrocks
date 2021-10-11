@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -26,19 +27,31 @@ public class PruneJoinColumnsRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
-        ColumnRefSet requiredInputColumns = joinOperator.getRequiredChildInputColumns();
 
+        ColumnRefSet requiredInputColumns = joinOperator.getRequiredChildInputColumns();
         ColumnRefSet requiredColumns = context.getTaskContext().get(0).getRequiredColumns();
 
         List<ColumnRefOperator> newOutputs = joinOperator.getOutputColumns(new ExpressionContext(input)).getStream()
                 .filter(requiredColumns::contains)
                 .mapToObj(id -> context.getColumnRefFactory().getColumnRef(id))
                 .collect(Collectors.toList());
-        joinOperator.setPruneOutputColumns(newOutputs);
 
         // Change the requiredColumns in context
         requiredColumns.union(requiredInputColumns);
 
-        return Collections.emptyList();
+        if (joinOperator.getPruneOutputColumns() != null) {
+            return Collections.emptyList();
+        }
+
+        LogicalJoinOperator newJoinOperator = new LogicalJoinOperator(
+                joinOperator.getJoinType(),
+                joinOperator.getOnPredicate(),
+                joinOperator.getJoinHint(),
+                joinOperator.getLimit(),
+                joinOperator.getPredicate(),
+                newOutputs,
+                joinOperator.isHasPushDownJoinOnClause());
+
+        return Lists.newArrayList(OptExpression.create(newJoinOperator, input.getInputs()));
     }
 }

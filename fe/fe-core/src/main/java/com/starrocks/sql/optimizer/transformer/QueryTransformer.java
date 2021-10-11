@@ -19,6 +19,7 @@ import com.starrocks.sql.analyzer.relation.Relation;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
@@ -407,7 +408,7 @@ class QueryTransformer {
             subOpt = new OptExprBuilder(repeatOperator, Lists.newArrayList(subOpt), groupingTranslations);
         }
 
-        return new OptExprBuilder(new LogicalAggregationOperator(groupByColumnRefs, aggregationsMap),
+        return new OptExprBuilder(new LogicalAggregationOperator(AggType.GLOBAL, groupByColumnRefs, aggregationsMap),
                 Lists.newArrayList(subOpt), groupingTranslations);
     }
 
@@ -446,7 +447,7 @@ class QueryTransformer {
                     groupByColumns.add(column);
                 }
             }
-            return subOpt.withNewRoot(new LogicalAggregationOperator(groupByColumns, new HashMap<>()));
+            return subOpt.withNewRoot(new LogicalAggregationOperator(AggType.GLOBAL, groupByColumns, new HashMap<>()));
         } else {
             return subOpt;
         }
