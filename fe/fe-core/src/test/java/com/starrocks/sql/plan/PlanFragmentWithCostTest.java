@@ -473,6 +473,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testReplicatedJoin() throws Exception {
+        new Expectations(connectContext.getSessionVariable()) {
+            {
+                connectContext.getSessionVariable().isEnableReplicationJoin();
+                result = true;
+            }
+        };
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select s_name, s_address from supplier, nation where s_suppkey in " +
                 "( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'forest%' ) and ps_availqty > " +
