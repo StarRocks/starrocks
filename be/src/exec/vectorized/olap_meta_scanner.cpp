@@ -1,14 +1,14 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
 #include "exec/vectorized/olap_meta_scanner.h"
+
 #include "exec/vectorized/olap_meta_scan_node.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks {
 namespace vectorized {
 
-OlapMetaScanner::OlapMetaScanner(OlapMetaScanNode* parent) 
-    : _parent(parent), _is_open(false) {}
+OlapMetaScanner::OlapMetaScanner(OlapMetaScanNode* parent) : _parent(parent), _is_open(false) {}
 
 Status OlapMetaScanner::init(RuntimeState* runtime_state, const OlapMetaScannerParams& params) {
     _runtime_state = runtime_state;
@@ -70,7 +70,7 @@ Status OlapMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
     _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash, true, &err);
     if (!_tablet) {
         std::stringstream ss;
-        ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash   
+        ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
            << ", reason=" << err;
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
@@ -80,4 +80,4 @@ Status OlapMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
 
 } // namespace vectorized
 
-} // namesapce starrocks
+} // namespace starrocks

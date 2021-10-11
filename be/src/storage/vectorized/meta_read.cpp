@@ -4,40 +4,34 @@
 
 #include <vector>
 
-#include "storage/tablet.h"
-#include "storage/vectorized/chunk_helper.h"
+#include "column/datum_convert.h"
 #include "storage/rowset/beta_rowset.h"
 #include "storage/rowset/segment_v2/column_reader.h"
-#include "column/datum_convert.h"
+#include "storage/tablet.h"
+#include "storage/vectorized/chunk_helper.h"
 
 namespace starrocks::vectorized {
 
-std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {
-    "dict_merge",
-    "max",
-    "min"
-};
+std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"dict_merge", "max", "min"};
 
-Status SegmentMetaCollecter::trait_field_and_colname(const std::string& item, std::string* field, 
-                                                      std::string* col_name) {
+Status SegmentMetaCollecter::trait_field_and_colname(const std::string& item, std::string* field,
+                                                     std::string* col_name) {
     for (size_t i = 0; i < support_collect_fields.size(); i++) {
-        if (item.size() <= support_collect_fields[i].size()) { 
-            continue; 
+        if (item.size() <= support_collect_fields[i].size()) {
+            continue;
         }
 
-        if (item.find(support_collect_fields[i]) != std::string::npos 
-            && item.substr(0, support_collect_fields[i].size()) == support_collect_fields[i]) {
-                *field = support_collect_fields[i];
-                *col_name = item.substr(support_collect_fields[i].size() + 1);
-                return Status::OK();
+        if (item.find(support_collect_fields[i]) != std::string::npos &&
+            item.substr(0, support_collect_fields[i].size()) == support_collect_fields[i]) {
+            *field = support_collect_fields[i];
+            *col_name = item.substr(support_collect_fields[i].size() + 1);
+            return Status::OK();
         }
     }
     return Status::InvalidArgument(item);
 }
 
-MetaReader::MetaReader() 
-    : _is_init(false),
-      _has_more(false) {}
+MetaReader::MetaReader() : _is_init(false), _has_more(false) {}
 
 MetaReader::~MetaReader() {}
 
@@ -74,7 +68,7 @@ Status MetaReader::_build_collect_context(const MetaReaderParams& read_params) {
         std::string col_name = "";
         std::string collect_field = "";
         RETURN_IF_ERROR(SegmentMetaCollecter::trait_field_and_colname(it.second, &collect_field, &col_name));
-     
+
         int32_t index = _tablet->field_index(col_name);
         if (index < 0) {
             std::stringstream ss;
@@ -94,7 +88,7 @@ Status MetaReader::_build_collect_context(const MetaReaderParams& read_params) {
         _collect_context.seg_collecter_params.cids.emplace_back(index);
         _collect_context.seg_collecter_params.max_cid = std::max(_collect_context.seg_collecter_params.max_cid, index);
 
-        // get result slot id 
+        // get result slot id
         _collect_context.result_slot_ids.emplace_back(it.first);
 
         // only collect the field of dict need read data page
@@ -119,7 +113,7 @@ Status MetaReader::_init_seg_meta_collecters(const MetaReaderParams& params) {
         RETURN_IF_ERROR(seg_collecter->init(&_collect_context.seg_collecter_params));
         _collect_context.seg_collecters.emplace_back(seg_collecter);
     }
-    
+
     return Status::OK();
 }
 
@@ -129,19 +123,18 @@ Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& v
         LOG(INFO) << "Skipped Update tablet";
         return Status::OK();
     }
-                               
+
     std::vector<RowsetSharedPtr> rowsets;
     tablet->obtain_header_rdlock();
     Status acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &rowsets);
     tablet->release_header_lock();
 
-     if (!acquire_rowset_st.ok()) {      
+    if (!acquire_rowset_st.ok()) {
         std::stringstream ss;
-        ss << "fail to init reader. tablet=" << tablet->full_name() 
-           << "res=" << acquire_rowset_st;
+        ss << "fail to init reader. tablet=" << tablet->full_name() << "res=" << acquire_rowset_st;
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str().c_str());
-    } 
+    }
 
     for (auto& rs : rowsets) {
         RETURN_IF_ERROR(rs->load());
@@ -150,7 +143,7 @@ Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& v
             segments->emplace_back(seg);
         }
     }
-   
+
     return Status::OK();
 }
 
@@ -181,10 +174,10 @@ Status MetaReader::do_get_next(ChunkPtr* result) {
     *result = std::make_shared<vectorized::Chunk>();
     if (nullptr == result->get()) {
         return Status::InternalError("Failed to allocate new chunk.");
-    } 
+    }
 
     RETURN_IF_ERROR(_fill_result_chunk(result->get()));
-    
+
     while ((chunk_start < chunk_capacity) && _has_more) {
         RETURN_IF_ERROR(_read((*result).get(), chunk_capacity - chunk_start));
         (*result)->check_or_die();
@@ -192,7 +185,7 @@ Status MetaReader::do_get_next(ChunkPtr* result) {
         chunk_start = next_start;
     }
 
-   return Status::OK();
+    return Status::OK();
 }
 
 Status MetaReader::_read(Chunk* chunk, size_t n) {
@@ -201,8 +194,8 @@ Status MetaReader::_read(Chunk* chunk, size_t n) {
         const ColumnPtr& col = chunk->get_column_by_index(i);
         columns.emplace_back(col.get());
     }
-    
-    size_t remaining  = n;
+
+    size_t remaining = n;
     while (remaining > 0) {
         if (!_collect_context.collecter_cursor) {
             _has_more = false;
@@ -229,15 +222,14 @@ bool MetaReader::has_more() {
     return _has_more;
 }
 
-SegmentMetaCollecter::SegmentMetaCollecter(segment_v2::SegmentSharedPtr segment) 
-    : _segment(segment) {}
+SegmentMetaCollecter::SegmentMetaCollecter(segment_v2::SegmentSharedPtr segment) : _segment(segment) {}
 
 SegmentMetaCollecter::~SegmentMetaCollecter() {}
 
 Status SegmentMetaCollecter::init(const SegmentMetaCollecterParams* params) {
     _params = params;
     RETURN_IF_ERROR(_init_return_column_iterators());
-    
+
     return Status::OK();
 }
 
@@ -247,7 +239,7 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
 
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
     RETURN_IF_ERROR(block_mgr->open_block(_segment->file_name(), &_rblock));
-    
+
     _column_iterators.resize(_params->max_cid + 1, nullptr);
     for (int i = 0; i < _params->fields.size(); i++) {
         if (_params->read_page[i]) {
@@ -276,7 +268,8 @@ Status SegmentMetaCollecter::collect(std::vector<vectorized::Column*>* dsts) {
     return Status::OK();
 }
 
-Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vectorized::Column*column, FieldType type) {
+Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vectorized::Column* column,
+                                      FieldType type) {
     if (name == "dict_merge") {
         return _collect_dict(cid, column, type);
     } else if (name == "max") {
@@ -289,16 +282,16 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vec
 
 // collect dict
 Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* column, FieldType type) {
-    if (!_column_iterators[cid]) { 
+    if (!_column_iterators[cid]) {
         return Status::InvalidArgument("Invalid Collet Params.");
     }
 
-    if (!_column_iterators[cid]->all_page_dict_encoded()) { 
-        return Status::NotSupported("No all page dict encoded."); 
+    if (!_column_iterators[cid]->all_page_dict_encoded()) {
+        return Status::NotSupported("No all page dict encoded.");
     }
 
     std::vector<Slice> words;
-    RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));    
+    RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
 
     vectorized::ArrayColumn* array_column = nullptr;
     array_column = down_cast<vectorized::ArrayColumn*>(column);
@@ -324,7 +317,7 @@ Status SegmentMetaCollecter::_collect_min(ColumnId cid, vectorized::Column* colu
     return __collect_max_or_min<false>(cid, column, type);
 }
 
-template<bool is_max>
+template <bool is_max>
 Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Column* column, FieldType type) {
     auto footer_pb = _segment->footer();
     for (size_t i = 0; i < footer_pb.columns_size(); i++) {
@@ -341,14 +334,15 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Colu
                 vectorized::Datum min;
                 vectorized::Datum max;
                 if (!segment_zone_map_pb.has_null() && !is_max) {
-                    RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &min, segment_zone_map_pb.min(), nullptr));
+                    RETURN_IF_ERROR(
+                            vectorized::datum_from_string(type_info.get(), &min, segment_zone_map_pb.min(), nullptr));
                     column->append_datum(min);
                 } else if (segment_zone_map_pb.has_not_null() && is_max) {
-                    RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &max, segment_zone_map_pb.max(), nullptr));
+                    RETURN_IF_ERROR(
+                            vectorized::datum_from_string(type_info.get(), &max, segment_zone_map_pb.max(), nullptr));
                     column->append_datum(max);
                 }
                 return Status::OK();
-
             }
             break;
         }
@@ -357,7 +351,3 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Colu
 }
 
 } // namespace starrocks::vectorized
-
-
-
-

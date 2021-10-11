@@ -3,11 +3,10 @@
 
 #include <gen_cpp/InternalService_types.h>
 
-#include "storage/vectorized/meta_read.h"
-
-#include "exec/olap_utils.h"
 #include "common/status.h"
+#include "exec/olap_utils.h"
 #include "runtime/runtime_state.h"
+#include "storage/vectorized/meta_read.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -53,10 +52,9 @@ private:
     MetaReaderParams _reader_params;
     std::shared_ptr<MetaReader> _reader;
 
-    bool _is_open;    
+    bool _is_open;
     bool _is_closed;
     int64_t _version = 0;
-
 };
 
 } // namespace vectorized

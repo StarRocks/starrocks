@@ -47,8 +47,8 @@
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "exec/vectorized/intersect_node.h"
 #include "exec/vectorized/mysql_scan_node.h"
-#include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/olap_meta_scan_node.h"
+#include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/project_node.h"
 #include "exec/vectorized/repeat_node.h"
 #include "exec/vectorized/schema_scan_node.h"
@@ -704,7 +704,7 @@ void ExecNode::collect_nodes(TPlanNodeType::type node_type, std::vector<ExecNode
     if (_type == node_type) {
         nodes->push_back(this);
     }
-    
+
     for (auto& i : _children) {
         i->collect_nodes(node_type, nodes);
     }

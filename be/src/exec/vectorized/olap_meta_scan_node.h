@@ -5,9 +5,8 @@
 #include <gen_cpp/Descriptors_types.h>
 
 #include "exec/scan_node.h"
-#include "runtime/descriptors.h"
 #include "exec/vectorized/olap_meta_scanner.h"
-
+#include "runtime/descriptors.h"
 
 namespace starrocks {
 
@@ -19,7 +18,7 @@ class OlapMetaScanNode final : public starrocks::ScanNode {
 public:
     OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~OlapMetaScanNode();
-    
+
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
@@ -39,7 +38,7 @@ private:
 
     // params
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
- 
+
     std::vector<OlapMetaScanner*> _scanners;
     OlapMetaScanner* _scanner_cursor = nullptr;
     size_t _cursor_idx = 0;
@@ -56,9 +55,7 @@ private:
     RuntimeProfile::Counter* _scan_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _tablet_counter = nullptr;
-
 };
 
 } // namespace vectorized
 } // namespace starrocks
-

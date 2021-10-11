@@ -1,15 +1,14 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 #pragma once
 
-#include <vector>
 #include <string>
-
-#include "storage/tablet.h"
-#include "storage/rowset/rowset_reader.h"
-#include "storage/olap_common.h"
-#include "storage/rowset/segment_v2/segment.h"
+#include <vector>
 
 #include "runtime/descriptors.h"
+#include "storage/olap_common.h"
+#include "storage/rowset/rowset_reader.h"
+#include "storage/rowset/segment_v2/segment.h"
+#include "storage/tablet.h"
 
 namespace starrocks {
 
@@ -25,7 +24,7 @@ class SegmentMetaCollecter;
 // Params for MetaReader
 // mainly include tablet
 struct MetaReaderParams {
-    MetaReaderParams() {};
+    MetaReaderParams(){};
     TabletSharedPtr tablet;
     Version version = Version(-1, 0);
     const std::vector<SlotDescriptor*>* slots = nullptr;
@@ -37,7 +36,7 @@ struct MetaReaderParams {
     }
 
     const std::map<int32_t, std::string>* id_to_names = nullptr;
-    const DescriptorTbl*  desc_tbl = nullptr;
+    const DescriptorTbl* desc_tbl = nullptr;
 
     int chunk_size = 1024;
 };
@@ -69,9 +68,9 @@ public:
         SegmentMetaCollecter* collecter_cursor = nullptr;
         size_t cursor_idx = 0;
 
-        std::vector<int32_t>  result_slot_ids;
+        std::vector<int32_t> result_slot_ids;
     };
-    
+
 private:
     TabletSharedPtr _tablet;
     Version _version;
@@ -110,17 +109,17 @@ public:
 public:
     static std::vector<std::string> support_collect_fields;
     static Status trait_field_and_colname(const std::string& item, std::string* field, std::string* col_name);
-    
+
     using CollectFunc = std::function<Status(ColumnId, vectorized::Column*, FieldType)>;
     std::unordered_map<std::string, CollectFunc> support_collect_func;
 
 private:
     Status _init_return_column_iterators();
-    Status _collect(const std::string& name, ColumnId cid, vectorized::Column*column, FieldType type);
+    Status _collect(const std::string& name, ColumnId cid, vectorized::Column* column, FieldType type);
     Status _collect_dict(ColumnId cid, vectorized::Column* column, FieldType type);
     Status _collect_max(ColumnId cid, vectorized::Column* column, FieldType type);
     Status _collect_min(ColumnId cid, vectorized::Column* column, FieldType type);
-    template<bool flag>
+    template <bool flag>
     Status __collect_max_or_min(ColumnId cid, vectorized::Column* column, FieldType type);
     segment_v2::SegmentSharedPtr _segment;
     std::vector<ColumnIterator*> _column_iterators;

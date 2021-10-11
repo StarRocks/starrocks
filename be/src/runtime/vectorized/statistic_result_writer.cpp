@@ -155,7 +155,7 @@ void StatisticResultWriter::_fill_statistic_data_v1(int version, const vectorize
         data_list[i].__set_nullCount(nullCounts[i]);
         data_list[i].__set_max(maxColumn->get_slice(i).to_string());
         data_list[i].__set_min(minColumn->get_slice(i).to_string());
-        if (dictColumn!= nullptr) {
+        if (dictColumn != nullptr) {
             //data_list[i].__set_dict(dictColumn->get_slice(i).to_string());
         }
     }

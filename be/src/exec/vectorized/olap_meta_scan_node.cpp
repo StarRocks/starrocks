@@ -4,7 +4,7 @@
 namespace starrocks {
 namespace vectorized {
 
-OlapMetaScanNode::OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs) 
+OlapMetaScanNode::OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs),
           _scanner_cursor(nullptr),
           _is_init(false),
@@ -22,13 +22,12 @@ Status OlapMetaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 void OlapMetaScanNode::_init_counter(RuntimeState* state) {
     _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _meta_scan_profile = _runtime_profile->create_child("META_SCAN", true, false);
-    
+
     _io_timer = ADD_TIMER(_meta_scan_profile, "IOTime");
     return;
 }
 
 Status OlapMetaScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
-
     for (auto& scan_range : scan_ranges) {
         _scan_ranges.emplace_back(new TInternalScanRange(scan_range.scan_range.internal_scan_range));
         COUNTER_UPDATE(_tablet_counter, 1);
@@ -40,7 +39,7 @@ Status OlapMetaScanNode::prepare(RuntimeState* state) {
     if (_is_init) {
         return Status::OK();
     }
-    
+
     RETURN_IF_ERROR(ScanNode::prepare(state));
     _tablet_counter = ADD_COUNTER(runtime_profile(), "TabletCount ", TUnit::UNIT);
 
@@ -50,7 +49,7 @@ Status OlapMetaScanNode::prepare(RuntimeState* state) {
     if (nullptr == _tuple_desc) {
         return Status::InternalError("Failed to get tuple descriptor.");
     }
-    
+
     _is_init = true;
     return Status::OK();
 }
@@ -87,20 +86,20 @@ Status OlapMetaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eo
     DCHECK(state != nullptr && chunk != nullptr && eos != nullptr);
     RETURN_IF_CANCELLED(state);
     if (!_scanner_cursor->has_more()) {
-        _next_cursor();  
-    } 
+        _next_cursor();
+    }
     if (!_scanner_cursor) {
         *eos = true;
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(_scanner_cursor->get_chunk(state, chunk)); 
+    RETURN_IF_ERROR(_scanner_cursor->get_chunk(state, chunk));
     return Status::OK();
 }
 
 void OlapMetaScanNode::_next_cursor() {
     _cursor_idx++;
-    if (_cursor_idx >= _scanners.size()) { 
+    if (_cursor_idx >= _scanners.size()) {
         _scanner_cursor = nullptr;
     } else {
         _scanner_cursor = _scanners[_cursor_idx];

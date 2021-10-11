@@ -320,7 +320,9 @@ public:
 
     // if all data page of this colum are encoded as dictionary encoding.
     // return all dictionary words that store in dict page
-    virtual Status fetch_all_dict_words(std::vector<Slice>* words) const { return Status::NotSupported("Not Support dict."); }
+    virtual Status fetch_all_dict_words(std::vector<Slice>* words) const {
+        return Status::NotSupported("Not Support dict.");
+    }
 
     // return a non-negative dictionary code of |word| if it exist in this segment file,
     // otherwise -1 is returned.
