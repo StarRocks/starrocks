@@ -255,8 +255,9 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         }
     }
 
-    // Disable one phase Agg node with default column statistics or output row count less than 1 (fe meta may not get real row count from be).
-    // Not include one phase local Agg node
+    // Disable one phase Agg node with unknown column statistics or table row count may not accurate because of
+    // fe meta may not get real row count from be.
+    // NOTE: Not include one phase local Agg node
     private boolean canGenerateOneStageAgg(GroupExpression childBestExpr) {
         if (!OperatorType.PHYSICAL_HASH_AGG.equals(groupExpression.getOp().getOpType())) {
             return true;
@@ -271,10 +272,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         // 1. check the agg node is global aggregation without split and child expr is PhysicalDistributionOperator
         if (aggregate.getType().isGlobal() && !aggregate.isSplit() &&
                 childBestExpr.getOp() instanceof PhysicalDistributionOperator) {
-            // 2. check default column statistics or output row count less than 1
-            if ((groupExpression.getGroup().getStatistics().getColumnStatistics().values().stream()
+            // 2. check default column statistics or child output row may not be accurate
+            if (groupExpression.getGroup().getStatistics().getColumnStatistics().values().stream()
                     .allMatch(ColumnStatistic::isUnknown) ||
-                    groupExpression.getGroup().getStatistics().getOutputRowCount() <= 1)) {
+                    childBestExpr.getGroup().getStatistics().isTableRowCountMayInaccurate()) {
                 // 3. check child expr distribution, if it is shuffle or gather without limit, could disable this plan
                 PhysicalDistributionOperator distributionOperator =
                         (PhysicalDistributionOperator) childBestExpr.getOp();

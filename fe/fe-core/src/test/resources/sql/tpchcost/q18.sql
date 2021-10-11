@@ -38,7 +38,7 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-19:MERGING-EXCHANGE
+18:MERGING-EXCHANGE
 limit: 100
 use vectorized: true
 
@@ -47,21 +47,21 @@ OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE
 
 STREAM DATA SINK
-EXCHANGE ID: 19
+EXCHANGE ID: 18
 UNPARTITIONED
 
-18:TOP-N
+17:TOP-N
 |  order by: <slot 13> 13: O_TOTALPRICE DESC, <slot 14> 14: O_ORDERDATE ASC
 |  offset: 0
 |  limit: 100
 |  use vectorized: true
 |
-17:AGGREGATE (merge finalize)
-|  output: sum(56: sum(24: L_QUANTITY))
+16:AGGREGATE (update finalize)
+|  output: sum(24: L_QUANTITY)
 |  group by: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE
 |  use vectorized: true
 |
-16:EXCHANGE
+15:EXCHANGE
 use vectorized: true
 
 PLAN FRAGMENT 2
@@ -69,15 +69,9 @@ OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 16
+EXCHANGE ID: 15
 HASH_PARTITIONED: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE
 
-15:AGGREGATE (update serialize)
-|  STREAMING
-|  output: sum(24: L_QUANTITY)
-|  group by: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: O_TOTALPRICE
-|  use vectorized: true
-|
 14:Project
 |  <slot 1> : 1: C_CUSTKEY
 |  <slot 2> : 2: C_NAME
