@@ -64,7 +64,7 @@ using SliceAggTwoLevelHashMap =
 static constexpr size_t AGG_HASH_MAP_DEFAULT_PREFETCH_DIST = 16;
 
 static_assert(sizeof(AggDataPtr) == sizeof(size_t));
-#define PRECOMPUTE_HASH_VALUES(column, prefetch_dist)                     \
+#define AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, prefetch_dist)        \
     size_t const column_size = column->size();                            \
     size_t* hash_values = reinterpret_cast<size_t*>(agg_states->data());  \
     {                                                                     \
@@ -76,7 +76,7 @@ static_assert(sizeof(AggDataPtr) == sizeof(size_t));
     }                                                                     \
     size_t __prefetch_index = prefetch_dist;
 
-#define PREFETCH_HASH_VALUE()                                    \
+#define AGG_HASH_MAP_PREFETCH_HASH_VALUE()                       \
     if (__prefetch_index < column_size) {                        \
         hash_map.prefetch_hash(hash_values[__prefetch_index++]); \
     }
@@ -101,9 +101,9 @@ struct AggHashMapWithOneNumberKey {
         DCHECK(!key_columns[0]->is_nullable());
         auto column = down_cast<ColumnType*>(key_columns[0].get());
 
-        PRECOMPUTE_HASH_VALUES(column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
+        AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
         for (size_t i = 0; i < column_size; i++) {
-            PREFETCH_HASH_VALUE();
+            AGG_HASH_MAP_PREFETCH_HASH_VALUE();
 
             FieldType key = column->get_data()[i];
             auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i],
@@ -168,9 +168,9 @@ struct AggHashMapWithOneNullableNumberKey {
             auto* data_column = down_cast<ColumnType*>(nullable_column->data_column().get());
 
             if (!nullable_column->has_null()) {
-                PRECOMPUTE_HASH_VALUES(data_column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
+                AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(data_column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
                 for (size_t i = 0; i < column_size; i++) {
-                    PREFETCH_HASH_VALUE();
+                    AGG_HASH_MAP_PREFETCH_HASH_VALUE();
 
                     auto key = data_column->get_data()[i];
                     auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i],
@@ -278,10 +278,10 @@ struct AggHashMapWithOneStringKey {
         DCHECK(key_columns[0]->is_binary());
         auto column = down_cast<BinaryColumn*>(key_columns[0].get());
 
-        PRECOMPUTE_HASH_VALUES(column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
+        AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
 
         for (size_t i = 0; i < column_size; i++) {
-            PREFETCH_HASH_VALUE();
+            AGG_HASH_MAP_PREFETCH_HASH_VALUE();
 
             auto key = column->get_slice(i);
             auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
@@ -348,10 +348,10 @@ struct AggHashMapWithOneNullableStringKey {
             DCHECK(data_column->is_binary());
 
             if (!nullable_column->has_null()) {
-                PRECOMPUTE_HASH_VALUES(data_column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
+                AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(data_column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
 
                 for (size_t i = 0; i < column_size; i++) {
-                    PREFETCH_HASH_VALUE();
+                    AGG_HASH_MAP_PREFETCH_HASH_VALUE();
                     auto key = data_column->get_slice(i);
                     auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
                         uint8_t* pos = pool->allocate(key.size);
@@ -578,12 +578,19 @@ struct AggHashMapWithSerializedKeyFixedSize {
 
     bool has_null_column = false;
     int fixed_byte_size = -1; // unset state
-    static constexpr size_t max_fixed_size = sizeof(FixedSizeSliceKey);
+    struct CacheEntry {
+        FixedSizeSliceKey key;
+        size_t hashval;
+    };
+
+    static constexpr size_t max_fixed_size = sizeof(CacheEntry);
+
+    std::vector<CacheEntry> caches;
 
     AggHashMapWithSerializedKeyFixedSize()
-            : tracker(std::make_unique<MemTracker>()),
-              mem_pool(std::make_unique<MemPool>(tracker.get())),
-              buffer(mem_pool->allocate(max_fixed_size * config::vector_chunk_size)) {
+            : tracker(std::make_unique<MemTracker>()), mem_pool(std::make_unique<MemPool>(tracker.get())) {
+        caches.reserve(config::vector_chunk_size);
+        uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
         memset(buffer, 0x0, max_fixed_size * config::vector_chunk_size);
     }
 
@@ -593,6 +600,7 @@ struct AggHashMapWithSerializedKeyFixedSize {
         DCHECK(fixed_byte_size != -1);
         slice_sizes.assign(chunk_size, 0);
 
+        uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
         if (has_null_column) {
             memset(buffer, 0x0, max_fixed_size * chunk_size);
         }
@@ -601,39 +609,27 @@ struct AggHashMapWithSerializedKeyFixedSize {
             key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_fixed_size);
         }
 
-        FixedSizeSliceKey key;
-
-        if (!has_null_column) {
-            size_t* hash_values = reinterpret_cast<size_t*>(agg_states->data());
-            static_assert(sizeof(AggDataPtr) == sizeof(size_t));
-            for (size_t i = 0; i < chunk_size; i++) {
-                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
-                size_t hashval = hash_map.hash_function()(key);
-                hash_values[i] = hashval;
-            }
-            size_t __prefetch_index = AGG_HASH_MAP_DEFAULT_PREFETCH_DIST;
-
+        if (has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
-                if (__prefetch_index < chunk_size) {
-                    hash_map.prefetch_hash(hash_values[__prefetch_index++]);
-                }
-                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
-                auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
-                    AggDataPtr pv = allocate_func();
-                    ctor(key, pv);
-                });
-                (*agg_states)[i] = iter->second;
+                caches[i].key.u.size = slice_sizes[i];
             }
-        } else {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
-                key.u.size = slice_sizes[i];
-                auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
-                    AggDataPtr pv = allocate_func();
-                    ctor(key, pv);
-                });
-                (*agg_states)[i] = iter->second;
+        }
+        for (size_t i = 0; i < chunk_size; i++) {
+            caches[i].hashval = hash_map.hash_function()(caches[i].key);
+        }
+
+        size_t __prefetch_index = AGG_HASH_MAP_DEFAULT_PREFETCH_DIST;
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if (__prefetch_index < chunk_size) {
+                hash_map.prefetch_hash(caches[__prefetch_index++].hashval);
             }
+            FixedSizeSliceKey& key = caches[i].key;
+            auto iter = hash_map.lazy_emplace_with_hash(key, caches[i].hashval, [&](const auto& ctor) {
+                AggDataPtr pv = allocate_func();
+                ctor(key, pv);
+            });
+            (*agg_states)[i] = iter->second;
         }
     }
 
@@ -646,6 +642,7 @@ struct AggHashMapWithSerializedKeyFixedSize {
         DCHECK(fixed_byte_size != -1);
         slice_sizes.assign(chunk_size, 0);
 
+        uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
         if (has_null_column) {
             memset(buffer, 0x0, max_fixed_size * chunk_size);
         }
@@ -656,26 +653,26 @@ struct AggHashMapWithSerializedKeyFixedSize {
 
         not_founds->assign(chunk_size, 0);
 
-        FixedSizeSliceKey key;
-
-        if (!has_null_column) {
+        if (has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
-                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
-                if (auto iter = hash_map.find(key); iter != hash_map.end()) {
-                    (*agg_states)[i] = iter->second;
-                } else {
-                    (*not_founds)[i] = 1;
-                }
+                caches[i].key.u.size = slice_sizes[i];
             }
-        } else {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                memcpy(key.u.data, buffer + i * max_fixed_size, max_fixed_size);
-                key.u.size = slice_sizes[i];
-                if (auto iter = hash_map.find(key); iter != hash_map.end()) {
-                    (*agg_states)[i] = iter->second;
-                } else {
-                    (*not_founds)[i] = 1;
-                }
+        }
+        for (size_t i = 0; i < chunk_size; i++) {
+            caches[i].hashval = hash_map.hash_function()(caches[i].key);
+        }
+
+        size_t __prefetch_index = AGG_HASH_MAP_DEFAULT_PREFETCH_DIST;
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if (__prefetch_index < chunk_size) {
+                hash_map.prefetch_hash(caches[__prefetch_index++].hashval);
+            }
+            FixedSizeSliceKey& key = caches[i].key;
+            if (auto iter = hash_map.find(key, caches[i].hashval); iter != hash_map.end()) {
+                (*agg_states)[i] = iter->second;
+            } else {
+                (*not_founds)[i] = 1;
             }
         }
     }
@@ -709,7 +706,6 @@ struct AggHashMapWithSerializedKeyFixedSize {
     Buffer<uint32_t> slice_sizes;
     std::unique_ptr<MemTracker> tracker;
     std::unique_ptr<MemPool> mem_pool;
-    uint8_t* buffer;
     ResultVector results;
     std::vector<Slice> tmp_slices;
 };
