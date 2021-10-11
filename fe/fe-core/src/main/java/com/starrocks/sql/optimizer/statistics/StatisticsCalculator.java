@@ -177,6 +177,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         long tableRowCount = getTableRowCount(table, node);
         // 2. get required columns statistics
         Statistics.Builder builder = estimateScanColumns(table);
+        if (tableRowCount <= 1) {
+            builder.setTableRowCountMayInaccurate(true);
+        }
         // 3. deal with column statistics for partition prune
         OlapTable olapTable = (OlapTable) table;
         ColumnStatistic partitionStatistic = adjustPartitionStatistic(selectedPartitionIds, olapTable);

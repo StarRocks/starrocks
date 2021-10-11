@@ -214,4 +214,12 @@ public class ReplayFromDumpTest {
                 "  |  other predicates: 110: wr_order_number IS NULL\n" +
                 "  |  cardinality: 7916106"));
     }
+
+    @Test
+    public void testGroupByLimit() throws Exception {
+        // check can generate 1 phase with limit 1
+        // This test has column statistics and accurate table row count
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"));
+        Assert.assertTrue(replayPair.second.contains("2:AGGREGATE (update finalize)"));
+    }
 }
