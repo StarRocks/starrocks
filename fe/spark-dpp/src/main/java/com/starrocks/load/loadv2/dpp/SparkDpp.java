@@ -610,6 +610,13 @@ public final class SparkDpp implements java.io.Serializable {
         return dataframe;
     }
 
+    /**
+     * Note: parameter fileUrl cannot contain any wildcards to prevent output of wrong results.
+     * For example, if fileUrl is specified by regular expression like hdfs://some/p1=*",
+     * column value will be extracted as "*" in {@link DppUtils#parseColumnsFromPath},
+     * then "*" will likely be cast to wrong output according to its field type such as NULL for INT
+     * in {@link this#convertSrcDataframeToDstDataframe}
+     */
     private Dataset<Row> loadDataFromPath(SparkSession spark,
                                           EtlJobConfig.EtlFileGroup fileGroup,
                                           String fileUrl,
@@ -843,7 +850,12 @@ public final class SparkDpp implements java.io.Serializable {
                                                EtlJobConfig.EtlFileGroup fileGroup,
                                                StructType dstTableSchema)
             throws SparkDppException, IOException, URISyntaxException {
+        if (fileGroup.columnSeparator == null) {
+            LOG.warn("invalid null column separator!");
+            throw new SparkDppException("Reason: invalid null column separator!");
+        }
         Dataset<Row> fileGroupDataframe = null;
+        Dataset<Row> dataframe = null;
         for (String filePath : filePaths) {
             try {
                 URI uri = new URI(filePath);
@@ -858,23 +870,17 @@ public final class SparkDpp implements java.io.Serializable {
                     }
                     fileNumberAcc.add(1);
                     fileSizeAcc.add(fileStatus.getLen());
+                    dataframe = loadDataFromPath(spark, fileGroup, fileStatus.getPath().toString(), baseIndex, baseIndex.columns);
+                    dataframe = convertSrcDataframeToDstDataframe(baseIndex, dataframe, dstTableSchema, fileGroup);
+                    if (fileGroupDataframe == null) {
+                        fileGroupDataframe = dataframe;
+                    } else {
+                        fileGroupDataframe = fileGroupDataframe.union(dataframe);
+                    }
                 }
             } catch (Exception e) {
                 LOG.warn("parse path failed:" + filePath);
                 throw e;
-            }
-            if (fileGroup.columnSeparator == null) {
-                LOG.warn("invalid null column separator!");
-                throw new SparkDppException("Reason: invalid null column separator!");
-            }
-            Dataset<Row> dataframe = null;
-
-            dataframe = loadDataFromPath(spark, fileGroup, filePath, baseIndex, baseIndex.columns);
-            dataframe = convertSrcDataframeToDstDataframe(baseIndex, dataframe, dstTableSchema, fileGroup);
-            if (fileGroupDataframe == null) {
-                fileGroupDataframe = dataframe;
-            } else {
-                fileGroupDataframe = fileGroupDataframe.union(dataframe);
             }
         }
         return fileGroupDataframe;
