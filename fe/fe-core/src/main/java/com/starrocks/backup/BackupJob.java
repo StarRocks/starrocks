@@ -666,8 +666,8 @@ public class BackupJob extends AbstractJob {
     }
 
     /*
-     * Choose a replica order by replica id.
-     * This is to expect to choose the same replica at each backup job.
+     * Choose a replica whose version >= visibleVersion and dose not have failed version.
+     * Iterate replica order by replica id, the reason is to choose the same replica at each backup job.
      */
     private Replica chooseReplica(Tablet tablet, long visibleVersion) {
         List<Long> replicaIds = Lists.newArrayList();
