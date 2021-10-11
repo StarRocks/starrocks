@@ -53,9 +53,11 @@ public:
                                    AggDataPtr state) const override {
         const auto* column = down_cast<const InputColumnType*>(columns[0]);
         const auto* data = column->get_data().data();
+        ResultType local_sum{};
         for (size_t i = 0; i < batch_size; ++i) {
-            this->data(state).sum += data[i];
+            local_sum += data[i];
         }
+        this->data(state).sum += local_sum;
     }
 
     void update_batch_single_state(FunctionContext* ctx, AggDataPtr state, const Column** columns,
