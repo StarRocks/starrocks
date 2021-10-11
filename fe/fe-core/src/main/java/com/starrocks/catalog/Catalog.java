@@ -432,8 +432,6 @@ public class Catalog {
 
     private StatisticStorage statisticStorage;
 
-    private long imageJournalId;
-
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         if (nodeType == null) {
             // get all
@@ -1512,7 +1510,6 @@ public class Catalog {
         Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
         long loadImageEndTime = System.currentTimeMillis();
-        this.imageJournalId = storage.getImageJournalId();
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
     }
 
@@ -5583,23 +5580,30 @@ public class Catalog {
         short replicationNum = Short.valueOf(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
         boolean isInMemory = partitionInfo.getIsInMemory(partition.getId());
         DataProperty newDataProperty = partitionInfo.getDataProperty(partition.getId());
-        // update table default replication num
-        List<Backend> clusterBackends = systemInfo.getClusterBackends(SystemInfoService.DEFAULT_CLUSTER);
-        if (replicationNum <= clusterBackends.size()) {
+
+        //check alive backends
+        List<Backend> clusterBackends =
+                Catalog.getCurrentSystemInfo().getClusterBackends(SystemInfoService.DEFAULT_CLUSTER, true);
+
+        if (replicationNum > clusterBackends.size()) {
+            throw new DdlException(
+                    "Failed to find enough backends , current backends num is : " + clusterBackends.size() +
+                            " . replication num is : " + replicationNum
+            );
+        } else {
             partitionInfo.setReplicationNum(partition.getId(), replicationNum);
+
+            // update table default replication num
             table.setReplicationNum(replicationNum);
-            //log
+
+            // log
             ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), table.getId(), partition.getId(),
                     newDataProperty, replicationNum, isInMemory);
             editLog.logModifyPartition(info);
             LOG.info("modify partition[{}-{}-{}] replication num to {}", db.getFullName(), table.getName(),
                     partition.getName(), replicationNum);
-        } else {
-            throw new DdlException(
-                    "Failed to find enough backends , current backends num is : " + clusterBackends.size() +
-                            " . replication num is : " + replicationNum
-            );
         }
+
     }
 
     /**
@@ -7270,12 +7274,5 @@ public class Catalog {
         }
     }
 
-    public long getImageJournalId() {
-        return imageJournalId;
-    }
-
-    public void setImageJournalId(long imageJournalId) {
-        this.imageJournalId = imageJournalId;
-    }
 }
 
