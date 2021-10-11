@@ -100,4 +100,9 @@ public class ResultSink extends DataSink {
         Preconditions.checkNotNull(fileSinkOptions);
         fileSinkOptions.setBroker_addresses(Lists.newArrayList(new TNetworkAddress(ip, port)));
     }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
+    }
 }

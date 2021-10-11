@@ -37,7 +37,7 @@ private:
 class AggregateBlockingSinkOperatorFactory final : public OperatorFactory {
 public:
     AggregateBlockingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : OperatorFactory(id, plan_node_id), _aggregator(std::move(aggregator)) {}
+            : OperatorFactory(id, "aggregate_blocking_sink", plan_node_id), _aggregator(std::move(aggregator)) {}
 
     ~AggregateBlockingSinkOperatorFactory() override = default;
 

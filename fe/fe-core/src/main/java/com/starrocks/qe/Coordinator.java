@@ -1820,7 +1820,7 @@ public class Coordinator {
                 // For broker load, the ConnectContext.get() is null
                 if (ConnectContext.get() != null &&
                         ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
-                    params.setIs_pipeline(fragment.getPlanRoot().canUsePipeLine());
+                    params.setIs_pipeline(fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
                 }
                 paramsList.add(params);
             }

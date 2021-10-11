@@ -10,6 +10,10 @@ GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> threa
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
           _exec_state_reporter(new ExecStateReporter()) {}
 
+GlobalDriverDispatcher::~GlobalDriverDispatcher() {
+    _driver_queue->close();
+}
+
 void GlobalDriverDispatcher::initialize(int num_threads) {
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
@@ -44,8 +48,13 @@ void GlobalDriverDispatcher::run() {
         }
 
         size_t queue_index;
-        auto driver = this->_driver_queue->take(&queue_index);
+        auto maybe_driver = this->_driver_queue->take(&queue_index);
+        if (maybe_driver.status().is_cancelled()) {
+            return;
+        }
+        auto driver = maybe_driver.value();
         DCHECK(driver != nullptr);
+
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
         auto* runtime_state = fragment_ctx->runtime_state();

@@ -107,13 +107,19 @@ void DataConsumerPool::return_consumers(DataConsumerGroup* grp) {
 }
 
 Status DataConsumerPool::start_bg_worker() {
-    _clean_idle_consumer_thread = std::thread([this] {
+    std::shared_ptr<bool> is_closed = _is_closed;
+
+    _clean_idle_consumer_thread = std::thread([=] {
 #ifdef GOOGLE_PROFILER
         ProfilerRegisterThread();
 #endif
 
         uint32_t interval = 60;
         while (true) {
+            if (*is_closed) {
+                return;
+            }
+
             _clean_idle_consumer_bg();
             sleep(interval);
         }
@@ -127,6 +133,10 @@ void DataConsumerPool::_clean_idle_consumer_bg() {
 
     std::unique_lock<std::mutex> l(_lock);
     time_t now = time(nullptr);
+
+    if (*_is_closed) {
+        return;
+    }
 
     auto iter = std::begin(_pool);
     while (iter != std::end(_pool)) {

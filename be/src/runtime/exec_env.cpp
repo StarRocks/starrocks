@@ -247,43 +247,178 @@ void ExecEnv::_init_buffer_pool(int64_t min_page_size, int64_t capacity, int64_t
 }
 
 void ExecEnv::_destory() {
-    delete _runtime_filter_worker;
-    delete _brpc_stub_cache;
-    delete _load_stream_mgr;
-    delete _load_channel_mgr;
-    delete _broker_mgr;
-    delete _bfd_parser;
-    delete _tmp_file_mgr;
-    delete _disk_io_mgr;
-    delete _load_path_mgr;
-    delete _master_info;
-    delete _driver_dispatcher;
-    delete _fragment_mgr;
-    delete _etl_thread_pool;
-    delete _thread_pool;
-    delete _thread_mgr;
-    delete _update_mem_tracker;
-    delete _page_cache_mem_tracker;
-    delete _local_column_pool_mem_tracker;
-    delete _central_column_pool_mem_tracker;
-    delete _column_pool_mem_tracker;
-    delete _snapshot_mem_tracker;
-    delete _schema_change_mem_tracker;
-    delete _compaction_mem_tracker;
-    delete _tablet_meta_mem_tracker;
-    delete _load_mem_tracker;
-    delete _query_pool_mem_tracker;
-    delete _mem_tracker;
-    delete _broker_client_cache;
-    delete _frontend_client_cache;
-    delete _backend_client_cache;
-    delete _result_mgr;
-    delete _result_queue_mgr;
-    delete _stream_mgr;
-    delete _stream_load_executor;
-    delete _routine_load_task_executor;
-    delete _external_scan_context_mgr;
-    delete _heartbeat_flags;
+    if (_runtime_filter_worker) {
+        delete _runtime_filter_worker;
+        _runtime_filter_worker = nullptr;
+    }
+    if (_plugin_mgr) {
+        delete _plugin_mgr;
+        _plugin_mgr = nullptr;
+    }
+    if (_heartbeat_flags) {
+        delete _heartbeat_flags;
+        _heartbeat_flags = nullptr;
+    }
+    if (_small_file_mgr) {
+        delete _small_file_mgr;
+        _small_file_mgr = nullptr;
+    }
+    if (_routine_load_task_executor) {
+        delete _routine_load_task_executor;
+        _routine_load_task_executor = nullptr;
+    }
+    if (_stream_load_executor) {
+        delete _stream_load_executor;
+        _stream_load_executor = nullptr;
+    }
+    if (_storage_engine) {
+        delete _storage_engine;
+        _storage_engine = nullptr;
+    }
+    if (_buffer_pool) {
+        delete _buffer_pool;
+        _buffer_pool = nullptr;
+    }
+    if (_buffer_reservation) {
+        delete _buffer_reservation;
+        _buffer_reservation = nullptr;
+    }
+    if (_brpc_stub_cache) {
+        delete _brpc_stub_cache;
+        _brpc_stub_cache = nullptr;
+    }
+    if (_load_stream_mgr) {
+        delete _load_stream_mgr;
+        _load_stream_mgr = nullptr;
+    }
+    if (_load_channel_mgr) {
+        delete _load_channel_mgr;
+        _load_channel_mgr = nullptr;
+    }
+    if (_broker_mgr) {
+        delete _broker_mgr;
+        _broker_mgr = nullptr;
+    }
+    if (_bfd_parser) {
+        delete _bfd_parser;
+        _bfd_parser = nullptr;
+    }
+    if (_tmp_file_mgr) {
+        delete _tmp_file_mgr;
+        _tmp_file_mgr = nullptr;
+    }
+    if (_disk_io_mgr) {
+        delete _disk_io_mgr;
+        _disk_io_mgr = nullptr;
+    }
+    if (_load_path_mgr) {
+        delete _load_path_mgr;
+        _load_path_mgr = nullptr;
+    }
+    if (_master_info) {
+        delete _master_info;
+        _master_info = nullptr;
+    }
+    if (_driver_dispatcher) {
+        delete _driver_dispatcher;
+        _driver_dispatcher = nullptr;
+    }
+    if (_fragment_mgr) {
+        delete _fragment_mgr;
+        _fragment_mgr = nullptr;
+    }
+    if (_etl_thread_pool) {
+        delete _etl_thread_pool;
+        _etl_thread_pool = nullptr;
+    }
+    if (_pipeline_io_thread_pool) {
+        delete _pipeline_io_thread_pool;
+        _pipeline_io_thread_pool = nullptr;
+    }
+    if (_thread_pool) {
+        delete _thread_pool;
+        _thread_pool = nullptr;
+    }
+    if (_thread_mgr) {
+        delete _thread_mgr;
+        _thread_mgr = nullptr;
+    }
+    if (_update_mem_tracker) {
+        delete _update_mem_tracker;
+        _update_mem_tracker = nullptr;
+    }
+    if (_page_cache_mem_tracker) {
+        delete _page_cache_mem_tracker;
+        _page_cache_mem_tracker = nullptr;
+    }
+    if (_local_column_pool_mem_tracker) {
+        delete _local_column_pool_mem_tracker;
+        _local_column_pool_mem_tracker = nullptr;
+    }
+    if (_central_column_pool_mem_tracker) {
+        delete _central_column_pool_mem_tracker;
+        _central_column_pool_mem_tracker = nullptr;
+    }
+    if (_column_pool_mem_tracker) {
+        delete _column_pool_mem_tracker;
+        _column_pool_mem_tracker = nullptr;
+    }
+    if (_snapshot_mem_tracker) {
+        delete _snapshot_mem_tracker;
+        _snapshot_mem_tracker = nullptr;
+    }
+    if (_schema_change_mem_tracker) {
+        delete _schema_change_mem_tracker;
+        _schema_change_mem_tracker = nullptr;
+    }
+    if (_compaction_mem_tracker) {
+        delete _compaction_mem_tracker;
+        _compaction_mem_tracker = nullptr;
+    }
+    if (_tablet_meta_mem_tracker) {
+        delete _tablet_meta_mem_tracker;
+        _tablet_meta_mem_tracker = nullptr;
+    }
+    if (_load_mem_tracker) {
+        delete _load_mem_tracker;
+        _load_mem_tracker = nullptr;
+    }
+    if (_query_pool_mem_tracker) {
+        delete _query_pool_mem_tracker;
+        _query_pool_mem_tracker = nullptr;
+    }
+    if (_mem_tracker) {
+        delete _mem_tracker;
+        _mem_tracker = nullptr;
+    }
+    if (_broker_client_cache) {
+        delete _broker_client_cache;
+        _broker_client_cache = nullptr;
+    }
+    if (_frontend_client_cache) {
+        delete _frontend_client_cache;
+        _frontend_client_cache = nullptr;
+    }
+    if (_backend_client_cache) {
+        delete _backend_client_cache;
+        _backend_client_cache = nullptr;
+    }
+    if (_result_queue_mgr) {
+        delete _result_queue_mgr;
+        _result_queue_mgr = nullptr;
+    }
+    if (_result_mgr) {
+        delete _result_mgr;
+        _result_mgr = nullptr;
+    }
+    if (_stream_mgr) {
+        delete _stream_mgr;
+        _stream_mgr = nullptr;
+    }
+    if (_external_scan_context_mgr) {
+        delete _external_scan_context_mgr;
+        _external_scan_context_mgr = nullptr;
+    }
     _metrics = nullptr;
 }
 

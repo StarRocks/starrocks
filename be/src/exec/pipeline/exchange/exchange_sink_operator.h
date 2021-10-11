@@ -136,7 +136,7 @@ public:
                                 TPartitionType::type part_type,
                                 const std::vector<TPlanFragmentDestination>& destinations, int sender_id,
                                 PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs)
-            : OperatorFactory(id, plan_node_id),
+            : OperatorFactory(id, "exchange_sink", plan_node_id),
               _buffer(std::move(buffer)),
               _part_type(part_type),
               _destinations(destinations),

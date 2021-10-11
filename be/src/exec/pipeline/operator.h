@@ -70,7 +70,8 @@ protected:
 
 class OperatorFactory {
 public:
-    OperatorFactory(int32_t id, int32_t plan_node_id) : _id(id), _plan_node_id(plan_node_id) {}
+    OperatorFactory(int32_t id, const std::string& name, int32_t plan_node_id)
+            : _id(id), _name(name), _plan_node_id(plan_node_id) {}
     virtual ~OperatorFactory() = default;
     // Create the operator for the specific sequence driver
     // For some operators, when share some status, need to know the the degree_of_parallelism
@@ -79,9 +80,11 @@ public:
     int32_t plan_node_id() const { return _plan_node_id; }
     virtual Status prepare(RuntimeState* state, MemTracker* mem_tracker) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
+    std::string get_name() const { return _name + "_" + std::to_string(_id); }
 
 protected:
     int32_t _id = 0;
+    std::string _name;
     int32_t _plan_node_id = -1;
 };
 
