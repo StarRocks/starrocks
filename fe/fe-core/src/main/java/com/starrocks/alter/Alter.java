@@ -54,12 +54,14 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.View;
+import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.proc.BackendsProcDir;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.AlterViewInfo;
@@ -72,6 +74,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import oshi.SystemInfo;
 
 import java.util.Arrays;
 import java.util.List;
@@ -522,7 +525,9 @@ public class Alter {
         // 4. tablet type
         TTabletType tTabletType =
                 PropertyAnalyzer.analyzeTabletType(properties);
-
+        //check alive backends
+        List<Backend> clusterBackends =
+                Catalog.getCurrentSystemInfo().getClusterBackends(SystemInfoService.DEFAULT_CLUSTER, true);
         // modify meta here
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         for (String partitionName : partitionNames) {
@@ -537,19 +542,17 @@ public class Alter {
                     throw new DdlException(
                             "table " + olapTable.getName() + " is colocate table, cannot change replicationNum");
                 }
-                List<Backend> clusterBackends =
-                        Catalog.getCurrentSystemInfo().getClusterBackends(SystemInfoService.DEFAULT_CLUSTER);
-                if (newReplicationNum <= clusterBackends.size()) {
+                if (newReplicationNum > clusterBackends.size()) {
+                    throw new DdlException(
+                            "Failed to find enough backends , current backends num is : " + clusterBackends.size() +
+                                    " . replication num is : " + newReplicationNum
+                    );
+                } else {
                     partitionInfo.setReplicationNum(partition.getId(), newReplicationNum);
                     // update default replication num if this table is unpartitioned table
                     if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
                         olapTable.setReplicationNum(newReplicationNum);
                     }
-                } else {
-                    throw new DdlException(
-                            "Failed to find enough backends , current backends num is : " + clusterBackends.size() +
-                                    " . replication num is : " + newReplicationNum
-                    );
                 }
             }
             // 3. in memory
