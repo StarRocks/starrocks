@@ -393,12 +393,6 @@ public class ViewPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testSql65() throws Exception {
-        String sql = "select count(distinct id2) from test.bitmap_table having count(distinct id2) > 0";
-        testViewIgnoreObjectCountDistinct(sql);
-    }
-
-    @Test
     public void testSql67() throws Exception {
         String sql = "select count(distinct id2) from test.hll_table";
         testViewIgnoreObjectCountDistinct(sql);

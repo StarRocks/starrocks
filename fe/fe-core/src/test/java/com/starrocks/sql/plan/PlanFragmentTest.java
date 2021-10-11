@@ -3950,6 +3950,12 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testReplicatedJoin() throws Exception {
+        new Expectations(connectContext.getSessionVariable()) {
+            {
+                connectContext.getSessionVariable().isEnableReplicationJoin();
+                result = true;
+            }
+        };
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
 
         String sql = "select * from join1 join join2 on join1.id = join2.id;";
