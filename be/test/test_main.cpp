@@ -21,6 +21,10 @@
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
+    if (getenv("STARROCKS_HOME") == nullptr) {
+        fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
+        exit(-1);
+    }
     std::string conffile = std::string(getenv("STARROCKS_HOME")) + "/conf/be.conf";
     if (!starrocks::config::init(conffile.c_str(), false)) {
         fprintf(stderr, "error read config file. \n");
@@ -63,13 +67,20 @@ int main(int argc, char** argv) {
                 s.to_string().c_str());
         return -1;
     }
+    auto* exec_env = starrocks::ExecEnv::GetInstance();
+    exec_env->init_mem_tracker();
+    starrocks::ExecEnv::init(exec_env, paths);
+
     int r = RUN_ALL_TESTS();
+
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
     // clear caches in update manager so mem_tracker checks will not fail
     starrocks::StorageEngine::instance()->update_manager()->clear_cache();
     (void)butil::DeleteFile(storage_root, true);
     starrocks::vectorized::TEST_clear_all_columns_this_thread();
+    // destroy exec env
+    starrocks::ExecEnv::destroy(exec_env);
 
     return r;
 }

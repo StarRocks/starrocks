@@ -102,7 +102,8 @@ Status FileReader::_parse_footer() {
 
     tparquet::FileMetaData t_metadata;
     // deserialize footer
-    RETURN_IF_ERROR(deserialize_thrift_msg(footer_buf + to_read - 8 - footer_size, &footer_size, true, &t_metadata));
+    RETURN_IF_ERROR(deserialize_thrift_msg(footer_buf + to_read - 8 - footer_size, &footer_size, TProtocolType::COMPACT,
+                                           &t_metadata));
     _file_metadata.reset(new FileMetaData());
     RETURN_IF_ERROR(_file_metadata->init(t_metadata));
 

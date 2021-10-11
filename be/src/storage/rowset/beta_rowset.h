@@ -43,6 +43,8 @@ class KVStore;
 
 class BetaRowset : public Rowset {
 public:
+    BetaRowset(MemTracker* mem_tracker, const TabletSchema* schema, std::string rowset_path,
+               RowsetMetaSharedPtr rowset_meta);
     ~BetaRowset() override { _mem_tracker->release(_mem_tracker->consumption()); }
 
     OLAPStatus create_reader(RowsetReaderSharedPtr* result) override;
@@ -89,9 +91,6 @@ public:
     std::vector<segment_v2::SegmentSharedPtr>& segments() { return _segments; }
 
 protected:
-    BetaRowset(MemTracker* mem_tracker, const TabletSchema* schema, std::string rowset_path,
-               RowsetMetaSharedPtr rowset_meta);
-
     // init segment groups
     OLAPStatus init() override;
 

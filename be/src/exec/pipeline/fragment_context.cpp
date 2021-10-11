@@ -28,7 +28,11 @@ FragmentContextPtr FragmentContextManager::get(const TUniqueId& fragment_id) {
 
 void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
     std::lock_guard<std::mutex> lock(_lock);
-    _fragment_contexts.erase(fragment_id);
+    auto it = _fragment_contexts.find(fragment_id);
+    if (it != _fragment_contexts.end()) {
+        it->second->_finish_promise.set_value();
+        _fragment_contexts.erase(it);
+    }
 }
 
 void FragmentContextManager::cancel(const Status& status) {

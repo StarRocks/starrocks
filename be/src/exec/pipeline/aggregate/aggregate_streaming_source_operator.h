@@ -35,7 +35,8 @@ private:
 class AggregateStreamingSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     AggregateStreamingSourceOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : SourceOperatorFactory(id, plan_node_id), _aggregator(std::move(aggregator)) {}
+            : SourceOperatorFactory(id, "aggregate_streaming_source", plan_node_id),
+              _aggregator(std::move(aggregator)) {}
 
     ~AggregateStreamingSourceOperatorFactory() override = default;
 

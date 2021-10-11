@@ -33,7 +33,8 @@ private:
 class AggregateBlockingSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     AggregateBlockingSourceOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : SourceOperatorFactory(id, plan_node_id), _aggregator(std::move(aggregator)) {}
+            : SourceOperatorFactory(id, "aggregate_blocking_source", plan_node_id),
+              _aggregator(std::move(aggregator)) {}
 
     ~AggregateBlockingSourceOperatorFactory() override = default;
 

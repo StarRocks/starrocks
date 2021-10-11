@@ -209,7 +209,7 @@ TEST_F(CumulativeCompactionTest, test_compact_succeed) {
     ASSERT_EQ(src_rowset_id, src_rowset->rowset_id());
     ASSERT_EQ(1024, src_rowset->num_rows());
 
-    TabletMetaSharedPtr tablet_meta(new TabletMeta(_tablet_meta_mem_tracker.get()));
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>(_tablet_meta_mem_tracker.get());
     create_tablet_meta(tablet_meta.get());
     tablet_meta->add_rs_meta(src_rowset->rowset_meta());
 

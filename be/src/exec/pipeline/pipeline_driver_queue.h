@@ -30,9 +30,9 @@ private:
 class DriverQueue {
 public:
     virtual void put_back(const DriverRawPtr driver) = 0;
-    virtual DriverRawPtr take(size_t* queue_index) = 0;
+    virtual StatusOr<DriverRawPtr> take(size_t* queue_index) = 0;
     virtual ~DriverQueue() = default;
-    ;
+    virtual void close() = 0;
     virtual SubQuerySharedDriverQueue* get_sub_queue(size_t) = 0;
 };
 
@@ -40,7 +40,7 @@ class QuerySharedDriverQueue : public FactoryMethod<DriverQueue, QuerySharedDriv
     friend class FactoryMethod<DriverQueue, QuerySharedDriverQueue>;
 
 public:
-    QuerySharedDriverQueue() : _is_empty(true) {
+    QuerySharedDriverQueue() : _is_closed(false), _is_empty(true) {
         double factor = 1;
         for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
             // initialize factor for every sub queue,
@@ -51,18 +51,21 @@ public:
         }
     }
     ~QuerySharedDriverQueue() override = default;
+    void close() override;
 
     static const size_t QUEUE_SIZE = 8;
     // maybe other value for ratio.
     static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.7;
     void put_back(const DriverRawPtr driver) override;
-    DriverRawPtr take(size_t* queue_index) override;
+    // return nullptr if queue is closed;
+    StatusOr<DriverRawPtr> take(size_t* queue_index) override;
     SubQuerySharedDriverQueue* get_sub_queue(size_t) override;
 
 private:
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
     std::mutex _global_mutex;
     std::condition_variable _cv;
+    bool _is_closed;
     std::atomic<bool> _is_empty;
 };
 
