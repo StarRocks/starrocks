@@ -81,7 +81,7 @@ public:
                             SortExecExprs& sort_exec_exprs, const std::vector<OrderByType>& order_by_types,
                             TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
                             const RowDescriptor& parent_node_child_row_desc)
-            : OperatorFactory(id, plan_node_id),
+            : OperatorFactory(id, "sort_sink", plan_node_id),
               _chunks_sorter(std::move(chunks_sorter)),
               _sort_exec_exprs(sort_exec_exprs),
               _order_by_types(order_by_types),

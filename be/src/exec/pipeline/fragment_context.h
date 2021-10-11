@@ -21,6 +21,8 @@ namespace starrocks {
 class MemTracker;
 namespace pipeline {
 class FragmentContext {
+    friend FragmentContextManager;
+
 public:
     FragmentContext() : _cancel_flag(false) {}
     ~FragmentContext() {
@@ -37,6 +39,7 @@ public:
     }
     void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
     TNetworkAddress fe_addr() { return _fe_addr; }
+    FragmentFuture finish_future() { return _finish_promise.get_future(); }
     MemTracker* mem_tracker() const { return _mem_tracker.get(); }
     void set_mem_tracker(std::unique_ptr<MemTracker> mem_tracker) { _mem_tracker = std::move(mem_tracker); }
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
@@ -104,6 +107,9 @@ private:
     TUniqueId _fragment_instance_id;
     TNetworkAddress _fe_addr;
 
+    // promise used to determine whether fragment finished its execution
+    FragmentPromise _finish_promise;
+
     // never adjust the order of _mem_tracker, _runtime_state, _plan, _pipelines and _drivers, since
     // _plan depends on _runtime_state and _drivers depends on _mem_tracker and _runtime_state.
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
@@ -127,6 +133,7 @@ private:
     std::atomic<bool> _cancel_flag;
     Status _s_status;
 };
+
 class FragmentContextManager {
 public:
     FragmentContextManager() = default;

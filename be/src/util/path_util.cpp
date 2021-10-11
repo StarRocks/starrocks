@@ -89,7 +89,7 @@ std::string base_name(const string& path) {
 
 std::string file_extension(const string& path) {
     string file_name = base_name(path);
-    if (file_name == "." || file_name == "..") {
+    if (file_name == "." || file_name == ".." || file_name.find('.') == 0) {
         return "";
     }
 

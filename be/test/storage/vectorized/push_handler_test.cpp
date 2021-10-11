@@ -287,9 +287,6 @@ void PushHandlerTest::_create_expr_info() {
 }
 
 void PushHandlerTest::_init() {
-    ExecEnv::GetInstance()->_thread_mgr = new ThreadResourceMgr();
-    ExecEnv::GetInstance()->_buffer_reservation = new ReservationTracker();
-
     _create_expr_info();
     _t_desc_table = _init_desc_table();
 }

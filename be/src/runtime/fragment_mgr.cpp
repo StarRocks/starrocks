@@ -548,7 +548,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     const uint8_t* buf = (const uint8_t*)query_plan_info.data();
     uint32_t len = query_plan_info.size();
     // deserialize TQueryPlanInfo
-    auto st = deserialize_thrift_msg(buf, &len, false, &t_query_plan_info);
+    auto st = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_query_plan_info);
     if (!st.ok()) {
         LOG(WARNING) << "open context error: deserialize TQueryPlanInfo failure";
         std::stringstream msg;

@@ -33,7 +33,7 @@ Status PageReader::next_header() {
         RETURN_IF_ERROR(_stream.get_bytes(&page_buf, &nbytes, true));
 
         header_length = nbytes;
-        auto st = deserialize_thrift_msg(page_buf, &header_length, true, &_cur_header);
+        auto st = deserialize_thrift_msg(page_buf, &header_length, TProtocolType::COMPACT, &_cur_header);
         if (st.ok()) {
             break;
         }

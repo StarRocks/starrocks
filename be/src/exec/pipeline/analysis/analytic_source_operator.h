@@ -33,7 +33,7 @@ private:
 class AnalyticSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     AnalyticSourceOperatorFactory(int32_t id, int32_t plan_node_id, AnalytorPtr analytor)
-            : SourceOperatorFactory(id, plan_node_id), _analytor(std::move(analytor)) {}
+            : SourceOperatorFactory(id, "analytic_source", plan_node_id), _analytor(std::move(analytor)) {}
 
     ~AnalyticSourceOperatorFactory() override = default;
 

@@ -9,7 +9,7 @@ namespace starrocks::pipeline {
 class AnalyticSinkOperator : public Operator {
 public:
     AnalyticSinkOperator(int32_t id, int32_t plan_node_id, AnalytorPtr analytor)
-            : Operator(id, "analytor_sink", plan_node_id), _analytor(analytor) {}
+            : Operator(id, "analytic_sink", plan_node_id), _analytor(analytor) {}
     ~AnalyticSinkOperator() = default;
 
     bool has_output() const override { return false; }
@@ -35,7 +35,7 @@ private:
 class AnalyticSinkOperatorFactory final : public OperatorFactory {
 public:
     AnalyticSinkOperatorFactory(int32_t id, int32_t plan_node_id, AnalytorPtr analytor)
-            : OperatorFactory(id, plan_node_id), _analytor(analytor) {}
+            : OperatorFactory(id, "analytic_sink", plan_node_id), _analytor(analytor) {}
 
     ~AnalyticSinkOperatorFactory() override = default;
 

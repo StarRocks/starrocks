@@ -39,7 +39,9 @@ private:
 class ExchangeSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     ExchangeSourceOperatorFactory(int32_t id, int32_t plan_node_id, int32_t num_sender, const RowDescriptor& row_desc)
-            : SourceOperatorFactory(id, plan_node_id), _num_sender(num_sender), _row_desc(row_desc) {}
+            : SourceOperatorFactory(id, "exchange_source", plan_node_id),
+              _num_sender(num_sender),
+              _row_desc(row_desc) {}
 
     ~ExchangeSourceOperatorFactory() override = default;
 

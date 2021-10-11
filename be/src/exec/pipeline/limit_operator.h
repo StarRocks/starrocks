@@ -33,7 +33,7 @@ private:
 class LimitOperatorFactory final : public OperatorFactory {
 public:
     LimitOperatorFactory(int32_t id, int32_t plan_node_id, int64_t limit)
-            : OperatorFactory(id, plan_node_id), _limit(limit) {}
+            : OperatorFactory(id, "limit", plan_node_id), _limit(limit) {}
 
     ~LimitOperatorFactory() override = default;
 
