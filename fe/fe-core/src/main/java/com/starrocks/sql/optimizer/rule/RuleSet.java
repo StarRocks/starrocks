@@ -39,9 +39,8 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithSortRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergePredicateScanRule;
-import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
-import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.PartitionPredicatePrune;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
@@ -51,7 +50,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneHiveScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneIntersectColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneJoinColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneProjectColumnsRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneRepeatColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTableFunctionColumnRule;
@@ -86,7 +84,6 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregate
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
 
@@ -146,11 +143,10 @@ public class RuleSet {
                 new DistributionPruneRule(),
                 new HiveScanPartitionPruneRule(),
                 new EsScanPartitionPruneRule(),
-                new PruneProjectRule()
+                new PartitionPredicatePrune()
         ));
 
         rewriteRules.put(RuleSetType.PRUNE_COLUMNS, ImmutableList.of(
-                new MergeTwoProjectRule(),
                 PruneScanColumnRule.OLAP_SCAN,
                 PruneScanColumnRule.SCHEMA_SCAN,
                 PruneScanColumnRule.MYSQL_SCAN,
@@ -168,10 +164,6 @@ public class RuleSet {
                 new PruneRepeatColumnsRule(),
                 new PruneValuesColumnsRule(),
                 new PruneTableFunctionColumnRule()
-        ));
-
-        rewriteRules.put(RuleSetType.SCALAR_OPERATOR_REUSE, ImmutableList.of(
-                new ScalarOperatorsReuseRule()
         ));
 
         rewriteRules.put(RuleSetType.PUSH_DOWN_PREDICATE, ImmutableList.of(
@@ -218,10 +210,6 @@ public class RuleSet {
                 new RewriteHllCountDistinctRule(),
                 new RewriteMultiDistinctRule(),
                 new RewriteDuplicateAggregateFnRule()
-        ));
-
-        rewriteRules.put(RuleSetType.MERGE_AGGREGATE, ImmutableList.of(
-                new MergeTwoAggRule()
         ));
     }
 

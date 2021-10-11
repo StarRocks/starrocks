@@ -74,14 +74,15 @@ public class ScalarOperatorsReuseRule extends TransformationRule {
                     newMap.put(kv.getKey(), ScalarOperatorsReuse.
                             rewriteOperatorWithCommonOperator(kv.getValue(), commonSubOperators));
                 }
-                projectOperator.setColumnRefMap(newMap);
 
+                Map<ColumnRefOperator, ScalarOperator> newCommonMap = Maps.newHashMap();
                 for (Map.Entry<ScalarOperator, ColumnRefOperator> kv : commonSubOperators.entrySet()) {
                     Preconditions.checkState(!newMap.containsKey(kv.getValue()));
-                    projectOperator.getCommonSubOperatorMap().put(kv.getValue(), kv.getKey());
+                    newCommonMap.put(kv.getValue(), kv.getKey());
                 }
 
-                return Lists.newArrayList(OptExpression.create(projectOperator, input.getInputs()));
+                return Lists.newArrayList(OptExpression.create(
+                        new LogicalProjectOperator(newMap, newCommonMap), input.getInputs()));
             }
         }
 
