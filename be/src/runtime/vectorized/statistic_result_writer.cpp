@@ -3,6 +3,7 @@
 #include "runtime/vectorized/statistic_result_writer.h"
 
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "exprs/expr.h"
 #include "gen_cpp/Data_types.h"
 #include "runtime/buffer_control_block.h"
@@ -11,16 +12,18 @@
 #include "util/thrift_util.h"
 #include "util/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
+namespace vectorized {
 
 const int STATISTIC_DATA_VERSION1 = 1;
+const int STATISTIC_DATA_VERSION2 = 101;
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
                                              starrocks::RuntimeProfile* parent_profile)
         : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {}
 
-StatisticResultWriter::~StatisticResultWriter() = default;
+StatisticResultWriter::~StatisticResultWriter() {}
 
 Status StatisticResultWriter::init(RuntimeState* state) {
     _init_profile();
@@ -68,6 +71,8 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
     // Step 3: fill statistic data
     if (version == STATISTIC_DATA_VERSION1) {
         _fill_statistic_data_v1(version, result_columns, chunk, result);
+    } else if (version == STATISTIC_DATA_VERSION2) {
+        _fill_statistic_data_v2(version, result_columns, chunk, result);
     }
 
     // Step 4: send
@@ -84,12 +89,39 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
     return status;
 }
 
+void StatisticResultWriter::_fill_statistic_data_v2(int version, const vectorized::Columns& columns,
+                                                    const vectorized::Chunk* chunk, TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
+    DCHECK(columns.size() == 3);
+    auto versioncolumn = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[1]);
+    auto dictColumnViewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
+
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+    data_list.resize(num_rows);
+
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_meta_version(versioncolumn->get_data()[i]);
+        if (!dictColumnViewer.is_null(i)) {
+            //data_list[i].__set_dict(dictColumnViewer.value(i).to_string());
+        }
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        serializer.serialize(&data_list[i], &result->result_batch.rows[i]);
+    }
+}
+
 void StatisticResultWriter::_fill_statistic_data_v1(int version, const vectorized::Columns& columns,
                                                     const vectorized::Chunk* chunk, TFetchDataResult* result) {
     SCOPED_TIMER(_serialize_timer);
 
     // mapping with Data.thrift.TStatisticData
-    DCHECK(columns.size() == 11);
+    DCHECK(columns.size() == 11 || columns.size() == 12);
 
     // skip read version
     auto& updateTimes = ColumnHelper::cast_to_raw<TYPE_DATETIME>(columns[1])->get_data();
@@ -103,6 +135,10 @@ void StatisticResultWriter::_fill_statistic_data_v1(int version, const vectorize
     auto& nullCounts = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[8])->get_data();
     BinaryColumn* maxColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[9]);
     BinaryColumn* minColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[10]);
+    BinaryColumn* dictColumn = nullptr;
+    if (columns.size() >= 12) {
+        dictColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[11]);
+    }
 
     std::vector<TStatisticData> data_list;
     int num_rows = chunk->num_rows();
@@ -119,6 +155,9 @@ void StatisticResultWriter::_fill_statistic_data_v1(int version, const vectorize
         data_list[i].__set_nullCount(nullCounts[i]);
         data_list[i].__set_max(maxColumn->get_slice(i).to_string());
         data_list[i].__set_min(minColumn->get_slice(i).to_string());
+        if (dictColumn!= nullptr) {
+            //data_list[i].__set_dict(dictColumn->get_slice(i).to_string());
+        }
     }
 
     result->result_batch.rows.resize(num_rows);
@@ -135,4 +174,5 @@ Status StatisticResultWriter::close() {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace vectorized
+} // namespace starrocks

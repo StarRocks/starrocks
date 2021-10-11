@@ -55,7 +55,6 @@
 #include "exec/vectorized/table_function_node.h"
 #include "exec/vectorized/topn_node.h"
 #include "exec/vectorized/union_node.h"
-#include "exec/vectorized/dict_decode_node.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
@@ -539,9 +538,6 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         return Status::OK();
     case TPlanNodeType::SCHEMA_SCAN_NODE:
         *node = pool->add(new vectorized::SchemaScanNode(pool, tnode, descs));
-        return Status::OK();
-    case TPlanNodeType::DECODE_NODE:
-        *node = pool->add(new vectorized::DictDecodeNode(pool, tnode, descs));
         return Status::OK();
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));

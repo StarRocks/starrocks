@@ -90,7 +90,6 @@ set(EXEC_FILES
     vectorized/hdfs_scanner_orc.cpp
     vectorized/json_scanner.cpp
     vectorized/project_node.cpp
-    vectorized/dict_decode_node.cpp
     vectorized/repeat_node.cpp
     vectorized/table_function_node.cpp
     vectorized/es_http_scan_node.cpp
