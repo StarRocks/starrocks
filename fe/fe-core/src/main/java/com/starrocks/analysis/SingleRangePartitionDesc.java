@@ -111,6 +111,10 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         partitionKeyDesc.analyze(partColNum);
 
         if (otherProperties != null) {
+            // The priority of the partition attribute is higher than that of the table
+            for (String key : properties.keySet()) {
+                otherProperties.put(key, properties.get(key));
+            }
             this.properties = otherProperties;
         }
 

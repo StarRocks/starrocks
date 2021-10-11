@@ -29,6 +29,7 @@ import com.starrocks.analysis.PartitionKeyDesc;
 import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.RangeUtils;
 import org.apache.logging.log4j.LogManager;
@@ -387,6 +388,12 @@ public class RangePartitionInfo extends PartitionInfo {
         Collections.sort(entries, RangeUtils.RANGE_MAP_ENTRY_COMPARATOR);
 
         idx = 0;
+        PartitionInfo tblPartitionInfo = table.getPartitionInfo();
+        short replicationNum = Short.parseShort(table.getTableProperty().getProperties().get("replication_num"));
+        if (table.getTableProperty().getProperties().get("replication_num") == null) {
+            replicationNum = FeConstants.default_replication_num;
+        }
+
         for (Map.Entry<Long, Range<PartitionKey>> entry : entries) {
             Partition partition = table.getPartition(entry.getKey());
             String partitionName = partition.getName();
@@ -401,7 +408,10 @@ public class RangePartitionInfo extends PartitionInfo {
                 partitionId.add(entry.getKey());
                 break;
             }
-
+            short curPartitionReplicationNum = tblPartitionInfo.getReplicationNum(entry.getKey());
+            if(curPartitionReplicationNum != replicationNum) {
+                sb.append("(").append("\"replication_num\" = \"").append(curPartitionReplicationNum).append("\")");
+            }
             if (idx != entries.size() - 1) {
                 sb.append(",\n");
             }
