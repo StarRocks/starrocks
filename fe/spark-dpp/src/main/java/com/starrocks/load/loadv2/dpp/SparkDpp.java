@@ -610,6 +610,11 @@ public final class SparkDpp implements java.io.Serializable {
         return dataframe;
     }
 
+    /**
+     * Note: parameter fileUrl cannot contain any wildcards to prevent output of wrong results.
+     * For example, if fileUrl is specified by regular expression like hdfs://some/p1=*", column value will be extracted as "*" in {@link DppUtils#parseColumnsFromPath},
+     * then "*" will likely be cast to wrong output according to its field type such as NULL for INT in {@link this#convertSrcDataframeToDstDataframe}
+     */
     private Dataset<Row> loadDataFromPath(SparkSession spark,
                                           EtlJobConfig.EtlFileGroup fileGroup,
                                           String fileUrl,
