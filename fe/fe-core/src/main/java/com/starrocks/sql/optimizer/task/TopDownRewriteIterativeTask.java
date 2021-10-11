@@ -15,25 +15,19 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.List;
 
 /**
- * TopDownIterativeTask performs a top-down rewrite logic operator pass.
- * <p>
- * This class modify from CMU noisepage project TopDownRewrite class
+ * TopDownIterativeTask will rewrite every operator iteration,
+ * and iterate for new operators until there is no matching pattern
  */
-public class TopDownIterativeTask extends OptimizerTask {
-    private final Group group;
-    private final List<Rule> candidateRules;
-
-    public TopDownIterativeTask(TaskContext context, Group group, List<Rule> ruleSet) {
-        super(context);
-        this.group = group;
-        this.candidateRules = ruleSet;
+public class TopDownRewriteIterativeTask extends TopDownRewriteTask {
+    public TopDownRewriteIterativeTask(TaskContext context, Group group, List<Rule> ruleSet) {
+        super(context, group, ruleSet);
     }
 
-    public TopDownIterativeTask(TaskContext context, Group group, Rule rule) {
+    public TopDownRewriteIterativeTask(TaskContext context, Group group, Rule rule) {
         this(context, group, Lists.newArrayList(rule));
     }
 
-    public TopDownIterativeTask(TaskContext context, Group group, RuleSetType ruleSetType) {
+    public TopDownRewriteIterativeTask(TaskContext context, Group group, RuleSetType ruleSetType) {
         this(context, group, context.getOptimizerContext().getRuleSet().
                 getRewriteRulesByType(ruleSetType));
     }
@@ -67,7 +61,7 @@ public class TopDownIterativeTask extends OptimizerTask {
                     if (group.getLogicalExpressions().isEmpty()) {
                         return;
                     }
-                    pushTask(new TopDownIterativeTask(context, group, candidateRules));
+                    pushTask(new TopDownRewriteIterativeTask(context, group, candidateRules));
                     return;
                 }
                 extractExpr = binder.next();
@@ -75,7 +69,7 @@ public class TopDownIterativeTask extends OptimizerTask {
         }
 
         for (Group childGroup : curGroupExpression.getInputs()) {
-            pushTask(new TopDownIterativeTask(context, childGroup, candidateRules));
+            pushTask(new TopDownRewriteIterativeTask(context, childGroup, candidateRules));
         }
     }
 }

@@ -1,5 +1,4 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
@@ -17,15 +16,15 @@ import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneProjectRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
-import com.starrocks.sql.optimizer.task.TopDownIterativeTask;
-import com.starrocks.sql.optimizer.task.TopDownRewriteTask;
+import com.starrocks.sql.optimizer.task.TopDownRewriteIterativeTask;
+import com.starrocks.sql.optimizer.task.TopDownRewriteOnceTask;
 
 import java.util.Collections;
 import java.util.List;
@@ -79,7 +78,7 @@ public class Optimizer {
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
         ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
-        ruleRewriteIterative(memo, rootTaskContext, new PruneWindowRule());
+        ruleRewriteIterative(memo, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         //Limit push must be after the column prune,
         //otherwise the Node containing limit may be prune
@@ -210,25 +209,25 @@ public class Optimizer {
     }
 
     void ruleRewriteIterative(Memo memo, TaskContext rootTaskContext, RuleSetType ruleSetType) {
-        context.getTaskScheduler().pushTask(new TopDownIterativeTask(rootTaskContext,
+        context.getTaskScheduler().pushTask(new TopDownRewriteIterativeTask(rootTaskContext,
                 memo.getRootGroup(), ruleSetType));
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
     }
 
     void ruleRewriteIterative(Memo memo, TaskContext rootTaskContext, Rule rule) {
-        context.getTaskScheduler().pushTask(new TopDownIterativeTask(rootTaskContext,
+        context.getTaskScheduler().pushTask(new TopDownRewriteIterativeTask(rootTaskContext,
                 memo.getRootGroup(), rule));
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
     }
 
     void ruleRewriteOnlyOnce(Memo memo, TaskContext rootTaskContext, RuleSetType ruleSetType) {
-        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
+        context.getTaskScheduler().pushTask(new TopDownRewriteOnceTask(rootTaskContext,
                 memo.getRootGroup(), ruleSetType));
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
     }
 
     void ruleRewriteOnlyOnce(Memo memo, TaskContext rootTaskContext, Rule rule) {
-        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
+        context.getTaskScheduler().pushTask(new TopDownRewriteOnceTask(rootTaskContext,
                 memo.getRootGroup(), rule));
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
     }

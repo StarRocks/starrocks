@@ -11,9 +11,9 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.Collections;
 import java.util.List;
 
-public class PruneWindowRule extends TransformationRule {
-    public PruneWindowRule() {
-        super(RuleType.TF_PRUNE_WINDOW, Pattern.create(OperatorType.LOGICAL_WINDOW)
+public class PruneEmptyWindowRule extends TransformationRule {
+    public PruneEmptyWindowRule() {
+        super(RuleType.TF_PRUNE_EMPTY_WINDOW, Pattern.create(OperatorType.LOGICAL_WINDOW)
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF)));
     }
 
