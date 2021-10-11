@@ -30,7 +30,7 @@ private:
 class DriverQueue {
 public:
     virtual void put_back(const DriverRawPtr driver) = 0;
-    virtual DriverRawPtr take(size_t* queue_index) = 0;
+    virtual StatusOr<DriverRawPtr> take(size_t* queue_index) = 0;
     virtual ~DriverQueue() = default;
     virtual void close() = 0;
     virtual SubQuerySharedDriverQueue* get_sub_queue(size_t) = 0;
@@ -58,7 +58,7 @@ public:
     static constexpr double RATIO_OF_ADJACENT_QUEUE = 1.7;
     void put_back(const DriverRawPtr driver) override;
     // return nullptr if queue is closed;
-    DriverRawPtr take(size_t* queue_index) override;
+    StatusOr<DriverRawPtr> take(size_t* queue_index) override;
     SubQuerySharedDriverQueue* get_sub_queue(size_t) override;
 
 private:

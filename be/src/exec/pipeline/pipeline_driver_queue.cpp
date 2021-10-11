@@ -22,7 +22,7 @@ void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
     }
 }
 
-DriverRawPtr QuerySharedDriverQueue::take(size_t* queue_index) {
+StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(size_t* queue_index) {
     // -1 means no candidates; else has candidate.
     int queue_idx = -1;
     double target_accu_time = 0;
@@ -32,7 +32,7 @@ DriverRawPtr QuerySharedDriverQueue::take(size_t* queue_index) {
         std::unique_lock<std::mutex> lock(_global_mutex);
         while (true) {
             if (_is_closed) {
-                return nullptr;
+                return Status::Cancelled("Shutdown");
             }
 
             for (int i = 0; i < QUEUE_SIZE; ++i) {

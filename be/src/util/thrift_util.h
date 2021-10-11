@@ -116,8 +116,11 @@ private:
 };
 
 enum TProtocolType {
+    // Use TCompactProtocol to deserialize msg
     COMPACT, // 0
+    // Use TBinaryProtocol to deserialize msg
     BINARY,  // 1
+    // Use TJSONProtocol to deserialize msg
     JSON     // 2
 };
 
