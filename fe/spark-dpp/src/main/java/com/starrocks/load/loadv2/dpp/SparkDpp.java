@@ -40,6 +40,7 @@ import org.apache.spark.TaskContext;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.FlatMapFunction;
+import org.apache.spark.api.java.function.ForeachFunction;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.sql.Dataset;
@@ -619,6 +620,37 @@ public final class SparkDpp implements java.io.Serializable {
      */
     private Dataset<Row> loadDataFromPath(SparkSession spark,
                                           EtlJobConfig.EtlFileGroup fileGroup,
+                                          String fileUrl) throws SparkDppException {
+        List<String> columnValueFromPath = DppUtils.parseColumnsFromPath(fileUrl, fileGroup.columnsFromPath);
+        Dataset<Row> sourceData = null;
+        if (StringUtils.equalsIgnoreCase(fileGroup.fileFormat, "orc")) {
+            sourceData = spark.read().orc(fileUrl);
+        } else if (StringUtils.equalsIgnoreCase(fileGroup.fileFormat, "parquet")) {
+            sourceData = spark.read().parquet(fileUrl);
+        }
+        if (fileGroup.columnsFromPath != null) {
+            for (int i = 0; i < fileGroup.columnsFromPath.size(); i++) {
+                sourceData = sourceData.withColumn(fileGroup.columnsFromPath.get(i), functions.lit(columnValueFromPath.get(i)));
+            }
+        }
+        sourceData.foreach((ForeachFunction<Row>) record -> scannedRowsAcc.add(1));
+        // TODO: data quality check for orc/parquet load
+        // Check process is roughly the same as the hive load, but there are some bugs to fix.
+        // Uncomment below when method checkDataFromHiveWithStrictMode is ready.
+        // checkDataFromHiveWithStrictMode(sourceData, baseIndex, fileGroup.columnMappings.keySet(), etlJobConfig.properties.strictMode,
+        //        dstTableSchema, dictBitmapColumnSet);
+        return sourceData;
+    }
+
+    /**
+     * Note: parameter fileUrl cannot contain any wildcards to prevent output of wrong results.
+     * For example, if fileUrl is specified by regular expression like hdfs://some/p1=*",
+     * column value will be extracted as "*" in {@link DppUtils#parseColumnsFromPath},
+     * then "*" will likely be cast to wrong output according to its field type such as NULL for INT
+     * in {@link this#convertSrcDataframeToDstDataframe}
+     */
+    private Dataset<Row> loadDataFromPath(SparkSession spark,
+                                          EtlJobConfig.EtlFileGroup fileGroup,
                                           String fileUrl,
                                           EtlJobConfig.EtlIndex baseIndex,
                                           List<EtlJobConfig.EtlColumn> columns) throws SparkDppException {
@@ -850,7 +882,9 @@ public final class SparkDpp implements java.io.Serializable {
                                                EtlJobConfig.EtlFileGroup fileGroup,
                                                StructType dstTableSchema)
             throws SparkDppException, IOException, URISyntaxException {
-        if (fileGroup.columnSeparator == null) {
+        // File format defaults to CSV when `FORMAT AS` is not specified.
+        if ((fileGroup.fileFormat == null ||
+                StringUtils.equalsIgnoreCase(fileGroup.fileFormat, "csv")) && fileGroup.columnSeparator == null) {
             LOG.warn("invalid null column separator!");
             throw new SparkDppException("Reason: invalid null column separator!");
         }
@@ -870,7 +904,14 @@ public final class SparkDpp implements java.io.Serializable {
                     }
                     fileNumberAcc.add(1);
                     fileSizeAcc.add(fileStatus.getLen());
-                    dataframe = loadDataFromPath(spark, fileGroup, fileStatus.getPath().toString(), baseIndex, baseIndex.columns);
+                    if (fileGroup.fileFormat != null &&
+                            (StringUtils.equalsIgnoreCase(fileGroup.fileFormat, "orc") ||
+                                    StringUtils.equalsIgnoreCase(fileGroup.fileFormat, "parquet"))) {
+                        dataframe = loadDataFromPath(spark, fileGroup, fileStatus.getPath().toString());
+                    } else {
+                        dataframe = loadDataFromPath(spark, fileGroup, fileStatus.getPath().toString(),
+                                baseIndex, baseIndex.columns);
+                    }
                     dataframe = convertSrcDataframeToDstDataframe(baseIndex, dataframe, dstTableSchema, fileGroup);
                     if (fileGroupDataframe == null) {
                         fileGroupDataframe = dataframe;
