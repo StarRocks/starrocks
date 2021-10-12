@@ -127,11 +127,11 @@ public class CachedStatisticStorage implements StatisticStorage {
         cachedStatistics.synchronous().invalidateAll(allKeys);
     }
 
-    private List<TStatisticData> queryStatisticsData(long tableId, String column) {
+    private List<TStatisticData> queryStatisticsData(long tableId, String column) throws Exception {
         return queryStatisticsData(tableId, ImmutableList.of(column));
     }
 
-    private List<TStatisticData> queryStatisticsData(long tableId, List<String> columns) {
+    private List<TStatisticData> queryStatisticsData(long tableId, List<String> columns) throws Exception {
         return statisticExecutor.queryStatisticSync(null, tableId, columns);
     }
 

@@ -104,7 +104,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "fn:TFunction(name:TFunctionName(function_name:money_format), binary_type:BUILTIN, arg_types:[TTypeDesc" +
                         "(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:20, scale:3))])], ret_type:TTypeDesc" +
                         "(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))]), has_var_args:false, signature:" +
-                        "money_format(DECIMAL(20,3)), scalar_fn:" +
+                        "money_format(DECIMAL128(20,3)), scalar_fn:" +
                         "TScalarFunction(symbol:_ZN9starrocks15StringFunctions12money_formatEPN13starrocks_udf15FunctionContextERKNS1_9BigIntValE)" +
                         ", id:0, fid:304022)";
         String thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
@@ -115,7 +115,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "fn:TFunction(name:TFunctionName(function_name:money_format), binary_type:BUILTIN, arg_types:[TTypeDesc(types:" +
                         "[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:20, scale:3))])], ret_type:TTypeDesc" +
                         "(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))]), has_var_args:false, " +
-                        "signature:money_format(DECIMAL(20,3)), scalar_fn:TScalarFunction(symbol:" +
+                        "signature:money_format(DECIMAL128(20,3)), scalar_fn:TScalarFunction(symbol:" +
                         "_ZN9starrocks15StringFunctions12money_formatEPN13starrocks_udf15FunctionContextERKNS1_9BigIntValE), id:0, fid:304022)";
         thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         System.out.println(thrift);
