@@ -3679,7 +3679,7 @@ public class Catalog {
         long tableId = Catalog.getCurrentCatalog().getNextId();
         OlapTable olapTable = null;
         if (stmt.isExternal()) {
-            olapTable = new ExternalOlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
+            olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                                               distributionInfo, indexes, stmt.getProperties());
         } else {
             olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
@@ -4101,7 +4101,8 @@ public class Catalog {
         // 1.2 other table type
         sb.append("CREATE ");
         if (table.getType() == TableType.MYSQL || table.getType() == TableType.ELASTICSEARCH
-                || table.getType() == TableType.BROKER || table.getType() == TableType.HIVE) {
+                || table.getType() == TableType.BROKER || table.getType() == TableType.HIVE
+                || table.getType() == TableType.OLAP_EXTERNAL) {
             sb.append("EXTERNAL ");
         }
         sb.append("TABLE ");
@@ -4118,7 +4119,7 @@ public class Catalog {
             // sqlalchemy requires this to parse SHOW CREATE TAEBL stmt.
             sb.append("  ").append(column.toSql());
         }
-        if (table.getType() == TableType.OLAP) {
+        if (table.getType() == TableType.OLAP || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
             if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
                 for (Index index : olapTable.getIndexes()) {
@@ -4130,7 +4131,7 @@ public class Catalog {
         sb.append("\n) ENGINE=");
         sb.append(table.getType().name()).append(" ");
 
-        if (table.getType() == TableType.OLAP) {
+        if (table.getType() == TableType.OLAP || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
 
             // keys
@@ -4209,8 +4210,20 @@ public class Catalog {
             // storage type
             sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).append("\" = \"");
             sb.append(olapTable.getStorageFormat()).append("\"");
+            sb.append("\n");
 
-            sb.append("\n)");
+            if (table.getType() == TableType.OLAP_EXTERNAL) {
+                ExternalOlapTable externalOlapTable = (ExternalOlapTable) table;
+                // properties
+                sb.append("\"host\" = \"").append(externalOlapTable.getSourceTableHost()).append("\",\n");
+                sb.append("\"port\" = \"").append(externalOlapTable.getSourceTablePort()).append("\",\n");
+                sb.append("\"user\" = \"").append(externalOlapTable.getSourceTableUser()).append("\",\n");
+                sb.append("\"password\" = \"").append(hidePassword ? "" : externalOlapTable.getSourceTablePassword())
+                                              .append("\",\n");
+                sb.append("\"database\" = \"").append(externalOlapTable.getSourceTableDbName()).append("\",\n");
+                sb.append("\"table\" = \"").append(externalOlapTable.getSourceTableName()).append("\"\n");
+            }
+            sb.append(")");
         } else if (table.getType() == TableType.MYSQL) {
             MysqlTable mysqlTable = (MysqlTable) table;
             if (!Strings.isNullOrEmpty(table.getComment())) {

@@ -44,7 +44,7 @@ public class MasterDaemon extends Daemon {
     }
 
     @Override
-    protected final void runOneCycle() {
+    protected void runOneCycle() {
         while (!Catalog.getServingCatalog().isReady()) {
             // here we use getServingCatalog(), not getCurrentCatalog() because we truly want the Catalog instance,
             // not the Checkpoint catalog instance.

@@ -3,32 +3,40 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Range;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Replica.ReplicaState;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBackendMeta;
-import com.starrocks.thrift.TColumnDef;
+import com.starrocks.thrift.TColumnMeta;
+import com.starrocks.thrift.TDataProperty;
 import com.starrocks.thrift.THashDistributionInfo;
 import com.starrocks.thrift.TIndexInfo;
 import com.starrocks.thrift.TIndexMeta;
 import com.starrocks.thrift.TPartitionInfo;
 import com.starrocks.thrift.TPartitionMeta;
+import com.starrocks.thrift.TRange;
+import com.starrocks.thrift.TRangePartitionDesc;
 import com.starrocks.thrift.TReplicaMeta;
+import com.starrocks.thrift.TSinglePartitionDesc;
 import com.starrocks.thrift.TTableMeta;
 import com.starrocks.thrift.TTabletMeta;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayInputStream;
 import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -37,6 +45,18 @@ import java.util.Map;
 
 public class ExternalOlapTable extends OlapTable {
     private static final Logger LOG = LogManager.getLogger(ExternalOlapTable.class);
+
+    private static final String JSON_KEY_HOST = "host";
+    private static final String JSON_KEY_PORT = "port";
+    private static final String JSON_KEY_USER = "user";
+    private static final String JSON_KEY_PASSWORD = "password";
+    private static final String JSON_KEY_TABLE_NAME = "table_name";
+    private static final String JSON_KEY_DB_ID = "db_id";
+    private static final String JSON_KEY_TABLE_ID = "table_id";
+    private static final String JSON_KEY_SOURCE_DB_NAME = "source_db_name";
+    private static final String JSON_KEY_SOURCE_DB_ID = "source_db_id";
+    private static final String JSON_KEY_SOURCE_TABLE_ID = "source_table_id";
+    private static final String JSON_KEY_SOURCE_TABLE_NAME = "source_table_name";
 
     public class ExternalTableInfo {
         // remote doris cluster fe addr
@@ -50,6 +70,9 @@ public class ExternalOlapTable extends OlapTable {
         private String dbName;
         private String tableName;
 
+        private long dbId;
+        private long tableId;
+
         public ExternalTableInfo() {
             this.host = "";
             this.port = 0;
@@ -57,6 +80,8 @@ public class ExternalOlapTable extends OlapTable {
             this.password = "";
             this.dbName = "";
             this.tableName = "";
+            this.dbId = -1;
+            this.tableId = -1;
         }
 
         public String getHost() {
@@ -83,22 +108,42 @@ public class ExternalOlapTable extends OlapTable {
             return tableName;
         }
 
-        public void write(DataOutput out) throws IOException {
-            Text.writeString(out, host);
-            out.writeInt(port);
-            Text.writeString(out, user);
-            Text.writeString(out, password);
-            Text.writeString(out, dbName);
-            Text.writeString(out, tableName);
+        public long getDbId() {
+            return dbId;
         }
 
-        public void read(DataInput in) throws IOException {
-            host = Text.readString(in);
-            port = in.readInt();
-            user = Text.readString(in);
-            password = Text.readString(in);
-            dbName = Text.readString(in);
-            tableName = Text.readString(in);
+        public void setDbId(long dbId) {
+            this.dbId = dbId;
+        }
+
+        public long getTableId() {
+            return tableId;
+        }
+
+        public void setTableId(long tableId) {
+            this.tableId = tableId;
+        }
+
+        public void toJsonObj(JsonObject obj) {
+            obj.addProperty(JSON_KEY_HOST, host);
+            obj.addProperty(JSON_KEY_PORT, port);
+            obj.addProperty(JSON_KEY_USER, user);
+            obj.addProperty(JSON_KEY_PASSWORD, password);
+            obj.addProperty(JSON_KEY_SOURCE_DB_NAME, dbName);
+            obj.addProperty(JSON_KEY_SOURCE_DB_ID, dbId);
+            obj.addProperty(JSON_KEY_SOURCE_TABLE_NAME, tableName);
+            obj.addProperty(JSON_KEY_SOURCE_TABLE_ID, tableId);
+        }
+
+        public void fromJsonObj(JsonObject obj) {
+            host = obj.getAsJsonPrimitive(JSON_KEY_HOST).getAsString();
+            port = obj.getAsJsonPrimitive(JSON_KEY_PORT).getAsInt();
+            user = obj.getAsJsonPrimitive(JSON_KEY_USER).getAsString();
+            password = obj.getAsJsonPrimitive(JSON_KEY_PASSWORD).getAsString();
+            dbName = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_DB_NAME).getAsString();
+            dbId = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_DB_ID).getAsLong();
+            tableName = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_TABLE_NAME).getAsString();
+            tableId = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_TABLE_ID).getAsLong();
         }
 
         public void parseFromProperties(Map<String, String> properties) throws DdlException {
@@ -160,17 +205,18 @@ public class ExternalOlapTable extends OlapTable {
         super();
         setType(TableType.OLAP_EXTERNAL);
         dbId = -1;
+        // sourceDbId = -1;
         lastExternalMeta = null;
         externalTableInfo = null;
     }
 
-    public ExternalOlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
+    public ExternalOlapTable(long dbId, long tableId, String tableName, List<Column> baseSchema, KeysType keysType,
                              PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
                              TableIndexes indexes, Map<String, String> properties)
         throws DdlException {
-        super(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, indexes);
+        super(tableId, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, indexes);
         setType(TableType.OLAP_EXTERNAL);
-        dbId = -1;
+        this.dbId = dbId;
         lastExternalMeta = null;
 
         externalTableInfo = new ExternalTableInfo();
@@ -181,8 +227,36 @@ public class ExternalOlapTable extends OlapTable {
         return dbId;
     }
 
-    public ExternalTableInfo getExternalInfo() {
-        return externalTableInfo;
+    public long getSourceTableDbId() {
+        return externalTableInfo.getDbId();
+    }
+
+    public String getSourceTableDbName() {
+        return externalTableInfo.getDbName();
+    }
+
+    public long getSourceTableId() {
+        return externalTableInfo.getTableId();
+    }
+
+    public String getSourceTableName() {
+        return externalTableInfo.getTableName();
+    }
+
+    public String getSourceTableHost() {
+        return externalTableInfo.getHost();
+    }
+
+    public int getSourceTablePort() {
+        return externalTableInfo.getPort();
+    }
+
+    public String getSourceTableUser() {
+        return externalTableInfo.getUser();
+    }
+
+    public String getSourceTablePassword() {
+        return externalTableInfo.getPassword();
     }
 
     @Override
@@ -197,22 +271,29 @@ public class ExternalOlapTable extends OlapTable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, type.name());
-        out.writeLong(id);
-        Text.writeString(out, name);
-        externalTableInfo.write(out);
+        super.write(out);
+
+        JsonObject obj = new JsonObject();
+        obj.addProperty(JSON_KEY_TABLE_ID, id);
+        obj.addProperty(JSON_KEY_TABLE_NAME, name);
+        obj.addProperty(JSON_KEY_DB_ID, dbId);
+        externalTableInfo.toJsonObj(obj);
+        Text.writeString(out, obj.toString());
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
-        this.id = in.readLong();
-        this.name = Text.readString(in);
-
+        super.readFields(in);
+        String jsonStr = Text.readString(in);
+        JsonObject obj = JsonParser.parseString(jsonStr).getAsJsonObject();
+        id = obj.getAsJsonPrimitive(JSON_KEY_TABLE_ID).getAsLong();
+        name = obj.getAsJsonPrimitive(JSON_KEY_TABLE_NAME).getAsString();
+        dbId = obj.getAsJsonPrimitive(JSON_KEY_DB_ID).getAsLong();
         externalTableInfo = new ExternalTableInfo();
-        externalTableInfo.read(in);
+        externalTableInfo.fromJsonObj(obj);
     }
 
-    public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas) throws DdlException {
+    public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas) throws DdlException, IOException {
         // no meta changed since last time, do nothing
         if (lastExternalMeta != null && meta.compareTo(lastExternalMeta) == 0) {
             LOG.info("no meta changed since last time, do nothing");
@@ -220,12 +301,12 @@ public class ExternalOlapTable extends OlapTable {
         }
 
         clusterId = meta.getCluster_id();
-        dbId = meta.getDb_id();
+        externalTableInfo.setDbId(meta.getDb_id());
+        externalTableInfo.setTableId(meta.getTable_id());
 
-        String fullDbName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, dbName);
-        Database db = Catalog.getCurrentCatalog().getDb(fullDbName);
+        Database db = Catalog.getCurrentCatalog().getDb(dbId);
         if (db == null) {
-            throw new DdlException("database " + dbName + " does not exist");
+            throw new DdlException("database " + dbId + " does not exist");
         }
         db.writeLock();
 
@@ -256,12 +337,66 @@ public class ExternalOlapTable extends OlapTable {
             }
 
             TPartitionInfo tPartitionInfo = meta.getPartition_info();
-            partitionInfo = new PartitionInfo(PartitionType.valueOf(tPartitionInfo.getType()));
-            for (Map.Entry<Long, Short> entry : tPartitionInfo.getReplica_num_map().entrySet()) {
-                partitionInfo.setReplicationNum(entry.getKey(), entry.getValue());
-            }
-            for (Map.Entry<Long, Boolean> entry : tPartitionInfo.getIn_memory_map().entrySet()) {
-                partitionInfo.setIsInMemory(entry.getKey(), entry.getValue());
+            PartitionType partitionType = PartitionType.fromThrift(tPartitionInfo.getType());
+            switch (partitionType) {
+                case RANGE:
+                    TRangePartitionDesc rangePartitionDesc = tPartitionInfo.getRange_partition_desc();
+                    List<Column> columns = new ArrayList<Column>();
+                    for (TColumnMeta columnMeta : rangePartitionDesc.getColumns()) {
+                        Type type = Type.fromThrift(columnMeta.getColumnType());
+                        Column column = new Column(columnMeta.getColumnName(), type);
+                        if (columnMeta.isSetKey()) {
+                            column.setIsKey(columnMeta.isKey());
+                        }
+                        if (columnMeta.isSetAggregationType()) {
+                            column.setAggregationType(AggregateType.valueOf(columnMeta.getAggregationType()), false);
+                        }
+                        if (columnMeta.isSetComment()) {
+                            column.setComment(columnMeta.getComment());
+                        }
+                        if (columnMeta.isSetDefaultValue()) {
+                            column.setDefaultValue(columnMeta.getDefaultValue());
+                        }
+                        columns.add(column);
+                    }
+                    partitionInfo = new RangePartitionInfo(columns);
+
+                    for (Map.Entry<Long, TRange> entry : rangePartitionDesc.getRanges().entrySet()) {
+                        TRange tRange = entry.getValue();
+                        long partitionId = tRange.getPartition_id();
+                        ByteArrayInputStream stream = new ByteArrayInputStream(tRange.getStart_key());
+                        DataInputStream input = new DataInputStream(stream);
+                        PartitionKey startKey = PartitionKey.read(input);
+                        stream = new ByteArrayInputStream(tRange.getEnd_key());
+                        input = new DataInputStream(stream);
+                        PartitionKey endKey = PartitionKey.read(input);
+                        Range<PartitionKey> range = Range.closedOpen(startKey, endKey);
+                        short replicaNum = tRange.getBase_desc().getReplica_num_map().get(partitionId);
+                        boolean inMemory = tRange.getBase_desc().getIn_memory_map().get(partitionId);
+                        TDataProperty thriftDataProperty = tRange.getBase_desc().getData_property().get(partitionId);
+                        DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
+                                                                     thriftDataProperty.getCold_time());
+                        // TODO: confirm false is ok
+                        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                        rangePartitionInfo.addPartition(partitionId, false, range, dataProperty, replicaNum, inMemory);
+                    }
+                    break;
+                case UNPARTITIONED:
+                    partitionInfo = new SinglePartitionInfo();
+                    TSinglePartitionDesc singePartitionDesc = tPartitionInfo.getSingle_partition_desc();
+                    for (Map.Entry<Long, Short> entry : singePartitionDesc.getBase_desc().getReplica_num_map().entrySet()) {
+                        long partitionId = entry.getKey();
+                        short replicaNum = singePartitionDesc.getBase_desc().getReplica_num_map().get(partitionId);
+                        boolean inMemory = singePartitionDesc.getBase_desc().getIn_memory_map().get(partitionId);
+                        TDataProperty thriftDataProperty = singePartitionDesc.getBase_desc().getData_property().get(partitionId);
+                        DataProperty dataProperty = new DataProperty(thriftDataProperty.getStorage_medium(),
+                                                                     thriftDataProperty.getCold_time());
+                        partitionInfo.addPartition(partitionId, dataProperty, replicaNum, inMemory);
+                    }
+                    break;
+                default:
+                    LOG.error("invalid partition type: {}", partitionType);
+                    return;
             }
 
             indexIdToMeta.clear();
@@ -269,18 +404,21 @@ public class ExternalOlapTable extends OlapTable {
 
             for (TIndexMeta indexMeta : meta.getIndexes()) {
                 List<Column> columns = new ArrayList();
-                for (TColumnDef columnDef : indexMeta.getSchema_meta().getColumns()) {
-                    Type type = Type.fromPrimitiveType(PrimitiveType.fromThrift(columnDef.getColumnDesc().getColumnType()));
-                    Column column = new Column(columnDef.getColumnDesc().getColumnName(), type);
-                    if (columnDef.getColumnDesc().isSetKey()) {
-                        column.setIsKey(columnDef.getColumnDesc().isKey());
+                for (TColumnMeta columnMeta : indexMeta.getSchema_meta().getColumns()) {
+                    Type type = Type.fromThrift(columnMeta.getColumnType());
+                    Column column = new Column(columnMeta.getColumnName(), type, columnMeta.isAllowNull());
+                    if (columnMeta.isSetKey()) {
+                        column.setIsKey(columnMeta.isKey());
                     }
                     // TODO(wulei): confirm false ok
-                    if (columnDef.getColumnDesc().isSetAggregationType()) {
-                        column.setAggregationType(AggregateType.valueOf(columnDef.getColumnDesc().getAggregationType()), false);
+                    if (columnMeta.isSetAggregationType()) {
+                        column.setAggregationType(AggregateType.valueOf(columnMeta.getAggregationType()), false);
                     }
-                    if (columnDef.isSetComment()) {
-                        column.setComment(columnDef.getComment());
+                    if (columnMeta.isSetComment()) {
+                        column.setComment(columnMeta.getComment());
+                    }
+                    if (columnMeta.isSetDefaultValue()) {
+                        column.setDefaultValue(columnMeta.getDefaultValue());
                     }
                     columns.add(column);
                 }
@@ -322,7 +460,7 @@ public class ExternalOlapTable extends OlapTable {
                                                             partitionMeta.getVisible_time());
                 for (TIndexMeta indexMeta : meta.getIndexes()) {
                     MaterializedIndex index = new MaterializedIndex(indexMeta.getIndex_id(),
-                                                                    IndexState.valueOf(indexMeta.getIndex_state()));
+                                                                    IndexState.fromThrift(indexMeta.getIndex_state()));
                     index.setRowCount(indexMeta.getRow_count());
                     index.setRollupIndexInfo(indexMeta.getRollup_index_id(), indexMeta.getRollup_finished_version());
                     for (TTabletMeta tTabletMeta : indexMeta.getTablets()) {
@@ -348,10 +486,12 @@ public class ExternalOlapTable extends OlapTable {
                                                             tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
                         index.addTablet(tablet, tabletMeta);
                     }
-                    if (index.getId() != baseIndexId) {
-                        partition.createRollupIndex(index);
-                    } else {
-                        partition.setBaseIndex(index);
+                    if (indexMeta.getPartition_id() == partition.getId()) {
+                        if (index.getId() != baseIndexId) {
+                            partition.createRollupIndex(index);
+                        } else {
+                            partition.setBaseIndex(index);
+                        }
                     }
                 }
                 addPartition(partition);
