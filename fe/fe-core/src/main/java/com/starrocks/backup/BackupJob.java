@@ -401,12 +401,11 @@ public class BackupJob extends AbstractJob {
                         int schemaHash = tbl.getSchemaHashByIndexId(index.getId());
                         List<Tablet> tablets = index.getTablets();
                         for (Tablet tablet : tablets) {
-                            Replica replica = chooseReplica(tablet, visibleVersion, visibleVersionHash);
+                            Replica replica = chooseReplica(tablet, visibleVersion);
                             if (replica == null) {
                                 status = new Status(ErrCode.COMMON_ERROR,
-                                        "faild to choose replica to make snapshot for tablet " + tablet.getId()
-                                                + ". visible version: " + visibleVersion
-                                                + ", visible version hash: " + visibleVersionHash);
+                                        "failed to choose replica to make snapshot for tablet " + tablet.getId()
+                                                + ". visible version: " + visibleVersion);
                                 return;
                             }
                             SnapshotTask task = new SnapshotTask(null, replica.getBackendId(), tablet.getId(),
@@ -667,10 +666,10 @@ public class BackupJob extends AbstractJob {
     }
 
     /*
-     * Choose a replica order by replica id.
-     * This is to expect to choose the same replica at each backup job.
+     * Choose a replica whose version >= visibleVersion and dose not have failed version.
+     * Iterate replica order by replica id, the reason is to choose the same replica at each backup job.
      */
-    private Replica chooseReplica(Tablet tablet, long visibleVersion, long visibleVersionHash) {
+    private Replica chooseReplica(Tablet tablet, long visibleVersion) {
         List<Long> replicaIds = Lists.newArrayList();
         for (Replica replica : tablet.getReplicas()) {
             replicaIds.add(replica.getId());
@@ -679,8 +678,7 @@ public class BackupJob extends AbstractJob {
         Collections.sort(replicaIds);
         for (Long replicaId : replicaIds) {
             Replica replica = tablet.getReplicaById(replicaId);
-            if (replica.getLastFailedVersion() < 0 && (replica.getVersion() > visibleVersion
-                    || (replica.getVersion() == visibleVersion && replica.getVersionHash() == visibleVersionHash))) {
+            if (replica.getLastFailedVersion() < 0 && (replica.getVersion() >= visibleVersion)) {
                 return replica;
             }
         }
