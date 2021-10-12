@@ -762,13 +762,17 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
     data_column->append("hij");
     data_column->append("ijk");
 
-    auto separator_column = vectorized::ColumnHelper::unpack_and_duplicate_const_column(
-            data_column->size(), ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1));
+    auto separator_column = ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1);
 
     std::vector<const Column*> raw_columns;
     raw_columns.resize(2);
     raw_columns[0] = data_column.get();
     raw_columns[1] = separator_column.get();
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(separator_column);
+    local_ctx->impl()->set_constant_columns(const_columns);
 
     // test update
     group_concat_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),

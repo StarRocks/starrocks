@@ -601,8 +601,12 @@ void Aggregator::_evaluate_agg_fn_exprs(vectorized::Chunk* chunk) {
             // For simplicity and don't change the overall processing flow,
             // We handle const column as normal data column
             // TODO(kks): improve const column aggregate later
-            _agg_intput_columns[i][j] = vectorized::ColumnHelper::unpack_and_duplicate_const_column(
-                    chunk->num_rows(), _agg_expr_ctxs[i][j]->evaluate(chunk));
+            if (j == 0) {
+                _agg_intput_columns[i][j] = vectorized::ColumnHelper::unpack_and_duplicate_const_column(
+                        chunk->num_rows(), _agg_expr_ctxs[i][j]->evaluate(chunk));
+            } else {
+                _agg_intput_columns[i][j] = _agg_expr_ctxs[i][j]->evaluate(chunk);
+            }
             _agg_input_raw_columns[i][j] = _agg_intput_columns[i][j].get();
         }
     }
