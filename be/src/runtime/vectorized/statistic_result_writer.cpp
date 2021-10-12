@@ -102,7 +102,8 @@ void StatisticResultWriter::_fill_statistic_data_v2(int version, const vectorize
     for (int i = 0; i < num_rows; ++i) {
         data_list[i].__set_meta_version(versioncolumn->get_data()[i]);
         if (!dictColumnViewer.is_null(i)) {
-            //data_list[i].__set_dict(dictColumnViewer.value(i).to_string());
+            data_list[i].__set_dict(from_json_string<TGlobalDict>(
+                    std::string(dictColumnViewer.value(i).data, dictColumnViewer.value(i).size)));
         }
     }
 
@@ -120,7 +121,7 @@ void StatisticResultWriter::_fill_statistic_data_v1(int version, const vectorize
     SCOPED_TIMER(_serialize_timer);
 
     // mapping with Data.thrift.TStatisticData
-    DCHECK(columns.size() == 11 || columns.size() == 12);
+    DCHECK(columns.size() == 11);
 
     // skip read version
     auto& updateTimes = ColumnHelper::cast_to_raw<TYPE_DATETIME>(columns[1])->get_data();
