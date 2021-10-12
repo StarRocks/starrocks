@@ -23,8 +23,8 @@
 
 #include <memory>
 
-#include "storage/reader.h"
-#include "storage/row.h"
+#include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/reader.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -45,7 +45,6 @@ OLAPStatus EngineChecksumTask::execute() {
 OLAPStatus EngineChecksumTask::_compute_checksum() {
     LOG(INFO) << "begin to process compute checksum."
               << "tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash << ", version=" << _version;
-    OLAPStatus res = OLAP_SUCCESS;
 
     if (_checksum == nullptr) {
         LOG(WARNING) << "invalid output parameter which is null pointer.";
@@ -64,69 +63,50 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
         return OLAP_SUCCESS;
     }
 
-    Reader reader;
-    ReaderParams reader_params;
-    reader_params.tablet = tablet;
+    std::vector<uint32_t> return_columns;
+    const TabletSchema& tablet_schema = tablet->tablet_schema();
+    for (size_t i = 0; i < tablet_schema.num_columns(); ++i) {
+        FieldType type = tablet_schema.column(i).type();
+        // The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
+        // a fixed value, so these two types are ignored in calculating checksum.
+        // And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
+        if (type == OLAP_FIELD_TYPE_FLOAT || type == OLAP_FIELD_TYPE_DOUBLE || type == OLAP_FIELD_TYPE_HLL ||
+            type == OLAP_FIELD_TYPE_OBJECT || type == OLAP_FIELD_TYPE_PERCENTILE) {
+            continue;
+        }
+        return_columns.push_back(i);
+    }
+
+    vectorized::Schema child_schema =
+            vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, return_columns);
+
+    std::shared_ptr<vectorized::Reader> reader =
+            std::make_shared<vectorized::Reader>(tablet, Version(0, _version), std::move(child_schema));
+
+    Status st = reader->prepare();
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to prepare tablet reader. tablet=" << tablet->full_name();
+        return OLAP_ERR_ROWSET_READER_INIT;
+    }
+
+    vectorized::ReaderParams reader_params;
     reader_params.reader_type = READER_CHECKSUM;
-    reader_params.version = Version(0, _version);
 
-    {
-        std::shared_lock rdlock(tablet->get_header_lock());
-        const RowsetSharedPtr message = tablet->rowset_with_max_version();
-        if (message == nullptr) {
-            LOG(FATAL) << "fail to get latest version. tablet_id=" << _tablet_id;
-            return OLAP_ERR_VERSION_NOT_EXIST;
-        }
-
-        if (Status st = tablet->capture_rs_readers(reader_params.version, &reader_params.rs_readers); !st.ok()) {
-            LOG(WARNING) << "fail to init reader for tablet " << tablet->full_name() << ": " << st;
-            return OLAP_ERR_OTHER_ERROR;
-        }
+    st = reader->open(reader_params);
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to open tablet reader. tablet=" << tablet->full_name();
+        return OLAP_ERR_ROWSET_READER_INIT;
     }
 
-    for (size_t i = 0; i < tablet->tablet_schema().num_columns(); ++i) {
-        reader_params.return_columns.push_back(i);
-    }
-
-    res = reader.init(reader_params);
-    if (res != OLAP_SUCCESS) {
-        LOG(WARNING) << "initiate reader fail. res=" << res;
-        return res;
-    }
-
-    RowCursor row;
-    std::unique_ptr<MemTracker> tracker(new MemTracker(-1));
-
-    // release the memory of object pool.
-    // The memory of object allocate from ObjectPool is recorded in the mem_tracker.
-    // TODO: add mem_tracker for ObjectPool?
-    DeferOp release_object_pool_memory([&tracker] { return tracker->release(tracker->consumption()); });
-    std::unique_ptr<MemPool> mem_pool(new MemPool(tracker.get()));
-    std::unique_ptr<ObjectPool> agg_object_pool(new ObjectPool());
-    res = row.init(tablet->tablet_schema(), reader_params.return_columns);
-    if (res != OLAP_SUCCESS) {
-        LOG(WARNING) << "failed to init row cursor. res=" << res;
-        return res;
-    }
-    row.allocate_memory_for_string_type(tablet->tablet_schema());
-
-    bool eof = false;
     uint32_t row_checksum = 0;
-    while (true) {
-        OLAPStatus res = reader.next_row_with_aggregation(&row, mem_pool.get(), agg_object_pool.get(), &eof);
-        if (res == OLAP_SUCCESS && eof) {
-            VLOG(3) << "reader reads to the end.";
-            break;
-        } else if (res != OLAP_SUCCESS) {
-            LOG(WARNING) << "fail to read in reader. res=" << res;
-            return res;
+    auto chunk = vectorized::ChunkHelper::new_chunk(child_schema, reader_params.chunk_size);
+    Status status = reader->get_next(chunk.get());
+    while (status.ok()) {
+        uint32_t num_rows = chunk->num_rows();
+        for (auto& column : chunk->columns()) {
+            column->crc32_hash(&row_checksum, 0, num_rows);
         }
-        // The value of checksum is independent of the sorting of data rows.
-        row_checksum ^= hash_row(row, 0);
-        // the memory allocate by mem pool has been copied,
-        // so we should release memory immediately
-        mem_pool->clear();
-        agg_object_pool = std::make_unique<ObjectPool>();
+        status = reader->get_next(chunk.get());
     }
 
     LOG(INFO) << "success to finish compute checksum. checksum=" << row_checksum;
