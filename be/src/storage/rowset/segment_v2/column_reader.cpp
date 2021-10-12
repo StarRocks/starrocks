@@ -701,10 +701,12 @@ Status FileColumnIterator::init(const ColumnIteratorOptions& opts) {
         _decode_dict_codes_func = &FileColumnIterator::_do_decode_dict_codes<OLAP_FIELD_TYPE_CHAR>;
         _dict_lookup_func = &FileColumnIterator::_do_dict_lookup<OLAP_FIELD_TYPE_CHAR>;
         _next_dict_codes_func = &FileColumnIterator::_do_next_dict_codes<OLAP_FIELD_TYPE_CHAR>;
+        _fetch_all_dict_words_func = &FileColumnIterator::_fetch_all_dict_words<OLAP_FIELD_TYPE_CHAR>;
     } else if (_all_dict_encoded && _reader->column_type() == OLAP_FIELD_TYPE_VARCHAR) {
         _decode_dict_codes_func = &FileColumnIterator::_do_decode_dict_codes<OLAP_FIELD_TYPE_VARCHAR>;
         _dict_lookup_func = &FileColumnIterator::_do_dict_lookup<OLAP_FIELD_TYPE_VARCHAR>;
         _next_dict_codes_func = &FileColumnIterator::_do_next_dict_codes<OLAP_FIELD_TYPE_VARCHAR>;
+        _fetch_all_dict_words_func = &FileColumnIterator::_fetch_all_dict_words<OLAP_FIELD_TYPE_VARCHAR>;
     }
     return Status::OK();
 }
@@ -929,6 +931,28 @@ Status FileColumnIterator::decode_dict_codes(const int32_t* codes, size_t size, 
     return (this->*_decode_dict_codes_func)(codes, size, words);
 }
 
+Status FileColumnIterator::fetch_all_dict_words(std::vector<Slice>* words) const {
+    DCHECK(all_page_dict_encoded());
+    return (this->*_fetch_all_dict_words_func)(words);
+}
+
+template <FieldType Type>
+Status FileColumnIterator::_fetch_all_dict_words(std::vector<Slice>* words) const {
+    auto dict = down_cast<BinaryPlainPageDecoder<Type>*>(_dict_decoder.get());
+    size_t words_count = dict->count();
+    words->reserve(words_count);
+    for (size_t i = 0; i < words_count; i++) {
+        if constexpr (Type != OLAP_FIELD_TYPE_CHAR) {
+            words->emplace_back(dict->string_at_index(i));
+        } else {
+            Slice s = dict->string_at_index(i);
+            s.size = strnlen(s.data, s.size);
+            words->emplace_back(s);
+        }
+    }
+    return Status::OK();
+}
+
 template <FieldType Type>
 int FileColumnIterator::_do_dict_lookup(const Slice& word) {
     auto dict = down_cast<BinaryPlainPageDecoder<Type>*>(_dict_decoder.get());
@@ -1017,6 +1041,18 @@ Status FileColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t s
     _opts.stats->bytes_read += values->byte_size() - prev_bytes;
     DCHECK_EQ(_current_ordinal, _page->first_ordinal() + _page->offset());
     return Status::OK();
+}
+
+int FileColumnIterator::dict_size() {
+    if (_reader->column_type() == OLAP_FIELD_TYPE_CHAR) {
+        auto dict = down_cast<BinaryPlainPageDecoder<OLAP_FIELD_TYPE_CHAR>*>(_dict_decoder.get());
+        return dict->dict_size();
+    } else if (_reader->column_type() == OLAP_FIELD_TYPE_VARCHAR) {
+        auto dict = down_cast<BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>*>(_dict_decoder.get());
+        return dict->dict_size();
+    }
+    __builtin_unreachable();
+    return 0;
 }
 
 Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
