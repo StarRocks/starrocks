@@ -26,6 +26,7 @@ class FragmentContext {
 public:
     FragmentContext() : _cancel_flag(false) {}
     ~FragmentContext() {
+        _drivers.clear();
         close_all_pipelines();
         if (_plan != nullptr) {
             _plan->close(_runtime_state.get());
