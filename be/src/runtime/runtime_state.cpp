@@ -193,7 +193,7 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
     }
 
     // Register with the thread mgr
-    if (exec_env != NULL) {
+    if (exec_env != nullptr) {
         _resource_pool = exec_env->thread_mgr()->register_pool();
         DCHECK(_resource_pool != NULL);
     }

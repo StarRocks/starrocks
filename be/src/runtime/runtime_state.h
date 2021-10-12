@@ -133,7 +133,7 @@ public:
     RuntimeProfile* runtime_profile() { return &_profile; }
 
     BufferedBlockMgr2* block_mgr2() {
-        DCHECK(_block_mgr2.get() != NULL);
+        DCHECK(_block_mgr2.get() != nullptr);
         return _block_mgr2.get();
     }
 
