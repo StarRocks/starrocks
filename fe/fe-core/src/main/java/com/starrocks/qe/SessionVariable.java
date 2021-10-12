@@ -182,7 +182,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePipelineEngine = false;
 
     // use vectorized insert
-    @VariableMgr.VarAttr(name = ENABLE_VECTORIZED_INSERT, alias = "vectorized_insert_enable")
+    @VariableMgr.VarAttr(name = ENABLE_VECTORIZED_INSERT, alias = "vectorized_insert_enable", flag = VariableMgr.INVISIBLE)
     private boolean vectorizedInsertEnable = true;
 
     // max memory used on every backend.

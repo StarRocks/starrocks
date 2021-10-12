@@ -210,13 +210,7 @@ public class Planner {
 
         // vectorized engine selector
         if (analyzer.getContext().getSessionVariable().useVectorizedEngineEnable()) {
-            if (statement instanceof InsertStmt) {
-                if (analyzer.getContext().getSessionVariable().isVectorizedInsertEnable()) {
-                    insertAdapterNodeToFragment(fragments, plannerContext);
-                }
-            } else {
-                insertAdapterNodeToFragment(fragments, plannerContext);
-            }
+            insertAdapterNodeToFragment(fragments, plannerContext);
         }
 
         if (queryStmt instanceof SelectStmt) {
