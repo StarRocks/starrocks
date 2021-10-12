@@ -45,7 +45,7 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-27:MERGING-EXCHANGE
+26:MERGING-EXCHANGE
 limit: 100
 use vectorized: true
 
@@ -54,21 +54,21 @@ OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 2: S_NAME
 
 STREAM DATA SINK
-EXCHANGE ID: 27
+EXCHANGE ID: 26
 UNPARTITIONED
 
-26:TOP-N
+25:TOP-N
 |  order by: <slot 77> 77: count() DESC, <slot 2> 2: S_NAME ASC
 |  offset: 0
 |  limit: 100
 |  use vectorized: true
 |
-25:AGGREGATE (merge finalize)
-|  output: count(77: count())
+24:AGGREGATE (update finalize)
+|  output: count(*)
 |  group by: 2: S_NAME
 |  use vectorized: true
 |
-24:EXCHANGE
+23:EXCHANGE
 use vectorized: true
 
 PLAN FRAGMENT 2
@@ -76,15 +76,9 @@ OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 24
+EXCHANGE ID: 23
 HASH_PARTITIONED: 2: S_NAME
 
-23:AGGREGATE (update serialize)
-|  STREAMING
-|  output: count(*)
-|  group by: 2: S_NAME
-|  use vectorized: true
-|
 22:Project
 |  <slot 2> : 2: S_NAME
 |  use vectorized: true
