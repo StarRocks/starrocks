@@ -389,9 +389,13 @@ public class RangePartitionInfo extends PartitionInfo {
 
         idx = 0;
         PartitionInfo tblPartitionInfo = table.getPartitionInfo();
-        short replicationNum = Short.parseShort(table.getTableProperty().getProperties().get("replication_num"));
-        if (table.getTableProperty().getProperties().get("replication_num") == null) {
+
+        String replicationNumStr = table.getTableProperty().getProperties().get("replication_num");
+        short replicationNum;
+        if (replicationNumStr == null) {
             replicationNum = FeConstants.default_replication_num;
+        } else {
+            replicationNum = Short.parseShort(replicationNumStr);
         }
 
         for (Map.Entry<Long, Range<PartitionKey>> entry : entries) {
