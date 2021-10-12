@@ -31,13 +31,13 @@ Status DictDecodeNode::prepare(RuntimeState* state) {
         _encode_column_cids.emplace_back(it.first);
         _decode_column_cids.emplace_back(it.second);
         TypeDescriptor desc;
-        desc.type = TYPE_CHAR;
+        desc.type = TYPE_VARCHAR;
         _encode_column_original_types.emplace_back(desc);
         auto dict_iter = global_dict.find(it.first);
         if (dict_iter == global_dict.end()) {
             return Status::InternalError("Not find dict");
         }
-        DefaultDecoder decoder = std::make_unique<DictDecoder<TYPE_INT, DefaultDict, TYPE_CHAR>>();
+        DefaultDecoder decoder = std::make_unique<DictDecoder<TYPE_INT, RGlobalDictMap, TYPE_VARCHAR>>();
         decoder->dict = dict_iter->second.second;
         _decoders.emplace_back(std::move(decoder));
     }
@@ -67,7 +67,7 @@ Status DictDecodeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
     Columns decode_columns(_encode_column_cids.size());
     for (size_t i = 0; i < _encode_column_cids.size(); i++) {
         const ColumnPtr& encode_column = (*chunk)->get_column_by_slot_id(_encode_column_cids[i]);
-        decode_columns[i] = ColumnHelper::create_column(_encode_column_original_types[i], false);
+        decode_columns[i] = ColumnHelper::create_column(_encode_column_original_types[i], encode_column->is_nullable());
         RETURN_IF_ERROR(_decoders[i]->decode(encode_column.get(), decode_columns[i].get()));
     }
 

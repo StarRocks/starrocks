@@ -4,13 +4,12 @@
 #include "column/chunk.h"
 #include "exec/exec_node.h"
 #include "exec/olap_common.h"
+#include "runtime/global_dicts.h"
 
 namespace starrocks::vectorized {
 
 class DictDecodeNode final : public ExecNode {
 public:
-    using DefaultDict = std::unordered_map<int, starrocks::Slice>;
-
     DictDecodeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~DictDecodeNode() override {}
 
@@ -32,16 +31,40 @@ public:
         Status decode(vectorized::Column* in, vectorized::Column* out) {
             DCHECK(in != nullptr);
             DCHECK(out != nullptr);
-            DCHECK(!in->is_nullable());
-            auto res_column = down_cast<ResultColumnType*>(out);
-            auto column = down_cast<ColumnType*>(in);
-            for (size_t i = 0; i < in->size(); i++) {
-                FieldType key = column->get_data()[i];
-                auto iter = dict.find(key);
-                if (iter == dict.end()) {
-                    return Status::InternalError("Dict Decode failed, Dict can't take cover all key.");
+            if (!in->is_nullable()) {
+                auto res_column = down_cast<ResultColumnType*>(out);
+                auto column = down_cast<ColumnType*>(in);
+                for (size_t i = 0; i < in->size(); i++) {
+                    FieldType key = column->get_data()[i];
+                    auto iter = dict.find(key);
+                    if (iter == dict.end()) {
+                        return Status::InternalError("Dict Decode failed, Dict can't take cover all key.");
+                    }
+                    res_column->append(iter->second);
                 }
-                res_column->append(iter->second);
+                return Status::OK();
+            }
+
+            auto column = down_cast<NullableColumn*>(in);
+            auto res_column = down_cast<NullableColumn*>(out);
+            res_column->null_column_data().resize(in->size());
+
+            auto res_data_column = down_cast<ResultColumnType*>(res_column->data_column().get());
+            auto data_column = down_cast<ColumnType*>(column->data_column().get());
+
+            for (size_t i = 0; i < in->size(); i++) {
+                if (column->null_column_data()[i] == 0) {
+                    res_column->null_column_data()[i] = 0;
+                    FieldType key = data_column->get_data()[i];
+                    auto iter = dict.find(key);
+                    if (iter == dict.end()) {
+                        return Status::InternalError("Dict Decode failed, Dict can't take cover all key.");
+                    }
+                    res_data_column->append(iter->second);
+                } else {
+                    res_column->null_column_data()[i] = 1;
+                    res_data_column->append_default();
+                }
             }
             return Status::OK();
         }
@@ -53,7 +76,7 @@ protected:
 private:
     void _init_counter();
 
-    using DefaultDecoder = std::unique_ptr<DictDecoder<TYPE_INT, DefaultDict, TYPE_CHAR>>;
+    using DefaultDecoder = std::unique_ptr<DictDecoder<TYPE_INT, RGlobalDictMap, TYPE_VARCHAR>>;
     std::shared_ptr<vectorized::Chunk> _input_chunk;
     std::vector<int32_t> _encode_column_cids;
     std::vector<int32_t> _decode_column_cids;
