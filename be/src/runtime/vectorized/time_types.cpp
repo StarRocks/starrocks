@@ -16,17 +16,17 @@ const uint64_t LOG_10_INT[] = {1,         10,         100,         1000,        
 
 struct JulianToDateEntry {
     // 14 bits
-    uint16_t year;
+    uint16_t year: 14;
 
     // 4 bits
-    uint8_t month;
+    uint8_t month: 4;
 
     // 5 bits
-    uint8_t day;
+    uint8_t day: 5;
 
     // 1-53, Base on 6 bits
-    uint8_t week_th_of_year;
-};
+    uint8_t week_th_of_year: 6;
+} __attribute__((packed));
 
 // Date Cache
 static const uint32_t CACHE_JULIAN_DAYS = 200 * 366;
