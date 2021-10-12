@@ -137,7 +137,7 @@ visible_functions = [
     [['to_days'], 'INT', ['DATE'],
         '_ZN9starrocks18TimestampFunctions7to_daysEPN13starrocks_udf15FunctionContextERKNS1_11DateTimeValE'],
 
-    [['year'], 'INT', ['DATETIME'],
+    [['year'], 'SMALLINT', ['DATETIME'],
         '_ZN9starrocks18TimestampFunctions4yearEPN13starrocks_udf15FunctionContextERKNS1_11DateTimeValE'],
     [['month'], 'INT', ['DATETIME'],
         '_ZN9starrocks18TimestampFunctions5monthEPN13starrocks_udf15FunctionContextERKNS1_11DateTimeValE'],

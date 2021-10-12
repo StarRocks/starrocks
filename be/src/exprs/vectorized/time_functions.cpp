@@ -300,10 +300,10 @@ ColumnPtr TimeFunctions::curdate(FunctionContext* context, const Columns& column
 DEFINE_UNARY_FN_WITH_IMPL(yearImpl, v) {
     int y, m, d;
     ((DateValue)v).to_date(&y, &m, &d);
-    return y;
+    return static_cast<int16_t>(y);
 }
 
-DEFINE_TIME_UNARY_FN(year, TYPE_DATETIME, TYPE_INT);
+DEFINE_TIME_UNARY_FN(year, TYPE_DATETIME, TYPE_SMALLINT);
 
 // quarter
 DEFINE_UNARY_FN_WITH_IMPL(quarterImpl, v) {

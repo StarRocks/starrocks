@@ -254,7 +254,7 @@ vectorized_functions = [
      'StringFunctions::parse_url_prepare', 'StringFunctions::parse_url_close'],
 
     # 50xxx: timestamp functions
-    [50010, 'year', 'INT', ['DATETIME'], 'TimeFunctions::year'],
+    [50010, 'year', 'SMALLINT', ['DATETIME'], 'TimeFunctions::year'],
     [50020, 'month', 'INT', ['DATETIME'], 'TimeFunctions::month'],
     [50030, 'quarter', 'INT', ['DATETIME'], 'TimeFunctions::quarter'],
     [50040, 'dayofweek', 'INT', ['DATETIME'], 'TimeFunctions::day_of_week'],

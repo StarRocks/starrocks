@@ -57,7 +57,7 @@ TEST_F(TimeFunctionsTest, yearTest) {
     ASSERT_TRUE(result->is_numeric());
     ASSERT_FALSE(result->is_nullable());
 
-    auto v = ColumnHelper::cast_to<TYPE_INT>(result);
+    auto v = ColumnHelper::cast_to<TYPE_SMALLINT>(result);
     for (int k = 0; k < 20; ++k) {
         ASSERT_EQ(2000 + k, v->get_data()[k]);
     }
@@ -158,7 +158,7 @@ TEST_F(TimeFunctionsTest, monthTest) {
     ASSERT_TRUE(result->is_numeric());
     ASSERT_FALSE(result->is_nullable());
 
-    auto year_values = ColumnHelper::cast_to<TYPE_INT>(years);
+    auto year_values = ColumnHelper::cast_to<TYPE_SMALLINT>(years);
     auto month_values = ColumnHelper::cast_to<TYPE_INT>(result);
     for (size_t j = 0; j < tc->size(); ++j) {
         ASSERT_EQ(2000 + (j / 12), year_values->get_data()[j]);

@@ -171,9 +171,9 @@ public class FEFunctions {
         return secondsAdd(date, new IntLiteral(-(int) second.getLongValue()));
     }
 
-    @FEFunction(name = "year", argTypes = {"DATETIME"}, returnType = "INT")
+    @FEFunction(name = "year", argTypes = {"DATETIME"}, returnType = "SMALLINT")
     public static IntLiteral year(LiteralExpr arg) throws AnalysisException {
-        return new IntLiteral(((DateLiteral) arg).getYear(), Type.INT);
+        return new IntLiteral(((DateLiteral) arg).getYear(), Type.SMALLINT);
     }
 
     @FEFunction(name = "month", argTypes = {"DATETIME"}, returnType = "INT")
