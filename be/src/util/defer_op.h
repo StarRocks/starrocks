@@ -28,9 +28,9 @@
 namespace starrocks {
 
 // This class is used to defer a function when this object is deconstruct
+template <class DeferFunction>
 class DeferOp {
 public:
-    typedef std::function<void()> DeferFunction;
     explicit DeferOp(DeferFunction func) : _func(std::move(func)) {}
 
     ~DeferOp() { _func(); };
