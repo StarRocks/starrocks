@@ -821,7 +821,11 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createUserTagMVSql);
         String query =
                 "select empid, percentile_approx(salary, 1), percentile_approx(commission, 1) from emps group by empid";
-        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: percentile_union(5: salary), percentile_union(6: commission)\n" +
+                "  |  group by: 2: empid\n" +
+                "  |  use vectorized: true");
     }
 
     @Test
