@@ -79,7 +79,7 @@ int FixedLengthColumnBase<T>::compare_at(size_t left, size_t right, const Column
 }
 
 template <typename T>
-uint32_t FixedLengthColumnBase<T>::serialize(size_t idx, uint8_t* pos) {
+inline uint32_t FixedLengthColumnBase<T>::serialize(size_t idx, uint8_t* pos) {
     strings::memcpy_inlined(pos, &_data[idx], sizeof(T));
     return sizeof(T);
 }
