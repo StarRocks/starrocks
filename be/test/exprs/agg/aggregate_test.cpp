@@ -3,16 +3,27 @@
 #include <gtest/gtest.h>
 #include <math.h>
 
+#include <algorithm>
+
+#include "column/array_column.h"
+#include "column/column_builder.h"
+#include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/sum.h"
+#include "exprs/vectorized/arithmetic_operation.h"
+#include "gen_cpp/Data_types.h"
+#include "gutil/casts.h"
 #include "runtime/vectorized/time_types.h"
 #include "testutil/function_utils.h"
 #include "udf/udf_internal.h"
 #include "util/bitmap_value.h"
 #include "util/slice.h"
+#include "util/thrift_util.h"
+#include "util/unaligned_access.h"
 
 namespace starrocks::vectorized {
 
@@ -615,6 +626,58 @@ TEST_F(AggregateTest, test_sum_distinct) {
     func = get_aggregate_function("multi_distinct_sum", TYPE_DECIMALV2, TYPE_DECIMALV2, false);
     test_agg_function<DecimalV2Value, DecimalV2Value>(ctx, func, DecimalV2Value(6), DecimalV2Value(18),
                                                       DecimalV2Value(21));
+}
+
+TEST_F(AggregateTest, test_dict_merge) {
+    const AggregateFunction* func = get_aggregate_function("dict_merge", TYPE_ARRAY, TYPE_VARCHAR, false);
+    ColumnBuilder<TYPE_VARCHAR> builder;
+    builder.append(Slice("key1"));
+    builder.append(Slice("key2"));
+    builder.append(Slice("starrocks-1"));
+    builder.append(Slice("starrocks-starrocks"));
+    builder.append(Slice("starrocks-starrocks"));
+    auto data_col = builder.build(false);
+
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(0);
+    offsets->append(2);
+    offsets->append(5);
+    // []
+    // [key1, key2]
+    // [sr-1, sr-2, sr-3]
+    auto col = ArrayColumn::create(data_col, offsets);
+    const Column* column = col.get();
+    std::unique_ptr<ManagedAggregateState> state = ManagedAggregateState::Make(func);
+    func->update_batch_single_state(ctx, col->size(), &column, state->mutable_data());
+
+    auto res = BinaryColumn::create();
+    func->finalize_to_column(ctx, state->data(), res.get());
+
+    ASSERT_EQ(res->size(), 1);
+    auto slice = res->get_slice(0);
+    std::map<int, std::string> datas;
+    auto dict = from_json_string<TGlobalDict>(std::string(slice.data, slice.size));
+    int sz = dict.ids.size();
+    for (int i = 0; i < sz; ++i) {
+        datas.emplace(dict.ids[i], dict.strings[i]);
+    }
+    ASSERT_EQ(dict.ids.size(), dict.strings.size());
+
+    std::set<std::string> origin_data;
+    std::set<int> ids;
+    auto binary_column = down_cast<BinaryColumn*>(data_col.get());
+    for (int i = 0; i < binary_column->size(); ++i) {
+        auto slice = binary_column->get_slice(i);
+        origin_data.emplace(slice.data, slice.size);
+    }
+
+    for (const auto& [k, v] : datas) {
+        ASSERT_TRUE(origin_data.count(v) != 0);
+        origin_data.erase(v);
+    }
+
+    ASSERT_TRUE(origin_data.empty());
 }
 
 TEST_F(AggregateTest, test_sum_nullable) {

@@ -64,6 +64,8 @@ public:
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeSumDistinctAggregateFunctionV2();
 
+    static AggregateFunctionPtr MakeDictMergeAggregateFunction();
+
     // Hyperloglog functions:
     static AggregateFunctionPtr MakeHllUnionAggregateFunction();
 
