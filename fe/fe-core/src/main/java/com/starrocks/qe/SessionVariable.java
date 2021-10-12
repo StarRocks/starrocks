@@ -151,6 +151,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE_USE_DP = "cbo_max_reorder_node_use_dp";
     public static final String CBO_ENABLE_GREEDY_JOIN_REORDER = "cbo_enable_greedy_join_reorder";
     public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
+    public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -284,6 +285,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DISABLE_COLOCATE_JOIN)
     private boolean disableColocateJoin = false;
 
+    @VariableMgr.VarAttr(name = CBO_USE_CORRELATED_JOIN_ESTIMATE)
+    private boolean useCorrelatedJoinEstimate = true;
     /*
      * the parallel exec instance num for one Fragment in one BE
      * 1 means disable this feature
@@ -673,6 +676,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setEnableReplicationJoin(boolean enableReplicationJoin) {
+    }
+
+    public boolean isUseCorrelatedJoinEstimate() {
+        return useCorrelatedJoinEstimate;
+    }
+
+    public void setUseCorrelatedJoinEstimate(boolean useCorrelatedJoinEstimate) {
+        this.useCorrelatedJoinEstimate = useCorrelatedJoinEstimate;
     }
 
     // Serialize to thrift object
