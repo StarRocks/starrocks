@@ -135,10 +135,6 @@ void StatisticResultWriter::_fill_statistic_data_v1(int version, const vectorize
     auto& nullCounts = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[8])->get_data();
     BinaryColumn* maxColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[9]);
     BinaryColumn* minColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[10]);
-    BinaryColumn* dictColumn = nullptr;
-    if (columns.size() >= 12) {
-        dictColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[11]);
-    }
 
     std::vector<TStatisticData> data_list;
     int num_rows = chunk->num_rows();
@@ -155,9 +151,6 @@ void StatisticResultWriter::_fill_statistic_data_v1(int version, const vectorize
         data_list[i].__set_nullCount(nullCounts[i]);
         data_list[i].__set_max(maxColumn->get_slice(i).to_string());
         data_list[i].__set_min(minColumn->get_slice(i).to_string());
-        if (dictColumn != nullptr) {
-            //data_list[i].__set_dict(dictColumn->get_slice(i).to_string());
-        }
     }
 
     result->result_batch.rows.resize(num_rows);
