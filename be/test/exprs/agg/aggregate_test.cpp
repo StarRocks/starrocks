@@ -8,6 +8,10 @@
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/sum.h"
+#include "exprs/anyval_util.h"
+#include "exprs/vectorized/arithmetic_operation.h"
+#include "gen_cpp/Data_types.h"
+#include "gutil/casts.h"
 #include "runtime/vectorized/time_types.h"
 #include "testutil/function_utils.h"
 #include "udf/udf_internal.h"
@@ -736,6 +740,51 @@ TEST_F(AggregateTest, test_group_concat) {
     group_concat_function->finalize_to_column(ctx, state->data(), result_column.get());
 
     ASSERT_EQ("starrocks0, starrocks1, starrocks2, starrocks3, starrocks4, starrocks5", result_column->get_data()[0]);
+}
+
+TEST_F(AggregateTest, test_group_concat_const_seperator) {
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR))};
+
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types)));
+
+    const AggregateFunction* group_concat_function =
+            get_aggregate_function("group_concat", TYPE_VARCHAR, TYPE_VARCHAR, false);
+    std::unique_ptr<ManagedAggregateState> state = ManagedAggregateState::Make(group_concat_function);
+
+    auto data_column = BinaryColumn::create();
+
+    data_column->append("abc");
+    data_column->append("bcd");
+    data_column->append("cde");
+    data_column->append("def");
+    data_column->append("efg");
+    data_column->append("fgh");
+    data_column->append("ghi");
+    data_column->append("hij");
+    data_column->append("ijk");
+
+    auto separator_column = ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1);
+
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(2);
+    raw_columns[0] = data_column.get();
+    raw_columns[1] = separator_column.get();
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(separator_column);
+    local_ctx->impl()->set_constant_columns(const_columns);
+
+    // test update
+    group_concat_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                     state->mutable_data());
+
+    auto result_column = BinaryColumn::create();
+    group_concat_function->finalize_to_column(local_ctx.get(), state->data(), result_column.get());
+
+    ASSERT_EQ("abcbcdcdedefefgfghghihijijk", result_column->get_data()[0]);
 }
 
 TEST_F(AggregateTest, test_intersect_count) {

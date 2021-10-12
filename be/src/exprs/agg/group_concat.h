@@ -101,9 +101,16 @@ public:
                                    AggDataPtr state) const override {
         if (ctx->get_num_args() > 1) {
             const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
-            const InputColumnType* column_sep = down_cast<const InputColumnType*>(columns[1]);
-            this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
-                                                          column_sep->get_bytes().size());
+            auto const_column_sep = ctx->get_constant_column(1);
+            if (const_column_sep == nullptr) {
+                const InputColumnType* column_sep = down_cast<const InputColumnType*>(columns[1]);
+                this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
+                                                              column_sep->get_bytes().size());
+            } else {
+                Slice sep = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_column_sep);
+                this->data(state).intermediate_string.reserve(column_val->get_bytes().size() +
+                                                              sep.get_size() * batch_size);
+            }
         } else {
             const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
             this->data(state).intermediate_string.reserve(column_val->get_bytes().size() + 2 * batch_size);
