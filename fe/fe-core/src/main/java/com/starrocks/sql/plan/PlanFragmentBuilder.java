@@ -365,7 +365,7 @@ public class PlanFragmentBuilder {
                             tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames());
             scanNode.computeRangeLocations();
 
-            for (Map.Entry<ColumnRefOperator, Column> entry : scan.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, Column> entry : scan.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());

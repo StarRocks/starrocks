@@ -338,7 +338,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalMetaScan(PhysicalMetaScanOperator node, ExpressionContext context) {
-        Statistics.Builder builder = estimateScanColumns(node.getTable(), node.getColumnRefMap());
+        Statistics.Builder builder = estimateScanColumns(node.getTable(), node.getColRefToColumnMetaMap());
         builder.setOutputRowCount(node.getAggColumnIdToNames().size());
         return visitOperator(node, context, builder);
     }

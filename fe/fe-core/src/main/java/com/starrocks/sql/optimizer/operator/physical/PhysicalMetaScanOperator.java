@@ -15,15 +15,15 @@ import java.util.Map;
 
 public class PhysicalMetaScanOperator extends PhysicalOperator {
     private final Table table;
-    private final Map<ColumnRefOperator, Column> columnRefMap;
+    private final Map<ColumnRefOperator, Column> colRefToColumnMetaMap;
     private final Map<Integer, String> aggColumnIdToNames;
 
-    public PhysicalMetaScanOperator(Table table, Map<ColumnRefOperator, Column> columnRefMap,
+    public PhysicalMetaScanOperator(Table table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                     Map<Integer, String> aggColumnIdToNames) {
         super(OperatorType.PHYSICAL_META_SCAN);
 
         this.table = table;
-        this.columnRefMap = columnRefMap;
+        this.colRefToColumnMetaMap = colRefToColumnMetaMap;
         this.aggColumnIdToNames = aggColumnIdToNames;
     }
 
@@ -31,8 +31,8 @@ public class PhysicalMetaScanOperator extends PhysicalOperator {
         return table;
     }
 
-    public Map<ColumnRefOperator, Column> getColumnRefMap() {
-        return columnRefMap;
+    public Map<ColumnRefOperator, Column> getColRefToColumnMetaMap() {
+        return colRefToColumnMetaMap;
     }
 
     public Map<Integer, String> getAggColumnIdToNames() {
@@ -58,11 +58,11 @@ public class PhysicalMetaScanOperator extends PhysicalOperator {
             return false;
         }
         PhysicalMetaScanOperator that = (PhysicalMetaScanOperator) o;
-        return Objects.equal(table, that.table) && Objects.equal(columnRefMap, that.columnRefMap);
+        return Objects.equal(table, that.table) && Objects.equal(colRefToColumnMetaMap, that.colRefToColumnMetaMap);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(table, columnRefMap);
+        return Objects.hashCode(table, colRefToColumnMetaMap);
     }
 }
