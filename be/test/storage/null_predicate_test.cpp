@@ -74,7 +74,6 @@ public:
         TabletSchemaPB tablet_schema_pb;
         static int id = 0;
         ColumnPB* column = tablet_schema_pb.add_column();
-        ;
         column->set_unique_id(++id);
         column->set_name(name);
         column->set_type(type);
@@ -82,8 +81,8 @@ public:
         column->set_is_nullable(is_allow_null);
         column->set_length(length);
         column->set_aggregation(aggregation);
-        column->set_precision(1000);
-        column->set_frac(1000);
+        column->set_precision(5);
+        column->set_frac(10);
         column->set_is_bf_column(false);
         tablet_schema->init_from_pb(tablet_schema_pb);
     }

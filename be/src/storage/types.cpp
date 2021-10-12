@@ -136,7 +136,7 @@ TypeInfoPtr get_type_info(const segment_v2::ColumnMetaPB& column_meta_pb) {
 TypeInfoPtr get_type_info(const TabletColumn& col) {
     TypeInfoPtr type_info;
     if (col.type() == OLAP_FIELD_TYPE_ARRAY) {
-        const TabletColumn& child = col.get_sub_column(0);
+        const TabletColumn& child = col.subcolumn(0);
         TypeInfoPtr child_type_info = get_type_info(child);
         type_info.reset(new ArrayTypeInfo(child_type_info));
         return type_info;

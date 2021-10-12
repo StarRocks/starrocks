@@ -46,7 +46,7 @@ starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id
     f.set_is_key(c.is_key());
 
     if (type == OLAP_FIELD_TYPE_ARRAY) {
-        const TabletColumn& sub_column = c.get_sub_column(0);
+        const TabletColumn& sub_column = c.subcolumn(0);
         auto sub_field = convert_field_to_format_v2(id, sub_column);
         f.add_sub_field(sub_field);
     }

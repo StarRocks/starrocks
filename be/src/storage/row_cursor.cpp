@@ -153,7 +153,7 @@ OLAPStatus RowCursor::init_scan_key(const TabletSchema& schema, const std::vecto
         if (type == OLAP_FIELD_TYPE_VARCHAR) {
             _variable_len += scan_keys[cid].length();
         } else if (type == OLAP_FIELD_TYPE_CHAR) {
-            _variable_len += std::max(scan_keys[cid].length(), column.length());
+            _variable_len += std::max<size_t>(scan_keys[cid].length(), column.length());
         }
     }
 
@@ -178,7 +178,7 @@ OLAPStatus RowCursor::init_scan_key(const TabletSchema& schema, const std::vecto
         } else if (type == OLAP_FIELD_TYPE_CHAR) {
             Slice* slice = reinterpret_cast<Slice*>(fixed_ptr + 1);
             slice->data = variable_ptr;
-            slice->size = std::max(scan_keys[cid].length(), column.length());
+            slice->size = std::max<size_t>(scan_keys[cid].length(), column.length());
             variable_ptr += slice->size;
         }
     }
