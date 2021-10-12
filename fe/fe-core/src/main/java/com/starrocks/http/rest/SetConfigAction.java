@@ -22,7 +22,6 @@
 package com.starrocks.http.rest;
 
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Catalog;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.ConfigBase.ConfField;
 import com.starrocks.common.DdlException;
@@ -73,10 +72,6 @@ public class SetConfigAction extends RestBaseAction {
             // ensure that field has "@ConfField" annotation
             ConfField anno = f.getAnnotation(ConfField.class);
             if (anno == null || !anno.mutable()) {
-                continue;
-            }
-
-            if (anno.masterOnly() && !Catalog.getCurrentCatalog().isMaster()) {
                 continue;
             }
 

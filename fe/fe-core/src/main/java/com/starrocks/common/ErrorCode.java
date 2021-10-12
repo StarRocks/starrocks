@@ -251,7 +251,9 @@ public enum ErrorCode {
     ERROR_REFRESH_EXTERNAL_TABLE_FAILED(5074, new byte[] {'4', '2', '0', '0', '0'},
             "refresh external table failed: %s"),
     ERROR_CREATE_TABLE_LIKE_UNSUPPORTED_VIEW(5075, new byte[] {'4', '2', '0', '0', '0'},
-            "Create table like does not support create view.");
+            "Create table like does not support create view."),
+    ERROR_SET_CONFIG_FAILED(5076, new byte[] {'4', '2', '0', '0', '0'},
+            "set config failed: %s");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
