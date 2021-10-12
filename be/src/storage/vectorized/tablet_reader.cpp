@@ -4,6 +4,7 @@
 
 #include <column/datum_convert.h>
 
+#include "common/status.h"
 #include "gutil/stl_util.h"
 #include "service/backend_options.h"
 #include "storage/tablet.h"
@@ -75,6 +76,7 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
     rs_opts.profile = params.profile;
     rs_opts.use_page_cache = params.use_page_cache;
     rs_opts.tablet_schema = &(_tablet->tablet_schema());
+    rs_opts.global_dictmaps = params.global_dictmaps;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
@@ -185,6 +187,11 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
     } else {
         return Status::InternalError("Unknown keys type");
     }
+
+    if (_collect_iter != nullptr) {
+        RETURN_IF_ERROR(_collect_iter->init_res_schema(*params.global_dictmaps));
+    }
+
     return Status::OK();
 }
 

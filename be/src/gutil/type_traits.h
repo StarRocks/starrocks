@@ -59,8 +59,8 @@
 #ifndef BASE_TYPE_TRAITS_H_
 #define BASE_TYPE_TRAITS_H_
 
+#include <cstddef>
 #include <utility>
-using std::make_pair;
 using std::pair; // For pair
 
 #include "gutil/template_util.h" // For true_type and false_type

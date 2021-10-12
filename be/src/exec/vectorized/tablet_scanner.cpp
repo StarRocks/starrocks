@@ -3,12 +3,16 @@
 #include "exec/vectorized/tablet_scanner.h"
 
 #include <memory>
+#include <utility>
 
 #include "column/column_helper.h"
 #include "column/column_pool.h"
+#include "column/field.h"
 #include "column/fixed_length_column.h"
+#include "column/vectorized_fwd.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "runtime/current_mem_tracker.h"
+#include "storage/field.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/predicate_parser.h"
@@ -26,6 +30,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     RETURN_IF_ERROR(Expr::clone_if_not_exists(*params.conjunct_ctxs, runtime_state, &_conjunct_ctxs));
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
     RETURN_IF_ERROR(_init_return_columns());
+    RETURN_IF_ERROR(_init_global_dicts());
     RETURN_IF_ERROR(_init_reader_params(params.key_ranges));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
     Schema child_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, _reader_columns);
@@ -40,6 +45,21 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     if (!_conjunct_ctxs.empty() || !_predicates.empty()) {
         _expr_filter_timer = ADD_TIMER(_parent->_runtime_profile, "ExprFilterTime");
     }
+
+    // _mapped_schema = ;
+    for (const auto& field : _prj_iter->schema().fields()) {
+        const auto cid = field->id();
+        const auto& name = field->name();
+        bool is_nullable = field->is_nullable();
+        if (_params.global_dictmaps->count(cid)) {
+            _mapped_schema.append(std::make_shared<Field>(cid, name, OLAP_FIELD_TYPE_INT, -1, -1, is_nullable));
+        } else {
+            _mapped_schema.append(field);
+        }
+    }
+
+    DCHECK(_params.global_dictmaps != nullptr);
+    RETURN_IF_ERROR(_prj_iter->init_res_schema(*_params.global_dictmaps));
 
     Status st = _reader->prepare();
     if (!st.ok()) {
@@ -148,7 +168,6 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     }
 
     // Return columns
-
     if (_skip_aggregation) {
         _reader_columns = _scanner_columns;
     } else {
@@ -189,6 +208,29 @@ Status TabletScanner::_init_return_columns() {
     if (_scanner_columns.empty()) {
         return Status::InternalError("failed to build storage scanner, no materialized slot!");
     }
+    return Status::OK();
+}
+
+// TODO: fix this
+// mapping a slot-column-id to schema-columnid
+Status TabletScanner::_init_global_dicts() {
+    const auto& global_dict_map = _runtime_state->get_global_dict_map();
+    auto global_dict = _parent->_obj_pool.add(new std::unordered_map<uint32_t, GlobalDictMap*>());
+    // mapping column id to storage column ids
+    for (auto slot : _parent->_tuple_desc->slots()) {
+        if (!slot->is_materialized()) {
+            continue;
+        }
+        auto iter = global_dict_map.find(slot->id());
+        if (iter != global_dict_map.end()) {
+            auto& dict_map = iter->second.first;
+            int32_t index = _tablet->field_index(slot->col_name());
+            DCHECK(index >= 0);
+            global_dict->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
+        }
+    }
+    _params.global_dictmaps = global_dict;
+
     return Status::OK();
 }
 

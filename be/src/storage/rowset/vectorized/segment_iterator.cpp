@@ -3,12 +3,16 @@
 #include "storage/rowset/vectorized/segment_iterator.h"
 
 #include <memory>
+#include <unordered_map>
 
 #include "butil/containers/flat_map.h"
+#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "common/status.h"
+#include "fmt/compile.h"
+#include "gutil/casts.h"
 #include "gutil/stl_util.h"
 #include "runtime/current_mem_tracker.h"
 #include "simd/simd.h"
@@ -33,6 +37,8 @@
 #include "storage/vectorized/projection_iterator.h"
 #include "storage/vectorized/range.h"
 #include "storage/vectorized/roaring2range.h"
+#include "util/phmap/phmap_fwd_decl.h"
+#include "util/slice.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::vectorized {
@@ -41,7 +47,6 @@ using segment_v2::BitmapIndexIterator;
 using segment_v2::ColumnIterator;
 using segment_v2::ColumnIteratorOptions;
 using segment_v2::rowid_t;
-using segment_v2::RowRanges;
 using segment_v2::Segment;
 
 constexpr static const FieldType kDictCodeType = OLAP_FIELD_TYPE_INT;
@@ -119,6 +124,115 @@ private:
     ColumnId _cid;
     ColumnIterator* _col_iter;
 };
+
+class GlobalDictCodeColumnIterator final : public ColumnIterator {
+public:
+    GlobalDictCodeColumnIterator(ColumnId cid, ColumnIterator* iter) : _cid(cid), _col_iter(iter) {}
+    ~GlobalDictCodeColumnIterator() = default;
+
+    ColumnId column_id() const { return _cid; }
+
+    ColumnIterator* column_iterator() const { return _col_iter; }
+
+    Status next_batch(size_t* n, Column* dst) override { return _col_iter->next_dict_codes(n, dst); }
+
+    // TOOD(stdpain): we need return global dict code
+    // so we should implement function `fetch_dict_by_rowid` in ColumnIterator
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override {
+        RETURN_IF_ERROR(_col_iter->fetch_values_by_rowid(rowids, size, values));
+        return Status::OK();
+    }
+
+    Status seek_to_first() override { return _col_iter->seek_to_first(); }
+
+    Status seek_to_ordinal(ordinal_t ord) override { return _col_iter->seek_to_ordinal(ord); }
+
+    // we should remove it ?
+    Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override {
+        return _col_iter->next_batch(n, dst, has_null);
+    }
+
+    ordinal_t get_current_ordinal() const override { return _col_iter->get_current_ordinal(); }
+
+    bool all_page_dict_encoded() const override { return _col_iter->all_page_dict_encoded(); }
+
+    // used for rewrite predicate
+    // we need return local dict code
+    int dict_lookup(const Slice& word) override { return _col_iter->dict_lookup(word); }
+
+    Status next_dict_codes(size_t* n, vectorized::Column* dst) override {
+        return Status::NotSupported("GlobalDictCodeColumnIterator does not support next_dict_codes");
+    }
+
+    Status decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) override {
+        RETURN_IF_ERROR(_build_to_global_dict());
+        vectorized::Int32Column::Container* container;
+        if (words->is_nullable()) {
+            vectorized::ColumnPtr& data_column = down_cast<vectorized::NullableColumn*>(words)->data_column();
+            container = &down_cast<vectorized::Int32Column*>(data_column.get())->get_data();
+        } else {
+            container = &down_cast<vectorized::Int32Column*>(words)->get_data();
+        }
+
+        auto& res_data = *container;
+        res_data.resize(size);
+        for (size_t i = 0; i < size; ++i) {
+            DCHECK(_code_to_global.contains(codes[i]));
+            res_data[i] = _code_to_global.at(codes[i]);
+        }
+        return Status::OK();
+    }
+
+    // TODO(stdpain): I'm not sure this function meaning
+    Status get_row_ranges_by_zone_map(const std::vector<const vectorized::ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate,
+                                      vectorized::SparseRange* row_ranges) override {
+        return _col_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges);
+    }
+    using GlobalDictMap = std::unordered_map<Slice, int, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
+    void set_global_dict(GlobalDictMap* gdict) { _global_dict = gdict; }
+
+private:
+    Status _build_to_global_dict();
+    ColumnId _cid;
+    ColumnIterator* _col_iter;
+    phmap::parallel_flat_hash_map<int32_t, int32_t> _code_to_global;
+    // global dict
+    GlobalDictMap* _global_dict;
+};
+
+Status GlobalDictCodeColumnIterator::_build_to_global_dict() {
+    DCHECK(_col_iter->all_page_dict_encoded());
+
+    // we only have to build code mapping once
+    if (_code_to_global.size() > 0) {
+        return Status::OK();
+    }
+    auto file_column_iter = down_cast<FileColumnIterator*>(_col_iter);
+    int dict_size = file_column_iter->dict_size();
+
+    auto column = BinaryColumn::create();
+
+    int dict_codes[dict_size];
+    for (int i = 0; i < dict_size; ++i) {
+        dict_codes[i] = i;
+    }
+
+    file_column_iter->decode_dict_codes(dict_codes, dict_size, column.get());
+
+    for (int i = 0; i < dict_size; ++i) {
+        auto slice = column->get_slice(i);
+        auto res = _global_dict->find(slice);
+        if (res == _global_dict->end()) {
+            if (slice.size > 0) {
+                return Status::InternalError(fmt::format("not found slice:{} in global dict", slice.data));
+            }
+        } else {
+            _code_to_global[dict_codes[i]] = res->second;
+        }
+    }
+    return Status::OK();
+}
 
 /// SegmentIterator
 // TODO(zhuming): Refine the implementation of this class to reduce the intellectual overhead.
@@ -213,10 +327,10 @@ private:
 
     void _init_column_predicates();
 
-    void _init_context();
+    Status _init_context();
 
     template <bool late_materialization>
-    void _build_context(ScanContext* ctx);
+    Status _build_context(ScanContext* ctx);
 
     void _rewrite_predicates();
 
@@ -233,6 +347,9 @@ private:
     // `_check_low_cardinality_optimization` and `_init_column_iterators` must have been called
     // before you calling this method, otherwise the result is incorrect.
     bool _can_using_dict_code(const FieldPtr& field) const;
+
+    // check field use low_cardinality global dict optimization
+    bool _can_using_global_dict(const FieldPtr& field) const;
 
     Status _init_bitmap_index_iterators();
 
@@ -335,7 +452,7 @@ Status SegmentIterator::_init() {
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
     _rewrite_predicates();
-    _init_context();
+    RETURN_IF_ERROR(_init_context());
     _init_column_predicates();
     _range_iter = _scan_range.new_iterator();
 
@@ -352,10 +469,19 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
         const ColumnId cid = f->id();
         if (_column_iterators[cid] == nullptr) {
             bool check_dict_enc;
-            if (_opts.predicates.count(cid)) {
-                check_dict_enc = _predicate_need_rewrite[cid];
+            // TODO(stdpain): a little trick ?
+            if (_opts.global_dictmaps != nullptr) {
+                if (_opts.predicates.count(cid)) {
+                    check_dict_enc = _predicate_need_rewrite[cid] || _opts.global_dictmaps->count(cid);
+                } else {
+                    check_dict_enc = has_predicate || _opts.global_dictmaps->count(cid);
+                }
             } else {
-                check_dict_enc = has_predicate;
+                if (_opts.predicates.count(cid)) {
+                    check_dict_enc = _predicate_need_rewrite[cid]; // || _opts.global_dictmaps->count(cid);
+                } else {
+                    check_dict_enc = has_predicate; // || _opts.global_dictmaps->count(cid);
+                }
             }
 
             RETURN_IF_ERROR(_segment->new_column_iterator(cid, &_column_iterators[cid]));
@@ -859,8 +985,15 @@ inline bool SegmentIterator::_can_using_dict_code(const FieldPtr& field) const {
     }
 }
 
+bool SegmentIterator::_can_using_global_dict(const FieldPtr& field) const {
+    if (_opts.global_dictmaps != nullptr) {
+        return _opts.global_dictmaps->find(field->id()) != _opts.global_dictmaps->end();
+    }
+    return false;
+}
+
 template <bool late_materialization>
-void SegmentIterator::_build_context(ScanContext* ctx) {
+Status SegmentIterator::_build_context(ScanContext* ctx) {
     const size_t predicate_count = _predicate_columns;
     const size_t num_fields = _schema.num_fields();
 
@@ -875,22 +1008,41 @@ void SegmentIterator::_build_context(ScanContext* ctx) {
     for (size_t i = 0; i < early_materialize_fields; i++) {
         const FieldPtr& f = _schema.field(i);
         const ColumnId cid = f->id();
-        if (_can_using_dict_code(f)) {
+        bool use_global_dict_code = _can_using_global_dict(f);
+        bool use_dict_code = _can_using_dict_code(f) || use_global_dict_code;
+
+        if (use_dict_code) {
             // create FixedLengthColumn<int64_t> for saving dict codewords.
             const std::string& name = f->name();
             auto f2 = std::make_shared<Field>(cid, name, kDictCodeType, -1, -1, f->is_nullable());
-            auto* iter = new DictCodeColumnIterator(cid, _column_iterators[cid]);
+            ColumnIterator* iter = nullptr;
+            if (use_global_dict_code) {
+                auto gdict_iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid]);
+                gdict_iter->set_global_dict(_opts.global_dictmaps->at(cid));
+                iter = gdict_iter;
+                // TODO(stdpain): may cause type nesting, we need fixit
+                // DictCodeColumnIterator wrap a DictCodeColumnIterator
+                _column_iterators[cid] = gdict_iter;
+            } else {
+                iter = new DictCodeColumnIterator(cid, _column_iterators[cid]);
+            }
             _obj_pool.add(iter);
             ctx->_read_schema.append(f2);
             ctx->_column_iterators.emplace_back(iter);
             ctx->_is_dict_column.emplace_back(true);
             ctx->_has_dict_column = true;
+            if (use_global_dict_code) {
+                ctx->_dict_decode_schema.append(
+                        std::make_shared<Field>(cid, name, kDictCodeType, -1, -1, f->is_nullable()));
+            } else {
+                ctx->_dict_decode_schema.append(f);
+            }
         } else {
             ctx->_read_schema.append(f);
             ctx->_column_iterators.emplace_back(_column_iterators[cid]);
             ctx->_is_dict_column.emplace_back(false);
+            ctx->_dict_decode_schema.append(f);
         }
-        ctx->_dict_decode_schema.append(f);
     }
     if (late_materialization && predicate_count < _schema.num_fields()) {
         // ordinal column
@@ -905,15 +1057,16 @@ void SegmentIterator::_build_context(ScanContext* ctx) {
         ctx->_is_dict_column.emplace_back(false);
         ctx->_late_materialize = true;
     }
+    return Status::OK();
 }
 
-void SegmentIterator::_init_context() {
+Status SegmentIterator::_init_context() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
     _late_materialization_ratio = config::late_materialization_ratio;
 
     if (_predicate_columns == 0 || _predicate_columns >= _schema.num_fields()) {
         // non or all field has predicate, disable late materialization.
-        _build_context<false>(&_context_list[0]);
+        RETURN_IF_ERROR(_build_context<false>(&_context_list[0]));
     } else {
         // metric column default enable late materialization
         for (const auto& field : _schema.fields()) {
@@ -925,19 +1078,20 @@ void SegmentIterator::_init_context() {
 
         if (_late_materialization_ratio <= 0) {
             // late materialization been disabled.
-            _build_context<false>(&_context_list[0]);
+            RETURN_IF_ERROR(_build_context<false>(&_context_list[0]));
         } else if (_late_materialization_ratio < 1000) {
             // late materialization based on condition filter ratio.
-            _build_context<true>(&_context_list[0]);
-            _build_context<false>(&_context_list[1]);
+            RETURN_IF_ERROR(_build_context<true>(&_context_list[0]));
+            RETURN_IF_ERROR(_build_context<false>(&_context_list[1]));
             _context_list[0]._next = &_context_list[1];
             _context_list[1]._next = &_context_list[0];
         } else {
             // always use late materialization strategy.
-            _build_context<true>(&_context_list[0]);
+            RETURN_IF_ERROR(_build_context<true>(&_context_list[0]));
         }
     }
     _switch_context(&_context_list[0]);
+    return Status::OK();
 }
 
 void SegmentIterator::_rewrite_predicates() {

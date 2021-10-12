@@ -25,6 +25,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include "common/logging.h"
 #include "common/object_pool.h"
@@ -52,7 +53,6 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
                            const TQueryGlobals& query_globals, ExecEnv* exec_env)
         : _profile("Fragment " + print_id(fragment_instance_id)),
           _unreported_error_idx(0),
-
           _obj_pool(new ObjectPool()),
           _is_cancelled(false),
           _per_fragment_instance_idx(0),
@@ -72,7 +72,6 @@ RuntimeState::RuntimeState(const TExecPlanFragmentParams& fragment_params, const
         : _profile("Fragment " + print_id(fragment_params.params.fragment_instance_id)),
           _unreported_error_idx(0),
           _query_id(fragment_params.params.query_id),
-
           _obj_pool(new ObjectPool()),
           _is_cancelled(false),
           _per_fragment_instance_idx(0),
@@ -194,9 +193,9 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
     }
 
     // Register with the thread mgr
-    if (exec_env != nullptr) {
+    if (exec_env != NULL) {
         _resource_pool = exec_env->thread_mgr()->register_pool();
-        DCHECK(_resource_pool != nullptr);
+        DCHECK(_resource_pool != NULL);
     }
     _db_name = "insert_stmt";
     _import_label = print_id(fragment_instance_id);
@@ -251,13 +250,13 @@ Status RuntimeState::init_buffer_poolstate() {
         max_reservation = ReservationUtil::GetReservationLimitFromMemLimit(mem_limit);
     }
     _buffer_reservation = _obj_pool->add(new ReservationTracker);
-    _buffer_reservation->InitChildTracker(nullptr, exec_env->buffer_reservation(), _query_mem_tracker.get(),
+    _buffer_reservation->InitChildTracker(NULL, exec_env->buffer_reservation(), _query_mem_tracker.get(),
                                           max_reservation);
     return Status::OK();
 }
 
 Status RuntimeState::create_block_mgr() {
-    DCHECK(_block_mgr2.get() == nullptr);
+    DCHECK(_block_mgr2.get() == NULL);
 
     int64_t block_mgr_limit = _query_mem_tracker->limit();
     if (block_mgr_limit < 0) {
@@ -318,11 +317,11 @@ Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_
         }
     }
 
-    DCHECK(_query_mem_tracker.get() != nullptr);
+    DCHECK(_query_mem_tracker.get() != NULL);
     std::stringstream ss;
     ss << "Memory Limit Exceeded\n";
     if (failed_allocation_size != 0) {
-        DCHECK(tracker != nullptr);
+        DCHECK(tracker != NULL);
         ss << "  " << tracker->label() << " could not allocate "
            << PrettyPrinter::print(failed_allocation_size, TUnit::BYTES) << " without exceeding limit." << std::endl;
     }
@@ -419,6 +418,28 @@ int64_t RuntimeState::get_load_mem_limit() const {
         return _query_options.load_mem_limit;
     }
     return 0;
+}
+
+const vectorized::GlobalDictMaps& RuntimeState::get_global_dict_map() const {
+    return _global_dicts;
+}
+
+Status RuntimeState::init_global_dict(const GlobalDictLists& global_dict_list) {
+    for (const auto& global_dict : global_dict_list) {
+        DCHECK_EQ(global_dict.ids.size(), global_dict.strings.size());
+        vectorized::GlobalDictMap dict_map;
+        vectorized::RGlobalDictMap rdict_map;
+        int dict_sz = global_dict.ids.size();
+        for (int i = 0; i < dict_sz; ++i) {
+            auto str = _obj_pool->add(new std::string(global_dict.strings[i]));
+            Slice slice(str->data(), str->size());
+            dict_map.emplace(slice, global_dict.ids[i]);
+            rdict_map.emplace(global_dict.ids[i], slice);
+        }
+        _global_dicts.emplace(uint32_t(global_dict.columnId),
+                              std::make_pair(std::move(dict_map), std::move(rdict_map)));
+    }
+    return Status::OK();
 }
 
 } // end namespace starrocks

@@ -133,6 +133,11 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     RETURN_IF_ERROR(DescriptorTbl::create(obj_pool(), request.desc_tbl, &desc_tbl));
     _runtime_state->set_desc_tbl(desc_tbl);
 
+    // TODO(stdpain): need acquire global dict from request.params
+    if (request.fragment.__isset.global_dicts) {
+        RETURN_IF_ERROR(_runtime_state->init_global_dict(request.fragment.global_dicts));
+    }
+
     // set up plan
     DCHECK(request.__isset.fragment);
     RETURN_IF_ERROR(ExecNode::create_tree(_runtime_state.get(), obj_pool(), request.fragment.plan, *desc_tbl, &_plan));
@@ -219,6 +224,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         _is_runtime_filter_merge_node = true;
         _exec_env->runtime_filter_worker()->open_query(_query_id, request.query_options, params.runtime_filter_params);
     }
+
     return Status::OK();
 }
 

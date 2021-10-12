@@ -392,13 +392,16 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
         const std::vector<SlotDescriptor*>& slots = tuple_desc->slots();
         for (const auto& kv : _chunk_meta.slot_id_to_index) {
             //TODO: performance?
+            bool check = false;
             for (auto slot : slots) {
                 if (kv.first == slot->id()) {
                     _chunk_meta.types[kv.second] = slot->type();
                     ++column_index;
+                    check = true;
                     break;
                 }
             }
+            DCHECK(check) << "unreach" << kv.first;
         }
     }
     for (const auto& kv : _chunk_meta.tuple_id_to_index) {

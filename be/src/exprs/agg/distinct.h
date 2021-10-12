@@ -2,17 +2,24 @@
 
 #pragma once
 
+#include <cstring>
 #include <limits>
 #include <type_traits>
 
+#include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "column/hash_set.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/sum.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "udf/udf_internal.h"
 #include "util/phmap/phmap_dump.h"
+#include "util/slice.h"
 
 namespace starrocks::vectorized {
 
@@ -427,5 +434,112 @@ class DistinctAggregateFunction : public TDistinctAggregateFunction<PT, Distinct
 
 template <PrimitiveType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
 class DistinctAggregateFunctionV2 : public TDistinctAggregateFunction<PT, DistinctAggregateStateV2, DistinctType, T> {};
+
+// now we only support String
+struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR> {
+    DictMergeState() = default;
+};
+
+class DictMergeAggregateFunction final
+        : public AggregateFunctionBatchHelper<DictMergeState, DictMergeAggregateFunction> {
+public:
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+        DCHECK(false) << "this method shouldn't be called";
+    }
+
+    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+                                   AggDataPtr state) const override {
+        size_t mem_usage = 0;
+        auto& agg_state = this->data(state);
+        const auto* column = down_cast<const ArrayColumn*>(columns[0]);
+        MemPool* mem_pool = ctx->impl()->mem_pool();
+
+        const auto& elements_column = column->elements();
+        if (column->elements().is_nullable()) {
+            const auto& null_column = down_cast<const NullableColumn&>(elements_column);
+            const auto& null_data = null_column.immutable_null_column_data();
+            const auto& binary_column = down_cast<const BinaryColumn&>(null_column.data_column_ref());
+
+            for (size_t i = 0; i < binary_column.size(); ++i) {
+                if (!null_data[i]) {
+                    mem_usage += agg_state.update(mem_pool, binary_column.get_slice(i));
+                }
+            }
+        } else {
+            const auto& binary_column = down_cast<const BinaryColumn&>(elements_column);
+            for (size_t i = 0; i < binary_column.size(); ++i) {
+                mem_usage += agg_state.update(mem_pool, binary_column.get_slice(i));
+            }
+        }
+    }
+
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+        const auto* input_column = down_cast<const BinaryColumn*>(column);
+        Slice slice = input_column->get_slice(row_num);
+        size_t mem_usage = 0;
+        mem_usage += this->data(state).deserialize_and_merge(ctx->impl()->mem_pool(), (const uint8_t*)slice.data,
+                                                             slice.size);
+        ctx->impl()->add_mem_usage(mem_usage);
+    }
+
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+        auto* column = down_cast<BinaryColumn*>(to);
+        size_t old_size = column->get_bytes().size();
+        size_t new_size = old_size + this->data(state).serialize_size();
+        column->get_bytes().resize(new_size);
+        this->data(state).serialize(column->get_bytes().data() + old_size);
+        column->get_offset().emplace_back(new_size);
+    }
+
+    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+        DCHECK(false) << "this method shouldn't be called";
+    }
+
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+        if (this->data(state).set.size() == 0) {
+            to->append_default();
+            return;
+        }
+        std::vector<int32_t> dict_ids;
+        dict_ids.resize(this->data(state).set.size());
+
+        auto* binary_column = down_cast<BinaryColumn*>(to);
+
+        // set dict_ids as [1...n]
+        for (int i = 0; i < dict_ids.size(); ++i) {
+            dict_ids[i] = i + 1;
+        }
+        // binary column content
+        // |dict-code: 4 bytes|string-size 4 bytes|string-content|...
+        int32_t result_binary_sz = 0;
+        for (const auto& v : this->data(state).set) {
+            result_binary_sz += 4;            // sizeof(dict-code)
+            result_binary_sz += 4;            // sizeof(string-size)
+            result_binary_sz += v.get_size(); // string-content size
+        }
+
+        size_t old_size = binary_column->get_bytes().size();
+        size_t new_size = old_size + result_binary_sz;
+
+        auto& data = binary_column->get_bytes();
+        data.resize(old_size + new_size);
+
+        int counter = 0;
+        int current_sz = old_size;
+        for (const auto& v : this->data(state).set) {
+            memcpy(data.data() + current_sz, reinterpret_cast<uint8_t*>(dict_ids.data() + counter++), sizeof(int));
+            current_sz += 4;
+            uint32_t slice_size = v.size;
+            memcpy(data.data() + current_sz, reinterpret_cast<const uint8_t*>(&slice_size), sizeof(int));
+            current_sz += 4;
+            memcpy(data.data() + current_sz, v.data, slice_size);
+            current_sz += slice_size;
+        }
+        DCHECK_EQ(new_size, current_sz);
+        binary_column->get_offset().emplace_back(new_size);
+    }
+
+    std::string get_name() const override { return "dict_merge"; }
+};
 
 } // namespace starrocks::vectorized
