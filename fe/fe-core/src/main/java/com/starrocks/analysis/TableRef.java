@@ -438,6 +438,18 @@ public class TableRef implements ParseNode, Writable {
         }
     }
 
+    public boolean isMetaQuery() {
+        if (commonHints == null || commonHints.isEmpty()) {
+            return false;
+        }
+        for (String hint : commonHints) {
+            if (hint.equalsIgnoreCase("_META_")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Analyze the join clause.
      * The join clause can only be analyzed after the left table has been analyzed

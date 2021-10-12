@@ -813,7 +813,7 @@ public class QueryAnalyzer {
         } else {
             if (isSupportedTable(table)) {
                 TableRelation tableRelation = new TableRelation(tableName, table, columns.build(), fields.build(),
-                        tableRef.getPartitionNames(), tableRef.getTabletIds());
+                        tableRef.getPartitionNames(), tableRef.getTabletIds(), tableRef.isMetaQuery());
                 session.getDumpInfo().addTable(tableRef.getName().getDb().split(":")[1], tableRelation.getTable());
                 return tableRelation;
             } else {
