@@ -52,7 +52,6 @@ public class MVProjectAggProjectScanRewrite {
                 input.inputAt(0).getOp() instanceof LogicalAggregationOperator &&
                 input.inputAt(0).inputAt(0).inputAt(0).getOp() instanceof LogicalOlapScanOperator) {
             LogicalProjectOperator topProject = (LogicalProjectOperator) input.getOp();
-            LogicalAggregationOperator agg = (LogicalAggregationOperator) input.inputAt(0).getOp();
             LogicalProjectOperator bellowProject = (LogicalProjectOperator) input.inputAt(0).inputAt(0).getOp();
             LogicalOlapScanOperator scanOperator =
                     (LogicalOlapScanOperator) input.inputAt(0).inputAt(0).inputAt(0).getOp();
@@ -65,7 +64,7 @@ public class MVProjectAggProjectScanRewrite {
             for (MaterializedViewRule.RewriteContext context : rewriteContexts) {
                 ColumnRefOperator projectColumn =
                         rewriteProjectOperator(bellowProject, context.queryColumnRef, context.mvColumnRef);
-                rewriteAggOperator(input, agg, context.aggCall, projectColumn, context.mvColumn);
+                rewriteAggOperator(input, context.aggCall, projectColumn, context.mvColumn);
                 rewriteTopProjectOperator((LogicalAggregationOperator) input.inputAt(0).getOp(), topProject,
                         projectColumn, context.aggCall);
             }
@@ -151,11 +150,10 @@ public class MVProjectAggProjectScanRewrite {
     // TODO(kks): refactor this method later
     // query: percentile_approx(a) && mv: percentile_union(a) -> percentile_union(a)
     protected void rewriteAggOperator(OptExpression optExpression,
-                                      LogicalAggregationOperator aggOperator,
                                       CallOperator agg,
                                       ColumnRefOperator aggUsedColumn,
                                       Column mvColumn) {
-
+        LogicalAggregationOperator aggOperator = (LogicalAggregationOperator) optExpression.getInputs().get(0).getOp();
         Map<ColumnRefOperator, CallOperator> newAggMap = new HashMap<>(aggOperator.getAggregations());
 
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : newAggMap.entrySet()) {
