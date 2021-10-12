@@ -14,6 +14,16 @@ DictDecodeNode::DictDecodeNode(ObjectPool* pool, const TPlanNode& tnode, const D
 
 Status DictDecodeNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    _init_counter();
+    return Status::OK();
+}
+
+void DictDecodeNode::_init_counter() {
+    _decode_timer = ADD_TIMER(_runtime_profile, "DictDecodeTime");
+}
+
+Status DictDecodeNode::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(ExecNode::prepare(state));
 
     std::vector<int32_t> _decode_column_ids;
     auto global_dict = state->get_global_dict_map();
@@ -32,16 +42,6 @@ Status DictDecodeNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _decoders.emplace_back(std::move(decoder));
     }
 
-    _init_counter();
-    return Status::OK();
-}
-
-void DictDecodeNode::_init_counter() {
-    _decode_timer = ADD_TIMER(_runtime_profile, "DictDecodeTime");
-}
-
-Status DictDecodeNode::prepare(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::prepare(state));
     return Status::OK();
 }
 
