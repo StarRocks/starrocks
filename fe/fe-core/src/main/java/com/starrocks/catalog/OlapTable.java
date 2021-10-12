@@ -234,15 +234,6 @@ public class OlapTable extends Table {
         return indexes;
     }
 
-    public Map<String, Index> getIndexesMap() {
-        Map<String, Index> indexMap = new HashMap<>();
-        if (indexes != null) {
-            Optional.ofNullable(indexes.getIndexes()).orElse(Collections.emptyList()).stream().forEach(
-                    i -> indexMap.put(i.getIndexName(), i));
-        }
-        return indexMap;
-    }
-
     public void checkAndSetName(String newName, boolean onlyCheck) throws DdlException {
         // check if rollup has same name
         for (String idxName : getIndexNameToId().keySet()) {

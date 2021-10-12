@@ -105,6 +105,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitPhysicalMetaScan(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     public R visitPhysicalProject(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }

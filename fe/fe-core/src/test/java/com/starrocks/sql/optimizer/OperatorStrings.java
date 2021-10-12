@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
@@ -185,6 +186,13 @@ public class OperatorStrings {
                 sb.append(" Limit ").append(scan.getLimit());
             }
             return new OperatorStr(sb.toString(), step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalMetaScan(OptExpression optExpression, Integer step) {
+            PhysicalMetaScanOperator scan = (PhysicalMetaScanOperator) optExpression.getOp();
+            String sb = "Meta SCAN (" + "columns" + scan.getUsedColumns() + ")";
+            return new OperatorStr(sb, step, Collections.emptyList());
         }
 
         @Override

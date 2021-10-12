@@ -36,9 +36,11 @@ import com.starrocks.builtins.ScalarBuiltins;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,26 +72,27 @@ public class FunctionSet {
     public static final String BITMAP_UNION = "bitmap_union";
     public static final String BITMAP_UNION_COUNT = "bitmap_union_count";
     public static final String BITMAP_UNION_INT = "bitmap_union_int";
-    public static final String BITMAP_COUNT = "bitmap_count";
     public static final String INTERSECT_COUNT = "intersect_count";
     public static final String BITMAP_INTERSECT = "bitmap_intersect";
     public static final String MULTI_DISTINCT_COUNT = "multi_distinct_count";
     public static final String MULTI_DISTINCT_SUM = "multi_distinct_sum";
+    public static final String DICT_MERGE = "dict_merge";
 
     // Window functions:
-    public static final String LEAD = "LEAD";
-    public static final String LAG = "LAG";
-    public static final String FIRST_VALUE = "FIRST_VALUE";
-    public static final String LAST_VALUE = "LAST_VALUE";
+    public static final String LEAD = "lead";
+    public static final String LAG = "lag";
+    public static final String FIRST_VALUE = "first_value";
+    public static final String LAST_VALUE = "last_value";
 
     // Scalar functions:
+    public static final String BITMAP_COUNT = "bitmap_count";
     public static final String HLL_HASH = "hll_hash";
     public static final String PERCENTILE_HASH = "percentile_hash";
     public static final String TO_BITMAP = "to_bitmap";
     public static final String NULL_OR_EMPTY = "null_or_empty";
     public static final String IF = "if";
 
-    // arithmetic functions:
+    // Arithmetic functions:
     public static final String ADD = "add";
     public static final String SUBTRACT = "subtract";
     public static final String MULTIPLY = "multiply";
@@ -1535,7 +1538,7 @@ public class FunctionSet {
         // analytic functions
         // Rank
         addBuiltin(AggregateFunction.createAnalyticBuiltin("rank",
-                Lists.newArrayList(), Type.BIGINT, Type.VARCHAR,
+                Collections.emptyList(), Type.BIGINT, Type.VARCHAR,
                 prefix + "9rank_initEPN13starrocks_udf15FunctionContextEPNS1_9StringValE",
                 prefix + "11rank_updateEPN13starrocks_udf15FunctionContextEPNS1_9StringValE",
                 null,
@@ -1543,18 +1546,26 @@ public class FunctionSet {
                 prefix + "13rank_finalizeEPN13starrocks_udf15FunctionContextERNS1_9StringValE"));
         // Dense rank
         addBuiltin(AggregateFunction.createAnalyticBuiltin("dense_rank",
-                Lists.newArrayList(), Type.BIGINT, Type.VARCHAR,
+                Collections.emptyList(), Type.BIGINT, Type.VARCHAR,
                 prefix + "9rank_initEPN13starrocks_udf15FunctionContextEPNS1_9StringValE",
                 prefix + "17dense_rank_updateEPN13starrocks_udf15FunctionContextEPNS1_9StringValE",
                 null,
                 prefix + "20dense_rank_get_valueEPN13starrocks_udf15FunctionContextERNS1_9StringValE",
                 prefix + "13rank_finalizeEPN13starrocks_udf15FunctionContextERNS1_9StringValE"));
         addBuiltin(AggregateFunction.createAnalyticBuiltin("row_number",
-                new ArrayList<Type>(), Type.BIGINT, Type.BIGINT,
+                Collections.emptyList(), Type.BIGINT, Type.BIGINT,
                 prefix + "9init_zeroIN13starrocks_udf9BigIntValEEEvPNS2_15FunctionContextEPT_",
                 prefix + "17count_star_updateEPN13starrocks_udf15FunctionContextEPNS1_9BigIntValE",
                 prefix + "11count_mergeEPN13starrocks_udf15FunctionContextERKNS1_9BigIntValEPS4_",
                 null, null));
+
+        addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.VARCHAR),
+                Type.VARCHAR, Type.VARCHAR, Strings.EMPTY, Strings.EMPTY, Strings.EMPTY, Strings.EMPTY,
+                Strings.EMPTY, true, false, false));
+
+        addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.ARRAY_VARCHAR),
+                Type.VARCHAR, Type.VARCHAR, Strings.EMPTY, Strings.EMPTY, Strings.EMPTY, Strings.EMPTY,
+                Strings.EMPTY, true, false, false));
 
         for (Type t : Type.getSupportedTypes()) {
             if (t.isNull()) {
