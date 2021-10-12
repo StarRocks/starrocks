@@ -2,6 +2,7 @@
 
 #include "exprs/agg/aggregate_factory.h"
 
+#include <tuple>
 #include <unordered_map>
 
 #include "column/type_traits.h"
@@ -126,6 +127,10 @@ AggregateFunctionPtr AggregateFactory::MakeSumDistinctAggregateFunctionV2() {
     return std::make_shared<DistinctAggregateFunctionV2<PT, AggDistinctType::SUM>>();
 }
 
+AggregateFunctionPtr AggregateFactory::MakeDictMergeAggregateFunction() {
+    return std::make_shared<DictMergeAggregateFunction>();
+}
+
 AggregateFunctionPtr AggregateFactory::MakeHllUnionAggregateFunction() {
     return std::make_shared<HllUnionAggregateFunction>();
 }
@@ -218,6 +223,14 @@ public:
                                create_object_function<arg_type, return_type, true>(name));
     }
 
+    template <PrimitiveType arg_type, PrimitiveType return_type>
+    void add_array_mapping(std::string&& name) {
+        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, false),
+                               create_array_function<arg_type, return_type, false>(name));
+        _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type, true),
+                               create_array_function<arg_type, return_type, true>(name));
+    }
+
     template <PrimitiveType arg_type, PrimitiveType return_type, bool is_null>
     AggregateFunctionPtr create_object_function(std::string& name) {
         if constexpr (is_null) {
@@ -271,6 +284,22 @@ public:
         //so here are the separate processing function percentile_approx
         if (name == "percentile_approx") {
             return AggregateFactory::MakePercentileApproxAggregateFunction();
+        }
+
+        return nullptr;
+    }
+
+    template <PrimitiveType arg_type, PrimitiveType return_type, bool is_null>
+    AggregateFunctionPtr create_array_function(std::string& name) {
+        if constexpr (is_null) {
+            if (name == "dict_merge") {
+                auto dict_merge = AggregateFactory::MakeDictMergeAggregateFunction();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<DictMergeState>(dict_merge);
+            }
+        } else {
+            if (name == "dict_merge") {
+                return AggregateFactory::MakeDictMergeAggregateFunction();
+            }
         }
 
         return nullptr;
@@ -734,6 +763,8 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_object_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_approx");
 
     add_object_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE>("percentile_union");
+
+    add_array_mapping<TYPE_ARRAY, TYPE_VARCHAR>("dict_merge");
 }
 
 #undef ADD_ALL_TYPE
