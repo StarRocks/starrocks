@@ -38,7 +38,6 @@ void GlobalDriverDispatcher::finalize_driver(DriverRawPtr driver, RuntimeState* 
     if (driver->query_ctx()->is_finished()) {
         auto query_id = driver->query_ctx()->query_id();
         DCHECK(!driver->source_operator()->pending_finish());
-        driver.reset();
         QueryContextManager::instance()->remove(query_id);
     }
 }
