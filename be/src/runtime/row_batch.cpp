@@ -256,18 +256,7 @@ void RowBatch::clear() {
     }
 
     _tuple_data_pool->free_all();
-    for (auto& _io_buffer : _io_buffers) {
-        _io_buffer->return_buffer();
-    }
 
-    for (BufferInfo& buffer_info : _buffers) {
-        ExecEnv::GetInstance()->buffer_pool()->FreeBuffer(buffer_info.client, &buffer_info.buffer);
-    }
-
-    close_tuple_streams();
-    for (auto& _block : _blocks) {
-        _block->del();
-    }
     if (config::enable_partitioned_aggregation) {
         DCHECK(_tuple_ptrs != nullptr);
         free(_tuple_ptrs);
@@ -420,33 +409,11 @@ void RowBatch::reset() {
 
     // TODO: Change this to Clear() and investigate the repercussions.
     _tuple_data_pool->free_all();
-    for (auto& _io_buffer : _io_buffers) {
-        _io_buffer->return_buffer();
-    }
-    _io_buffers.clear();
 
-    for (BufferInfo& buffer_info : _buffers) {
-        ExecEnv::GetInstance()->buffer_pool()->FreeBuffer(buffer_info.client, &buffer_info.buffer);
-    }
-    _buffers.clear();
-
-    close_tuple_streams();
-    for (auto& _block : _blocks) {
-        _block->del();
-    }
-    _blocks.clear();
     if (!config::enable_partitioned_aggregation) {
         _tuple_ptrs = reinterpret_cast<Tuple**>(_tuple_data_pool->allocate(_tuple_ptrs_size));
     }
     _need_to_return = false;
-}
-
-void RowBatch::close_tuple_streams() {
-    for (auto& _tuple_stream : _tuple_streams) {
-        _tuple_stream->close();
-        delete _tuple_stream;
-    }
-    _tuple_streams.clear();
 }
 
 int RowBatch::get_batch_size(const TRowBatch& batch) {
