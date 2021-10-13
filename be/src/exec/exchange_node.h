@@ -28,7 +28,6 @@
 
 namespace starrocks {
 
-class RowBatch;
 class RuntimeProfile;
 
 // Receiver node for data streams. The data stream receiver is created in Prepare()
@@ -73,12 +72,7 @@ protected:
 private:
     // Implements GetNext() for the case where _is_merging is true. Delegates the GetNext()
     // call to the underlying DataStreamRecvr.
-    Status get_next_merging(RuntimeState* state, RowBatch* output_batch, bool* eos);
     Status get_next_merging(RuntimeState* state, ChunkPtr* chunk, bool* eos);
-
-    // Resets _input_batch to the next batch from the from _stream_recvr's queue.
-    // Only used when _is_merging is false.
-    Status fill_input_row_batch(RuntimeState* state);
 
     int _num_senders; // needed for _stream_recvr construction
 
@@ -88,24 +82,8 @@ private:
     // our input rows are a prefix of the rows we produce
     RowDescriptor _input_row_desc;
 
-    // the size of our input batches does not necessarily match the capacity
-    // of our output batches, which means that we need to buffer the input
-    // Current batch of rows from the receiver queue being processed by this node.
-    // Only valid if _is_merging is false. (If _is_merging is true, GetNext() is
-    // delegated to the receiver). Owned by the stream receiver.
-    // std::unique_ptr<RowBatch> _input_batch;
-    RowBatch* _input_batch = nullptr;
-
     std::unique_ptr<vectorized::Chunk> _input_chunk;
     bool _is_finished = false;
-
-    // Next row to copy from _input_batch. For non-merging exchanges, _input_batch
-    // is retrieved directly from the sender queue in the stream recvr, and rows from
-    // _input_batch must be copied to the output batch in GetNext().
-    int _next_row_idx;
-
-    // time spent reconstructing received rows
-    RuntimeProfile::Counter* _convert_row_batch_timer = nullptr;
 
     // True if this is a merging exchange node. If true, GetNext() is delegated to the
     // underlying _stream_recvr, and _input_batch is not used/valid.
