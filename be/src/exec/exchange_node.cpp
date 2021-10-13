@@ -48,7 +48,6 @@ ExchangeNode::ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
                   descs, tnode.exchange_node.input_row_tuples,
                   std::vector<bool>(tnode.nullable_tuples.begin(),
                                     tnode.nullable_tuples.begin() + tnode.exchange_node.input_row_tuples.size())),
-          _next_row_idx(0),
           _is_merging(tnode.exchange_node.__isset.sort_info),
           _offset(tnode.exchange_node.__isset.offset ? tnode.exchange_node.offset : 0),
           _num_rows_skipped(0) {
@@ -70,7 +69,6 @@ Status ExchangeNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 Status ExchangeNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    _convert_row_batch_timer = ADD_TIMER(runtime_profile(), "ConvertRowBatchTime");
     // TODO: figure out appropriate buffer size
     DCHECK_GT(_num_senders, 0);
     _sub_plan_query_statistics_recvr.reset(new QueryStatisticsRecvr());
@@ -95,16 +93,7 @@ Status ExchangeNode::open(RuntimeState* state) {
         return Status::OK();
     }
 
-    if (_is_merging) {
-        RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-        TupleRowComparator less_than(_sort_exec_exprs, _is_asc_order, _nulls_first);
-        // create_merger() will populate its merging heap with batches from the _stream_recvr,
-        // so it is not necessary to call fill_input_row_batch().
-        RETURN_IF_ERROR(_stream_recvr->create_merger(less_than));
-    } else {
-        RETURN_IF_ERROR(fill_input_row_batch(state));
-    }
-    return Status::OK();
+    return Status::InternalError("Non-vectorized runtime engine is not supported now");
 }
 
 Status ExchangeNode::collect_query_statistics(QueryStatistics* statistics) {
@@ -125,20 +114,6 @@ Status ExchangeNode::close(RuntimeState* state) {
     }
     // _stream_recvr.reset();
     return ExecNode::close(state);
-}
-
-Status ExchangeNode::fill_input_row_batch(RuntimeState* state) {
-    DCHECK(!_is_merging);
-    Status ret_status;
-    {
-        // SCOPED_TIMER(state->total_network_receive_timer());
-        ret_status = _stream_recvr->get_batch(&_input_batch);
-    }
-    VLOG_FILE << "exch: has batch=" << (_input_batch == nullptr ? "false" : "true")
-              << " #rows=" << (_input_batch != nullptr ? _input_batch->num_rows() : 0)
-              << " is_cancelled=" << (ret_status.is_cancelled() ? "true" : "false")
-              << " instance_id=" << state->fragment_instance_id();
-    return ret_status;
 }
 
 Status ExchangeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
@@ -181,44 +156,6 @@ Status ExchangeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     COUNTER_SET(_rows_returned_counter, _num_rows_returned);
 
     DCHECK_CHUNK(*chunk);
-    return Status::OK();
-}
-
-Status ExchangeNode::get_next_merging(RuntimeState* state, RowBatch* output_batch, bool* eos) {
-    DCHECK_EQ(output_batch->num_rows(), 0);
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(state->check_query_state("Exchange, while merging next."));
-
-    RETURN_IF_ERROR(_stream_recvr->get_next(output_batch, eos));
-    while ((_num_rows_skipped < _offset)) {
-        _num_rows_skipped += output_batch->num_rows();
-        // Throw away rows in the output batch until the offset is skipped.
-        int rows_to_keep = _num_rows_skipped - _offset;
-        if (rows_to_keep > 0) {
-            output_batch->copy_rows(0, output_batch->num_rows() - rows_to_keep, rows_to_keep);
-            output_batch->set_num_rows(rows_to_keep);
-        } else {
-            output_batch->set_num_rows(0);
-        }
-        if (rows_to_keep > 0 || *eos || output_batch->at_capacity()) {
-            break;
-        }
-        RETURN_IF_ERROR(_stream_recvr->get_next(output_batch, eos));
-    }
-
-    _num_rows_returned += output_batch->num_rows();
-    if (reached_limit()) {
-        output_batch->set_num_rows(output_batch->num_rows() - (_num_rows_returned - _limit));
-        *eos = true;
-    }
-
-    // On eos, transfer all remaining resources from the input batches maintained
-    // by the merger to the output batch.
-    if (*eos) {
-        _stream_recvr->transfer_all_resources(output_batch);
-    }
-
-    COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     return Status::OK();
 }
 
