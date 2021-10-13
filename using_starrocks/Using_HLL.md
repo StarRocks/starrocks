@@ -35,7 +35,7 @@ SELECT floor((0.721 * 1024 * 1024) / (sum(pow(2, m * -1)) + 1024 - count(*))) AS
 FROM(select(murmur_hash3_32(c2) & 1023) AS bucket,
      max((31 - CAST(log2(murmur_hash3_32(c2) & 2147483647) AS INT))) AS m
      FROM db0.table0
-     GROUP BY bucket) bucket_values
+     GROUP BY bucket) bucket_values;
 ~~~
 
 该算法对db0.table0的col2进行去重分析。

@@ -1,4 +1,4 @@
-# BrokerLoad
+# Broker Load
 
 StarRocks支持从Apache HDFS、Amazon S3等外部存储系统导入数据，支持CSV、ORCFile、Parquet等文件格式。数据量在几十GB到上百GB 级别。
 
@@ -399,7 +399,7 @@ LoadFinishTime: 2019-07-27 11:50:16
 
     关于HDFS集群的配置可以写入hdfs-site.xml文件中，用户使用Broker进程读取HDFS集群的信息时，只需要填写集群的文件路径名和认证信息即可。
 
-* Q：如何配置Hadoop ViewFS （fedoration）
+* Q：如何配置Hadoop ViewFS （federation）
 
   A：需要将 ViewFs 相关的配置 core-site.xml 和 hdfs-site.xml 拷贝到 broker/conf 目录中。
 

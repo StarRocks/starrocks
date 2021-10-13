@@ -1,4 +1,4 @@
-# Insert Into loading
+# Insert Into 导入
 
 Insert Into 语句的使用方式和 MySQL 等数据库中 Insert Into 语句的使用方式类似。
 但在 StarRocks 中，所有的数据写入都是 ***一个独立的导入作业*** ，所以这里将 Insert Into 也作为一种导入方式介绍。
@@ -8,7 +8,7 @@ Insert Into 语句的使用方式和 MySQL 等数据库中 Insert Into 语句的
 ## 使用场景
 
 * Insert Into 导入命令会同步返回导入流程的运行结果。
-* 仅导入几条测试数据，验证一下 StarRocks 系统的功能。此时适合使用 INSERT INTO VALUS 的语法。
+* 仅导入几条测试数据，验证一下 StarRocks 系统的功能。此时适合使用 INSERT INTO VALUES 的语法。
 * 用户希望将已经在 StarRocks 表中的数据进行 ETL 转换并导入到一个新的 StarRocks 表中，此时适合使用 INSERT INTO SELECT 语法。
 * 用户可以创建一种外部表，如 MySQL 外部表映射一张 MySQL 系统中的表。然后通过 INSERT INTO SELECT 语法将外部表中的数据导入到 StarRocks 表中存储。
 

@@ -31,7 +31,7 @@ StarRocks 是基于MPP 架构实现的，在使用count distinct做精准去重�
  select page, count(distinct user_id) as uv from table group by page;
 ```
 
-对于上图计算 PV 的 SQL，StarRocks 在计算时，会按照下图进行计算，先根据 page 列和 user_id 列 group by，最后再 count。
+对于上图计算 UV 的 SQL，StarRocks 在计算时，会按照下图进行计算，先根据 page 列和 user_id 列 group by，最后再 count。
 
 ![alter](../assets/6.1.2-2.png)
 
