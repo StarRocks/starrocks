@@ -8,6 +8,8 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
+import java.util.Set;
+
 public class PhysicalDistributionOperator extends PhysicalOperator {
     public PhysicalDistributionOperator(DistributionSpec spec) {
         super(OperatorType.PHYSICAL_DISTRIBUTION, spec);
@@ -35,5 +37,10 @@ public class PhysicalDistributionOperator extends PhysicalOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalDistribution(optExpression, context);
+    }
+
+    @Override
+    public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
+        return true;
     }
 }
