@@ -596,14 +596,6 @@ Status DataStreamRecvr::create_merger_for_pipeline(const SortExecExprs* exprs, c
     return Status::OK();
 }
 
-void DataStreamRecvr::transfer_all_resources(RowBatch* transfer_batch) {
-    for (SenderQueue* sender_queue : _sender_queues) {
-        if (sender_queue->current_batch() != nullptr) {
-            sender_queue->current_batch()->transfer_resource_ownership(transfer_batch);
-        }
-    }
-}
-
 DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_tracker, const RowDescriptor& row_desc,
                                  const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
                                  bool is_merging, int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
