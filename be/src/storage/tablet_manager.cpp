@@ -1023,9 +1023,6 @@ Status TabletManager::start_trash_sweep() {
                         if (!st.ok()) {
                             LOG(WARNING) << "Fail to snapshot_trash, tablet_id=" << tablet->tablet_id()
                                          << " schema_hash=" << tablet->schema_hash() << ", status=" << st.to_string();
-                        } else {
-                            LOG(INFO) << "Created snapshot tablet_id=" << tablet->tablet_id()
-                                      << " schema_hash=" << tablet->schema_hash();
                         }
                     } else {
                         // take snapshot of tablet meta

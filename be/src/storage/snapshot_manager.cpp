@@ -325,7 +325,7 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
         return Status::RuntimeError("empty snapshot_id_path");
     }
     std::string snapshot_dir = get_schema_hash_full_path(tablet, snapshot_id_path);
-    (void)FileUtils::remove_all(snapshot_dir);
+    FileUtils::remove_all(snapshot_dir);
     RETURN_IF_ERROR(FileUtils::create_dir(snapshot_dir));
 
     // 3. Link files to snapshot directory.
@@ -334,7 +334,7 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
         auto st = rowset->link_files_to(snapshot_dir, rowset->rowset_id());
         if (!st.ok()) {
             LOG(WARNING) << "Fail to link rowset file:" << st;
-            (void)FileUtils::remove_all(snapshot_id_path);
+            FileUtils::remove_all(snapshot_id_path);
             return st;
         }
         snapshot_rowset_metas.emplace_back(rowset->rowset_meta());
@@ -347,7 +347,7 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
         std::string header_path = _get_header_full_path(tablet, snapshot_dir);
         if (Status st = snapshot_tablet_meta->save(header_path); !st.ok()) {
             LOG(WARNING) << "Fail to save tablet meta to " << header_path;
-            (void)FileUtils::remove_all(snapshot_id_path);
+            FileUtils::remove_all(snapshot_id_path);
             return Status::RuntimeError("Fail to save tablet meta to header file");
         }
         return snapshot_id_path;
@@ -355,7 +355,7 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
         auto st = build_snapshot_meta(SNAPSHOT_TYPE_INCREMENTAL, snapshot_dir, tablet, snapshot_rowset_metas,
                                       0 /*snapshot_version, unused*/, g_Types_constants.TSNAPSHOT_REQ_VERSION2);
         if (!st.ok()) {
-            (void)FileUtils::remove_all(snapshot_id_path);
+            FileUtils::remove_all(snapshot_id_path);
             return st;
         }
         return snapshot_id_path;
@@ -385,7 +385,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
         return Status::RuntimeError("empty snapshot_id_path");
     }
     std::string snapshot_dir = get_schema_hash_full_path(tablet, snapshot_id_path);
-    (void)FileUtils::remove_all(snapshot_dir);
+    FileUtils::remove_all(snapshot_dir);
     RETURN_IF_ERROR(FileUtils::create_dir(snapshot_dir));
 
     // 3. Link files to snapshot directory.
@@ -394,7 +394,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
         auto st = snapshot_rowset->link_files_to(snapshot_dir, snapshot_rowset->rowset_id());
         if (!st.ok()) {
             LOG(WARNING) << "Fail to link rowset file:" << st;
-            (void)FileUtils::remove_all(snapshot_id_path);
+            FileUtils::remove_all(snapshot_id_path);
             return st;
         }
         snapshot_rowset_metas.emplace_back(snapshot_rowset->rowset_meta());
@@ -407,7 +407,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
         std::string header_path = _get_header_full_path(tablet, snapshot_dir);
         if (Status st = snapshot_tablet_meta->save(header_path); !st.ok()) {
             LOG(WARNING) << "Fail to save tablet meta to " << header_path;
-            (void)FileUtils::remove_all(snapshot_id_path);
+            FileUtils::remove_all(snapshot_id_path);
             return Status::RuntimeError("Fail to save tablet meta to header file");
         }
         return snapshot_id_path;
@@ -415,7 +415,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
         auto st = build_snapshot_meta(SNAPSHOT_TYPE_FULL, snapshot_dir, tablet, snapshot_rowset_metas, snapshot_version,
                                       g_Types_constants.TSNAPSHOT_REQ_VERSION2);
         if (!st.ok()) {
-            (void)FileUtils::remove_all(snapshot_id_path);
+            FileUtils::remove_all(snapshot_id_path);
             return st;
         }
         return snapshot_id_path;
@@ -437,7 +437,7 @@ Status SnapshotManager::write_meta_snapshot(const TabletSharedPtr& tablet) {
     auto st = build_snapshot_meta(SNAPSHOT_TYPE_FULL, meta_path, tablet, snapshot_rowset_metas, snapshot_version,
                                   g_Types_constants.TSNAPSHOT_REQ_VERSION2);
     if (!st.ok()) {
-        (void)FileUtils::remove(meta_path);
+        FileUtils::remove(meta_path);
         return st;
     }
     return Status::OK();
