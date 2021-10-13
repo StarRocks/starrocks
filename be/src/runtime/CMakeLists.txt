@@ -72,7 +72,6 @@ set(RUNTIME_FILES
     data_stream_recvr.cc
     buffered_tuple_stream2.cc
     buffered_tuple_stream2_ir.cc
-    buffered_tuple_stream3.cc
     #  export_task_mgr.cpp
     export_sink.cpp
     load_channel_mgr.cpp
