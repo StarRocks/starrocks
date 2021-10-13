@@ -211,6 +211,9 @@ public:
         return 0;
     };
 
+    virtual void serialize_batch_with_null_vector(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
+                                                  uint32_t max_one_row_size, uint8_t* null_vector) {}
+
     // deserialize one data and append to this column
     virtual const uint8_t* deserialize_and_append(const uint8_t* pos) = 0;
 

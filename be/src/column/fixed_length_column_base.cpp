@@ -107,6 +107,24 @@ void FixedLengthColumnBase<T>::serialize_batch(uint8_t* __restrict__ dst, Buffer
 }
 
 template <typename T>
+void FixedLengthColumnBase<T>::serialize_batch_with_null_vector(uint8_t* __restrict__ dst,
+                                                                Buffer<uint32_t>& slice_sizes, size_t chunk_size,
+                                                                uint32_t max_one_row_size, uint8_t* null_vector) {
+    uint32_t* sizes = slice_sizes.data();
+    T* __restrict__ src = _data.data();
+
+    for (size_t i = 0; i < chunk_size; ++i) {
+        memcpy(dst + i * max_one_row_size + sizes[i], null_vector + i, sizeof(bool));
+        sizes[i] += 1;
+
+        if (!null_vector[i]) {
+            memcpy(dst + i * max_one_row_size + sizes[i], src + i, sizeof(T));
+            sizes[i] += sizeof(T);
+        }
+    }
+}
+
+template <typename T>
 size_t FixedLengthColumnBase<T>::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
                                                              size_t start, size_t count) {
     const size_t value_size = sizeof(T);
