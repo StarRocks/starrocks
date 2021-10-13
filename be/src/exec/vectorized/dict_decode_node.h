@@ -47,7 +47,6 @@ public:
             auto column = down_cast<NullableColumn*>(in);
             auto res_column = down_cast<NullableColumn*>(out);
             res_column->null_column_data().resize(in->size());
-            res_column->set_has_null(true);
 
             auto res_data_column = down_cast<ResultColumnType*>(res_column->data_column().get());
             auto data_column = down_cast<ColumnType*>(column->data_column().get());
@@ -64,6 +63,7 @@ public:
                 } else {
                     res_column->null_column_data()[i] = 1;
                     res_data_column->append_default();
+                    res_column->set_null(i);
                 }
             }
             return Status::OK();
