@@ -1022,11 +1022,11 @@ Status TabletManager::start_trash_sweep() {
                         StatusOr<std::string> st = SnapshotManager::instance()->snapshot_trash(tablet, 0, 180);
                         if (!st.ok()) {
                             LOG(WARNING) << "Fail to snapshot_trash, tablet_id=" << tablet->tablet_id()
-                                         << " schema_hash="
-                                         << tablet->schema_hash(); // << " status=" << st.to_string();
+                                         << " schema_hash=" << tablet->schema_hash()
+                                         << ", status=" << st.status().to_string();
                         } else {
-                            LOG(INFO) << "Created snapshot tablet_id=" << tablet->tablet_id() << " schema_hash="
-                                      << tablet->schema_hash(); // << " snapshot_path=" << snapshot_path;
+                            LOG(INFO) << "Created snapshot tablet_id=" << tablet->tablet_id()
+                                      << " schema_hash=" << tablet->schema_hash();
                         }
                     } else {
                         // take snapshot of tablet meta
