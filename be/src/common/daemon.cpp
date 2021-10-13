@@ -118,9 +118,6 @@ void* memory_maintenance_thread(void* dummy) {
         // ExecEnv may not have been created yet or this may be the catalogd or statestored,
         // which don't have ExecEnvs.
         if (env != nullptr) {
-            BufferPool* buffer_pool = env->buffer_pool();
-            if (buffer_pool != nullptr) buffer_pool->Maintenance();
-
             // The process limit as measured by our trackers may get out of sync with the
             // process usage if memory is allocated or freed without updating a MemTracker.
             // The metric is refreshed whenever memory is consumed or released via a MemTracker,
