@@ -48,6 +48,7 @@
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "exec/vectorized/intersect_node.h"
 #include "exec/vectorized/mysql_scan_node.h"
+#include "exec/vectorized/olap_meta_scan_node.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/project_node.h"
 #include "exec/vectorized/repeat_node.h"
@@ -448,6 +449,9 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     case TPlanNodeType::OLAP_SCAN_NODE:
         *node = pool->add(new vectorized::OlapScanNode(pool, tnode, descs));
         return Status::OK();
+    case TPlanNodeType::META_SCAN_NODE:
+        *node = pool->add(new vectorized::OlapMetaScanNode(pool, tnode, descs));
+        return Status::OK();
     case TPlanNodeType::AGGREGATION_NODE:
         if (tnode.agg_node.__isset.use_streaming_preaggregation && tnode.agg_node.use_streaming_preaggregation) {
             if (tnode.agg_node.aggregate_functions.size() == 0) {
@@ -705,6 +709,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::ES_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::ES_HTTP_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::HDFS_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::META_SCAN_NODE, nodes);
 }
 
 bool ExecNode::_check_has_vectorized_scan_child() {

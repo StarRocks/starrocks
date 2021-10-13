@@ -32,6 +32,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "common/logging.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
@@ -269,6 +271,8 @@ public:
         }
         return max_length;
     }
+
+    uint32_t dict_size() { return _num_elems; }
 
 private:
     // Return the offset within '_data' where the string value with index 'idx' can be found.
