@@ -346,7 +346,7 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
 }
 
 void TabletColumn::to_schema_pb(ColumnPB* column) const {
-    column->mutable_name()->assign(_col_name.value());
+    column->mutable_name()->assign(_col_name.data(), _col_name.size());
     column->set_unique_id(_unique_id);
     column->set_type(get_string_by_field_type(_type));
     column->set_is_key(is_key());
@@ -544,7 +544,7 @@ bool operator==(const TabletSchema& a, const TabletSchema& b) {
 
 std::string TabletColumn::debug_string() const {
     std::stringstream ss;
-    ss << "(unique_id=" << _unique_id << ",name=" << _col_name.value() << ",type=" << _type << ",is_key=" << is_key()
+    ss << "(unique_id=" << _unique_id << ",name=" << _col_name << ",type=" << _type << ",is_key=" << is_key()
        << ",aggregation=" << _aggregation << ",is_nullable=" << is_nullable()
        << ",default_value=" << (has_default_value() ? default_value() : "N/A")
        << ",precision=" << (has_precision() ? std::to_string(_precision) : "N/A")

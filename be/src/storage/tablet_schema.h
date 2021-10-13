@@ -31,6 +31,7 @@
 #include "storage/olap_define.h"
 #include "storage/types.h"
 #include "storage/vectorized/type_utils.h"
+#include "util/c_string.h"
 
 namespace starrocks {
 
@@ -47,59 +48,15 @@ class TabletColumn {
         bool has_default_value = false;
     };
 
-    // Zero terminated string.
-    class ColumnName {
-    public:
-        ColumnName() : _name(nullptr) {}
-        ~ColumnName() { delete[] _name; }
-
-        // Copy ctor
-        ColumnName(const ColumnName& rhs) : _name(nullptr) { assign(rhs.value()); }
-
-        // Move ctor
-        ColumnName(ColumnName&& rhs) : _name(rhs._name) { rhs._name = nullptr; }
-
-        // Copy assignment
-        ColumnName& operator=(const ColumnName& rhs) {
-            assign(rhs.value());
-            return *this;
-        }
-
-        // Move assignment
-        ColumnName& operator=(ColumnName&& rhs) {
-            delete[] _name;
-            _name = rhs._name;
-            rhs._name = nullptr;
-            return *this;
-        }
-
-        void assign(const std::string_view& s) { assign(s.data(), s.size()); }
-
-        void assign(const char* name, uint16_t len) {
-            delete[] _name;
-            _name = new char[len + 1];
-            memcpy(_name, name, len);
-            _name[len] = '\0';
-        }
-
-        bool operator==(const ColumnName& rhs) const { return strcmp(_name, rhs._name) == 0; }
-
-        bool operator!=(const ColumnName& rhs) const { return strcmp(_name, rhs._name) != 0; }
-
-        std::string_view value() const { return _name ? std::string_view(_name, strlen(_name)) : std::string_view(); }
-
-    private:
-        char* _name;
-    };
-
 public:
     // To developers: if you changed the typedefs, don't forget to reorder class members to
     // minimize the memory space of TabletColumn, i.e, sizeof(TabletColumn)
-    typedef int32_t unique_id_type;
-    typedef int32_t length_type;
-    typedef uint8_t index_length_type;
-    typedef uint8_t precision_type;
-    typedef uint8_t scale_type;
+    using ColumnName = CString;
+    using ColumnUID = int32_t;
+    using ColumnLength = int32_t;
+    using ColumnIndexLength = uint8_t;
+    using ColumnPrecision = uint8_t;
+    using ColumnScale = uint8_t;
 
     TabletColumn();
     TabletColumn(FieldAggregationMethod agg, FieldType type);
@@ -119,10 +76,10 @@ public:
     void init_from_pb(const ColumnPB& column);
     void to_schema_pb(ColumnPB* column) const;
 
-    unique_id_type unique_id() const { return _unique_id; }
-    void set_unique_id(unique_id_type unique_id) { _unique_id = unique_id; }
+    ColumnUID unique_id() const { return _unique_id; }
+    void set_unique_id(ColumnUID unique_id) { _unique_id = unique_id; }
 
-    std::string_view name() const { return _col_name.value(); }
+    std::string_view name() const { return std::string_view(_col_name.data(), _col_name.size()); }
     void set_name(const std::string_view name) { _col_name.assign(name.data(), name.size()); }
 
     FieldType type() const { return _type; }
@@ -140,28 +97,28 @@ public:
     bool has_bitmap_index() const { return _check_flag(kHasBitmapIndexShift); }
     void set_has_bitmap_index(bool value) { _set_flag(kHasBitmapIndexShift, value); }
 
-    length_type length() const { return _length; }
-    void set_length(length_type length) { _length = length; }
+    ColumnLength length() const { return _length; }
+    void set_length(ColumnLength length) { _length = length; }
 
     FieldAggregationMethod aggregation() const { return _aggregation; }
     void set_aggregation(FieldAggregationMethod agg) { _aggregation = agg; }
 
     bool has_precision() const { return _check_flag(kHasPrecisionShift); }
-    precision_type precision() const { return _precision; }
-    void set_precision(precision_type precision) {
+    ColumnPrecision precision() const { return _precision; }
+    void set_precision(ColumnPrecision precision) {
         _precision = precision;
         _set_flag(kHasPrecisionShift, true);
     }
 
     bool has_scale() const { return _check_flag(kHasScaleShift); }
-    scale_type scale() const { return _scale; }
-    void set_scale(scale_type scale) {
+    ColumnScale scale() const { return _scale; }
+    void set_scale(ColumnScale scale) {
         _scale = scale;
         _set_flag(kHasScaleShift, true);
     }
 
-    index_length_type index_length() const { return _index_length; }
-    void set_index_length(index_length_type index_length) { _index_length = index_length; }
+    ColumnIndexLength index_length() const { return _index_length; }
+    void set_index_length(ColumnIndexLength index_length) { _index_length = index_length; }
 
     bool has_default_value() const { return _extra_fields && _extra_fields->has_default_value; }
     std::string default_value() const { return _extra_fields ? _extra_fields->default_value : ""; }
@@ -191,7 +148,7 @@ public:
     bool is_format_v2_column() const;
 
     int64_t mem_usage() const {
-        int64_t mem_usage = sizeof(TabletColumn) + _col_name.value().size() + default_value().capacity();
+        int64_t mem_usage = sizeof(TabletColumn) + _col_name.size() + default_value().capacity();
         for (int i = 0; i < subcolumn_count(); i++) {
             mem_usage += subcolumn(i).mem_usage();
         }
@@ -230,14 +187,14 @@ private:
     // To developers: try to order the class members in a way to minimize the required memory space.
 
     ColumnName _col_name;
-    unique_id_type _unique_id = 0;
-    length_type _length = 0;
+    ColumnUID _unique_id = 0;
+    ColumnLength _length = 0;
     FieldAggregationMethod _aggregation = OLAP_FIELD_AGGREGATION_NONE;
     FieldType _type = OLAP_FIELD_TYPE_UNKNOWN;
 
-    index_length_type _index_length = 0;
-    precision_type _precision = 0;
-    scale_type _scale = 0;
+    ColumnIndexLength _index_length = 0;
+    ColumnPrecision _precision = 0;
+    ColumnScale _scale = 0;
 
     uint8_t _flags = 0;
 
