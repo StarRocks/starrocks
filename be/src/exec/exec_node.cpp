@@ -40,6 +40,7 @@
 #include "exec/vectorized/analytic_node.h"
 #include "exec/vectorized/assert_num_rows_node.h"
 #include "exec/vectorized/cross_join_node.h"
+#include "exec/vectorized/dict_decode_node.h"
 #include "exec/vectorized/es_http_scan_node.h"
 #include "exec/vectorized/except_node.h"
 #include "exec/vectorized/file_scan_node.h"
@@ -536,6 +537,9 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     case TPlanNodeType::SCHEMA_SCAN_NODE:
         *node = pool->add(new vectorized::SchemaScanNode(pool, tnode, descs));
         return Status::OK();
+    case TPlanNodeType::DECODE_NODE:
+        *node = pool->add(new vectorized::DictDecodeNode(pool, tnode, descs));
+        return Status::OK();
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
     }
@@ -703,7 +707,6 @@ void ExecNode::collect_nodes(TPlanNodeType::type node_type, std::vector<ExecNode
     if (_type == node_type) {
         nodes->push_back(this);
     }
-
     for (auto& i : _children) {
         i->collect_nodes(node_type, nodes);
     }
