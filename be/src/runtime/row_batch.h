@@ -233,9 +233,6 @@ public:
 private:
     MemTracker* _mem_tracker; // not owned
 
-    // Close owned tuple streams and delete if needed.
-    void close_tuple_streams();
-
     // All members need to be handled in RowBatch::swap()
 
     bool _has_in_flight_row; // if true, last row hasn't been committed yet
@@ -270,24 +267,6 @@ private:
 
     // holding (some of the) data referenced by rows
     std::unique_ptr<MemPool> _tuple_data_pool;
-
-    // IO buffers current owned by this row batch. Ownership of IO buffers transfer
-    // between row batches. Any IO buffer will be owned by at most one row batch
-    // (i.e. they are not ref counted) so most row batches don't own any.
-    std::vector<DiskIoMgr::BufferDescriptor*> _io_buffers;
-
-    struct BufferInfo {
-        BufferPool::ClientHandle* client;
-        BufferPool::BufferHandle buffer;
-    };
-    /// Pages attached to this row batch. See AddBuffer() for ownership semantics.
-    std::vector<BufferInfo> _buffers;
-    // Tuple streams currently owned by this row batch.
-    std::vector<BufferedTupleStream2*> _tuple_streams;
-
-    // Blocks attached to this row batch. The underlying memory and block manager client
-    // are owned by the BufferedBlockMgr2.
-    std::vector<BufferedBlockMgr2::Block*> _blocks;
 
     // String to write compressed tuple data to in serialize().
     // This is a string so we can swap() with the string in the TRowBatch we're serializing
