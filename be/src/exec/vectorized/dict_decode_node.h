@@ -79,7 +79,6 @@ private:
     std::shared_ptr<vectorized::Chunk> _input_chunk;
     std::vector<int32_t> _encode_column_cids;
     std::vector<int32_t> _decode_column_cids;
-    std::vector<TypeDescriptor> _encode_column_original_types;
     std::vector<DefaultDecoder> _decoders;
     TDecodeNode _decode_node;
 
