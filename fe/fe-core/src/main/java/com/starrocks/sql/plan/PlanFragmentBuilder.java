@@ -131,7 +131,7 @@ public class PlanFragmentBuilder {
         ExecPlan execPlan = new ExecPlan(plannerContext, connectContext, colNames);
         createOutputFragment(new PhysicalPlanTranslator(columnRefFactory).visit(plan, execPlan), execPlan,
                 outputColumns);
-
+        execPlan.setPlanCount(plan.getPlanCount());
         try {
             List<PlanFragment> fragments = execPlan.getFragments();
             for (PlanFragment fragment : fragments) {
