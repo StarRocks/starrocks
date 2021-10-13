@@ -8,6 +8,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
@@ -16,8 +17,10 @@ public class PhysicalMysqlScanOperator extends PhysicalScanOperator {
 
     public PhysicalMysqlScanOperator(Table table,
                                      List<ColumnRefOperator> outputColumns,
-                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        super(OperatorType.PHYSICAL_MYSQL_SCAN, table, outputColumns, colRefToColumnMetaMap);
+                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                     long limit,
+                                     ScalarOperator predicate) {
+        super(OperatorType.PHYSICAL_MYSQL_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate);
     }
 
     @Override

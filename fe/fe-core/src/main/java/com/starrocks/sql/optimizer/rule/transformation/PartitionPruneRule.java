@@ -66,23 +66,14 @@ public class PartitionPruneRule extends TransformationRule {
                     .filter(id -> table.getPartition(id).hasData()).collect(Collectors.toList());
         }
 
-        return Lists.newArrayList(OptExpression.create(new LogicalOlapScanOperator(
-                olapScanOperator.getTable(),
-                olapScanOperator.getOutputColumns(),
-                olapScanOperator.getColRefToColumnMetaMap(),
-                olapScanOperator.getColumnMetaToColRefMap(),
-                olapScanOperator.getDistributionSpec(),
-                olapScanOperator.getLimit(),
-                olapScanOperator.getPredicate(),
-                olapScanOperator.getSelectedIndexId(),
-                selectedPartitionIds,
-                olapScanOperator.getPartitionNames(),
-                olapScanOperator.getSelectedTabletId(),
-                olapScanOperator.getHintsTabletIds()), input.getInputs()));
+        LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+        return Lists.newArrayList(OptExpression.create(
+                builder.withOperator(olapScanOperator).setSelectedPartitionId(selectedPartitionIds).build(),
+                input.getInputs()));
     }
 
     private List<Long> partitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
-                                            LogicalOlapScanOperator operator) {
+                                      LogicalOlapScanOperator operator) {
         Map<Long, Range<PartitionKey>> keyRangeById;
         if (operator.getPartitionNames() != null) {
             keyRangeById = Maps.newHashMap();

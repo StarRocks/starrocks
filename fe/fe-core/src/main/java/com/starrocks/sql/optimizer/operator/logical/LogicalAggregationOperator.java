@@ -68,6 +68,16 @@ public class LogicalAggregationOperator extends LogicalOperator {
         this.singleDistinctFunctionPos = singleDistinctFunctionPos;
     }
 
+    private LogicalAggregationOperator(Builder builder) {
+        super(OperatorType.LOGICAL_AGGR, builder.getLimit(), builder.getPredicate());
+        this.type = builder.type;
+        this.groupingKeys = builder.groupingKeys;
+        this.partitionByColumns = builder.partitionByColumns;
+        this.aggregations = builder.aggregations;
+        this.isSplit = builder.isSplit;
+        this.singleDistinctFunctionPos = builder.singleDistinctFunctionPos;
+    }
+
     public AggType getType() {
         return type;
     }
@@ -90,10 +100,6 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     public int getSingleDistinctFunctionPos() {
         return singleDistinctFunctionPos;
-    }
-
-    public void setSingleDistinctFunctionPos(int singleDistinctFunctionPos) {
-        this.singleDistinctFunctionPos = singleDistinctFunctionPos;
     }
 
     public List<ColumnRefOperator> getPartitionByColumns() {
@@ -146,5 +152,64 @@ public class LogicalAggregationOperator extends LogicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), type, aggregations, groupingKeys);
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalAggregationOperator, LogicalAggregationOperator.Builder> {
+        private AggType type;
+        private boolean isSplit = false;
+        private ImmutableMap<ColumnRefOperator, CallOperator> aggregations;
+        private ImmutableList<ColumnRefOperator> groupingKeys;
+        private List<ColumnRefOperator> partitionByColumns;
+        private int singleDistinctFunctionPos = -1;
+
+        @Override
+        public LogicalAggregationOperator build() {
+            return new LogicalAggregationOperator(this);
+        }
+
+        @Override
+        public LogicalAggregationOperator.Builder withOperator(LogicalAggregationOperator aggregationOperator) {
+            super.withOperator(aggregationOperator);
+            this.type = aggregationOperator.type;
+            this.groupingKeys = aggregationOperator.groupingKeys;
+            this.partitionByColumns = aggregationOperator.partitionByColumns;
+            this.aggregations = aggregationOperator.aggregations;
+            this.isSplit = aggregationOperator.isSplit;
+            this.singleDistinctFunctionPos = aggregationOperator.singleDistinctFunctionPos;
+            return this;
+        }
+
+        public Builder setType(AggType type) {
+            this.type = type;
+            return this;
+        }
+
+        public Builder setGroupingKeys(
+                List<ColumnRefOperator> groupingKeys) {
+            this.groupingKeys = ImmutableList.copyOf(groupingKeys);
+            return this;
+        }
+
+        public Builder setAggregations(Map<ColumnRefOperator, CallOperator> aggregations) {
+            this.aggregations = ImmutableMap.copyOf(aggregations);
+            return this;
+        }
+
+        public Builder setSplit() {
+            this.isSplit = true;
+            return this;
+        }
+
+        public Builder setPartitionByColumns(
+                List<ColumnRefOperator> partitionByColumns) {
+            this.partitionByColumns = partitionByColumns;
+            return this;
+        }
+
+        public Builder setSingleDistinctFunctionPos(int singleDistinctFunctionPos) {
+            this.singleDistinctFunctionPos = singleDistinctFunctionPos;
+            return this;
+        }
     }
 }

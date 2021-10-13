@@ -141,18 +141,9 @@ public class PartitionPredicatePrune extends TransformationRule {
 
         allPredicate.removeAll(removePredicate);
 
-        return Lists.newArrayList(OptExpression.create(new LogicalOlapScanOperator(
-                logicalOlapScanOperator.getTable(),
-                logicalOlapScanOperator.getOutputColumns(),
-                logicalOlapScanOperator.getColRefToColumnMetaMap(),
-                logicalOlapScanOperator.getColumnMetaToColRefMap(),
-                logicalOlapScanOperator.getDistributionSpec(),
-                logicalOlapScanOperator.getLimit(),
-                Utils.compoundAnd(allPredicate),
-                logicalOlapScanOperator.getSelectedIndexId(),
-                logicalOlapScanOperator.getSelectedPartitionId(),
-                logicalOlapScanOperator.getPartitionNames(),
-                logicalOlapScanOperator.getSelectedTabletId(),
-                logicalOlapScanOperator.getHintsTabletIds()), input.getInputs()));
+        LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+        return Lists.newArrayList(OptExpression.create(
+                builder.withOperator(logicalOlapScanOperator).setPredicate(Utils.compoundAnd(allPredicate)).build(),
+                input.getInputs()));
     }
 }
