@@ -85,6 +85,27 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
+    public void testNoSqlFailure() throws IOException {
+        RequestBody body = RequestBody
+            .create(JSON, "{}");
+        Request request = new Request.Builder()
+            .post(body)
+            .addHeader("Authorization", rootAuth)
+            .url(URI + PATH_URI)
+            .build();
+        Response response = networkClient.newCall(request).execute();
+        String respStr = Objects.requireNonNull(response.body()).string();
+        System.out.println(respStr);
+        Assert.assertNotNull(respStr);
+        expectThrowsNoException(() -> new JSONObject(respStr));
+        JSONObject jsonObject = new JSONObject(respStr);
+        Assert.assertEquals(400, jsonObject.getInt("status"));
+        String exception = jsonObject.getString("exception");
+        Assert.assertNotNull(exception);
+        Assert.assertEquals("POST body must contains [sql] root object", exception);
+    }
+
+    @Test
     public void testInconsistentResource() throws IOException {
         RequestBody body = RequestBody
                 .create(JSON, "{ \"sql\" :  \" select k1,k2 from " + DB_NAME + "." + TABLE_NAME + 1 + " \" }");
