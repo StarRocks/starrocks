@@ -24,7 +24,7 @@
 #include <memory>
 
 #include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/reader.h"
+#include "storage/vectorized/tablet_reader.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -65,7 +65,9 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
 
     std::vector<uint32_t> return_columns;
     const TabletSchema& tablet_schema = tablet->tablet_schema();
-    for (size_t i = 0; i < tablet_schema.num_columns(); ++i) {
+
+    size_t num_columns = tablet_schema.num_columns();
+    for (size_t i = 0; i < num_columns; ++i) {
         FieldType type = tablet_schema.column(i).type();
         // The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
         // a fixed value, so these two types are ignored in calculating checksum.
@@ -77,40 +79,54 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
         return_columns.push_back(i);
     }
 
-    vectorized::Schema child_schema =
-            vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, return_columns);
+    vectorized::Schema schema = vectorized::ChunkHelper::convert_schema_to_format_v2(tablet_schema, return_columns);
 
-    std::shared_ptr<vectorized::Reader> reader =
-            std::make_shared<vectorized::Reader>(tablet, Version(0, _version), std::move(child_schema));
+    vectorized::TabletReader reader(tablet, Version(0, _version), schema);
 
-    Status st = reader->prepare();
+    Status st = reader.prepare();
     if (!st.ok()) {
-        LOG(WARNING) << "Failed to prepare tablet reader. tablet=" << tablet->full_name();
+        LOG(WARNING) << "Failed to prepare tablet reader. tablet=" << tablet->full_name()
+                     << ", error:" << st.to_string();
         return OLAP_ERR_ROWSET_READER_INIT;
     }
 
-    vectorized::ReaderParams reader_params;
+    vectorized::TabletReaderParams reader_params;
     reader_params.reader_type = READER_CHECKSUM;
+    reader_params.chunk_size = config::vector_chunk_size;
 
-    st = reader->open(reader_params);
+    st = reader.open(reader_params);
     if (!st.ok()) {
-        LOG(WARNING) << "Failed to open tablet reader. tablet=" << tablet->full_name();
+        LOG(WARNING) << "Failed to open tablet reader. tablet=" << tablet->full_name() << ", error:" << st.to_string();
         return OLAP_ERR_ROWSET_READER_INIT;
     }
 
-    uint32_t row_checksum = 0;
-    auto chunk = vectorized::ChunkHelper::new_chunk(child_schema, reader_params.chunk_size);
-    Status status = reader->get_next(chunk.get());
-    while (status.ok()) {
-        uint32_t num_rows = chunk->num_rows();
+    uint32_t checksum = 0;
+    uint32_t num_rows = 0;
+    uint32_t hash_codes[config::vector_chunk_size];
+    memset(hash_codes, 0, sizeof(uint32_t) * config::vector_chunk_size);
+
+    auto chunk = vectorized::ChunkHelper::new_chunk(schema, reader_params.chunk_size);
+    st = reader.get_next(chunk.get());
+
+    while (st.ok()) {
+        num_rows = chunk->num_rows();
         for (auto& column : chunk->columns()) {
-            column->crc32_hash(&row_checksum, 0, num_rows);
+            column->crc32_hash(hash_codes, 0, num_rows);
+            for (int i = 0; i < num_rows; ++i) {
+                checksum ^= hash_codes[i];
+            }
         }
-        status = reader->get_next(chunk.get());
+        chunk->reset();
+        st = reader.get_next(chunk.get());
     }
 
-    LOG(INFO) << "success to finish compute checksum. checksum=" << row_checksum;
-    *_checksum = row_checksum;
+    if (!st.is_end_of_file() && !st.ok()) {
+        LOG(INFO) << "Failed to do checksum. error:=" << st.to_string();
+        return OLAP_ERR_CHECKSUM_ERROR;
+    }
+
+    LOG(INFO) << "success to finish compute checksum. checksum=" << checksum;
+    *_checksum = checksum;
     return OLAP_SUCCESS;
 }
 
