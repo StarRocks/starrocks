@@ -15,6 +15,11 @@ public class LogicalFilterOperator extends LogicalOperator {
         this.predicate = predicate;
     }
 
+    private LogicalFilterOperator(Builder builder) {
+        super(OperatorType.LOGICAL_FILTER);
+        this.predicate = builder.getPredicate();
+    }
+
     public ScalarOperator getPredicate() {
         return predicate;
     }
@@ -54,5 +59,19 @@ public class LogicalFilterOperator extends LogicalOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalFilter(optExpression, context);
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalFilterOperator, LogicalFilterOperator.Builder> {
+        @Override
+        public LogicalFilterOperator build() {
+            return new LogicalFilterOperator(this);
+        }
+
+        @Override
+        public LogicalFilterOperator.Builder withOperator(LogicalFilterOperator operator) {
+            super.withOperator(operator);
+            return this;
+        }
     }
 }

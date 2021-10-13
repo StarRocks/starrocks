@@ -8,6 +8,7 @@ import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.SortPhase;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Objects;
 
@@ -22,13 +23,15 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     public PhysicalTopNOperator(OrderSpec spec, long limit, long offset,
                                 SortPhase sortPhase,
                                 boolean isSplit,
-                                boolean isEnforced) {
+                                boolean isEnforced,
+                                ScalarOperator predicate) {
         super(OperatorType.PHYSICAL_TOPN, spec);
         this.limit = limit;
         this.offset = offset;
         this.sortPhase = sortPhase;
         this.isSplit = isSplit;
         this.isEnforced = isEnforced;
+        this.predicate = predicate;
     }
 
     public SortPhase getSortPhase() {

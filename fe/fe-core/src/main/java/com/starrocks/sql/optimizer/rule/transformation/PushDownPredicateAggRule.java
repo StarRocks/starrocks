@@ -49,15 +49,10 @@ public class PushDownPredicateAggRule extends TransformationRule {
 
         // merge filter
         filters.add(logicalAggOperator.getPredicate());
-        input.setChild(0, OptExpression.create(new LogicalAggregationOperator(
-                logicalAggOperator.getType(),
-                logicalAggOperator.getGroupingKeys(),
-                logicalAggOperator.getPartitionByColumns(),
-                logicalAggOperator.getAggregations(),
-                logicalAggOperator.isSplit(),
-                logicalAggOperator.getSingleDistinctFunctionPos(),
-                logicalAggOperator.getLimit(),
-                Utils.compoundAnd(filters)), input.inputAt(0).getInputs()));
+        input.setChild(0, OptExpression.create(new LogicalAggregationOperator.Builder().withOperator(logicalAggOperator)
+                        .setPredicate(Utils.compoundAnd(filters))
+                        .build(),
+                input.inputAt(0).getInputs()));
 
         // push down
         if (pushDownPredicates.size() > 0) {

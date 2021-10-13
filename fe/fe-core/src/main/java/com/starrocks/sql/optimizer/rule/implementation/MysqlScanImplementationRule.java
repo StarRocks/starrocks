@@ -22,10 +22,9 @@ public class MysqlScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalMysqlScanOperator logical = (LogicalMysqlScanOperator) input.getOp();
         PhysicalMysqlScanOperator physical = new PhysicalMysqlScanOperator(logical.getTable(),
-                logical.getOutputColumns(), logical.getColRefToColumnMetaMap());
-
-        physical.setPredicate(logical.getPredicate());
-        physical.setLimit(logical.getLimit());
+                logical.getOutputColumns(), logical.getColRefToColumnMetaMap(),
+                logical.getLimit(),
+                logical.getPredicate());
 
         OptExpression result = new OptExpression(physical);
         return Lists.newArrayList(result);

@@ -28,6 +28,13 @@ public class LogicalAssertOneRowOperator extends LogicalOperator {
         this.tips = tips;
     }
 
+    private LogicalAssertOneRowOperator(Builder builder) {
+        super(OperatorType.LOGICAL_ASSERT_ONE_ROW, builder.getLimit(), builder.getPredicate());
+        this.assertion = builder.assertion;
+        this.checkRows = builder.checkRows;
+        this.tips = builder.tips;
+    }
+
     public static LogicalAssertOneRowOperator createLessEqOne(String tips) {
         return new LogicalAssertOneRowOperator(AssertNumRowsElement.Assertion.LE, 1, tips);
     }
@@ -79,5 +86,26 @@ public class LogicalAssertOneRowOperator extends LogicalOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalAssertOneRow(optExpression, context);
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalAssertOneRowOperator, LogicalAssertOneRowOperator.Builder> {
+        private AssertNumRowsElement.Assertion assertion;
+        private long checkRows;
+        private String tips;
+
+        @Override
+        public LogicalAssertOneRowOperator build() {
+            return new LogicalAssertOneRowOperator(this);
+        }
+
+        @Override
+        public LogicalAssertOneRowOperator.Builder withOperator(LogicalAssertOneRowOperator assertOneRowOperator) {
+            super.withOperator(assertOneRowOperator);
+            this.assertion = assertOneRowOperator.assertion;
+            this.checkRows = assertOneRowOperator.checkRows;
+            this.tips = assertOneRowOperator.tips;
+            return this;
+        }
     }
 }

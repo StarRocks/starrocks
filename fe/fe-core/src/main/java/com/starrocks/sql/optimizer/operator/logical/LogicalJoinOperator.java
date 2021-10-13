@@ -47,6 +47,16 @@ public class LogicalJoinOperator extends LogicalOperator {
         this.hasPushDownJoinOnClause = hasPushDownJoinOnClause;
     }
 
+    private LogicalJoinOperator(Builder builder) {
+        super(OperatorType.LOGICAL_JOIN, builder.getLimit(), builder.getPredicate());
+        this.joinType = builder.joinType;
+        this.onPredicate = builder.onPredicate;
+        this.joinHint = builder.joinHint;
+
+        this.pruneOutputColumns = builder.pruneOutputColumns;
+        this.hasPushDownJoinOnClause = builder.hasPushDownJoinOnClause;
+    }
+
     // Constructor for UT, don't use this ctor except ut
     public LogicalJoinOperator() {
         super(OperatorType.LOGICAL_JOIN);
@@ -148,5 +158,39 @@ public class LogicalJoinOperator extends LogicalOperator {
                 ", onPredicate = " + onPredicate + ' ' +
                 ", Predicate = " + predicate +
                 '}';
+    }
+
+    public static class Builder extends LogicalOperator.Builder<LogicalJoinOperator, LogicalJoinOperator.Builder> {
+        private JoinOperator joinType;
+        private ScalarOperator onPredicate;
+        private String joinHint = "";
+        private boolean hasPushDownJoinOnClause = false;
+        private List<ColumnRefOperator> pruneOutputColumns;
+
+        @Override
+        public LogicalJoinOperator build() {
+            return new LogicalJoinOperator(this);
+        }
+
+        @Override
+        public LogicalJoinOperator.Builder withOperator(LogicalJoinOperator joinOperator) {
+            super.withOperator(joinOperator);
+            this.joinType = joinOperator.joinType;
+            this.onPredicate = joinOperator.onPredicate;
+            this.joinHint = joinOperator.joinHint;
+            this.pruneOutputColumns = joinOperator.pruneOutputColumns;
+            this.hasPushDownJoinOnClause = joinOperator.hasPushDownJoinOnClause;
+            return this;
+        }
+
+        public Builder setJoinType(JoinOperator joinType) {
+            this.joinType = joinType;
+            return this;
+        }
+
+        public Builder setOnPredicate(ScalarOperator onPredicate) {
+            this.onPredicate = onPredicate;
+            return this;
+        }
     }
 }

@@ -9,6 +9,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
@@ -16,8 +17,10 @@ import java.util.Map;
 public class PhysicalSchemaScanOperator extends PhysicalScanOperator {
     public PhysicalSchemaScanOperator(Table table,
                                       List<ColumnRefOperator> outputColumns,
-                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        super(OperatorType.PHYSICAL_SCHEMA_SCAN, table, outputColumns, colRefToColumnMetaMap);
+                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                      long limit,
+                                      ScalarOperator predicate) {
+        super(OperatorType.PHYSICAL_SCHEMA_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate);
     }
 
     @Override
