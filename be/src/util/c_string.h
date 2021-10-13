@@ -19,6 +19,8 @@ namespace starrocks {
 // Time complexity of empty() is O(1).
 // Time complexity of size() is O(n), where n is the length of string.
 class CString {
+    friend void swap(CString& lhs, CString& rhs);
+
 public:
     CString() {}
     ~CString() { _dealloc_if_needed(); }
@@ -58,6 +60,8 @@ public:
         return *this;
     }
 
+    void swap(CString* rhs) { std::swap(_data, rhs->_data); }
+
     const char* data() const { return _data; }
 
     size_t size() const { return std::strlen(_data); }
@@ -90,6 +94,10 @@ private:
 
 inline std::ostream& operator<<(std::ostream& os, const CString& s) {
     return os << s.data();
+}
+
+inline void swap(CString& lhs, CString& rhs) {
+    lhs.swap(&rhs);
 }
 
 } // namespace starrocks

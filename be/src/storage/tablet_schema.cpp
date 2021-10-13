@@ -280,16 +280,17 @@ TabletColumn::~TabletColumn() {
 }
 
 void TabletColumn::swap(TabletColumn* rhs) {
-    std::swap(_col_name, rhs->_col_name);
-    std::swap(_unique_id, rhs->_unique_id);
-    std::swap(_length, rhs->_length);
-    std::swap(_aggregation, rhs->_aggregation);
-    std::swap(_type, rhs->_type);
-    std::swap(_index_length, rhs->_index_length);
-    std::swap(_precision, rhs->_precision);
-    std::swap(_scale, rhs->_scale);
-    std::swap(_flags, rhs->_flags);
-    std::swap(_extra_fields, rhs->_extra_fields);
+    using std::swap;
+    swap(_col_name, rhs->_col_name);
+    swap(_unique_id, rhs->_unique_id);
+    swap(_length, rhs->_length);
+    swap(_aggregation, rhs->_aggregation);
+    swap(_type, rhs->_type);
+    swap(_index_length, rhs->_index_length);
+    swap(_precision, rhs->_precision);
+    swap(_scale, rhs->_scale);
+    swap(_flags, rhs->_flags);
+    swap(_extra_fields, rhs->_extra_fields);
 }
 
 TabletColumn& TabletColumn::operator=(const TabletColumn& rhs) {
