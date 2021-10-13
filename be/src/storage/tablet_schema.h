@@ -24,6 +24,7 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <string_view>
 #include <vector>
 
 #include "gen_cpp/olap_file.pb.h"
@@ -44,6 +45,51 @@ class TabletColumn {
         std::string default_value;
         std::vector<TabletColumn> sub_columns;
         bool has_default_value = false;
+    };
+
+    // Zero terminated string.
+    class ColumnName {
+    public:
+        ColumnName() : _name(nullptr) {}
+        ~ColumnName() { delete[] _name; }
+
+        // Copy ctor
+        ColumnName(const ColumnName& rhs) : _name(nullptr) { assign(rhs.value()); }
+
+        // Move ctor
+        ColumnName(ColumnName&& rhs) : _name(rhs._name) { rhs._name = nullptr; }
+
+        // Copy assignment
+        ColumnName& operator=(const ColumnName& rhs) {
+            assign(rhs.value());
+            return *this;
+        }
+
+        // Move assignment
+        ColumnName& operator=(ColumnName&& rhs) {
+            delete[] _name;
+            _name = rhs._name;
+            rhs._name = nullptr;
+            return *this;
+        }
+
+        void assign(const std::string_view& s) { assign(s.data(), s.size()); }
+
+        void assign(const char* name, uint16_t len) {
+            delete[] _name;
+            _name = new char[len + 1];
+            memcpy(_name, name, len);
+            _name[len] = '\0';
+        }
+
+        bool operator==(const ColumnName& rhs) const { return strcmp(_name, rhs._name) == 0; }
+
+        bool operator!=(const ColumnName& rhs) const { return strcmp(_name, rhs._name) != 0; }
+
+        std::string_view value() const { return _name ? std::string_view(_name, strlen(_name)) : std::string_view(); }
+
+    private:
+        char* _name;
     };
 
 public:
@@ -76,8 +122,8 @@ public:
     unique_id_type unique_id() const { return _unique_id; }
     void set_unique_id(unique_id_type unique_id) { _unique_id = unique_id; }
 
-    const std::string& name() const { return _col_name; }
-    void set_name(std::string name) { _col_name = std::move(name); }
+    std::string_view name() const { return _col_name.value(); }
+    void set_name(const std::string_view name) { _col_name.assign(name.data(), name.size()); }
 
     FieldType type() const { return _type; }
     void set_type(FieldType type) { _type = type; }
@@ -145,7 +191,7 @@ public:
     bool is_format_v2_column() const;
 
     int64_t mem_usage() const {
-        int64_t mem_usage = sizeof(TabletColumn) + _col_name.capacity() + default_value().capacity();
+        int64_t mem_usage = sizeof(TabletColumn) + _col_name.value().size() + default_value().capacity();
         for (int i = 0; i < subcolumn_count(); i++) {
             mem_usage += subcolumn(i).mem_usage();
         }
@@ -183,7 +229,7 @@ private:
 
     // To developers: try to order the class members in a way to minimize the required memory space.
 
-    std::string _col_name;
+    ColumnName _col_name;
     unique_id_type _unique_id = 0;
     length_type _length = 0;
     FieldAggregationMethod _aggregation = OLAP_FIELD_AGGREGATION_NONE;

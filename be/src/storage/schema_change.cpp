@@ -1947,7 +1947,7 @@ OLAPStatus SchemaChangeHandler::_parse_request(
     // set column mapping
     for (int i = 0, new_schema_size = new_tablet->tablet_schema().num_columns(); i < new_schema_size; ++i) {
         const TabletColumn& new_column = new_tablet->tablet_schema().column(i);
-        const string& column_name = new_column.name();
+        string column_name = std::string(new_column.name());
         ColumnMapping* column_mapping = rb_changer->get_mutable_column_mapping(i);
 
         if (materialized_function_map.find(column_name) != materialized_function_map.end()) {
