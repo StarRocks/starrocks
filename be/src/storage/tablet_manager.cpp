@@ -1018,12 +1018,23 @@ Status TabletManager::start_trash_sweep() {
                 TabletSharedPtr& tablet = *it;
                 std::string tablet_path = tablet->tablet_path();
                 if (Env::Default()->path_exists(tablet_path).ok()) {
-                    // take snapshot of tablet meta
-                    std::string meta_file_path = path_util::join_path_segments(
-                            tablet->tablet_path(), std::to_string(tablet->tablet_id()) + ".hdr");
-                    tablet->tablet_meta()->save(meta_file_path);
-                    OLAPStatus rm_st = move_to_trash(tablet_path, tablet_path);
-                    if (rm_st == OLAP_SUCCESS) {
+                    if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
+                        StatusOr<std::string> st = SnapshotManager::instance()->snapshot_trash(tablet, 0, 180);
+                        if (!st.ok()) {
+                            LOG(WARNING) << "Fail to snapshot_trash, tablet_id=" << tablet->tablet_id()
+                                         << " schema_hash="
+                                         << tablet->schema_hash(); // << " status=" << st.to_string();
+                        } else {
+                            LOG(INFO) << "Created snapshot tablet_id=" << tablet->tablet_id() << " schema_hash="
+                                      << tablet->schema_hash(); // << " snapshot_path=" << snapshot_path;
+                        }
+                    } else {
+                        // take snapshot of tablet meta
+                        std::string meta_file_path = path_util::join_path_segments(
+                                tablet_path, std::to_string(tablet->tablet_id()) + ".hdr");
+                        tablet->tablet_meta()->save(meta_file_path);
+                    }
+                    if (move_to_trash(tablet_path, tablet_path) == OLAP_SUCCESS) {
                         LOG(INFO) << "Moved " << tablet_path << " to trash";
                     } else {
                         LOG(WARNING) << "Fail to move " << tablet_path << " to trash";
@@ -1069,7 +1080,7 @@ Status TabletManager::start_trash_sweep() {
         }
     } while (clean_num >= 200);
     return Status::OK();
-} // start_trash_sweep
+}
 
 void TabletManager::register_clone_tablet(int64_t tablet_id) {
     tablets_shard& shard = _get_tablets_shard(tablet_id);
@@ -1103,8 +1114,7 @@ void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId t
 
         // TODO(ygl): may do other checks in the future
         if (Env::Default()->path_exists(schema_hash_path).ok()) {
-            OLAPStatus rm_st = move_to_trash(schema_hash_path, schema_hash_path);
-            if (rm_st != OLAP_SUCCESS) {
+            if (move_to_trash(schema_hash_path, schema_hash_path) != OLAP_SUCCESS) {
                 LOG(WARNING) << "Fail to move tablet_path=" << schema_hash_path << " to trash";
             } else {
                 LOG(INFO) << "Moved tablet_path=" << schema_hash_path << " to trash";

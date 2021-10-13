@@ -105,13 +105,13 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
             LOG(INFO) << "Skipped clone, no missing version";
             return Status::OK();
         }
-        status = _clone_copy(*(tablet->data_dir()), download_path, _error_msgs, &missed_versions);
+        status = _clone_copy(*tablet->data_dir(), download_path, _error_msgs, &missed_versions);
         bool incremental_clone = true;
         if (!status.ok()) {
             LOG(INFO) << "Fail to do incremental clone: " << status
                       << ". switched to fully clone. tablet_id=" << tablet->tablet_id();
             incremental_clone = false;
-            status = _clone_copy(*(tablet->data_dir()), download_path, _error_msgs, nullptr);
+            status = _clone_copy(*tablet->data_dir(), download_path, _error_msgs, nullptr);
         }
 
         if (status.ok()) {
@@ -428,9 +428,8 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
 Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, int64_t committed_version,
                                       bool incremental_clone) {
     if (tablet->updates() != nullptr) {
-        return _finish_clone_updatable(tablet, clone_dir, committed_version, incremental_clone);
+        return _finish_clone_updatable(tablet, clone_dir);
     }
-    // else
     Status res;
     std::vector<std::string> linked_success_files;
 
@@ -637,8 +636,7 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
     return st;
 }
 
-Status EngineCloneTask::_finish_clone_updatable(Tablet* tablet, const std::string& clone_dir, int64_t committed_version,
-                                                bool incremental_clone) {
+Status EngineCloneTask::_finish_clone_updatable(Tablet* tablet, const std::string& clone_dir) {
     auto meta_file = strings::Substitute("$0/meta", clone_dir);
     auto res = SnapshotManager::instance()->parse_snapshot_meta(meta_file);
     if (!res.ok()) {
@@ -674,11 +672,10 @@ Status EngineCloneTask::_finish_clone_updatable(Tablet* tablet, const std::strin
         local_files.erase(fname);
     }
 
-    auto env = Env::Default();
     for (const std::string& filename : clone_files) {
         std::string from = clone_dir + "/" + filename;
         std::string to = tablet_dir + "/" + filename;
-        RETURN_IF_ERROR(env->link_file(from, to));
+        RETURN_IF_ERROR(Env::Default()->link_file(from, to));
         LOG(INFO) << "Linked " << from << " to " << to;
     }
     // Note that |snapshot_meta| may be modified by `load_snapshot`.

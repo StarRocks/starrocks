@@ -276,7 +276,7 @@ std::string SnapshotManager::_calc_snapshot_id_path(const TabletSharedPtr& table
     }
 
     std::stringstream snapshot_id_path_stream;
-    std::lock_guard auto_lock(_snapshot_mutex);
+    std::lock_guard l(_snapshot_mutex);
     snapshot_id_path_stream << tablet->data_dir()->path() << SNAPSHOT_PREFIX << "/" << time_str << "."
                             << _snapshot_base_id++ << "." << timeout_s;
     return snapshot_id_path_stream.str();
@@ -286,9 +286,7 @@ std::string SnapshotManager::get_schema_hash_full_path(const TabletSharedPtr& ta
                                                        const std::string& location) const {
     std::stringstream schema_full_path_stream;
     schema_full_path_stream << location << "/" << tablet->tablet_id() << "/" << tablet->schema_hash();
-    string schema_full_path = schema_full_path_stream.str();
-
-    return schema_full_path;
+    return schema_full_path_stream.str();
 }
 
 std::string SnapshotManager::_get_header_full_path(const TabletSharedPtr& tablet,
@@ -392,14 +390,14 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
 
     // 3. Link files to snapshot directory.
     snapshot_rowset_metas.reserve(snapshot_rowsets.size());
-    for (const auto& rowset : snapshot_rowsets) {
-        auto st = rowset->link_files_to(snapshot_dir, rowset->rowset_id());
+    for (const auto& snapshot_rowset : snapshot_rowsets) {
+        auto st = snapshot_rowset->link_files_to(snapshot_dir, snapshot_rowset->rowset_id());
         if (!st.ok()) {
             LOG(WARNING) << "Fail to link rowset file:" << st;
             (void)FileUtils::remove_all(snapshot_id_path);
             return st;
         }
-        snapshot_rowset_metas.emplace_back(rowset->rowset_meta());
+        snapshot_rowset_metas.emplace_back(snapshot_rowset->rowset_meta());
     }
 
     // 4. Build snapshot header/meta file.
@@ -424,6 +422,43 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     }
 }
 
+StatusOr<std::string> SnapshotManager::snapshot_trash(const TabletSharedPtr& tablet, int64_t snapshot_version,
+                                                      int64_t timeout_s) {
+    std::vector<RowsetSharedPtr> snapshot_rowsets;
+    // 1. Check whether the snapshot version exist.
+    std::shared_lock rdlock(tablet->get_header_lock());
+    if (snapshot_version == 0) {
+        snapshot_version = tablet->max_version().second;
+    }
+    RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, snapshot_version), &snapshot_rowsets));
+    rdlock.unlock();
+
+    // 2. Create snapshot directory.
+    std::string snapshot_id_path = _calc_snapshot_id_path(tablet, timeout_s);
+    if (UNLIKELY(snapshot_id_path.empty())) {
+        return Status::RuntimeError("empty snapshot_id_path");
+    }
+    std::string snapshot_dir = tablet->tablet_path() + "/" + SNAPSHOT_PREFIX + "/" +
+                               std::filesystem::path(snapshot_id_path).filename().string();
+    (void)FileUtils::remove_all(snapshot_dir);
+    RETURN_IF_ERROR(FileUtils::create_dir(snapshot_dir));
+
+    std::vector<RowsetMetaSharedPtr> snapshot_rowset_metas;
+    snapshot_rowset_metas.reserve(snapshot_rowsets.size());
+    for (const auto& snapshot_rowset : snapshot_rowsets) {
+        snapshot_rowset_metas.emplace_back(snapshot_rowset->rowset_meta());
+    }
+
+    // 3. Build snapshot meta file.
+    auto st = build_snapshot_meta(SNAPSHOT_TYPE_FULL, snapshot_dir, tablet, snapshot_rowset_metas, snapshot_version,
+                                  g_Types_constants.TSNAPSHOT_REQ_VERSION2);
+    if (!st.ok()) {
+        (void)FileUtils::remove_all(snapshot_id_path);
+        return st;
+    }
+    return snapshot_id_path;
+}
+
 Status SnapshotManager::build_snapshot_meta(SnapshotTypePB snapshot_type, const std::string& snapshot_dir,
                                             const TabletSharedPtr& tablet,
                                             const std::vector<RowsetMetaSharedPtr>& rowset_metas,
@@ -434,33 +469,32 @@ Status SnapshotManager::build_snapshot_meta(SnapshotTypePB snapshot_type, const 
     if (tablet->updates() == nullptr) {
         return Status::InternalError("build_snapshot_meta only support updatable tablet");
     }
-    const TTabletId tablet_id = tablet->tablet_id();
 
     SnapshotMeta snapshot_meta;
     snapshot_meta.set_snapshot_format(snapshot_format);
     snapshot_meta.set_snapshot_type(snapshot_type);
     snapshot_meta.set_snapshot_version(snapshot_version);
     snapshot_meta.rowset_metas().reserve(rowset_metas.size());
-    for (const auto& m : rowset_metas) {
+    for (const auto& rowset_meta : rowset_metas) {
         RowsetMetaPB& meta_pb = snapshot_meta.rowset_metas().emplace_back();
-        m->to_rowset_pb(&meta_pb);
+        rowset_meta->to_rowset_pb(&meta_pb);
     }
     if (snapshot_type == SNAPSHOT_TYPE_FULL) {
         auto meta_store = tablet->data_dir()->get_meta();
         uint32_t new_rsid = 0;
-        for (auto& rm : snapshot_meta.rowset_metas()) {
-            const uint32_t old_rsid = rm.rowset_seg_id();
-            for (int i = 0; i < rm.num_segments(); i++) {
+        for (auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
+            const uint32_t old_rsid = rowset_meta_pb.rowset_seg_id();
+            for (int i = 0; i < rowset_meta_pb.num_segments(); i++) {
                 int64_t dummy;
                 const uint32_t old_segment_id = old_rsid + i;
                 const uint32_t new_segment_id = new_rsid + i;
                 CHECK(snapshot_meta.delete_vectors().count(new_segment_id) == 0);
                 DelVector* delvec = &snapshot_meta.delete_vectors()[new_segment_id];
-                RETURN_IF_ERROR(TabletMetaManager::get_del_vector(meta_store, tablet_id, old_segment_id,
+                RETURN_IF_ERROR(TabletMetaManager::get_del_vector(meta_store, tablet->tablet_id(), old_segment_id,
                                                                   snapshot_version, delvec, &dummy /*latest_version*/));
             }
-            rm.set_rowset_seg_id(new_rsid);
-            new_rsid += std::max<uint32_t>(rm.num_segments(), 1);
+            rowset_meta_pb.set_rowset_seg_id(new_rsid);
+            new_rsid += std::max<uint32_t>(rowset_meta_pb.num_segments(), 1);
         }
     }
 
@@ -475,9 +509,9 @@ Status SnapshotManager::build_snapshot_meta(SnapshotTypePB snapshot_type, const 
         version->mutable_version()->set_major(snapshot_version);
         version->mutable_version()->set_minor(0);
         version->set_creation_time(time(nullptr));
-        for (const auto& rm : snapshot_meta.rowset_metas()) {
-            auto rsid = rm.rowset_seg_id();
-            next_segment_id = std::max<uint32_t>(next_segment_id, rsid + std::max(1L, rm.num_segments()));
+        for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
+            auto rsid = rowset_meta_pb.rowset_seg_id();
+            next_segment_id = std::max<uint32_t>(next_segment_id, rsid + std::max(1L, rowset_meta_pb.num_segments()));
             version->add_rowsets(rsid);
         }
         meta_pb.mutable_updates()->set_next_rowset_id(next_segment_id);
@@ -504,24 +538,24 @@ StatusOr<SnapshotMeta> SnapshotManager::parse_snapshot_meta(const std::string& f
 }
 
 Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir) {
-    for (auto& rm : snapshot_meta->rowset_metas()) {
+    for (auto& rowset_meta_pb : snapshot_meta->rowset_metas()) {
         RowsetId old_rowset_id;
         RowsetId new_rowset_id = StorageEngine::instance()->next_rowset_id();
-        old_rowset_id.init(rm.rowset_id_v2());
+        old_rowset_id.init(rowset_meta_pb.rowset_id_v2());
 
-        LOG(INFO) << "Replacing rowset id " << rm.rowset_id_v2() << " with " << new_rowset_id;
+        LOG(INFO) << "Replacing rowset id " << rowset_meta_pb.rowset_id_v2() << " with " << new_rowset_id;
 
-        for (int seg_id = 0; seg_id < rm.num_segments(); seg_id++) {
+        for (int seg_id = 0; seg_id < rowset_meta_pb.num_segments(); seg_id++) {
             auto old_path = BetaRowset::segment_file_path(clone_dir, old_rowset_id, seg_id);
             auto new_path = BetaRowset::segment_file_path(clone_dir, new_rowset_id, seg_id);
             RETURN_IF_ERROR(Env::Default()->link_file(old_path, new_path));
         }
-        for (int del_id = 0; del_id < rm.num_delete_files(); del_id++) {
+        for (int del_id = 0; del_id < rowset_meta_pb.num_delete_files(); del_id++) {
             auto old_path = BetaRowset::segment_del_file_path(clone_dir, old_rowset_id, del_id);
             auto new_path = BetaRowset::segment_del_file_path(clone_dir, new_rowset_id, del_id);
             RETURN_IF_ERROR(Env::Default()->link_file(old_path, new_path));
         }
-        rm.set_rowset_id_v2(new_rowset_id.to_string());
+        rowset_meta_pb.set_rowset_id_v2(new_rowset_id.to_string());
     }
     return Status::OK();
 }

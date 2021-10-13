@@ -1921,11 +1921,11 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
 
     if (snapshot_meta.snapshot_type() == SNAPSHOT_TYPE_INCREMENTAL) {
         // Assume the elements of |snapshot_meta.rowset_metas()| are sorted by version.
-        for (const auto& i : snapshot_meta.rowset_metas()) {
-            RETURN_IF_ERROR(check_rowset_files(i));
+        for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
+            RETURN_IF_ERROR(check_rowset_files(rowset_meta_pb));
             RowsetSharedPtr rowset;
             auto rowset_meta = std::make_shared<RowsetMeta>();
-            if (!rowset_meta->init_from_pb(i)) {
+            if (!rowset_meta->init_from_pb(rowset_meta_pb)) {
                 return Status::InternalError("rowset meta init from pb failed");
             }
             if (rowset_meta->tablet_id() != _tablet.tablet_id()) {
@@ -1949,8 +1949,8 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         if (snapshot_meta.snapshot_version() <= _versions.back()->version.major()) {
             return Status::Cancelled("snapshot version too small");
         }
-        for (const auto& rm : snapshot_meta.rowset_metas()) {
-            RETURN_IF_ERROR(check_rowset_files(rm));
+        for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
+            RETURN_IF_ERROR(check_rowset_files(rowset_meta_pb));
         }
         // Stop apply thread.
         _stop_and_wait_apply_done();
@@ -1984,13 +1984,14 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         }
 
         uint32_t new_next_rowset_id = _next_rowset_id;
-        for (const auto& rm : snapshot_meta.rowset_metas()) {
+        for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
             RowsetMetaSharedPtr rowset_meta = std::make_shared<RowsetMeta>();
-            if (!rowset_meta->init_from_pb(rm)) {
+            if (!rowset_meta->init_from_pb(rowset_meta_pb)) {
                 return Status::InternalError("fail to init rowset meta");
             }
-            const auto new_id = rm.rowset_seg_id() + _next_rowset_id;
-            new_next_rowset_id = std::max<uint32_t>(new_next_rowset_id, new_id + std::max(1L, rm.num_segments()));
+            const auto new_id = rowset_meta_pb.rowset_seg_id() + _next_rowset_id;
+            new_next_rowset_id =
+                    std::max<uint32_t>(new_next_rowset_id, new_id + std::max(1L, rowset_meta_pb.num_segments()));
             rowset_meta->set_rowset_seg_id(new_id);
             RowsetSharedPtr* rowset = &new_rowsets[new_id];
             RETURN_IF_ERROR(RowsetFactory::create_rowset(_tablet._mem_tracker, &_tablet.tablet_schema(),

@@ -1372,7 +1372,6 @@ void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
         std::vector<std::string> snapshot_files;
         Status st = SnapshotManager::instance()->make_snapshot(snapshot_request, &snapshot_path);
         if (!st.ok()) {
-            status_code = st.code();
             LOG(WARNING) << "Fail to make_snapshot, tablet_id=" << snapshot_request.tablet_id
                          << " schema_hash=" << snapshot_request.schema_hash << " version=" << snapshot_request.version
                          << " version_hash=" << snapshot_request.version_hash << " status=" << st.to_string();
