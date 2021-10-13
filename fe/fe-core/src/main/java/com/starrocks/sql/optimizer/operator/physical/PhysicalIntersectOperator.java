@@ -6,12 +6,16 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 
 public class PhysicalIntersectOperator extends PhysicalSetOperation {
-    public PhysicalIntersectOperator(List<ColumnRefOperator> columnRef, List<List<ColumnRefOperator>> childOutputColumns) {
-        super(OperatorType.PHYSICAL_INTERSECT, columnRef, childOutputColumns);
+    public PhysicalIntersectOperator(List<ColumnRefOperator> columnRef,
+                                     List<List<ColumnRefOperator>> childOutputColumns,
+                                     long limit,
+                                     ScalarOperator predicate) {
+        super(OperatorType.PHYSICAL_INTERSECT, columnRef, childOutputColumns, limit, predicate);
     }
 
     @Override

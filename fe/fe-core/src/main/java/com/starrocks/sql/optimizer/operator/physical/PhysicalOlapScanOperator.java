@@ -12,6 +12,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Collections;
 import java.util.List;
@@ -29,33 +30,29 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     public PhysicalOlapScanOperator(Table table,
                                     List<ColumnRefOperator> outputColumns,
                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                    HashDistributionSpec hashDistributionDesc) {
-        super(OperatorType.PHYSICAL_OLAP_SCAN, table, outputColumns, colRefToColumnMetaMap);
+                                    HashDistributionSpec hashDistributionDesc,
+                                    long limit,
+                                    ScalarOperator predicate,
+                                    long selectedIndexId,
+                                    List<Long> selectedPartitionId,
+                                    List<Long> selectedTabletId) {
+        super(OperatorType.PHYSICAL_OLAP_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate);
         this.hashDistributionSpec = hashDistributionDesc;
+        this.selectedIndexId = selectedIndexId;
+        this.selectedPartitionId = selectedPartitionId;
+        this.selectedTabletId = selectedTabletId;
     }
 
     public long getSelectedIndexId() {
         return selectedIndexId;
     }
 
-    public void setSelectedIndexId(long selectedIndexId) {
-        this.selectedIndexId = selectedIndexId;
-    }
-
     public List<Long> getSelectedPartitionId() {
         return selectedPartitionId;
     }
 
-    public void setSelectedPartitionId(List<Long> selectedPartitionId) {
-        this.selectedPartitionId = selectedPartitionId;
-    }
-
     public List<Long> getSelectedTabletId() {
         return selectedTabletId;
-    }
-
-    public void setSelectedTabletId(List<Long> selectedTabletId) {
-        this.selectedTabletId = selectedTabletId;
     }
 
     public boolean isPreAggregation() {

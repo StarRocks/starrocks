@@ -22,8 +22,9 @@ public class FilterImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalFilterOperator logical = (LogicalFilterOperator) input.getOp();
 
-        PhysicalFilterOperator filter = new PhysicalFilterOperator(logical.getPredicate());
-        filter.setLimit(logical.getLimit());
+        PhysicalFilterOperator filter = new PhysicalFilterOperator(
+                logical.getPredicate(),
+                logical.getLimit());
         return Lists.newArrayList(OptExpression.create(filter, input.getInputs()));
     }
 }

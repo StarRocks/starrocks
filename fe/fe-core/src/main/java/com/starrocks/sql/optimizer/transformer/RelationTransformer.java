@@ -192,18 +192,28 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
 
         LogicalOperator setOperator;
         if (setOperationRelation instanceof UnionRelation) {
-            setOperator = new LogicalUnionOperator(outputColumns, childOutputColumns,
-                    !SetQualifier.DISTINCT.equals(setOperationRelation.getQualifier()));
+            setOperator = new LogicalUnionOperator.Builder()
+                    .setOutputColumnRefOp(outputColumns)
+                    .setChildOutputColumns(childOutputColumns)
+                    .isUnionAll(!SetQualifier.DISTINCT.equals(setOperationRelation.getQualifier()))
+                    .build();
+
             if (setOperationRelation.getQualifier().equals(SetQualifier.DISTINCT)) {
                 OptExprBuilder unionOpt = new OptExprBuilder(setOperator, childPlan, expressionMapping);
                 this.outputColumn = outputColumns;
-                return new OptExprBuilder(new LogicalAggregationOperator(AggType.GLOBAL, outputColumns, Maps.newHashMap()),
+                return new OptExprBuilder(
+                        new LogicalAggregationOperator(AggType.GLOBAL, outputColumns, Maps.newHashMap()),
                         Lists.newArrayList(unionOpt), expressionMapping);
             }
         } else if (setOperationRelation instanceof ExceptRelation) {
-            setOperator = new LogicalExceptOperator(outputColumns, childOutputColumns);
+            setOperator = new LogicalExceptOperator.Builder()
+                    .setOutputColumnRefOp(outputColumns)
+                    .setChildOutputColumns(childOutputColumns).build();
+
         } else if (setOperationRelation instanceof IntersectRelation) {
-            setOperator = new LogicalIntersectOperator(outputColumns, childOutputColumns);
+            setOperator = new LogicalIntersectOperator.Builder()
+                    .setOutputColumnRefOp(outputColumns)
+                    .setChildOutputColumns(childOutputColumns).build();
         } else {
             throw unsupportedException("New Planner only support Query Statement");
         }
@@ -274,7 +284,8 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
                     colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap, -1, null);
         } else if (Table.TableType.SCHEMA.equals(node.getTable().getType())) {
             scanOperator =
-                    new LogicalSchemaScanOperator(node.getTable(), outputVariables, colRefToColumnMetaMapBuilder.build(),
+                    new LogicalSchemaScanOperator(node.getTable(), outputVariables,
+                            colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, -1,
                             null);
         } else if (Table.TableType.MYSQL.equals(node.getTable().getType())) {

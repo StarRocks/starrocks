@@ -26,8 +26,32 @@ public class LogicalMysqlScanOperator extends LogicalScanOperator {
         Preconditions.checkState(table instanceof MysqlTable);
     }
 
+    private LogicalMysqlScanOperator(LogicalMysqlScanOperator.Builder builder) {
+        super(OperatorType.LOGICAL_MYSQL_SCAN,
+                builder.table,
+                builder.outputColumns,
+                builder.colRefToColumnMetaMap,
+                builder.columnMetaToColRefMap,
+                builder.getLimit(),
+                builder.getPredicate());
+    }
+
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalMysqlScan(this, context);
+    }
+
+    public static class Builder
+            extends LogicalScanOperator.Builder<LogicalMysqlScanOperator, LogicalMysqlScanOperator.Builder> {
+        @Override
+        public LogicalMysqlScanOperator build() {
+            return new LogicalMysqlScanOperator(this);
+        }
+
+        @Override
+        public LogicalMysqlScanOperator.Builder withOperator(LogicalMysqlScanOperator operator) {
+            super.withOperator(operator);
+            return this;
+        }
     }
 }
