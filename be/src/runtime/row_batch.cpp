@@ -26,13 +26,13 @@
 #include <cstdint> // for intptr_t
 #include <memory>
 
+#include "gen_cpp/Data_types.h"
+#include "gen_cpp/data.pb.h"
 #include "runtime/buffered_tuple_stream2.inline.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "runtime/tuple_row.h"
-#include "gen_cpp/Data_types.h"
-#include "gen_cpp/data.pb.h"
 
 using std::vector;
 
