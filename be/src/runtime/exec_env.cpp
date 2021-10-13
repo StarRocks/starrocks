@@ -222,8 +222,6 @@ Status ExecEnv::_init_mem_tracker() {
         return Status::InternalError(ss.str());
     }
 
-    _init_buffer_pool(config::min_buffer_size, buffer_pool_limit, clean_pages_limit);
-
     RETURN_IF_ERROR(_disk_io_mgr->init(_mem_tracker));
     RETURN_IF_ERROR(_tmp_file_mgr->init(StarRocksMetrics::instance()->metrics()));
 
@@ -237,13 +235,6 @@ Status ExecEnv::_init_mem_tracker() {
     // TODO(zc): The current memory usage configuration is a bit confusing,
     // we need to sort out the use of memory
     return Status::OK();
-}
-
-void ExecEnv::_init_buffer_pool(int64_t min_page_size, int64_t capacity, int64_t clean_pages_limit) {
-    DCHECK(_buffer_pool == nullptr);
-    _buffer_pool = new BufferPool(min_page_size, capacity, clean_pages_limit);
-    _buffer_reservation = new ReservationTracker();
-    _buffer_reservation->InitRootTracker(nullptr, capacity);
 }
 
 void ExecEnv::_destory() {
@@ -274,14 +265,6 @@ void ExecEnv::_destory() {
     if (_storage_engine) {
         delete _storage_engine;
         _storage_engine = nullptr;
-    }
-    if (_buffer_pool) {
-        delete _buffer_pool;
-        _buffer_pool = nullptr;
-    }
-    if (_buffer_reservation) {
-        delete _buffer_reservation;
-        _buffer_reservation = nullptr;
     }
     if (_brpc_stub_cache) {
         delete _brpc_stub_cache;

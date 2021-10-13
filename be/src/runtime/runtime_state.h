@@ -56,7 +56,6 @@ class TmpFileMgr;
 class BufferedBlockMgr2;
 class LoadErrorHub;
 class ReservationTracker;
-class InitialReservations;
 class RowDescriptor;
 class RuntimeFilterPort;
 
@@ -91,9 +90,6 @@ public:
     // for ut only
     Status init_instance_mem_tracker();
 
-    /// Called from Init() to set up buffer reservations and the file group.
-    Status init_buffer_poolstate();
-
     // Gets/Creates the query wide block mgr.
     Status create_block_mgr();
 
@@ -125,17 +121,8 @@ public:
         _root_node_id = id;
     }
 
-    // The seed value to use when hashing tuples.
-    // See comment on _root_node_id. We add one to prevent having a hash seed of 0.
-    uint32_t fragment_hash_seed() const { return _root_node_id + 1; }
-
     // Returns runtime state profile
     RuntimeProfile* runtime_profile() { return &_profile; }
-
-    BufferedBlockMgr2* block_mgr2() {
-        DCHECK(_block_mgr2.get() != nullptr);
-        return _block_mgr2.get();
-    }
 
     Status query_status() {
         std::lock_guard<std::mutex> l(_process_status_lock);
@@ -274,8 +261,6 @@ public:
 
     int num_per_fragment_instances() const { return _num_per_fragment_instances; }
 
-    ReservationTracker* instance_buffer_reservation() { return _instance_buffer_reservation.get(); }
-
     int64_t min_reservation() const { return _query_options.min_reservation; }
 
     int64_t max_reservation() const { return _query_options.max_reservation; }
@@ -283,11 +268,6 @@ public:
     bool disable_stream_preaggregations() const { return _query_options.disable_stream_preaggregations; }
 
     bool enable_spill() const { return _query_options.enable_spilling; }
-
-    // the following getters are only valid after Prepare()
-    InitialReservations* initial_reservations() const { return _initial_reservations; }
-
-    ReservationTracker* buffer_reservation() const { return _buffer_reservation; }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
@@ -410,26 +390,6 @@ private:
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path
     std::unique_ptr<LoadErrorHub> _error_hub;
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
-
-    //TODO chenhao , remove this to QueryState
-    /// Pool of buffer reservations used to distribute initial reservations to operators
-    /// in the query. Contains a ReservationTracker that is a child of
-    /// 'buffer_reservation_'. Owned by 'obj_pool_'. Set in Prepare().
-    ReservationTracker* _buffer_reservation = nullptr;
-
-    /// Buffer reservation for this fragment instance - a child of the query buffer
-    /// reservation. Non-NULL if 'query_state_' is not NULL.
-    std::unique_ptr<ReservationTracker> _instance_buffer_reservation;
-
-    /// Pool of buffer reservations used to distribute initial reservations to operators
-    /// in the query. Contains a ReservationTracker that is a child of
-    /// 'buffer_reservation_'. Owned by 'obj_pool_'. Set in Prepare().
-    InitialReservations* _initial_reservations = nullptr;
-
-    /// Number of fragment instances executing, which may need to claim
-    /// from 'initial_reservations_'.
-    /// TODO: not needed if we call ReleaseResources() in a timely manner (IMPALA-1575).
-    std::atomic<int32_t> _initial_reservation_refcnt{0};
 
     // prohibit copies
     RuntimeState(const RuntimeState&) = delete;

@@ -60,7 +60,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/initial_reservations.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/row_batch.h"
@@ -358,12 +357,6 @@ Status ExecNode::close(RuntimeState* state) {
 
     if (expr_mem_pool() != nullptr) {
         _expr_mem_pool->free_all();
-    }
-
-    if (_buffer_pool_client.is_registered()) {
-        VLOG_FILE << _id << " returning reservation " << _resource_profile.min_reservation;
-        state->initial_reservations()->Return(&_buffer_pool_client, _resource_profile.min_reservation);
-        state->exec_env()->buffer_pool()->DeregisterClient(&_buffer_pool_client);
     }
 
     if (_expr_mem_tracker != nullptr) {
