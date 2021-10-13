@@ -32,6 +32,7 @@
 #include "common/status.h"
 #include "exprs/anyval_util.h"
 #include "exprs/slot_ref.h"
+#include "exprs/tuple_is_null_predicate.h"
 #include "exprs/vectorized/arithmetic_expr.h"
 #include "exprs/vectorized/array_element_expr.h"
 #include "exprs/vectorized/array_expr.h"
@@ -407,13 +408,15 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::INFO_FUNC:
         *expr = pool->add(new vectorized::VectorizedInfoFunc(texpr_node));
         break;
+    case TExprNodeType::TUPLE_IS_NULL_PRED:
+        *expr = pool->add(new TupleIsNullPredicate(texpr_node));
+        break;
     case TExprNodeType::ARRAY_SLICE_EXPR:
     case TExprNodeType::AGG_EXPR:
     case TExprNodeType::TABLE_FUNCTION_EXPR:
     case TExprNodeType::IS_NULL_PRED:
     case TExprNodeType::LIKE_PRED:
     case TExprNodeType::LITERAL_PRED:
-    case TExprNodeType::TUPLE_IS_NULL_PRED:
         break;
     }
     if (*expr == nullptr) {
