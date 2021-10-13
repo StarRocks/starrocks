@@ -27,6 +27,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "cctz/time_zone.h"
@@ -34,6 +35,7 @@
 #include "common/object_pool.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+#include "runtime/global_dicts.h"
 #include "runtime/mem_pool.h"
 #include "runtime/thread_resource_mgr.h"
 #include "util/logging.h"
@@ -295,6 +297,10 @@ public:
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
 
+    const vectorized::GlobalDictMaps& get_global_dict_map() const;
+    using GlobalDictLists = std::vector<TGlobalDict>;
+    Status init_global_dict(const GlobalDictLists& global_dict_list);
+
 private:
     // Allow TestEnv to set block_mgr manually for testing.
     friend class TestEnv;
@@ -429,6 +435,8 @@ private:
     RuntimeState(const RuntimeState&) = delete;
 
     RuntimeFilterPort* _runtime_filter_port;
+
+    vectorized::GlobalDictMaps _global_dicts;
 };
 
 #define RETURN_IF_CANCELLED(state)                                                       \
