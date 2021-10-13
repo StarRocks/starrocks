@@ -95,10 +95,6 @@ public:
     Status get_next(vectorized::ChunkPtr* chunk, bool* eos);
     Status get_next_for_pipeline(vectorized::ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit);
 
-    // Transfer all resources from the current batches being processed from each sender
-    // queue to the specified batch.
-    void transfer_all_resources(RowBatch* transfer_batch);
-
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
     PlanNodeId dest_node_id() const { return _dest_node_id; }
     const RowDescriptor& row_desc() const { return _row_desc; }
