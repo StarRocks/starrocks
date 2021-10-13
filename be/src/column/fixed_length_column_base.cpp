@@ -115,12 +115,13 @@ void FixedLengthColumnBase<T>::serialize_batch_with_null_vector(uint8_t* __restr
 
     for (size_t i = 0; i < chunk_size; ++i) {
         memcpy(dst + i * max_one_row_size + sizes[i], null_vector + i, sizeof(bool));
-        sizes[i] += 1;
-
         if (!null_vector[i]) {
-            memcpy(dst + i * max_one_row_size + sizes[i], src + i, sizeof(T));
-            sizes[i] += sizeof(T);
+            memcpy(dst + i * max_one_row_size + sizes[i] + 1, src + i, sizeof(T));
         }
+    }
+
+    for (size_t i = 0; i < chunk_size; ++i) {
+        sizes[i] += (1 - null_vector[i]) * sizeof(T) + 1;
     }
 }
 
