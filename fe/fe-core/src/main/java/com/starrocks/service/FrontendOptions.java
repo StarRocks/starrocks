@@ -133,11 +133,12 @@ public class FrontendOptions {
     }
 
     private static boolean isInPriorNetwork(String ip) {
+        ip = ip.trim();
         for (String cidr : priorityCidrs) {
             cidr = cidr.trim();
             if (!cidr.contains("/")) {
                 // it is not valid CIDR, compare ip directly.
-                if (cidr.equals(ip.trim())) {
+                if (cidr.equals(ip)) {
                     return true;
                 }
             } else {
