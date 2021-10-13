@@ -120,7 +120,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
                 // The priority of the partition attribute is higher than that of the table
                 Map<String, String> partitionProperties = Maps.newHashMap();
                 for (String key : otherProperties.keySet()) {
-                    partitionProperties.put(key, properties.get(key));
+                    partitionProperties.put(key, otherProperties.get(key));
                 }
                 for (String key : properties.keySet()) {
                     partitionProperties.put(key, properties.get(key));
