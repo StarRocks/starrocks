@@ -107,21 +107,32 @@ void FixedLengthColumnBase<T>::serialize_batch(uint8_t* __restrict__ dst, Buffer
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::serialize_batch_with_null_vector(uint8_t* __restrict__ dst,
-                                                                Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                                                uint32_t max_one_row_size, uint8_t* null_vector) {
+void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restrict__ dst, Buffer<uint32_t>& slice_sizes,
+                                                               size_t chunk_size, uint32_t max_one_row_size,
+                                                               uint8_t* null_masks, bool has_null) {
     uint32_t* sizes = slice_sizes.data();
     T* __restrict__ src = _data.data();
 
-    for (size_t i = 0; i < chunk_size; ++i) {
-        memcpy(dst + i * max_one_row_size + sizes[i], null_vector + i, sizeof(bool));
-        if (!null_vector[i]) {
+    if (!has_null) {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(dst + i * max_one_row_size + sizes[i], &has_null, sizeof(bool));
             memcpy(dst + i * max_one_row_size + sizes[i] + 1, src + i, sizeof(T));
         }
-    }
 
-    for (size_t i = 0; i < chunk_size; ++i) {
-        sizes[i] += (1 - null_vector[i]) * sizeof(T) + 1;
+        for (size_t i = 0; i < chunk_size; ++i) {
+            sizes[i] += 1 + sizeof(T);
+        }
+    } else {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(dst + i * max_one_row_size + sizes[i], null_masks + i, sizeof(bool));
+            if (!null_masks[i]) {
+                memcpy(dst + i * max_one_row_size + sizes[i] + 1, src + i, sizeof(T));
+            }
+        }
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            sizes[i] += 1 + (1 - null_masks[i]) * sizeof(T);
+        }
     }
 }
 
