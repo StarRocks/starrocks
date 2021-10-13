@@ -32,6 +32,7 @@ add_library(Exprs
   expr.cpp
   expr_context.cpp
   slot_ref.cpp
+  tuple_is_null_predicate.cpp
   anyval_util.cpp
   vectorized/arithmetic_expr.cpp
   vectorized/array_expr.cpp
