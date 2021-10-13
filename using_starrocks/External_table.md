@@ -1,6 +1,6 @@
 # 外部表
 
-StarRocks 支持以外部表的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、HDFS、ElasticSearch、Hive。对这几种种数据源，**现阶段只支持读取，还不支持写入**。
+StarRocks 支持以外部表的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、HDFS、ElasticSearch、Hive以及StarRocks。**对于StarRocks数据源，现阶段只支持Insert写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
 
 <br/>
 
@@ -338,3 +338,70 @@ select count(*) from profile_wos_p7;
 * 也可以手动刷新元数据信息：
   1. hive中新增或者删除分区时，可以刷新**表**的元数据信息：`REFRESH EXTERNAL TABLE hive_t`，其中hive_t是starrocks中的外表名称。
   2. hive中向某些partition中新增数据时，可以**指定partition**进行刷新：`REFRESH EXTERNAL TABLE hive_t PARTITION ('date_id=01', 'date_id=02')`，其中hive_t是starrocks中的外表名称，'date_id=01'、 'date_id=02'是hive中的partition名称。
+
+## StarRocks外部表
+
+1.19版本开始，StarRocks支持将数据通过外表方式写入另一个StarRocks集群的表中。这可以解决用户的读写分离需求，提供更好的资源隔离。用户需要首先在目标集群上创建一张目标表，然后在源StarRocks集群上创建一个Schema信息一致的外表，并在属性中指定目标集群和表的信息。
+
+通过insert into 写入数据至StarRocks外表,可以实现如下目标:
+
+* 集群间的数据同步
+* 在外表集群计算结果写入目标表集群，并在目标表集群提供查询服务，实现读写分离
+
+以下是创建目标表和外表的实例：
+
+~~~sql
+# 在目标集群上执行
+CREATE TABLE t
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    k4 VARCHAR(2048),
+    k5 DATETIME
+)
+ENGINE=olap
+DISTRIBUTED BY HASH(k1) BUCKETS 10;
+
+# 在外表集群上执行
+CREATE EXTERNAL TABLE external_t
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    k4 VARCHAR(2048),
+    k5 DATETIME
+)
+ENGINE=olap
+DISTRIBUTED BY HASH(k1) BUCKETS 10
+PROPERTIES
+(
+    "host" = "127.0.0.1",
+    "port" = "9030",
+    "user" = "user",
+    "password" = "passwd",
+    "database" = "db_test",
+    "table" = "t"
+);
+
+# 向外表插入数据,线上推荐使用第二种方式
+insert into external_t values ('2020-10-11', 1, 1, 'hello', '2020-10-11 10:00:00');
+
+insert into external_t select * from other_table;
+~~~
+
+其中：
+
+* **EXTERNAL**：该关键字指定创建的是StarRocks外表
+* **host**：该属性描述目标表所属StarRocks集群Master FE的IP地址
+* **port**：该属性描述目标表所属StarRocks集群Master FE的RPC访问端口，该值可参考配置fe/fe.conf中的rpc_port配置取值
+* **user**：该属性描述目标表所属StarRocks集群的访问用户名
+* **password**：该属性描述目标表所属StarRocks集群的访问密码
+* **database**：该属性描述目标表所属数据库名称
+* **table**：该属性描述目标表名称
+
+目前StarRocks外表使用上有以下限制：
+
+* 仅可以在外表上执行insert into 和show create table操作，不支持其他数据写入方式，也不支持查询和DDL
+* 创建外表语法和创建普通表一致，但其中的列名等信息请保持同其对应的目标表一致
+* 外表会周期性从目标表同步元信息（同步周期为10秒），在目标表执行的DDL操作可能会延迟一定时间反应在外表上
