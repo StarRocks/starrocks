@@ -3,10 +3,10 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.rewrite.PhysicalOperatorTreeRewriteRule;
+import com.starrocks.sql.optimizer.task.TaskContext;
 
 public class DeriveOutputColumnsRule extends OptExpressionVisitor<Void, Void> implements
         PhysicalOperatorTreeRewriteRule {
@@ -17,7 +17,7 @@ public class DeriveOutputColumnsRule extends OptExpressionVisitor<Void, Void> im
     }
 
     @Override
-    public OptExpression rewrite(OptExpression root, ColumnRefFactory factory) {
+    public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         root.getOp().accept(this, root, null);
         return root;
     }
