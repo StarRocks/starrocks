@@ -12,13 +12,13 @@
 # HADOOP
 HADOOP_DOWNLOAD="https://cdn-thirdparty.starrocks.com/hadoop-3.3.0-aarch64.tar.gz"
 HADOOP_NAME="hadoop-3.3.0-aarch64.tar.gz"
-HADOOP_SOURCE="hadoop-3.3.0-aarch64"
+HADOOP_SOURCE="hadoop"
 HADOOP_MD5SUM="4e2e3e0dc8a1d80e1940565bbf6199a4"
 
 # OPEN JDK FOR aarch64, provided by huawei kunpeng (https://www.hikunpeng.com/zh/developer/devkit/compiler)
 JDK_DOWNLOAD="https://mirror.iscas.ac.cn/kunpeng/archive/compiler/bisheng_jdk/bisheng-jdk-8u262-linux-aarch64.tar.gz"
 JDK_NAME="bisheng-jdk-8u262-linux-aarch64.tar.gz"
-JDK_SOURCE="bisheng-jdk1.8.0_262"
+JDK_SOURCE="open_jdk"
 JDK_MD5SUM="a1254dea3728e0a86e53a55d8debfbeb"
 
 # HYPERSCAN for aarch64, provided by huawei kunpeng.

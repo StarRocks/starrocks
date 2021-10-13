@@ -12,13 +12,13 @@
 # HADOOP
 HADOOP_DOWNLOAD="https://cdn-thirdparty.starrocks.com/hadoop-3.3.0.tar.gz"
 HADOOP_NAME="hadoop-3.3.0.tar.gz"
-HADOOP_SOURCE="hadoop-3.3.0"
+HADOOP_SOURCE="hadoop"
 HADOOP_MD5SUM="c4ba5155ec44abcb63d183d2dbe38df9"
 
 # OPEN JDK
 JDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/java-se-8u41-ri.tar.gz"
 JDK_NAME="java-se-8u41-ri.tar.gz"
-JDK_SOURCE="java-se-8u41-ri"
+JDK_SOURCE="open_jdk"
 JDK_MD5SUM="7295b5a3fb90e7aaf80df23d5eac222d"
 
 # HYPERSCAN
