@@ -61,7 +61,6 @@ public:
                     }
                     res_data_column->append(iter->second);
                 } else {
-                    res_column->null_column_data()[i] = 1;
                     res_data_column->append_default();
                     res_column->set_null(i);
                 }
