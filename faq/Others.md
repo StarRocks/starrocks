@@ -46,6 +46,10 @@ ALTER DATABASE example_db SET DATA QUOTA 10T;
 
 改动db的quota，调整这个db的容量上限。
 
+## StarRocks有没有upsert这样的语法，就是更新表中某几个字段，没指定更新的字段，值不变化？
+
+目前没有upsert语法，无法更新表中单独的几个字段，暂时只能通过「更新表模型」或者「delete+insert」来实现全字段的更新。
+
 ## [数据恢复]中原子替换表/分区功能使用方法
 
 类似CK的分区卸载、装载，跨表分区移动等功能。
