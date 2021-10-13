@@ -718,7 +718,6 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::ES_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::ES_HTTP_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::HDFS_SCAN_NODE, nodes);
-    collect_nodes(TPlanNodeType::META_SCAN_NODE, nodes);
 }
 
 bool ExecNode::_check_has_vectorized_scan_child() {
