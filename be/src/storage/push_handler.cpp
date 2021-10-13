@@ -469,7 +469,8 @@ OLAPStatus PushBrokerReader::init(const Schema* schema, const TBrokerScanRange& 
     TQueryOptions query_options;
     TQueryGlobals query_globals;
     _runtime_state =
-            std::make_unique<RuntimeState>(fragment_params, query_options, query_globals, ExecEnv::GetInstance());
+            std::make_unique<RuntimeState>(fragment_params.params.query_id, fragment_params.params.fragment_instance_id,
+                                           query_options, query_globals, ExecEnv::GetInstance());
     DescriptorTbl* desc_tbl = nullptr;
     Status status = DescriptorTbl::create(_runtime_state->obj_pool(), t_desc_tbl, &desc_tbl);
     if (UNLIKELY(!status.ok())) {
