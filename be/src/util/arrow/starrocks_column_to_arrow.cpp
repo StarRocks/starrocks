@@ -18,6 +18,7 @@ DEF_PRED_GUARD(ConvFloatAndIntegerGuard, is_conv_float_integer, PrimitiveType, P
 #define IS_CONV_FLOAT_INTEGER(PT, ...) \
     DEF_BINARY_RELATION_ENTRY_SEP_SEMICOLON(IS_CONV_FLOAT_INTEGER_CTOR, PT, ##__VA_ARGS__)
 
+IS_CONV_FLOAT_INTEGER(TYPE_BOOLEAN, ArrowTypeId::BOOL)
 IS_CONV_FLOAT_INTEGER(TYPE_TINYINT, ArrowTypeId::INT8)
 IS_CONV_FLOAT_INTEGER(TYPE_SMALLINT, ArrowTypeId::INT16)
 IS_CONV_FLOAT_INTEGER(TYPE_INT, ArrowTypeId::INT32)
@@ -227,6 +228,7 @@ typedef arrow::Status (*StarRocksToArrowConvertFunc)(const ColumnPtr&, arrow::Me
                                                      std::shared_ptr<arrow::Array>&);
 
 static const std::unordered_map<int32_t, StarRocksToArrowConvertFunc> global_starrocks_to_arrow_conv_table{
+        STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::BOOL, TYPE_BOOLEAN),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::INT8, TYPE_TINYINT),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::INT16, TYPE_SMALLINT),
         STARROCKS_TO_ARROW_CONV_ENTRY_R(ArrowTypeId::INT32, TYPE_INT),
@@ -265,6 +267,7 @@ public:
     DEF_VISIT_METHOD(Decimal128Type);
     DEF_VISIT_METHOD(DoubleType);
     DEF_VISIT_METHOD(FloatType);
+    DEF_VISIT_METHOD(BooleanType);
     DEF_VISIT_METHOD(Int8Type);
     DEF_VISIT_METHOD(Int16Type);
     DEF_VISIT_METHOD(Int32Type);

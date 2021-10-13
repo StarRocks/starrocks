@@ -53,6 +53,9 @@ using strings::Substitute;
 
 Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result) {
     switch (type.type) {
+    case TYPE_BOOLEAN:
+        *result = arrow::boolean();
+        break;
     case TYPE_TINYINT:
         *result = arrow::int8();
         break;
@@ -85,6 +88,11 @@ Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::
         break;
     case TYPE_DECIMALV2:
         *result = std::make_shared<arrow::Decimal128Type>(27, 9);
+        break;
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
+        *result = std::make_shared<arrow::Decimal128Type>(type.precision, type.scale);
         break;
     default:
         return Status::InvalidArgument(strings::Substitute("Unknown primitive type($0)", type.type));
