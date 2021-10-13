@@ -6,7 +6,7 @@
 #include "common/status.h"
 #include "exec/olap_utils.h"
 #include "runtime/runtime_state.h"
-#include "storage/vectorized/meta_read.h"
+#include "storage/vectorized/meta_reader.h"
 
 namespace starrocks {
 namespace vectorized {

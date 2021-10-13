@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
-#include "storage/vectorized/meta_read.h"
+#include "storage/vectorized/meta_reader.h"
 
 #include <vector>
 
@@ -14,7 +14,7 @@ namespace starrocks::vectorized {
 
 std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"dict_merge", "max", "min"};
 
-Status SegmentMetaCollecter::trait_field_and_colname(const std::string& item, std::string* field,
+Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
     for (size_t i = 0; i < support_collect_fields.size(); i++) {
         if (item.size() <= support_collect_fields[i].size()) {
@@ -45,7 +45,6 @@ Status MetaReader::init(const MetaReaderParams& read_params) {
         return Status::OK();
     }
 
-    _collect_context.collecter_cursor = _collect_context.seg_collecters[0];
     _collect_context.cursor_idx = 0;
     _is_init = true;
     _has_more = true;
@@ -67,7 +66,7 @@ Status MetaReader::_build_collect_context(const MetaReaderParams& read_params) {
     for (auto it : *(read_params.id_to_names)) {
         std::string col_name = "";
         std::string collect_field = "";
-        RETURN_IF_ERROR(SegmentMetaCollecter::trait_field_and_colname(it.second, &collect_field, &col_name));
+        RETURN_IF_ERROR(SegmentMetaCollecter::parse_field_and_colname(it.second, &collect_field, &col_name));
 
         int32_t index = _tablet->field_index(col_name);
         if (index < 0) {
@@ -197,25 +196,16 @@ Status MetaReader::_read(Chunk* chunk, size_t n) {
 
     size_t remaining = n;
     while (remaining > 0) {
-        if (!_collect_context.collecter_cursor) {
+        if (_collect_context.cursor_idx >= _collect_context.seg_collecters.size()) {
             _has_more = false;
             return Status::OK();
         }
-        RETURN_IF_ERROR(_collect_context.collecter_cursor->collect(&columns));
+        RETURN_IF_ERROR(_collect_context.seg_collecters[_collect_context.cursor_idx]->collect(&columns));
         remaining--;
-        _next_cursor();
+        _collect_context.cursor_idx++;
     }
 
     return Status::OK();
-}
-
-void MetaReader::_next_cursor() {
-    _collect_context.cursor_idx++;
-    if (_collect_context.cursor_idx >= _collect_context.seg_collecters.size()) {
-        _collect_context.collecter_cursor = nullptr;
-    } else {
-        _collect_context.collecter_cursor = _collect_context.seg_collecters[_collect_context.cursor_idx];
-    }
 }
 
 bool MetaReader::has_more() {

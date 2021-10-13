@@ -33,14 +33,12 @@ public:
 
 private:
     void _init_counter(RuntimeState* state);
-    void _next_cursor();
     friend class OlapMetaScanner;
 
     // params
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
 
     std::vector<OlapMetaScanner*> _scanners;
-    OlapMetaScanner* _scanner_cursor = nullptr;
     size_t _cursor_idx = 0;
 
     bool _is_init;

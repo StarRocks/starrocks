@@ -65,7 +65,6 @@ public:
     struct CollectContext {
         SegmentMetaCollecterParams seg_collecter_params;
         std::vector<SegmentMetaCollecter*> seg_collecters;
-        SegmentMetaCollecter* collecter_cursor = nullptr;
         size_t cursor_idx = 0;
 
         std::vector<int32_t> result_slot_ids;
@@ -94,8 +93,6 @@ private:
     Status _get_segments(const TabletSharedPtr& tablet, const Version& version,
                          std::vector<segment_v2::SegmentSharedPtr>* segments);
 
-    void _next_cursor();
-
     Status _read(Chunk* chunk, size_t n);
 };
 
@@ -108,7 +105,7 @@ public:
 
 public:
     static std::vector<std::string> support_collect_fields;
-    static Status trait_field_and_colname(const std::string& item, std::string* field, std::string* col_name);
+    static Status parse_field_and_colname(const std::string& item, std::string* field, std::string* col_name);
 
     using CollectFunc = std::function<Status(ColumnId, vectorized::Column*, FieldType)>;
     std::unordered_map<std::string, CollectFunc> support_collect_func;

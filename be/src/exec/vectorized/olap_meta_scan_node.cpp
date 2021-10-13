@@ -6,7 +6,6 @@ namespace vectorized {
 
 OlapMetaScanNode::OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs),
-          _scanner_cursor(nullptr),
           _is_init(false),
           _tuple_id(tnode.olap_scan_node.tuple_id),
           _meta_scan_node(tnode.meta_scan_node),
@@ -70,7 +69,6 @@ Status OlapMetaScanNode::open(RuntimeState* state) {
         return Status::InternalError("Invalid ScanRange.");
     }
 
-    _scanner_cursor = _scanners[0];
     _cursor_idx = 0;
 
     RETURN_IF_CANCELLED(state);
@@ -85,25 +83,16 @@ Status OlapMetaScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool
 Status OlapMetaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     DCHECK(state != nullptr && chunk != nullptr && eos != nullptr);
     RETURN_IF_CANCELLED(state);
-    if (!_scanner_cursor->has_more()) {
-        _next_cursor();
+    if (!_scanners[_cursor_idx]->has_more()) {
+        _cursor_idx++;
     }
-    if (!_scanner_cursor) {
+    if (_cursor_idx >= _scanners.size()) {
         *eos = true;
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(_scanner_cursor->get_chunk(state, chunk));
+    RETURN_IF_ERROR(_scanners[_cursor_idx]->get_chunk(state, chunk));
     return Status::OK();
-}
-
-void OlapMetaScanNode::_next_cursor() {
-    _cursor_idx++;
-    if (_cursor_idx >= _scanners.size()) {
-        _scanner_cursor = nullptr;
-    } else {
-        _scanner_cursor = _scanners[_cursor_idx];
-    }
 }
 
 Status OlapMetaScanNode::close(RuntimeState* state) {
