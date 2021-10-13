@@ -19,7 +19,6 @@ public:
     Status open(RuntimeState* state) override;
 
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status collect_query_statistics(QueryStatistics* statistics) override;
     Status close(RuntimeState* state) override;
 
     template <PrimitiveType primitive_type, typename Dict, PrimitiveType result_primitive_type>
@@ -48,6 +47,7 @@ public:
             auto column = down_cast<NullableColumn*>(in);
             auto res_column = down_cast<NullableColumn*>(out);
             res_column->null_column_data().resize(in->size());
+            res_column->set_has_null(true);
 
             auto res_data_column = down_cast<ResultColumnType*>(res_column->data_column().get());
             auto data_column = down_cast<ColumnType*>(column->data_column().get());

@@ -86,10 +86,6 @@ Status DictDecodeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
     DCHECK_CHUNK(*chunk);
     return Status::OK();
 }
-Status DictDecodeNode::collect_query_statistics(QueryStatistics* statistics) {
-    RETURN_IF_ERROR(ExecNode::collect_query_statistics(statistics));
-    return Status::OK();
-}
 
 Status DictDecodeNode::close(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::close(state));
