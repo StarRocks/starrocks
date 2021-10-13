@@ -17,6 +17,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private final HashDistributionSpec hashDistributionSpec;
@@ -99,5 +100,11 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                     HashDistributionDesc.SourceType.LOCAL);
             return DistributionSpec.createHashDistributionSpec(leftHashDesc);
         }
+    }
+
+    // FixMe(KKS): Fix filter
+    @Override
+    public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
+        return true;
     }
 }

@@ -384,5 +384,12 @@ public class OperatorStrings {
 
             return new OperatorStr(s, step, new ArrayList<>(childString));
         }
+
+        @Override
+        public OperatorStr visitPhysicalDecode(OptExpression optExpression, Integer step) {
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+            String sb = "Decode ";
+            return new OperatorStr(sb, step, Collections.singletonList(child));
+        }
     }
 }
