@@ -67,12 +67,9 @@ set(RUNTIME_FILES
     buffered_block_mgr2.cc
     test_env.cc
     mem_tracker.cpp
-    spill_sorter.cc
-    sorted_run_merger.cc
     data_stream_recvr.cc
     buffered_tuple_stream2.cc
     buffered_tuple_stream2_ir.cc
-    buffered_tuple_stream3.cc
     #  export_task_mgr.cpp
     export_sink.cpp
     load_channel_mgr.cpp

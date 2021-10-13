@@ -156,11 +156,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             statistics = new Statistics(limit, statistics.getColumnStatistics());
         }
 
-        context.setStatistics(statistics);
-
         Projection projection = node.getProjection();
         if (projection != null) {
             Statistics.Builder pruneBuilder = Statistics.builder();
+            pruneBuilder.addColumnStatistics(statistics.getColumnStatistics());
             pruneBuilder.setOutputRowCount(statistics.getOutputRowCount());
 
             for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
@@ -176,6 +175,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
 
             context.setStatistics(pruneBuilder.build());
+        } else {
+            context.setStatistics(statistics);
         }
         return null;
     }
@@ -257,12 +258,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     table.getTableLevelColumnStats(requiredColumns.stream().
                             map(ColumnRefOperator::getName).collect(Collectors.toList()));
             List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
-                    computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
+                            computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
                     .collect(Collectors.toList());
             columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats ->
-                    new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
-                            hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
-                            hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
+                            new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
+                                    hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
+                                    hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues()))
                     .collect(Collectors.toList());
         } catch (Exception e) {
             LOG.warn("hive table {} get column failed. error : {}", table.getName(), e);
@@ -619,25 +620,18 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalJoin(LogicalJoinOperator node, ExpressionContext context) {
-        //Projection projection = node.getProjection();
-        //Preconditions.checkState(projection != null);
-        return computeJoinNode(context, node.getOnPredicate(), node.getPredicate(), node.getJoinType(), node.getLimit(),
-                null);
-        //node.getOutputColumns(context).getStream().boxed().map(columnRefFactory::getColumnRef).collect(Collectors.toList()));
+        return computeJoinNode(context, node.getOnPredicate(), node.getPredicate(), node.getJoinType(),
+                node.getLimit());
     }
 
     @Override
     public Void visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
-        //Projection projection = node.getProjection();
-        //Preconditions.checkState(projection != null);
         return computeJoinNode(context, node.getJoinPredicate(), node.getPredicate(), node.getJoinType(),
-                node.getLimit(),
-                null);
-        //projection.getOutputColumns());
+                node.getLimit());
     }
 
     private Void computeJoinNode(ExpressionContext context, ScalarOperator joinOnPredicate, ScalarOperator predicate,
-                                 JoinOperator joinType, long limit, List<ColumnRefOperator> outputColumns) {
+                                 JoinOperator joinType, long limit) {
         Preconditions.checkState(context.arity() == 2);
 
         Statistics.Builder builder = Statistics.builder();
@@ -727,27 +721,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             estimateStatistics = new Statistics(limit, estimateStatistics.getColumnStatistics());
         }
 
-        if (outputColumns == null) {
-            context.setStatistics(estimateStatistics);
-            return visitOperator(context.getOp(), context, builder);
-        }
-        Preconditions.checkState(false);
-        if (outputColumns.isEmpty()) {
-            if (!context.getRootProperty().getOutputColumns().isEmpty()) {
-                outputColumns.add(Utils.findSmallestColumnRef(context.getRootProperty().getOutputColumns().getStream().
-                        mapToObj(columnRefFactory::getColumnRef).collect(Collectors.toList())));
-            }
-        }
-        // use outputColumns to prune column statistics
-        Map<ColumnRefOperator, ColumnStatistic> outputColumnStatisticMap = estimateStatistics.getColumnStatistics().
-                entrySet().stream().filter(entry -> outputColumns.contains(entry.getKey())).
-                collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        Statistics.Builder joinBuilder = Statistics.builder();
-        joinBuilder.setOutputRowCount(estimateStatistics.getOutputRowCount());
-        joinBuilder.addColumnStatistics(outputColumnStatisticMap);
+        context.setStatistics(estimateStatistics);
+        return visitOperator(context.getOp(), context, builder);
 
-        context.setStatistics(joinBuilder.build());
-        return visitOperator(context.getOp(), context);
     }
 
     @Override

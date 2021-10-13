@@ -9,6 +9,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rewrite.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
@@ -106,7 +107,7 @@ public class Optimizer {
 
         // Rewrite maybe produce empty groups, we need to remove them.
         memo.removeAllEmptyGroup();
-        memo.func();
+        memo.removeUnreachableGroup();
 
         // collect all olap scan operator
         collectAllScanOperators(memo, rootTaskContext);
@@ -138,9 +139,9 @@ public class Optimizer {
             }
         }
 
-        //if (connectContext.getSessionVariable().isEnableNewPlannerPushDownJoinToAgg()) {
-        //     context.getRuleSet().addPushDownJoinToAggRule();
-        //}
+        if (connectContext.getSessionVariable().isEnableNewPlannerPushDownJoinToAgg()) {
+             //context.getRuleSet().addPushDownJoinToAggRule();
+        }
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(
                 rootTaskContext, memo.getRootGroup()));
@@ -150,18 +151,14 @@ public class Optimizer {
 
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
 
-        //System.out.println("Memo size : " + memo.getGroups().size());
-
         OptExpression result = extractBestPlan(requiredProperty, memo.getRootGroup());
         tryOpenPreAggregate(result);
-        //result = new AddProjectForJoinOnBinaryPredicatesRule().rewrite(result, columnRefFactory);
-        //result = new AddProjectForJoinPruneRule((ColumnRefSet) requiredColumns.clone()).rewrite(result, columnRefFactory);
         // Rewrite Exchange on top of Sort to Final Sort
         result = new ExchangeSortToMergeRule().rewrite(result);
 
         // Add project will case output change, re-derive output columns in property
-        result = new DeriveOutputColumnsRule((ColumnRefSet) requiredColumns.clone()).rewrite(result, columnRefFactory);
-
+        result = new DeriveOutputColumnsRule((ColumnRefSet) requiredColumns.clone()).rewrite(result, rootTaskContext);
+        result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         return result;
     }
 

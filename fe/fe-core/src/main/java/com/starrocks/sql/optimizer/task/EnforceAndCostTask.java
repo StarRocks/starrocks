@@ -207,7 +207,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                         ConnectContext.get().getSessionVariable().getParallelExecInstanceNum()));
         int beNum = Math.max(1, Catalog.getCurrentSystemInfo().getBackendIds(true).size());
         PhysicalHashJoinOperator operator = (PhysicalHashJoinOperator) groupExpression.getOp();
-        if (leftChildStats.getOutputSize() < rightChildStats.getOutputSize() * parallelExecInstance * beNum * 10
+        double leftOutputSize = leftChildStats.getOutputSize(groupExpression.getChildOutputColumns(curChildIndex - 1));
+        double rightOutputSize = rightChildStats.getOutputSize(groupExpression.getChildOutputColumns(curChildIndex));
+
+        if (leftOutputSize < rightOutputSize * parallelExecInstance * beNum * 10
                 && rightChildStats.getOutputRowCount() > ConnectContext.get().getSessionVariable()
                 .getBroadcastRowCountLimit() && !operator.getJoinHint().equalsIgnoreCase("BROADCAST")) {
             return false;

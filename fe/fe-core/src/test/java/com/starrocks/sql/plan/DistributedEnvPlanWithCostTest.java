@@ -239,6 +239,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  and p_size = 12\n" +
                 "  and p_type like '%COPPER'";
         String planFragment = getCostExplain(sql);
+        System.out.println("FIXME : " + planFragment);
         Assert.assertTrue(planFragment.contains("9:Project\n" +
                 "  |  output columns:\n" +
                 "  |  16 <-> [16: S_ACCTBAL, DOUBLE, false]\n" +
@@ -415,6 +416,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testJoinOnExpression() throws Exception {
         String sql = "SELECT COUNT(*)  FROM lineitem JOIN [shuffle] orders ON l_orderkey = o_orderkey + 1  GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
         String plan = getCostExplain(sql);
+        System.out.println("FIXME : " + plan);
         Assert.assertTrue(plan.contains("6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [29: cast, BIGINT, true] = [30: add, BIGINT, true]\n" +

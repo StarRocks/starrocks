@@ -367,6 +367,7 @@ Status Analytor::output_result_chunk(vectorized::ChunkPtr* chunk) {
         output_chunk->set_num_rows(output_chunk->num_rows() - num_rows_over);
         COUNTER_SET(_rows_returned_counter, _limit);
         *chunk = output_chunk;
+        _output_chunk_index++;
         return Status::OK();
     }
 

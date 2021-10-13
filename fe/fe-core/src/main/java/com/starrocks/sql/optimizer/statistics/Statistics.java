@@ -36,7 +36,17 @@ public class Statistics {
         return outputRowCount;
     }
 
-    public double getOutputSize() {
+    public double getOutputSize(ColumnRefSet outputColumns) {
+        double totalSize = 0;
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
+            if (outputColumns.contains(entry.getKey().getId())) {
+                totalSize += entry.getValue().getAverageRowSize();
+            }
+        }
+        return totalSize * outputRowCount;
+    }
+
+    public double getComputeSize() {
         return this.columnStatistics.values().stream().map(ColumnStatistic::getAverageRowSize).
                 reduce(0.0, Double::sum) * outputRowCount;
     }

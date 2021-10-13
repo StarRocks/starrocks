@@ -8,6 +8,8 @@ import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+import java.util.Set;
+
 public abstract class PhysicalOperator extends Operator {
     protected OrderSpec orderSpec;
     protected DistributionSpec distributionSpec;
@@ -55,5 +57,9 @@ public abstract class PhysicalOperator extends Operator {
         }
 
         return result;
+    }
+
+    public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
+        return false;
     }
 }

@@ -64,13 +64,16 @@ public class PushDownJoinOnExpressionToChildProject extends TransformationRule {
             if (leftOutputColumns.contains(left.getUsedColumns()) && !left.isColumnRef()) {
                 leftProjectMaps.put(context.getColumnRefFactory().create(left, left.getType(), left.isNullable()),
                         left);
-            } else if (rightOutputColumns.contains(left.getUsedColumns()) && !left.isColumnRef()) {
+            }
+            if (rightOutputColumns.contains(left.getUsedColumns()) && !left.isColumnRef()) {
                 rightProjectMaps.put(context.getColumnRefFactory().create(left, left.getType(), left.isNullable()),
                         left);
-            } else if (rightOutputColumns.contains(right.getUsedColumns()) && !right.isColumnRef()) {
+            }
+            if (rightOutputColumns.contains(right.getUsedColumns()) && !right.isColumnRef()) {
                 rightProjectMaps.put(context.getColumnRefFactory().create(right, right.getType(), right.isNullable()),
                         right);
-            } else if (leftOutputColumns.contains(right.getUsedColumns()) && !right.isColumnRef()) {
+            }
+            if (leftOutputColumns.contains(right.getUsedColumns()) && !right.isColumnRef()) {
                 leftProjectMaps.put(context.getColumnRefFactory().create(right, right.getType(), right.isNullable()),
                         right);
             }

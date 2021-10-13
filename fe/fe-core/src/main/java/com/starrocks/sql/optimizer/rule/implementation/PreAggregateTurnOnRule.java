@@ -14,10 +14,10 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -58,13 +58,45 @@ public class PreAggregateTurnOnRule {
 
         @Override
         public Void visit(OptExpression optExpression, PreAggregationContext context) {
+
+
             // Avoid left child modify context will effect right child
             if (optExpression.getInputs().size() <= 1) {
                 for (OptExpression opt : optExpression.getInputs()) {
+                    if (opt.getOp().getProjection() != null) {
+                        Projection projection = opt.getOp().getProjection();
+                        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
+                        ReplaceColumnRefRewriter subRewriter =
+                                new ReplaceColumnRefRewriter(projection.getCommonSubOperatorMap(), true);
+
+                        context.aggregations = context.aggregations.stream()
+                                .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
+                                .collect(Collectors.toList());
+
+                        context.groupings = context.groupings.stream()
+                                .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
+                                .collect(Collectors.toList());
+                    }
+
                     opt.getOp().accept(this, opt, context);
                 }
             } else {
                 for (OptExpression opt : optExpression.getInputs()) {
+                    if (opt.getOp().getProjection() != null) {
+                        Projection projection = opt.getOp().getProjection();
+                        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
+                        ReplaceColumnRefRewriter subRewriter =
+                                new ReplaceColumnRefRewriter(projection.getCommonSubOperatorMap(), true);
+
+                        context.aggregations = context.aggregations.stream()
+                                .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
+                                .collect(Collectors.toList());
+
+                        context.groupings = context.groupings.stream()
+                                .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
+                                .collect(Collectors.toList());
+                    }
+
                     opt.getOp().accept(this, opt, context.clone());
                 }
             }
@@ -81,24 +113,6 @@ public class PreAggregateTurnOnRule {
             context.groupings =
                     aggregate.getGroupBys().stream().map(ScalarOperator::clone).collect(Collectors.toList());
             context.notPreAggregationJoin = false;
-
-            return visit(optExpression, context);
-        }
-
-        @Override
-        public Void visitPhysicalProject(OptExpression optExpression, PreAggregationContext context) {
-            PhysicalProjectOperator project = (PhysicalProjectOperator) optExpression.getOp();
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(project.getColumnRefMap());
-            ReplaceColumnRefRewriter subRewriter =
-                    new ReplaceColumnRefRewriter(project.getCommonSubOperatorMap(), true);
-
-            context.aggregations = context.aggregations.stream()
-                    .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
-                    .collect(Collectors.toList());
-
-            context.groupings = context.groupings.stream()
-                    .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
-                    .collect(Collectors.toList());
 
             return visit(optExpression, context);
         }

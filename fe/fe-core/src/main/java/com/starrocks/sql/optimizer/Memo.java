@@ -251,20 +251,20 @@ public class Memo {
         }
     }
 
-    private void deepSearch(Group root, Map<Group, Boolean> map) {
+    private void deepSearchGroup(Group root, Map<Group, Boolean> map) {
         for (Group group : root.getFirstLogicalExpression().getInputs()) {
             map.put(group, true);
-            deepSearch(group, map);
+            deepSearchGroup(group, map);
         }
     }
 
-    public void func() {
+    public void removeUnreachableGroup() {
         Map<Group, Boolean> touch = new HashMap<>();
         for (Group group : getGroups()) {
             touch.put(group, false);
         }
         touch.put(rootGroup, true);
-        deepSearch(rootGroup, touch);
+        deepSearchGroup(rootGroup, touch);
 
         for (Map.Entry<Group, Boolean> e : touch.entrySet()) {
             if (!e.getValue()) {
