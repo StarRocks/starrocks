@@ -29,9 +29,10 @@ AnalyticNode::AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
           _tnode(tnode),
           _result_tuple_desc(descs.get_tuple_descriptor(tnode.analytic_node.output_tuple_id)) {
     TAnalyticWindow window = tnode.analytic_node.window;
+
     if (!tnode.analytic_node.__isset.window) {
         _get_next = &AnalyticNode::_get_next_for_unbounded_frame;
-    } else if (tnode.analytic_node.window.type == TAnalyticWindowType::RANGE) {
+    } else if (window.type == TAnalyticWindowType::RANGE) {
         // RANGE windows must have UNBOUNDED PRECEDING
         // RANGE window end bound must be CURRENT ROW or UNBOUNDED FOLLOWING
         if (!window.__isset.window_end) {
@@ -148,14 +149,14 @@ Status AnalyticNode::_get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr
                                            _analytor->partition_start(), _analytor->partition_end());
         }
 
-        int64_t first_chunk_row_position =
+        int64_t chunk_first_row_position =
                 _analytor->input_chunk_first_row_positions()[_analytor->output_chunk_index()];
         int64_t get_value_start =
-                _analytor->get_total_position(_analytor->current_row_position()) - first_chunk_row_position;
+                _analytor->get_total_position(_analytor->current_row_position()) - chunk_first_row_position;
         int64_t get_value_end =
                 std::min<int64_t>(_analytor->current_row_position() + chunk_size, _analytor->partition_end());
         _analytor->set_window_result_position(std::min<int64_t>(
-                (_analytor->get_total_position(get_value_end) - first_chunk_row_position), chunk_size));
+                (_analytor->get_total_position(get_value_end) - chunk_first_row_position), chunk_size));
 
         _analytor->get_window_function_result(get_value_start, _analytor->window_result_position());
         _analytor->update_current_row_position(_analytor->window_result_position() - get_value_start);
@@ -196,12 +197,12 @@ Status AnalyticNode::_get_next_for_unbounded_preceding_range_frame(RuntimeState*
                                                _analytor->peer_group_start(), _analytor->peer_group_end());
             }
 
-            int64_t first_chunk_row_position =
+            int64_t chunk_first_row_position =
                     _analytor->input_chunk_first_row_positions()[_analytor->output_chunk_index()];
             int64_t get_value_start =
-                    _analytor->get_total_position(_analytor->current_row_position()) - first_chunk_row_position;
+                    _analytor->get_total_position(_analytor->current_row_position()) - chunk_first_row_position;
             _analytor->set_window_result_position(std::min<int64_t>(
-                    (_analytor->get_total_position(_analytor->peer_group_end()) - first_chunk_row_position),
+                    (_analytor->get_total_position(_analytor->peer_group_end()) - chunk_first_row_position),
                     chunk_size));
 
             DCHECK_GE(get_value_start, 0);
@@ -364,7 +365,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AnalyticNode::decompose
     AnalytorPtr analytor = std::make_shared<Analytor>(_tnode, child(0)->row_desc(), _result_tuple_desc);
 
     operators_with_sink.emplace_back(
-            std::make_shared<AnalyticSinkOperatorFactory>(context->next_operator_id(), id(), analytor));
+            std::make_shared<AnalyticSinkOperatorFactory>(context->next_operator_id(), id(), _tnode, analytor));
     context->add_pipeline(operators_with_sink);
 
     OpFactories operators_with_source;
