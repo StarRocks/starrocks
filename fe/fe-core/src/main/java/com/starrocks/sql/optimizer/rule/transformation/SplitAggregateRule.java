@@ -243,6 +243,7 @@ public class SplitAggregateRule extends TransformationRule {
                 .setType(AggType.LOCAL)
                 .setAggregations(createNormalAgg(AggType.LOCAL, newAggMap))
                 .setPredicate(null)
+                .setLimit(-1)
                 .build();
         OptExpression localOptExpression = OptExpression.create(local, input.getInputs());
 
