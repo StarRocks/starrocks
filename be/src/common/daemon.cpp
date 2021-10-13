@@ -38,8 +38,10 @@
 #include "util/cpu_info.h"
 #include "util/debug_util.h"
 #include "util/disk_info.h"
+#include "util/gc_helper.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
+#include "util/monotime.h"
 #include "util/network_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/system_metrics.h"
@@ -69,27 +71,33 @@ private:
 void* tcmalloc_gc_thread(void* dummy) {
     using namespace starrocks::vectorized;
     const static float kFreeRatio = 0.5;
+    uint64_t tick = 0;
+    GCHelper gch(120 /* second */, MonoTime::Now());
     while (true) {
-        sleep(10);
+        ++tick;
+        sleep(1);
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
         MallocExtension::instance()->MarkThreadBusy();
 #endif
-        ReleaseColumnPool releaser(kFreeRatio);
-        ForEach<ColumnPoolList>(releaser);
-        LOG_IF(INFO, releaser.freed_bytes() > 0) << "Released " << releaser.freed_bytes() << " bytes from column pool";
-        auto* local_column_pool_mem_tracker = ExecEnv::GetInstance()->local_column_pool_mem_tracker();
-        if (local_column_pool_mem_tracker != nullptr) {
-            // Frequent update MemTracker where allocate or release column may affect performance,
-            // so here update MemTracker regularly
-            local_column_pool_mem_tracker->consume(g_column_pool_total_local_bytes.get_value() -
-                                                   local_column_pool_mem_tracker->consumption());
-        }
-        auto* central_column_pool_mem_tracker = ExecEnv::GetInstance()->central_column_pool_mem_tracker();
-        if (central_column_pool_mem_tracker != nullptr) {
-            // Frequent update MemTracker where allocate or release column may affect performance,
-            // so here update MemTracker regularly
-            central_column_pool_mem_tracker->consume(g_column_pool_total_central_bytes.get_value() -
-                                                     central_column_pool_mem_tracker->consumption());
+        if ((tick % 10) == 0) { // for every 10 second
+            ReleaseColumnPool releaser(kFreeRatio);
+            ForEach<ColumnPoolList>(releaser);
+            LOG_IF(INFO, releaser.freed_bytes() > 0)
+                    << "Released " << releaser.freed_bytes() << " bytes from column pool";
+            auto* local_column_pool_mem_tracker = ExecEnv::GetInstance()->local_column_pool_mem_tracker();
+            if (local_column_pool_mem_tracker != nullptr) {
+                // Frequent update MemTracker where allocate or release column may affect performance,
+                // so here update MemTracker regularly
+                local_column_pool_mem_tracker->consume(g_column_pool_total_local_bytes.get_value() -
+                                                       local_column_pool_mem_tracker->consumption());
+            }
+            auto* central_column_pool_mem_tracker = ExecEnv::GetInstance()->central_column_pool_mem_tracker();
+            if (central_column_pool_mem_tracker != nullptr) {
+                // Frequent update MemTracker where allocate or release column may affect performance,
+                // so here update MemTracker regularly
+                central_column_pool_mem_tracker->consume(g_column_pool_total_central_bytes.get_value() -
+                                                         central_column_pool_mem_tracker->consumption());
+            }
         }
 
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
@@ -98,10 +106,22 @@ void* tcmalloc_gc_thread(void* dummy) {
         MallocExtension::instance()->GetNumericProperty("generic.current_allocated_bytes", &used_size);
         MallocExtension::instance()->GetNumericProperty("tcmalloc.pageheap_free_bytes", &free_size);
         size_t phy_size = used_size + free_size; // physical memory usage
+        size_t total_bytes_to_gc = 0;
         if (phy_size > config::tc_use_memory_min) {
             size_t max_free_size = phy_size * config::tc_free_memory_rate / 100;
             if (free_size > max_free_size) {
-                MallocExtension::instance()->ReleaseToSystem(free_size - max_free_size);
+                total_bytes_to_gc = free_size - max_free_size;
+            }
+        }
+        size_t bytes_to_gc = gch.bytes_should_gc(MonoTime::Now(), total_bytes_to_gc);
+        if (bytes_to_gc > 0) {
+            size_t bytes = bytes_to_gc;
+            while (bytes >= GCBYTES_ONE_STEP) {
+                MallocExtension::instance()->ReleaseToSystem(GCBYTES_ONE_STEP);
+                bytes -= GCBYTES_ONE_STEP;
+            }
+            if (bytes > 0) {
+                MallocExtension::instance()->ReleaseToSystem(bytes);
             }
         }
         MallocExtension::instance()->MarkThreadIdle();

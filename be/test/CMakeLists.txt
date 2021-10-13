@@ -244,6 +244,7 @@ set(EXEC_FILES
         ./util/buffered_stream_test.cpp
         ./util/int96_test.cpp
         ./util/bit_packing_test.cpp
+        ./util/gc_helper_test.cpp
         )
 
 if (USE_AVX2)
