@@ -422,41 +422,25 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     }
 }
 
-StatusOr<std::string> SnapshotManager::snapshot_trash(const TabletSharedPtr& tablet, int64_t snapshot_version,
-                                                      int64_t timeout_s) {
+Status SnapshotManager::write_meta_snapshot(const TabletSharedPtr& tablet) {
     std::vector<RowsetSharedPtr> snapshot_rowsets;
-    // 1. Check whether the snapshot version exist.
     std::shared_lock rdlock(tablet->get_header_lock());
-    if (snapshot_version == 0) {
-        snapshot_version = tablet->max_version().second;
-    }
+    int64_t snapshot_version = tablet->max_version().second;
     RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, snapshot_version), &snapshot_rowsets));
     rdlock.unlock();
-
-    // 2. Create snapshot directory.
-    std::string snapshot_id_path = _calc_snapshot_id_path(tablet, timeout_s);
-    if (UNLIKELY(snapshot_id_path.empty())) {
-        return Status::RuntimeError("empty snapshot_id_path");
-    }
-    std::string snapshot_dir = tablet->tablet_path() + "/" + SNAPSHOT_PREFIX + "/" +
-                               std::filesystem::path(snapshot_id_path).filename().string();
-    (void)FileUtils::remove_all(snapshot_dir);
-    RETURN_IF_ERROR(FileUtils::create_dir(snapshot_dir));
-
     std::vector<RowsetMetaSharedPtr> snapshot_rowset_metas;
     snapshot_rowset_metas.reserve(snapshot_rowsets.size());
     for (const auto& snapshot_rowset : snapshot_rowsets) {
         snapshot_rowset_metas.emplace_back(snapshot_rowset->rowset_meta());
     }
-
-    // 3. Build snapshot meta file.
-    auto st = build_snapshot_meta(SNAPSHOT_TYPE_FULL, snapshot_dir, tablet, snapshot_rowset_metas, snapshot_version,
+    std::string meta_path = tablet->tablet_path() + "/tablet.meta";
+    auto st = build_snapshot_meta(SNAPSHOT_TYPE_FULL, meta_path, tablet, snapshot_rowset_metas, snapshot_version,
                                   g_Types_constants.TSNAPSHOT_REQ_VERSION2);
     if (!st.ok()) {
-        (void)FileUtils::remove_all(snapshot_id_path);
+        (void)FileUtils::remove(meta_path);
         return st;
     }
-    return snapshot_id_path;
+    return Status::OK();
 }
 
 Status SnapshotManager::build_snapshot_meta(SnapshotTypePB snapshot_type, const std::string& snapshot_dir,

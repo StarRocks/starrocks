@@ -1019,11 +1019,10 @@ Status TabletManager::start_trash_sweep() {
                 std::string tablet_path = tablet->tablet_path();
                 if (Env::Default()->path_exists(tablet_path).ok()) {
                     if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
-                        StatusOr<std::string> st = SnapshotManager::instance()->snapshot_trash(tablet, 0, 180);
+                        Status st = SnapshotManager::instance()->write_meta_snapshot(tablet);
                         if (!st.ok()) {
                             LOG(WARNING) << "Fail to snapshot_trash, tablet_id=" << tablet->tablet_id()
-                                         << " schema_hash=" << tablet->schema_hash()
-                                         << ", status=" << st.status().to_string();
+                                         << " schema_hash=" << tablet->schema_hash() << ", status=" << st.to_string();
                         } else {
                             LOG(INFO) << "Created snapshot tablet_id=" << tablet->tablet_id()
                                       << " schema_hash=" << tablet->schema_hash();

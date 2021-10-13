@@ -672,10 +672,11 @@ Status EngineCloneTask::_finish_clone_updatable(Tablet* tablet, const std::strin
         local_files.erase(fname);
     }
 
+    auto env = Env::Default();
     for (const std::string& filename : clone_files) {
         std::string from = clone_dir + "/" + filename;
         std::string to = tablet_dir + "/" + filename;
-        RETURN_IF_ERROR(Env::Default()->link_file(from, to));
+        RETURN_IF_ERROR(env->link_file(from, to));
         LOG(INFO) << "Linked " << from << " to " << to;
     }
     // Note that |snapshot_meta| may be modified by `load_snapshot`.
