@@ -39,6 +39,19 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * For a low cardinality string column with global dict, we will rewrite the plan to
+ * speed up query with global dict.
+ *
+ * 1. Check the olap scan nodes have low cardinality global dict string column
+ * 2. Replace the string column with the dict encoded int column
+ * 3. Bottom up traverse the plan tree, if the operator could apply global dict, then
+ *    Replace the string column with the dict encoded int column,
+ *    else insert the decode operator into the tree
+ * 4. The decode operator will translate the encoded int column to string column
+ *
+ * The concrete example could refer to testDecodeNodeRewriteXXX in PlanFragmentTest
+ */
 public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewriteRule {
     private static final Logger LOG = LogManager.getLogger(AddDecodeNodeForDictStringRule.class);
 
@@ -124,12 +137,13 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                             scanOperator.getTable(),
                             newOutputColumns,
                             newColRefToColumnMetaMap,
-                            scanOperator.getDistributionSpec());
-                    newOlapScan.setSelectedIndexId(scanOperator.getSelectedIndexId());
-                    newOlapScan.setSelectedPartitionId(scanOperator.getSelectedPartitionId());
-                    newOlapScan.setSelectedTabletId(scanOperator.getSelectedTabletId());
-                    newOlapScan.setPredicate(scanOperator.getPredicate());
-                    newOlapScan.setLimit(scanOperator.getLimit());
+                            scanOperator.getDistributionSpec(),
+                            scanOperator.getLimit(),
+                            scanOperator.getPredicate(),
+                            scanOperator.getSelectedIndexId(),
+                            scanOperator.getSelectedPartitionId(),
+                            scanOperator.getSelectedTabletId());
+                    newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
 
                     OptExpression result =  new OptExpression(newOlapScan);
                     result.setLogicalProperty(optExpression.getLogicalProperty());
@@ -257,8 +271,13 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             }
 
             context.stringColumnIdToDictColumnIds = newStringToDicts;
-            return new PhysicalHashAggregateOperator(aggOperator.getType(), newGroupBys,
-                    newPartitionsBy, newAggMap, aggOperator.getSingleDistinctFunctionPos(), aggOperator.isSplit());
+            return new PhysicalHashAggregateOperator(aggOperator.getType(),
+                    newGroupBys,
+                    newPartitionsBy, newAggMap,
+                    aggOperator.getSingleDistinctFunctionPos(),
+                    aggOperator.isSplit(),
+                    aggOperator.getLimit(),
+                    aggOperator.getPredicate());
         }
 
         @Override
@@ -350,14 +369,14 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
                 ColumnStatistic columnStatistic = Catalog.getCurrentStatisticStorage().
                         getColumnStatistic(table, column.getName());
-                // Condition 2:
+                // Condition 2: the varchar column is low cardinality string column
                 if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
                         columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
                     LOG.debug("{} isn't low cardinality string column", column.getName());
                     continue;
                 }
 
-                // Condition 3:
+                // Condition 3: the varchar column has collected global dict
                 if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName(), version)) {
                     if (!tableIdToStringColumnIds.containsKey(table.getId())) {
                         List<Integer> integers = Lists.newArrayList();
