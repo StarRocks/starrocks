@@ -67,7 +67,6 @@ set(RUNTIME_FILES
     buffered_block_mgr2.cc
     test_env.cc
     mem_tracker.cpp
-    sorted_run_merger.cc
     data_stream_recvr.cc
     buffered_tuple_stream2.cc
     buffered_tuple_stream2_ir.cc

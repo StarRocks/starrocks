@@ -34,7 +34,6 @@
 #include "gen_cpp/data.pb.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/row_batch.h"
-#include "runtime/sorted_run_merger.h"
 #include "runtime/vectorized/sorted_chunks_merger.h"
 #include "util/block_compression.h"
 #include "util/debug_util.h"
