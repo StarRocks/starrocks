@@ -52,8 +52,8 @@ private:
     MetaReaderParams _reader_params;
     std::shared_ptr<MetaReader> _reader;
 
-    bool _is_open;
-    bool _is_closed;
+    bool _is_open = false;
+    bool _is_closed = false;
     int64_t _version = 0;
 };
 

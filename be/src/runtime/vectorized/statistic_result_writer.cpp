@@ -15,7 +15,7 @@
 namespace starrocks::vectorized {
 
 const int STATISTIC_DATA_VERSION1 = 1;
-const int STATISTIC_DATA_VERSION2 = 101;
+const int DICT_STATISTIC_DATA_VERSION = 101;
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
@@ -70,8 +70,8 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
     // Step 3: fill statistic data
     if (version == STATISTIC_DATA_VERSION1) {
         _fill_statistic_data_v1(version, result_columns, chunk, result);
-    } else if (version == STATISTIC_DATA_VERSION2) {
-        _fill_statistic_data_v2(version, result_columns, chunk, result);
+    } else if (version == DICT_STATISTIC_DATA_VERSION) {
+        _fill_dict_statistic_data(version, result_columns, chunk, result);
     }
 
     // Step 4: send
@@ -88,8 +88,8 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
     return status;
 }
 
-void StatisticResultWriter::_fill_statistic_data_v2(int version, const vectorized::Columns& columns,
-                                                    const vectorized::Chunk* chunk, TFetchDataResult* result) {
+void StatisticResultWriter::_fill_dict_statistic_data(int version, const vectorized::Columns& columns,
+                                                      const vectorized::Chunk* chunk, TFetchDataResult* result) {
     SCOPED_TIMER(_serialize_timer);
     DCHECK(columns.size() == 3);
     auto versioncolumn = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[1]);

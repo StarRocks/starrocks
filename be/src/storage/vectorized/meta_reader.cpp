@@ -292,7 +292,7 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* col
     end_offset += words.size();
     offsets->append(end_offset);
 
-    // read elements
+    // add elements
     auto dst = array_column->elements_column().get();
     dst->append_strings(words);
 
@@ -321,16 +321,20 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Colu
                 const ZoneMapPB& segment_zone_map_pb = zone_map_index_pb.segment_zone_map();
 
                 TypeInfoPtr type_info = get_type_info(delegate_type(type));
-                vectorized::Datum min;
-                vectorized::Datum max;
-                if (!segment_zone_map_pb.has_null() && !is_max) {
-                    RETURN_IF_ERROR(
-                            vectorized::datum_from_string(type_info.get(), &min, segment_zone_map_pb.min(), nullptr));
-                    column->append_datum(min);
-                } else if (segment_zone_map_pb.has_not_null() && is_max) {
-                    RETURN_IF_ERROR(
-                            vectorized::datum_from_string(type_info.get(), &max, segment_zone_map_pb.max(), nullptr));
-                    column->append_datum(max);
+                if constexpr (!is_max) {
+                    vectorized::Datum min;
+                    if (!segment_zone_map_pb.has_null()) {
+                        RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &min, segment_zone_map_pb.min(),
+                                                                      nullptr));
+                        column->append_datum(min);
+                    }
+                } else if constexpr (is_max) {
+                    vectorized::Datum max;
+                    if (segment_zone_map_pb.has_not_null()) {
+                        RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &max, segment_zone_map_pb.max(),
+                                                                      nullptr));
+                        column->append_datum(max);
+                    }
                 }
                 return Status::OK();
             }

@@ -38,7 +38,7 @@ struct MetaReaderParams {
     const std::map<int32_t, std::string>* id_to_names = nullptr;
     const DescriptorTbl* desc_tbl = nullptr;
 
-    int chunk_size = 1024;
+    int chunk_size = config::vector_chunk_size;
 };
 
 struct SegmentMetaCollecterParams {
@@ -49,6 +49,9 @@ struct SegmentMetaCollecterParams {
     int32_t max_cid;
 };
 
+// MetaReader will implements
+// 1. read meta info from segment footer
+// 2. read dict info from dict page if column is dict encoding type
 class MetaReader {
 public:
     MetaReader();
@@ -116,7 +119,7 @@ private:
     Status _collect_dict(ColumnId cid, vectorized::Column* column, FieldType type);
     Status _collect_max(ColumnId cid, vectorized::Column* column, FieldType type);
     Status _collect_min(ColumnId cid, vectorized::Column* column, FieldType type);
-    template <bool flag>
+    template <bool is_max>
     Status __collect_max_or_min(ColumnId cid, vectorized::Column* column, FieldType type);
     segment_v2::SegmentSharedPtr _segment;
     std::vector<ColumnIterator*> _column_iterators;

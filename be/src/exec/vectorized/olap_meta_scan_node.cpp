@@ -76,10 +76,6 @@ Status OlapMetaScanNode::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status OlapMetaScanNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) {
-    return Status::NotSupported("get next for row_batch is not supported");
-}
-
 Status OlapMetaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     DCHECK(state != nullptr && chunk != nullptr && eos != nullptr);
     RETURN_IF_CANCELLED(state);
