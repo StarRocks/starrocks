@@ -23,12 +23,12 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
-    Status _maybe_partition_finish();
-    void _partition_finish_for_unbounded_frame(size_t chunk_size, bool is_new_partition);
-    void _partition_finish_for_unbounded_preceding_range_frame(size_t chunk_size, bool is_new_partition);
-    void _partition_finish_for_unbounded_preceding_rows_frame(size_t chunk_size, bool is_new_partition);
-    void _partition_finish_for_sliding_frame(size_t chunk_size, bool is_new_partition);
-    void (AnalyticSinkOperator::*_partition_finish)(size_t chunk_size, bool is_new_partition) = nullptr;
+    Status _process_by_partition_if_necessary();
+    void _process_by_partition_for_unbounded_frame(size_t chunk_size, bool is_new_partition);
+    void _process_by_partition_for_unbounded_preceding_range_frame(size_t chunk_size, bool is_new_partition);
+    void _process_by_partition_for_unbounded_preceding_rows_frame(size_t chunk_size, bool is_new_partition);
+    void _process_by_partition_for_sliding_frame(size_t chunk_size, bool is_new_partition);
+    void (AnalyticSinkOperator::*_process_by_partition)(size_t chunk_size, bool is_new_partition) = nullptr;
 
     TPlanNode _tnode;
     // It is used to perform analytic algorithms
