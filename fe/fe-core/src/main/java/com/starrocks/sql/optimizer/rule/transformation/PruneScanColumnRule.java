@@ -14,6 +14,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -102,12 +103,13 @@ public class PruneScanColumnRule extends TransformationRule {
                     Class<? extends LogicalScanOperator> classType = scanOperator.getClass();
                     LogicalScanOperator newScanOperator =
                             classType.getConstructor(Table.class, List.class, Map.class, Map.class, long.class,
-                                    ScalarOperator.class).newInstance(
+                                    ScalarOperator.class, Projection.class).newInstance(
                                     scanOperator.getTable(), new ArrayList<>(outputColumns),
                                     newColumnRefMap,
                                     scanOperator.getColumnMetaToColRefMap(),
                                     scanOperator.getLimit(),
-                                    scanOperator.getPredicate());
+                                    scanOperator.getPredicate(),
+                                    scanOperator.getProjection());
 
                     return Lists.newArrayList(new OptExpression(newScanOperator));
                 } catch (Exception e) {

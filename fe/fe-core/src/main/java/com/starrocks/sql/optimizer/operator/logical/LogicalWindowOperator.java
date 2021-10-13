@@ -35,7 +35,7 @@ public class LogicalWindowOperator extends LogicalOperator {
     }
 
     private LogicalWindowOperator(Builder builder) {
-        super(OperatorType.LOGICAL_WINDOW);
+        super(OperatorType.LOGICAL_WINDOW, builder.getLimit(), builder.getPredicate(), builder.getProjection());
         this.windowCall = builder.windowCall;
         this.partitionExpressions = builder.partitionExpressions;
         this.orderByElements = builder.orderByElements;

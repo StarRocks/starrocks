@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
@@ -57,6 +58,14 @@ public class MultiJoinNode {
         if (!joinOperator.isInnerOrCrossJoin()) {
             atoms.add(node);
             return;
+        }
+
+        if (joinOperator.getProjection() != null) {
+            Projection projection = joinOperator.getProjection();
+            if (projection.getColumnRefMap().values().stream().anyMatch(s -> !s.isColumnRef())) {
+                atoms.add(node);
+                return;
+            }
         }
 
         flattenJoinNode(node.inputAt(0), atoms, predicates);

@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -65,7 +64,8 @@ public class JoinAssociativityRule extends TransformationRule {
         if (leftChildJoin.getProjection() != null) {
             Projection projection = leftChildJoin.getProjection();
             if (projection.getColumnRefMap().values().stream().anyMatch(s -> !s.isColumnRef())) {
-                Preconditions.checkState(false);
+                //Preconditions.checkState(false);
+                return Collections.emptyList();
             }
         }
 

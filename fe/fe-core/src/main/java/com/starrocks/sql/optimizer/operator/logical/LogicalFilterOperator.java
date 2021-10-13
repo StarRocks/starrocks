@@ -18,8 +18,7 @@ public class LogicalFilterOperator extends LogicalOperator {
     }
 
     private LogicalFilterOperator(Builder builder) {
-        super(OperatorType.LOGICAL_FILTER);
-        this.predicate = builder.getPredicate();
+        super(OperatorType.LOGICAL_FILTER, builder.getLimit(), builder.getPredicate(), builder.getProjection());
     }
 
     public ScalarOperator getPredicate() {
@@ -28,24 +27,6 @@ public class LogicalFilterOperator extends LogicalOperator {
 
     public ColumnRefSet getRequiredChildInputColumns() {
         return predicate.getUsedColumns();
-    }
-
-    @Override
-    public int hashCode() {
-        return predicate.hashCode();
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof LogicalFilterOperator)) {
-            return false;
-        }
-        LogicalFilterOperator rhs = (LogicalFilterOperator) obj;
-        if (this == rhs) {
-            return true;
-        }
-
-        return predicate.equals(rhs.getPredicate());
     }
 
     @Override

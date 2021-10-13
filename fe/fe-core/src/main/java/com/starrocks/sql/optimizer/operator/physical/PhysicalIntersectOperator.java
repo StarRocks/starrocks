@@ -12,7 +12,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.List;
 
 public class PhysicalIntersectOperator extends PhysicalSetOperation {
-    public PhysicalIntersectOperator(List<ColumnRefOperator> columnRef, List<List<ColumnRefOperator>> childOutputColumns,
+    public PhysicalIntersectOperator(List<ColumnRefOperator> columnRef,
+                                     List<List<ColumnRefOperator>> childOutputColumns,
                                      long limit,
                                      ScalarOperator predicate,
                                      Projection projection) {

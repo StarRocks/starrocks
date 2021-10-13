@@ -98,28 +98,6 @@ public class LogicalTopNOperator extends LogicalOperator {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(sortPhase, orderByElements, limit, offset);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof LogicalTopNOperator)) {
-            return false;
-        }
-
-        LogicalTopNOperator rhs = (LogicalTopNOperator) obj;
-        if (this == rhs) {
-            return true;
-        }
-
-        return limit == rhs.limit &&
-                offset == rhs.offset &&
-                sortPhase.equals(rhs.sortPhase) &&
-                orderByElements.equals(rhs.orderByElements);
-    }
-
-    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalTopN(this, context);
     }
@@ -127,6 +105,27 @@ public class LogicalTopNOperator extends LogicalOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalTopN(optExpression, context);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        LogicalTopNOperator that = (LogicalTopNOperator) o;
+        return offset == that.offset && Objects.equals(orderByElements, that.orderByElements) &&
+                sortPhase == that.sortPhase;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), sortPhase, orderByElements, offset);
     }
 
     public static class Builder

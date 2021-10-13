@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -62,6 +63,18 @@ public class ReorderJoinRule extends Rule {
             for (OptExpression joinExpr : reorderTopKResult) {
                 ((LogicalOperator) joinExpr.getOp()).setLimit(oldRoot.getLimit());
             }
+        }
+
+        List<OptExpression> o = new ArrayList<>();
+        if (oldRoot.getProjection() != null) {
+            for (OptExpression joinExpr : reorderTopKResult) {
+                o.add(OptExpression.create(
+                        new LogicalJoinOperator.Builder().withOperator((LogicalJoinOperator) joinExpr.getOp())
+                                .setProjection(oldRoot.getProjection()).build(),
+                        joinExpr.getInputs())
+                );
+            }
+            reorderTopKResult = o;
         }
 
         for (OptExpression joinExpr : reorderTopKResult) {

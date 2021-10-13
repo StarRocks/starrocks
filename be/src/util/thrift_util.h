@@ -173,6 +173,18 @@ void t_network_address_to_string(const TNetworkAddress& address, std::string* ou
 // string representation
 bool t_network_address_comparator(const TNetworkAddress& a, const TNetworkAddress& b);
 
+template <typename ThriftStruct>
+ThriftStruct from_json_string(const std::string& json_val) {
+    using namespace apache::thrift::transport;
+    using namespace apache::thrift::protocol;
+    ThriftStruct ts;
+    TMemoryBuffer* buffer = new TMemoryBuffer((uint8_t*)json_val.c_str(), (uint32_t)json_val.size());
+    std::shared_ptr<TTransport> trans(buffer);
+    TJSONProtocol protocol(trans);
+    ts.read(&protocol);
+    return ts;
+}
+
 } // namespace starrocks
 
 #endif

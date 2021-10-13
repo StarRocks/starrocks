@@ -58,7 +58,6 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         return selectedTabletId;
     }
 
-
     public boolean isPreAggregation() {
         return isPreAggregation;
     }
