@@ -141,8 +141,7 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_EQ(sizeof(int32_t), c0.length());
     ASSERT_EQ(sizeof(int32_t), c0.index_length());
     ASSERT_EQ(OLAP_FIELD_AGGREGATION_NONE, c0.aggregation());
-    ASSERT_TRUE(c0.visible());
-    ASSERT_EQ(0, c0.get_subtype_count());
+    ASSERT_EQ(0, c0.subcolumn_count());
 
     // check c1.
     ASSERT_EQ(col_ordinal_to_unique_id[1], c1.unique_id());
@@ -156,18 +155,18 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_EQ(24, c1.length());
     ASSERT_EQ(24, c1.index_length());
     ASSERT_EQ(OLAP_FIELD_AGGREGATION_NONE, c1.aggregation());
-    ASSERT_EQ(1, c1.get_subtype_count());
+    ASSERT_EQ(1, c1.subcolumn_count());
 
-    ASSERT_EQ("_c1_1", c1.get_sub_column(0).name());
-    ASSERT_EQ(kInvalidUniqueId, c1.get_sub_column(0).unique_id());
-    ASSERT_EQ(OLAP_FIELD_TYPE_DECIMAL_V2, c1.get_sub_column(0).type());
-    ASSERT_FALSE(c1.get_sub_column(0).is_key());
-    ASSERT_FALSE(c1.get_sub_column(0).is_bf_column());
-    ASSERT_TRUE(c1.get_sub_column(0).is_nullable());
-    ASSERT_FALSE(c1.get_sub_column(0).has_bitmap_index());
-    ASSERT_FALSE(c1.get_sub_column(0).has_default_value());
-    ASSERT_EQ(sizeof(DecimalV2Value), c1.get_sub_column(0).length());
-    ASSERT_EQ(sizeof(DecimalV2Value), c1.get_sub_column(0).index_length());
+    ASSERT_EQ("_c1_1", c1.subcolumn(0).name());
+    ASSERT_EQ(kInvalidUniqueId, c1.subcolumn(0).unique_id());
+    ASSERT_EQ(OLAP_FIELD_TYPE_DECIMAL_V2, c1.subcolumn(0).type());
+    ASSERT_FALSE(c1.subcolumn(0).is_key());
+    ASSERT_FALSE(c1.subcolumn(0).is_bf_column());
+    ASSERT_TRUE(c1.subcolumn(0).is_nullable());
+    ASSERT_FALSE(c1.subcolumn(0).has_bitmap_index());
+    ASSERT_FALSE(c1.subcolumn(0).has_default_value());
+    ASSERT_EQ(sizeof(DecimalV2Value), c1.subcolumn(0).length());
+    ASSERT_EQ(sizeof(DecimalV2Value), c1.subcolumn(0).index_length());
 
     // check c2.
     ASSERT_EQ(col_ordinal_to_unique_id[2], c2.unique_id());
@@ -181,32 +180,32 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_EQ(24, c2.length());
     ASSERT_EQ(24, c2.index_length());
     ASSERT_EQ(OLAP_FIELD_AGGREGATION_NONE, c2.aggregation());
-    ASSERT_EQ(1, c2.get_subtype_count());
+    ASSERT_EQ(1, c2.subcolumn_count());
 
-    ASSERT_EQ("_c2_1", c2.get_sub_column(0).name());
-    ASSERT_EQ(kInvalidUniqueId, c2.get_sub_column(0).unique_id());
-    ASSERT_EQ(OLAP_FIELD_TYPE_ARRAY, c2.get_sub_column(0).type());
-    ASSERT_FALSE(c2.get_sub_column(0).is_key());
-    ASSERT_FALSE(c2.get_sub_column(0).is_bf_column());
-    ASSERT_TRUE(c2.get_sub_column(0).is_nullable());
-    ASSERT_FALSE(c2.get_sub_column(0).has_bitmap_index());
-    ASSERT_FALSE(c2.get_sub_column(0).has_default_value());
-    ASSERT_EQ(24, c2.get_sub_column(0).length());
-    ASSERT_EQ(24, c2.get_sub_column(0).index_length());
-    ASSERT_EQ(1, c2.get_sub_column(0).get_subtype_count());
+    ASSERT_EQ("_c2_1", c2.subcolumn(0).name());
+    ASSERT_EQ(kInvalidUniqueId, c2.subcolumn(0).unique_id());
+    ASSERT_EQ(OLAP_FIELD_TYPE_ARRAY, c2.subcolumn(0).type());
+    ASSERT_FALSE(c2.subcolumn(0).is_key());
+    ASSERT_FALSE(c2.subcolumn(0).is_bf_column());
+    ASSERT_TRUE(c2.subcolumn(0).is_nullable());
+    ASSERT_FALSE(c2.subcolumn(0).has_bitmap_index());
+    ASSERT_FALSE(c2.subcolumn(0).has_default_value());
+    ASSERT_EQ(24, c2.subcolumn(0).length());
+    ASSERT_EQ(24, c2.subcolumn(0).index_length());
+    ASSERT_EQ(1, c2.subcolumn(0).subcolumn_count());
 
-    const TabletColumn& c2_1 = c2.get_sub_column(0);
-    ASSERT_EQ("_c2_2", c2_1.get_sub_column(0).name());
-    ASSERT_EQ(kInvalidUniqueId, c2_1.get_sub_column(0).unique_id());
-    ASSERT_EQ(OLAP_FIELD_TYPE_VARCHAR, c2_1.get_sub_column(0).type());
-    ASSERT_FALSE(c2_1.get_sub_column(0).is_key());
-    ASSERT_FALSE(c2_1.get_sub_column(0).is_bf_column());
-    ASSERT_TRUE(c2_1.get_sub_column(0).is_nullable());
-    ASSERT_FALSE(c2_1.get_sub_column(0).has_bitmap_index());
-    ASSERT_FALSE(c2_1.get_sub_column(0).has_default_value());
-    ASSERT_EQ(10 + sizeof(OLAP_STRING_MAX_LENGTH), c2_1.get_sub_column(0).length());
-    ASSERT_EQ(10, c2_1.get_sub_column(0).index_length());
-    ASSERT_EQ(0, c2_1.get_sub_column(0).get_subtype_count());
+    const TabletColumn& c2_1 = c2.subcolumn(0);
+    ASSERT_EQ("_c2_2", c2_1.subcolumn(0).name());
+    ASSERT_EQ(kInvalidUniqueId, c2_1.subcolumn(0).unique_id());
+    ASSERT_EQ(OLAP_FIELD_TYPE_VARCHAR, c2_1.subcolumn(0).type());
+    ASSERT_FALSE(c2_1.subcolumn(0).is_key());
+    ASSERT_FALSE(c2_1.subcolumn(0).is_bf_column());
+    ASSERT_TRUE(c2_1.subcolumn(0).is_nullable());
+    ASSERT_FALSE(c2_1.subcolumn(0).has_bitmap_index());
+    ASSERT_FALSE(c2_1.subcolumn(0).has_default_value());
+    ASSERT_EQ(10 + sizeof(OLAP_STRING_MAX_LENGTH), c2_1.subcolumn(0).length());
+    ASSERT_EQ(10, c2_1.subcolumn(0).index_length());
+    ASSERT_EQ(0, c2_1.subcolumn(0).subcolumn_count());
 }
 
 } // namespace starrocks
