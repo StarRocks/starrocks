@@ -130,6 +130,9 @@ public:
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                          uint32_t max_one_row_size) override;
 
+    void serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
+                                         uint32_t max_one_row_size, uint8_t* null_masks, bool has_null) override;
+
     size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
                                        size_t count) override;
 
