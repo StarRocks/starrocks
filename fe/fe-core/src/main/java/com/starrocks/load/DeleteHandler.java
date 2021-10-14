@@ -106,13 +106,16 @@ public class DeleteHandler implements Writable {
     private static final Logger LOG = LogManager.getLogger(DeleteHandler.class);
 
     // TransactionId -> DeleteJob
-    private Map<Long, DeleteJob> idToDeleteJob;
+    private final Map<Long, DeleteJob> idToDeleteJob;
 
     // Db -> DeleteInfo list
     @SerializedName(value = "dbToDeleteInfos")
-    private Map<Long, List<MultiDeleteInfo>> dbToDeleteInfos;
+    private final Map<Long, List<MultiDeleteInfo>> dbToDeleteInfos;
 
-    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    // this lock is protect List<MultiDeleteInfo> add / remove dbToDeleteInfos is use newConcurrentMap
+    // so it does not need to protect, although removeOldDeleteInfo only be called in one thread
+    // but other thread may call deleteInfoList.add(deleteInfo) so deleteInfoList is not thread safe.
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public DeleteHandler() {
         idToDeleteJob = Maps.newConcurrentMap();
