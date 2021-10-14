@@ -217,36 +217,6 @@ public:
     static void TearDownTestCase() { delete mock_es_server; }
 };
 
-TEST_F(MockESServerTest, workflow) {
-    std::string target = "http://127.0.0.1:" + std::to_string(real_port);
-    std::vector<std::string> fields = {"id", "value"};
-    std::map<std::string, std::string> props;
-    props[ESScanReader::KEY_INDEX] = "tindex";
-    props[ESScanReader::KEY_TYPE] = "doc";
-    props[ESScanReader::KEY_USER_NAME] = "root";
-    props[ESScanReader::KEY_PASS_WORD] = "root";
-    props[ESScanReader::KEY_SHARD] = "0";
-    props[ESScanReader::KEY_BATCH_SIZE] = "1";
-    std::vector<EsPredicate*> predicates;
-    std::map<std::string, std::string> docvalue_context;
-    bool doc_value_mode = false;
-    props[ESScanReader::KEY_QUERY] =
-            ESScrollQueryBuilder::build(props, fields, predicates, docvalue_context, &doc_value_mode);
-    ESScanReader reader(target, props, doc_value_mode);
-    auto st = reader.open();
-    ASSERT_TRUE(st.ok());
-    bool eos = false;
-    std::unique_ptr<ScrollParser> parser = nullptr;
-    while (!eos) {
-        st = reader.get_next(&eos, parser);
-        ASSERT_TRUE(st.ok());
-        if (eos) {
-            break;
-        }
-    }
-    auto cst = reader.close();
-    ASSERT_TRUE(cst.ok());
-}
 } // namespace starrocks
 
 int main(int argc, char* argv[]) {
