@@ -104,8 +104,6 @@ public:
     const TUniqueId& query_id() const { return _query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
     ExecEnv* exec_env() { return _exec_env; }
-    std::vector<MemTracker*>* mem_trackers() { return &_mem_trackers; }
-    MemTracker* fragment_mem_tracker() { return _fragment_mem_tracker; }
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
     ThreadResourceMgr::ResourcePool* resource_pool() { return _resource_pool; }
     RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
@@ -122,13 +120,6 @@ public:
         std::lock_guard<std::mutex> l(_process_status_lock);
         return _process_status;
     };
-
-    // Sets the fragment memory limit and adds it to _mem_trackers
-    void set_fragment_mem_tracker(MemTracker* limit) {
-        DCHECK(_fragment_mem_tracker == nullptr);
-        _fragment_mem_tracker = limit;
-        _mem_trackers.push_back(limit);
-    }
 
     // Appends error to the _error_log if there is space
     bool log_error(const std::string& error);
@@ -312,12 +303,6 @@ private:
     // Thread resource management object for this fragment's execution.  The runtime
     // state is responsible for returning this pool to the thread mgr.
     ThreadResourceMgr::ResourcePool* _resource_pool = nullptr;
-
-    // all mem limits that apply to this query
-    std::vector<MemTracker*> _mem_trackers;
-
-    // Fragment memory limit.  Also contained in _mem_trackers
-    MemTracker* _fragment_mem_tracker = nullptr;
 
     // MemTracker that is shared by all fragment instances running on this host.
     // The query mem tracker must be released after the _instance_mem_tracker.

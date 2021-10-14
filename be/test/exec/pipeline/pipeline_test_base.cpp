@@ -47,12 +47,9 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx->set_mem_tracker(std::make_unique<MemTracker>(bytes_limit, "pipeline test mem-limit",
                                                                 _exec_env->query_pool_mem_tracker(), true));
 
-    auto mem_tracker = _fragment_ctx->mem_tracker();
-
     _runtime_state->set_batch_size(config::vector_chunk_size);
     ASSERT_TRUE(_runtime_state->init_mem_trackers(query_id).ok());
     _runtime_state->set_be_number(_request.backend_num);
-    _runtime_state->set_fragment_mem_tracker(mem_tracker);
 
     _obj_pool = _runtime_state->obj_pool();
 
