@@ -68,8 +68,6 @@ set(RUNTIME_FILES
     test_env.cc
     mem_tracker.cpp
     data_stream_recvr.cc
-    buffered_tuple_stream2.cc
-    buffered_tuple_stream2_ir.cc
     #  export_task_mgr.cpp
     export_sink.cpp
     load_channel_mgr.cpp

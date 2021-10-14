@@ -35,7 +35,6 @@
 
 namespace starrocks {
 
-class BufferedTupleStream2;
 class TRowBatch;
 class Tuple;
 class TupleRow;
