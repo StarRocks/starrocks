@@ -116,7 +116,7 @@ void GlobalDriverDispatcher::run() {
         case INPUT_EMPTY:
         case OUTPUT_FULL:
         case PENDING_FINISH:
-        case DEPENDENCIES_STUCK: {
+        case DEPENDENCIES_BLOCK: {
             VLOG_ROW << strings::Substitute("[Driver] Blocked, source=$0, state=$1",
                                             driver->source_operator()->get_name(), ds_to_string(driver_state));
             _blocked_driver_poller->add_blocked_driver(driver);

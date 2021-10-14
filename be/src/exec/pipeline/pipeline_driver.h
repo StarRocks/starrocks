@@ -30,7 +30,7 @@ enum DriverState : uint32_t {
     RUNNING = 2,
     INPUT_EMPTY = 3,
     OUTPUT_FULL = 4,
-    DEPENDENCIES_STUCK = 5,
+    DEPENDENCIES_BLOCK = 5,
     FINISH = 6,
     CANCELED = 7,
     INTERNAL_ERROR = 8,
@@ -52,8 +52,8 @@ static inline std::string ds_to_string(DriverState ds) {
         return "INPUT_EMPTY";
     case OUTPUT_FULL:
         return "OUTPUT_FULL";
-    case DEPENDENCIES_STUCK:
-        return "DEPENDENCIES_STUCK";
+    case DEPENDENCIES_BLOCK:
+        return "DEPENDENCIES_BLOCK";
     case FINISH:
         return "FINISH";
     case CANCELED:
@@ -142,8 +142,8 @@ public:
                _state == DriverState::INTERNAL_ERROR;
     }
     bool pending_finish() { return _state == DriverState::PENDING_FINISH; }
-    // return true if all the dependencies are ready, otherwise return false.
-    bool dependencies_stuck() {
+    // return false if all the dependencies are ready, otherwise return true.
+    bool dependencies_block() {
         if (_all_dependencies_ready) {
             return false;
         }
@@ -153,8 +153,8 @@ public:
     }
 
     bool is_not_blocked() {
-        if (UNLIKELY(_state == DriverState::DEPENDENCIES_STUCK)) {
-            return !dependencies_stuck();
+        if (UNLIKELY(_state == DriverState::DEPENDENCIES_BLOCK)) {
+            return !dependencies_block();
         } else if (_state == DriverState::OUTPUT_FULL) {
             return sink_operator()->need_input() || sink_operator()->is_finished();
         } else if (_state == DriverState::INPUT_EMPTY) {

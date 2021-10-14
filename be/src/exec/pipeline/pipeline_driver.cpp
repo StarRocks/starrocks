@@ -135,9 +135,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
             driver_acct().increment_schedule_times();
             driver_acct().update_last_chunks_moved(total_chunks_moved);
             driver_acct().update_last_time_spent(time_spent);
-            if (dependencies_stuck()) {
-                _state = DriverState::DEPENDENCIES_STUCK;
-                return DriverState::DEPENDENCIES_STUCK;
+            if (dependencies_block()) {
+                _state = DriverState::DEPENDENCIES_BLOCK;
+                return DriverState::DEPENDENCIES_BLOCK;
             } else if (!sink_operator()->is_finished() && !sink_operator()->need_input()) {
                 _state = DriverState::OUTPUT_FULL;
                 return DriverState::OUTPUT_FULL;
