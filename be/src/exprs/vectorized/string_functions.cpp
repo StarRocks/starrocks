@@ -903,8 +903,6 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
     dst_nulls.resize(num_rows);
     bool has_null = false;
 
-    constexpr auto LIMIT = std::numeric_limits<size_t>::max();
-
     if (times <= 0) {
         dst_offsets.resize(num_rows + 1);
         return builder.build(ColumnHelper::is_all_const(columns));
@@ -914,7 +912,7 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
         size_t reserved = 0;
         for (int i = 0; i < num_rows; ++i) {
             auto slice_sz = src_offsets[i + 1] - src_offsets[i];
-            if (slice_sz > LIMIT / times || slice_sz * times > OLAP_STRING_MAX_LENGTH) {
+            if (slice_sz * times > OLAP_STRING_MAX_LENGTH) {
                 continue;
             }
             reserved += slice_sz * times;
@@ -932,7 +930,7 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
         }
         // if result exceed STRING_MAX_LENGTH
         // return null
-        if (s.size > LIMIT / times || s.size * times > OLAP_STRING_MAX_LENGTH) {
+        if (s.size * times > OLAP_STRING_MAX_LENGTH) {
             dst_nulls[i] = 1;
             has_null = true;
             dst_offsets[i + 1] = dst_off;
@@ -970,8 +968,6 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
     bool has_null = false;
     size_t dst_off = 0;
 
-    constexpr auto LIMIT = std::numeric_limits<size_t>::max();
-
     for (int i = 0; i < num_rows; ++i) {
         if (str_viewer.is_null(i) || times_viewer.is_null(i)) {
             dst_nulls[i] = 1;
@@ -988,7 +984,7 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
         auto s = str_viewer.value(i);
         int32_t n = times_viewer.value(i);
 
-        if (s.size > LIMIT / n || s.size * n > OLAP_STRING_MAX_LENGTH) {
+        if (s.size * n > OLAP_STRING_MAX_LENGTH) {
             dst_nulls[i] = 1;
             has_null = true;
             dst_offsets[i + 1] = dst_off;
