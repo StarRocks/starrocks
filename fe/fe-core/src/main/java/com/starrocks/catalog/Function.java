@@ -229,7 +229,7 @@ public class Function implements Writable {
     }
 
     public boolean isVectorized() {
-        return isVectorized;
+        return true;
     }
 
     public boolean isPolymorphic() {

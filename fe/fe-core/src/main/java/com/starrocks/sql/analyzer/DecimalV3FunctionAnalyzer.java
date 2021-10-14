@@ -113,19 +113,11 @@ public class DecimalV3FunctionAnalyzer {
             }
         }
         AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), Arrays.asList(argType), returnType,
-                fn.getIntermediateType(), fn.getLocation(),
-                fn.getUpdateFnSymbol(),
-                fn.getInitFnSymbol(),
-                fn.getSerializeFnSymbol(),
-                fn.getMergeFnSymbol(),
-                fn.getGetValueFnSymbol(),
-                fn.getRemoveFnSymbol(),
-                fn.getFinalizeFnSymbol());
+                fn.getIntermediateType(), fn.hasVarArgs());
 
         newFn.setFunctionId(fn.getFunctionId());
         newFn.setChecksum(fn.getChecksum());
         newFn.setBinaryType(fn.getBinaryType());
-        newFn.setIsVectorized(fn.isVectorized());
         newFn.setHasVarArgs(fn.hasVarArgs());
         newFn.setId(fn.getId());
         newFn.setUserVisible(fn.isUserVisible());
