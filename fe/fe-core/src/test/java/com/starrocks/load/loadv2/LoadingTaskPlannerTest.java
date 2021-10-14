@@ -224,10 +224,8 @@ public class LoadingTaskPlannerTest {
 
         Function f1 = new Function(new FunctionName("substr"), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
                 Type.VARCHAR, true);
-        f1.setIsVectorized(true);
         Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
                 Type.INT, true);
-        f2.setIsVectorized(true);
         new Expectations() {
             {
                 Catalog.getCurrentSystemInfo();
@@ -534,13 +532,10 @@ public class LoadingTaskPlannerTest {
 
         Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {Type.VARCHAR},
                 Type.BIGINT, true);
-        f1.setIsVectorized(true);
         Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
                 Type.INT, true);
-        f2.setIsVectorized(true);
         Function f3 = new Function(new FunctionName("casttotinyint"), new Type[] {Type.VARCHAR},
                 Type.TINYINT, true);
-        f3.setIsVectorized(true);
 
         new Expectations() {
             {
@@ -642,13 +637,10 @@ public class LoadingTaskPlannerTest {
 
         Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {Type.VARCHAR},
                 Type.BIGINT, true);
-        f1.setIsVectorized(true);
         Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
                 Type.INT, true);
-        f2.setIsVectorized(true);
         Function f3 = new Function(new FunctionName("casttotinyint"), new Type[] {Type.VARCHAR},
                 Type.TINYINT, true);
-        f3.setIsVectorized(true);
 
         new Expectations() {
             {
