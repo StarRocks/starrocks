@@ -1296,7 +1296,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
             //    to the new column
             size_t old_col_idx = 0;
             for (old_col_idx = 0; old_col_idx < old_num_columns; ++old_col_idx) {
-                const std::string& old_name = base_tablet->tablet_schema().column(old_col_idx).name();
+                auto old_name = base_tablet->tablet_schema().column(old_col_idx).name();
                 if (old_name == column.column_name) {
                     uint32_t old_unique_id = base_tablet->tablet_schema().column(old_col_idx).unique_id();
                     col_idx_to_unique_id[new_col_idx] = old_unique_id;

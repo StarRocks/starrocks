@@ -46,7 +46,8 @@ public:
         FileUtils::create_dir(_root_path);
 
         _kv_store = new KVStore(_root_path);
-        ASSERT_TRUE(_kv_store->init().ok());
+        Status st = _kv_store->init();
+        ASSERT_TRUE(st.ok()) << st;
         ASSERT_TRUE(std::filesystem::exists(_root_path + "/meta"));
     }
 

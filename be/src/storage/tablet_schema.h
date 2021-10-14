@@ -24,12 +24,14 @@
 
 #include <gtest/gtest_prod.h>
 
+#include <string_view>
 #include <vector>
 
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/olap_define.h"
 #include "storage/types.h"
 #include "storage/vectorized/type_utils.h"
+#include "util/c_string.h"
 
 namespace starrocks {
 
@@ -40,35 +42,96 @@ class SegmentReaderWriterTest_TestStringDict_Test;
 } // namespace segment_v2
 
 class TabletColumn {
+    struct ExtraFields {
+        std::string default_value;
+        std::vector<TabletColumn> sub_columns;
+        bool has_default_value = false;
+    };
+
 public:
+    // To developers: if you changed the typedefs, don't forget to reorder class members to
+    // minimize the memory space of TabletColumn, i.e, sizeof(TabletColumn)
+    using ColumnName = CString;
+    using ColumnUID = int32_t;
+    using ColumnLength = int32_t;
+    using ColumnIndexLength = uint8_t;
+    using ColumnPrecision = uint8_t;
+    using ColumnScale = uint8_t;
+
     TabletColumn();
     TabletColumn(FieldAggregationMethod agg, FieldType type);
-    TabletColumn(FieldAggregationMethod agg, FieldType field_type, bool is_nullable);
-    TabletColumn(FieldAggregationMethod agg, FieldType field_type, bool is_nullable, int32_t unique_id, size_t length);
+    TabletColumn(FieldAggregationMethod agg, FieldType type, bool is_nullable);
+    TabletColumn(FieldAggregationMethod agg, FieldType type, bool is_nullable, int32_t unique_id, size_t length);
+
+    ~TabletColumn();
+
+    TabletColumn(const TabletColumn& rhs);
+    TabletColumn(TabletColumn&& rhs);
+
+    TabletColumn& operator=(const TabletColumn& rhs);
+    TabletColumn& operator=(TabletColumn&& rhs);
+
+    void swap(TabletColumn* rhs);
+
     void init_from_pb(const ColumnPB& column);
     void to_schema_pb(ColumnPB* column) const;
 
-    inline int32_t unique_id() const { return _unique_id; }
-    inline std::string name() const { return _col_name; }
-    inline FieldType type() const { return _type; }
-    inline bool is_key() const { return _is_key; }
-    inline bool is_nullable() const { return _is_nullable; }
-    inline bool is_bf_column() const { return _is_bf_column; }
-    inline bool has_bitmap_index() const { return _has_bitmap_index; }
-    bool has_default_value() const { return _has_default_value; }
-    std::string default_value() const { return _default_value; }
-    bool has_reference_column() const { return _has_referenced_column; }
-    int32_t referenced_column_id() const { return _referenced_column_id; }
-    std::string referenced_column() const { return _referenced_column; }
-    size_t length() const { return _length; }
-    size_t index_length() const { return _index_length; }
+    ColumnUID unique_id() const { return _unique_id; }
+    void set_unique_id(ColumnUID unique_id) { _unique_id = unique_id; }
+
+    std::string_view name() const { return std::string_view(_col_name.data(), _col_name.size()); }
+    void set_name(const std::string_view name) { _col_name.assign(name.data(), name.size()); }
+
+    FieldType type() const { return _type; }
+    void set_type(FieldType type) { _type = type; }
+
+    bool is_key() const { return _check_flag(kIsKeyShift); }
+    void set_is_key(bool value) { _set_flag(kIsKeyShift, value); }
+
+    bool is_nullable() const { return _check_flag(kIsNullableShift); }
+    void set_is_nullable(bool value) { _set_flag(kIsNullableShift, value); }
+
+    bool is_bf_column() const { return _check_flag(kIsBfColumnShift); }
+    void set_is_bf_column(bool value) { _set_flag(kIsBfColumnShift, value); }
+
+    bool has_bitmap_index() const { return _check_flag(kHasBitmapIndexShift); }
+    void set_has_bitmap_index(bool value) { _set_flag(kHasBitmapIndexShift, value); }
+
+    ColumnLength length() const { return _length; }
+    void set_length(ColumnLength length) { _length = length; }
+
     FieldAggregationMethod aggregation() const { return _aggregation; }
-    int precision() const { return _precision; }
-    int scale() const { return _scale; }
-    bool visible() const { return _visible; }
-    void add_sub_column(TabletColumn& sub_column);
-    uint32_t get_subtype_count() const { return _sub_columns.size(); }
-    const TabletColumn& get_sub_column(uint32_t i) const { return _sub_columns[i]; }
+    void set_aggregation(FieldAggregationMethod agg) { _aggregation = agg; }
+
+    bool has_precision() const { return _check_flag(kHasPrecisionShift); }
+    ColumnPrecision precision() const { return _precision; }
+    void set_precision(ColumnPrecision precision) {
+        _precision = precision;
+        _set_flag(kHasPrecisionShift, true);
+    }
+
+    bool has_scale() const { return _check_flag(kHasScaleShift); }
+    ColumnScale scale() const { return _scale; }
+    void set_scale(ColumnScale scale) {
+        _scale = scale;
+        _set_flag(kHasScaleShift, true);
+    }
+
+    ColumnIndexLength index_length() const { return _index_length; }
+    void set_index_length(ColumnIndexLength index_length) { _index_length = index_length; }
+
+    bool has_default_value() const { return _extra_fields && _extra_fields->has_default_value; }
+    std::string default_value() const { return _extra_fields ? _extra_fields->default_value : ""; }
+    void set_default_value(std::string value) {
+        ExtraFields* ext = _get_or_alloc_extra_fields();
+        ext->has_default_value = true;
+        ext->default_value = std::move(value);
+    }
+
+    void add_sub_column(const TabletColumn& sub_column);
+    void add_sub_column(TabletColumn&& sub_column);
+    uint32_t subcolumn_count() const { return _extra_fields ? _extra_fields->sub_columns.size() : 0; }
+    const TabletColumn& subcolumn(uint32_t i) const { return _extra_fields->sub_columns[i]; }
 
     friend bool operator==(const TabletColumn& a, const TabletColumn& b);
     friend bool operator!=(const TabletColumn& a, const TabletColumn& b);
@@ -85,45 +148,57 @@ public:
     bool is_format_v2_column() const;
 
     int64_t mem_usage() const {
-        int64_t mem_usage =
-                sizeof(TabletColumn) + _col_name.length() + _default_value.length() + _referenced_column.length();
-        for (const auto& col : _sub_columns) {
-            mem_usage += col.mem_usage();
+        int64_t mem_usage = sizeof(TabletColumn) + _col_name.size() + default_value().capacity();
+        for (int i = 0; i < subcolumn_count(); i++) {
+            mem_usage += subcolumn(i).mem_usage();
         }
         return mem_usage;
     }
 
 private:
-    int32_t _unique_id;
-    std::string _col_name;
-    FieldType _type;
-    bool _is_key = false;
-    FieldAggregationMethod _aggregation{OLAP_FIELD_AGGREGATION_NONE};
-    bool _is_nullable = false;
+    constexpr static uint8_t kIsKeyShift = 0;
+    constexpr static uint8_t kIsNullableShift = 1;
+    constexpr static uint8_t kIsBfColumnShift = 2;
+    constexpr static uint8_t kHasBitmapIndexShift = 3;
+    constexpr static uint8_t kHasPrecisionShift = 4;
+    constexpr static uint8_t kHasScaleShift = 5;
 
-    bool _has_default_value = false;
-    std::string _default_value;
+    ExtraFields* _get_or_alloc_extra_fields() {
+        if (_extra_fields == nullptr) {
+            _extra_fields = new ExtraFields();
+        }
+        return _extra_fields;
+    }
 
-    bool _is_decimal = false;
-    int32_t _precision;
-    int32_t _scale;
+    void _set_flag(uint8_t pos, bool value) {
+        assert(pos < sizeof(_flags) * 8);
+        if (value) {
+            _flags |= (1 << pos);
+        } else {
+            _flags &= ~(1 << pos);
+        }
+    }
 
-    int32_t _length;
-    int32_t _index_length;
+    bool _check_flag(uint8_t pos) const {
+        assert(pos < sizeof(_flags) * 8);
+        return _flags & (1 << pos);
+    }
 
-    bool _is_bf_column = false;
+    // To developers: try to order the class members in a way to minimize the required memory space.
 
-    bool _has_referenced_column = false;
-    int32_t _referenced_column_id;
-    std::string _referenced_column;
+    ColumnName _col_name;
+    ColumnUID _unique_id = 0;
+    ColumnLength _length = 0;
+    FieldAggregationMethod _aggregation = OLAP_FIELD_AGGREGATION_NONE;
+    FieldType _type = OLAP_FIELD_TYPE_UNKNOWN;
 
-    bool _has_bitmap_index = false;
+    ColumnIndexLength _index_length = 0;
+    ColumnPrecision _precision = 0;
+    ColumnScale _scale = 0;
 
-    // for hidded column, which is transparent to user
-    bool _visible = true;
+    uint8_t _flags = 0;
 
-    TabletColumn* _parent = nullptr;
-    std::vector<TabletColumn> _sub_columns;
+    ExtraFields* _extra_fields = nullptr;
 };
 
 bool operator==(const TabletColumn& a, const TabletColumn& b);
@@ -138,15 +213,15 @@ public:
     size_t field_index(const std::string& field_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
-    inline size_t num_columns() const { return _num_columns; }
-    inline size_t num_key_columns() const { return _num_key_columns; }
-    inline size_t num_short_key_columns() const { return _num_short_key_columns; }
-    inline size_t num_rows_per_row_block() const { return _num_rows_per_row_block; }
-    inline KeysType keys_type() const { return _keys_type; }
-    inline CompressKind compress_kind() const { return _compress_kind; }
-    inline size_t next_column_unique_id() const { return _next_column_unique_id; }
-    inline bool is_in_memory() const { return _is_in_memory; }
-    inline void set_is_in_memory(bool is_in_memory) { _is_in_memory = is_in_memory; }
+    size_t num_columns() const { return _cols.size(); }
+    size_t num_key_columns() const { return _num_key_columns; }
+    size_t num_short_key_columns() const { return _num_short_key_columns; }
+    size_t num_rows_per_row_block() const { return _num_rows_per_row_block; }
+    KeysType keys_type() const { return _keys_type; }
+    CompressKind compress_kind() const { return _compress_kind; }
+    size_t next_column_unique_id() const { return _next_column_unique_id; }
+    bool is_in_memory() const { return _is_in_memory; }
+    void set_is_in_memory(bool is_in_memory) { _is_in_memory = is_in_memory; }
 
     bool contains_format_v1_column() const;
     bool contains_format_v2_column() const;
@@ -171,18 +246,20 @@ private:
     friend bool operator==(const TabletSchema& a, const TabletSchema& b);
     friend bool operator!=(const TabletSchema& a, const TabletSchema& b);
 
-    KeysType _keys_type = DUP_KEYS;
+    double _bf_fpp = 0;
+
     std::vector<TabletColumn> _cols;
-    size_t _num_columns = 0;
-    size_t _num_key_columns = 0;
-    size_t _num_null_columns = 0;
-    size_t _num_short_key_columns = 0;
     size_t _num_rows_per_row_block = 0;
-    CompressKind _compress_kind = COMPRESS_NONE;
     size_t _next_column_unique_id = 0;
 
+    CompressKind _compress_kind = COMPRESS_NONE;
+    KeysType _keys_type = DUP_KEYS;
+
+    uint16_t _num_key_columns = 0;
+    uint16_t _num_null_columns = 0;
+    uint16_t _num_short_key_columns = 0;
+
     bool _has_bf_fpp = false;
-    double _bf_fpp = 0;
     bool _is_in_memory = false;
 };
 
