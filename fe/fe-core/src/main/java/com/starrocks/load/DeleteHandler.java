@@ -92,12 +92,14 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 public class DeleteHandler implements Writable {
@@ -109,6 +111,8 @@ public class DeleteHandler implements Writable {
     // Db -> DeleteInfo list
     @SerializedName(value = "dbToDeleteInfos")
     private Map<Long, List<MultiDeleteInfo>> dbToDeleteInfos;
+
+    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public DeleteHandler() {
         idToDeleteJob = Maps.newConcurrentMap();
@@ -758,5 +762,35 @@ public class DeleteHandler implements Writable {
     public static DeleteHandler read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, DeleteHandler.class);
+    }
+
+    public void removeOldDeleteInfo() {
+        long currentTimeMs = System.currentTimeMillis();
+        Iterator<Entry<Long, List<MultiDeleteInfo>>> logIterator = dbToDeleteInfos.entrySet().iterator();
+        while (logIterator.hasNext()) {
+            lock.writeLock().lock();
+            try {
+                List<MultiDeleteInfo> deleteInfos = logIterator.next().getValue();
+
+                deleteInfos.sort((o1, o2) -> Long.signum(o1.getCreateTimeMs() - o2.getCreateTimeMs()));
+                int labelKeepMaxSecond = Config.label_keep_max_second;
+                int numJobsToRemove = deleteInfos.size() - Config.label_keep_max_num;
+
+                Iterator<MultiDeleteInfo> iterator = deleteInfos.iterator();
+                while (iterator.hasNext()) {
+                    MultiDeleteInfo deleteInfo = iterator.next();
+                    if ((currentTimeMs - deleteInfo.getCreateTimeMs()) / 1000 > labelKeepMaxSecond ||
+                            numJobsToRemove > 0) {
+                        iterator.remove();
+                        --numJobsToRemove;
+                    }
+                }
+            } finally {
+                lock.writeLock().unlock();
+            }
+            if (dbToDeleteInfos.isEmpty()) {
+                logIterator.remove();
+            }
+        }
     }
 }
