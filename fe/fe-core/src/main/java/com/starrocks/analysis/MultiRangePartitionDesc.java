@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -131,9 +132,12 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         long currentLoopNum = 0;
         long maxAllowedLimit = Config.max_partitions_in_one_batch;
 
+        // By default, the dayOfWeek parameter are the same as those of dynamic partition.
+        // If user set dynamic_partition.start_day_of_week table properties
+        // it will follow this configuration to set day of week
         int dayOfWeek = 1;
-        if (properties != null && properties.get("dynamic_partition.start_day_of_week") != null) {
-            dayOfWeek = Integer.parseInt(properties.get("dynamic_partition.start_day_of_week"));
+        if (properties != null && properties.get(DynamicPartitionProperty.START_DAY_OF_WEEK) != null) {
+            dayOfWeek = Integer.parseInt(properties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
         }
         WeekFields weekFields = WeekFields.of(DayOfWeek.of(dayOfWeek), 1);
 
@@ -148,9 +152,9 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                 case WEEK:
                     LocalDate localDate = LocalDate.of(beginTime.getYear(), beginTime.getMonthOfYear(),
                             beginTime.getDayOfMonth());
-                    int weekOfWeekyear = localDate.get(weekFields.weekOfYear());
-                    partitionName = DEFAULT_PREFIX + String.format("%s_%02d",
-                            beginTime.toString(DateUtils.YEAR_FORMAT), weekOfWeekyear);
+                    int weekOfYear = localDate.get(weekFields.weekOfYear());
+                    partitionName = String.format("%s%s_%02d", DEFAULT_PREFIX,
+                            beginTime.toString(DateUtils.YEAR_FORMAT), weekOfYear);
                     beginTime = beginTime.plusWeeks(timeInterval);
                     break;
                 case MONTH:
