@@ -52,9 +52,7 @@ class DateTimeValue;
 class MemTracker;
 class DataStreamRecvr;
 class ResultBufferMgr;
-class TmpFileMgr;
 class LoadErrorHub;
-class ReservationTracker;
 class RowDescriptor;
 class RuntimeFilterPort;
 
@@ -278,9 +276,6 @@ public:
     Status init_global_dict(const GlobalDictLists& global_dict_list);
 
 private:
-    // Allow TestEnv to set block_mgr manually for testing.
-    friend class TestEnv;
-
     Status create_error_log_file();
 
     static const int DEFAULT_BATCH_SIZE = 2048;
