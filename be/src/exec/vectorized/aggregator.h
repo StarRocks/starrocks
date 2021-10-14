@@ -149,9 +149,8 @@ public:
 #endif
 
 private:
-    // used to init
-    const TPlanNode _tnode;
-    const RowDescriptor _child_row_desc;
+    const TPlanNode& _tnode;
+    const RowDescriptor& _child_row_desc;
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;

@@ -69,7 +69,8 @@ RuntimeState* TestEnv::create_runtime_state(int64_t query_id) {
     TExecPlanFragmentParams plan_params = TExecPlanFragmentParams();
     plan_params.params.query_id.hi = 0;
     plan_params.params.query_id.lo = query_id;
-    return new RuntimeState(plan_params, TQueryOptions(), TQueryGlobals(), _exec_env.get());
+    return new RuntimeState(plan_params.params.query_id, plan_params.params.fragment_instance_id, TQueryOptions(),
+                            TQueryGlobals(), _exec_env.get());
 }
 
 Status TestEnv::create_query_state(int64_t query_id, int max_buffers, int block_size, RuntimeState** runtime_state) {
