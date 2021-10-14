@@ -104,22 +104,19 @@ starrocksSparkRDD.collect()
 
 | StarRocks Type | Spark Type            |
 | -------------- | --------------------- |
-| NULL_TYPE      | DataTypes.NullType    |
 | BOOLEAN        | DataTypes.BooleanType |
 | TINYINT        | DataTypes.ByteType    |
 | SMALLINT       | DataTypes.ShortType   |
 | INT            | DataTypes.IntegerType |
 | BIGINT         | DataTypes.LongType    |
+| LARGEINT       | DataTypes.StringType  |
 | FLOAT          | DataTypes.FloatType   |
 | DOUBLE         | DataTypes.DoubleType  |
+| DECIMAL        | DecimalType           |
 | DATE           | DataTypes.StringType  |
 | DATETIME       | DataTypes.StringType  |
-| BINARY         | DataTypes.BinaryType  |
-| DECIMAL        | DecimalType           |
 | CHAR           | DataTypes.StringType  |
-| LARGEINT       | DataTypes.StringType  |
 | VARCHAR        | DataTypes.StringType  |
-| TIME           | DataTypes.DoubleType  |
 | ARRAY          | Unsupported datatype  |
 | HLL            | Unsupported datatype  |
 | BITMAP         | Unsupported datatype  |
