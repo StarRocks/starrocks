@@ -22,7 +22,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.analysis.CreateFunctionStmt;
@@ -91,7 +90,6 @@ public class ScalarFunction extends Function {
                 new FunctionName(name), argTypes, retType, hasVarArgs, true);
         fn.setBinaryType(TFunctionBinaryType.BUILTIN);
         fn.setUserVisible(true);
-
         return fn;
     }
 
@@ -210,20 +208,6 @@ public class ScalarFunction extends Function {
         fn.setBinaryType(TFunctionBinaryType.BUILTIN);
         fn.setUserVisible(userVisible);
         fn.symbolName = symbol;
-        return fn;
-    }
-
-    /**
-     * Create a function that is used to search the catalog for a matching builtin. Only
-     * the fields necessary for matching function prototypes are specified.
-     */
-    public static ScalarFunction createBuiltinSearchDesc(
-            String name, Type[] argTypes, boolean hasVarArgs) {
-        ArrayList<Type> fnArgs =
-                (argTypes == null) ? new ArrayList<Type>() : Lists.newArrayList(argTypes);
-        ScalarFunction fn = new ScalarFunction(
-                new FunctionName(name), fnArgs, Type.INVALID, hasVarArgs);
-        fn.setBinaryType(TFunctionBinaryType.BUILTIN);
         return fn;
     }
 

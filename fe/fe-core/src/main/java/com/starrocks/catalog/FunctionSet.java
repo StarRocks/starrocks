@@ -32,7 +32,6 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LikePredicate;
-import com.starrocks.builtins.ScalarBuiltins;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,7 +39,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -138,13 +136,6 @@ public class FunctionSet {
                     .add(Type.FLOAT)
                     .add(Type.DOUBLE)
                     .build();
-
-    // All of the registered user functions. The key is the user facing name (e.g. "myUdf"),
-    // and the values are all the overloaded variants (e.g. myUdf(double), myUdf(string))
-    // This includes both UDFs and UDAs. Updates are made thread safe by synchronizing
-    // on this map. Functions are sorted in a canonical order defined by
-    // FunctionResolutionOrder.
-    private final HashMap<String, List<Function>> functions;
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
      * need to check whether the expression tree can use vectorized function from bottom to
@@ -154,10 +145,10 @@ public class FunctionSet {
      */
     private final Map<String, List<Function>> vectorizedFunctions;
     // cmy: This does not contain any user defined functions. All UDFs handle null values by themselves.
-    private ImmutableSet<String> nonNullResultWithNullParamFunctions;
+    private final ImmutableSet<String> nonNullResultWithNullParamFunctions = ImmutableSet.of("if", "hll_hash",
+            "concat_ws", "ifnull", "nullif", "null_or_empty", "coalesce");
 
     public FunctionSet() {
-        functions = Maps.newHashMap();
         vectorizedFunctions = Maps.newHashMap();
     }
 
@@ -217,7 +208,6 @@ public class FunctionSet {
     }
 
     public void init() {
-        ScalarBuiltins.initBuiltins(this);
         ArithmeticExpr.initBuiltins(this);
         BinaryPredicate.initBuiltins(this);
         CastExpr.initBuiltins(this);
@@ -232,20 +222,12 @@ public class FunctionSet {
         initAggregateBuiltins();
     }
 
-    public void buildNonNullResultWithNullParamFunction(Set<String> funcNames) {
-        ImmutableSet.Builder<String> setBuilder = new ImmutableSet.Builder<String>();
-        for (String funcName : funcNames) {
-            setBuilder.add(funcName);
-        }
-        this.nonNullResultWithNullParamFunctions = setBuilder.build();
-    }
-
     public boolean isNonNullResultWithNullParamFunctions(String funcName) {
         return nonNullResultWithNullParamFunctions.contains(funcName);
     }
 
     public Function getFunction(Function desc, Function.CompareMode mode) {
-        List<Function> fns = functions.get(desc.functionName());
+        List<Function> fns = vectorizedFunctions.get(desc.functionName());
         if (fns == null) {
             return null;
         }
@@ -294,29 +276,8 @@ public class FunctionSet {
         if (getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
             return;
         }
-        List<Function> fns = functions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
+        List<Function> fns = vectorizedFunctions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
         fns.add(fn);
-    }
-
-    /**
-     * Add a builtin with the specified name and signatures to this
-     * This defaults to not using a Prepare/Close function.
-     */
-    public void addScalarBuiltin(String fnName, String symbol, boolean userVisible,
-                                 boolean varArgs, Type retType, Type... args) {
-        addScalarBuiltin(fnName, symbol, userVisible, null, null, varArgs, retType, args);
-    }
-
-    /**
-     * Add a builtin with the specified name and signatures to this db.
-     */
-    public void addScalarBuiltin(String fnName, String symbol, boolean userVisible,
-                                 String prepareFnSymbol, String closeFnSymbol, boolean varArgs,
-                                 Type retType, Type... args) {
-        List<Type> argsType = Arrays.stream(args).collect(Collectors.toList());
-        addBuiltin(ScalarFunction.createBuiltin(
-                fnName, argsType, varArgs, retType,
-                symbol, prepareFnSymbol, closeFnSymbol, userVisible));
     }
 
     // for vectorized engine
@@ -328,36 +289,15 @@ public class FunctionSet {
     }
 
     private void addVectorizedBuiltin(Function fn) {
-        if (findVectorizedFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
+        if (findVectorizedFunction(fn) != null) {
             return;
         }
 
         List<Function> fns = vectorizedFunctions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
-        Function scalarFn = findScalarFunction(fn);
-        if (scalarFn != null) {
-            scalarFn.setFunctionId(fn.getFunctionId());
-        } else {
-            List<Function> scalarFns = functions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
-            scalarFns.add(fn);
-        }
         fns.add(fn);
     }
 
-    private Function findScalarFunction(Function desc) {
-        List<Function> fns = functions.get(desc.functionName());
-        if (fns == null) {
-            return null;
-        }
-        // First check for identical
-        for (Function f : fns) {
-            if (f.compare(desc, Function.CompareMode.IS_IDENTICAL)) {
-                return f;
-            }
-        }
-        return null;
-    }
-
-    private Function findVectorizedFunction(Function desc, Function.CompareMode mode) {
+    private Function findVectorizedFunction(Function desc) {
         List<Function> fns = vectorizedFunctions.get(desc.functionName());
 
         if (fns == null) {
@@ -370,9 +310,6 @@ public class FunctionSet {
                 return f;
             }
         }
-        if (mode == Function.CompareMode.IS_IDENTICAL) {
-            return null;
-        }
 
         // Next check for indistinguishable
         for (Function f : fns) {
@@ -380,11 +317,8 @@ public class FunctionSet {
                 return f;
             }
         }
-        if (mode == Function.CompareMode.IS_INDISTINGUISHABLE) {
-            return null;
-        }
-
         return null;
+
     }
 
     /**
@@ -398,15 +332,6 @@ public class FunctionSet {
     // null symbols indicate the function does not need that step of the evaluation.
     // An empty symbol indicates a TODO for the BE to implement the function.
     private void initAggregateBuiltins() {
-        final String prefix = "_ZN9starrocks18AggregateFunctions";
-        final String initNull = prefix + "9init_nullEPN13starrocks_udf15FunctionContextEPNS1_6AnyValE";
-        final String initNullString = prefix
-                + "16init_null_stringEPN13starrocks_udf15FunctionContextEPNS1_9StringValE";
-        final String stringValSerializeOrFinalize = prefix
-                + "32string_val_serialize_or_finalizeEPN13starrocks_udf15FunctionContextERKNS1_9StringValE";
-        final String stringValGetValue = prefix
-                + "20string_val_get_valueEPN13starrocks_udf15FunctionContextERKNS1_9StringValE";
-
         // count(*)
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
                 new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
@@ -703,7 +628,7 @@ public class FunctionSet {
 
     public List<Function> getBuiltinFunctions() {
         List<Function> builtinFunctions = Lists.newArrayList();
-        for (Map.Entry<String, List<Function>> entry : functions.entrySet()) {
+        for (Map.Entry<String, List<Function>> entry : vectorizedFunctions.entrySet()) {
             builtinFunctions.addAll(entry.getValue());
         }
         return builtinFunctions;
