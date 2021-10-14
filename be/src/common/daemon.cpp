@@ -110,28 +110,6 @@ void* tcmalloc_gc_thread(void* dummy) {
     return nullptr;
 }
 
-void* memory_maintenance_thread(void* dummy) {
-    while (true) {
-        sleep(config::memory_maintenance_sleep_time_s);
-        ExecEnv* env = ExecEnv::GetInstance();
-        // ExecEnv may not have been created yet or this may be the catalogd or statestored,
-        // which don't have ExecEnvs.
-        if (env != nullptr) {
-            // The process limit as measured by our trackers may get out of sync with the
-            // process usage if memory is allocated or freed without updating a MemTracker.
-            // The metric is refreshed whenever memory is consumed or released via a MemTracker,
-            // so on a system with queries executing it will be refreshed frequently. However
-            // if the system is idle, we need to refresh the tracker occasionally since
-            // untracked memory may be allocated or freed, e.g. by background threads.
-            if (env->process_mem_tracker() != nullptr && !env->process_mem_tracker()->is_consumption_metric_null()) {
-                env->process_mem_tracker()->RefreshConsumptionFromMetric();
-            }
-        }
-    }
-
-    return nullptr;
-}
-
 /*
  * this thread will calculate some metrics at a fix interval(15 sec)
  * 1. push bytes per second
@@ -288,9 +266,6 @@ void init_daemon(int argc, char** argv, const std::vector<StorePath>& paths) {
 
     pthread_t tc_malloc_pid;
     pthread_create(&tc_malloc_pid, nullptr, tcmalloc_gc_thread, nullptr);
-
-    pthread_t buffer_pool_pid;
-    pthread_create(&buffer_pool_pid, nullptr, memory_maintenance_thread, nullptr);
 
     LOG(INFO) << CpuInfo::debug_string();
     LOG(INFO) << DiskInfo::debug_string();
