@@ -119,10 +119,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
                      << ". Using process memory limit instead";
         bytes_limit = _exec_env->query_pool_mem_tracker()->limit();
     }
-    // NOTE: this MemTracker only for olap
-    _mem_tracker =
-            std::make_unique<MemTracker>(bytes_limit, "fragment mem-limit", _exec_env->query_pool_mem_tracker(), true);
-    _runtime_state->set_fragment_mem_tracker(_mem_tracker.get());
 
     LOG(INFO) << "Using query memory limit: " << PrettyPrinter::print(bytes_limit, TUnit::BYTES);
 
