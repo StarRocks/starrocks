@@ -97,6 +97,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -444,8 +445,11 @@ public class DeleteHandler implements Writable {
                     job.getTransactionId(), dbId);
             dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
             List<MultiDeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
-            synchronized (deleteInfoList) {
+            lock.writeLock().lock();
+            try {
                 deleteInfoList.add(job.getDeleteInfo());
+            } finally {
+                lock.writeLock().unlock();
             }
         }
     }
@@ -672,7 +676,7 @@ public class DeleteHandler implements Writable {
                 predicate.setChild(childNo, LiteralExpr.create("0", Type.TINYINT));
             }
         }
-        LiteralExpr result = LiteralExpr.create(value, Type.fromPrimitiveType(column.getPrimitiveType()));
+        LiteralExpr result = LiteralExpr.create(value, Objects.requireNonNull(Type.fromPrimitiveType(column.getPrimitiveType())));
         if (result instanceof DecimalLiteral) {
             ((DecimalLiteral) result).checkPrecisionAndScale(column.getPrecision(), column.getScale());
         } else if (result instanceof DateLiteral) {
@@ -690,40 +694,45 @@ public class DeleteHandler implements Writable {
 
         String dbName = db.getFullName();
         List<MultiDeleteInfo> deleteInfos = dbToDeleteInfos.get(dbId);
-        if (deleteInfos == null) {
-            return infos;
-        }
 
-        for (MultiDeleteInfo deleteInfo : deleteInfos) {
-
-            if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), dbName,
-                    deleteInfo.getTableName(),
-                    PrivPredicate.LOAD)) {
-                continue;
+        lock.readLock().lock();
+        try {
+            if (deleteInfos == null) {
+                return infos;
             }
 
-            List<Comparable> info = Lists.newArrayList();
-            info.add(deleteInfo.getTableName());
-            if (deleteInfo.isNoPartitionSpecified()) {
-                info.add("*");
-            } else {
-                if (deleteInfo.getPartitionNames() == null) {
-                    info.add("");
-                } else {
-                    info.add(Joiner.on(", ").join(deleteInfo.getPartitionNames()));
+            for (MultiDeleteInfo deleteInfo : deleteInfos) {
+
+                if (!Catalog.getCurrentCatalog().getAuth().checkTblPriv(ConnectContext.get(), dbName,
+                        deleteInfo.getTableName(),
+                        PrivPredicate.LOAD)) {
+                    continue;
                 }
+
+                List<Comparable> info = Lists.newArrayList();
+                info.add(deleteInfo.getTableName());
+                if (deleteInfo.isNoPartitionSpecified()) {
+                    info.add("*");
+                } else {
+                    if (deleteInfo.getPartitionNames() == null) {
+                        info.add("");
+                    } else {
+                        info.add(Joiner.on(", ").join(deleteInfo.getPartitionNames()));
+                    }
+                }
+
+                info.add(TimeUtils.longToTimeString(deleteInfo.getCreateTimeMs()));
+                String conds = Joiner.on(", ").join(deleteInfo.getDeleteConditions());
+                info.add(conds);
+
+                info.add("FINISHED");
+                infos.add(info);
             }
-
-            info.add(TimeUtils.longToTimeString(deleteInfo.getCreateTimeMs()));
-            String conds = Joiner.on(", ").join(deleteInfo.getDeleteConditions());
-            info.add(conds);
-
-            info.add("FINISHED");
-            infos.add(info);
+        } finally {
+            lock.readLock().unlock();
         }
         // sort by createTimeMs
-        int sortIndex;
-        ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(2);
+        ListComparator<List<Comparable>> comparator = new ListComparator<>(2);
         infos.sort(comparator);
         return infos;
     }
@@ -737,8 +746,11 @@ public class DeleteHandler implements Writable {
         LOG.info("replay delete, dbId {}", dbId);
         dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
         List<MultiDeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
-        synchronized (deleteInfoList) {
+        lock.writeLock().lock();
+        try {
             deleteInfoList.add(MultiDeleteInfo.upgrade(deleteInfo));
+        } finally {
+            lock.writeLock().unlock();
         }
     }
 
@@ -751,8 +763,11 @@ public class DeleteHandler implements Writable {
         LOG.info("replay delete, dbId {}", dbId);
         dbToDeleteInfos.putIfAbsent(dbId, Lists.newArrayList());
         List<MultiDeleteInfo> deleteInfoList = dbToDeleteInfos.get(dbId);
-        synchronized (deleteInfoList) {
+        lock.writeLock().lock();
+        try {
             deleteInfoList.add(deleteInfo);
+        } finally {
+            lock.writeLock().unlock();
         }
     }
 
