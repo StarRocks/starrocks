@@ -25,7 +25,7 @@ BUILD_DIR = ${CURDIR}/../build/
 FE_TARGET_DIR = ${CURDIR}/../../fe/fe-core/target/generated-sources/build
 
 # Prerequisites on the right side of '|' is only order
-all: gen_builtins gen_version gen_vectorized_functions
+all: gen_version gen_vectorized_functions
 .PHONY: all
 
 ${BUILD_DIR}/python:
@@ -33,14 +33,6 @@ ${BUILD_DIR}/python:
 
 ${BUILD_DIR}/python/vectorized:
 	mkdir -p $@
-
-# generate 
-GEN_BUILTINS_OUTPUT = ${FE_TARGET_DIR}/com/starrocks/builtins/ScalarBuiltins.java
-
-${GEN_BUILTINS_OUTPUT}: starrocks_builtins_functions.py gen_builtins_functions.py | ${BUILD_DIR}/python
-	cd ${BUILD_DIR}/python && ${PYTHON} ${CURDIR}/gen_builtins_functions.py
-gen_builtins: ${GEN_BUILTINS_OUTPUT}
-.PHONY: gen_builtins
 
 # generated vectorized engine function
 GEN_VECTORIZED_FUNCTIONS_OUTPUT = ${FE_TARGET_DIR}/com/starrocks/builtins/VectorizedBuiltinFunctions.java  \
