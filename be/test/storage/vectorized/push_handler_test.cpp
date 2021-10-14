@@ -6,7 +6,6 @@
 
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/bufferpool/reservation_tracker.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "storage/vectorized/chunk_helper.h"

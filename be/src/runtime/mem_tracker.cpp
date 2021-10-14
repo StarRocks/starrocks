@@ -29,7 +29,6 @@
 
 #include "exec/exec_node.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/bufferpool/reservation_tracker_counters.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -101,20 +100,11 @@ void MemTracker::Init() {
 // TODO chenhao , set MemTracker close state
 void MemTracker::close() {}
 
-void MemTracker::enable_reservation_reporting(const ReservationTrackerCounters& counters) {
-    ReservationTrackerCounters* old = nullptr;
-    ReservationTrackerCounters* new_counters = new ReservationTrackerCounters(counters);
-    if (!_reservation_counters.compare_exchange_strong(old, new_counters, std::memory_order_relaxed)) {
-        delete new_counters;
-    }
-}
-
 MemTracker::~MemTracker() {
     DCHECK_EQ(0, consumption()) << CurrentThread::query_id_string();
     if (UNLIKELY(consumption() > 0)) {
         release(consumption());
     }
-    delete _reservation_counters.load(std::memory_order_relaxed);
     if (_auto_unregister && parent()) {
         unregister_from_parent();
     }
@@ -155,23 +145,6 @@ std::string MemTracker::LogUsage(int max_recursive_depth, const std::string& pre
     if (limit_exceeded()) ss << " memory limit exceeded.";
     if (_limit > 0) ss << " Limit=" << PrettyPrinter::print(_limit, TUnit::BYTES);
 
-    ReservationTrackerCounters* reservation_counters = _reservation_counters.load(std::memory_order_relaxed);
-    if (reservation_counters != nullptr) {
-        int64_t reservation = reservation_counters->peak_reservation->current_value();
-        int64_t used_reservation = reservation_counters->peak_used_reservation->current_value();
-        int64_t reservation_limit = 0;
-        //TODO chenhao, reservation_limit is null when ReservationTracker
-        // does't have reservation limit
-        if (reservation_counters->reservation_limit != nullptr) {
-            reservation_limit = reservation_counters->reservation_limit->value();
-        }
-        ss << " BufferPoolUsed/Reservation=" << PrettyPrinter::print(used_reservation, TUnit::BYTES) << "/"
-           << PrettyPrinter::print(reservation, TUnit::BYTES);
-        if (reservation_limit != std::numeric_limits<int64_t>::max()) {
-            ss << " BufferPoolLimit=" << PrettyPrinter::print(reservation_limit, TUnit::BYTES);
-        }
-        ss << " OtherMemory=" << PrettyPrinter::print(curr_consumption - reservation, TUnit::BYTES);
-    }
     ss << " Total=" << PrettyPrinter::print(curr_consumption, TUnit::BYTES)
        << " Peak=" << PrettyPrinter::print(peak_consumption, TUnit::BYTES);
 
