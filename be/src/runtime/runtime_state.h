@@ -53,7 +53,6 @@ class MemTracker;
 class DataStreamRecvr;
 class ResultBufferMgr;
 class TmpFileMgr;
-class BufferedBlockMgr2;
 class LoadErrorHub;
 class ReservationTracker;
 class RowDescriptor;
@@ -89,9 +88,6 @@ public:
 
     // for ut only
     Status init_instance_mem_tracker();
-
-    // Gets/Creates the query wide block mgr.
-    Status create_block_mgr();
 
     const TQueryOptions& query_options() const { return _query_options; }
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
@@ -285,9 +281,6 @@ private:
     // Allow TestEnv to set block_mgr manually for testing.
     friend class TestEnv;
 
-    // Use a custom block manager for the query for testing purposes.
-    void set_block_mgr2(const std::shared_ptr<BufferedBlockMgr2>& block_mgr) { _block_mgr2 = block_mgr; }
-
     Status create_error_log_file();
 
     static const int DEFAULT_BATCH_SIZE = 2048;
@@ -355,11 +348,6 @@ private:
     std::mutex _process_status_lock;
     Status _process_status;
     //std::unique_ptr<MemPool> _udf_pool;
-
-    // BufferedBlockMgr object used to allocate and manage blocks of input data in memory
-    // with a fixed memory budget.
-    // The block mgr is shared by all fragments for this query.
-    std::shared_ptr<BufferedBlockMgr2> _block_mgr2;
 
     // This is the node id of the root node for this plan fragment. This is used as the
     // hash seed and has two useful properties:
