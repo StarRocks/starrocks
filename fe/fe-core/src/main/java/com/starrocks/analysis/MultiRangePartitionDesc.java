@@ -8,7 +8,9 @@ import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.DynamicPartitionUtil;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormatter;
 
@@ -137,7 +139,13 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         // it will follow this configuration to set day of week
         int dayOfWeek = 1;
         if (properties != null && properties.get(DynamicPartitionProperty.START_DAY_OF_WEEK) != null) {
-            dayOfWeek = Integer.parseInt(properties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
+            String dayOfWeekStr = properties.get(DynamicPartitionProperty.START_DAY_OF_WEEK);
+            try {
+                DynamicPartitionUtil.checkStartDayOfWeek(dayOfWeekStr);
+            } catch (DdlException e) {
+                throw new AnalysisException(e.getMessage());
+            }
+            dayOfWeek = Integer.parseInt(dayOfWeekStr);
         }
         WeekFields weekFields = WeekFields.of(DayOfWeek.of(dayOfWeek), 1);
 

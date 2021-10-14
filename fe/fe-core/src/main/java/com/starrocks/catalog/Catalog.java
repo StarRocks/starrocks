@@ -3103,7 +3103,7 @@ public class Catalog {
             Column firstPartitionColumn = partitionColumns.get(0);
             MultiRangePartitionDesc multiRangePartitionDesc = (MultiRangePartitionDesc) partitionDesc;
             Map<String, String> properties = addPartitionClause.getProperties();
-            if (tableProperties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
+            if (tableProperties != null && tableProperties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
                 properties.put(DynamicPartitionProperty.START_DAY_OF_WEEK,
                         tableProperties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
             }
