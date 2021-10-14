@@ -32,7 +32,6 @@
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
-#include "runtime/buffered_block_mgr2.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
@@ -106,7 +105,6 @@ RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
 }
 
 RuntimeState::~RuntimeState() {
-    _block_mgr2.reset();
     // close error log file
     if (_error_log_file != nullptr && _error_log_file->is_open()) {
         _error_log_file->close();
@@ -201,19 +199,6 @@ Status RuntimeState::init_mem_trackers(const TUniqueId& query_id) {
 
 Status RuntimeState::init_instance_mem_tracker() {
     _instance_mem_tracker = std::make_unique<MemTracker>(-1);
-    return Status::OK();
-}
-
-Status RuntimeState::create_block_mgr() {
-    DCHECK(_block_mgr2.get() == nullptr);
-
-    int64_t block_mgr_limit = _query_mem_tracker->limit();
-    if (block_mgr_limit < 0) {
-        block_mgr_limit = std::numeric_limits<int64_t>::max();
-    }
-    RETURN_IF_ERROR(BufferedBlockMgr2::create(this, _query_mem_tracker.get(), runtime_profile(),
-                                              _exec_env->tmp_file_mgr(), block_mgr_limit,
-                                              _exec_env->disk_io_mgr()->max_read_buffer_size(), &_block_mgr2));
     return Status::OK();
 }
 
