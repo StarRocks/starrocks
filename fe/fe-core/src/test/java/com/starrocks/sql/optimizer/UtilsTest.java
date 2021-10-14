@@ -33,6 +33,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -177,7 +178,7 @@ public class UtilsTest {
             minTimes = 0;
             result = OperatorType.LOGICAL_OLAP_SCAN;
 
-            so1.getColumnRefMap();
+            so1.getColRefToColumnMetaMap();
             minTimes = 0;
             result = col1;
 
@@ -185,7 +186,7 @@ public class UtilsTest {
             minTimes = 0;
             result = OperatorType.LOGICAL_OLAP_SCAN;
 
-            so2.getColumnRefMap();
+            so2.getColRefToColumnMetaMap();
             minTimes = 0;
             result = col2;
         }};
@@ -306,14 +307,14 @@ public class UtilsTest {
         columnRefMap.put(new ColumnRefOperator(3, Type.BIGINT, "v3", true),
                 t0.getBaseColumn("v3"));
 
-        OptExpression opt = new OptExpression(new LogicalOlapScanOperator(t0, null, columnRefMap, null));
+        OptExpression opt = new OptExpression(new LogicalOlapScanOperator(t0, new ArrayList<>(), columnRefMap, Maps.newHashMap(), null, -1, null));
         Assert.assertTrue(Utils.hasUnknownColumnsStats(opt));
 
         Catalog.getCurrentStatisticStorage().addColumnStatistic(t0, "v2",
                 new ColumnStatistic(1, 1, 0, 1, 1));
         Catalog.getCurrentStatisticStorage().addColumnStatistic(t0, "v3",
                 new ColumnStatistic(1, 1, 0, 1, 1));
-        opt = new OptExpression(new LogicalOlapScanOperator(t0, null, columnRefMap, null));
+        opt = new OptExpression(new LogicalOlapScanOperator(t0, new ArrayList<>(), columnRefMap, Maps.newHashMap(), null, -1, null));
         Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
     }
 }

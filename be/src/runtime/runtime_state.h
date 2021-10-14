@@ -27,6 +27,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "cctz/time_zone.h"
@@ -34,6 +35,7 @@
 #include "common/object_pool.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+#include "runtime/global_dicts.h"
 #include "runtime/mem_pool.h"
 #include "runtime/thread_resource_mgr.h"
 #include "util/logging.h"
@@ -50,11 +52,7 @@ class DateTimeValue;
 class MemTracker;
 class DataStreamRecvr;
 class ResultBufferMgr;
-class TmpFileMgr;
-class BufferedBlockMgr2;
 class LoadErrorHub;
-class ReservationTracker;
-class InitialReservations;
 class RowDescriptor;
 class RuntimeFilterPort;
 
@@ -66,7 +64,7 @@ public:
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
 
-    RuntimeState(const TExecPlanFragmentParams& fragment_params, const TQueryOptions& query_options,
+    RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
 
     // RuntimeState for executing expr in fe-support.
@@ -88,12 +86,6 @@ public:
 
     // for ut only
     Status init_instance_mem_tracker();
-
-    /// Called from Init() to set up buffer reservations and the file group.
-    Status init_buffer_poolstate();
-
-    // Gets/Creates the query wide block mgr.
-    Status create_block_mgr();
 
     const TQueryOptions& query_options() const { return _query_options; }
     ObjectPool* obj_pool() const { return _obj_pool.get(); }
@@ -123,17 +115,8 @@ public:
         _root_node_id = id;
     }
 
-    // The seed value to use when hashing tuples.
-    // See comment on _root_node_id. We add one to prevent having a hash seed of 0.
-    uint32_t fragment_hash_seed() const { return _root_node_id + 1; }
-
     // Returns runtime state profile
     RuntimeProfile* runtime_profile() { return &_profile; }
-
-    BufferedBlockMgr2* block_mgr2() {
-        DCHECK(_block_mgr2.get() != nullptr);
-        return _block_mgr2.get();
-    }
 
     Status query_status() {
         std::lock_guard<std::mutex> l(_process_status_lock);
@@ -272,8 +255,6 @@ public:
 
     int num_per_fragment_instances() const { return _num_per_fragment_instances; }
 
-    ReservationTracker* instance_buffer_reservation() { return _instance_buffer_reservation.get(); }
-
     int64_t min_reservation() const { return _query_options.min_reservation; }
 
     int64_t max_reservation() const { return _query_options.max_reservation; }
@@ -281,11 +262,6 @@ public:
     bool disable_stream_preaggregations() const { return _query_options.disable_stream_preaggregations; }
 
     bool enable_spill() const { return _query_options.enable_spilling; }
-
-    // the following getters are only valid after Prepare()
-    InitialReservations* initial_reservations() const { return _initial_reservations; }
-
-    ReservationTracker* buffer_reservation() const { return _buffer_reservation; }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
@@ -295,13 +271,11 @@ public:
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
 
+    const vectorized::GlobalDictMaps& get_global_dict_map() const;
+    using GlobalDictLists = std::vector<TGlobalDict>;
+    Status init_global_dict(const GlobalDictLists& global_dict_list);
+
 private:
-    // Allow TestEnv to set block_mgr manually for testing.
-    friend class TestEnv;
-
-    // Use a custom block manager for the query for testing purposes.
-    void set_block_mgr2(const std::shared_ptr<BufferedBlockMgr2>& block_mgr) { _block_mgr2 = block_mgr; }
-
     Status create_error_log_file();
 
     static const int DEFAULT_BATCH_SIZE = 2048;
@@ -370,11 +344,6 @@ private:
     Status _process_status;
     //std::unique_ptr<MemPool> _udf_pool;
 
-    // BufferedBlockMgr object used to allocate and manage blocks of input data in memory
-    // with a fixed memory budget.
-    // The block mgr is shared by all fragments for this query.
-    std::shared_ptr<BufferedBlockMgr2> _block_mgr2;
-
     // This is the node id of the root node for this plan fragment. This is used as the
     // hash seed and has two useful properties:
     // 1) It is the same for all exec nodes in a fragment, so the resulting hash values
@@ -405,30 +374,12 @@ private:
     std::unique_ptr<LoadErrorHub> _error_hub;
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
 
-    //TODO chenhao , remove this to QueryState
-    /// Pool of buffer reservations used to distribute initial reservations to operators
-    /// in the query. Contains a ReservationTracker that is a child of
-    /// 'buffer_reservation_'. Owned by 'obj_pool_'. Set in Prepare().
-    ReservationTracker* _buffer_reservation = nullptr;
-
-    /// Buffer reservation for this fragment instance - a child of the query buffer
-    /// reservation. Non-NULL if 'query_state_' is not NULL.
-    std::unique_ptr<ReservationTracker> _instance_buffer_reservation;
-
-    /// Pool of buffer reservations used to distribute initial reservations to operators
-    /// in the query. Contains a ReservationTracker that is a child of
-    /// 'buffer_reservation_'. Owned by 'obj_pool_'. Set in Prepare().
-    InitialReservations* _initial_reservations = nullptr;
-
-    /// Number of fragment instances executing, which may need to claim
-    /// from 'initial_reservations_'.
-    /// TODO: not needed if we call ReleaseResources() in a timely manner (IMPALA-1575).
-    std::atomic<int32_t> _initial_reservation_refcnt{0};
-
     // prohibit copies
-    RuntimeState(const RuntimeState&);
+    RuntimeState(const RuntimeState&) = delete;
 
     RuntimeFilterPort* _runtime_filter_port;
+
+    vectorized::GlobalDictMaps _global_dicts;
 };
 
 #define RETURN_IF_CANCELLED(state)                                                       \

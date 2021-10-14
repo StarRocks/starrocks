@@ -21,6 +21,8 @@
 
 #include "storage/task/engine_checksum_task.h"
 
+#include <memory>
+
 #include "storage/reader.h"
 #include "storage/row.h"
 #include "util/defer_op.h"
@@ -76,10 +78,9 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
             return OLAP_ERR_VERSION_NOT_EXIST;
         }
 
-        OLAPStatus acquire_reader_st = tablet->capture_rs_readers(reader_params.version, &reader_params.rs_readers);
-        if (acquire_reader_st != OLAP_SUCCESS) {
-            LOG(WARNING) << "fail to init reader. tablet=" << tablet->full_name() << "res=" << acquire_reader_st;
-            return acquire_reader_st;
+        if (Status st = tablet->capture_rs_readers(reader_params.version, &reader_params.rs_readers); !st.ok()) {
+            LOG(WARNING) << "fail to init reader for tablet " << tablet->full_name() << ": " << st;
+            return OLAP_ERR_OTHER_ERROR;
         }
     }
 
@@ -125,7 +126,7 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
         // the memory allocate by mem pool has been copied,
         // so we should release memory immediately
         mem_pool->clear();
-        agg_object_pool.reset(new ObjectPool());
+        agg_object_pool = std::make_unique<ObjectPool>();
     }
 
     LOG(INFO) << "success to finish compute checksum. checksum=" << row_checksum;

@@ -22,6 +22,9 @@
 package com.starrocks.master;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJobV2.JobType;
 import com.starrocks.alter.MaterializedViewHandler;
@@ -29,22 +32,40 @@ import com.starrocks.alter.RollupJob;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SchemaChangeJob;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.UserException;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
@@ -61,73 +82,58 @@ import com.starrocks.task.SchemaChangeTask;
 import com.starrocks.task.SnapshotTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.task.UploadTask;
-import com.starrocks.thrift.TBackend;
-import com.starrocks.thrift.TBackendMeta;
-import com.starrocks.thrift.TFetchResourceResult;
-import com.starrocks.thrift.TFinishTaskRequest;
-import com.starrocks.thrift.TMasterResult;
-import com.starrocks.thrift.TPushType;
-import com.starrocks.thrift.TReportRequest;
-import com.starrocks.thrift.TStatus;
-import com.starrocks.thrift.TStatusCode;
-import com.starrocks.thrift.TTabletInfo;
-import com.starrocks.thrift.TTaskType;
-import com.starrocks.thrift.TGetTableMetaRequest;
-import com.starrocks.thrift.TGetTableMetaResponse;
-import com.starrocks.thrift.TReplicaMeta;
-import com.starrocks.thrift.TTabletMeta;
-import com.starrocks.thrift.TIndexMeta;
-import com.starrocks.thrift.TIndexInfo;
-import com.starrocks.thrift.TSchemaMeta;
-import com.starrocks.thrift.TColumnDef;
-import com.starrocks.thrift.TColumnDesc;
-import com.starrocks.thrift.THashDistributionInfo;
-import com.starrocks.thrift.TRandomDistributionInfo;
-
-import com.starrocks.catalog.MaterializedIndex.IndexExtState;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
-import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.RandomDistributionInfo;
-import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Index;
-import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.thrift.TPartitionMeta;
-import com.starrocks.thrift.TPartitionInfo;
-import com.starrocks.thrift.TTableMeta;
-import com.starrocks.thrift.TDistributionDesc;
-import com.starrocks.thrift.TBeginRemoteTxnRequest;
-import com.starrocks.thrift.TBeginRemoteTxnResponse;
-import com.starrocks.thrift.TCommitRemoteTxnRequest;
-import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
+import com.starrocks.thrift.TBackend;
+import com.starrocks.thrift.TBackendMeta;
+import com.starrocks.thrift.TBasePartitionDesc;
+import com.starrocks.thrift.TBeginRemoteTxnRequest;
+import com.starrocks.thrift.TBeginRemoteTxnResponse;
+import com.starrocks.thrift.TColumnMeta;
+import com.starrocks.thrift.TCommitRemoteTxnRequest;
+import com.starrocks.thrift.TCommitRemoteTxnResponse;
+import com.starrocks.thrift.TDataProperty;
+import com.starrocks.thrift.TDistributionDesc;
+import com.starrocks.thrift.TFetchResourceResult;
+import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TGetTableMetaRequest;
+import com.starrocks.thrift.TGetTableMetaResponse;
+import com.starrocks.thrift.THashDistributionInfo;
+import com.starrocks.thrift.TIndexInfo;
+import com.starrocks.thrift.TIndexMeta;
+import com.starrocks.thrift.TMasterResult;
+import com.starrocks.thrift.TPartitionInfo;
+import com.starrocks.thrift.TPartitionMeta;
+import com.starrocks.thrift.TPushType;
+import com.starrocks.thrift.TRandomDistributionInfo;
+import com.starrocks.thrift.TRange;
+import com.starrocks.thrift.TRangePartitionDesc;
+import com.starrocks.thrift.TReplicaMeta;
+import com.starrocks.thrift.TReportRequest;
+import com.starrocks.thrift.TSchemaMeta;
+import com.starrocks.thrift.TSinglePartitionDesc;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTableMeta;
+import com.starrocks.thrift.TTabletInfo;
+import com.starrocks.thrift.TTabletMeta;
+import com.starrocks.thrift.TTaskType;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TransactionState.LoadJobSourceType;
+import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
 import com.starrocks.transaction.TxnCommitAttachment;
-import com.starrocks.transaction.TabletCommitInfo;
-import com.starrocks.common.UserException;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import com.starrocks.transaction.TransactionState.TxnCoordinator;
-import com.starrocks.transaction.TransactionState.TxnSourceType;
-import com.starrocks.transaction.TransactionState.LoadJobSourceType;
-
-import com.starrocks.service.FrontendOptions;
-
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-
-import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 
 public class MasterImpl {
     private static final Logger LOG = LogManager.getLogger(MasterImpl.class);
@@ -309,7 +315,7 @@ public class MasterImpl {
                     replica.setPathHash(request.getFinish_tablet_infos().get(0).getPath_hash());
 
                     if (createReplicaTask.isRecoverTask()) {
-                        /**
+                        /*
                          * This create replica task may be generated by recovery(See comment of Config.recover_with_empty_tablet)
                          * So we set replica back to good.
                          */
@@ -983,7 +989,7 @@ public class MasterImpl {
             distributionDesc.setDistribution_type(distributionInfo.getType().name());
             if (distributionInfo.getType() == DistributionInfoType.HASH) {
                 THashDistributionInfo tHashDistributionInfo = new THashDistributionInfo();
-                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo)distributionInfo;
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
                 tHashDistributionInfo.setBucket_num(hashDistributionInfo.getBucketNum());
                 for (Column column : hashDistributionInfo.getDistributionColumns()) {
                     tHashDistributionInfo.addToDistribution_columns(column.getName());
@@ -991,7 +997,7 @@ public class MasterImpl {
                 distributionDesc.setHash_distribution(tHashDistributionInfo);
             } else {
                 TRandomDistributionInfo tRandomDistributionInfo = new TRandomDistributionInfo();
-                RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo)distributionInfo;
+                RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo) distributionInfo;
                 tRandomDistributionInfo.setBucket_num(randomDistributionInfo.getBucketNum());
                 distributionDesc.setRandom_distribution(tRandomDistributionInfo);
             }
@@ -1002,10 +1008,8 @@ public class MasterImpl {
                 tableMeta.putToProperties(property.getKey(), property.getValue());
             }
 
-            TPartitionInfo tPartitionInfo = new TPartitionInfo();
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-            tPartitionInfo.setType(partitionInfo.getType().name());
-
+            TBasePartitionDesc basePartitionDesc = new TBasePartitionDesc();
             // fill partition meta info
             for (Partition partition : olapTable.getAllPartitions()) {
                 TPartitionMeta partitionMeta = new TPartitionMeta();
@@ -1021,9 +1025,57 @@ public class MasterImpl {
                 tableMeta.addToPartitions(partitionMeta);
                 Short replicaNum = partitionInfo.getReplicationNum(partition.getId());
                 boolean inMemory = partitionInfo.getIsInMemory(partition.getId());
-                tPartitionInfo.putToReplica_num_map(partition.getId(), replicaNum);
-                tPartitionInfo.putToIn_memory_map(partition.getId(), inMemory);
+                basePartitionDesc.putToReplica_num_map(partition.getId(), replicaNum);
+                basePartitionDesc.putToIn_memory_map(partition.getId(), inMemory);
+                DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
+                TDataProperty thriftDataProperty = new TDataProperty();
+                thriftDataProperty.setStorage_medium(dataProperty.getStorageMedium());
+                thriftDataProperty.setCold_time(dataProperty.getCooldownTimeMs());
+                basePartitionDesc.putToData_property(partition.getId(), thriftDataProperty);
             }
+
+            TPartitionInfo tPartitionInfo = new TPartitionInfo();
+            tPartitionInfo.setType(partitionInfo.getType().toThrift());
+            if (partitionInfo.getType() == PartitionType.RANGE) {
+                TRangePartitionDesc rangePartitionDesc = new TRangePartitionDesc();
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                for (Column column : rangePartitionInfo.getPartitionColumns()) {
+                    TColumnMeta columnMeta = new TColumnMeta();
+                    columnMeta.setColumnName(column.getName());
+                    columnMeta.setColumnType(column.getType().toThrift());
+                    columnMeta.setKey(column.isKey());
+                    if (column.getAggregationType() != null) {
+                        columnMeta.setAggregationType(column.getAggregationType().name());
+                    }
+                    columnMeta.setComment(column.getComment());
+                    rangePartitionDesc.addToColumns(columnMeta);
+                }
+                Map<Long, Range<PartitionKey>> ranges = rangePartitionInfo.getIdToRange(false);
+                for (Map.Entry<Long, Range<PartitionKey>> range : ranges.entrySet()) {
+                    TRange tRange = new TRange();
+                    tRange.setPartition_id(range.getKey());
+                    ByteArrayOutputStream output = new ByteArrayOutputStream();
+                    DataOutputStream stream = new DataOutputStream(output);
+                    range.getValue().lowerEndpoint().write(stream);
+                    tRange.setStart_key(output.toByteArray());
+
+                    output = new ByteArrayOutputStream();
+                    stream = new DataOutputStream(output);
+                    range.getValue().upperEndpoint().write(stream);
+                    tRange.setEnd_key(output.toByteArray());
+                    tRange.setBase_desc(basePartitionDesc);
+                    rangePartitionDesc.putToRanges(range.getKey(), tRange);
+                }
+                tPartitionInfo.setRange_partition_desc(rangePartitionDesc);
+            } else if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                TSinglePartitionDesc singlePartitionDesc = new TSinglePartitionDesc();
+                singlePartitionDesc.setBase_desc(basePartitionDesc);
+                tPartitionInfo.setSingle_partition_desc(singlePartitionDesc);
+            } else {
+                LOG.info("invalid partition type {}", partitionInfo.getType());
+                return null;
+            }
+
             tableMeta.setPartition_info(tPartitionInfo);
 
             // fill index meta info
@@ -1043,7 +1095,8 @@ public class MasterImpl {
                 for (MaterializedIndex index : indexes) {
                     TIndexMeta indexMeta = new TIndexMeta();
                     indexMeta.setIndex_id(index.getId());
-                    indexMeta.setIndex_state(index.getState().name());
+                    indexMeta.setPartition_id(partition.getId());
+                    indexMeta.setIndex_state(index.getState().toThrift());
                     indexMeta.setRow_count(index.getRowCount());
                     indexMeta.setRollup_index_id(index.getRollupIndexId());
                     indexMeta.setRollup_finished_version(index.getRollupFinishedVersion());
@@ -1055,17 +1108,17 @@ public class MasterImpl {
                     schemaMeta.setStorage_type(materializedIndexMeta.getStorageType());
                     schemaMeta.setKeys_type(materializedIndexMeta.getKeysType().name());
                     for (Column column : materializedIndexMeta.getSchema()) {
-                        TColumnDef columnDef = new TColumnDef();
-                        TColumnDesc columnDesc = new TColumnDesc();
-                        columnDesc.setColumnName(column.getName());
-                        columnDesc.setColumnType(column.getPrimitiveType().toThrift());
-                        columnDesc.setKey(column.isKey());
+                        TColumnMeta columnMeta = new TColumnMeta();
+                        columnMeta.setColumnName(column.getName());
+                        columnMeta.setColumnType(column.getType().toThrift());
+                        columnMeta.setKey(column.isKey());
+                        columnMeta.setAllowNull(column.isAllowNull());
                         if (column.getAggregationType() != null) {
-                            columnDesc.setAggregationType(column.getAggregationType().name());
+                            columnMeta.setAggregationType(column.getAggregationType().name());
                         }
-                        columnDef.setColumnDesc(columnDesc);
-                        columnDef.setComment(column.getComment());
-                        schemaMeta.addToColumns(columnDef);
+                        columnMeta.setComment(column.getComment());
+                        columnMeta.setDefaultValue(column.getDefaultValue());
+                        schemaMeta.addToColumns(columnMeta);
                     }
                     indexMeta.setSchema_meta(schemaMeta);
                     // fill in tablet info
@@ -1109,11 +1162,11 @@ public class MasterImpl {
                     }
                     tableMeta.addToIndexes(indexMeta);
                 }
-                break;
             }
 
             List<TBackendMeta> backends = new ArrayList<>();
-            for (Backend backend : Catalog.getCurrentCatalog().getCurrentSystemInfo().getClusterBackends(db.getClusterName())) {
+            for (Backend backend : Catalog.getCurrentCatalog().getCurrentSystemInfo()
+                    .getClusterBackends(db.getClusterName())) {
                 TBackendMeta backendMeta = new TBackendMeta();
                 backendMeta.setBackend_id(backend.getId());
                 backendMeta.setHost(backend.getHost());
@@ -1140,7 +1193,7 @@ public class MasterImpl {
 
     public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {
         TBeginRemoteTxnResponse response = new TBeginRemoteTxnResponse();
-        Database db = Catalog.getCurrentCatalog().getDb(request.getDb_name());
+        Database db = Catalog.getCurrentCatalog().getDb(request.getDb_id());
         if (db == null) {
             TStatus status = new TStatus(TStatusCode.NOT_FOUND);
             status.setError_msgs(Lists.newArrayList("db not exist"));
@@ -1148,25 +1201,12 @@ public class MasterImpl {
             return response;
         }
 
-        List tableIds = Lists.newArrayList();
-        for (String tableName : request.getTable_name()) {
-            Table table = db.getTable(tableName);
-            if (table == null) {
-                TStatus status = new TStatus(TStatusCode.NOT_FOUND);
-                String errMsg = "table " + "'" + tableName + "' not exist";
-                status.setError_msgs(Lists.newArrayList(errMsg));
-                response.setStatus(status);
-                return response;
-            }
-            tableIds.add(table.getId());
-        }
-
         long txnId;
         try {
             txnId = Catalog.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
-                tableIds, request.getLabel(),
-                new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
+                    request.getTable_ids(), request.getLabel(),
+                    new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                    LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
         } catch (Exception e) {
             LOG.info("begin remote txn error, label {}, msg {}", request.getLabel(), e.getStackTrace());
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
@@ -1203,9 +1243,9 @@ public class MasterImpl {
             // It will results as error like "call frontend service failed"
             timeoutMs = timeoutMs * 3 / 4;
             boolean ret = Catalog.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
-                            db, request.getTxn_id(),
-                            TabletCommitInfo.fromThrift(request.getCommit_infos()),
-                            timeoutMs, attachment);
+                    db, request.getTxn_id(),
+                    TabletCommitInfo.fromThrift(request.getCommit_infos()),
+                    timeoutMs, attachment);
             if (!ret) {
                 TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
                 status.setError_msgs(Lists.newArrayList("commit and publish txn failed"));
@@ -1238,7 +1278,7 @@ public class MasterImpl {
 
         try {
             Catalog.getCurrentGlobalTransactionMgr().abortTransaction(
-                request.getDb_id(), request.getTxn_id(), request.getError_msg());
+                    request.getDb_id(), request.getTxn_id(), request.getError_msg());
         } catch (Exception e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));

@@ -32,7 +32,8 @@ protected:
 
 class SourceOperatorFactory : public OperatorFactory {
 public:
-    SourceOperatorFactory(int32_t id, int32_t plan_node_id) : OperatorFactory(id, plan_node_id) {}
+    SourceOperatorFactory(int32_t id, const std::string& name, int32_t plan_node_id)
+            : OperatorFactory(id, name, plan_node_id) {}
     bool is_source() const override { return true; }
     // with_morsels returning true means that the SourceOperator needs attach to MorselQueue, only
     // ScanOperator needs to do so.

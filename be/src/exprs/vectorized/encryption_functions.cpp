@@ -14,8 +14,7 @@
 #include "util/debug_util.h"
 #include "util/md5.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 ColumnPtr EncryptionFunctions::aes_encrypt(FunctionContext* ctx, const Columns& columns) {
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
@@ -200,5 +199,4 @@ ColumnPtr EncryptionFunctions::md5(FunctionContext* ctx, const Columns& columns)
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

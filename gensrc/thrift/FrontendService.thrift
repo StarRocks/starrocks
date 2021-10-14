@@ -24,6 +24,7 @@ namespace java com.starrocks.thrift
 
 include "Status.thrift"
 include "Types.thrift"
+include "Partitions.thrift"
 include "InternalService.thrift"
 include "PlanNodes.thrift"
 include "Planner.thrift"
@@ -729,8 +730,22 @@ struct TIndexInfo {
     4: optional string comment
 }
 
+struct TColumnMeta {
+  1: optional string columnName
+  2: optional Types.TTypeDesc columnType
+  3: optional i32 columnLength
+  4: optional i32 columnPrecision
+  5: optional i32 columnScale
+  6: optional string columnKey
+  7: optional bool key
+  8: optional string aggregationType
+  9: optional string comment
+  10: optional bool allowNull
+  11: optional string defaultValue
+}
+
 struct TSchemaMeta {
-    1: optional list<TColumnDef> columns
+    1: optional list<TColumnMeta> columns
     2: optional i32 schema_version
     3: optional i32 schema_hash
     4: optional i16 short_key_col_count
@@ -738,20 +753,56 @@ struct TSchemaMeta {
     6: optional string keys_type
 }
 
+enum TIndexState {
+    NORMAL,
+    SHADOW,
+}
+
 struct TIndexMeta {
     1: optional i64 index_id
-    2: optional string index_state
-    3: optional i64 row_count
-    4: optional i64 rollup_index_id
-    5: optional i64 rollup_finished_version
-    6: optional TSchemaMeta schema_meta
-    7: optional list<TTabletMeta> tablets
+    2: optional i64 partition_id
+    3: optional TIndexState index_state
+    4: optional i64 row_count
+    5: optional i64 rollup_index_id
+    6: optional i64 rollup_finished_version
+    7: optional TSchemaMeta schema_meta
+    8: optional list<TTabletMeta> tablets
+}
+
+struct TDataProperty {
+    1: optional Types.TStorageMedium storage_medium
+    2: optional i64 cold_time
+}
+
+struct TBasePartitionDesc {
+    1: optional map<i64, i16> replica_num_map
+    2: optional map<i64, bool> in_memory_map
+    3: optional map<i64, TDataProperty> data_property
+}
+
+struct TSinglePartitionDesc {
+    1: optional TBasePartitionDesc base_desc
+}
+
+// one single partition range
+struct TRange {
+    1: optional i64 partition_id
+    2: optional TBasePartitionDesc base_desc
+    3: optional binary start_key
+    4: optional binary end_key
+}
+
+struct TRangePartitionDesc {
+    // partition keys
+    1: optional list<TColumnMeta> columns
+    // partition ranges
+    2: optional map<i64, TRange> ranges
 }
 
 struct TPartitionInfo {
-    1: optional string type
-    2: optional map<i64, i16> replica_num_map
-    3: optional map<i64, bool> in_memory_map
+    1: optional Partitions.TPartitionType type
+    2: optional TSinglePartitionDesc single_partition_desc
+    3: optional TRangePartitionDesc  range_partition_desc
 }
 
 struct TPartitionMeta {
@@ -808,8 +859,8 @@ struct TGetTableMetaResponse {
 }
 
 struct TBeginRemoteTxnRequest {
-    1: optional string db_name
-    2: optional list<string> table_name
+    1: optional i64 db_id
+    2: optional list<i64> table_ids
     3: optional string label
     4: optional i32 source_type
     5: optional i64 timeout_second

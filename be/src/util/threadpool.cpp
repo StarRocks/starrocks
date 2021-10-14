@@ -84,7 +84,7 @@ Status ThreadPoolBuilder::build(std::unique_ptr<ThreadPool>* pool) const {
 }
 
 ThreadPoolToken::ThreadPoolToken(ThreadPool* pool, ThreadPool::ExecutionMode mode)
-        : _mode(mode), _pool(pool), _state(State::IDLE), _not_running_cond(), _active_threads(0) {}
+        : _mode(mode), _pool(pool), _state(State::IDLE), _active_threads(0) {}
 
 ThreadPoolToken::~ThreadPoolToken() {
     shutdown();
@@ -229,8 +229,7 @@ ThreadPool::ThreadPool(const ThreadPoolBuilder& builder)
           _max_queue_size(builder._max_queue_size),
           _idle_timeout(builder._idle_timeout),
           _pool_status(Status::Uninitialized("The pool was not initialized.")),
-          _idle_cond(),
-          _no_threads_cond(),
+
           _num_threads(0),
           _num_threads_pending_start(0),
           _active_threads(0),

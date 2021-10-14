@@ -2,17 +2,26 @@
 
 #pragma once
 
+#include <cstring>
 #include <limits>
 #include <type_traits>
 
+#include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "column/hash_set.h"
 #include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/sum.h"
+#include "gen_cpp/Data_types.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
 #include "runtime/mem_pool.h"
+#include "thrift/protocol/TJSONProtocol.h"
 #include "udf/udf_internal.h"
 #include "util/phmap/phmap_dump.h"
+#include "util/slice.h"
 
 namespace starrocks::vectorized {
 
@@ -30,6 +39,11 @@ struct DistinctAggregateState<PT, FixedLengthPTGuard<PT>> {
 
     size_t update(T key) {
         auto pair = set.insert(key);
+        return pair.second * phmap::item_serialize_size<HashSet<T>>::value;
+    }
+
+    size_t update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) {
+        auto pair = set.emplace_with_hash(hash, key);
         return pair.second * phmap::item_serialize_size<HashSet<T>>::value;
     }
 
@@ -88,6 +102,18 @@ struct DistinctAggregateState<PT, BinaryPTGuard<PT>> {
         size_t ret = 0;
         KeyType key(raw_key);
         set.template lazy_emplace(key, [&](const auto& ctor) {
+            uint8_t* pos = mem_pool->allocate(key.size);
+            memcpy(pos, key.data, key.size);
+            ctor(pos, key.size, key.hash);
+            ret = phmap::item_serialize_size<SliceHashSet>::value;
+        });
+        return ret;
+    }
+
+    size_t update_with_hash(MemPool* mem_pool, Slice raw_key, size_t hash) {
+        size_t ret = 0;
+        KeyType key(reinterpret_cast<uint8_t*>(raw_key.data), raw_key.size, hash);
+        set.template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
             uint8_t* pos = mem_pool->allocate(key.size);
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
@@ -156,6 +182,11 @@ struct DistinctAggregateStateV2<PT, FixedLengthPTGuard<PT>> {
 
     size_t update(T key) {
         auto pair = set.insert(key);
+        return pair.second * item_size;
+    }
+
+    size_t update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) {
+        auto pair = set.emplace_with_hash(hash, key);
         return pair.second * item_size;
     }
 
@@ -243,29 +274,70 @@ public:
         ctx->impl()->add_mem_usage(mem_usage);
     }
 
+    // The following two functions are specialized because of performance issue.
+    // We have found out that by precomputing and prefetching hash values, we can boost peformance of hash table by a lot.
+    // And this is a quite useful pattern for phmap::flat_hash_table.
     void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
                                    AggDataPtr state) const override {
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
         size_t mem_usage = 0;
         auto& agg_state = this->data(state);
 
-        if constexpr (IsSlice<T>) {
-            MemPool* mem_pool = ctx->impl()->mem_pool();
-            for (size_t i = 0; i < batch_size; ++i) {
-                mem_usage += agg_state.update(mem_pool, column->get_slice(i));
+        struct CacheEntry {
+            size_t hash_value;
+        };
+
+        std::vector<CacheEntry> cache(batch_size);
+        const auto& container_data = column->get_data();
+        for (size_t i = 0; i < batch_size; ++i) {
+            size_t hash_value = agg_state.set.hash_function()(container_data[i]);
+            cache[i] = CacheEntry{hash_value};
+        }
+        // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
+        size_t prefetch_index = 16;
+
+        MemPool* mem_pool = ctx->impl()->mem_pool();
+        for (size_t i = 0; i < batch_size; ++i) {
+            if (prefetch_index < batch_size) {
+                agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
+                prefetch_index++;
             }
-        } else {
-            auto* data = column->get_data().data();
-            // after doing some benchmark, we see a lot of perf gain by prefetching when doing count(distinct)
-            // but only when there is no group by clause or group by number is low.
-            // prefetching has down side if group by number is high.
-            static const size_t prefetch_dist = 4;
-            for (size_t i = 0; i < batch_size; ++i) {
-                if ((i + prefetch_dist) < batch_size) {
-                    agg_state.prefetch(data[i + prefetch_dist]);
-                }
-                mem_usage += agg_state.update(data[i]);
+            mem_usage += agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+        }
+        ctx->impl()->add_mem_usage(mem_usage);
+    }
+
+    void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
+                      AggDataPtr* states) const override {
+        const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
+        size_t mem_usage = 0;
+
+        // We find that agg_states are scatterd in `states`, we can collect them together with hash value,
+        // so there will be good cache locality. We can also collect column data into this `CacheEntry` to
+        // exploit cache locality further, but I don't see much steady performance gain by doing that.
+        struct CacheEntry {
+            TDistinctAggState<PT>* agg_state;
+            size_t hash_value;
+        };
+
+        std::vector<CacheEntry> cache(batch_size);
+        const auto& container_data = column->get_data();
+        for (size_t i = 0; i < batch_size; ++i) {
+            AggDataPtr state = states[i] + state_offset;
+            auto& agg_state = this->data(state);
+            size_t hash_value = agg_state.set.hash_function()(container_data[i]);
+            cache[i] = CacheEntry{&agg_state, hash_value};
+        }
+        // This is just an empirical value based on benchmark, and you can tweak it if more proper value is found.
+        size_t prefetch_index = 16;
+
+        MemPool* mem_pool = ctx->impl()->mem_pool();
+        for (size_t i = 0; i < batch_size; ++i) {
+            if (prefetch_index < batch_size) {
+                cache[prefetch_index].agg_state->set.prefetch_hash(cache[prefetch_index].hash_value);
+                prefetch_index++;
             }
+            mem_usage += cache[i].agg_state->update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
         }
         ctx->impl()->add_mem_usage(mem_usage);
     }
@@ -364,5 +436,106 @@ class DistinctAggregateFunction : public TDistinctAggregateFunction<PT, Distinct
 
 template <PrimitiveType PT, AggDistinctType DistinctType, typename T = RunTimeCppType<PT>>
 class DistinctAggregateFunctionV2 : public TDistinctAggregateFunction<PT, DistinctAggregateStateV2, DistinctType, T> {};
+
+// now we only support String
+struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR> {
+    DictMergeState() = default;
+};
+
+class DictMergeAggregateFunction final
+        : public AggregateFunctionBatchHelper<DictMergeState, DictMergeAggregateFunction> {
+public:
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+        DCHECK(false) << "this method shouldn't be called";
+    }
+
+    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+                                   AggDataPtr state) const override {
+        size_t mem_usage = 0;
+        auto& agg_state = this->data(state);
+        const auto* column = down_cast<const ArrayColumn*>(columns[0]);
+        MemPool* mem_pool = ctx->impl()->mem_pool();
+
+        const auto& elements_column = column->elements();
+        if (column->elements().is_nullable()) {
+            const auto& null_column = down_cast<const NullableColumn&>(elements_column);
+            const auto& null_data = null_column.immutable_null_column_data();
+            const auto& binary_column = down_cast<const BinaryColumn&>(null_column.data_column_ref());
+
+            for (size_t i = 0; i < binary_column.size(); ++i) {
+                if (!null_data[i]) {
+                    mem_usage += agg_state.update(mem_pool, binary_column.get_slice(i));
+                }
+            }
+        } else {
+            const auto& binary_column = down_cast<const BinaryColumn&>(elements_column);
+            for (size_t i = 0; i < binary_column.size(); ++i) {
+                mem_usage += agg_state.update(mem_pool, binary_column.get_slice(i));
+            }
+        }
+    }
+
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+        const auto* input_column = down_cast<const BinaryColumn*>(column);
+        Slice slice = input_column->get_slice(row_num);
+        size_t mem_usage = 0;
+        mem_usage += this->data(state).deserialize_and_merge(ctx->impl()->mem_pool(), (const uint8_t*)slice.data,
+                                                             slice.size);
+        ctx->impl()->add_mem_usage(mem_usage);
+    }
+
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+        auto* column = down_cast<BinaryColumn*>(to);
+        size_t old_size = column->get_bytes().size();
+        size_t new_size = old_size + this->data(state).serialize_size();
+        column->get_bytes().resize(new_size);
+        this->data(state).serialize(column->get_bytes().data() + old_size);
+        column->get_offset().emplace_back(new_size);
+    }
+
+    void convert_to_serialize_format(const Columns& src, size_t chunk_size, ColumnPtr* dst) const override {
+        DCHECK(false) << "this method shouldn't be called";
+    }
+
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+        if (this->data(state).set.size() == 0) {
+            to->append_default();
+            return;
+        }
+        std::vector<int32_t> dict_ids;
+        dict_ids.resize(this->data(state).set.size());
+
+        auto* binary_column = down_cast<BinaryColumn*>(to);
+
+        // set dict_ids as [1...n]
+        for (int i = 0; i < dict_ids.size(); ++i) {
+            dict_ids[i] = i + 1;
+        }
+
+        TGlobalDict tglobal_dict;
+        tglobal_dict.__isset.ids = true;
+        tglobal_dict.ids = std::move(dict_ids);
+        tglobal_dict.__isset.strings = true;
+        tglobal_dict.strings.reserve(dict_ids.size());
+
+        for (const auto& v : this->data(state).set) {
+            tglobal_dict.strings.emplace_back(v.data, v.size);
+        }
+
+        std::string result_value = apache::thrift::ThriftJSONString(tglobal_dict);
+
+        size_t old_size = binary_column->get_bytes().size();
+        size_t new_size = old_size + result_value.size();
+
+        auto& data = binary_column->get_bytes();
+        data.resize(old_size + new_size);
+
+        memcpy(data.data() + old_size, result_value.data(), result_value.size());
+
+        binary_column->get_offset().emplace_back(new_size);
+    }
+
+    std::string get_name() const override { return "dict_merge"; }
+};
 
 } // namespace starrocks::vectorized

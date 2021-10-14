@@ -2,17 +2,19 @@
 
 #include "chunk_cursor.h"
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "exec/sort_exec_exprs.h"
 
 namespace starrocks::vectorized {
 
-ChunkCursor::ChunkCursor(const ChunkSupplier& chunk_supplier, const ChunkProbeSupplier& chunk_probe_supplier,
-                         const ChunkHasSupplier& chunk_has_supplier, const std::vector<ExprContext*>* exprs,
+ChunkCursor::ChunkCursor(ChunkSupplier chunk_supplier, ChunkProbeSupplier chunk_probe_supplier,
+                         ChunkHasSupplier chunk_has_supplier, const std::vector<ExprContext*>* exprs,
                          const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first, bool is_pipeline)
-        : _chunk_supplier(chunk_supplier),
-          _chunk_probe_supplier(chunk_probe_supplier),
-          _chunk_has_supplier(chunk_has_supplier),
+        : _chunk_supplier(std::move(chunk_supplier)),
+          _chunk_probe_supplier(std::move(chunk_probe_supplier)),
+          _chunk_has_supplier(std::move(chunk_has_supplier)),
           _current_pos(-1),
           _sort_exprs(exprs),
           _is_pipeline(is_pipeline) {
@@ -36,7 +38,7 @@ ChunkCursor::ChunkCursor(const ChunkSupplier& chunk_supplier, const ChunkProbeSu
     }
 }
 
-ChunkCursor::~ChunkCursor() {}
+ChunkCursor::~ChunkCursor() = default;
 
 bool ChunkCursor::operator<(const ChunkCursor& cursor) const {
     DCHECK_EQ(_current_order_by_columns.size(), cursor._current_order_by_columns.size());

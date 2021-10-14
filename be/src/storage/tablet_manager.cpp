@@ -75,9 +75,6 @@ TabletManager::TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_sh
 Status TabletManager::_add_tablet_unlocked(TTabletId tablet_id, SchemaHash schema_hash, const TabletSharedPtr& tablet,
                                            bool update_meta, bool force) {
     Status res = Status::OK();
-    VLOG(3) << "Adding tablet to TabletManager. "
-            << "tablet_id=" << tablet_id << " schema_hash=" << schema_hash << " force=" << force;
-
     TabletSharedPtr existed_tablet = nullptr;
     tablet_map_t& tablet_map = _get_tablet_map(tablet_id);
     for (const TabletSharedPtr& item : tablet_map[tablet_id].table_arr) {
@@ -94,13 +91,12 @@ Status TabletManager::_add_tablet_unlocked(TTabletId tablet_id, SchemaHash schem
 
     if (!force) {
         if (existed_tablet->tablet_path() == tablet->tablet_path()) {
-            LOG(WARNING) << "add the same tablet twice! tablet_id=" << tablet_id << " schema_hash=" << schema_hash
+            LOG(WARNING) << "add the same tablet twice! tablet_id=" << tablet_id
                          << " tablet_path=" << tablet->tablet_path();
             return Status::InternalError("tablet already exists");
         }
         if (existed_tablet->data_dir() == tablet->data_dir()) {
-            LOG(WARNING) << "add tablet with same data dir twice! tablet_id=" << tablet_id
-                         << " schema_hash=" << schema_hash;
+            LOG(WARNING) << "add tablet with same data dir twice! tablet_id=" << tablet_id;
             return Status::InternalError("tablet already exists");
         }
     }
@@ -116,7 +112,7 @@ Status TabletManager::_add_tablet_unlocked(TTabletId tablet_id, SchemaHash schem
         // it seems useless to call unlock and return here.
         // it could prevent error when log level is changed in the future.
         LOG(FATAL) << "new tablet is empty and old tablet exists. it should not happen."
-                   << " tablet_id=" << tablet_id << " schema_hash=" << schema_hash;
+                   << " tablet_id=" << tablet_id;
         return Status::InternalError("tablet already exists");
     }
     int64_t old_time = old_rowset == nullptr ? -1 : old_rowset->creation_time();
@@ -158,8 +154,7 @@ Status TabletManager::_add_tablet_to_map_unlocked(TTabletId tablet_id, SchemaHas
         // the existing tablet with the new one.
         Status st = _drop_tablet_unlocked(tablet_id, schema_hash, keep_state);
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to drop old tablet when add new tablet. tablet_id=" << tablet_id
-                         << " schema_hash=" << schema_hash;
+            LOG(WARNING) << "Fail to drop old tablet when add new tablet. tablet_id=" << tablet_id;
             return st;
         }
     }
@@ -172,8 +167,6 @@ Status TabletManager::_add_tablet_to_map_unlocked(TTabletId tablet_id, SchemaHas
     tablet_map[tablet_id].table_arr.sort(_cmp_tablet_by_create_time);
     _add_tablet_to_partition(*tablet);
 
-    VLOG(3) << "add tablet to map successfully."
-            << " tablet_id=" << tablet_id << ", schema_hash=" << schema_hash;
     return Status::OK();
 }
 
@@ -188,7 +181,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
 
     int64_t tablet_id = request.tablet_id;
     int32_t schema_hash = request.tablet_schema.schema_hash;
-    LOG(INFO) << "Creating tablet_id=" << tablet_id << " schema_hash=" << schema_hash;
+    LOG(INFO) << "Creating tablet " << tablet_id;
 
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
     // Make create_tablet operation to be idempotent:
@@ -208,11 +201,10 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     } else if (_check_tablet_id_exist_unlocked(tablet_id)) {
         TabletSharedPtr tablet = _get_tablet_unlocked(tablet_id, schema_hash);
         if (tablet != nullptr) {
-            LOG(INFO) << "Created tablet_id=" << tablet_id << " already exist";
+            LOG(INFO) << "Created tablet " << tablet_id << ": already exist";
             return Status::OK();
         } else {
-            LOG(WARNING) << "Fail to create tablet_id=" << tablet_id << " schema_hash=" << schema_hash
-                         << ", tablet exist but with different schema_hash";
+            LOG(WARNING) << "Fail to create tablet " << tablet_id << ": tablet exist but with different schema_hash";
             StarRocksMetrics::instance()->create_tablet_requests_failed.increment(1);
             return Status::InternalError("tablet exist but with different schema hash");
         }
@@ -243,12 +235,12 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     TabletSharedPtr tablet = _internal_create_tablet_unlocked(AlterTabletType::SCHEMA_CHANGE, request, is_schema_change,
                                                               base_tablet.get(), stores);
     if (tablet == nullptr) {
-        LOG(WARNING) << "Fail to create tablet_id=" << request.tablet_id;
+        LOG(WARNING) << "Fail to create tablet " << request.tablet_id;
         StarRocksMetrics::instance()->create_tablet_requests_failed.increment(1);
         return Status::InternalError("fail to create tablet");
     }
 
-    LOG(INFO) << "Created tablet_id=" << tablet_id << " schema_hash=" << schema_hash;
+    LOG(INFO) << "Created tablet " << tablet_id;
     return Status::OK();
 }
 
@@ -283,9 +275,9 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(const AlterTable
         if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
             tablet->tablet_meta()->create_inital_updates_meta();
         }
-        if (tablet->init() != OLAP_SUCCESS) {
-            LOG(WARNING) << "Fail to init tablet name=" << tablet->full_name();
-            status = Status::InternalError("tablet init failed");
+        if (Status st = tablet->init(); !st.ok()) {
+            LOG(WARNING) << "Fail to init tablet " << tablet->full_name() << ": " << st;
+            status = Status::InternalError("tablet init failed: " + st.to_string());
             break;
         }
         // TODO(lingbin): is it needed? because all type of create_tablet will be true.
@@ -342,7 +334,7 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(const AlterTable
             break;
         }
         is_tablet_added = true;
-    } while (0);
+    } while (false);
 
     if (status.ok()) {
         return tablet;
@@ -409,16 +401,15 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, SchemaHash schema_hash, b
 //      b. other cases:
 //          drop specified tablet directly and clear schema change info.
 Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, SchemaHash schema_hash, bool keep_state) {
-    LOG(INFO) << "Dropping tablet_id=" << tablet_id << ", schema_hash=" << schema_hash;
     StarRocksMetrics::instance()->drop_tablet_requests_total.increment(1);
 
     // Fetch tablet which need to be dropped
     TabletSharedPtr tablet_to_drop = _get_tablet_unlocked(tablet_id, schema_hash);
     if (tablet_to_drop == nullptr) {
-        LOG(WARNING) << "Fail to drop tablet because it does not exist. "
-                     << "tablet_id=" << tablet_id << " schema_hash=" << schema_hash;
+        LOG(WARNING) << "Fail to drop tablet " << tablet_id << ": not exist";
         return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
     }
+    LOG(INFO) << "Dropping tablet " << tablet_id;
 
     // Try to get schema change info, we can drop tablet directly if it is not
     // in schema-change state.
@@ -435,7 +426,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, SchemaHash sche
     if (related_tablet == nullptr) {
         // TODO(lingbin): in what case, can this happen?
         LOG(WARNING) << "Dropping tablet directly when related tablet not found. "
-                     << " tablet_id=" << related_tablet_id << " schema_hash=" << related_schema_hash;
+                     << " tablet_id=" << related_tablet_id;
         return _drop_tablet_directly_unlocked(tablet_id, schema_hash, keep_state);
     }
 
@@ -483,7 +474,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, SchemaHash sche
         return res;
     }
 
-    LOG(INFO) << "Dropped tablet. tablet_id=" << tablet_id;
+    LOG(INFO) << "Dropped tablet " << tablet_id;
     return res;
 }
 
@@ -499,11 +490,9 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
                 continue;
             }
             TSchemaHash schema_hash = tablet_info.schema_hash;
-            VLOG(3) << "drop_tablet begin. tablet_id=" << tablet_id << ", schema_hash=" << schema_hash;
             TabletSharedPtr dropped_tablet = _get_tablet_unlocked(tablet_id, schema_hash);
             if (dropped_tablet == nullptr) {
-                LOG(WARNING) << "dropping tablet not exist. "
-                             << " tablet=" << tablet_id << " schema_hash=" << schema_hash;
+                LOG(WARNING) << "dropping tablet not exist. tablet_id=" << tablet_id;
                 continue;
             } else {
                 tablet_map_t& tablet_map = _get_tablet_map(tablet_id);
@@ -766,9 +755,9 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
                                             bool check_path) {
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
     TabletMetaSharedPtr tablet_meta(new TabletMeta(_mem_tracker));
-    if (tablet_meta->deserialize(meta_binary) != OLAP_SUCCESS) {
+    if (Status st = tablet_meta->deserialize(meta_binary); !st.ok()) {
         LOG(WARNING) << "Fail to load tablet because can not parse meta_binary string. "
-                     << "tablet_id=" << tablet_id << " schema_hash=" << schema_hash << " path=" << data_dir->path();
+                     << "tablet_id=" << tablet_id << " path=" << data_dir->path();
         return Status::InternalError("Invalid serialized tablet meta");
     }
 
@@ -800,7 +789,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
 
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, data_dir);
     if (tablet == nullptr) {
-        LOG(WARNING) << "Fail to load tablet_id=" << tablet_id << " schema_hash=" << schema_hash;
+        LOG(WARNING) << "Fail to load tablet_id=" << tablet_id;
         return Status::InternalError("Fail to create tablet");
     }
 
@@ -816,13 +805,12 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
         LOG(WARNING) << "Fail to create table, tablet path not exists, path=" << tablet->tablet_path();
         return Status::NotFound("tablet path not exists");
     }
-    if (tablet->init() != OLAP_SUCCESS) {
-        LOG(WARNING) << "Fail to init tablet, tablet=" << tablet->full_name();
-        return Status::InternalError("tablet init failed");
+    if (Status st = tablet->init(); !st.ok()) {
+        LOG(WARNING) << "Fail to init tablet " << tablet->full_name() << ": " << st;
+        return Status::InternalError("tablet init failed: " + st.to_string());
     }
     if (tablet->tablet_state() == TABLET_SHUTDOWN) {
-        LOG(INFO) << "Fail to load shutdown tablet_id=" << tablet_id << " schema_hash=" << schema_hash
-                  << " path=" << data_dir->path();
+        LOG(INFO) << "Loaded shutdown tablet " << tablet_id;
         std::unique_lock shutdown_tablets_wlock(_shutdown_tablets_lock);
         _shutdown_tablets.push_back(tablet);
         return Status::NotFound("tablet state is shutdown");
@@ -842,9 +830,8 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
 
 Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
                                            const string& schema_hash_path, bool force, bool restore) {
-    LOG(INFO) << "Loading tablet from dir. "
-              << " tablet_id=" << tablet_id << " schema_hash=" << schema_hash << " path=" << schema_hash_path
-              << " force=" << force << " restore=" << restore;
+    LOG(INFO) << "Loading tablet " << tablet_id << " from " << schema_hash_path << ". force=" << force
+              << " restore=" << restore;
     // not add lock here, because load_tablet_from_meta already add lock
     std::string header_path = TabletMeta::construct_header_file_path(schema_hash_path, tablet_id);
     // should change shard id before load tablet
@@ -853,7 +840,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
     int32_t shard = stol(shard_str);
     // load dir is called by clone, restore, storage migration
     // should change tablet uid when tablet object changed
-    if (TabletMeta::reset_tablet_uid(header_path) != OLAP_SUCCESS) {
+    if (Status st = TabletMeta::reset_tablet_uid(header_path); !st.ok()) {
         LOG(WARNING) << "Fail to set tablet uid when copied meta file. header_path=" << header_path;
         return Status::InternalError("reset tablet uid failed");
     }
@@ -864,7 +851,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
     }
 
     TabletMetaSharedPtr tablet_meta(new TabletMeta(_mem_tracker));
-    if (tablet_meta->create_from_file(header_path) != OLAP_SUCCESS) {
+    if (Status st = tablet_meta->create_from_file(header_path); !st.ok()) {
         LOG(WARNING) << "Fail to load tablet_meta. file_path=" << header_path;
         return Status::InternalError("fail to create tablet meta from file");
     }
@@ -894,15 +881,14 @@ void TabletManager::release_schema_change_lock(TTabletId tablet_id) {
 
 Status TabletManager::report_tablet_info(TTabletInfo* tablet_info) {
     StarRocksMetrics::instance()->report_tablet_requests_total.increment(1);
-    LOG(INFO) << "Reporting tablet info."
-              << " tablet_id=" << tablet_info->tablet_id << " schema_hash=" << tablet_info->schema_hash;
 
     TabletSharedPtr tablet = get_tablet(tablet_info->tablet_id, tablet_info->schema_hash);
     if (tablet == nullptr) {
-        LOG(WARNING) << "Fail to report table, can't find tablet. "
-                     << " tablet=" << tablet_info->tablet_id << " schema_hash=" << tablet_info->schema_hash;
+        LOG(WARNING) << "Fail to report tablet info: can't find tablet."
+                     << " tablet=" << tablet_info->tablet_id;
         return Status::NotFound("tablet not found");
     }
+    LOG(INFO) << "Reporting tablet info. tablet_id=" << tablet_info->tablet_id;
 
     tablet->build_tablet_report_info(tablet_info);
     VLOG(10) << "Reported tablet info.";
@@ -1023,10 +1009,8 @@ Status TabletManager::start_trash_sweep() {
                     continue;
                 }
                 if (tablet_meta->tablet_state() != TABLET_SHUTDOWN) {
-                    LOG(WARNING) << "Cannot remove normal state"
-                                 << " tablet_id=" << tablet_meta->tablet_id()
-                                 << " schema_hash=" << tablet_meta->schema_hash()
-                                 << " tablet_uid=" << (*it)->tablet_uid();
+                    LOG(WARNING) << "Cannot remove normal state tablet " << tablet_meta->tablet_id()
+                                 << ". tablet_uid=" << (*it)->tablet_uid();
                     it = _shutdown_tablets.erase(it);
                     continue;
                 }
@@ -1038,10 +1022,11 @@ Status TabletManager::start_trash_sweep() {
                     std::string meta_file_path = path_util::join_path_segments(
                             tablet->tablet_path(), std::to_string(tablet->tablet_id()) + ".hdr");
                     tablet->tablet_meta()->save(meta_file_path);
-                    LOG(INFO) << "Moving tablet_path=" << tablet_path << " to trash";
                     OLAPStatus rm_st = move_to_trash(tablet_path, tablet_path);
-                    if (rm_st != OLAP_SUCCESS) {
-                        LOG(WARNING) << "Fail to move tablet_path=" << tablet_path << " to trash";
+                    if (rm_st == OLAP_SUCCESS) {
+                        LOG(INFO) << "Moved " << tablet_path << " to trash";
+                    } else {
+                        LOG(WARNING) << "Fail to move " << tablet_path << " to trash";
                         ++it;
                         continue;
                     }
@@ -1056,24 +1041,21 @@ Status TabletManager::start_trash_sweep() {
                     LOG(WARNING) << "Fail to clear tablet meta: " << st;
                     ++it;
                 } else {
-                    LOG(INFO) << "Removed tablet_id=" << tablet->tablet_id() << " tablet_path=" << tablet_path
-                              << " to trash";
                     it = _shutdown_tablets.erase(it);
                     ++clean_num;
                 }
             } else if (st.is_not_found()) {
                 // if could not find tablet info in meta store, then check if dir existed
-                std::string tablet_path = (*it)->tablet_path();
-                if (Env::Default()->path_exists(tablet_path).ok()) {
-                    LOG(WARNING) << "Cannot remove tablet_id=" << (*it)->tablet_id()
-                                 << " schema_hash=" << (*it)->schema_hash() << ", tablet dir still exist";
+                st = Env::Default()->path_exists((*it)->tablet_path());
+                if (st.ok()) {
+                    LOG(WARNING) << "Cannot remove tablet " << (*it)->tablet_id() << ": tablet meta not found";
                     ++it;
-                } else {
-                    LOG(INFO) << "Cannot remove tablet_id=" << (*it)->tablet_id()
-                              << " schema_hash=" << (*it)->schema_hash() << " tablet_path=" << tablet_path
-                              << ", tablet dir does not exist";
-
+                } else if (st.is_not_found()) {
+                    LOG(INFO) << "Removed tablet " << (*it)->tablet_id();
                     it = _shutdown_tablets.erase(it);
+                } else {
+                    LOG(WARNING) << "Fail to check path " << (*it)->tablet_path() << ": " << st;
+                    ++it;
                 }
             } else {
                 LOG(WARNING) << "Fail to get tablet meta: " << st;
@@ -1232,7 +1214,7 @@ void TabletManager::_build_tablet_stat() {
 }
 
 Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& request, Tablet* tablet) {
-    OLAPStatus res = OLAP_SUCCESS;
+    Status st;
     if (request.version < 1) {
         LOG(WARNING) << "init version of tablet should at least 1. req.ver=" << request.version;
         return Status::InvalidArgument("invalid version");
@@ -1259,28 +1241,28 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
             context.segments_overlap = OVERLAP_UNKNOWN;
 
             std::unique_ptr<RowsetWriter> builder;
-            res = RowsetFactory::create_rowset_writer(context, &builder);
-            if (res != OLAP_SUCCESS) {
-                LOG(WARNING) << "failed to init rowset writer for tablet " << tablet->full_name();
+            st = RowsetFactory::create_rowset_writer(context, &builder);
+            if (!st.ok()) {
+                LOG(WARNING) << "failed to init rowset writer for tablet " << tablet->full_name() << ": " << st;
                 break;
             }
-            res = builder->flush();
-            if (res != OLAP_SUCCESS) {
+            if (builder->flush() != OLAP_SUCCESS) {
                 LOG(WARNING) << "failed to flush rowset writer for tablet " << tablet->full_name();
+                st = Status::InternalError("flush rowset failed");
                 break;
             }
 
             new_rowset = builder->build();
-            res = tablet->add_rowset(new_rowset, false);
-            if (res != OLAP_SUCCESS) {
+            st = tablet->add_rowset(new_rowset, false);
+            if (!st.ok()) {
                 LOG(WARNING) << "failed to add rowset for tablet " << tablet->full_name();
                 break;
             }
-        } while (0);
+        } while (false);
 
         // Unregister index and delete files(index and data) if failed
-        if (res != OLAP_SUCCESS) {
-            LOG(WARNING) << "fail to create initial rowset. res=" << res << " version=" << version;
+        if (!st.ok()) {
+            LOG(WARNING) << "fail to create initial rowset: " << st << " version=" << version;
             StorageEngine::instance()->add_unused_rowset(new_rowset);
             return Status::InternalError("fail to create initial rowset");
         }
@@ -1288,7 +1270,7 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
     tablet->set_cumulative_layer_point(request.version + 1);
     // NOTE: should not save tablet meta here, because it will be saved if add to map successfully
 
-    return res == OLAP_SUCCESS ? Status::OK() : Status::InternalError("");
+    return st;
 }
 
 Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& request, DataDir* store,
@@ -1314,7 +1296,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
             //    to the new column
             size_t old_col_idx = 0;
             for (old_col_idx = 0; old_col_idx < old_num_columns; ++old_col_idx) {
-                const std::string& old_name = base_tablet->tablet_schema().column(old_col_idx).name();
+                auto old_name = base_tablet->tablet_schema().column(old_col_idx).name();
                 if (old_name == column.column_name) {
                     uint32_t old_unique_id = base_tablet->tablet_schema().column(old_col_idx).unique_id();
                     col_idx_to_unique_id[new_col_idx] = old_unique_id;
@@ -1337,17 +1319,14 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
     }
 
     RowsetTypePB rowset_type = RowsetTypePB::BETA_ROWSET;
-    if (TabletMeta::create(_mem_tracker, request, TabletUid::gen_uid(), shard_id, next_unique_id, col_idx_to_unique_id,
-                           rowset_type, tablet_meta) != OLAP_SUCCESS) {
-        return Status::InternalError("fail to create tablet meta");
-    }
-    return Status::OK();
+    return TabletMeta::create(_mem_tracker, request, TabletUid::gen_uid(), shard_id, next_unique_id,
+                              col_idx_to_unique_id, rowset_type, tablet_meta);
 }
 
 Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, SchemaHash schema_hash, bool keep_state) {
     TabletSharedPtr dropped_tablet = _get_tablet_unlocked(tablet_id, schema_hash);
     if (dropped_tablet == nullptr) {
-        LOG(WARNING) << "Fail to drop nonexistent tablet_id=" << tablet_id << " schema_hash=" << schema_hash;
+        LOG(WARNING) << "Fail to drop nonexistent tablet " << tablet_id;
         return Status::NotFound("");
     }
     tablet_map_t& tablet_map = _get_tablet_map(tablet_id);
@@ -1365,8 +1344,7 @@ Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, Schema
         if (!keep_state) {
             // drop tablet will update tablet meta, should lock
             std::unique_lock wrlock(tablet->get_header_lock());
-            LOG(INFO) << "Shutting down tablet_id=" << tablet_id << " schema_hash=" << schema_hash
-                      << " tablet_path=" << dropped_tablet->tablet_path();
+            LOG(INFO) << "Shutting down tablet " << tablet_id;
             // NOTE: has to update tablet here, but must not update tablet meta directly.
             // because other thread may hold the tablet object, they may save meta too.
             // If update meta directly here, other thread may override the meta
@@ -1386,14 +1364,12 @@ Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, Schema
 }
 
 TabletSharedPtr TabletManager::_get_tablet_unlocked(TTabletId tablet_id, SchemaHash schema_hash) {
-    VLOG(3) << "begin to get tablet. tablet_id=" << tablet_id << ", schema_hash=" << schema_hash;
     tablet_map_t& tablet_map = _get_tablet_map(tablet_id);
     auto it = tablet_map.find(tablet_id);
     if (it != tablet_map.end()) {
         for (TabletSharedPtr tablet : it->second.table_arr) {
             CHECK(tablet != nullptr) << "tablet is nullptr. tablet_id=" << tablet_id;
             if (tablet->equal(tablet_id, schema_hash)) {
-                VLOG(3) << "get tablet success. tablet_id=" << tablet_id << ", schema_hash=" << schema_hash;
                 return tablet;
             }
         }
@@ -1489,7 +1465,7 @@ Status TabletManager::create_tablet_from_snapshot(DataDir* store, TTabletId tabl
     // DO NOT access tablet->updates() until tablet has been init()-ed.
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, store);
     if (tablet == nullptr) {
-        LOG(WARNING) << "Fail to load tablet_id=" << tablet_id << " schema_hash=" << schema_hash;
+        LOG(WARNING) << "Fail to load tablet " << tablet_id;
         return Status::InternalError("Fail to create tablet");
     }
     // NOTE: do NOT touch snapshot_meta->tablet_meta since here, it has been modified by
@@ -1511,7 +1487,7 @@ Status TabletManager::create_tablet_from_snapshot(DataDir* store, TTabletId tabl
 
     RETURN_IF_ERROR(meta_store->write_batch(&wb));
 
-    if (tablet->init() != OLAP_SUCCESS) {
+    if (!tablet->init().ok()) {
         LOG(WARNING) << "Fail to init cloned tablet " << tablet_id << ", try to clear meta store";
         wb.Clear();
         RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(store, &wb, tablet_id));

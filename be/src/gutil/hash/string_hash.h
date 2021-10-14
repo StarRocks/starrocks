@@ -11,7 +11,7 @@
 #ifndef UTIL_HASH_STRING_HASH_H_
 #define UTIL_HASH_STRING_HASH_H_
 
-#include <stddef.h>
+#include <cstddef>
 
 #include "gutil/hash/city.h"
 #include "gutil/hash/jenkins.h"

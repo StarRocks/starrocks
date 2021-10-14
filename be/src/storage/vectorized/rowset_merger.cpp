@@ -2,6 +2,8 @@
 
 #include "storage/vectorized/rowset_merger.h"
 
+#include <memory>
+
 #include "gutil/stl_util.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/beta_rowset_writer.h"
@@ -11,15 +13,13 @@
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 
-namespace starrocks {
-
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class RowsetMerger {
 public:
-    RowsetMerger() {}
+    RowsetMerger() = default;
 
-    virtual ~RowsetMerger() {}
+    virtual ~RowsetMerger() = default;
 
     virtual Status do_merge(Tablet& tablet, int64_t version, const Schema& schema,
                             const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg) = 0;
@@ -39,7 +39,7 @@ struct MergeEntry {
     // set |encode_schema| if require encode chunk pk columns
     const vectorized::Schema* encode_schema = nullptr;
 
-    MergeEntry() {}
+    MergeEntry() = default;
     ~MergeEntry() { close(); }
 
     string debug_string() {
@@ -140,9 +140,9 @@ struct MergeEntryCmp {
 template <class T>
 class RowsetMergerImpl : public RowsetMerger {
 public:
-    RowsetMergerImpl() {}
+    RowsetMergerImpl() = default;
 
-    ~RowsetMergerImpl() override {}
+    ~RowsetMergerImpl() override = default;
 
     Status _fill_heap(MergeEntry<T>* entry) {
         auto st = entry->next();
@@ -233,12 +233,12 @@ public:
             }
         }
         size_t total_input_size = 0;
-        for (int i = 0; i < rowsets.size(); i++) {
-            total_input_size += rowsets[i]->data_disk_size();
+        for (const auto& i : rowsets) {
+            total_input_size += i->data_disk_size();
             _entries.emplace_back(new MergeEntry<T>());
             MergeEntry<T>& entry = *_entries.back();
-            entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowsets[i]);
-            auto rowset = rowsets[i].get();
+            entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(i);
+            auto rowset = i.get();
             auto beta_rowset = down_cast<BetaRowset*>(rowset);
             auto res = beta_rowset->get_segment_iterators2(schema, tablet.data_dir()->get_meta(), version, &stats);
             if (!res.ok()) {
@@ -336,31 +336,31 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
     auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema);
     switch (key_type) {
     case OLAP_FIELD_TYPE_BOOL:
-        merger.reset(new RowsetMergerImpl<uint8_t>());
+        merger = std::make_unique<RowsetMergerImpl<uint8_t>>();
         break;
     case OLAP_FIELD_TYPE_TINYINT:
-        merger.reset(new RowsetMergerImpl<int8_t>());
+        merger = std::make_unique<RowsetMergerImpl<int8_t>>();
         break;
     case OLAP_FIELD_TYPE_SMALLINT:
-        merger.reset(new RowsetMergerImpl<int16_t>());
+        merger = std::make_unique<RowsetMergerImpl<int16_t>>();
         break;
     case OLAP_FIELD_TYPE_INT:
-        merger.reset(new RowsetMergerImpl<int32_t>());
+        merger = std::make_unique<RowsetMergerImpl<int32_t>>();
         break;
     case OLAP_FIELD_TYPE_BIGINT:
-        merger.reset(new RowsetMergerImpl<int64_t>());
+        merger = std::make_unique<RowsetMergerImpl<int64_t>>();
         break;
     case OLAP_FIELD_TYPE_LARGEINT:
-        merger.reset(new RowsetMergerImpl<int128_t>());
+        merger = std::make_unique<RowsetMergerImpl<int128_t>>();
         break;
     case OLAP_FIELD_TYPE_VARCHAR:
-        merger.reset(new RowsetMergerImpl<Slice>());
+        merger = std::make_unique<RowsetMergerImpl<Slice>>();
         break;
     case OLAP_FIELD_TYPE_DATE_V2:
-        merger.reset(new RowsetMergerImpl<int32_t>());
+        merger = std::make_unique<RowsetMergerImpl<int32_t>>();
         break;
     case OLAP_FIELD_TYPE_TIMESTAMP:
-        merger.reset(new RowsetMergerImpl<int64_t>());
+        merger = std::make_unique<RowsetMergerImpl<int64_t>>();
         break;
     default:
         return Status::NotSupported(StringPrintf("primary key type not support: %s", field_type_to_string(key_type)));
@@ -368,6 +368,4 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
     return merger->do_merge(tablet, version, schema, rowsets, writer, cfg);
 }
 
-} // namespace vectorized
-
-} // namespace starrocks
+} // namespace starrocks::vectorized

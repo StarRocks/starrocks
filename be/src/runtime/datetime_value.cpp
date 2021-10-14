@@ -21,10 +21,9 @@
 
 #include "runtime/datetime_value.h"
 
-#include <ctype.h>
-#include <string.h>
-#include <time.h>
-
+#include <cctype>
+#include <cstring>
+#include <ctime>
 #include <limits>
 #include <sstream>
 
@@ -1394,7 +1393,7 @@ bool DateTimeValue::from_date_format_str(const char* format, int format_len, con
     }
     if (sub_val_end) {
         *sub_val_end = val;
-        return 0;
+        return false;
     }
     // Year day
     if (yearday > 0) {

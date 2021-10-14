@@ -6,9 +6,9 @@
 #define STARROCKS_BE_SRC_OLAP_LRU_CACHE_H
 
 #include <rapidjson/document.h>
-#include <stdint.h>
-#include <string.h>
 
+#include <cstdint>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -51,7 +51,7 @@ extern Cache* new_lru_cache(size_t capacity);
 
 class CacheKey {
 public:
-    CacheKey() : _data(nullptr), _size(0) {}
+    CacheKey() {}
     // Create a slice that refers to d[0,n-1].
     CacheKey(const char* d, size_t n) : _data(d), _size(n) {}
 
@@ -61,7 +61,7 @@ public:
     // Create a slice that refers to s[0,strlen(s)-1]
     CacheKey(const char* s) : _data(s), _size(strlen(s)) {}
 
-    ~CacheKey() {}
+    ~CacheKey() = default;
 
     // Return a pointer to the beginning of the referenced data
     const char* data() const { return _data; }
@@ -127,8 +127,8 @@ private:
         return result;
     }
 
-    const char* _data;
-    size_t _size;
+    const char* _data{nullptr};
+    size_t _size{0};
 };
 
 // The entry with smaller CachePriority will evict firstly
@@ -136,7 +136,7 @@ enum class CachePriority { NORMAL = 0, DURABLE = 1 };
 
 class Cache {
 public:
-    Cache() {}
+    Cache() = default;
 
     // Destroys all existing entries by calling the "deleter"
     // function that was passed to the constructor.
@@ -202,7 +202,8 @@ public:
     virtual void get_cache_status(rapidjson::Document* document) = 0;
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(Cache);
+    Cache(const Cache&) = delete;
+    const Cache& operator=(const Cache&) = delete;
 };
 
 // An entry is a variable length heap-allocated structure.  Entries
@@ -246,7 +247,7 @@ typedef struct LRUHandle {
 
 class HandleTable {
 public:
-    HandleTable() : _length(0), _elems(0), _list(nullptr) { _resize(); }
+    HandleTable() { _resize(); }
 
     ~HandleTable() { delete[] _list; }
 
@@ -259,9 +260,9 @@ public:
 private:
     // The tablet consists of an array of buckets where each bucket is
     // a linked list of cache entries that hash into the bucket.
-    uint32_t _length;
-    uint32_t _elems;
-    LRUHandle** _list;
+    uint32_t _length{0};
+    uint32_t _elems{0};
+    LRUHandle** _list{nullptr};
 
     // Return a pointer to slot that points to a cache entry that
     // matches key/hash.  If there is no such cache entry, return a
@@ -305,8 +306,8 @@ private:
 
     // _mutex protects the following state.
     std::mutex _mutex;
-    size_t _usage;
-    uint64_t _last_id;
+    size_t _usage{0};
+    uint64_t _last_id{0};
 
     // Dummy head of LRU list.
     // lru.prev is newest entry, lru.next is oldest entry.
@@ -315,8 +316,8 @@ private:
 
     HandleTable _table;
 
-    uint64_t _lookup_count;
-    uint64_t _hit_count;
+    uint64_t _lookup_count{0};
+    uint64_t _hit_count{0};
 };
 
 static const int kNumShardBits = 4;
@@ -325,7 +326,7 @@ static const int kNumShards = 1 << kNumShardBits;
 class ShardedLRUCache : public Cache {
 public:
     explicit ShardedLRUCache(size_t capacity);
-    ~ShardedLRUCache() override {}
+    ~ShardedLRUCache() override = default;
     Handle* insert(const CacheKey& key, void* value, size_t charge, void (*deleter)(const CacheKey& key, void* value),
                    CachePriority priority = CachePriority::NORMAL) override;
     Handle* lookup(const CacheKey& key) override;

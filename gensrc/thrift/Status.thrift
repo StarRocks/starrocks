@@ -79,6 +79,7 @@ enum TStatusCode {
     INCOMPLETE          = 44,
     OLAP_ERR_VERSION_ALREADY_MERGED = 45,
     DATA_QUALITY_ERROR  = 46,
+    DUPLICATE_RPC_INVOCATION        = 47,
 
     UNKNOWN = 50
 }

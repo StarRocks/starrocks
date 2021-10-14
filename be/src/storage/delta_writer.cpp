@@ -130,7 +130,9 @@ OLAPStatus DeltaWriter::init() {
     writer_context.txn_id = _req.txn_id;
     writer_context.load_id = _req.load_id;
     writer_context.segments_overlap = OVERLAPPING;
-    RETURN_NOT_OK(RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer));
+    if (Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer); !st.ok()) {
+        return OLAP_ERR_OTHER_ERROR;
+    }
 
     _tablet_schema = &(_tablet->tablet_schema());
     _schema = std::make_unique<Schema>(*_tablet_schema);

@@ -32,9 +32,10 @@
 #define PLATFORM_WINDOWS 1
 #endif
 
-#include <ctype.h>
 #include <fcntl.h>  // for open()
 #include <unistd.h> // for read()
+
+#include <cctype>
 
 #if defined __MACH__    // Mac OS X, almost certainly
 #include <sys/sysctl.h> // how we figure out numcpu's on OS X

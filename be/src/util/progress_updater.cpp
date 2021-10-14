@@ -21,20 +21,21 @@
 
 #include "util/progress_updater.h"
 
+#include <utility>
+
 #include "common/logging.h"
 
 namespace starrocks {
 
-ProgressUpdater::ProgressUpdater(const std::string& label, int64_t total, int period)
-        : _label(label),
+ProgressUpdater::ProgressUpdater(std::string label, int64_t total, int period)
+        : _label(std::move(label)),
           _logging_level(2),
           _total(total),
           _update_period(period),
           _num_complete(0),
           _last_output_percentage(0) {}
 
-ProgressUpdater::ProgressUpdater()
-        : _logging_level(2), _total(0), _update_period(0), _num_complete(0), _last_output_percentage(0) {}
+ProgressUpdater::ProgressUpdater() {}
 
 void ProgressUpdater::update(int64_t delta) {
     DCHECK_GE(delta, 0);

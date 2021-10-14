@@ -3,16 +3,28 @@
 #include <gtest/gtest.h>
 #include <math.h>
 
+#include <algorithm>
+
+#include "column/array_column.h"
+#include "column/column_builder.h"
+#include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/sum.h"
+#include "exprs/anyval_util.h"
+#include "exprs/vectorized/arithmetic_operation.h"
+#include "gen_cpp/Data_types.h"
+#include "gutil/casts.h"
 #include "runtime/vectorized/time_types.h"
 #include "testutil/function_utils.h"
 #include "udf/udf_internal.h"
 #include "util/bitmap_value.h"
 #include "util/slice.h"
+#include "util/thrift_util.h"
+#include "util/unaligned_access.h"
 
 namespace starrocks::vectorized {
 
@@ -617,6 +629,58 @@ TEST_F(AggregateTest, test_sum_distinct) {
                                                       DecimalV2Value(21));
 }
 
+TEST_F(AggregateTest, test_dict_merge) {
+    const AggregateFunction* func = get_aggregate_function("dict_merge", TYPE_ARRAY, TYPE_VARCHAR, false);
+    ColumnBuilder<TYPE_VARCHAR> builder;
+    builder.append(Slice("key1"));
+    builder.append(Slice("key2"));
+    builder.append(Slice("starrocks-1"));
+    builder.append(Slice("starrocks-starrocks"));
+    builder.append(Slice("starrocks-starrocks"));
+    auto data_col = builder.build(false);
+
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(0);
+    offsets->append(2);
+    offsets->append(5);
+    // []
+    // [key1, key2]
+    // [sr-1, sr-2, sr-3]
+    auto col = ArrayColumn::create(data_col, offsets);
+    const Column* column = col.get();
+    std::unique_ptr<ManagedAggregateState> state = ManagedAggregateState::Make(func);
+    func->update_batch_single_state(ctx, col->size(), &column, state->mutable_data());
+
+    auto res = BinaryColumn::create();
+    func->finalize_to_column(ctx, state->data(), res.get());
+
+    ASSERT_EQ(res->size(), 1);
+    auto slice = res->get_slice(0);
+    std::map<int, std::string> datas;
+    auto dict = from_json_string<TGlobalDict>(std::string(slice.data, slice.size));
+    int sz = dict.ids.size();
+    for (int i = 0; i < sz; ++i) {
+        datas.emplace(dict.ids[i], dict.strings[i]);
+    }
+    ASSERT_EQ(dict.ids.size(), dict.strings.size());
+
+    std::set<std::string> origin_data;
+    std::set<int> ids;
+    auto binary_column = down_cast<BinaryColumn*>(data_col.get());
+    for (int i = 0; i < binary_column->size(); ++i) {
+        auto slice = binary_column->get_slice(i);
+        origin_data.emplace(slice.data, slice.size);
+    }
+
+    for (const auto& [k, v] : datas) {
+        ASSERT_TRUE(origin_data.count(v) != 0);
+        origin_data.erase(v);
+    }
+
+    ASSERT_TRUE(origin_data.empty());
+}
+
 TEST_F(AggregateTest, test_sum_nullable) {
     using NullableSumInt64 = NullableAggregateFunctionState<SumAggregateState<int64_t>>;
     const AggregateFunction* sum_null = get_aggregate_function("sum", TYPE_INT, TYPE_BIGINT, true);
@@ -736,6 +800,51 @@ TEST_F(AggregateTest, test_group_concat) {
     group_concat_function->finalize_to_column(ctx, state->data(), result_column.get());
 
     ASSERT_EQ("starrocks0, starrocks1, starrocks2, starrocks3, starrocks4, starrocks5", result_column->get_data()[0]);
+}
+
+TEST_F(AggregateTest, test_group_concat_const_seperator) {
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR))};
+
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types)));
+
+    const AggregateFunction* group_concat_function =
+            get_aggregate_function("group_concat", TYPE_VARCHAR, TYPE_VARCHAR, false);
+    std::unique_ptr<ManagedAggregateState> state = ManagedAggregateState::Make(group_concat_function);
+
+    auto data_column = BinaryColumn::create();
+
+    data_column->append("abc");
+    data_column->append("bcd");
+    data_column->append("cde");
+    data_column->append("def");
+    data_column->append("efg");
+    data_column->append("fgh");
+    data_column->append("ghi");
+    data_column->append("hij");
+    data_column->append("ijk");
+
+    auto separator_column = ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1);
+
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(2);
+    raw_columns[0] = data_column.get();
+    raw_columns[1] = separator_column.get();
+
+    Columns const_columns;
+    const_columns.emplace_back(data_column);
+    const_columns.emplace_back(separator_column);
+    local_ctx->impl()->set_constant_columns(const_columns);
+
+    // test update
+    group_concat_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                     state->mutable_data());
+
+    auto result_column = BinaryColumn::create();
+    group_concat_function->finalize_to_column(local_ctx.get(), state->data(), result_column.get());
+
+    ASSERT_EQ("abcbcdcdedefefgfghghihijijk", result_column->get_data()[0]);
 }
 
 TEST_F(AggregateTest, test_intersect_count) {

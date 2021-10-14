@@ -26,6 +26,7 @@
 #include <functional>
 #include <sstream>
 #include <type_traits>
+#include <utility>
 
 #include "orc/BloomFilter.hh"
 #include "orc/Common.hh"
@@ -33,23 +34,23 @@
 
 namespace orc {
 
-PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName, const Literal& literal)
-        : mOperator(op), mType(type), mColumnName(colName) {
+PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, std::string colName, const Literal& literal)
+        : mOperator(op), mType(type), mColumnName(std::move(colName)) {
     mLiterals.emplace_back(literal);
     mHashCode = hashCode();
     validate();
 }
 
-PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName,
+PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, std::string colName,
                              const std::initializer_list<Literal>& literals)
-        : mOperator(op), mType(type), mColumnName(colName), mLiterals(literals.begin(), literals.end()) {
+        : mOperator(op), mType(type), mColumnName(std::move(colName)), mLiterals(literals.begin(), literals.end()) {
     mHashCode = hashCode();
     validate();
 }
 
-PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, const std::string& colName,
+PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, std::string colName,
                              const std::vector<Literal>& literals)
-        : mOperator(op), mType(type), mColumnName(colName), mLiterals(literals.begin(), literals.end()) {
+        : mOperator(op), mType(type), mColumnName(std::move(colName)), mLiterals(literals.begin(), literals.end()) {
     mHashCode = hashCode();
     validate();
 }

@@ -38,7 +38,7 @@
 
 namespace starrocks {
 
-static std::string s_empty = "";
+static std::string s_empty;
 
 HttpRequest::HttpRequest(evhttp_request* evhttp_request) : _ev_req(evhttp_request) {}
 

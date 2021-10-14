@@ -22,7 +22,7 @@
 #ifndef  STARROCKS_BE_SRC_COMMON_UTIL_MEM_UTIL_HPP
 #define  STARROCKS_BE_SRC_COMMON_UTIL_MEM_UTIL_HPP
 
-#include <string.h>
+#include <cstring>
 
 namespace starrocks {
 
@@ -624,7 +624,6 @@ B255:
 #endif
 
     memcpy(dst, src, size);
-    return;
 }
 
 }

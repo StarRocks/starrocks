@@ -63,8 +63,8 @@ public:
         _thread_pool.join();
 
         LOG(INFO) << _task_map.size() << " not executed tasks left, cleanup";
-        for (auto it = _task_map.begin(); it != _task_map.end(); ++it) {
-            auto ctx = it->second;
+        for (auto& it : _task_map) {
+            auto ctx = it.second;
             if (ctx->unref()) {
                 delete ctx;
             }

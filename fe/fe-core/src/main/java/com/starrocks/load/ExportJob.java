@@ -254,7 +254,6 @@ public class ExportJob implements Writable {
 
         ScanNode scanNode = genScanNode();
         tabletLocations = scanNode.getScanRangeLocations(0);
-        scanNode.setUseVectorized(scanNode.isVectorized() && Config.vectorized_load_enable);
         if (tabletLocations == null) {
             // not olap scan node
             PlanFragment fragment = genPlanFragment(exportTable.getType(), scanNode, 0);
@@ -291,7 +290,6 @@ public class ExportJob implements Writable {
                 }
 
                 OlapScanNode taskScanNode = genOlapScanNodeByLocation(taskTabletLocations);
-                taskScanNode.setUseVectorized(taskScanNode.isVectorized() && Config.vectorized_load_enable);
                 scanNodes.add(taskScanNode);
                 PlanFragment fragment = genPlanFragment(exportTable.getType(), taskScanNode, taskIdx++);
                 fragments.add(fragment);

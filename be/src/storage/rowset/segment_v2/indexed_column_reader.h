@@ -109,8 +109,8 @@ class IndexedColumnReader {
 
 public:
     // Does *NOT* take the ownership of |block_mgr|.
-    IndexedColumnReader(fs::BlockManager* block_mgr, std::string file_name, const IndexedColumnMetaPB& meta)
-            : _block_mgr(block_mgr), _file_name(std::move(file_name)), _meta(meta){};
+    IndexedColumnReader(fs::BlockManager* block_mgr, std::string file_name, IndexedColumnMetaPB meta)
+            : _block_mgr(block_mgr), _file_name(std::move(file_name)), _meta(std::move(meta)){};
 
     Status load(bool use_page_cache, bool kept_in_memory);
 

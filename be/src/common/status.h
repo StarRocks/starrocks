@@ -17,7 +17,7 @@ namespace starrocks {
 
 class Status {
 public:
-    Status() : _state(nullptr) {}
+    Status() {}
     ~Status() noexcept {
         if (!is_moved_from(_state)) {
             delete[] _state;
@@ -131,6 +131,9 @@ public:
     static Status VersionAlreadyMerged(const Slice& msg, int16_t precise_code = -1, const Slice& msg2 = Slice()) {
         return Status(TStatusCode::OLAP_ERR_VERSION_ALREADY_MERGED, msg, precise_code, msg2);
     }
+    static Status DuplicateRpcInvocation(const Slice& msg, int16_t precise_code = -1, const Slice& msg2 = Slice()) {
+        return Status(TStatusCode::DUPLICATE_RPC_INVOCATION, msg, precise_code, msg2);
+    }
 
     bool ok() const { return _state == nullptr; }
 
@@ -158,6 +161,8 @@ public:
     bool is_data_quality_error() const { return code() == TStatusCode::DATA_QUALITY_ERROR; }
 
     bool is_version_already_merged() const { return code() == TStatusCode::OLAP_ERR_VERSION_ALREADY_MERGED; }
+
+    bool is_duplicate_rpc_invocation() const { return code() == TStatusCode::DUPLICATE_RPC_INVOCATION; }
 
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
@@ -243,7 +248,7 @@ private:
     //    _state[4]    == code
     //    _state[5..6] == precise_code
     //    _state[7..]  == message
-    const char* _state;
+    const char* _state{nullptr};
 };
 
 inline std::ostream& operator<<(std::ostream& os, const Status& st) {

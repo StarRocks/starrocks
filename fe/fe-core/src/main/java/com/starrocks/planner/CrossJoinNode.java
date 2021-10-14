@@ -124,17 +124,4 @@ public class CrossJoinNode extends PlanNode {
 
         return true;
     }
-
-    @Override
-    public void setUseVectorized(boolean flag) {
-        this.useVectorized = flag;
-
-        for (Expr expr : conjuncts) {
-            expr.setUseVectorized(flag);
-        }
-
-        for (PlanNode node : getChildren()) {
-            node.setUseVectorized(flag);
-        }
-    }
 }

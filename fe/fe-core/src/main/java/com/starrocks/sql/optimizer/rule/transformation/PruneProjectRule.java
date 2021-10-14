@@ -45,6 +45,10 @@ public class PruneProjectRule extends TransformationRule {
             return input.getInputs();
         }
 
+        if (output.isEmpty()) {
+            return input.getInputs();
+        }
+
         return Collections.emptyList();
     }
 

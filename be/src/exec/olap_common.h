@@ -261,13 +261,13 @@ public:
 
 private:
     std::string _column_name;
-    PrimitiveType _column_type; // Column type (eg: TINYINT,SMALLINT,INT,BIGINT)
-    int _precision;             // casting a decimalv3-typed value into string need precision
-    int _scale;                 // casting a decimalv3-typed value into string need scale
-    T _type_min;                // Column type's min value
-    T _type_max;                // Column type's max value
-    T _low_value;               // Column's low value, closed interval at left
-    T _high_value;              // Column's high value, open interval at right
+    PrimitiveType _column_type{INVALID_TYPE}; // Column type (eg: TINYINT,SMALLINT,INT,BIGINT)
+    int _precision;                           // casting a decimalv3-typed value into string need precision
+    int _scale;                               // casting a decimalv3-typed value into string need scale
+    T _type_min;                              // Column type's min value
+    T _type_max;                              // Column type's max value
+    T _low_value;                             // Column's low value, closed interval at left
+    T _high_value;                            // Column's high value, open interval at right
     SQLFilterOp _low_op;
     SQLFilterOp _high_op;
     std::set<T> _fixed_values; // Column's fixed values
@@ -280,7 +280,7 @@ private:
 
 class OlapScanKeys {
 public:
-    OlapScanKeys() : _has_range_value(false), _begin_include(true), _end_include(true), _is_convertible(true) {}
+    OlapScanKeys() {}
 
     template <class T>
     Status extend_scan_key(ColumnValueRange<T>& range, int32_t max_scan_key_num);
@@ -325,10 +325,10 @@ public:
 private:
     std::vector<OlapTuple> _begin_scan_keys;
     std::vector<OlapTuple> _end_scan_keys;
-    bool _has_range_value;
-    bool _begin_include;
-    bool _end_include;
-    bool _is_convertible;
+    bool _has_range_value{false};
+    bool _begin_include{true};
+    bool _end_include{true};
+    bool _is_convertible{true};
 };
 
 // clang-format off
@@ -351,7 +351,7 @@ typedef boost::variant<
 // clang-format on
 
 template <class T>
-inline ColumnValueRange<T>::ColumnValueRange() : _column_type(INVALID_TYPE) {}
+inline ColumnValueRange<T>::ColumnValueRange() {}
 
 template <class T>
 inline ColumnValueRange<T>::ColumnValueRange(std::string col_name, PrimitiveType type, T min, T max)
@@ -773,14 +773,14 @@ inline Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t 
             _end_scan_keys.back().add_value(
                     cast_to_string(range.get_range_max_value(), range.type(), range.precision(), range.scale()));
         } else {
-            for (int i = 0; i < _begin_scan_keys.size(); ++i) {
-                _begin_scan_keys[i].add_value(
+            for (auto& _begin_scan_key : _begin_scan_keys) {
+                _begin_scan_key.add_value(
                         cast_to_string(range.get_range_min_value(), range.type(), range.precision(), range.scale()),
                         range.is_low_value_mininum());
             }
 
-            for (int i = 0; i < _end_scan_keys.size(); ++i) {
-                _end_scan_keys[i].add_value(
+            for (auto& _end_scan_key : _end_scan_keys) {
+                _end_scan_key.add_value(
                         cast_to_string(range.get_range_max_value(), range.type(), range.precision(), range.scale()));
             }
         }

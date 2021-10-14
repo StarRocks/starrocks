@@ -196,8 +196,8 @@ std::string SymbolsUtil::mangle_user_function(const std::string& fn_name, const 
         ss << "N";                        // Start namespace
         seq_id += name_tokens.size() - 1; // Append for all the name space tokens.
     }
-    for (int i = 0; i < name_tokens.size(); ++i) {
-        append_mangled_token(name_tokens[i], &ss);
+    for (auto& name_token : name_tokens) {
+        append_mangled_token(name_token, &ss);
     }
     if (name_tokens.size() > 1) {
         ss << "E"; // End fn namespace
@@ -275,8 +275,8 @@ std::string SymbolsUtil::mangle_prepare_or_close_function(const std::string& fn_
         ss << "N";                        // Start namespace
         seq_id += name_tokens.size() - 1; // Append for all the name space tokens.
     }
-    for (int i = 0; i < name_tokens.size(); ++i) {
-        append_mangled_token(name_tokens[i], &ss);
+    for (auto& name_token : name_tokens) {
+        append_mangled_token(name_token, &ss);
     }
     if (name_tokens.size() > 1) {
         ss << "E"; // End fn namespace

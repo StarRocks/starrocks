@@ -49,7 +49,7 @@ HttpService::HttpService(ExecEnv* env, int port, int num_threads)
           _ev_http_server(new EvHttpServer(port, num_threads)),
           _web_page_handler(new WebPageHandler(_ev_http_server.get())) {}
 
-HttpService::~HttpService() {}
+HttpService::~HttpService() = default;
 
 Status HttpService::start() {
     add_default_path_handlers(_web_page_handler.get(), _env->process_mem_tracker());
@@ -114,7 +114,7 @@ Status HttpService::start() {
     CompactionAction* run_compaction_action = new CompactionAction(CompactionActionType::RUN_COMPACTION);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/compaction/run", run_compaction_action);
 
-    UpdateConfigAction* update_config_action = new UpdateConfigAction();
+    UpdateConfigAction* update_config_action = new UpdateConfigAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/update_config", update_config_action);
 
     RETURN_IF_ERROR(_ev_http_server->start());

@@ -91,7 +91,7 @@ private:
 };
 
 struct ExtColumnDesc {
-    ExtColumnDesc(const std::string& name, const TypeDescriptor& type) : name(name), type(type) {}
+    ExtColumnDesc(std::string name, TypeDescriptor type) : name(std::move(name)), type(std::move(type)) {}
 
     std::string name;
     TypeDescriptor type;
@@ -99,7 +99,7 @@ struct ExtColumnDesc {
 
 struct ExtPredicate {
     ExtPredicate(TExprNodeType::type node_type) : node_type(node_type) {}
-    virtual ~ExtPredicate() {}
+    virtual ~ExtPredicate() = default;
 
     TExprNodeType::type node_type;
 };
@@ -107,8 +107,8 @@ struct ExtPredicate {
 // this used for placeholder for compound_predicate
 // reserved for compound_not
 struct ExtCompPredicates : public ExtPredicate {
-    ExtCompPredicates(TExprOpcode::type expr_op, const std::vector<EsPredicate*>& es_predicates)
-            : ExtPredicate(TExprNodeType::COMPOUND_PRED), op(expr_op), conjuncts(es_predicates) {}
+    ExtCompPredicates(TExprOpcode::type expr_op, std::vector<EsPredicate*> es_predicates)
+            : ExtPredicate(TExprNodeType::COMPOUND_PRED), op(expr_op), conjuncts(std::move(es_predicates)) {}
 
     TExprOpcode::type op;
     std::vector<EsPredicate*> conjuncts;
@@ -153,9 +153,12 @@ struct ExtIsNullPredicate : public ExtPredicate {
 };
 
 struct ExtFunction : public ExtPredicate {
-    ExtFunction(TExprNodeType::type node_type, const std::string& func_name, std::vector<ExtColumnDesc> cols,
+    ExtFunction(TExprNodeType::type node_type, std::string func_name, std::vector<ExtColumnDesc> cols,
                 std::vector<ExtLiteral*> values)
-            : ExtPredicate(node_type), func_name(func_name), cols(std::move(cols)), values(std::move(values)) {}
+            : ExtPredicate(node_type),
+              func_name(std::move(func_name)),
+              cols(std::move(cols)),
+              values(std::move(values)) {}
 
     const std::string func_name;
     std::vector<ExtColumnDesc> cols;
@@ -167,7 +170,7 @@ public:
     EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, ObjectPool* pool);
     ~EsPredicate();
     const std::vector<ExtPredicate*>& get_predicate_list();
-    Status build_disjuncts_list(bool use_vectorized = false);
+    Status build_disjuncts_list(bool use_vectorized = true);
     // public for tests
     EsPredicate(const std::vector<ExtPredicate*>& all_predicates) { _disjuncts = all_predicates; };
 

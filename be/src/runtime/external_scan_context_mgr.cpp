@@ -23,6 +23,7 @@
 
 #include <chrono>
 #include <functional>
+#include <memory>
 #include <vector>
 
 #include "runtime/fragment_mgr.h"
@@ -34,8 +35,8 @@ namespace starrocks {
 
 ExternalScanContextMgr::ExternalScanContextMgr(ExecEnv* exec_env) : _exec_env(exec_env), _is_stop(false) {
     // start the reaper thread for gc the expired context
-    _keep_alive_reaper.reset(
-            new std::thread(std::bind<void>(std::mem_fn(&ExternalScanContextMgr::gc_expired_context), this)));
+    _keep_alive_reaper = std::make_unique<std::thread>(
+            std::bind<void>(std::mem_fn(&ExternalScanContextMgr::gc_expired_context), this));
     REGISTER_GAUGE_STARROCKS_METRIC(active_scan_context_count, [this]() {
         std::lock_guard<std::mutex> l(_lock);
         return _active_contexts.size();

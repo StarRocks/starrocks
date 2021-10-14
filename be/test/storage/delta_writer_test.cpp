@@ -266,13 +266,9 @@ public:
     TestDeltaWriter() {}
     ~TestDeltaWriter() {}
 
-    void SetUp() {
-        // Create local data dir for StorageEngine.
-        std::cout << "setup" << std::endl;
-    }
+    void SetUp() { std::cout << "setup" << std::endl; }
 
     void TearDown() {
-        // Remove all dir.
         std::cout << "tear down" << std::endl;
         //starrocks::tear_down();
         //ASSERT_EQ(OLAP_SUCCESS, remove_all_dir(config::storage_root_path));
@@ -419,8 +415,7 @@ TEST_F(TestDeltaWriter, write) {
         std::cout << "start to add inc rowset:" << rowset->rowset_id() << ", num rows:" << rowset->num_rows()
                   << ", version:" << rowset->version().first << "-" << rowset->version().second
                   << ", version_hash:" << rowset->version_hash() << std::endl;
-        res = tablet->add_inc_rowset(rowset);
-        ASSERT_EQ(OLAP_SUCCESS, res);
+        ASSERT_TRUE(tablet->add_inc_rowset(rowset).ok());
     }
     ASSERT_EQ(1, tablet->num_rows());
 

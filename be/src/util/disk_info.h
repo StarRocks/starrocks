@@ -26,6 +26,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <utility>
 
 #include "common/logging.h"
 #include "common/status.h"
@@ -95,14 +96,15 @@ private:
 
         // 0 based index.  Does not map to anything in the system, useful to index into
         // our structures
-        int id;
+        int id{0};
 
         bool is_rotational = false;
 
-        Disk() : name(""), id(0) {}
-        Disk(const std::string& name) : name(name), id(0), is_rotational(true) {}
-        Disk(const std::string& name, int id) : name(name), id(id), is_rotational(true) {}
-        Disk(const std::string& name, int id, bool is_rotational) : name(name), id(id), is_rotational(is_rotational) {}
+        Disk() {}
+        Disk(std::string name) : name(std::move(name)), id(0), is_rotational(true) {}
+        Disk(std::string name, int id) : name(std::move(name)), id(id), is_rotational(true) {}
+        Disk(std::string name, int id, bool is_rotational)
+                : name(std::move(name)), id(id), is_rotational(is_rotational) {}
     };
 
     // All disks

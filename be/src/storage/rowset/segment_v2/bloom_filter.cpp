@@ -21,18 +21,18 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 
 #include "gen_cpp/segment_v2.pb.h"
 #include "gutil/strings/substitute.h"
 #include "storage/rowset/segment_v2/block_split_bloom_filter.h"
 #include "storage/utils.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 Status BloomFilter::create(BloomFilterAlgorithmPB algorithm, std::unique_ptr<BloomFilter>* bf) {
     if (algorithm == BLOCK_BLOOM_FILTER) {
-        bf->reset(new BlockSplitBloomFilter());
+        *bf = std::make_unique<BlockSplitBloomFilter>();
     } else {
         return Status::InternalError(strings::Substitute("invalid bloom filter algorithm:$0", algorithm));
     }
@@ -66,5 +66,4 @@ uint32_t BloomFilter::_optimal_bit_num(uint64_t n, double fpp) {
     return num_bits;
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

@@ -22,14 +22,14 @@
 
 #include "Timezone.hh"
 
-#include <errno.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-
+#include <cerrno>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
 #include <map>
 #include <sstream>
+#include <utility>
 
 #include "orc/OrcFile.hh"
 
@@ -554,7 +554,7 @@ Version2Parser::~Version2Parser() {
 
 class TimezoneImpl : public Timezone {
 public:
-    TimezoneImpl(const std::string& name, const std::vector<unsigned char>& bytes);
+    TimezoneImpl(std::string name, const std::vector<unsigned char>& bytes);
     ~TimezoneImpl() override;
 
     /**
@@ -616,8 +616,8 @@ Timezone::~Timezone() {
     // PASS
 }
 
-TimezoneImpl::TimezoneImpl(const std::string& _filename, const std::vector<unsigned char>& buffer)
-        : filename(_filename) {
+TimezoneImpl::TimezoneImpl(std::string _filename, const std::vector<unsigned char>& buffer)
+        : filename(std::move(_filename)) {
     parseZoneFile(&buffer[0], 0, buffer.size(), Version1Parser());
     // Build the literal for the ORC epoch
     // 2015 Jan 1 00:00:00
@@ -650,7 +650,7 @@ const Timezone& getTimezoneByFilename(const std::string& filename) {
     std::lock_guard<std::mutex> timezone_lock(timezone_mutex);
     std::map<std::string, std::shared_ptr<Timezone> >::iterator itr = timezoneCache.find(filename);
     if (itr != timezoneCache.end()) {
-        return *(itr->second).get();
+        return *itr->second;
     }
     try {
         ORC_UNIQUE_PTR<InputStream> file = readFile(filename);

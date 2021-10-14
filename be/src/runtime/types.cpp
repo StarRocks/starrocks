@@ -51,8 +51,8 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) : 
     case TTypeNodeType::STRUCT:
         type = TYPE_STRUCT;
         ++(*idx);
-        for (int i = 0; i < node.struct_fields.size(); ++i) {
-            field_names.push_back(node.struct_fields[i].name);
+        for (const auto& struct_field : node.struct_fields) {
+            field_names.push_back(struct_field.name);
             children.push_back(TypeDescriptor(types, idx));
         }
         break;

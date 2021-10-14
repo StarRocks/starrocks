@@ -31,7 +31,8 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TDescr
     TQueryOptions query_options;
     TQueryGlobals query_globals;
     _runtime_state =
-            std::make_unique<RuntimeState>(fragment_params, query_options, query_globals, ExecEnv::GetInstance());
+            std::make_unique<RuntimeState>(fragment_params.params.query_id, fragment_params.params.fragment_instance_id,
+                                           query_options, query_globals, ExecEnv::GetInstance());
 
     DescriptorTbl* desc_tbl = nullptr;
     RETURN_IF_ERROR(DescriptorTbl::create(_runtime_state->obj_pool(), t_desc_tbl, &desc_tbl));
@@ -438,10 +439,10 @@ Status PushHandler::_convert(const TabletSharedPtr& cur_tablet, const TabletShar
     context.segments_overlap = NONOVERLAPPING;
 
     std::unique_ptr<RowsetWriter> rowset_writer;
-    OLAPStatus res = RowsetFactory::create_rowset_writer(context, &rowset_writer);
-    if (OLAP_SUCCESS != res) {
+    st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
+    if (!st.ok()) {
         LOG(WARNING) << "failed to init rowset writer, tablet=" << cur_tablet->full_name()
-                     << ", txn_id=" << _request.transaction_id << ", res=" << res;
+                     << ", txn_id=" << _request.transaction_id << ", res=" << st;
         return Status::InternalError("Fail to init rowset writer");
     }
 
@@ -481,9 +482,9 @@ Status PushHandler::_convert(const TabletSharedPtr& cur_tablet, const TabletShar
                     break;
                 }
 
-                if (OLAP_SUCCESS != (res = rowset_writer->add_chunk(*chunk))) {
+                if (auto ost = rowset_writer->add_chunk(*chunk); ost != OLAP_SUCCESS) {
                     LOG(WARNING) << "fail to add chunk to rowset writer"
-                                 << ". res=" << res << ", tablet=" << cur_tablet->full_name()
+                                 << ". res=" << ost << ", tablet=" << cur_tablet->full_name()
                                  << ", read_rows=" << num_rows;
                     return Status::InternalError("Fail to add chunk to rowset writer");
                 }

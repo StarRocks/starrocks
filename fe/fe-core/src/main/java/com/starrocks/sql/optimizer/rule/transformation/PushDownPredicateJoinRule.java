@@ -99,15 +99,21 @@ public class PushDownPredicateJoinRule extends TransformationRule {
 
         joinOpt = pushDownPredicate(joinOpt, Utils.compoundAnd(leftPushDown), Utils.compoundAnd(rightPushDown));
 
+        LogicalJoinOperator newJoinOperator;
         if (!remainingFilter.isEmpty()) {
             if (join.getJoinType().isInnerJoin()) {
-                join.setOnPredicate(
-                        Utils.compoundAnd(join.getOnPredicate(), Utils.compoundAnd(remainingFilter)));
+                newJoinOperator = new LogicalJoinOperator.Builder().withOperator(join)
+                        .setOnPredicate(Utils.compoundAnd(join.getOnPredicate(), Utils.compoundAnd(remainingFilter)))
+                        .build();
             } else {
-                join.setPredicate(Utils.compoundAnd(remainingFilter));
+                newJoinOperator = new LogicalJoinOperator.Builder().withOperator(join)
+                        .setPredicate(Utils.compoundAnd(remainingFilter)).build();
             }
+        } else {
+            newJoinOperator = join;
         }
-        return joinOpt;
+
+        return OptExpression.create(newJoinOperator, joinOpt.getInputs());
     }
 
     private void convertOuterToInner(OptExpression input) {
@@ -120,11 +126,17 @@ public class PushDownPredicateJoinRule extends TransformationRule {
 
         if (join.getJoinType().isLeftOuterJoin()) {
             if (canEliminateNull(rightColumns, filter.getPredicate().clone())) {
-                join.setJoinType(JoinOperator.INNER_JOIN);
+                input.setChild(0, OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
+                                .setJoinType(JoinOperator.INNER_JOIN)
+                                .build(),
+                        input.inputAt(0).getInputs()));
             }
         } else if (join.getJoinType().isRightOuterJoin()) {
             if (canEliminateNull(leftColumns, filter.getPredicate().clone())) {
-                join.setJoinType(JoinOperator.INNER_JOIN);
+                input.setChild(0, OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
+                                .setJoinType(JoinOperator.INNER_JOIN)
+                                .build(),
+                        input.inputAt(0).getInputs()));
             }
         } else if (join.getJoinType().isFullOuterJoin()) {
             boolean canConvertLeft = false;
@@ -138,11 +150,19 @@ public class PushDownPredicateJoinRule extends TransformationRule {
             }
 
             if (canConvertLeft && canConvertRight) {
-                join.setJoinType(JoinOperator.INNER_JOIN);
+                input.setChild(0, OptExpression.create(
+
+                        new LogicalJoinOperator.Builder().withOperator(join)
+                                .setJoinType(JoinOperator.INNER_JOIN)
+                                .build(), input.inputAt(0).getInputs()));
             } else if (canConvertLeft) {
-                join.setJoinType(JoinOperator.LEFT_OUTER_JOIN);
+                input.setChild(0, OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
+                                .setJoinType(JoinOperator.LEFT_OUTER_JOIN).build(),
+                        input.inputAt(0).getInputs()));
             } else if (canConvertRight) {
-                join.setJoinType(JoinOperator.RIGHT_OUTER_JOIN);
+                input.setChild(0, OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
+                                .setJoinType(JoinOperator.RIGHT_OUTER_JOIN).build(),
+                        input.inputAt(0).getInputs()));
             }
         }
     }
@@ -189,6 +209,7 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         } else {
             if (join.getJoinType().isOuterJoin()) {
                 convertOuterToInner(input);
+                join = (LogicalJoinOperator) input.inputAt(0).getOp();
             }
 
             if (join.getJoinType().isCrossJoin() || join.getJoinType().isInnerJoin()) {

@@ -113,7 +113,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     protected Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
 
     // use vectorized flag
-    protected boolean useVectorized = false;
+    protected boolean useVectorized = true;
 
     // For vector query engine
     // case 1: If agg node hash outer join child
@@ -365,7 +365,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             }
             expBuilder.append("\n");
         }
-        expBuilder.append(detailPrefix).append("use vectorized: ").append(useVectorized).append("\n");
+        expBuilder.append(detailPrefix).append("use vectorized: ").append(true).append("\n");
         // Print the children
         // if (children != null && children.size() > 0) {
         if (traverseChildren) {
@@ -791,20 +791,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         isColocate = colocate;
     }
 
-    /**
-     * check support vectorized engine
-     * re-implement it if children need
-     */
     public boolean isVectorized() {
-        return false;
-    }
-
-    /**
-     * set use vectorized engine
-     * re-implement it if children need
-     */
-    public void setUseVectorized(boolean flag) {
-        this.useVectorized = flag;
+        return true;
     }
 
     public boolean isUseVectorized() {

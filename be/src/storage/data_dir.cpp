@@ -21,9 +21,7 @@
 
 #include "storage/data_dir.h"
 
-#include <ctype.h>
 #include <mntent.h>
-#include <stdio.h>
 #include <sys/file.h>
 #include <sys/statfs.h>
 #include <utime.h>
@@ -32,10 +30,13 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/trim.hpp>
+#include <cctype>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <set>
 #include <sstream>
+#include <utility>
 
 #include "env/env.h"
 #include "gen_cpp/version.h"
@@ -61,9 +62,9 @@ namespace starrocks {
 static const char* const kMtabPath = "/etc/mtab";
 static const char* const kTestFilePath = "/.testfile";
 
-DataDir::DataDir(const std::string& path, int64_t capacity_bytes, TStorageMedium::type storage_medium,
+DataDir::DataDir(std::string path, int64_t capacity_bytes, TStorageMedium::type storage_medium,
                  TabletManager* tablet_manager, TxnManager* txn_manager)
-        : _path(path),
+        : _path(std::move(path)),
           _capacity_bytes(capacity_bytes),
           _available_bytes(0),
           _disk_capacity_bytes(0),
@@ -73,8 +74,7 @@ DataDir::DataDir(const std::string& path, int64_t capacity_bytes, TStorageMedium
           _txn_manager(txn_manager),
           _cluster_id(-1),
           _to_be_deleted(false),
-          _current_shard(0),
-          _kv_store(nullptr) {}
+          _current_shard(0) {}
 
 DataDir::~DataDir() {
     delete _id_generator;
@@ -158,9 +158,9 @@ Status DataDir::_read_cluster_id(const std::string& path, int32_t* cluster_id) {
     if (!cluster_id_str.empty()) {
         size_t pos = cluster_id_str.find('-');
         if (pos != std::string::npos) {
-            tmp_cluster_id = std::stoi(cluster_id_str.substr(0, pos).c_str());
+            tmp_cluster_id = std::stoi(cluster_id_str.substr(0, pos));
         } else {
-            tmp_cluster_id = std::stoi(cluster_id_str.c_str());
+            tmp_cluster_id = std::stoi(cluster_id_str);
         }
     }
 
@@ -508,7 +508,10 @@ OLAPStatus DataDir::load() {
         RowsetSharedPtr rowset;
         OLAPStatus create_status =
                 RowsetFactory::create_rowset(_tablet_manager->tablet_meta_mem_tracker(), &tablet->tablet_schema(),
-                                             tablet->tablet_path(), rowset_meta, &rowset);
+                                             tablet->tablet_path(), rowset_meta, &rowset)
+                                .ok()
+                        ? OLAP_SUCCESS
+                        : OLAP_ERR_OTHER_ERROR;
         if (create_status != OLAP_SUCCESS) {
             LOG(WARNING) << "Fail to create rowset from rowsetmeta,"
                          << " rowset=" << rowset_meta->rowset_id() << " type=" << rowset_meta->rowset_type()
@@ -530,7 +533,10 @@ OLAPStatus DataDir::load() {
             }
         } else if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE &&
                    rowset_meta->tablet_uid() == tablet->tablet_uid()) {
-            OLAPStatus publish_status = tablet->add_rowset(rowset, false);
+            Status st = tablet->add_rowset(rowset, false);
+            OLAPStatus publish_status =
+                    st.ok() ? OLAP_SUCCESS
+                            : st.is_already_exist() ? OLAP_ERR_PUSH_VERSION_ALREADY_EXIST : OLAP_ERR_OTHER_ERROR;
             if (publish_status != OLAP_SUCCESS && publish_status != OLAP_ERR_PUSH_VERSION_ALREADY_EXIST) {
                 LOG(WARNING) << "Fail to add visible rowset=" << rowset->rowset_id()
                              << " to tablet=" << rowset_meta->tablet_id() << " txn id=" << rowset_meta->txn_id()

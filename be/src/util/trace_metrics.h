@@ -41,8 +41,8 @@ namespace starrocks {
 // are plausible.
 class TraceMetrics {
 public:
-    TraceMetrics() {}
-    ~TraceMetrics() {}
+    TraceMetrics() = default;
+    ~TraceMetrics() = default;
 
     // Internalize the given string by duplicating it into a process-wide
     // pool. If this string has already been interned, returns a pointer
@@ -72,7 +72,8 @@ private:
     mutable SpinLock lock_;
     std::map<const char*, int64_t> counters_;
 
-    DISALLOW_COPY_AND_ASSIGN(TraceMetrics);
+    TraceMetrics(const TraceMetrics&) = delete;
+    const TraceMetrics& operator=(const TraceMetrics&) = delete;
 };
 
 inline void TraceMetrics::Increment(const char* name, int64_t amount) {

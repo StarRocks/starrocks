@@ -19,6 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include <memory>
 #include <queue>
 
 #include "storage/iterators.h"
@@ -46,7 +47,7 @@ public:
     // Will generate num_rows rows in total
     AutoIncrementIterator(const Schema& schema, size_t num_rows)
             : _schema(schema), _num_rows(num_rows), _rows_returned(0) {}
-    ~AutoIncrementIterator() override {}
+    ~AutoIncrementIterator() override = default;
 
     // NOTE: Currently, this function will ignore StorageReadOptions
     Status init(const StorageReadOptions& opts) override;
@@ -247,8 +248,8 @@ Status MergeIterator::init(const StorageReadOptions& opts) {
     if (_origin_iters.empty()) {
         return Status::OK();
     }
-    _schema.reset(new Schema(_origin_iters[0]->schema()));
-    _merge_heap.reset(new MergeHeap);
+    _schema = std::make_unique<Schema>(_origin_iters[0]->schema());
+    _merge_heap = std::make_unique<MergeHeap>();
 
     for (auto iter : _origin_iters) {
         std::unique_ptr<MergeIteratorContext> ctx(new MergeIteratorContext(iter));

@@ -49,7 +49,7 @@ class SortSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     SortSourceOperatorFactory(int32_t id, int32_t plan_node_id,
                               std::shared_ptr<vectorized::ChunksSorter>&& chunks_sorter)
-            : SourceOperatorFactory(id, plan_node_id), _chunks_sorter(chunks_sorter) {}
+            : SourceOperatorFactory(id, "sort_source", plan_node_id), _chunks_sorter(chunks_sorter) {}
 
     ~SortSourceOperatorFactory() override = default;
 

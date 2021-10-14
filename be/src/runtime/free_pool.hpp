@@ -22,9 +22,8 @@
 #ifndef STARROCKS_BE_SRC_QUERY_BE_RUNTIME_FREE_POOL_H
 #define STARROCKS_BE_SRC_QUERY_BE_RUNTIME_FREE_POOL_H
 
-#include <stdio.h>
-#include <string.h>
-
+#include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "common/logging.h"
@@ -52,7 +51,7 @@ public:
     // 'mem_pool'.
     FreePool(MemPool* mem_pool) : _mem_pool(mem_pool) { memset(&_lists, 0, sizeof(_lists)); }
 
-    virtual ~FreePool() {}
+    virtual ~FreePool() = default;
 
     // Allocates a buffer of size.
     uint8_t* allocate(int64_t size) {

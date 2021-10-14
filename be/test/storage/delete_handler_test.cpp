@@ -241,7 +241,6 @@ void set_create_duplicate_tablet_request(TCreateTabletReq* request) {
 class TestDeleteConditionHandler : public testing::Test {
 protected:
     void SetUp() {
-        // Create local data dir for StorageEngine.
         config::storage_root_path = std::filesystem::current_path().string() + "/data_delete_condition";
         FileUtils::remove_all(config::storage_root_path);
         ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
@@ -266,7 +265,6 @@ protected:
     }
 
     void TearDown() {
-        // Remove all dir.
         tablet.reset();
         dup_tablet.reset();
         (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id,
@@ -401,7 +399,6 @@ TEST_F(TestDeleteConditionHandler, StoreCondNonexistentColumn) {
 class TestDeleteConditionHandler2 : public testing::Test {
 protected:
     void SetUp() {
-        // Create local data dir for StorageEngine.
         config::storage_root_path = std::filesystem::current_path().string() + "/data_delete_condition";
         FileUtils::remove_all(config::storage_root_path);
         ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
@@ -418,7 +415,6 @@ protected:
     }
 
     void TearDown() {
-        // Remove all dir.
         tablet.reset();
         (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id,
                                                                        _create_tablet.tablet_schema.schema_hash);
@@ -433,7 +429,6 @@ protected:
 
 TEST_F(TestDeleteConditionHandler2, ValidConditionValue) {
     OLAPStatus res;
-    DeleteConditionHandler cond_handler;
     std::vector<TCondition> conditions;
 
     // k1,k2,k3,k4 type is int8, int16, int32, int64
@@ -547,7 +542,6 @@ TEST_F(TestDeleteConditionHandler2, ValidConditionValue) {
 
 TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
     OLAPStatus res;
-    DeleteConditionHandler cond_handler;
     std::vector<TCondition> conditions;
 
     // Test k1 max, k1 type is int8
@@ -734,7 +728,6 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
 class TestDeleteHandler : public testing::Test {
 protected:
     void SetUp() {
-        // Create local data dir for StorageEngine.
         config::storage_root_path = std::filesystem::current_path().string() + "/data_delete_condition";
         FileUtils::remove_all(config::storage_root_path);
         ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
@@ -754,7 +747,6 @@ protected:
     }
 
     void TearDown() {
-        // Remove all dir.
         tablet.reset();
         _delete_handler.finalize();
         (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id,
@@ -773,7 +765,6 @@ protected:
 TEST_F(TestDeleteHandler, InitSuccess) {
     OLAPStatus res;
     std::vector<TCondition> conditions;
-    DeleteConditionHandler delete_condition_handler;
 
     // add delete condition in FileHeader
     TCondition condition;
@@ -855,7 +846,6 @@ TEST_F(TestDeleteHandler, InitSuccess) {
 // That is, the data will be filtered only if all the subconditions contained in a filter condition are satisfied
 TEST_F(TestDeleteHandler, FilterDataSubconditions) {
     OLAPStatus res;
-    DeleteConditionHandler cond_handler;
     std::vector<TCondition> conditions;
 
     TCondition condition;
@@ -911,7 +901,6 @@ TEST_F(TestDeleteHandler, FilterDataSubconditions) {
 // Test that multiple filter conditions are or related to each other
 TEST_F(TestDeleteHandler, FilterDataConditions) {
     OLAPStatus res;
-    DeleteConditionHandler cond_handler;
     std::vector<TCondition> conditions;
 
     TCondition condition;
@@ -985,7 +974,6 @@ TEST_F(TestDeleteHandler, FilterDataConditions) {
 // Test that filter conditions with version numbers less than the data version will not work when filtering
 TEST_F(TestDeleteHandler, FilterDataVersion) {
     OLAPStatus res;
-    DeleteConditionHandler cond_handler;
     std::vector<TCondition> conditions;
 
     TCondition condition;

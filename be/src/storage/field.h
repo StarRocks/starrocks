@@ -425,7 +425,7 @@ uint32_t Field::hash_code(const CellType& cell, uint32_t seed) const {
 
 class CharField : public Field {
 public:
-    explicit CharField() : Field() {}
+    explicit CharField() {}
     explicit CharField(const TabletColumn& column) : Field(column) {}
 
     // the char field is especial, which need the _length info when consume raw data
@@ -471,7 +471,7 @@ public:
 
 class VarcharField : public Field {
 public:
-    explicit VarcharField() : Field() {}
+    explicit VarcharField() {}
     explicit VarcharField(const TabletColumn& column) : Field(column) {}
 
     size_t get_variable_len() const override { return _length - OLAP_STRING_MAX_BYTES; }
@@ -502,7 +502,7 @@ public:
 
 class BitmapAggField : public Field {
 public:
-    explicit BitmapAggField() : Field() {}
+    explicit BitmapAggField() {}
     explicit BitmapAggField(const TabletColumn& column) : Field(column) {}
 
     // bitmap storage data always not null
@@ -526,7 +526,7 @@ public:
 
 class HllAggField : public Field {
 public:
-    explicit HllAggField() : Field() {}
+    explicit HllAggField() {}
     explicit HllAggField(const TabletColumn& column) : Field(column) {}
 
     // Hll storage data always not null
@@ -550,7 +550,7 @@ public:
 
 class PercentileAggField : public Field {
 public:
-    PercentileAggField() : Field() {}
+    PercentileAggField() {}
     explicit PercentileAggField(const TabletColumn& column) : Field(column) {}
 
     // Hll storage data always not null
@@ -583,7 +583,7 @@ public:
             case OLAP_FIELD_TYPE_VARCHAR:
                 return new VarcharField(column);
             case OLAP_FIELD_TYPE_ARRAY: {
-                std::unique_ptr<Field> item_field(FieldFactory::create(column.get_sub_column(0)));
+                std::unique_ptr<Field> item_field(FieldFactory::create(column.subcolumn(0)));
                 auto* local = new Field(column);
                 local->add_sub_field(std::move(item_field));
                 return local;
@@ -616,7 +616,7 @@ public:
             case OLAP_FIELD_TYPE_VARCHAR:
                 return new VarcharField(column);
             case OLAP_FIELD_TYPE_ARRAY: {
-                std::unique_ptr<Field> item_field(FieldFactory::create(column.get_sub_column(0)));
+                std::unique_ptr<Field> item_field(FieldFactory::create(column.subcolumn(0)));
                 auto* local = new Field(column);
                 local->add_sub_field(std::move(item_field));
                 return local;

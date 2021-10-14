@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 
 #include "common/status.h"
 #include "exec/file_reader.h"

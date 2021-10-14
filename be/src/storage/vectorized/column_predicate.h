@@ -5,6 +5,7 @@
 #include <runtime/decimalv3.h>
 
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 #include "column/chunk.h"
@@ -66,8 +67,8 @@ static inline T string_to_float(const Slice& s) {
 // ColumnPredicate represents a predicate that can only be applied to a column.
 class ColumnPredicate {
 public:
-    explicit ColumnPredicate(const TypeInfoPtr& type_info, ColumnId column_id)
-            : _type_info(type_info), _column_id(column_id) {}
+    explicit ColumnPredicate(TypeInfoPtr type_info, ColumnId column_id)
+            : _type_info(std::move(type_info)), _column_id(column_id) {}
 
     virtual ~ColumnPredicate() = default;
 

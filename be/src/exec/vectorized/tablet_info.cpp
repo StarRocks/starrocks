@@ -10,14 +10,13 @@
 #include "runtime/mem_tracker.h"
 #include "util/string_parser.hpp"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 OlapTablePartitionParam::OlapTablePartitionParam(std::shared_ptr<OlapTableSchemaParam> schema,
                                                  const TOlapTablePartitionParam& t_param)
         : _schema(std::move(schema)), _t_param(t_param) {}
 
-OlapTablePartitionParam::~OlapTablePartitionParam() {}
+OlapTablePartitionParam::~OlapTablePartitionParam() = default;
 
 Status OlapTablePartitionParam::init() {
     std::map<std::string, SlotDescriptor*> slots_map;
@@ -51,8 +50,7 @@ Status OlapTablePartitionParam::init() {
     _distributed_columns.resize(_distributed_slot_descs.size());
 
     // initial partitions
-    for (int i = 0; i < _t_param.partitions.size(); ++i) {
-        const TOlapTablePartition& t_part = _t_param.partitions[i];
+    for (auto& t_part : _t_param.partitions) {
         OlapTablePartition* part = _obj_pool.add(new OlapTablePartition());
         part->id = t_part.id;
         if (t_part.__isset.start_keys) {
@@ -236,5 +234,4 @@ void OlapTablePartitionParam::_compute_hashes(Chunk* chunk, std::vector<uint32_t
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

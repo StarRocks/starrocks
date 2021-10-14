@@ -40,7 +40,7 @@ class TabletSchema;
 class StorageReadOptions {
 public:
     struct KeyRange {
-        KeyRange() : lower_key(nullptr), include_lower(false), upper_key(nullptr), include_upper(false) {}
+        KeyRange() {}
 
         KeyRange(const RowCursor* lower_key_, bool include_lower_, const RowCursor* upper_key_, bool include_upper_)
                 : lower_key(lower_key_),
@@ -49,13 +49,13 @@ public:
                   include_upper(include_upper_) {}
 
         // the lower bound of the range, nullptr if not existed
-        const RowCursor* lower_key;
+        const RowCursor* lower_key{nullptr};
         // whether `lower_key` is included in the range
-        bool include_lower;
+        bool include_lower{false};
         // the upper bound of the range, nullptr if not existed
-        const RowCursor* upper_key;
+        const RowCursor* upper_key{nullptr};
         // whether `upper_key` is included in the range
-        bool include_upper;
+        bool include_upper{false};
     };
 
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
@@ -88,8 +88,8 @@ public:
 // Used to read data in RowBlockV2 one by one
 class RowwiseIterator {
 public:
-    RowwiseIterator() {}
-    virtual ~RowwiseIterator() {}
+    RowwiseIterator() = default;
+    virtual ~RowwiseIterator() = default;
 
     // Initialize this iterator and make it ready to read with
     // input options.

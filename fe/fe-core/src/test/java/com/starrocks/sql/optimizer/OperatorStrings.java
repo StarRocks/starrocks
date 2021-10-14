@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
@@ -178,13 +179,20 @@ public class OperatorStrings {
         public OperatorStr visitPhysicalOlapScan(OptExpression optExpression, Integer step) {
             PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("SCAN (");
-            sb.append("columns").append(scan.getOutputColumns());
+            sb.append("columns").append(scan.getColRefToColumnMetaMap().keySet());
             sb.append(" predicate[").append(scan.getPredicate()).append("]");
             sb.append(")");
             if (scan.getLimit() >= 0) {
                 sb.append(" Limit ").append(scan.getLimit());
             }
             return new OperatorStr(sb.toString(), step, Collections.emptyList());
+        }
+
+        @Override
+        public OperatorStr visitPhysicalMetaScan(OptExpression optExpression, Integer step) {
+            PhysicalMetaScanOperator scan = (PhysicalMetaScanOperator) optExpression.getOp();
+            String sb = "Meta SCAN (" + "columns" + scan.getUsedColumns() + ")";
+            return new OperatorStr(sb, step, Collections.emptyList());
         }
 
         @Override
@@ -375,6 +383,13 @@ public class OperatorStrings {
             }
 
             return new OperatorStr(s, step, new ArrayList<>(childString));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalDecode(OptExpression optExpression, Integer step) {
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+            String sb = "Decode ";
+            return new OperatorStr(sb, step, Collections.singletonList(child));
         }
     }
 }

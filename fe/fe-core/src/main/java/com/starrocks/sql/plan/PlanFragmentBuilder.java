@@ -36,6 +36,7 @@ import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.AssertNumRowsNode;
 import com.starrocks.planner.CrossJoinNode;
 import com.starrocks.planner.DataPartition;
+import com.starrocks.planner.DecodeNode;
 import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.EsScanNode;
 import com.starrocks.planner.ExceptNode;
@@ -43,6 +44,7 @@ import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.IntersectNode;
+import com.starrocks.planner.MetaScanNode;
 import com.starrocks.planner.MysqlScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
@@ -72,12 +74,14 @@ import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
@@ -108,7 +112,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
-import static com.starrocks.planner.AdapterNode.insertAdapterNodeToFragment;
+import static com.starrocks.planner.AdapterNode.checkPlanIsVectorized;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
@@ -132,7 +136,7 @@ public class PlanFragmentBuilder {
                 fragment.finalize(null, false);
             }
             Collections.reverse(fragments);
-            insertAdapterNodeToFragment(fragments, execPlan.getPlanCtx());
+            checkPlanIsVectorized(fragments);
         } catch (UserException e) {
             throw new StarRocksPlannerException("Create fragment fail, " + e.getMessage(), INTERNAL_ERROR);
         }
@@ -153,7 +157,6 @@ public class PlanFragmentBuilder {
             fragment.finalizeForStatistic(isStatistic);
         }
         Collections.reverse(fragments);
-        insertAdapterNodeToFragment(fragments, execPlan.getPlanCtx());
         return execPlan;
     }
 
@@ -264,10 +267,38 @@ public class PlanFragmentBuilder {
         }
 
         @Override
+        public PlanFragment visitPhysicalDecode(OptExpression optExpression, ExecPlan context) {
+            PhysicalDecodeOperator node = (PhysicalDecodeOperator) optExpression.getOp();
+            PlanFragment inputFragment = visit(optExpression.inputAt(0), context);
+
+            TupleDescriptor tupleDescriptor = context.getDescTbl().getTupleDesc(
+                    inputFragment.getPlanRoot().getTupleIds().get(0));
+
+            for (Map.Entry<Integer, Integer> entry : node.getDictToStrings().entrySet()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getValue()));
+                slotDescriptor.setIsNullable(true);
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(Type.VARCHAR);
+
+                context.getColRefToExpr().put(new ColumnRefOperator(entry.getValue(), Type.VARCHAR, "xxx", true),
+                        new SlotRef(entry.getValue().toString(), slotDescriptor));
+            }
+
+            DecodeNode decodeNode = new DecodeNode(context.getPlanCtx().getNextNodeId(),
+                    inputFragment.getPlanRoot().getTupleIds(),
+                    inputFragment.getPlanRoot(),
+                    node.getDictToStrings());
+
+            inputFragment.setPlanRoot(decodeNode);
+            return inputFragment;
+        }
+
+        @Override
         public PlanFragment visitPhysicalOlapScan(OptExpression optExpr, ExecPlan context) {
             PhysicalOlapScanOperator node = (PhysicalOlapScanOperator) optExpr.getOp();
 
-            OlapTable referenceTable = node.getTable();
+            OlapTable referenceTable = (OlapTable) node.getTable();
             context.getDescTbl().addReferencedTable(referenceTable);
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(referenceTable);
@@ -321,7 +352,7 @@ public class PlanFragmentBuilder {
             }
 
             // set slot
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());
@@ -352,6 +383,36 @@ public class PlanFragmentBuilder {
         }
 
         @Override
+        public PlanFragment visitPhysicalMetaScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalMetaScanOperator scan = (PhysicalMetaScanOperator) optExpression.getOp();
+
+            context.getDescTbl().addReferencedTable(scan.getTable());
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(scan.getTable());
+
+            MetaScanNode scanNode =
+                    new MetaScanNode(context.getPlanCtx().getNextNodeId(),
+                            tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames());
+            scanNode.computeRangeLocations();
+
+            for (Map.Entry<ColumnRefOperator, Column> entry : scan.getColRefToColumnMetaMap().entrySet()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setColumn(entry.getValue());
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().getName(), slotDescriptor));
+            }
+            tupleDescriptor.computeMemLayout();
+
+            context.getScanNodes().add(scanNode);
+            PlanFragment fragment =
+                    new PlanFragment(context.getPlanCtx().getNextFragmentId(), scanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
         public PlanFragment visitPhysicalHiveScan(OptExpression optExpression, ExecPlan context) {
             PhysicalHiveScanOperator node = (PhysicalHiveScanOperator) optExpression.getOp();
 
@@ -361,7 +422,7 @@ public class PlanFragmentBuilder {
             tupleDescriptor.setTable(referenceTable);
 
             // set slot
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());
@@ -443,7 +504,7 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(node.getTable());
 
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());
@@ -486,7 +547,7 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(node.getTable());
 
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());
@@ -527,7 +588,7 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(node.getTable());
 
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
                 slotDescriptor.setColumn(entry.getValue());

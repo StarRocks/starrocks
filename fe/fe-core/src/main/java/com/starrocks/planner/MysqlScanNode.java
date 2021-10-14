@@ -170,19 +170,4 @@ public class MysqlScanNode extends ScanNode {
         // We assume that the data volume of all mysql tables is very small, so set cardinality directly to 1.
         cardinality = cardinality == -1 ? 1 : cardinality;
     }
-
-    @Override
-    public boolean isVectorized() {
-        return true;
-    }
-
-    @Override
-    public void setUseVectorized(boolean flag) {
-        this.useVectorized = flag;
-
-        // conjuncts is useless in BE, set it in order to make the all slot of mysql scan node is Vectorized
-        for (Expr expr : conjuncts) {
-            expr.setUseVectorized(flag);
-        }
-    }
 }

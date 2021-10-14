@@ -22,17 +22,16 @@
 #ifndef STARROCKS_BE_SRC_COMMON_UTIL_HTTP_PARSER_H
 #define STARROCKS_BE_SRC_COMMON_UTIL_HTTP_PARSER_H
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <ostream>
 
 namespace starrocks {
 
 struct HttpChunkParseCtx {
-    int state;     // Parse state
-    size_t size;   // Chunk size
-    size_t length; // minimal length need to read
-    HttpChunkParseCtx() : state(0), size(0), length(0) {}
+    int state{0};     // Parse state
+    size_t size{0};   // Chunk size
+    size_t length{0}; // minimal length need to read
+    HttpChunkParseCtx() {}
 };
 
 std::ostream& operator<<(std::ostream& os, const HttpChunkParseCtx& ctx);

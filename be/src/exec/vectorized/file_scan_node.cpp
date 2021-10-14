@@ -176,8 +176,8 @@ Status FileScanNode::close(RuntimeState* state) {
     _scan_finished.store(true);
     _queue_writer_cond.notify_all();
     _queue_reader_cond.notify_all();
-    for (int i = 0; i < _scanner_threads.size(); ++i) {
-        _scanner_threads[i].join();
+    for (auto& _scanner_thread : _scanner_threads) {
+        _scanner_thread.join();
     }
 
     while (!_chunk_queue.empty()) {

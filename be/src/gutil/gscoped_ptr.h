@@ -98,11 +98,10 @@
 // implementation of the scoped_ptr class, and its closely-related brethren,
 // scoped_array, scoped_ptr_malloc.
 
-#include <assert.h>
-#include <stddef.h>
-#include <stdlib.h>
-
 #include <algorithm> // For std::swap().
+#include <cassert>
+#include <cstddef>
+#include <cstdlib>
 
 #include "gutil/basictypes.h"
 #include "gutil/move.h"
@@ -121,7 +120,7 @@ class RefCountedThreadSafeBase;
 // invokes 'delete'. The default deleter for gscoped_ptr<T>.
 template <class T>
 struct DefaultDeleter {
-    DefaultDeleter() {}
+    DefaultDeleter() = default;
     template <typename U>
     DefaultDeleter(const DefaultDeleter<U>& other) {
         // IMPLEMENTATION NOTE: C++11 20.7.1.1.2p2 only provides this constructor
@@ -288,7 +287,8 @@ private:
 
     Data data_;
 
-    DISALLOW_COPY_AND_ASSIGN(gscoped_ptr_impl);
+    gscoped_ptr_impl(const gscoped_ptr_impl&) = delete;
+    const gscoped_ptr_impl& operator=(const gscoped_ptr_impl&) = delete;
 };
 
 } // namespace internal

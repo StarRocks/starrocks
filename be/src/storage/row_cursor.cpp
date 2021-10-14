@@ -22,6 +22,7 @@
 #include "storage/row_cursor.h"
 
 #include <algorithm>
+#include <memory>
 #include <unordered_set>
 
 #include "util/stack_util.h"
@@ -32,7 +33,7 @@ using std::string;
 using std::vector;
 
 namespace starrocks {
-RowCursor::RowCursor() : _fixed_len(0), _variable_len(0) {}
+RowCursor::RowCursor() {}
 
 RowCursor::~RowCursor() {
     delete[] _owned_fixed_buf;
@@ -63,7 +64,7 @@ OLAPStatus RowCursor::init(std::unique_ptr<Schema> schema) {
 }
 
 OLAPStatus RowCursor::_init(const std::vector<TabletColumn>& schema, const std::vector<uint32_t>& columns) {
-    _schema.reset(new Schema(schema, columns));
+    _schema = std::make_unique<Schema>(schema, columns);
     _variable_len = 0;
     for (auto cid : columns) {
         if (_schema->column(cid) == nullptr) {
@@ -152,7 +153,7 @@ OLAPStatus RowCursor::init_scan_key(const TabletSchema& schema, const std::vecto
         if (type == OLAP_FIELD_TYPE_VARCHAR) {
             _variable_len += scan_keys[cid].length();
         } else if (type == OLAP_FIELD_TYPE_CHAR) {
-            _variable_len += std::max(scan_keys[cid].length(), column.length());
+            _variable_len += std::max<size_t>(scan_keys[cid].length(), column.length());
         }
     }
 
@@ -177,7 +178,7 @@ OLAPStatus RowCursor::init_scan_key(const TabletSchema& schema, const std::vecto
         } else if (type == OLAP_FIELD_TYPE_CHAR) {
             Slice* slice = reinterpret_cast<Slice*>(fixed_ptr + 1);
             slice->data = variable_ptr;
-            slice->size = std::max(scan_keys[cid].length(), column.length());
+            slice->size = std::max<size_t>(scan_keys[cid].length(), column.length());
             variable_ptr += slice->size;
         }
     }

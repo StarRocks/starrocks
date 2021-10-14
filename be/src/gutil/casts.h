@@ -10,10 +10,11 @@
 #ifndef BASE_CASTS_H_
 #define BASE_CASTS_H_
 
-#include <assert.h> // for use with down_cast<>
 #include <common/logging.h>
-#include <limits.h> // for enumeration casts and tests
-#include <string.h> // for memcpy
+
+#include <cassert> // for use with down_cast<>
+#include <climits> // for enumeration casts and tests
+#include <cstring> // for memcpy
 
 #include "gutil/macros.h"
 #include "gutil/template_util.h"

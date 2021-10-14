@@ -2,6 +2,8 @@
 
 #include "exec/vectorized/except_node.h"
 
+#include <memory>
+
 #include "column/column_helper.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
@@ -31,7 +33,7 @@ Status ExceptNode::prepare(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
 
     DCHECK(_tuple_desc != nullptr);
-    _build_pool.reset(new MemPool(mem_tracker()));
+    _build_pool = std::make_unique<MemPool>(mem_tracker());
 
     _build_set_timer = ADD_TIMER(runtime_profile(), "BuildSetTime");
     _erase_duplicate_row_timer = ADD_TIMER(runtime_profile(), "EraseDuplicateRowTime");
@@ -74,7 +76,7 @@ Status ExceptNode::open(RuntimeState* state) {
     }
 
     // initial build hash table used for remove duplicted
-    _hash_set.reset(new HashSerializeSet());
+    _hash_set = std::make_unique<HashSerializeSet>();
 
     ChunkPtr chunk = nullptr;
     RETURN_IF_ERROR(child(0)->open(state));
@@ -201,7 +203,7 @@ Status ExceptNode::close(RuntimeState* state) {
         Expr::close(exprs, state);
     }
 
-    if (_build_pool.get() != nullptr) {
+    if (_build_pool != nullptr) {
         _build_pool->free_all();
     }
 

@@ -2,9 +2,9 @@
 
 #include "storage/tablet_updates.h"
 
-#include <time.h>
-
 #include <algorithm>
+#include <ctime>
+#include <memory>
 
 #include "common/status.h"
 #include "gen_cpp/MasterService_types.h"
@@ -134,9 +134,9 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& updates) {
         RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
         CHECK(rowset_meta->init(rowset_meta_data)) << "Corrupted rowset meta";
         RowsetSharedPtr rowset;
-        auto ost = RowsetFactory::create_rowset(_tablet._mem_tracker, &_tablet.tablet_schema(), _tablet.tablet_path(),
-                                                rowset_meta, &rowset);
-        if (ost == OLAP_SUCCESS) {
+        st = RowsetFactory::create_rowset(_tablet._mem_tracker, &_tablet.tablet_schema(), _tablet.tablet_path(),
+                                          rowset_meta, &rowset);
+        if (st.ok()) {
             _pending_commits.emplace(version, rowset);
         } else {
             LOG(WARNING) << "Fail to create rowset from pending rowset meta. rowset=" << rowset_meta->rowset_id()
@@ -157,9 +157,9 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& updates) {
     // them on demand.
     auto rowset_iterate_func = [&](const RowsetMetaSharedPtr& rowset_meta) -> bool {
         RowsetSharedPtr rowset;
-        auto ost = RowsetFactory::create_rowset(_tablet._mem_tracker, &_tablet.tablet_schema(), _tablet.tablet_path(),
-                                                rowset_meta, &rowset);
-        if (ost == OLAP_SUCCESS) {
+        st = RowsetFactory::create_rowset(_tablet._mem_tracker, &_tablet.tablet_schema(), _tablet.tablet_path(),
+                                          rowset_meta, &rowset);
+        if (st.ok()) {
             _rowsets[rowset_meta->get_rowset_seg_id()] = std::move(rowset);
         } else {
             LOG(WARNING) << "Fail to create rowset from rowset meta. rowset=" << rowset_meta->rowset_id()
@@ -365,7 +365,7 @@ void TabletUpdates::_redo_edit_version_log(const EditVersionMetaPB& v) {
     }
     tmp->deltas.assign(v.deltas().begin(), v.deltas().end());
     if (v.has_compaction()) {
-        tmp->compaction.reset(new CompactionInfo());
+        tmp->compaction = std::make_unique<CompactionInfo>();
         auto& cpb = v.compaction();
         tmp->compaction->start_version = EditVersion(cpb.start_version().major(), cpb.start_version().minor());
         tmp->compaction->inputs.assign(cpb.inputs().begin(), cpb.inputs().end());
@@ -741,7 +741,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         }
     }
     for (const auto& one_delete : state.deletes()) {
-        index.erase(*one_delete.get(), &new_deletes);
+        index.erase(*one_delete, &new_deletes);
     }
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
     // release resource
@@ -956,10 +956,10 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, Mem
     context.rowset_state = COMMITTED;
     context.segments_overlap = NONOVERLAPPING;
     std::unique_ptr<RowsetWriter> rowset_writer;
-    OLAPStatus olap_status = RowsetFactory::create_rowset_writer(context, &rowset_writer);
-    if (olap_status != OLAPStatus::OLAP_SUCCESS) {
+    Status st = RowsetFactory::create_rowset_writer(context, &rowset_writer);
+    if (!st.ok()) {
         std::stringstream ss;
-        ss << "Fail to create rowset writer err=" << olap_status << " " << debug_string();
+        ss << "Fail to create rowset writer err=" << st << " " << debug_string();
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
@@ -980,7 +980,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, Mem
 
 Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo, const RowsetSharedPtr& rowset,
                                          EditVersion* commit_version) {
-    _compaction_state.reset(new vectorized::CompactionState());
+    _compaction_state = std::make_unique<vectorized::CompactionState>();
     RETURN_IF_ERROR(_compaction_state->load(rowset.get()));
     std::lock_guard wl(_lock);
     EditVersionMetaPB edit;
@@ -1762,8 +1762,8 @@ Status TabletUpdates::load_from_base_tablet(int64_t request_version, Tablet* bas
     version_pb->mutable_version()->set_minor(version.minor());
     int64_t creation_time = time(nullptr);
     version_pb->set_creation_time(creation_time);
-    for (int i = 0; i < new_rowsets.size(); i++) {
-        version_pb->mutable_rowsets()->Add(new_rowsets[i].rowset_id);
+    for (auto& new_rowset : new_rowsets) {
+        version_pb->mutable_rowsets()->Add(new_rowset.rowset_id);
     }
     version_pb->set_rowsetid_add(next_rowset_id);
     auto apply_version_pb = updates_pb->mutable_apply_version();
@@ -1780,8 +1780,7 @@ Status TabletUpdates::load_from_base_tablet(int64_t request_version, Tablet* bas
     RETURN_IF_ERROR(TabletMetaManager::clear_pending_rowset(data_dir, &wb, tablet_id));
     RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(data_dir, &wb, tablet_id));
     RETURN_IF_ERROR(TabletMetaManager::put_tablet_meta(data_dir, &wb, meta_pb));
-    for (int i = 0; i < new_rowsets.size(); i++) {
-        auto& info = new_rowsets[i];
+    for (auto& info : new_rowsets) {
         RETURN_IF_ERROR(TabletMetaManager::put_rowset_meta(data_dir, &wb, tablet_id, info.rowset_meta_pb));
         for (int j = 0; j < info.num_segments; j++) {
             RETURN_IF_ERROR(
@@ -1922,21 +1921,18 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
 
     if (snapshot_meta.snapshot_type() == SNAPSHOT_TYPE_INCREMENTAL) {
         // Assume the elements of |snapshot_meta.rowset_metas()| are sorted by version.
-        for (int i = 0; i < snapshot_meta.rowset_metas().size(); i++) {
-            RETURN_IF_ERROR(check_rowset_files(snapshot_meta.rowset_metas()[i]));
+        for (const auto& i : snapshot_meta.rowset_metas()) {
+            RETURN_IF_ERROR(check_rowset_files(i));
             RowsetSharedPtr rowset;
             auto rowset_meta = std::make_shared<RowsetMeta>();
-            if (!rowset_meta->init_from_pb(snapshot_meta.rowset_metas()[i])) {
+            if (!rowset_meta->init_from_pb(i)) {
                 return Status::InternalError("rowset meta init from pb failed");
             }
             if (rowset_meta->tablet_id() != _tablet.tablet_id()) {
                 return Status::InternalError("mismatched tablet id");
             }
-            auto s = RowsetFactory::create_rowset(_tablet.mem_tracker(), &_tablet.tablet_schema(),
-                                                  _tablet.tablet_path(), rowset_meta, &rowset);
-            if (s != OLAP_SUCCESS) {
-                return Status::RuntimeError("fail to create rowset");
-            }
+            RETURN_IF_ERROR(RowsetFactory::create_rowset(_tablet.mem_tracker(), &_tablet.tablet_schema(),
+                                                         _tablet.tablet_path(), rowset_meta, &rowset));
             if (rowset->start_version() != rowset->end_version()) {
                 return Status::InternalError("mismatched start and end version");
             }
@@ -1994,14 +1990,11 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
                 return Status::InternalError("fail to init rowset meta");
             }
             const auto new_id = rm.rowset_seg_id() + _next_rowset_id;
-            new_next_rowset_id = std::max<uint32_t>(new_next_rowset_id, new_id + rm.num_segments());
+            new_next_rowset_id = std::max<uint32_t>(new_next_rowset_id, new_id + std::max(1L, rm.num_segments()));
             rowset_meta->set_rowset_seg_id(new_id);
             RowsetSharedPtr* rowset = &new_rowsets[new_id];
-            auto ost = RowsetFactory::create_rowset(_tablet._mem_tracker, &_tablet.tablet_schema(),
-                                                    _tablet.tablet_path(), rowset_meta, rowset);
-            if (ost != OLAP_SUCCESS) {
-                return Status::InternalError("fail to create rowset");
-            }
+            RETURN_IF_ERROR(RowsetFactory::create_rowset(_tablet._mem_tracker, &_tablet.tablet_schema(),
+                                                         _tablet.tablet_path(), rowset_meta, rowset));
             VLOG(2) << "add a new rowset " << tablet_id << "@" << new_id << "@" << rowset_meta->rowset_id();
         }
 

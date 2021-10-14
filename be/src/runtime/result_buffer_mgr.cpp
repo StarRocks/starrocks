@@ -21,6 +21,8 @@
 
 #include "runtime/result_buffer_mgr.h"
 
+#include <memory>
+
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/types.pb.h"
 #include "runtime/buffer_control_block.h"
@@ -36,7 +38,7 @@ namespace starrocks {
 //    return value;
 //}
 
-ResultBufferMgr::ResultBufferMgr() : _is_stop(false) {
+ResultBufferMgr::ResultBufferMgr() {
     // Each BufferControlBlock has a limited queue size of 1024, it's not needed to count the
     // actual size of all BufferControlBlock.
     REGISTER_GAUGE_STARROCKS_METRIC(result_buffer_block_count, [this]() {
@@ -51,7 +53,8 @@ ResultBufferMgr::~ResultBufferMgr() {
 }
 
 Status ResultBufferMgr::init() {
-    _cancel_thread.reset(new boost::thread(std::bind<void>(std::mem_fn(&ResultBufferMgr::cancel_thread), this)));
+    _cancel_thread =
+            std::make_unique<boost::thread>(std::bind<void>(std::mem_fn(&ResultBufferMgr::cancel_thread), this));
     return Status::OK();
 }
 
@@ -145,8 +148,8 @@ void ResultBufferMgr::cancel_thread() {
             TimeoutMap::iterator end = _timeout_map.upper_bound(now_time + 1);
 
             for (TimeoutMap::iterator iter = _timeout_map.begin(); iter != end; ++iter) {
-                for (int i = 0; i < iter->second.size(); ++i) {
-                    query_to_cancel.push_back(iter->second[i]);
+                for (auto& i : iter->second) {
+                    query_to_cancel.push_back(i);
                 }
             }
 
@@ -154,8 +157,8 @@ void ResultBufferMgr::cancel_thread() {
         }
 
         // cancel query
-        for (int i = 0; i < query_to_cancel.size(); ++i) {
-            cancel(query_to_cancel[i]);
+        for (auto& i : query_to_cancel) {
+            cancel(i);
         }
 
         sleep(1);

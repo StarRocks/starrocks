@@ -157,8 +157,8 @@ public class ReplayFromDumpTest {
                 "  |    \n" +
                 "  19:UNION\n" +
                 "  |  child exprs: \n" +
-                "  |      [143, INT, true] | [164, DECIMAL(7,2), true]\n" +
-                "  |      [179, INT, true] | [200, DECIMAL(7,2), true]"));
+                "  |      [143, INT, true] | [164, DECIMAL64(7,2), true]\n" +
+                "  |      [179, INT, true] | [200, DECIMAL64(7,2), true]\n"));
     }
 
     @Test
@@ -187,5 +187,13 @@ public class ReplayFromDumpTest {
         // check q1 has two agg phase with default column statistics
         Assert.assertTrue(replayPair.second.contains("AGGREGATE (merge finalize)"));
         Assert.assertTrue(replayPair.second.contains("AGGREGATE (update serialize)"));
+    }
+
+    @Test
+    public void testGroupByLimit() throws Exception {
+        // check can generate 1 phase with limit 1
+        // This test has column statistics and accurate table row count
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"));
+        Assert.assertTrue(replayPair.second.contains("2:AGGREGATE (update finalize)"));
     }
 }

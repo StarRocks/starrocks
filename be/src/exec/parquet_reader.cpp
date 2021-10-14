@@ -22,7 +22,8 @@
 
 #include <arrow/array.h>
 #include <arrow/status.h>
-#include <time.h>
+
+#include <ctime>
 
 #include "common/logging.h"
 #include "exec/file_reader.h"
@@ -165,7 +166,6 @@ inline void ParquetReaderWrap::fill_slot(Tuple* tuple, SlotDescriptor* slot_desc
     str_slot->ptr = reinterpret_cast<char*>(mem_pool->allocate(len));
     memcpy(str_slot->ptr, value, len);
     str_slot->len = len;
-    return;
 }
 
 Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs) {

@@ -53,7 +53,7 @@ SlotRef::SlotRef(const SlotDescriptor* desc, const TypeDescriptor& type)
 }
 
 SlotRef::SlotRef(const TypeDescriptor& type, int offset, SlotId slot)
-        : Expr(type, true), _tuple_idx(0), _slot_offset(offset), _null_indicator_offset(0, -1), _slot_id(slot) {}
+        : Expr(type, true), _slot_offset(offset), _null_indicator_offset(0, -1), _slot_id(slot) {}
 
 Status SlotRef::prepare(const SlotDescriptor* slot_desc, const RowDescriptor& row_desc) {
     if (!slot_desc->is_materialized()) {
@@ -128,8 +128,8 @@ int SlotRef::get_slot_ids(std::vector<SlotId>* slot_ids) const {
 }
 
 bool SlotRef::is_bound(const std::vector<TupleId>& tuple_ids) const {
-    for (int i = 0; i < tuple_ids.size(); i++) {
-        if (_tuple_id == tuple_ids[i]) {
+    for (int tuple_id : tuple_ids) {
+        if (_tuple_id == tuple_id) {
             return true;
         }
     }

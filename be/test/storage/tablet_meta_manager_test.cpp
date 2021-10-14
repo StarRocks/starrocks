@@ -76,7 +76,7 @@ TEST_F(TabletMetaManagerTest, test_save_load_tablet_meta) {
 
     load_meta.reset(new TabletMeta(&tracker));
     auto visit_func = [&](long tablet_id, long schema_hash, const std::string& meta) -> bool {
-        CHECK_EQ(OLAP_SUCCESS, load_meta->deserialize(meta));
+        CHECK(load_meta->deserialize(meta).ok());
         return true;
     };
     ASSERT_TRUE(TabletMetaManager::traverse_headers(_data_dir->get_meta(), visit_func).ok());

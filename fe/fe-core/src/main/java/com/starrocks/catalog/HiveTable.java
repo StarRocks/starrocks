@@ -31,6 +31,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
@@ -155,13 +156,19 @@ public class HiveTable extends Table {
                 .getPartition(resourceName, hiveDb, hiveTable, partitionKey);
     }
 
+    public List<HivePartition> getPartitions(List<PartitionKey> partitionKeys)
+            throws DdlException {
+        return Catalog.getCurrentCatalog().getHiveRepository()
+                .getPartitions(resourceName, hiveDb, hiveTable, partitionKeys);
+    }
+
     public HiveTableStats getTableStats() throws DdlException {
         return Catalog.getCurrentCatalog().getHiveRepository().getTableStats(resourceName, hiveDb, hiveTable);
     }
 
-    public HivePartitionStats getPartitionStats(PartitionKey partitionKey) throws DdlException {
+    public List<HivePartitionStats> getPartitionsStats(List<PartitionKey> partitionKeys) throws DdlException {
         return Catalog.getCurrentCatalog().getHiveRepository()
-                .getPartitionStats(resourceName, hiveDb, hiveTable, partitionKey);
+                .getPartitionsStats(resourceName, hiveDb, hiveTable, partitionKeys);
     }
 
     public Map<String, HiveColumnStats> getTableLevelColumnStats(List<String> columnNames) throws DdlException {
@@ -266,17 +273,18 @@ public class HiveTable extends Table {
         }
 
         long numRows = -1;
-        for (PartitionKey key : partitions) {
-            HivePartitionStats partitionStats = null;
-            try {
-                partitionStats = getPartitionStats(key);
-            } catch (DdlException e) {
-                LOG.warn("table {} gets partition {} stats failed.", name, key, e);
-                return -1;
-            }
 
-            long partNumRows = partitionStats.getNumRows();
-            long partTotalFileBytes = partitionStats.getTotalFileBytes();
+        List<HivePartitionStats> partitionsStats = Lists.newArrayList();
+        try {
+            partitionsStats = getPartitionsStats(partitions);
+        } catch (DdlException e) {
+            LOG.warn("table {} gets partitions stats failed.", name, e);
+        }
+
+
+        for (int i = 0; i < partitionsStats.size(); i++) {
+            long partNumRows = partitionsStats.get(i).getNumRows();
+            long partTotalFileBytes = partitionsStats.get(i).getTotalFileBytes();
             // -1: missing stats
             if (partNumRows > -1) {
                 if (numRows == -1) {
@@ -285,7 +293,7 @@ public class HiveTable extends Table {
                 numRows += partNumRows;
             } else {
                 LOG.debug("table {} partition {} stats abnormal. num rows: {}, total file bytes: {}",
-                        name, key, partNumRows, partTotalFileBytes);
+                        name, partitions.get(i), partNumRows, partTotalFileBytes);
             }
         }
         return numRows;
@@ -455,28 +463,33 @@ public class HiveTable extends Table {
         }
 
         // partitions
-        for (ReferencedPartitionInfo info : partitions) {
+        List<PartitionKey> partitionKeys = Lists.newArrayList();
+        for (ReferencedPartitionInfo partition : partitions) {
+            partitionKeys.add(partition.getKey());
+        }
+        List<HivePartition> hivePartitions;
+        try {
+            hivePartitions = getPartitions(partitionKeys);
+        } catch (DdlException e) {
+            LOG.warn("table {} gets partition info failed.", name, e);
+            return null;
+        }
+
+        for (int i = 0; i < hivePartitions.size(); i++) {
+            ReferencedPartitionInfo info = partitions.get(i);
             PartitionKey key = info.getKey();
             long partitionId = info.getId();
 
-            HivePartition hivePartition = null;
-            try {
-                hivePartition = getPartition(key);
-            } catch (DdlException e) {
-                LOG.warn("table {} gets partition {} failed.", name, key, e);
-                return null;
-            }
-
             THdfsPartition tPartition = new THdfsPartition();
-            tPartition.setFile_format(hivePartition.getFormat().toThrift());
+            tPartition.setFile_format(hivePartitions.get(i).getFormat().toThrift());
 
             List<LiteralExpr> keys = key.getKeys();
-            keys.stream().forEach(v -> v.setUseVectorized(true));
-            tPartition.setPartition_key_exprs(keys.stream().map(v -> v.treeToThrift()).collect(Collectors.toList()));
+            keys.forEach(v -> v.setUseVectorized(true));
+            tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
 
             THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
             tPartitionLocation.setPrefix_index(-1);
-            tPartitionLocation.setSuffix(hivePartition.getFullPath());
+            tPartitionLocation.setSuffix(hivePartitions.get(i).getFullPath());
             tPartition.setLocation(tPartitionLocation);
             tHdfsTable.putToPartitions(partitionId, tPartition);
         }

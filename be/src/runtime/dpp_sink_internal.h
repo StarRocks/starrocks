@@ -44,9 +44,9 @@ class TRangePartition;
 
 class PartRangeKey {
 public:
-    PartRangeKey() {}
+    PartRangeKey() = default;
 
-    ~PartRangeKey() {}
+    ~PartRangeKey() = default;
 
     static const PartRangeKey& pos_infinite() { return _s_pos_infinite; }
 
@@ -112,14 +112,14 @@ private:
 
 class PartRange {
 public:
-    PartRange() {}
+    PartRange() = default;
     PartRange(const PartRangeKey& start_key, const PartRangeKey& end_key, bool include_start, bool include_end)
             : _start_key(start_key),
               _end_key(end_key),
               _include_start_key(include_start),
               _include_end_key(include_end) {}
 
-    ~PartRange() {}
+    ~PartRange() = default;
 
     static const PartRange& all() { return _s_all_range; }
 
@@ -189,7 +189,7 @@ private:
 
 class PartitionInfo {
 public:
-    PartitionInfo() : _id(-1), _distributed_bucket(0) {}
+    PartitionInfo() {}
 
     static Status from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition);
 
@@ -208,12 +208,12 @@ public:
     const PartRange& range() const { return _range; }
 
 private:
-    int64_t _id;
+    int64_t _id{-1};
     PartRange _range;
     // Information used to distribute data
     // distribute exprs
     std::vector<ExprContext*> _distributed_expr_ctxs;
-    int32_t _distributed_bucket;
+    int32_t _distributed_bucket{0};
 };
 
 // which tablet this batch belong to

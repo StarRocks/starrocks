@@ -29,7 +29,7 @@ namespace starrocks {
 // Lightweight spinlock.
 class SpinLock {
 public:
-    SpinLock() : _locked(false) {
+    SpinLock() {
         // do nothing
     }
 
@@ -73,7 +73,7 @@ private:
     // TODO: how do we set this.
     static const int NUM_SPIN_CYCLES = 70;
     // TODO: pad this to be a cache line?
-    bool _locked;
+    bool _locked{false};
 };
 
 } // end namespace starrocks

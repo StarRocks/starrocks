@@ -191,14 +191,6 @@ public class ExchangeNode extends PlanNode {
     }
 
     @Override
-    public void setUseVectorized(boolean flag) {
-        this.useVectorized = flag;
-        for (Expr expr : conjuncts) {
-            expr.setUseVectorized(flag);
-        }
-    }
-
-    @Override
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
         boolean accept = false;
         if (description.canPushAcrossExchangeNode()) {

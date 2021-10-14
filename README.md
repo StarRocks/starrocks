@@ -31,6 +31,12 @@ We will continue to contribute to Apache Doris(incubating) and help to build the
 
 \* Statistics from GitHub, September 2021
 
+## Build
+
+Because of the thirdparty dependencies, we recommend building StarRocks with the development docker image we provide.
+
+For detailed instructions, please refer to [build](https://github.com/StarRocks/docs/blob/master/development/Build_in_docker.md).
+
 ## Install
 
 Download the current release [here](https://www.starrocks.com/en-US/download/community).  

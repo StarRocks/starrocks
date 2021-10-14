@@ -27,14 +27,15 @@ public class HiveScanImplementationRule extends ImplementationRule {
         if (scan.getTableType() == Table.TableType.HIVE) {
             PhysicalHiveScanOperator physicalHiveScan = new PhysicalHiveScanOperator(scan.getTable(),
                     scan.getOutputColumns(),
-                    scan.getColumnRefMap(),
+                    scan.getColRefToColumnMetaMap(),
                     scan.getSelectedPartitionIds(),
                     scan.getIdToPartitionKey(),
                     scan.getNoEvalPartitionConjuncts(),
                     scan.getNonPartitionConjuncts(),
                     scan.getMinMaxConjuncts(),
-                    scan.getMinMaxColumnRefMap());
-            physicalHiveScan.setLimit(scan.getLimit());
+                    scan.getMinMaxColumnRefMap(),
+                    scan.getLimit(),
+                    scan.getPredicate());
 
             result = new OptExpression(physicalHiveScan);
         }

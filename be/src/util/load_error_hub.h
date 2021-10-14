@@ -23,6 +23,7 @@
 #define STARROCKS_BE_SRC_UTIL_LOAD_ERROR_HUB_H
 
 #include <memory>
+#include <utility>
 
 #include "common/status.h"
 
@@ -38,12 +39,12 @@ public:
         std::string msg;
         // enum ErrType type;
 
-        ErrorMsg(int64_t id, const std::string& message) : job_id(id), msg(message) {}
+        ErrorMsg(int64_t id, std::string message) : job_id(id), msg(std::move(message)) {}
     };
 
-    LoadErrorHub() {}
+    LoadErrorHub() = default;
 
-    virtual ~LoadErrorHub() {}
+    virtual ~LoadErrorHub() = default;
 
     static Status create_hub(ExecEnv* env, const TLoadErrorHubInfo* t_hub_info, const std::string& error_log_file_name,
                              std::unique_ptr<LoadErrorHub>* hub);

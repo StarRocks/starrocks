@@ -21,9 +21,13 @@ namespace starrocks {
 class MemTracker;
 namespace pipeline {
 class FragmentContext {
+    friend FragmentContextManager;
+
 public:
     FragmentContext() : _cancel_flag(false) {}
     ~FragmentContext() {
+        _drivers.clear();
+        close_all_pipelines();
         if (_plan != nullptr) {
             _plan->close(_runtime_state.get());
         }
@@ -35,7 +39,8 @@ public:
         _fragment_instance_id = fragment_instance_id;
     }
     void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
-    TNetworkAddress fe_addr() { return _fe_addr; }
+    const TNetworkAddress& fe_addr() { return _fe_addr; }
+    FragmentFuture finish_future() { return _finish_promise.get_future(); }
     MemTracker* mem_tracker() const { return _mem_tracker.get(); }
     void set_mem_tracker(std::unique_ptr<MemTracker> mem_tracker) { _mem_tracker = std::move(mem_tracker); }
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
@@ -62,9 +67,8 @@ public:
             return;
         }
         Status* old_status = nullptr;
-        static Status s_status;
-        if (_final_status.compare_exchange_strong(old_status, &s_status)) {
-            s_status = status;
+        if (_final_status.compare_exchange_strong(old_status, &_s_status)) {
+            _s_status = status;
         }
     }
 
@@ -84,12 +88,28 @@ public:
 
     MorselQueueMap& morsel_queues() { return _morsel_queues; }
 
+    Status prepare_all_pipelines() {
+        for (auto& pipe : _pipelines) {
+            RETURN_IF_ERROR(pipe->prepare(_runtime_state.get(), _mem_tracker.get()));
+        }
+        return Status::OK();
+    }
+
+    void close_all_pipelines() {
+        for (auto& pipe : _pipelines) {
+            pipe->close(_runtime_state.get());
+        }
+    }
+
 private:
     // Id of this query
     TUniqueId _query_id;
     // Id of this instance
     TUniqueId _fragment_instance_id;
     TNetworkAddress _fe_addr;
+
+    // promise used to determine whether fragment finished its execution
+    FragmentPromise _finish_promise;
 
     // never adjust the order of _mem_tracker, _runtime_state, _plan, _pipelines and _drivers, since
     // _plan depends on _runtime_state and _drivers depends on _mem_tracker and _runtime_state.
@@ -112,7 +132,9 @@ private:
     std::atomic<size_t> _num_drivers;
     std::atomic<Status*> _final_status;
     std::atomic<bool> _cancel_flag;
+    Status _s_status;
 };
+
 class FragmentContextManager {
 public:
     FragmentContextManager() = default;

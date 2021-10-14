@@ -160,8 +160,8 @@ private:
     Node* FindLast() const;
 
     // No copying allowed
-    SkipList(const SkipList&);
-    void operator=(const SkipList&);
+    SkipList(const SkipList&) = delete;
+    void operator=(const SkipList&) = delete;
 };
 
 // Implementation details follow

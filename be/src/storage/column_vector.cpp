@@ -144,7 +144,7 @@ ScalarColumnVectorBatch<ScalarType>::ScalarColumnVectorBatch(const TypeInfoPtr& 
 
 ArrayColumnVectorBatch::ArrayColumnVectorBatch(const TypeInfoPtr& type_info, bool is_nullable, size_t init_capacity,
                                                Field* field)
-        : ColumnVectorBatch(type_info, is_nullable), _data(), _item_offsets(1) {
+        : ColumnVectorBatch(type_info, is_nullable), _item_offsets(1) {
     auto array_type_info = down_cast<const ArrayTypeInfo*>(type_info.get());
     _item_offsets[0] = 0;
     ColumnVectorBatch::create(init_capacity, field->get_sub_field(0)->is_nullable(), array_type_info->item_type_info(),

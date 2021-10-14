@@ -80,16 +80,16 @@ public:
 
     Status convert_to(FieldType new_type, std::unique_ptr<Cond>* output) const;
 
-    CondOp op;
+    CondOp op{OP_NULL};
     // valid when op is not OP_IN or OP_NOT_IN
-    WrapperField* operand_field;
+    WrapperField* operand_field{nullptr};
     // valid when op is OP_IN or OP_NOT_IN
     using FieldSet = std::unordered_set<const WrapperField*, FieldHash, FieldEqual>;
     FieldSet operand_set;
     // valid when op is OP_IN or OP_NOT_IN, represents the minimum value of in elements
-    WrapperField* min_value_filed;
+    WrapperField* min_value_filed{nullptr};
     // valid when op is OP_IN or OP_NOT_IN, represents the maximum value of in elements
-    WrapperField* max_value_filed;
+    WrapperField* max_value_filed{nullptr};
 };
 
 class CondColumn {
@@ -126,9 +126,9 @@ public:
     Status convert_to(FieldType new_type, std::unique_ptr<CondColumn>* output) const;
 
 private:
-    CondColumn() : _is_key(true), _col_index(-1) {}
-    bool _is_key;
-    int32_t _col_index;
+    CondColumn() {}
+    bool _is_key{true};
+    int32_t _col_index{-1};
     std::vector<Cond*> _conds;
 };
 
@@ -138,7 +138,7 @@ public:
     // Value: CondColumn object
     typedef std::map<int32_t, CondColumn*> CondColumns;
 
-    Conditions() {}
+    Conditions() = default;
     ~Conditions() { finalize(); }
 
     void finalize() {

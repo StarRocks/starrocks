@@ -47,7 +47,7 @@ MemoryScratchSink::MemoryScratchSink(const RowDescriptor& row_desc, const std::v
                                      const TMemoryScratchSink& sink)
         : _row_desc(row_desc), _t_output_expr(t_output_expr) {}
 
-MemoryScratchSink::~MemoryScratchSink() {}
+MemoryScratchSink::~MemoryScratchSink() = default;
 
 void MemoryScratchSink::convert_to_slot_types_and_ids() {
     for (auto* tuple_desc : _row_desc.tuple_descriptors()) {

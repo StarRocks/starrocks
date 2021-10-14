@@ -55,7 +55,8 @@ public:
     virtual uint64_t size() const = 0;
 
 private:
-    DISALLOW_COPY_AND_ASSIGN(BitmapIndexWriter);
+    BitmapIndexWriter(const BitmapIndexWriter&) = delete;
+    const BitmapIndexWriter& operator=(const BitmapIndexWriter&) = delete;
 };
 
 } // namespace segment_v2

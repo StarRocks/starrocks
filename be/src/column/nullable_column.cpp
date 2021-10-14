@@ -9,8 +9,7 @@
 #include "simd/simd.h"
 #include "util/mysql_row_buffer.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 NullableColumn::NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column)
         : _data_column(std::move(data_column)), _has_null(false) {
@@ -214,9 +213,8 @@ size_t NullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_off
 
 void NullableColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                      uint32_t max_one_row_size) {
-    for (size_t i = 0; i < chunk_size; ++i) {
-        slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
-    }
+    _data_column->serialize_batch_with_null_masks(dst, slice_sizes, chunk_size, max_one_row_size,
+                                                  _null_column->get_data().data(), _has_null);
 }
 
 const uint8_t* NullableColumn::deserialize_and_append(const uint8_t* pos) {
@@ -311,5 +309,4 @@ void NullableColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

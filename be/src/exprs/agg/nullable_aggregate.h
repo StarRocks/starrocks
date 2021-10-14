@@ -28,13 +28,13 @@ template <typename T>
 struct NullableAggregateFunctionState {
     using NestedState = T;
 
-    NullableAggregateFunctionState() : is_null(true), _nested_state() {}
+    NullableAggregateFunctionState() : _nested_state() {}
 
     AggDataPtr mutable_nest_state() { return reinterpret_cast<AggDataPtr>(&_nested_state); }
 
     ConstAggDataPtr nested_state() const { return reinterpret_cast<ConstAggDataPtr>(&_nested_state); }
 
-    bool is_null;
+    bool is_null{true};
     T _nested_state;
 };
 
@@ -176,6 +176,16 @@ public:
                      AggDataPtr* states) const override {
         for (size_t i = 0; i < batch_size; ++i) {
             merge(ctx, column, states[i] + state_offset, i);
+        }
+    }
+
+    void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
+                                 AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+        for (size_t i = 0; i < batch_size; i++) {
+            // TODO: optimize with simd ?
+            if (filter[i] == 0) {
+                merge(ctx, column, states[i] + state_offset, i);
+            }
         }
     }
 
@@ -531,13 +541,13 @@ public:
         data_columns.reserve(src.size());
 
         bool has_nullable_column = false;
-        for (int i = 0; i < src.size(); ++i) {
-            if (src[i]->is_nullable()) {
+        for (const auto& i : src) {
+            if (i->is_nullable()) {
                 has_nullable_column = true;
 
-                const auto* nullable_column = down_cast<const NullableColumn*>(src[i].get());
+                const auto* nullable_column = down_cast<const NullableColumn*>(i.get());
                 data_columns.emplace_back(nullable_column->data_column());
-                if (src[i]->has_null()) {
+                if (i->has_null()) {
                     const NullData& src_null_data = nullable_column->immutable_null_column_data();
 
                     // for one row, every columns should be probing to obtain null column.
@@ -546,7 +556,7 @@ public:
                     }
                 }
             } else {
-                data_columns.emplace_back(src[i]);
+                data_columns.emplace_back(i);
             }
         }
 

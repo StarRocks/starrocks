@@ -21,10 +21,10 @@
 
 #include "storage/schema_change.h"
 
-#include <signal.h>
 #include <util/defer_op.h>
 
 #include <algorithm>
+#include <csignal>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -199,7 +199,8 @@ private:
     typedef std::pair<FieldType, FieldType> convert_type_pair;
     std::unordered_set<convert_type_pair, ConvertTypeMapHash> _convert_type_set;
 
-    DISALLOW_COPY_AND_ASSIGN(ConvertTypeResolver);
+    ConvertTypeResolver(const ConvertTypeResolver&) = delete;
+    const ConvertTypeResolver& operator=(const ConvertTypeResolver&) = delete;
 };
 
 ConvertTypeResolver::ConvertTypeResolver() {
@@ -259,7 +260,7 @@ ConvertTypeResolver::ConvertTypeResolver() {
     add_convert_type_mapping<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL128>();
 }
 
-ConvertTypeResolver::~ConvertTypeResolver() {}
+ConvertTypeResolver::~ConvertTypeResolver() = default;
 
 bool to_bitmap(RowCursor* read_helper, RowCursor* write_helper, const TabletColumn& ref_column, int field_idx,
                int ref_field_idx, MemPool* mem_pool) {
@@ -913,7 +914,7 @@ RowBlockMerger::RowBlockMerger(MemTracker* mem_tracker, TabletSharedPtr tablet) 
     _mem_tracker = std::make_unique<MemTracker>(-1, "block_merger", mem_tracker);
 }
 
-RowBlockMerger::~RowBlockMerger() {}
+RowBlockMerger::~RowBlockMerger() = default;
 
 bool RowBlockMerger::merge(const std::vector<RowBlock*>& row_block_arr, RowsetWriter* rowset_writer,
                            uint64_t* merged_rows) {
@@ -1323,8 +1324,8 @@ bool SchemaChangeWithSorting::process(RowsetReaderSharedPtr rowset_reader, Rowse
 
             src_rowsets.push_back(rowset);
 
-            for (vector<RowBlock*>::iterator it = row_block_arr.begin(); it != row_block_arr.end(); ++it) {
-                _row_block_allocator->release(*it);
+            for (auto& it : row_block_arr) {
+                _row_block_allocator->release(it);
             }
 
             row_block_arr.clear();
@@ -1464,7 +1465,7 @@ bool SchemaChangeWithSorting::_internal_sorting(const std::vector<RowBlock*>& ro
             << ", block_row_size=" << new_tablet->num_rows_per_row_block();
 
     std::unique_ptr<RowsetWriter> rowset_writer;
-    if (RowsetFactory::create_rowset_writer(context, &rowset_writer) != OLAP_SUCCESS) {
+    if (!RowsetFactory::create_rowset_writer(context, &rowset_writer).ok()) {
         return false;
     }
 
@@ -1697,7 +1698,7 @@ OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterT
             rs_reader->init(&_reader_context);
         }
 
-    } while (0);
+    } while (false);
 
     new_tablet->release_header_lock();
     base_tablet->release_header_lock();
@@ -1755,7 +1756,7 @@ OLAPStatus SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterT
             break;
         }
         new_tablet->save_meta();
-    } while (0);
+    } while (false);
 
     if (res == OLAP_SUCCESS) {
         // _validate_alter_result should be outside the above while loop.
@@ -1782,9 +1783,12 @@ OLAPStatus SchemaChangeHandler::_get_versions_to_be_changed(const TabletSharedPt
     }
 
     std::vector<Version> span_versions;
-    RETURN_NOT_OK(base_tablet->capture_consistent_versions(Version(0, rowset->version().second), &span_versions));
-    for (uint32_t i = 0; i < span_versions.size(); i++) {
-        versions_to_be_changed->push_back(span_versions[i]);
+    if (Status st = base_tablet->capture_consistent_versions(Version(0, rowset->version().second), &span_versions);
+        !st.ok()) {
+        return OLAP_ERR_OTHER_ERROR;
+    }
+    for (auto& span_version : span_versions) {
+        versions_to_be_changed->push_back(span_version);
     }
 
     return OLAP_SUCCESS;
@@ -1797,9 +1801,9 @@ OLAPStatus SchemaChangeHandler::_convert_historical_rowsets(const SchemaChangePa
 
     // find end version
     int32_t end_version = -1;
-    for (size_t i = 0; i < sc_params.ref_rowset_readers.size(); ++i) {
-        if (sc_params.ref_rowset_readers[i]->version().second > end_version) {
-            end_version = sc_params.ref_rowset_readers[i]->version().second;
+    for (const auto& ref_rowset_reader : sc_params.ref_rowset_readers) {
+        if (ref_rowset_reader->version().second > end_version) {
+            end_version = ref_rowset_reader->version().second;
         }
     }
 
@@ -1873,7 +1877,9 @@ OLAPStatus SchemaChangeHandler::_convert_historical_rowsets(const SchemaChangePa
         writer_context.segments_overlap = rs_reader->rowset()->rowset_meta()->segments_overlap();
 
         std::unique_ptr<RowsetWriter> rowset_writer;
-        OLAPStatus status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
+        OLAPStatus status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok()
+                                    ? OLAP_SUCCESS
+                                    : OLAP_ERR_OTHER_ERROR;
         if (status != OLAP_SUCCESS) {
             res = OLAP_ERR_ROWSET_BUILDER_INIT;
             goto PROCESS_ALTER_EXIT;
@@ -1894,19 +1900,20 @@ OLAPStatus SchemaChangeHandler::_convert_historical_rowsets(const SchemaChangePa
             sc_params.new_tablet->release_push_lock();
             goto PROCESS_ALTER_EXIT;
         }
-        res = sc_params.new_tablet->add_rowset(new_rowset, false);
-        if (res == OLAP_ERR_PUSH_VERSION_ALREADY_EXIST) {
+        auto st = sc_params.new_tablet->add_rowset(new_rowset, false);
+        if (st.is_already_exist()) {
             LOG(WARNING) << "version already exist, version revert occured. "
                          << "tablet=" << sc_params.new_tablet->full_name() << ", version='"
                          << rs_reader->version().first << "-" << rs_reader->version().second;
             StorageEngine::instance()->add_unused_rowset(new_rowset);
             res = OLAP_SUCCESS;
-        } else if (res != OLAP_SUCCESS) {
+        } else if (!st.ok()) {
             LOG(WARNING) << "failed to register new version. "
                          << " tablet=" << sc_params.new_tablet->full_name()
                          << ", version=" << rs_reader->version().first << "-" << rs_reader->version().second;
             StorageEngine::instance()->add_unused_rowset(new_rowset);
             sc_params.new_tablet->release_push_lock();
+            res = OLAP_ERR_OTHER_ERROR;
             goto PROCESS_ALTER_EXIT;
         } else {
             VLOG(3) << "register new version. tablet=" << sc_params.new_tablet->full_name()
@@ -1926,7 +1933,7 @@ PROCESS_ALTER_EXIT : {
 }
     if (res == OLAP_SUCCESS) {
         Version test_version(0, end_version);
-        res = sc_params.new_tablet->check_version_integrity(test_version);
+        res = sc_params.new_tablet->check_version_integrity(test_version).ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
     }
     SAFE_DELETE(sc_procedure);
 
@@ -1946,23 +1953,8 @@ OLAPStatus SchemaChangeHandler::_parse_request(
     // set column mapping
     for (int i = 0, new_schema_size = new_tablet->tablet_schema().num_columns(); i < new_schema_size; ++i) {
         const TabletColumn& new_column = new_tablet->tablet_schema().column(i);
-        const string& column_name = new_column.name();
+        string column_name = std::string(new_column.name());
         ColumnMapping* column_mapping = rb_changer->get_mutable_column_mapping(i);
-
-        if (new_column.has_reference_column()) {
-            int32_t column_index = base_tablet->field_index(new_column.referenced_column());
-
-            if (column_index < 0) {
-                LOG(WARNING) << "referenced column was missing. "
-                             << "[column=" << column_name << " referenced_column=" << column_index << "]";
-                return OLAP_ERR_CE_CMD_PARAMS_ERROR;
-            }
-
-            column_mapping->ref_column = column_index;
-            VLOG(3) << "A column refered to existed column will be added after schema changing."
-                    << "column=" << column_name << ", ref_column=" << column_index;
-            continue;
-        }
 
         if (materialized_function_map.find(column_name) != materialized_function_map.end()) {
             AlterMaterializedViewParam mvParam = materialized_function_map.find(column_name)->second;

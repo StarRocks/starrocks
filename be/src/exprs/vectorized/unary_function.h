@@ -5,6 +5,8 @@
 #include <fmt/compile.h>
 #include <fmt/format.h>
 
+#include <cstdint>
+
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
@@ -13,7 +15,6 @@
 #include "common/logging.h"
 #include "function_helper.h"
 #include "simd/simd.h"
-#include "stdint.h"
 
 namespace starrocks {
 namespace vectorized {

@@ -34,6 +34,14 @@ public class LogicalWindowOperator extends LogicalOperator {
         this.analyticWindow = analyticWindow;
     }
 
+    private LogicalWindowOperator(Builder builder) {
+        super(OperatorType.LOGICAL_WINDOW);
+        this.windowCall = builder.windowCall;
+        this.partitionExpressions = builder.partitionExpressions;
+        this.orderByElements = builder.orderByElements;
+        this.analyticWindow = builder.analyticWindow;
+    }
+
     public Map<ColumnRefOperator, CallOperator> getWindowCall() {
         return windowCall;
     }
@@ -89,5 +97,28 @@ public class LogicalWindowOperator extends LogicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), windowCall, partitionExpressions, orderByElements, analyticWindow);
+    }
+
+    public static class Builder extends LogicalOperator.Builder<LogicalWindowOperator, LogicalWindowOperator.Builder> {
+        private Map<ColumnRefOperator, CallOperator> windowCall;
+        private List<ScalarOperator> partitionExpressions;
+        private List<Ordering> orderByElements;
+        private AnalyticWindow analyticWindow;
+
+        @Override
+        public LogicalWindowOperator build() {
+            return new LogicalWindowOperator(this);
+        }
+
+        @Override
+        public LogicalWindowOperator.Builder withOperator(LogicalWindowOperator windowOperator) {
+            super.withOperator(windowOperator);
+
+            this.windowCall = windowOperator.windowCall;
+            this.partitionExpressions = windowOperator.partitionExpressions;
+            this.orderByElements = windowOperator.orderByElements;
+            this.analyticWindow = windowOperator.analyticWindow;
+            return this;
+        }
     }
 }

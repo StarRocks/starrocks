@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
+import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,9 +32,10 @@ import java.util.Map;
  */
 public class AddProjectForJoinOnBinaryPredicatesRule implements PhysicalOperatorTreeRewriteRule {
     @Override
-    public OptExpression rewrite(OptExpression root, ColumnRefFactory factory) {
+    public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
+        ColumnRefFactory factory = taskContext.getOptimizerContext().getColumnRefFactory();
         for (int i = 0; i < root.arity(); ++i) {
-            root.setChild(i, this.rewrite(root.inputAt(i), factory));
+            root.setChild(i, this.rewrite(root.inputAt(i), taskContext));
         }
 
         if (!(root.getOp() instanceof PhysicalHashJoinOperator)) {

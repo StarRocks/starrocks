@@ -22,7 +22,7 @@
 #ifndef STARROCKS_BE_RUNTIME_STRING_VALUE_H
 #define STARROCKS_BE_RUNTIME_STRING_VALUE_H
 
-#include <string.h>
+#include <cstring>
 
 #include "udf/udf.h"
 #include "util/hash_util.hpp"
@@ -41,11 +41,11 @@ struct StringValue {
     // NOTE: This struct should keep the same memory layout with Slice, otherwise
     // it will lead to BE crash.
     // TODO(zc): we should unify this struct with Slice some day.
-    char* ptr;
-    size_t len;
+    char* ptr{nullptr};
+    size_t len{0};
 
     StringValue(char* ptr, size_t len) : ptr(ptr), len(len) {}
-    StringValue() : ptr(nullptr), len(0) {}
+    StringValue() {}
 
     /// Construct a StringValue from 's'.  's' must be valid for as long as
     /// this object is valid.

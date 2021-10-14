@@ -23,8 +23,7 @@
 
 #include "env/env.h"
 
-namespace starrocks {
-namespace env_util {
+namespace starrocks::env_util {
 
 Status open_file_for_write(Env* env, const std::string& path, std::shared_ptr<WritableFile>* file) {
     return open_file_for_write(WritableFileOptions(), env, path, file);
@@ -52,5 +51,4 @@ Status open_file_for_random(Env* env, const std::string& path, std::shared_ptr<R
     return Status::OK();
 }
 
-} // namespace env_util
-} // namespace starrocks
+} // namespace starrocks::env_util

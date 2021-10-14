@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -19,7 +20,8 @@ import java.util.stream.Collectors;
 
 public class EliminateLimitZeroRule extends TransformationRule {
     public EliminateLimitZeroRule() {
-        super(RuleType.TF_ELIMINATE_LIMIT_ZERO, Pattern.create(OperatorType.LOGICAL_LIMIT));
+        super(RuleType.TF_ELIMINATE_LIMIT_ZERO, Pattern.create(OperatorType.LOGICAL_LIMIT)
+                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 
     @Override
@@ -30,7 +32,9 @@ public class EliminateLimitZeroRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        ColumnRefSet outputColumnIds = input.getOutputColumns();
+        ColumnRefSet outputColumnIds =
+                ((LogicalLimitOperator) input.getOp()).getOutputColumns(new ExpressionContext(input));
+
         List<ColumnRefOperator> outputColumns = outputColumnIds.getStream().mapToObj(
                 id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
         LogicalValuesOperator emptyOperator = new LogicalValuesOperator(

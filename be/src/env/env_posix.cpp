@@ -9,12 +9,12 @@
 
 #include <dirent.h>
 #include <fcntl.h>
-#include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
 
+#include <cstdio>
 #include <memory>
 
 #include "common/logging.h"
@@ -407,7 +407,7 @@ private:
 class PosixRandomRWFile : public RandomRWFile {
 public:
     PosixRandomRWFile(string fname, int fd, bool sync_on_close)
-            : _filename(std::move(fname)), _fd(fd), _sync_on_close(sync_on_close), _closed(false) {}
+            : _filename(std::move(fname)), _fd(fd), _sync_on_close(sync_on_close) {}
 
     ~PosixRandomRWFile() override { WARN_IF_ERROR(close(), "Failed to close " + _filename); }
 
@@ -489,7 +489,7 @@ private:
 
 class PosixEnv : public Env {
 public:
-    ~PosixEnv() override {}
+    ~PosixEnv() override = default;
 
     Status new_sequential_file(const string& fname, std::unique_ptr<SequentialFile>* result) override {
         FILE* f;
@@ -497,7 +497,7 @@ public:
         if (f == nullptr) {
             return io_error(fname, errno);
         }
-        result->reset(new PosixSequentialFile(fname, f));
+        *result = std::make_unique<PosixSequentialFile>(fname, f);
         return Status::OK();
     }
 
@@ -513,7 +513,7 @@ public:
         if (fd < 0) {
             return io_error(fname, errno);
         }
-        result->reset(new PosixRandomAccessFile(fname, fd));
+        *result = std::make_unique<PosixRandomAccessFile>(fname, fd);
         return Status::OK();
     }
 
@@ -530,7 +530,7 @@ public:
         if (opts.mode == MUST_EXIST) {
             RETURN_IF_ERROR(get_file_size(fname, &file_size));
         }
-        result->reset(new PosixWritableFile(fname, fd, file_size, opts.sync_on_close));
+        *result = std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close);
         return Status::OK();
     }
 
@@ -542,7 +542,7 @@ public:
                               std::unique_ptr<RandomRWFile>* result) override {
         int fd;
         RETURN_IF_ERROR(do_open(fname, opts.mode, &fd));
-        result->reset(new PosixRandomRWFile(fname, fd, opts.sync_on_close));
+        *result = std::make_unique<PosixRandomRWFile>(fname, fd, opts.sync_on_close);
         return Status::OK();
     }
 

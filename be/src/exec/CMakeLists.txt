@@ -47,7 +47,6 @@ set(EXEC_FILES
     es/es_predicate.cpp
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
-    es/es_scroll_parser.cpp
     es/es_query_builder.cpp
     local_file_writer.cpp
     broker_writer.cpp
@@ -61,9 +60,12 @@ set(EXEC_FILES
     vectorized/aggregate/aggregate_streaming_node.cpp
     vectorized/aggregate/distinct_streaming_node.cpp
     vectorized/analytic_node.cpp
+    vectorized/analytor.cpp
     vectorized/csv_scanner.cpp
-    vectorized/olap_scanner.cpp
+    vectorized/tablet_scanner.cpp
     vectorized/olap_scan_node.cpp
+    vectorized/olap_meta_scanner.cpp
+    vectorized/olap_meta_scan_node.cpp
     vectorized/hash_join_node.cpp
     vectorized/join_hash_map.cpp
     vectorized/topn_node.cpp
@@ -87,6 +89,7 @@ set(EXEC_FILES
     vectorized/hdfs_scanner_orc.cpp
     vectorized/json_scanner.cpp
     vectorized/project_node.cpp
+    vectorized/dict_decode_node.cpp
     vectorized/repeat_node.cpp
     vectorized/table_function_node.cpp
     vectorized/es_http_scan_node.cpp
@@ -151,6 +154,8 @@ set(EXEC_FILES
     pipeline/aggregate/aggregate_distinct_blocking_source_operator.cpp
     pipeline/aggregate/aggregate_distinct_streaming_sink_operator.cpp
     pipeline/aggregate/aggregate_distinct_streaming_source_operator.cpp
+    pipeline/analysis/analytic_sink_operator.cpp
+    pipeline/analysis/analytic_source_operator.cpp
 )
 
 set(EXEC_FILES

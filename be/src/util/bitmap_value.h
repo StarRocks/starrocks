@@ -96,13 +96,9 @@ public:
      */
     Roaring64Map() = default;
 
-    Roaring64Map(const Roaring64Map& other) : roarings(other.roarings), copyOnWrite(other.copyOnWrite) {}
+    Roaring64Map(const Roaring64Map& other) = default;
 
-    Roaring64Map& operator=(const Roaring64Map& other) {
-        this->roarings = other.roarings;
-        this->copyOnWrite = other.copyOnWrite;
-        return *this;
-    }
+    Roaring64Map& operator=(const Roaring64Map& other) = default;
 
     Roaring64Map(Roaring64Map&& other) noexcept : roarings(std::move(other.roarings)), copyOnWrite(other.copyOnWrite) {
         other.copyOnWrite = false;
@@ -212,9 +208,9 @@ public:
      *
      */
     uint64_t minimum() const {
-        for (auto roaring_iter = roarings.cbegin(); roaring_iter != roarings.cend(); ++roaring_iter) {
-            if (!roaring_iter->second.isEmpty()) {
-                return uniteBytes(roaring_iter->first, roaring_iter->second.minimum());
+        for (const auto& roaring : roarings) {
+            if (!roaring.second.isEmpty()) {
+                return uniteBytes(roaring.first, roaring.second.minimum());
             }
         }
         // we put std::numeric_limits<>::max/lowest in parenthesis
@@ -946,7 +942,7 @@ inline Roaring64MapSetBitForwardIterator Roaring64Map::end() const {
 class BitmapValue {
 public:
     // Construct an empty bitmap.
-    BitmapValue() : _type(EMPTY) {}
+    BitmapValue() {}
 
     BitmapValue(const BitmapValue& other)
             : _bitmap(other._bitmap == nullptr ? nullptr : std::make_shared<detail::Roaring64Map>(*other._bitmap)),
@@ -1672,8 +1668,8 @@ public:
             array->emplace_back(_sv);
             break;
         case BITMAP: {
-            for (auto ptr_value = _bitmap->begin(); ptr_value != _bitmap->end(); ++ptr_value) {
-                array->emplace_back(*ptr_value);
+            for (unsigned long ptr_value : *_bitmap) {
+                array->emplace_back(ptr_value);
             }
             break;
         }
@@ -1735,7 +1731,7 @@ private:
     std::shared_ptr<detail::Roaring64Map> _bitmap = nullptr;
     phmap::flat_hash_set<uint64_t> _set;
     uint64_t _sv = 0; // store the single value when _type == SINGLE
-    BitmapDataType _type;
+    BitmapDataType _type{EMPTY};
 };
 
 } // namespace starrocks

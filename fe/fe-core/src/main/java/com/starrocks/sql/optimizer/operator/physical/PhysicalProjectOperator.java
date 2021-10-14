@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -12,6 +13,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
+import java.util.Set;
 
 public class PhysicalProjectOperator extends PhysicalOperator {
     private final Map<ColumnRefOperator, ScalarOperator> columnRefMap;
@@ -67,5 +69,39 @@ public class PhysicalProjectOperator extends PhysicalOperator {
         columnRefMap.values().forEach(d -> set.union(d.getUsedColumns()));
         commonSubOperatorMap.values().forEach(d -> set.union(d.getUsedColumns()));
         return set;
+    }
+
+    @Override
+    public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
+        Preconditions.checkState(!childDictColumns.isEmpty());
+        ColumnRefSet dictSet = new ColumnRefSet();
+        for (Integer id : childDictColumns) {
+            dictSet.union(id);
+        }
+
+        for (ScalarOperator operator : columnRefMap.values()) {
+            if (!couldApplyStringDict(operator, dictSet)) {
+                return false;
+            }
+        }
+
+        for (ScalarOperator operator : commonSubOperatorMap.values()) {
+            if (!couldApplyStringDict(operator, dictSet)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private boolean couldApplyStringDict(ScalarOperator operator, ColumnRefSet dictSet) {
+        ColumnRefSet usedColumns = operator.getUsedColumns();
+        if (usedColumns.isIntersect(dictSet)) {
+            if (usedColumns.cardinality() > 1) {
+                return false;
+            }
+            return operator instanceof ColumnRefOperator;
+        }
+        return true;
     }
 }

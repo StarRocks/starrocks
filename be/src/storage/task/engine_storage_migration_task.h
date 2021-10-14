@@ -36,7 +36,7 @@ public:
 
 public:
     EngineStorageMigrationTask(TTabletId tablet_id, TSchemaHash schema_hash, DataDir* dest_store);
-    ~EngineStorageMigrationTask() override {}
+    ~EngineStorageMigrationTask() override = default;
 
 private:
     OLAPStatus _storage_migrate(TabletSharedPtr tablet);

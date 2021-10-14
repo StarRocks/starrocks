@@ -170,7 +170,8 @@ private:
 
     std::shared_mutex& _get_tablets_shard_lock(TTabletId tabletId);
 
-    DISALLOW_COPY_AND_ASSIGN(TabletManager);
+    TabletManager(const TabletManager&) = delete;
+    const TabletManager& operator=(const TabletManager&) = delete;
 
     // TODO(lingbin): should be TabletInstances?
     // should be removed after schema_hash be removed

@@ -5,10 +5,12 @@ package com.starrocks.sql.optimizer.statistics;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -20,12 +22,15 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -90,7 +95,7 @@ public class StatisticsCalculatorTest {
         Group childGroup = new Group(0);
         childGroup.setStatistics(builder.build());
 
-        LogicalAggregationOperator aggNode = new LogicalAggregationOperator(groupByColumns, aggCall);
+        LogicalAggregationOperator aggNode = new LogicalAggregationOperator(AggType.GLOBAL, groupByColumns, aggCall);
         GroupExpression groupExpression = new GroupExpression(aggNode, Lists.newArrayList(childGroup));
         groupExpression.setGroup(new Group(1));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
@@ -100,7 +105,7 @@ public class StatisticsCalculatorTest {
         Assert.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
 
         groupByColumns = Lists.newArrayList(v1, v2);
-        aggNode = new LogicalAggregationOperator(groupByColumns, aggCall);
+        aggNode = new LogicalAggregationOperator(AggType.GLOBAL, groupByColumns, aggCall);
         groupExpression = new GroupExpression(aggNode, Lists.newArrayList(childGroup));
         groupExpression.setGroup(new Group(1));
         expressionContext = new ExpressionContext(groupExpression);
@@ -187,8 +192,16 @@ public class StatisticsCalculatorTest {
             partition.getBaseIndex().setRowCount(1000);
         }
 
-        LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table);
-        olapScanOperator.getSelectedPartitionId().addAll(partitionIds);
+        LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
+                Lists.newArrayList(),
+                Maps.newHashMap(), Maps.newHashMap(),
+                null, -1, null,
+                ((OlapTable) table).getBaseIndexId(),
+                partitionIds,
+                null,
+                Lists.newArrayList(),
+                Lists.newArrayList());
+
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
@@ -230,10 +243,15 @@ public class StatisticsCalculatorTest {
         ColumnRefOperator id_date = columnRefFactory.create("id_date", Type.DATE, true);
 
         Catalog catalog = connectContext.getCatalog();
-        OlapTable table = (OlapTable) catalog.getDb("default_cluster:test").getTable("test_all_type");
+        Table table = catalog.getDb("default_cluster:test").getTable("test_all_type");
 
         new Expectations() {
             {
+                cachedStatisticStorage.getColumnStatistics(table, Lists.newArrayList("id_date"));
+                result = new ColumnStatistic(0, Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 01, 0, 0, 0)),
+                        0, 0, 30);
+                minTimes = 0;
+
                 cachedStatisticStorage.getColumnStatistic(table, "id_date");
                 result = new ColumnStatistic(0, Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 01, 0, 0, 0)),
                         0, 0, 30);
@@ -241,7 +259,7 @@ public class StatisticsCalculatorTest {
             }
         };
 
-        Collection<Partition> partitions = table.getPartitions();
+        Collection<Partition> partitions = ((OlapTable) table).getPartitions();
         // select partition p1
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p1")).
                 mapToLong(Partition::getId).boxed().collect(Collectors.toList());
@@ -249,13 +267,19 @@ public class StatisticsCalculatorTest {
             partition.getBaseIndex().setRowCount(1000);
         }
 
-        LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
-                Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of(new Column("id_date", Type.DATE, true),
-                id_date.getId()));
-        olapScanOperator.getSelectedPartitionId().addAll(partitionIds);
-
-        olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
-                id_date, ConstantOperator.createDate(LocalDateTime.of(2013, 12, 30, 0, 0, 0))));
+        LogicalOlapScanOperator olapScanOperator =
+                new LogicalOlapScanOperator(table,
+                        Lists.newArrayList(),
+                        ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
+                        ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date),
+                        null, -1,
+                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                                id_date, ConstantOperator.createDate(LocalDateTime.of(2013, 12, 30, 0, 0, 0))),
+                        ((OlapTable) table).getBaseIndexId(),
+                        partitionIds,
+                        null,
+                        Lists.newArrayList(),
+                        Lists.newArrayList());
 
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
@@ -274,12 +298,18 @@ public class StatisticsCalculatorTest {
         partitionIds.clear();
         partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                 mapToLong(Partition::getId).boxed().collect(Collectors.toList());
-        olapScanOperator = new LogicalOlapScanOperator(table,
-                Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of(new Column("id_date", Type.DATE, true),
-                id_date.getId()));
+        olapScanOperator =
+                new LogicalOlapScanOperator(table,
+                        Lists.newArrayList(),
+                        ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
+                        ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date),
+                        null, -1, null, ((OlapTable) table).getBaseIndexId(),
+                        partitionIds,
+                        null,
+                        Lists.newArrayList(),
+                        Lists.newArrayList());
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
                 id_date, ConstantOperator.createDate(LocalDateTime.of(2014, 5, 1, 0, 0, 0))));
-        olapScanOperator.getSelectedPartitionId().addAll(partitionIds);
 
         groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
@@ -333,6 +363,11 @@ public class StatisticsCalculatorTest {
 
         new Expectations() {
             {
+                cachedStatisticStorage.getColumnStatistics(table, Lists.newArrayList("id_date"));
+                result = new ColumnStatistic(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 23, 0, 0, 0)),
+                        Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 25, 0, 0, 0)), 0, 0, 3);
+                minTimes = 0;
+
                 cachedStatisticStorage.getColumnStatistic(table, "id_date");
                 result = new ColumnStatistic(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 23, 0, 0, 0)),
                         Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 25, 0, 0, 0)), 0, 0, 3);
@@ -348,10 +383,15 @@ public class StatisticsCalculatorTest {
             partition.getBaseIndex().setRowCount(1000);
         }
 
-        LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
-                Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of(new Column("id_date", Type.DATE, true),
-                id_date.getId()));
-        olapScanOperator.getSelectedPartitionId().addAll(partitionIds);
+        LogicalOlapScanOperator olapScanOperator =
+                new LogicalOlapScanOperator(table, Lists.newArrayList(id_date),
+                        ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
+                        ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date), null, -1, null,
+                        ((OlapTable) table).getBaseIndexId(),
+                        partitionIds,
+                        null,
+                        Lists.newArrayList(),
+                        Lists.newArrayList());
 
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
@@ -372,12 +412,17 @@ public class StatisticsCalculatorTest {
         partitionIds.clear();
         partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                 mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
-        olapScanOperator = new LogicalOlapScanOperator(table,
-                Lists.newArrayList(), Maps.newHashMap(), ImmutableMap.of(new Column("id_date", Type.DATE, true),
-                id_date.getId()));
+        olapScanOperator =
+                new LogicalOlapScanOperator(table, Lists.newArrayList(id_date),
+                        ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
+                        ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date), null, -1, null,
+                        ((OlapTable) table).getBaseIndexId(),
+                        partitionIds,
+                        null,
+                        Lists.newArrayList(),
+                        Lists.newArrayList());
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
                 id_date, ConstantOperator.createDate(LocalDateTime.of(2020, 04, 24, 0, 0, 0))));
-        olapScanOperator.getSelectedPartitionId().addAll(partitionIds);
 
         groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
@@ -394,5 +439,107 @@ public class StatisticsCalculatorTest {
                 columnStatistic.getMaxValue(), 0.001);
         Assert.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.001);
         starRocksAssert.dropTable("test_all_type");
+    }
+
+    @Test
+    public void testJoinEstimateWithMultiColumns() {
+        // child 1 output column
+        ColumnRefOperator v1 = columnRefFactory.create("v1", Type.INT, true);
+        ColumnRefOperator v2 = columnRefFactory.create("v2", Type.INT, true);
+        ColumnRefOperator v5 = columnRefFactory.create("v5", Type.INT, true);
+        // child 2 output column
+        ColumnRefOperator v3 = columnRefFactory.create("v3", Type.INT, true);
+        ColumnRefOperator v4 = columnRefFactory.create("v4", Type.INT, true);
+        ColumnRefOperator v6 = columnRefFactory.create("v6", Type.INT, true);
+        // child 1 statistics
+        Statistics.Builder childBuilder1 = Statistics.builder();
+        childBuilder1.setOutputRowCount(10000);
+        childBuilder1.addColumnStatistics(ImmutableMap.of(v1, new ColumnStatistic(0, 100, 0, 10, 50)));
+        childBuilder1.addColumnStatistics(ImmutableMap.of(v2, new ColumnStatistic(0, 50, 0, 10, 50)));
+        childBuilder1.addColumnStatistics(ImmutableMap.of(v5, new ColumnStatistic(0, 50, 0, 10, 50)));
+        Group childGroup1 = new Group(0);
+        childGroup1.setStatistics(childBuilder1.build());
+        // child 2 statistics
+        Statistics.Builder childBuilder2 = Statistics.builder();
+        childBuilder2.setOutputRowCount(20000);
+        childBuilder2.addColumnStatistics(ImmutableMap.of(v3, new ColumnStatistic(100, 200, 0, 10, 50)));
+        childBuilder2.addColumnStatistics(ImmutableMap.of(v4, new ColumnStatistic(0, 100, 0, 10, 100)));
+        childBuilder2.addColumnStatistics(ImmutableMap.of(v6, new ColumnStatistic(0, 100, 0, 10, 100)));
+        Group childGroup2 = new Group(1);
+        childGroup2.setStatistics(childBuilder2.build());
+        // record column id to relation id
+        columnRefFactory.updateColumnToRelationIds(v1.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(v2.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(v3.getId(), 1);
+        columnRefFactory.updateColumnToRelationIds(v4.getId(), 1);
+        columnRefFactory.updateColumnToRelationIds(v5.getId(), 3);
+        columnRefFactory.updateColumnToRelationIds(v6.getId(), 4);
+        // on predicate : t0.v1 = t1.v3 and t0.v2 = t1.v4
+        BinaryPredicateOperator eqOnPredicate1 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, v1, v3);
+        BinaryPredicateOperator eqOnPredicate2 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, v2, v4);
+        BinaryPredicateOperator eqOnPredicate3 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, v5, v6);
+        // construct group expression
+        LogicalJoinOperator joinOperator =
+                new LogicalJoinOperator(JoinOperator.INNER_JOIN, new CompoundPredicateOperator(
+                        CompoundPredicateOperator.CompoundType.AND, eqOnPredicate1, eqOnPredicate2));
+        GroupExpression groupExpression =
+                new GroupExpression(joinOperator, Lists.newArrayList(childGroup1, childGroup2));
+        groupExpression.setGroup(new Group(2));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+                columnRefFactory, new MockDumpInfo());
+        // use middle ground method to estimate
+        ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
+        statisticsCalculator.estimatorStats();
+        Assert.assertEquals(expressionContext.getStatistics().getOutputRowCount(), 400000.0, 0.0001);
+        // use correlated method to estimate
+        ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(true);
+        statisticsCalculator.estimatorStats();
+        Assert.assertEquals(expressionContext.getStatistics().getOutputRowCount(), 1800000.0, 0.0001);
+
+        // on predicate : t0.v1 = t1.v3 and t0.v2 = t2.v4
+        columnRefFactory.updateColumnToRelationIds(v4.getId(), 2);
+        // use middle ground method to estimate
+        ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
+        statisticsCalculator.estimatorStats();
+        Assert.assertEquals(expressionContext.getStatistics().getOutputRowCount(), 40000.0, 0.0001);
+        columnRefFactory.updateColumnToRelationIds(v4.getId(), 1);
+
+        // on predicate : t0.v1 = t1.v3 and t0.v2 = t2.v4 and t3.v5 = t4.v6
+        // construct group expression
+        joinOperator = new LogicalJoinOperator(JoinOperator.INNER_JOIN, new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, eqOnPredicate1, new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, eqOnPredicate2, eqOnPredicate3)));
+        groupExpression = new GroupExpression(joinOperator, Lists.newArrayList(childGroup1, childGroup2));
+        groupExpression.setGroup(new Group(2));
+        expressionContext = new ExpressionContext(groupExpression);
+        statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+                columnRefFactory, new MockDumpInfo());
+        // use middle ground method to estimate
+        ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
+        statisticsCalculator.estimatorStats();
+        Assert.assertEquals(expressionContext.getStatistics().getOutputRowCount(), 4000.0, 0.0001);
+
+        // on predicate : t0.v1 = t1.v3 + t1.v4 and t0.v2 = t1.v3 + t1.v4
+        BinaryPredicateOperator eqOnPredicateWithAdd1 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, v1,
+                        new CallOperator("add", Type.BIGINT, Lists.newArrayList(v3, v4)));
+        BinaryPredicateOperator eqOnPredicateWithAdd2 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, v2,
+                        new CallOperator("add", Type.BIGINT, Lists.newArrayList(v3, v4)));
+        joinOperator = new LogicalJoinOperator(JoinOperator.INNER_JOIN, new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, eqOnPredicateWithAdd1, eqOnPredicateWithAdd2));
+        groupExpression = new GroupExpression(joinOperator, Lists.newArrayList(childGroup1, childGroup2));
+        groupExpression.setGroup(new Group(2));
+        expressionContext = new ExpressionContext(groupExpression);
+        statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+                columnRefFactory, new MockDumpInfo());
+        // use middle ground method to estimate
+        ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
+        statisticsCalculator.estimatorStats();
+        Assert.assertEquals(expressionContext.getStatistics().getOutputRowCount(), 200000.0, 0.0001);
     }
 }

@@ -22,11 +22,12 @@
 
 #include "orc/OrcFile.hh"
 
-#include <errno.h>
 #include <fcntl.h>
-#include <stdio.h>
-#include <string.h>
 #include <sys/stat.h>
+
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
 
 #include "Adaptor.hh"
 #include "orc/Exceptions.hh"

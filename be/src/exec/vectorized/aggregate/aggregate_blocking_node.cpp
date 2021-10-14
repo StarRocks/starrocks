@@ -7,6 +7,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/aggregator.h"
+#include "simd/simd.h"
 
 namespace starrocks::vectorized {
 
@@ -27,6 +28,11 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
 
     VLOG_ROW << "group_by_expr_ctxs size " << _aggregator->group_by_expr_ctxs().size() << " _needs_finalize "
              << _aggregator->needs_finalize();
+    bool agg_group_by_with_limit =
+            (!_aggregator->is_none_group_by_exprs() &&     // has group by
+             _limit != -1 &&                               // has limit
+             _conjunct_ctxs.empty() &&                     // no 'having' clause
+             _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
     while (true) {
         bool eos = false;
         RETURN_IF_CANCELLED(state);
@@ -44,6 +50,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
 
         _aggregator->evaluate_exprs(chunk.get());
 
+        size_t chunk_size = chunk->num_rows();
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
             if (!_aggregator->is_none_group_by_exprs()) {
@@ -52,7 +59,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
 #define HASH_MAP_METHOD(NAME)                                                                          \
     else if (_aggregator->hash_map_variant().type == HashMapVariant::Type::NAME)                       \
             _aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, chunk->num_rows());
+                    *_aggregator->hash_map_variant().NAME, chunk_size, agg_group_by_with_limit);
                 APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
 
@@ -60,12 +67,23 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
                 _aggregator->try_convert_to_two_level_map();
             }
             if (_aggregator->is_none_group_by_exprs()) {
-                _aggregator->compute_single_agg_state(chunk->num_rows());
+                _aggregator->compute_single_agg_state(chunk_size);
             } else {
-                _aggregator->compute_batch_agg_states(chunk->num_rows());
+                if (agg_group_by_with_limit) {
+                    // use `_aggregator->streaming_selection()` here to mark whether needs to filter key when compute agg states,
+                    // it's generated in `build_hash_map`
+                    size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection().data(), chunk_size);
+                    if (zero_count == chunk_size) {
+                        _aggregator->compute_batch_agg_states(chunk_size);
+                    } else {
+                        _aggregator->compute_batch_agg_states_with_selection(chunk_size);
+                    }
+                } else {
+                    _aggregator->compute_batch_agg_states(chunk_size);
+                }
             }
 
-            _aggregator->update_num_input_rows(chunk->num_rows());
+            _aggregator->update_num_input_rows(chunk_size);
         }
     }
 
@@ -139,7 +157,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
-    context->maybe_interpolate_local_exchange(operators_with_sink);
+    operators_with_sink = context->maybe_interpolate_local_exchange(operators_with_sink);
 
     // shared by sink operator and source operator
     AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode, child(0)->row_desc());
@@ -152,7 +170,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     auto source_operator =
             std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(), id(), aggregator);
 
-    // The merge-aggregation phase cannot be parallel, so we set the degree of parallism to 1
+    // TODO(hcf) Currently, the shared data structure aggregator does not support concurrency.
+    // So the degree of parallism must set to 1, we'll fix it later
     source_operator->set_degree_of_parallelism(1);
     operators_with_source.push_back(std::move(source_operator));
     return operators_with_source;

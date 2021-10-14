@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -29,25 +30,30 @@ import java.util.Map;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 
-public class MaterializedViewRewriter extends OptExpressionVisitor<Void, MaterializedViewRule.RewriteContext> {
+public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression, MaterializedViewRule.RewriteContext> {
 
     public MaterializedViewRewriter() {
     }
 
-    public Void rewrite(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
-        optExpression.getOp().accept(this, optExpression, context);
-        return null;
+    public OptExpression rewrite(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
+        return optExpression.getOp().accept(this, optExpression, context);
     }
 
     @Override
-    public Void visit(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
-        optExpression.getInputs().forEach(e -> rewrite(e, context));
-        return null;
+    public OptExpression visit(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
+        for (int childIdx = 0; childIdx < optExpression.arity(); ++childIdx) {
+            optExpression.setChild(childIdx, rewrite(optExpression.inputAt(childIdx), context));
+        }
+
+        return OptExpression.create(optExpression.getOp(), optExpression.getInputs());
     }
 
     @Override
-    public Void visitLogicalProject(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
-        optExpression.getInputs().forEach(e -> rewrite(e, context));
+    public OptExpression visitLogicalProject(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
+        for (int childIdx = 0; childIdx < optExpression.arity(); ++childIdx) {
+            optExpression.setChild(childIdx, rewrite(optExpression.inputAt(childIdx), context));
+        }
+
         LogicalProjectOperator projectOperator = (LogicalProjectOperator) optExpression.getOp();
 
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
@@ -62,43 +68,69 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<Void, Materia
                 newProjectMap.put(kv.getKey(), kv.getValue());
             }
         }
-        projectOperator.setColumnRefMap(newProjectMap);
-        return null;
+        return OptExpression.create(new LogicalProjectOperator(newProjectMap), optExpression.getInputs());
     }
 
     @Override
-    public Void visitLogicalTableScan(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
-        LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) optExpression.getOp();
+    public OptExpression visitLogicalTableScan(OptExpression optExpression,
+                                               MaterializedViewRule.RewriteContext context) {
+        LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) optExpression.getOp();
 
-        if (scanOperator.getColumnRefMap().containsKey(context.queryColumnRef)) {
-            scanOperator.getOutputColumns().remove(context.queryColumnRef);
-            scanOperator.getOutputColumns().add(context.mvColumnRef);
-            scanOperator.getColumnRefMap().remove(context.queryColumnRef);
-            scanOperator.getColumnRefMap().put(context.mvColumnRef, context.mvColumn);
+        if (olapScanOperator.getColRefToColumnMetaMap().containsKey(context.queryColumnRef)) {
+            List<ColumnRefOperator> outputColumns = new ArrayList<>(olapScanOperator.getOutputColumns());
+            outputColumns.remove(context.queryColumnRef);
+            outputColumns.add(context.mvColumnRef);
+
+            Map<ColumnRefOperator, Column> columnRefOperatorColumnMap =
+                    new HashMap<>(olapScanOperator.getColRefToColumnMetaMap());
+            columnRefOperatorColumnMap.remove(context.queryColumnRef);
+            columnRefOperatorColumnMap.put(context.mvColumnRef, context.mvColumn);
+
+            LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
+                    olapScanOperator.getTable(),
+                    outputColumns,
+                    columnRefOperatorColumnMap,
+                    olapScanOperator.getColumnMetaToColRefMap(),
+                    olapScanOperator.getDistributionSpec(),
+                    olapScanOperator.getLimit(),
+                    olapScanOperator.getPredicate(),
+                    olapScanOperator.getSelectedIndexId(),
+                    olapScanOperator.getSelectedPartitionId(),
+                    olapScanOperator.getPartitionNames(),
+                    olapScanOperator.getSelectedTabletId(),
+                    olapScanOperator.getHintsTabletIds());
+
+            optExpression = OptExpression.create(newScanOperator, optExpression.getInputs());
         }
-        return null;
+        return optExpression;
     }
 
     @Override
-    public Void visitLogicalAggregate(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
-        optExpression.getInputs().forEach(e -> rewrite(e, context));
+    public OptExpression visitLogicalAggregate(OptExpression optExpression,
+                                               MaterializedViewRule.RewriteContext context) {
+        for (int childIdx = 0; childIdx < optExpression.arity(); ++childIdx) {
+            optExpression.setChild(childIdx, rewrite(optExpression.inputAt(childIdx), context));
+        }
+
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) optExpression.getOp();
 
         Map<ColumnRefOperator, ScalarOperator> replaceMap = new HashMap<>();
         replaceMap.put(context.queryColumnRef, context.mvColumnRef);
         ReplaceColumnRefRewriter replaceColumnRefRewriter = new ReplaceColumnRefRewriter(replaceMap);
 
+        Map<ColumnRefOperator, CallOperator> newAggMap = new HashMap<>(aggregationOperator.getAggregations());
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggregationOperator.getAggregations().entrySet()) {
             String functionName = kv.getValue().getFnName();
             if (functionName.equals(context.aggCall.getFnName())
                     && kv.getValue().getUsedColumns().getFirstId() == context.queryColumnRef.getId()) {
                 if (kv.getValue().getFnName().equals(FunctionSet.COUNT) && !kv.getValue().isDistinct()) {
-
                     CallOperator callOperator = new CallOperator(FunctionSet.SUM,
                             kv.getValue().getType(),
                             kv.getValue().getChildren(),
-                            Expr.getBuiltinFunction(FunctionSet.SUM, new Type[]{Type.BIGINT}, IS_IDENTICAL));
-                    kv.setValue((CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
+                            Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT}, IS_IDENTICAL));
+
+                    newAggMap.put(kv.getKey(),
+                            (CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
                     break;
                 } else if (
                         ((functionName.equals(FunctionSet.COUNT) && kv.getValue().isDistinct())
@@ -107,16 +139,20 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<Void, Materia
                     CallOperator callOperator = new CallOperator(FunctionSet.BITMAP_UNION_COUNT,
                             kv.getValue().getType(),
                             kv.getValue().getChildren(),
-                            Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[]{Type.BITMAP}, IS_IDENTICAL));
-                    kv.setValue((CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
+                            Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
+                                    IS_IDENTICAL));
+                    newAggMap.put(kv.getKey(),
+                            (CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
                     break;
-                } else if ((functionName.equals(FunctionSet.NDV) || functionName.equals(FunctionSet.APPROX_COUNT_DISTINCT))
-                        && context.mvColumn.getAggregationType() == AggregateType.HLL_UNION) {
+                } else if (
+                        (functionName.equals(FunctionSet.NDV) || functionName.equals(FunctionSet.APPROX_COUNT_DISTINCT))
+                                && context.mvColumn.getAggregationType() == AggregateType.HLL_UNION) {
                     CallOperator callOperator = new CallOperator(FunctionSet.HLL_UNION_AGG,
                             kv.getValue().getType(),
                             kv.getValue().getChildren(),
-                            Expr.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[]{Type.HLL}, IS_IDENTICAL));
-                    kv.setValue((CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
+                            Expr.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[] {Type.HLL}, IS_IDENTICAL));
+                    newAggMap.put(kv.getKey(),
+                            (CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
                     break;
                 } else if (functionName.equals(FunctionSet.PERCENTILE_APPROX) &&
                         context.mvColumn.getAggregationType() == AggregateType.PERCENTILE_UNION) {
@@ -130,18 +166,30 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<Void, Materia
                             kv.getValue().getType(),
                             Lists.newArrayList(child),
                             Expr.getBuiltinFunction(FunctionSet.PERCENTILE_UNION,
-                                    new Type[]{Type.PERCENTILE}, IS_IDENTICAL));
-                    kv.setValue((CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
+                                    new Type[] {Type.PERCENTILE}, IS_IDENTICAL));
+                    newAggMap.put(kv.getKey(),
+                            (CallOperator) replaceColumnRefRewriter.visit(callOperator, null));
                     break;
                 }
             }
         }
-        return null;
+        return OptExpression.create(new LogicalAggregationOperator(
+                aggregationOperator.getType(),
+                aggregationOperator.getGroupingKeys(),
+                aggregationOperator.getPartitionByColumns(),
+                newAggMap,
+                aggregationOperator.isSplit(),
+                aggregationOperator.getSingleDistinctFunctionPos(),
+                aggregationOperator.getLimit(),
+                aggregationOperator.getPredicate()), optExpression.getInputs());
     }
 
     @Override
-    public Void visitLogicalTableFunction(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
-        optExpression.getInputs().forEach(e -> rewrite(e, context));
+    public OptExpression visitLogicalTableFunction(OptExpression optExpression,
+                                                   MaterializedViewRule.RewriteContext context) {
+        for (int childIdx = 0; childIdx < optExpression.arity(); ++childIdx) {
+            optExpression.setChild(childIdx, rewrite(optExpression.inputAt(childIdx), context));
+        }
 
         ColumnRefSet bitSet = new ColumnRefSet();
         LogicalTableFunctionOperator tableFunctionOperator = (LogicalTableFunctionOperator) optExpression.getOp();
@@ -154,12 +202,14 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<Void, Materia
         }
 
         tableFunctionOperator.setOuterColumnRefSet(bitSet);
-        return null;
+        return OptExpression.create(tableFunctionOperator, optExpression.getInputs());
     }
 
     @Override
-    public Void visitLogicalJoin(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
-        optExpression.getInputs().forEach(e -> rewrite(e, context));
+    public OptExpression visitLogicalJoin(OptExpression optExpression, MaterializedViewRule.RewriteContext context) {
+        for (int childIdx = 0; childIdx < optExpression.arity(); ++childIdx) {
+            optExpression.setChild(childIdx, rewrite(optExpression.inputAt(childIdx), context));
+        }
 
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) optExpression.getOp();
         List<ColumnRefOperator> pruneOutputColumns = joinOperator.getPruneOutputColumns();
@@ -172,7 +222,16 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<Void, Materia
                 newPruneOutputColumns.add(c);
             }
         }
-        joinOperator.setPruneOutputColumns(newPruneOutputColumns);
-        return null;
+
+        LogicalJoinOperator newJoinOperator = new LogicalJoinOperator(
+                joinOperator.getJoinType(),
+                joinOperator.getOnPredicate(),
+                joinOperator.getJoinHint(),
+                joinOperator.getLimit(),
+                joinOperator.getPredicate(),
+                newPruneOutputColumns,
+                joinOperator.isHasPushDownJoinOnClause());
+
+        return OptExpression.create(newJoinOperator, optExpression.getInputs());
     }
 }

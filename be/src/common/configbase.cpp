@@ -35,8 +35,7 @@
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
 
-namespace starrocks {
-namespace config {
+namespace starrocks::config {
 
 std::map<std::string, Register::Field>* Register::_s_field_map = nullptr;
 std::map<std::string, std::string>* full_conf_map = nullptr;
@@ -328,5 +327,4 @@ Status set_config(const std::string& field, const std::string& value) {
             strings::Substitute("'$0' is type of '$1' which is not support to modify", field, it->second.type));
 }
 
-} // namespace config
-} // namespace starrocks
+} // namespace starrocks::config

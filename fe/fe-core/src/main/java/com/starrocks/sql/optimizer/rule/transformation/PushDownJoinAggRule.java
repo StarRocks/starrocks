@@ -135,10 +135,10 @@ public class PushDownJoinAggRule extends TransformationRule {
             }
         }
 
-        LogicalJoinOperator newJoin =
-                new LogicalJoinOperator(inputJoinOperator.getJoinType(), Utils.compoundAnd(newJoinOnPredicate),
-                        inputJoinOperator.getJoinHint());
-        newJoin.setPredicate(Utils.compoundAnd(newJoinFilterPredicate));
+        LogicalJoinOperator newJoin = new LogicalJoinOperator.Builder().withOperator(inputJoinOperator)
+                .setOnPredicate(Utils.compoundAnd(newJoinOnPredicate))
+                .setPredicate(Utils.compoundAnd(newJoinFilterPredicate))
+                .build();
 
         OptExpression newJoinExpression = new OptExpression(newJoin);
         newJoinExpression.getInputs().add(input.getInputs().get(0));
@@ -190,9 +190,9 @@ public class PushDownJoinAggRule extends TransformationRule {
                                                GroupExpression groupExpression) {
         if (OperatorType.LOGICAL_OLAP_SCAN.equals(groupExpression.getOp().getOpType())) {
             LogicalOlapScanOperator loso = (LogicalOlapScanOperator) groupExpression.getOp();
-            Map<ColumnRefOperator, Column> askColumnsMap = loso.getColumnRefMap();
+            Map<ColumnRefOperator, Column> askColumnsMap = loso.getColRefToColumnMetaMap();
 
-            List<String> keyColumns = getTpchMockPrimaryKeys(loso.getOlapTable().getName());
+            List<String> keyColumns = getTpchMockPrimaryKeys(loso.getTable().getName());
 
             if (keyColumns.isEmpty()) {
                 return false;

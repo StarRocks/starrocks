@@ -90,7 +90,8 @@ private:
     PageCacheHandle _cache_data;
 
     // Don't allow copy and assign
-    DISALLOW_COPY_AND_ASSIGN(PageHandle);
+    PageHandle(const PageHandle&) = delete;
+    const PageHandle& operator=(const PageHandle&) = delete;
 };
 
 } // namespace starrocks::segment_v2

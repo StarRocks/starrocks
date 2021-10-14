@@ -23,7 +23,7 @@ SchemaScanNode::SchemaScanNode(ObjectPool* pool, const TPlanNode& tnode, const D
           _dest_tuple_desc(nullptr),
           _schema_scanner(nullptr) {}
 
-SchemaScanNode::~SchemaScanNode() {}
+SchemaScanNode::~SchemaScanNode() = default;
 
 Status SchemaScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode));
@@ -91,7 +91,7 @@ Status SchemaScanNode::prepare(RuntimeState* state) {
     // new one scanner
     _schema_scanner.reset(SchemaScanner::create(schema_table->schema_table_type()));
 
-    if (nullptr == _schema_scanner.get()) {
+    if (nullptr == _schema_scanner) {
         return Status::InternalError("schema scanner get nullptr pointer.");
     }
 
@@ -103,6 +103,8 @@ Status SchemaScanNode::prepare(RuntimeState* state) {
     int slot_num = dest_slot_descs.size();
     if (src_slot_descs.empty()) {
         slot_num = 0;
+    } else {
+        _index_map.resize(slot_num);
     }
     for (int i = 0; i < slot_num; ++i) {
         int j = 0;
@@ -122,6 +124,7 @@ Status SchemaScanNode::prepare(RuntimeState* state) {
                          << dest_slot_descs[i]->type();
             return Status::InternalError("schema not match.");
         }
+        _index_map[i] = j;
     }
 
     _is_init = true;
@@ -178,17 +181,20 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         return Status::OK();
     }
 
-    ChunkPtr chunk_tmp = std::make_shared<vectorized::Chunk>();
-    if (nullptr == chunk_tmp.get()) {
+    const std::vector<SlotDescriptor*>& src_slot_descs = _schema_scanner->get_slot_descs();
+    const std::vector<SlotDescriptor*>& dest_slot_descs = _dest_tuple_desc->slots();
+
+    *chunk = std::make_shared<vectorized::Chunk>();
+    if (nullptr == chunk->get()) {
         return Status::InternalError("Failed to allocate new chunk.");
     }
-    const std::vector<SlotDescriptor*>& src_slot_descs = _schema_scanner->get_slot_descs();
-    // init column information
-    for (auto& slot_desc : src_slot_descs) {
+    for (auto& slot_desc : dest_slot_descs) {
+        if (!slot_desc->is_materialized()) {
+            continue;
+        }
         ColumnPtr column = vectorized::ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
-        chunk_tmp->append_column(std::move(column), slot_desc->id());
+        (*chunk)->append_column(std::move(column), slot_desc->id());
     }
-
     bool scanner_eos = false;
     int row_num = 0;
 
@@ -209,8 +215,16 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
             break;
         }
 
-        size_t old_row = chunk_tmp->num_rows();
-        RETURN_IF_ERROR(_schema_scanner->get_next(&chunk_tmp, &scanner_eos));
+        ChunkPtr chunk_src = std::make_shared<vectorized::Chunk>();
+        if (nullptr == chunk_src.get()) {
+            return Status::InternalError("Failed to allocate new chunk.");
+        }
+        // init column information
+        for (auto& slot_desc : src_slot_descs) {
+            ColumnPtr column = vectorized::ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+            chunk_src->append_column(std::move(column), slot_desc->id());
+        }
+        RETURN_IF_ERROR(_schema_scanner->get_next(&chunk_src, &scanner_eos));
 
         if (scanner_eos) {
             _is_finished = true;
@@ -223,25 +237,32 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         }
         ++row_num;
 
+        // convert src chunk format to dest chunk format to process where clause
+        ChunkPtr chunk_dst = std::make_shared<vectorized::Chunk>();
+        if (nullptr == chunk_dst.get()) {
+            return Status::InternalError("Failed to allocate new chunk.");
+        }
+        if (!src_slot_descs.empty()) {
+            for (size_t i = 0; i < dest_slot_descs.size(); ++i) {
+                if (!dest_slot_descs[i]->is_materialized()) {
+                    continue;
+                }
+                int j = _index_map[i];
+                ColumnPtr column = chunk_src->get_column_by_slot_id(src_slot_descs[j]->id());
+                chunk_dst->append_column(std::move(column), dest_slot_descs[i]->id());
+            }
+        }
+
         // process where clause
         if (!_conjunct_ctxs.empty()) {
-            ExecNode::eval_conjuncts(_conjunct_ctxs, chunk_tmp.get());
+            ExecNode::eval_conjuncts(_conjunct_ctxs, chunk_dst.get());
         }
 
-        if (chunk_tmp->num_rows() != old_row) {
+        // collect result chunk
+        if (chunk_dst->num_rows()) {
+            (*chunk)->append(*(chunk_dst.get()));
             ++_num_rows_returned;
             COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-        }
-    }
-
-    *chunk = std::make_shared<vectorized::Chunk>();
-    if (nullptr == chunk->get()) {
-        return Status::InternalError("Failed to allocate new chunk.");
-    }
-    if (!src_slot_descs.empty()) {
-        for (auto& slot_desc : _dest_tuple_desc->slots()) {
-            ColumnPtr column = chunk_tmp->get_column_by_slot_id(slot_desc->id());
-            (*chunk)->append_column(std::move(column), slot_desc->id());
         }
     }
 
@@ -263,8 +284,8 @@ void SchemaScanNode::debug_string(int indentation_level, std::stringstream* out)
     *out << "SchemaScanNode(tupleid=" << _tuple_id << " table=" << _table_name;
     *out << ")" << std::endl;
 
-    for (int i = 0; i < _children.size(); ++i) {
-        _children[i]->debug_string(indentation_level + 1, out);
+    for (auto i : _children) {
+        i->debug_string(indentation_level + 1, out);
     }
 }
 

@@ -78,7 +78,7 @@ public:
 
     // if report_status_cb is not empty, is used to report the accumulated profile
     // information periodically during execution (open() or get_next()).
-    PlanFragmentExecutor(ExecEnv* exec_env, const report_status_callback& report_status_cb);
+    PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb);
 
     // Closes the underlying plan fragment and frees up all resources allocated
     // in open()/get_next().
@@ -141,7 +141,7 @@ public:
     void set_is_report_on_cancel(bool val) { _is_report_on_cancel = val; }
 
 private:
-    bool _is_vectorized = false;
+    bool _is_vectorized = true;
     ExecEnv* _exec_env;        // not owned
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     TUniqueId _query_id;

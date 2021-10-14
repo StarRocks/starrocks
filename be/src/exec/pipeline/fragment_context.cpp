@@ -1,8 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
 #include "exec/pipeline/fragment_context.h"
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {
     std::lock_guard<std::mutex> lock(_lock);
@@ -29,15 +28,18 @@ FragmentContextPtr FragmentContextManager::get(const TUniqueId& fragment_id) {
 
 void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
     std::lock_guard<std::mutex> lock(_lock);
-    _fragment_contexts.erase(fragment_id);
+    auto it = _fragment_contexts.find(fragment_id);
+    if (it != _fragment_contexts.end()) {
+        it->second->_finish_promise.set_value();
+        _fragment_contexts.erase(it);
+    }
 }
 
 void FragmentContextManager::cancel(const Status& status) {
     std::lock_guard<std::mutex> lock(_lock);
-    for (auto ctx_it = _fragment_contexts.begin(); ctx_it != _fragment_contexts.end(); ++ctx_it) {
-        ctx_it->second->cancel(status);
+    for (auto& _fragment_context : _fragment_contexts) {
+        _fragment_context.second->cancel(status);
     }
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

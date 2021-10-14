@@ -44,8 +44,6 @@ import java.util.Map;
 
 import static com.starrocks.common.io.IOUtils.writeOptionString;
 
-// import com.starrocks.thrift.TSymbolType;
-
 /**
  * Internal representation of a scalar function.
  */

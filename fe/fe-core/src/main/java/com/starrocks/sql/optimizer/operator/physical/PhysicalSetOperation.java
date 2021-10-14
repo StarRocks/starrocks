@@ -5,6 +5,7 @@ import com.google.common.base.Objects;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 
@@ -13,10 +14,14 @@ public class PhysicalSetOperation extends PhysicalOperator {
     protected List<List<ColumnRefOperator>> childOutputColumns;
 
     public PhysicalSetOperation(OperatorType type, List<ColumnRefOperator> outputColumnRefOp,
-                                List<List<ColumnRefOperator>> childOutputColumns) {
+                                List<List<ColumnRefOperator>> childOutputColumns,
+                                long limit,
+                                ScalarOperator predicate) {
         super(type);
         this.outputColumnRefOp = outputColumnRefOp;
         this.childOutputColumns = childOutputColumns;
+        this.limit = limit;
+        this.predicate = predicate;
     }
 
     public List<ColumnRefOperator> getOutputColumnRefOp() {

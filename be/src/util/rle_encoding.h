@@ -97,7 +97,7 @@ public:
         DCHECK_LE(bit_width_, 64);
     }
 
-    RleDecoder() {}
+    RleDecoder() = default;
 
     // Skip n values, and returns the number of non-zero entries skipped.
     size_t Skip(size_t to_skip);

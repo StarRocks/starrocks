@@ -35,7 +35,7 @@ template <typename T>
 class CallBackClosure : public google::protobuf::Closure {
 public:
     CallBackClosure() : _refs(0) {}
-    ~CallBackClosure() override {}
+    ~CallBackClosure() override = default;
 
     // Disallow copy and assignment.
     CallBackClosure(const CallBackClosure& other) = delete;
@@ -51,15 +51,22 @@ public:
     void addFailedHandler(std::function<void()> fn) { _failed_handler = std::move(fn); }
     void addSuccessHandler(std::function<void(const T&)> fn) { _success_handler = fn; }
 
-    void Run() override {
-        if (cntl.Failed()) {
-            LOG(WARNING) << "brpc failed, error=" << berror(cntl.ErrorCode()) << ", error_text=" << cntl.ErrorText();
-            _failed_handler();
-        } else {
-            _success_handler(result);
-        }
-        if (unref()) {
-            delete this;
+    void Run() noexcept override {
+        try {
+            if (cntl.Failed()) {
+                LOG(WARNING) << "brpc failed, error=" << berror(cntl.ErrorCode())
+                             << ", error_text=" << cntl.ErrorText();
+                _failed_handler();
+            } else {
+                _success_handler(result);
+            }
+            if (unref()) {
+                delete this;
+            }
+        } catch (const std::exception& exp) {
+            LOG(FATAL) << "[ExchangeSinkOperator] Callback error: " << exp.what();
+        } catch (...) {
+            LOG(FATAL) << "[ExchangeSinkOperator] Callback error: Unknown";
         }
     }
 

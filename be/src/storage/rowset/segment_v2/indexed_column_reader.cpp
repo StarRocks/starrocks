@@ -26,8 +26,7 @@
 #include "storage/rowset/segment_v2/encoding_info.h" // for EncodingInfo
 #include "storage/rowset/segment_v2/page_io.h"
 
-namespace starrocks {
-namespace segment_v2 {
+namespace starrocks::segment_v2 {
 
 using strings::Substitute;
 
@@ -230,5 +229,4 @@ Status IndexedColumnIterator::next_batch(size_t* n, ColumnBlockView* column_view
     return Status::OK();
 }
 
-} // namespace segment_v2
-} // namespace starrocks
+} // namespace starrocks::segment_v2

@@ -224,10 +224,8 @@ public class LoadingTaskPlannerTest {
 
         Function f1 = new Function(new FunctionName("substr"), new Type[] {Type.VARCHAR, Type.INT, Type.INT},
                 Type.VARCHAR, true);
-        f1.setIsVectorized(true);
         Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
                 Type.INT, true);
-        f2.setIsVectorized(true);
         new Expectations() {
             {
                 Catalog.getCurrentSystemInfo();
@@ -303,7 +301,6 @@ public class LoadingTaskPlannerTest {
         Assert.assertEquals(1, nodes.size());
         TPlanNode tPlanNode = nodes.get(0);
         Assert.assertEquals(TPlanNodeType.FILE_SCAN_NODE, tPlanNode.node_type);
-        Assert.assertTrue(tPlanNode.use_vectorized);
 
         // 2. check scan node column expr
         FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
@@ -535,13 +532,10 @@ public class LoadingTaskPlannerTest {
 
         Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {Type.VARCHAR},
                 Type.BIGINT, true);
-        f1.setIsVectorized(true);
         Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
                 Type.INT, true);
-        f2.setIsVectorized(true);
         Function f3 = new Function(new FunctionName("casttotinyint"), new Type[] {Type.VARCHAR},
                 Type.TINYINT, true);
-        f3.setIsVectorized(true);
 
         new Expectations() {
             {
@@ -643,13 +637,10 @@ public class LoadingTaskPlannerTest {
 
         Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {Type.VARCHAR},
                 Type.BIGINT, true);
-        f1.setIsVectorized(true);
         Function f2 = new Function(new FunctionName("casttoint"), new Type[] {Type.VARCHAR},
                 Type.INT, true);
-        f2.setIsVectorized(true);
         Function f3 = new Function(new FunctionName("casttotinyint"), new Type[] {Type.VARCHAR},
                 Type.TINYINT, true);
-        f3.setIsVectorized(true);
 
         new Expectations() {
             {

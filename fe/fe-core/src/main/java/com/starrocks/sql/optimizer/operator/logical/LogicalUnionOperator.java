@@ -18,6 +18,11 @@ public class LogicalUnionOperator extends LogicalSetOperator {
         this.isUnionAll = isUnionAll;
     }
 
+    private LogicalUnionOperator(LogicalUnionOperator.Builder builder) {
+        super(OperatorType.LOGICAL_UNION, builder.outputColumnRefOp, builder.childOutputColumns);
+        this.isUnionAll = builder.isUnionAll;
+    }
+
     public boolean isUnionAll() {
         return isUnionAll;
     }
@@ -30,5 +35,26 @@ public class LogicalUnionOperator extends LogicalSetOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalUnion(optExpression, context);
+    }
+
+    public static class Builder extends LogicalSetOperator.Builder<LogicalUnionOperator, LogicalUnionOperator.Builder> {
+        private boolean isUnionAll;
+
+        @Override
+        public LogicalUnionOperator build() {
+            return new LogicalUnionOperator(this);
+        }
+
+        @Override
+        public Builder withOperator(LogicalUnionOperator unionOperator) {
+            super.withOperator(unionOperator);
+            isUnionAll = unionOperator.isUnionAll;
+            return this;
+        }
+
+        public Builder isUnionAll(boolean isUnionAll) {
+            this.isUnionAll = isUnionAll;
+            return this;
+        }
     }
 }

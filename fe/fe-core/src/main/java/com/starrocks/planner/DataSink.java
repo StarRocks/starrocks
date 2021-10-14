@@ -71,4 +71,8 @@ public abstract class DataSink {
             throw new AnalysisException("Unknown table type " + table.getType());
         }
     }
+
+    public boolean canUsePipeLine() {
+        return false;
+    }
 }

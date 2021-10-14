@@ -92,7 +92,7 @@ ESScanReader::ESScanReader(const std::string& target, const std::map<std::string
     _eos = false;
 }
 
-ESScanReader::~ESScanReader() {}
+ESScanReader::~ESScanReader() = default;
 
 Status ESScanReader::open() {
     _is_first = true;
@@ -178,8 +178,6 @@ Status ESScanReader::get_next(bool* scan_eos, std::unique_ptr<T>& scroll_parser)
     *scan_eos = false;
     return Status::OK();
 }
-
-template Status ESScanReader::get_next<ScrollParser>(bool* scan_eos, std::unique_ptr<ScrollParser>& scroll_parser);
 
 template Status ESScanReader::get_next<vectorized::ScrollParser>(
         bool* scan_eos, std::unique_ptr<vectorized::ScrollParser>& scroll_parser);

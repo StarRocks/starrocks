@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
@@ -848,6 +849,15 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalMysqlScan(PhysicalMysqlScanOperator node, ExpressionContext context) {
         if (getRequiredLocalDesc().isPresent()) {
             outputInputProps.add(new Pair<>(distributeRequirements(), Lists.newArrayList()));
+            return visitOperator(node, context);
+        }
+        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList()));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalMetaScan(PhysicalMetaScanOperator node, ExpressionContext context) {
+        if (getRequiredLocalDesc().isPresent()) {
             return visitOperator(node, context);
         }
         outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList()));

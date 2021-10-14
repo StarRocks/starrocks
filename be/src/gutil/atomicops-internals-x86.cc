@@ -29,7 +29,8 @@
 #include "gutil/atomicops-internals-x86.h"
 
 #include <common/logging.h>
-#include <string.h>
+
+#include <cstring>
 
 #include "gutil/integral_types.h"
 

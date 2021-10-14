@@ -100,8 +100,8 @@ private:
 //      ...
 class MemTableFlushExecutor {
 public:
-    MemTableFlushExecutor() {}
-    ~MemTableFlushExecutor() {}
+    MemTableFlushExecutor() = default;
+    ~MemTableFlushExecutor() = default;
 
     // init should be called after storage engine is opened,
     // because it needs path hash of each data dir.

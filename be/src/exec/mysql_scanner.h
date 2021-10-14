@@ -22,8 +22,7 @@
 #ifndef STARROCKS_BE_SRC_QUERY_EXEC_MYSQL_SCANNER_H
 #define STARROCKS_BE_SRC_QUERY_EXEC_MYSQL_SCANNER_H
 
-#include <stdlib.h>
-
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -49,8 +48,8 @@ struct MysqlScannerParam {
     std::string user;
     std::string passwd;
     std::string db;
-    unsigned long client_flag;
-    MysqlScannerParam() : client_flag(0) {}
+    unsigned long client_flag{0};
+    MysqlScannerParam() {}
 };
 
 // Mysql Scanner for scan data from mysql

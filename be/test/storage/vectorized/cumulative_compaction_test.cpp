@@ -197,7 +197,7 @@ TEST_F(CumulativeCompactionTest, test_compact_succeed) {
     RowsetWriterContext rowset_writer_context(kDataFormatUnknown, config::storage_format_version);
     create_rowset_writer_context(&rowset_writer_context);
     std::unique_ptr<RowsetWriter> _rowset_writer;
-    ASSERT_EQ(OLAP_SUCCESS, RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer));
+    ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
 
     rowset_writer_add_rows(_rowset_writer);
 
@@ -209,7 +209,7 @@ TEST_F(CumulativeCompactionTest, test_compact_succeed) {
     ASSERT_EQ(src_rowset_id, src_rowset->rowset_id());
     ASSERT_EQ(1024, src_rowset->num_rows());
 
-    TabletMetaSharedPtr tablet_meta(new TabletMeta(_tablet_meta_mem_tracker.get()));
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>(_tablet_meta_mem_tracker.get());
     create_tablet_meta(tablet_meta.get());
     tablet_meta->add_rs_meta(src_rowset->rowset_meta());
 
@@ -221,7 +221,7 @@ TEST_F(CumulativeCompactionTest, test_compact_succeed) {
                 Version(rowset_writer_context.version.second + 1, rowset_writer_context.version.second + 1);
 
         std::unique_ptr<RowsetWriter> _rowset_writer;
-        ASSERT_EQ(OLAP_SUCCESS, RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer));
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
 
         rowset_writer_add_rows(_rowset_writer);
 
