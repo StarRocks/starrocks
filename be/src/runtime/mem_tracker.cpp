@@ -160,16 +160,6 @@ std::string MemTracker::LogUsage(int max_recursive_depth, const std::string& pre
     }
     if (!child_trackers_usage.empty()) ss << "\n" << child_trackers_usage;
 
-    if (_consumption_metric != nullptr) {
-        // Log the difference between the metric value and children as "untracked" memory so
-        // that the values always add up. This value is not always completely accurate because
-        // we did not necessarily get a consistent snapshot of the consumption values for all
-        // children at a single moment in time, but is good enough for our purposes.
-        int64_t untracked_bytes = curr_consumption - child_consumption;
-        ss << "\n" << new_prefix << "Untracked Memory: Total=";
-        ss << "\n" << new_prefix << "Untracked Memory: Total=" << PrettyPrinter::print(untracked_bytes, TUnit::BYTES);
-    }
-
     return ss.str();
 }
 
@@ -223,7 +213,6 @@ Status MemTracker::MemLimitExceeded(RuntimeState* state, const std::string& deta
 bool MemTracker::GcMemory(int64_t max_consumption) {
     if (max_consumption < 0) return true;
     std::lock_guard<std::mutex> l(_gc_lock);
-    if (_consumption_metric != nullptr) RefreshConsumptionFromMetric();
     int64_t pre_gc_consumption = consumption();
     // Check if someone gc'd before us
     if (pre_gc_consumption < max_consumption) return false;
@@ -238,7 +227,6 @@ bool MemTracker::GcMemory(int64_t max_consumption) {
         const int64_t EXTRA_BYTES_TO_FREE = 512L * 1024L * 1024L;
         int64_t bytes_to_free = curr_consumption - max_consumption + EXTRA_BYTES_TO_FREE;
         _gc_function(bytes_to_free);
-        if (_consumption_metric != nullptr) RefreshConsumptionFromMetric();
         curr_consumption = consumption();
         if (max_consumption - curr_consumption <= EXTRA_BYTES_TO_FREE) break;
     }
