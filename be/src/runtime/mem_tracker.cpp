@@ -23,7 +23,6 @@
 
 #include <boost/algorithm/string/join.hpp>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <utility>
 
@@ -208,33 +207,6 @@ Status MemTracker::MemLimitExceeded(RuntimeState* state, const std::string& deta
     // ss << tracker_to_log->LogUsage();
     // Status status = Status::MemLimitExceeded(ss.str());
     LIMIT_EXCEEDED(this, state, ss.str());
-}
-
-bool MemTracker::GcMemory(int64_t max_consumption) {
-    if (max_consumption < 0) return true;
-    std::lock_guard<std::mutex> l(_gc_lock);
-    int64_t pre_gc_consumption = consumption();
-    // Check if someone gc'd before us
-    if (pre_gc_consumption < max_consumption) return false;
-    if (_num_gcs_metric != nullptr) _num_gcs_metric->increment(1);
-
-    int64_t curr_consumption = pre_gc_consumption;
-    // Try to free up some memory
-    for (auto& _gc_function : _gc_functions) {
-        // Try to free up the amount we are over plus some extra so that we don't have to
-        // immediately GC again. Don't free all the memory since that can be unnecessarily
-        // expensive.
-        const int64_t EXTRA_BYTES_TO_FREE = 512L * 1024L * 1024L;
-        int64_t bytes_to_free = curr_consumption - max_consumption + EXTRA_BYTES_TO_FREE;
-        _gc_function(bytes_to_free);
-        curr_consumption = consumption();
-        if (max_consumption - curr_consumption <= EXTRA_BYTES_TO_FREE) break;
-    }
-
-    if (_bytes_freed_by_last_gc_metric != nullptr) {
-        _bytes_freed_by_last_gc_metric->set_value(pre_gc_consumption - curr_consumption);
-    }
-    return curr_consumption > max_consumption;
 }
 
 } // end namespace starrocks
