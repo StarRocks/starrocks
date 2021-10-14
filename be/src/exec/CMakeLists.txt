@@ -47,7 +47,6 @@ set(EXEC_FILES
     es/es_predicate.cpp
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
-    es/es_scroll_parser.cpp
     es/es_query_builder.cpp
     local_file_writer.cpp
     broker_writer.cpp
