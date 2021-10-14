@@ -2,8 +2,10 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -13,6 +15,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 
 import java.util.Collections;
 import java.util.List;
@@ -21,12 +24,14 @@ import java.util.Set;
 
 public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private final HashDistributionSpec hashDistributionSpec;
-    private long selectedIndexId;
-    private List<Long> selectedTabletId;
-    private List<Long> selectedPartitionId;
+    private final long selectedIndexId;
+    private final List<Long> selectedTabletId;
+    private final List<Long> selectedPartitionId;
 
     private boolean isPreAggregation;
     private String turnOffReason;
+
+    private final List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
 
     public PhysicalOlapScanOperator(Table table,
                                     List<ColumnRefOperator> outputColumns,
@@ -70,6 +75,18 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public void setTurnOffReason(String turnOffReason) {
         this.turnOffReason = turnOffReason;
+    }
+
+    public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
+        return globalDicts;
+    }
+
+    public void addGlobalDictColumns(Pair<Integer, ColumnDict> dict) {
+        globalDicts.add(dict);
+    }
+
+    public boolean couldApplyStringDict(List<Integer> childDictColumns) {
+        return true;
     }
 
     @Override
