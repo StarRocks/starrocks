@@ -30,6 +30,7 @@
 #include "column/nullable_column.h"
 #include "common/logging.h"
 #include "env/env.h"
+#include "gen_cpp/segment_v2.pb.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
 #include "storage/fs/block_manager.h"
@@ -875,18 +876,23 @@ inline void StringColumnWriter::speculate_column_and_set_encoding(const vectoriz
 }
 
 inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const vectorized::BinaryColumn& bin_col) {
+    const size_t dictionary_min_rowcount = 256;
+
     auto row_count = bin_col.size();
     auto ratio = config::dictionary_encoding_ratio;
     auto max_card = static_cast<size_t>(static_cast<double>(row_count) * ratio);
-    max_card = std::max<size_t>(256, max_card);
-    phmap::flat_hash_set<size_t> hash_set;
-    for (size_t i = 0; i < row_count; i++) {
-        size_t hash = vectorized::SliceHash()(bin_col.get_slice(i));
-        hash_set.insert(hash);
-        if (hash_set.size() > max_card) {
-            return PLAIN_ENCODING;
+
+    if (row_count > dictionary_min_rowcount) {
+        phmap::flat_hash_set<size_t> hash_set;
+        for (size_t i = 0; i < row_count; i++) {
+            size_t hash = vectorized::SliceHash()(bin_col.get_slice(i));
+            hash_set.insert(hash);
+            if (hash_set.size() > max_card) {
+                return PLAIN_ENCODING;
+            }
         }
     }
+
     return DICT_ENCODING;
 }
 
