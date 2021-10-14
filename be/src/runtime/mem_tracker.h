@@ -117,10 +117,6 @@ public:
         _child_tracker_it = _parent->_child_trackers.end();
     }
 
-    /// Include counters from a ReservationTracker in logs and other diagnostics.
-    /// The counters should be owned by the fragment's RuntimeProfile.
-    void enable_reservation_reporting(const ReservationTrackerCounters& counters);
-
     void consume(int64_t bytes) {
         if (bytes <= 0) {
             if (bytes < 0) release(-bytes);
@@ -403,11 +399,6 @@ private:
     /// to Consume()/Release(). Only used for the process tracker, thus parent_ should be
     /// NULL if _consumption_metric is set.
     UIntGauge* _consumption_metric = nullptr;
-
-    /// If non-NULL, counters from a corresponding ReservationTracker that should be
-    /// reported in logs and other diagnostics. Owned by this MemTracker. The counters
-    /// are owned by the fragment's RuntimeProfile.
-    std::atomic<ReservationTrackerCounters*> _reservation_counters{nullptr};
 
     std::vector<MemTracker*> _all_trackers;   // this tracker plus all of its ancestors
     std::vector<MemTracker*> _limit_trackers; // _all_trackers with valid limits
