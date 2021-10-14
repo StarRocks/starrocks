@@ -22,7 +22,6 @@
 #ifndef STARROCKS_BE_TEST_QUERY_RUNTIME_TEST_ENV_H
 #define STARROCKS_BE_TEST_QUERY_RUNTIME_TEST_ENV_H
 
-#include "runtime/buffered_block_mgr2.h"
 #include "runtime/disk_io_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -60,7 +59,6 @@ public:
     MemTracker* block_mgr_parent_tracker() { return _block_mgr_parent_tracker.get(); }
     MemTracker* io_mgr_tracker() { return _io_mgr_tracker.get(); }
     MetricRegistry* metrics() { return _metrics.get(); }
-    TmpFileMgr* tmp_file_mgr() { return _tmp_file_mgr.get(); }
 
 private:
     // Recreate global metric groups.
@@ -75,7 +73,6 @@ private:
     std::unique_ptr<MemTracker> _block_mgr_parent_tracker;
     std::unique_ptr<MemTracker> _io_mgr_tracker;
     std::unique_ptr<MetricRegistry> _metrics;
-    std::unique_ptr<TmpFileMgr> _tmp_file_mgr;
 
     // Per-query states with associated block managers.
     std::vector<std::shared_ptr<RuntimeState> > _query_states;
