@@ -180,25 +180,14 @@ public:
             if (limit < 0) {
                 tracker->_consumption->add(bytes); // No limit at this tracker.
             } else {
-                // If TryConsume fails, we can try to GC, but we may need to try several times if
-                // there are concurrent consumers because we don't take a lock before trying to
-                // update _consumption.
-                while (true) {
-                    if (LIKELY(tracker->_consumption->try_add(bytes, limit))) break;
-
-                    VLOG_RPC << "TryConsume failed, bytes=" << bytes
-                             << " consumption=" << tracker->_consumption->current_value() << " limit=" << limit
-                             << " attempting to GC";
-                    if (UNLIKELY(tracker->GcMemory(limit - bytes))) {
-                        DCHECK_GE(i, 0);
-                        // Failed for this mem tracker. Roll back the ones that succeeded.
-                        for (int j = _all_trackers.size() - 1; j > i; --j) {
-                            _all_trackers[j]->_consumption->add(-bytes);
-                        }
-                        return false;
+                if (LIKELY(tracker->_consumption->try_add(bytes, limit))) {
+                    continue;
+                } else {
+                    // Failed for this mem tracker. Roll back the ones that succeeded.
+                    for (int j = _all_trackers.size() - 1; j > i; --j) {
+                        _all_trackers[j]->_consumption->add(-bytes);
                     }
-                    VLOG_RPC << "GC succeeded, TryConsume bytes=" << bytes
-                             << " consumption=" << tracker->_consumption->current_value() << " limit=" << limit;
+                    return false;
                 }
             }
         }
@@ -322,11 +311,6 @@ public:
     Type type() const { return _type; }
 
 private:
-    /// If consumption is higher than max_consumption, attempts to free memory by calling
-    /// any added GC functions.  Returns true if max_consumption is still exceeded. Takes
-    /// gc_lock. Updates metrics if initialized.
-    bool GcMemory(int64_t max_consumption);
-
     // Walks the MemTracker hierarchy and populates _all_trackers and _limit_trackers
     void Init();
 
@@ -341,9 +325,6 @@ private:
     /// of children to include in the dump. If it is zero, then no children are dumped.
     static std::string LogUsage(int max_recursive_depth, const std::string& prefix,
                                 const std::list<MemTracker*>& trackers, int64_t* logged_consumption);
-
-    /// Lock to protect GcMemory(). This prevents many GCs from occurring at once.
-    std::mutex _gc_lock;
 
     Type _type{NO_SET};
 
@@ -369,19 +350,9 @@ private:
     // remove.
     std::list<MemTracker*>::iterator _child_tracker_it;
 
-    /// Functions to call after the limit is reached to free memory.
-    std::vector<GcFunction> _gc_functions;
-
     /// If false, this tracker (and its children) will not be included in LogUsage() output
     /// if consumption is 0.
     bool _log_usage_if_zero;
-
-    /// The number of times the GcFunctions were called.
-    IntCounter* _num_gcs_metric = nullptr;
-
-    /// The number of bytes freed by the last round of calling the GcFunctions (-1 before any
-    /// GCs are performed).
-    IntGauge* _bytes_freed_by_last_gc_metric = nullptr;
 
     // If true, calls unregister_from_parent() in the dtor. This is only used for
     // the query wide trackers to remove it from the process mem tracker. The
