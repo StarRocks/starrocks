@@ -107,6 +107,36 @@ void FixedLengthColumnBase<T>::serialize_batch(uint8_t* __restrict__ dst, Buffer
 }
 
 template <typename T>
+void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restrict__ dst, Buffer<uint32_t>& slice_sizes,
+                                                               size_t chunk_size, uint32_t max_one_row_size,
+                                                               uint8_t* null_masks, bool has_null) {
+    uint32_t* sizes = slice_sizes.data();
+    T* __restrict__ src = _data.data();
+
+    if (!has_null) {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(dst + i * max_one_row_size + sizes[i], &has_null, sizeof(bool));
+            memcpy(dst + i * max_one_row_size + sizes[i] + sizeof(bool), src + i, sizeof(T));
+        }
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            sizes[i] += sizeof(bool) + sizeof(T);
+        }
+    } else {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(dst + i * max_one_row_size + sizes[i], null_masks + i, sizeof(bool));
+            if (!null_masks[i]) {
+                memcpy(dst + i * max_one_row_size + sizes[i] + sizeof(bool), src + i, sizeof(T));
+            }
+        }
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            sizes[i] += sizeof(bool) + (1 - null_masks[i]) * sizeof(T);
+        }
+    }
+}
+
+template <typename T>
 size_t FixedLengthColumnBase<T>::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
                                                              size_t start, size_t count) {
     const size_t value_size = sizeof(T);
