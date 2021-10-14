@@ -12,7 +12,6 @@ from string import Template
 import vectorized_functions
 
 sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
-import starrocks_builtins_functions
 
 license_string = """
 // Licensed to the Apache Software Foundation (ASF) under one
@@ -88,22 +87,6 @@ BuiltinFunctions::FunctionTables BuiltinFunctions::_fn_tables = {
 
 function_list = list()
 
-
-def check_function(vectorized_fn, starrocks_fn):
-    # NAME: [[RETURN_TYPE, ARG_TYPES], ...]
-    ids = set()
-    for vfn in vectorized_fn:
-        assert 5 <= len(vfn) <= 7, "Invalid function in vectorized_functions.py:\n\t" + repr(vfn)
-
-        if "..." in vfn[3]:
-            assert 2 <= len(vfn[3]), "Invalid arguments in vectorized_functions.py:\n\t" + repr(vfn)
-            assert "..." == vfn[3][-1], "variadic parameter must at the end:\n\t" + repr(vfn)
-
-        if vfn[0] in ids:
-            assert False, "Duplicate id in vectorized_functions.py:\n\t" + repr(vfn)
-
-        ids.add(vfn[0])
-
 def add_function(fn_data):
     entry = dict()
     entry["id"] = fn_data[0]
@@ -169,9 +152,6 @@ def generate_cpp(path):
 
 
 if __name__ == '__main__':
-    # check function metadata
-    check_function(vectorized_functions.vectorized_functions, starrocks_builtins_functions.visible_functions)
-
     # Read the function metadata inputs
     for function in vectorized_functions.vectorized_functions:
         add_function(function)
