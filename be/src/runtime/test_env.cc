@@ -40,8 +40,6 @@ TestEnv::TestEnv() {
     _block_mgr_parent_tracker = std::make_unique<MemTracker>(-1);
     _exec_env->disk_io_mgr()->init(_io_mgr_tracker.get());
     init_metrics();
-    _tmp_file_mgr = std::make_unique<TmpFileMgr>();
-    _tmp_file_mgr->init(_metrics.get());
 }
 
 void TestEnv::init_metrics() {
@@ -51,8 +49,6 @@ void TestEnv::init_metrics() {
 void TestEnv::init_tmp_file_mgr(const std::vector<std::string>& tmp_dirs, bool one_dir_per_device) {
     // Need to recreate metrics to avoid error when registering metric twice.
     init_metrics();
-    _tmp_file_mgr = std::make_unique<TmpFileMgr>();
-    _tmp_file_mgr->init_custom(tmp_dirs, one_dir_per_device, _metrics.get());
 }
 
 TestEnv::~TestEnv() {
@@ -61,7 +57,6 @@ TestEnv::~TestEnv() {
     _block_mgr_parent_tracker.reset();
     _exec_env.reset();
     _io_mgr_tracker.reset();
-    _tmp_file_mgr.reset();
     _metrics.reset();
 }
 
@@ -78,13 +73,6 @@ Status TestEnv::create_query_state(int64_t query_id, int max_buffers, int block_
     if (*runtime_state == nullptr) {
         return Status::InternalError("Unexpected error creating RuntimeState");
     }
-
-    std::shared_ptr<BufferedBlockMgr2> mgr;
-    RETURN_IF_ERROR(BufferedBlockMgr2::create(*runtime_state, _block_mgr_parent_tracker.get(),
-                                              (*runtime_state)->runtime_profile(), _tmp_file_mgr.get(),
-                                              calculate_mem_tracker(max_buffers, block_size), block_size, &mgr));
-    (*runtime_state)->set_block_mgr2(mgr);
-    // (*runtime_state)->_block_mgr = mgr;
 
     _query_states.push_back(std::shared_ptr<RuntimeState>(*runtime_state));
     return Status::OK();
