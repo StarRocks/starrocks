@@ -211,6 +211,7 @@ public:
         return 0;
     };
 
+    // A dedicated serialization method used by NullableColumn to serialize data columns with null_masks.
     virtual void serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                                  uint32_t max_one_row_size, uint8_t* null_masks, bool has_null) {
         uint32_t* sizes = slice_sizes.data();
