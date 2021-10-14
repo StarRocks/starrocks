@@ -245,7 +245,7 @@ public:
             return Status::OK();
         }
         DateValue tmp;
-        tmp.from_mysql_date(src.get_uint24());
+        tmp.from_mysql_date(src.get_datev1());
         dst.set_date(tmp);
         return Status::OK();
     }
@@ -266,7 +266,7 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        auto src_value = src.get_uint24();
+        auto src_value = src.get_datev1();
         int day = static_cast<int>(src_value & 31);
         int mon = static_cast<int>(src_value >> 5 & 15);
         int year = static_cast<int>(src_value >> 9);
@@ -338,7 +338,7 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        auto src_value = src.get_uint24();
+        auto src_value = src.get_datev1();
         int day = implicit_cast<int>(src_value & 31u);
         int mon = implicit_cast<int>((src_value >> 5u) & 15u);
         int year = implicit_cast<int>(src_value >> 9u);
@@ -423,10 +423,10 @@ public:
     }
 };
 
-class Decimal12ToDecimalTypeConverter : public TypeConverter {
+class DecimalToDecimal12TypeConverter : public TypeConverter {
 public:
-    Decimal12ToDecimalTypeConverter() = default;
-    ~Decimal12ToDecimalTypeConverter() = default;
+    DecimalToDecimal12TypeConverter() = default;
+    ~DecimalToDecimal12TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("misssing implementation");
@@ -444,10 +444,10 @@ public:
     }
 };
 
-class DecimalToDecimal12TypeConverter : public TypeConverter {
+class Decimal12ToDecimalTypeConverter : public TypeConverter {
 public:
-    DecimalToDecimal12TypeConverter() = default;
-    ~DecimalToDecimal12TypeConverter() = default;
+    Decimal12ToDecimalTypeConverter() = default;
+    ~Decimal12ToDecimalTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("misssing implementation");
@@ -459,8 +459,7 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        DecimalV2Value dst_value;
-        dst_value.from_olap_decimal(src.get_decimal12().integer, src.get_decimal12().fraction);
+        DecimalV2Value dst_value = src.from_decimal_v1();
         dst.set_decimal(dst_value);
         return Status::OK();
     }
@@ -737,7 +736,7 @@ const TypeConverter* get_timestamp_converter(FieldType from_type, FieldType to_t
 const TypeConverter* get_decimal_converter(FieldType from_type, FieldType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_DECIMAL_V2: {
-        static Decimal12ToDecimalTypeConverter s_converter;
+        static DecimalToDecimal12TypeConverter s_converter;
         return &s_converter;
     }
     case OLAP_FIELD_TYPE_DECIMAL128: {
@@ -752,7 +751,7 @@ const TypeConverter* get_decimal_converter(FieldType from_type, FieldType to_typ
 const TypeConverter* get_decimalv2_converter(FieldType from_type, FieldType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_DECIMAL: {
-        static DecimalToDecimal12TypeConverter s_converter;
+        static Decimal12ToDecimalTypeConverter s_converter;
         return &s_converter;
     }
     case OLAP_FIELD_TYPE_DECIMAL128: {
