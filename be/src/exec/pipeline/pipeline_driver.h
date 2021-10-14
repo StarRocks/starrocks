@@ -10,6 +10,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/morsel.h"
 #include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/source_operator.h"
@@ -29,13 +30,14 @@ enum DriverState : uint32_t {
     RUNNING = 2,
     INPUT_EMPTY = 3,
     OUTPUT_FULL = 4,
-    FINISH = 5,
-    CANCELED = 6,
-    INTERNAL_ERROR = 7,
+    DEPENDENCIES_STUCK = 5,
+    FINISH = 6,
+    CANCELED = 7,
+    INTERNAL_ERROR = 8,
     // PENDING_FINISH means a driver's SinkOperator has finished, but its SourceOperator still have a pending
     // io task executed by io threads synchronously, a driver turns to FINISH from PENDING_FINISH after the
     // pending io task's completion.
-    PENDING_FINISH = 8,
+    PENDING_FINISH = 9,
 };
 
 static inline std::string ds_to_string(DriverState ds) {
@@ -50,6 +52,8 @@ static inline std::string ds_to_string(DriverState ds) {
         return "INPUT_EMPTY";
     case OUTPUT_FULL:
         return "OUTPUT_FULL";
+    case DEPENDENCIES_STUCK:
+        return "DEPENDENCIES_STUCK";
     case FINISH:
         return "FINISH";
     case CANCELED:
@@ -138,9 +142,20 @@ public:
                _state == DriverState::INTERNAL_ERROR;
     }
     bool pending_finish() { return _state == DriverState::PENDING_FINISH; }
+    // return true if all the dependencies are ready, otherwise return false.
+    bool dependencies_stuck() {
+        if (_all_dependencies_ready) {
+            return false;
+        }
+        _all_dependencies_ready =
+                std::all_of(_dependencies.begin(), _dependencies.end(), [](auto& dep) { return dep->is_ready(); });
+        return !_all_dependencies_ready;
+    }
 
     bool is_not_blocked() {
-        if (_state == DriverState::OUTPUT_FULL) {
+        if (UNLIKELY(_state == DriverState::DEPENDENCIES_STUCK)) {
+            return !dependencies_stuck();
+        } else if (_state == DriverState::OUTPUT_FULL) {
             return sink_operator()->need_input() || sink_operator()->is_finished();
         } else if (_state == DriverState::INPUT_EMPTY) {
             return source_operator()->has_output() || source_operator()->is_finished();
@@ -154,6 +169,8 @@ public:
 
 private:
     Operators _operators;
+    DriverDependencies _dependencies;
+    bool _all_dependencies_ready = false;
     size_t _first_unfinished;
     QueryContext* _query_ctx;
     FragmentContext* _fragment_ctx;

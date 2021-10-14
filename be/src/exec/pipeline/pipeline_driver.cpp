@@ -12,13 +12,22 @@
 
 namespace starrocks::pipeline {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
-    if (_state == DriverState::NOT_READY) {
-        source_operator()->add_morsel_queue(_morsel_queue);
-        for (auto& op : _operators) {
-            RETURN_IF_ERROR(op->prepare(runtime_state));
+    DCHECK(_state == DriverState::NOT_READY);
+    // fill OperatorWithDependency instances into _dependencies from _operators.
+    DCHECK(_dependencies.empty());
+    _dependencies.reserve(_operators.size());
+    for (auto& op : _operators) {
+        if (auto* op_with_dep = dynamic_cast<DriverDependencyPtr>(op.get())) {
+            _dependencies.push_back(op_with_dep);
         }
-        _state = DriverState::READY;
     }
+    source_operator()->add_morsel_queue(_morsel_queue);
+    for (auto& op : _operators) {
+        RETURN_IF_ERROR(op->prepare(runtime_state));
+    }
+    // Driver has no dependencies always sets _all_dependencies_ready to true;
+    _all_dependencies_ready = _dependencies.empty();
+    _state = DriverState::READY;
     return Status::OK();
 }
 
@@ -126,7 +135,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
             driver_acct().increment_schedule_times();
             driver_acct().update_last_chunks_moved(total_chunks_moved);
             driver_acct().update_last_time_spent(time_spent);
-            if (!sink_operator()->is_finished() && !sink_operator()->need_input()) {
+            if (dependencies_stuck()) {
+                _state = DriverState::DEPENDENCIES_STUCK;
+                return DriverState::DEPENDENCIES_STUCK;
+            } else if (!sink_operator()->is_finished() && !sink_operator()->need_input()) {
                 _state = DriverState::OUTPUT_FULL;
                 return DriverState::OUTPUT_FULL;
             }
