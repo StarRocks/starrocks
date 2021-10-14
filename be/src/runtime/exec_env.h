@@ -47,19 +47,15 @@ class MetricRegistry;
 class StorageEngine;
 class ThreadPool;
 class PriorityThreadPool;
-class ReservationTracker;
 class ResultBufferMgr;
 class ResultQueueMgr;
 class TMasterInfo;
 class LoadChannelMgr;
-class TestExecEnv;
 class ThreadResourceMgr;
-class TmpFileMgr;
 class WebPageHandler;
 class StreamLoadExecutor;
 class RoutineLoadTaskExecutor;
 class SmallFileMgr;
-class FileBlockManager;
 class PluginMgr;
 class RuntimeFilterWorker;
 
@@ -135,7 +131,6 @@ public:
     TMasterInfo* master_info() { return _master_info; }
     LoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     DiskIoMgr* disk_io_mgr() { return _disk_io_mgr; }
-    TmpFileMgr* tmp_file_mgr() { return _tmp_file_mgr; }
     BfdParser* bfd_parser() const { return _bfd_parser; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
     BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache; }
@@ -217,7 +212,6 @@ private:
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
     DiskIoMgr* _disk_io_mgr = nullptr;
-    TmpFileMgr* _tmp_file_mgr = nullptr;
 
     BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;

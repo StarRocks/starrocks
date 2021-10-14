@@ -48,7 +48,6 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/thread_resource_mgr.h"
-#include "runtime/tmp_file_mgr.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
@@ -119,7 +118,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
     _disk_io_mgr = new DiskIoMgr();
-    _tmp_file_mgr = new TmpFileMgr(this), _bfd_parser = BfdParser::create();
     _broker_mgr = new BrokerMgr(this);
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
@@ -221,7 +219,6 @@ Status ExecEnv::_init_mem_tracker() {
     }
 
     RETURN_IF_ERROR(_disk_io_mgr->init(_mem_tracker));
-    RETURN_IF_ERROR(_tmp_file_mgr->init(StarRocksMetrics::instance()->metrics()));
 
     int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit, &is_percent);
     if (storage_cache_limit > MemInfo::physical_mem()) {
@@ -283,10 +280,6 @@ void ExecEnv::_destory() {
     if (_bfd_parser) {
         delete _bfd_parser;
         _bfd_parser = nullptr;
-    }
-    if (_tmp_file_mgr) {
-        delete _tmp_file_mgr;
-        _tmp_file_mgr = nullptr;
     }
     if (_disk_io_mgr) {
         delete _disk_io_mgr;

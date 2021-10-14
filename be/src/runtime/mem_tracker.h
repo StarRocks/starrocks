@@ -37,7 +37,6 @@ namespace starrocks {
 
 class ObjectPool;
 class MemTracker;
-class ReservationTrackerCounters;
 class RuntimeState;
 class TQueryOptions;
 
