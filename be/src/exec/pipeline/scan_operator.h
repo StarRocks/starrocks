@@ -80,7 +80,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    TOlapScanNode _olap_scan_node;
+    const TOlapScanNode& _olap_scan_node;
     std::vector<ExprContext*> _conjunct_ctxs;
     vectorized::RuntimeFilterProbeCollector _runtime_filters;
 };

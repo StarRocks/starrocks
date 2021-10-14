@@ -20,7 +20,7 @@ public:
                                        vectorized::RuntimeFilterProbeCollector* collector) override;
 
 protected:
-    const TPlanNode _tnode;
+    const TPlanNode& _tnode;
     AggregatorPtr _aggregator = nullptr;
     bool _child_eos = false;
 };
