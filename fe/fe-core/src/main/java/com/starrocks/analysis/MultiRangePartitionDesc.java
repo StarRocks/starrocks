@@ -11,6 +11,9 @@ import com.starrocks.common.util.DateUtils;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormatter;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.temporal.WeekFields;
 import java.util.List;
 import java.util.Map;
 
@@ -127,6 +130,13 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         List<SingleRangePartitionDesc> singleRangePartitionDescs = Lists.newArrayList();
         long currentLoopNum = 0;
         long maxAllowedLimit = Config.max_partitions_in_one_batch;
+
+        int dayOfWeek = 1;
+        if (properties.get("dynamic_partition.start_day_of_week") != null) {
+            dayOfWeek = Integer.parseInt(properties.get("dynamic_partition.start_day_of_week"));
+        }
+        WeekFields weekFields = WeekFields.of(DayOfWeek.of(dayOfWeek), 1);
+
         while (beginTime.isBefore(endTime)) {
             PartitionValue lowerPartitionValue = new PartitionValue(beginTime.toString(beginDateTimeFormat));
 
@@ -136,7 +146,11 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                     beginTime = beginTime.plusDays(timeInterval);
                     break;
                 case WEEK:
-                    partitionName = DEFAULT_PREFIX + beginTime.toString(DateUtils.WEEK_FORMAT);
+                    LocalDate localDate = LocalDate.of(beginTime.getYear(), beginTime.getMonthOfYear(),
+                            beginTime.getDayOfMonth());
+                    int weekOfWeekyear = localDate.get(weekFields.weekOfYear());
+                    partitionName = DEFAULT_PREFIX + String.format("%s_%02d",
+                            beginTime.toString(DateUtils.YEAR_FORMAT), weekOfWeekyear);
                     beginTime = beginTime.plusWeeks(timeInterval);
                     break;
                 case MONTH:
