@@ -31,8 +31,6 @@
 #include "gen_cpp/TFileBrokerService.h"
 #include "plugin/plugin_mgr.h"
 #include "runtime/broker_mgr.h"
-#include "runtime/bufferpool/buffer_pool.h"
-#include "runtime/bufferpool/reservation_tracker.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/disk_io_mgr.h"
