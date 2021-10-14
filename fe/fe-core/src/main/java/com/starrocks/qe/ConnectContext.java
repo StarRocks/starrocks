@@ -22,6 +22,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.cluster.ClusterNamespace;
@@ -39,6 +40,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.nio.channels.SocketChannel;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 // When one client connect in, we create a connect context for it.
@@ -47,7 +49,7 @@ import java.util.UUID;
 // Use `volatile` to make the reference change atomic.
 public class ConnectContext {
     private static final Logger LOG = LogManager.getLogger(ConnectContext.class);
-    protected static ThreadLocal<ConnectContext> threadLocalInfo = new ThreadLocal<ConnectContext>();
+    protected static ThreadLocal<ConnectContext> threadLocalInfo = new ThreadLocal<>();
 
     // set this id before analyze
     protected volatile long stmtId;
@@ -130,6 +132,9 @@ public class ConnectContext {
     protected boolean isQueryDump = false;
 
     protected DumpInfo dumpInfo;
+
+    // The related db ids for current sql
+    protected Set<Long> currentSqlDbIds = Sets.newHashSet();
 
     public static ConnectContext get() {
         return threadLocalInfo.get();
@@ -424,6 +429,14 @@ public class ConnectContext {
 
     public void setDumpInfo(DumpInfo dumpInfo) {
         this.dumpInfo = dumpInfo;
+    }
+
+    public Set<Long> getCurrentSqlDbIds() {
+        return currentSqlDbIds;
+    }
+
+    public void setCurrentSqlDbIds(Set<Long> currentSqlDbIds) {
+        this.currentSqlDbIds = currentSqlDbIds;
     }
 
     // kill operation with no protect.

@@ -24,6 +24,7 @@ import com.starrocks.sql.plan.PlanFragmentBuilder;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class StatementPlanner {
     public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
@@ -41,6 +42,7 @@ public class StatementPlanner {
 
             try {
                 lock(dbs);
+                session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
                 return createQueryPlan(relation, session);
             } finally {
                 unLock(dbs);

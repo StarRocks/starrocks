@@ -12,6 +12,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -126,7 +127,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     newColRefToColumnMetaMap.put(newDictColumn, newColumn);
 
                     ColumnDict dict = IDictManager.getInstance().getGlobalDict(tableId, stringColumn.getName());
-                    // scanOperator.addGlobalDictColumns(new Pair<>(newDictColumn.getId(), dict));
+                    scanOperator.addGlobalDictColumns(new Pair<>(newDictColumn.getId(), dict));
 
                     context.stringColumnIdToDictColumnIds.put(columnId, newDictColumn.getId());
                     context.hasChanged = true;
@@ -214,7 +215,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         if (kv.getValue().contains(columnId)) {
                             ColumnDict dict = IDictManager.getInstance().getGlobalDict(kv.getKey(),
                                     stringColumn.getName());
-                            // exchangeOperator.addGlobalDictColumns(new Pair<>(dictColumn.getId(), dict));
+                            exchangeOperator.addGlobalDictColumns(new Pair<>(dictColumn.getId(), dict));
                         }
                     }
                 } else {
