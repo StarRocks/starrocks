@@ -39,7 +39,7 @@ public:
         _fragment_instance_id = fragment_instance_id;
     }
     void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
-    TNetworkAddress fe_addr() { return _fe_addr; }
+    const TNetworkAddress& fe_addr() { return _fe_addr; }
     FragmentFuture finish_future() { return _finish_promise.get_future(); }
     MemTracker* mem_tracker() const { return _mem_tracker.get(); }
     void set_mem_tracker(std::unique_ptr<MemTracker> mem_tracker) { _mem_tracker = std::move(mem_tracker); }
