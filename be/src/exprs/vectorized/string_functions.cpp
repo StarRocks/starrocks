@@ -909,13 +909,15 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
     } else {
         raw::make_room(&dst_offsets, num_rows + 1);
         dst_offsets[0] = 0;
-        size_t reserved = 0;
-        for (int i = 0; i < num_rows; ++i) {
-            auto slice_sz = src_offsets[i + 1] - src_offsets[i];
-            if (slice_sz * times > OLAP_STRING_MAX_LENGTH) {
-                continue;
+        size_t reserved = times * dst_offsets.back();
+        if (reserved > OLAP_STRING_MAX_LENGTH * num_rows) {
+            reserved = 0;
+            for (int i = 0; i < num_rows; ++i) {
+                auto slice_sz = src_offsets[i + 1] - src_offsets[i];
+                if (slice_sz * times < OLAP_STRING_MAX_LENGTH) {
+                    reserved += slice_sz * times;
+                }
             }
-            reserved += slice_sz * times;
         }
         dst_bytes.resize(reserved);
     }
@@ -943,7 +945,7 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
         dst_offsets[i + 1] = dst_off;
     }
 
-    DCHECK_EQ(dst_bytes.size(), dst_off);
+    dst_bytes.resize(dst_off);
     builder.set_has_null(has_null);
     return builder.build(ColumnHelper::is_all_const(columns));
 }
