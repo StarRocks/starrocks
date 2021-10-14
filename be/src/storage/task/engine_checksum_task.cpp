@@ -121,7 +121,7 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
     }
 
     if (!st.is_end_of_file() && !st.ok()) {
-        LOG(INFO) << "Failed to do checksum. error:=" << st.to_string();
+        LOG(WARNING) << "Failed to do checksum. tablet=" << tablet->full_name() << ", error:=" << st.to_string();
         return OLAP_ERR_CHECKSUM_ERROR;
     }
 
