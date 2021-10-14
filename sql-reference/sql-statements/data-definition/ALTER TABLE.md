@@ -308,7 +308,7 @@ bitmap index 支持如下几种修改方式
 1. 修改表的默认副本数量, 新建分区副本数量默认使用此值
 
     ```sql
-    ATLER TABLE example_db.my_table
+    ALTER TABLE example_db.my_table
     SET ("default.replication_num" = "2");
     ```
 
