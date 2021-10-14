@@ -22,6 +22,8 @@
 #ifndef STARROCKS_BE_SRC_COMMON_UTIL_PRIORITY_THREAD_POOL_HPP
 #define STARROCKS_BE_SRC_COMMON_UTIL_PRIORITY_THREAD_POOL_HPP
 
+#include <algorithm>
+#include <atomic>
 #include <boost/thread.hpp>
 #include <functional>
 
@@ -58,7 +60,7 @@ public:
     //  -- work_function: the function to run every time an item is consumed from the queue
     PriorityThreadPool(uint32_t num_threads, uint32_t queue_size) : _work_queue(queue_size), _shutdown(false) {
         for (int i = 0; i < num_threads; ++i) {
-            _threads.create_thread(std::bind<void>(std::mem_fn(&PriorityThreadPool::work_thread), this, i));
+            new_thread(++_current_thread_id);
         }
     }
 
@@ -123,7 +125,49 @@ public:
         join();
     }
 
+    void set_num_thread(int num_thread) {
+        size_t num_thread_in_pool = _threads.size();
+        if (num_thread > num_thread_in_pool) {
+            increase_thr(num_thread - num_thread_in_pool);
+        } else if (num_thread < num_thread_in_pool) {
+            decrease_thr(num_thread_in_pool - num_thread);
+        }
+    }
+
 private:
+    void increase_thr(int num_thread) {
+        std::lock_guard<std::mutex> l(_lock);
+        for (int i = 0; i < num_thread; ++i) {
+            new_thread(++_current_thread_id);
+        }
+    }
+
+    void decrease_thr(int num_thread) {
+        _should_decrease += num_thread;
+
+        for (int i = 0; i < num_thread; ++i) {
+            PriorityThreadPool::Task empty_task = {0, []() {}};
+            _work_queue.try_put(empty_task);
+        }
+    }
+
+    // not thread safe
+    // we need acquire _lock before call this function
+    void new_thread(int tid) {
+        auto* thr = _threads.create_thread(std::bind<void>(std::mem_fn(&PriorityThreadPool::work_thread), this, tid));
+        _threads_holder.emplace_back(thr, tid);
+    }
+
+    void remove_thread(int tid) {
+        std::lock_guard<std::mutex> l(_lock);
+        auto res = std::find_if(_threads_holder.begin(), _threads_holder.end(),
+                                [=](const auto& val) { return tid == val.second; });
+        if (res != _threads_holder.end()) {
+            _threads.remove_thread(res->first);
+            _threads_holder.erase(res);
+        }
+    }
+
     // Driver method for each thread in the pool. Continues to read work from the queue
     // until the pool is shutdown.
     void work_thread(int thread_id) {
@@ -135,6 +179,23 @@ private:
             if (_work_queue.get_size() == 0) {
                 _empty_cv.notify_all();
             }
+            if (_should_decrease) {
+                bool need_destroy = true;
+                int32_t expect;
+                int32_t target;
+                do {
+                    expect = _should_decrease;
+                    target = expect - 1;
+                    if (expect == 0) {
+                        need_destroy = false;
+                        break;
+                    }
+                } while (!_should_decrease.compare_exchange_weak(expect, target));
+                if (need_destroy) {
+                    remove_thread(thread_id);
+                    break;
+                }
+            }
         }
     }
 
@@ -143,6 +204,9 @@ private:
         std::lock_guard<std::mutex> l(_lock);
         return _shutdown;
     }
+    // thread pointer
+    // tid
+    std::vector<std::pair<boost::thread*, int>> _threads_holder;
 
     // Queue on which work items are held until a thread is available to process them in
     // FIFO order.
@@ -159,6 +223,10 @@ private:
 
     // Signalled when the queue becomes empty
     std::condition_variable _empty_cv;
+
+    std::atomic<int32_t> _should_decrease = 0;
+
+    std::atomic<int32_t> _current_thread_id = 0;
 };
 
 } // namespace starrocks

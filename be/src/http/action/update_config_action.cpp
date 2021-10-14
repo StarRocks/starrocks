@@ -26,6 +26,7 @@
 #include <rapidjson/rapidjson.h>
 #include <rapidjson/stringbuffer.h>
 
+#include <mutex>
 #include <string>
 
 #include "common/configbase.h"
@@ -37,6 +38,7 @@
 #include "http/http_request.h"
 #include "http/http_response.h"
 #include "http/http_status.h"
+#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 
@@ -44,6 +46,13 @@ const static std::string HEADER_JSON = "application/json";
 
 void UpdateConfigAction::handle(HttpRequest* req) {
     LOG(INFO) << req->debug_string();
+
+    std::call_once(_once_flag, [&]() {
+        _config_callback.emplace("doris_scanner_thread_pool_thread_num", [&]() {
+            LOG(INFO) << "set doris_scanner_thread_pool_thread_num:" << config::doris_scanner_thread_pool_thread_num;
+            _exec_env->thread_pool()->set_num_thread(config::doris_scanner_thread_pool_thread_num);
+        });
+    });
 
     Status s;
     std::string msg;
@@ -57,6 +66,11 @@ void UpdateConfigAction::handle(HttpRequest* req) {
         s = config::set_config(config, new_value);
         if (s.ok()) {
             LOG(INFO) << "set_config " << config << "=" << new_value << " success";
+
+            if (_config_callback.count(config)) {
+                _config_callback[config]();
+            }
+
         } else {
             LOG(WARNING) << "set_config " << config << "=" << new_value << " failed";
             msg = strings::Substitute("set $0=$1 failed, reason: $2", config, new_value, s.to_string());
