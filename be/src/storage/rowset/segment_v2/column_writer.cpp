@@ -878,6 +878,7 @@ inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const vector
     auto row_count = bin_col.size();
     auto ratio = config::dictionary_encoding_ratio;
     auto max_card = static_cast<size_t>(static_cast<double>(row_count) * ratio);
+    max_card = std::max<size_t>(256, max_card);
     phmap::flat_hash_set<size_t> hash_set;
     for (size_t i = 0; i < row_count; i++) {
         size_t hash = vectorized::SliceHash()(bin_col.get_slice(i));
