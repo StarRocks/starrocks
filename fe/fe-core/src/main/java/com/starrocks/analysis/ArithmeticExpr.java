@@ -147,43 +147,67 @@ public class ArithmeticExpr extends Expr {
                 "Types of lhs and rhs must be DecimalV3");
         final PrimitiveType lhsPtype = lhsType.getPrimitiveType();
         final PrimitiveType rhsPtype = rhsType.getPrimitiveType();
+        final int lhsPrecision = lhsType.getScalarPrecision();
+        final int rhsPrecision = rhsType.getScalarPrecision();
         final int lhsScale = lhsType.getScalarScale();
         final int rhsScale = rhsType.getScalarScale();
-
-        // get the wider decimal type
-        PrimitiveType widerType = PrimitiveType.getWiderDecimalV3Type(lhsPtype, rhsPtype);
-        // compute arithmetic expr use decimal64 for both decimal32 and decimal64
-        widerType = PrimitiveType.getWiderDecimalV3Type(widerType, PrimitiveType.DECIMAL64);
-        int maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(widerType);
+        final int lhsIntegerPartWidth = lhsPrecision - lhsScale;
+        final int rhsIntegerPartWidth = rhsPrecision - rhsScale;
 
         TypeTriple result = new TypeTriple();
-        result.lhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, lhsScale);
-        result.rhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, rhsScale);
+        PrimitiveType returnPtype = PrimitiveType.INVALID_TYPE;
+        int returnPrecision = 0;
         int returnScale = 0;
         switch (op) {
             case ADD:
             case SUBTRACT:
-            case MOD:
+                // S(A+/-B) = max(S(A), S(B));
+                // P(A+/-B) = max(P(A)-S(A), P(B)-S(B)) + 1 +S(A+/-B);
                 returnScale = Math.max(lhsScale, rhsScale);
+                // +1 is carry in MSB
+                int returnIntegerPart = Math.max(lhsIntegerPartWidth, rhsIntegerPartWidth) + 1;
+                returnPrecision = returnIntegerPart + returnScale;
+                try {
+                    result.returnType = ScalarType.createDecimalV3NarrowestType(returnPrecision, returnScale);
+                    returnPtype = result.returnType.getPrimitiveType();
+                } catch (Exception e) {
+                    String errMsg = String.format("Result type is illegal(p<=38): %s%s%s=>DECIMAL(%d,%d)",
+                            lhsType, op, rhsType, returnPrecision, returnScale);
+                    throw new AnalysisException(errMsg, e);
+                }
+                break;
+            case MOD:
+                // S(A%B) = max(S(A), S(B));
+                // P(A%B) = P(B) - S(B) + S(A%B);
+                returnScale = Math.max(lhsScale, rhsScale);
+                int maxPrecision = Math.max(lhsIntegerPartWidth, rhsIntegerPartWidth) + returnScale;
+                returnPrecision = rhsIntegerPartWidth + returnScale;
+                try {
+                    returnPtype = ScalarType.createDecimalV3NarrowestType(maxPrecision, returnScale).getPrimitiveType();
+                    result.returnType = ScalarType.createDecimalV3Type(returnPtype, returnPrecision, returnScale);
+                } catch (Exception e) {
+                    String errMsg = String.format("Operand type DECIMAL(%d,%d) is illegal(p<=38): %s%s%s=>DECIMAL(%d,%d)",
+                            maxPrecision, returnScale, lhsType, op, rhsType, returnPrecision, returnScale);
+                    throw new AnalysisException(errMsg, e);
+                }
                 break;
             case MULTIPLY:
+                // S(A*B) = S(A) + S(B)
+                // P(A*B) = P(A) + P(B)
                 returnScale = lhsScale + rhsScale;
-                // promote type result type of multiplication if it is too narrow to hold all significant bits
-                if (returnScale > maxPrecision) {
-                    final int maxPrecisionOfDecimal128 =
-                            PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
-                    // decimal128 is already the widest decimal types, so throw an error if scale of result exceeds 38
-                    Preconditions.checkState(widerType != PrimitiveType.DECIMAL128,
-                            String.format("Return scale(%d) exceeds maximum value(%d)", returnScale,
-                                    maxPrecisionOfDecimal128));
-                    widerType = PrimitiveType.DECIMAL128;
-                    maxPrecision = maxPrecisionOfDecimal128;
-                    result.lhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, lhsScale);
-                    result.rhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, rhsScale);
+                returnPrecision = lhsPrecision + rhsPrecision;
+                try {
+                    result.returnType = ScalarType.createDecimalV3NarrowestType(returnPrecision, returnScale);
+                } catch (Exception e) {
+                    String errMsg = String.format("Result type is illegal(p<=38): %s%s%s=>DECIMAL(%d,%d)",
+                            lhsType, op, rhsType, returnPrecision, returnScale);
+                    throw new AnalysisException(errMsg, e);
                 }
                 break;
             case INT_DIVIDE:
             case DIVIDE:
+                // S(A/B) = S(A) + 6 when S(A) <= 6, 12 when 6<S(A)<=12, S(A) when 12 < S(A)
+                // P(A/B) = P(A) - S(A) + S(A/B) + S(B) - P(B)
                 if (lhsScale <= 6) {
                     returnScale = lhsScale + 6;
                 } else if (lhsScale <= 12) {
@@ -191,17 +215,16 @@ public class ArithmeticExpr extends Expr {
                 } else {
                     returnScale = lhsScale;
                 }
-                widerType = PrimitiveType.DECIMAL128;
-                maxPrecision = PrimitiveType.getMaxPrecisionOfDecimal(widerType);
-                result.lhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, lhsScale);
-                result.rhsTargetType = ScalarType.createDecimalV3Type(widerType, maxPrecision, rhsScale);
-                int adjustedScale = returnScale + rhsScale;
-                if (adjustedScale > maxPrecision) {
-                    throw new AnalysisException(
-                            String.format(
-                                    "Dividend fails to adjust scale to %d that exceeds maximum value(%d)",
-                                    adjustedScale,
-                                    maxPrecision));
+                int dividendScale = returnScale + rhsScale;
+                int dividendPrecision = lhsIntegerPartWidth + dividendScale;
+                returnPrecision = dividendPrecision - rhsPrecision;
+                try {
+                    returnPtype = ScalarType.createDecimalV3NarrowestType(dividendPrecision, dividendScale).getPrimitiveType();
+                    result.returnType = ScalarType.createDecimalV3Type(returnPtype, returnPrecision, returnScale);
+                } catch (Exception e) {
+                    String errMsg = String.format("Dividend type DECIMAL(%d,%d) is illegal(p<=38): %s%s%s=>DECIMAL(%d,%d)",
+                            dividendPrecision, dividendScale, lhsType, op, rhsType, returnPrecision, returnScale);
+                    throw new AnalysisException(errMsg, e);
                 }
                 break;
             case BITAND:
@@ -214,8 +237,11 @@ public class ArithmeticExpr extends Expr {
             default:
                 Preconditions.checkState(false, "DecimalV3 only support operators: +-*/%&|^");
         }
-        result.returnType = op == Operator.INT_DIVIDE ? ScalarType.BIGINT :
-                ScalarType.createDecimalV3Type(widerType, maxPrecision, returnScale);
+        if (op == Operator.INT_DIVIDE) {
+            result.returnType = ScalarType.BIGINT;
+        }
+        result.lhsTargetType = ScalarType.createDecimalV3Type(returnPtype, lhsPrecision, lhsScale);
+        result.rhsTargetType = ScalarType.createDecimalV3Type(returnPtype, rhsPrecision, rhsScale);
         return result;
     }
 
