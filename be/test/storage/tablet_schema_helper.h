@@ -31,15 +31,15 @@ namespace starrocks {
 inline TabletColumn create_int_key(int32_t id, bool is_nullable = true, bool is_bf_column = false,
                                    bool has_bitmap_index = false) {
     TabletColumn column;
-    column._unique_id = id;
-    column._col_name = std::to_string(id);
-    column._type = OLAP_FIELD_TYPE_INT;
-    column._is_key = true;
-    column._is_nullable = is_nullable;
-    column._length = 4;
-    column._index_length = 4;
-    column._is_bf_column = is_bf_column;
-    column._has_bitmap_index = has_bitmap_index;
+    column.set_unique_id(id);
+    column.set_name(std::to_string(id));
+    column.set_type(OLAP_FIELD_TYPE_INT);
+    column.set_is_key(true);
+    column.set_is_nullable(is_nullable);
+    column.set_length(4);
+    column.set_index_length(4);
+    column.set_is_bf_column(is_bf_column);
+    column.set_has_bitmap_index(has_bitmap_index);
     return column;
 }
 
@@ -47,68 +47,66 @@ inline TabletColumn create_int_value(int32_t id, FieldAggregationMethod agg_meth
                                      bool is_nullable = true, const std::string default_value = "",
                                      bool is_bf_column = false, bool has_bitmap_index = false) {
     TabletColumn column;
-    column._unique_id = id;
-    column._col_name = std::to_string(id);
-    column._type = OLAP_FIELD_TYPE_INT;
-    column._is_key = false;
-    column._aggregation = agg_method;
-    column._is_nullable = is_nullable;
-    column._length = 4;
-    column._index_length = 4;
+    column.set_unique_id(id);
+    column.set_name(std::to_string(id));
+    column.set_type(OLAP_FIELD_TYPE_INT);
+    column.set_is_key(false);
+    column.set_aggregation(agg_method);
+    column.set_is_nullable(is_nullable);
+    column.set_length(4);
+    column.set_index_length(4);
     if (default_value != "") {
-        column._has_default_value = true;
-        column._default_value = default_value;
+        column.set_default_value(default_value);
     }
-    column._is_bf_column = is_bf_column;
-    column._has_bitmap_index = has_bitmap_index;
+    column.set_is_bf_column(is_bf_column);
+    column.set_has_bitmap_index(has_bitmap_index);
     return column;
 }
 
 inline TabletColumn create_char_key(int32_t id, bool is_nullable = true, int length = 8) {
     TabletColumn column;
-    column._unique_id = id;
-    column._col_name = std::to_string(id);
-    column._type = OLAP_FIELD_TYPE_CHAR;
-    column._is_key = true;
-    column._is_nullable = is_nullable;
-    column._length = length;
-    column._index_length = 1;
+    column.set_unique_id(id);
+    column.set_name(std::to_string(id));
+    column.set_type(OLAP_FIELD_TYPE_CHAR);
+    column.set_is_key(true);
+    column.set_is_nullable(is_nullable);
+    column.set_length(length);
+    column.set_index_length(1);
     return column;
 }
 
 inline TabletColumn create_varchar_key(int32_t id, bool is_nullable = true, int length = 8) {
     TabletColumn column;
-    column._unique_id = id;
-    column._col_name = std::to_string(id);
-    column._type = OLAP_FIELD_TYPE_VARCHAR;
-    column._is_key = true;
-    column._is_nullable = is_nullable;
-    column._length = length;
-    column._index_length = 4;
+    column.set_unique_id(id);
+    column.set_name(std::to_string(id));
+    column.set_type(OLAP_FIELD_TYPE_VARCHAR);
+    column.set_is_key(true);
+    column.set_is_nullable(is_nullable);
+    column.set_length(length);
+    column.set_index_length(4);
     return column;
 }
 
 inline TabletColumn create_array(int32_t id, bool is_nullable = true, int length = 24) {
     TabletColumn column;
-    column._unique_id = id;
-    column._col_name = std::to_string(id);
-    column._type = OLAP_FIELD_TYPE_ARRAY;
-    column._is_key = true;
-    column._is_nullable = is_nullable;
-    column._length = length;
-    column._index_length = length;
+    column.set_unique_id(id);
+    column.set_name(std::to_string(id));
+    column.set_type(OLAP_FIELD_TYPE_ARRAY);
+    column.set_is_key(true);
+    column.set_is_nullable(is_nullable);
+    column.set_length(length);
+    column.set_index_length(length);
     return column;
 }
 
 template <FieldType type>
 inline TabletColumn create_with_default_value(std::string default_value) {
     TabletColumn column;
-    column._type = type;
-    column._is_nullable = true;
-    column._aggregation = OLAP_FIELD_AGGREGATION_NONE;
-    column._has_default_value = true;
-    column._default_value = default_value;
-    column._length = 4;
+    column.set_type(type);
+    column.set_is_nullable(true);
+    column.set_aggregation(OLAP_FIELD_AGGREGATION_NONE);
+    column.set_default_value(default_value);
+    column.set_length(4);
     return column;
 }
 
