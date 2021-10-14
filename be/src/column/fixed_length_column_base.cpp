@@ -116,22 +116,22 @@ void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restri
     if (!has_null) {
         for (size_t i = 0; i < chunk_size; ++i) {
             memcpy(dst + i * max_one_row_size + sizes[i], &has_null, sizeof(bool));
-            memcpy(dst + i * max_one_row_size + sizes[i] + 1, src + i, sizeof(T));
+            memcpy(dst + i * max_one_row_size + sizes[i] + sizeof(bool), src + i, sizeof(T));
         }
 
         for (size_t i = 0; i < chunk_size; ++i) {
-            sizes[i] += 1 + sizeof(T);
+            sizes[i] += sizeof(bool) + sizeof(T);
         }
     } else {
         for (size_t i = 0; i < chunk_size; ++i) {
             memcpy(dst + i * max_one_row_size + sizes[i], null_masks + i, sizeof(bool));
             if (!null_masks[i]) {
-                memcpy(dst + i * max_one_row_size + sizes[i] + 1, src + i, sizeof(T));
+                memcpy(dst + i * max_one_row_size + sizes[i] + sizeof(bool), src + i, sizeof(T));
             }
         }
 
         for (size_t i = 0; i < chunk_size; ++i) {
-            sizes[i] += 1 + (1 - null_masks[i]) * sizeof(T);
+            sizes[i] += sizeof(bool) + (1 - null_masks[i]) * sizeof(T);
         }
     }
 }

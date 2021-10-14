@@ -219,14 +219,14 @@ public:
         if (!has_null) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 memcpy(dst + i * max_one_row_size + sizes[i], &has_null, sizeof(bool));
-                sizes[i] += 1 + serialize(i, dst + i * max_one_row_size + sizes[i]);
+                sizes[i] += sizeof(bool) + serialize(i, dst + i * max_one_row_size + sizes[i] + sizeof(bool));
             }
         } else {
             for (size_t i = 0; i < chunk_size; ++i) {
                 memcpy(dst + i * max_one_row_size + sizes[i], null_masks + i, sizeof(bool));
-                sizes[i] += 1;
+                sizes[i] += sizeof(bool);
 
-                if (null_masks[i]) {
+                if (!null_masks[i]) {
                     sizes[i] += serialize(i, dst + i * max_one_row_size + sizes[i]);
                 }
             }
