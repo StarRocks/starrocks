@@ -83,12 +83,10 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     // NOTE: this MemTracker only for olap
     _fragment_ctx->set_mem_tracker(
             std::make_unique<MemTracker>(bytes_limit, "fragment mem-limit", exec_env->query_pool_mem_tracker(), true));
-    auto mem_tracker = _fragment_ctx->mem_tracker();
 
     runtime_state->set_batch_size(config::vector_chunk_size);
     RETURN_IF_ERROR(runtime_state->init_mem_trackers(query_id));
     runtime_state->set_be_number(backend_num);
-    runtime_state->set_fragment_mem_tracker(mem_tracker);
 
     LOG(INFO) << "Using query memory limit: " << PrettyPrinter::print(bytes_limit, TUnit::BYTES);
 
