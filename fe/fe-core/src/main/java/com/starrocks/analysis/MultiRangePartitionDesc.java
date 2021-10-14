@@ -132,7 +132,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         long maxAllowedLimit = Config.max_partitions_in_one_batch;
 
         int dayOfWeek = 1;
-        if (properties.get("dynamic_partition.start_day_of_week") != null) {
+        if (properties != null && properties.get("dynamic_partition.start_day_of_week") != null) {
             dayOfWeek = Integer.parseInt(properties.get("dynamic_partition.start_day_of_week"));
         }
         WeekFields weekFields = WeekFields.of(DayOfWeek.of(dayOfWeek), 1);
