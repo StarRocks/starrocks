@@ -23,15 +23,14 @@ TEST_F(StringFunctionRepeatTest, repeatTest) {
     ColumnPtr result = StringFunctions::repeat(ctx.get(), columns);
     ASSERT_EQ(20, result->size());
 
-    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+    auto v = ColumnViewer<TYPE_VARCHAR>(result);
 
     for (int k = 0; k < 20; ++k) {
         std::string s;
         for (int i = 0; i < k; ++i) {
             s.append(std::to_string(k));
         }
-
-        ASSERT_EQ(s, v->get_data()[k].to_string());
+        ASSERT_EQ(s, v.value(k).to_string());
     }
 }
 
@@ -49,12 +48,6 @@ TEST_F(StringFunctionRepeatTest, repeatLargeTest) {
 
     ColumnPtr result = StringFunctions::repeat(ctx.get(), columns);
     ASSERT_EQ(1, result->size());
-
-    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-
-    std::string s;
-    s.resize(OLAP_STRING_MAX_LENGTH, '1');
-    ASSERT_EQ(s, v->get_data()[0].to_string());
 }
 
 TEST_F(StringFunctionRepeatTest, repeatConstTest) {
@@ -67,6 +60,7 @@ TEST_F(StringFunctionRepeatTest, repeatConstTest) {
         str->append(std::string(i, 'x'));
         str->append(std::string(1, 'x'));
     }
+
     int32_t repeat_times = OLAP_STRING_MAX_LENGTH / 100 + 10;
     times->append(repeat_times);
 
@@ -77,15 +71,16 @@ TEST_F(StringFunctionRepeatTest, repeatConstTest) {
     const auto num_rows = str->size();
     ASSERT_EQ(num_rows, result->size());
 
-    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+    auto v = ColumnViewer<TYPE_VARCHAR>(result);
+
     for (int i = 0; i < num_rows; ++i) {
         auto si = str->get_slice(i);
-        auto so = v->get_slice(i);
+        auto so = v.value(i);
+
         if (si.size * repeat_times < OLAP_STRING_MAX_LENGTH) {
             ASSERT_EQ(so.size, si.size * repeat_times);
         } else {
-            auto real_repeat_times = std::max((int32_t)(OLAP_STRING_MAX_LENGTH / si.size), 1);
-            ASSERT_EQ(so.size, si.size * real_repeat_times);
+            ASSERT_TRUE(v.is_null(i));
         }
     }
 }

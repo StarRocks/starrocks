@@ -82,6 +82,7 @@ public:
 
     /**
      * Repeat a string the specified number of times
+     * we will truncate the result length to 65535
      *
      * @param: [string_value, times]
      * @paramType: [BinaryColumn, IntColumn]
