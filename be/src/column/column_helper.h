@@ -105,6 +105,7 @@ public:
      */
     template <PrimitiveType Type>
     static inline typename RunTimeColumnType<Type>::Ptr cast_to(const ColumnPtr& value) {
+        down_cast<RunTimeColumnType<Type>*>(value.get());
         return std::static_pointer_cast<RunTimeColumnType<Type>>(value);
     }
 
