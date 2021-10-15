@@ -29,6 +29,8 @@ public class PruneWindowColumnsRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalWindowOperator windowOperator = (LogicalWindowOperator) input.getOp();
         ColumnRefSet requiredOutputColumns = context.getTaskContext().get(0).getRequiredColumns();
+        ColumnRefSet requiredInputColumns = new ColumnRefSet();
+        requiredInputColumns.union(requiredOutputColumns);
 
         Map<ColumnRefOperator, CallOperator> newWindowCall = new HashMap<>();
         windowOperator.getWindowCall().forEach((columnRefOperator, callOperator) -> {
@@ -44,6 +46,13 @@ public class PruneWindowColumnsRule extends TransformationRule {
 
         if (newWindowCall.keySet().equals(windowOperator.getWindowCall().keySet())) {
             return Collections.emptyList();
+        }
+
+        //If newWindowCall is empty, it will be clipped in PruneEmptyWindowRule,
+        // so it is directly transmitted requiredOutputColumns here
+        if (newWindowCall.isEmpty()) {
+            requiredOutputColumns.clear();
+            requiredOutputColumns.union(requiredInputColumns);
         }
 
         return Lists.newArrayList(OptExpression.create(new LogicalWindowOperator(
