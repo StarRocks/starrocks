@@ -51,8 +51,8 @@ Columns prepare_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_pr
         lhs_data[i] = CppType(0);
         rhs_data[i] = CppType(0);
     }
-    std::cout << "lhs_column=" << lhs_column->debug_string() << std::endl;
-    std::cout << "rhs_column=" << rhs_column->debug_string() << std::endl;
+    // std::cout << "lhs_column=" << lhs_column->debug_string() << std::endl;
+    // std::cout << "rhs_column=" << rhs_column->debug_string() << std::endl;
     columns.push_back(lhs_column);
     columns.push_back(rhs_column);
     return columns;
@@ -128,9 +128,9 @@ Columns prepare_const_const(const DecimalTestCase& test_case, int lhs_precision,
 
 using Func = std::function<ColumnPtr(ColumnPtr const&, ColumnPtr const&)>;
 
-template <PrimitiveType Type, typename Op, bool check_overflow>
+template <PrimitiveType Type, typename Op, bool check_overflow, bool assert_overflow = false>
 void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Columns columns, int result_precision,
-                                   int result_scale, size_t off) {
+                                   int result_scale, size_t off, [[maybe_unused]] const std::vector<bool>& overflows) {
     using ColumnWiseOp = UnpackConstColumnDecimalBinaryFunction<Op, check_overflow>;
     using CppType = RunTimeCppType<Type>;
     using ColumnType = RunTimeColumnType<Type>;
@@ -154,8 +154,8 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
             auto& tc = test_cases[0];
             auto& rhs_datum = std::get<1>(tc);
             auto& expect = std::get<2>(tc);
-            std::cout << "test#" << 0 << ": lhs=" << std::get<0>(tc) << ", rhs=" << std::get<1>(tc)
-                      << ", expect=" << expect << ", actual=" << actual << std::endl;
+            //std::cout << "test#" << 0 << ": lhs=" << std::get<0>(tc) << ", rhs=" << std::get<1>(tc)
+            //          << ", expect=" << expect << ", actual=" << actual << std::endl;
 
             if constexpr (is_div_op<Op> || is_mod_op<Op>) {
                 if (rhs_datum != "0") {
@@ -192,9 +192,13 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
 
         CppType& value = data[row_idx];
         auto actual = DecimalV3Cast::to_string<CppType>(value, decimal_column->precision(), decimal_column->scale());
-        std::cout << "test#" << i << ": lhs=" << lhs_datum << ", rhs=" << rhs_datum << ", expect=" << expect
-                  << ", actual=" << actual << std::endl;
+        //std::cout << "test#" << i << ": lhs=" << lhs_datum << ", rhs=" << rhs_datum << ", expect=" << expect
+        //          << ", actual=" << actual << std::endl;
         if constexpr (check_overflow) {
+            if constexpr (assert_overflow) {
+                const auto& expect_overflow = overflows[i];
+                ASSERT_EQ(expect_overflow, result->is_null(row_idx));
+            }
             if (result->is_nullable() && result->is_null(row_idx)) {
                 continue;
             }
@@ -213,16 +217,23 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
 template <PrimitiveType Type, typename Op, bool check_overflow>
 void test_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                         int rhs_scale, int result_precision, int result_scale) {
-    std::cout << "test_vector_vector begin: check_overflow=" << check_overflow << std::endl;
     Columns columns = prepare_vector_vector<Type>(test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, 0, 0);
-    test_decimal_binary_functions<Type, Op, check_overflow>(test_cases, columns, result_precision, result_scale, 0);
-    std::cout << "test_vector_vector end: check_overflow=" << check_overflow << std::endl;
+    test_decimal_binary_functions<Type, Op, check_overflow>(test_cases, columns, result_precision, result_scale, 0,
+                                                            std::vector<bool>());
+}
+
+template <PrimitiveType Type, typename Op, bool check_overflow>
+void test_vector_vector_assert_overflow(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
+                                        int rhs_precision, int rhs_scale, int result_precision, int result_scale,
+                                        const std::vector<bool>& overflows) {
+    Columns columns = prepare_vector_vector<Type>(test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, 0, 0);
+    test_decimal_binary_functions<Type, Op, check_overflow, true>(test_cases, columns, result_precision, result_scale,
+                                                                  0, overflows);
 }
 
 template <PrimitiveType Type, typename Op, bool check_overflow>
 void test_const_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                        int rhs_scale, int result_precision, int result_scale) {
-    std::cout << "test_const_vector begin: check_overflow=" << check_overflow << std::endl;
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<int> rand_int(1, 50);
@@ -232,15 +243,13 @@ void test_const_vector(DecimalTestCaseArray const& test_cases, int lhs_precision
         Columns columns = prepare_const_vector<Type>(tc, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
                                                      front_fill_size, rear_fill_size);
         test_decimal_binary_functions<Type, Op, check_overflow>(DecimalTestCaseArray{tc}, columns, result_precision,
-                                                                result_scale, front_fill_size);
+                                                                result_scale, front_fill_size, std::vector<bool>());
     }
-    std::cout << "test_const_vector end: check_overflow=" << check_overflow << std::endl;
 }
 
 template <PrimitiveType Type, typename Op, bool check_overflow>
 void test_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                        int rhs_scale, int result_precision, int result_scale) {
-    std::cout << "test_vector_const begin: check_overflow=" << check_overflow << std::endl;
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<int> rand_int(1, 50);
@@ -250,21 +259,18 @@ void test_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision
         Columns columns = prepare_vector_const<Type>(tc, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
                                                      front_fill_size, rear_fill_size);
         test_decimal_binary_functions<Type, Op, check_overflow>(DecimalTestCaseArray{tc}, columns, result_precision,
-                                                                result_scale, front_fill_size);
+                                                                result_scale, front_fill_size, std::vector<bool>());
     }
-    std::cout << "test_vector_const end: check_overflow=" << check_overflow << std::endl;
 }
 
 template <PrimitiveType Type, typename Op, bool check_overflow>
 void test_const_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                       int rhs_scale, int result_precision, int result_scale) {
-    std::cout << "test_const_const begin: check_overflow=" << check_overflow << std::endl;
     for (auto& tc : test_cases) {
         Columns columns = prepare_const_const<Type>(tc, lhs_precision, lhs_scale, rhs_precision, rhs_scale);
         test_decimal_binary_functions<Type, Op, check_overflow>(DecimalTestCaseArray{tc}, columns, result_precision,
-                                                                result_scale, 0);
+                                                                result_scale, 0, std::vector<bool>());
     }
-    std::cout << "test_const_const end: check_overflow=" << check_overflow << std::endl;
 }
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p30s20_add_decimal128p38s28_eq_decimal128p38s28) {
     DecimalTestCaseArray test_cases = {
@@ -2586,5 +2592,64 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal64p18s15_sub_decimal64p18s15_eq_de
     test_const_vector<TYPE_DECIMAL64, SubOp, false>(test_cases, 18, 15, 18, 15, 18, 15);
     test_const_const<TYPE_DECIMAL64, SubOp, true>(test_cases, 18, 15, 18, 15, 18, 15);
     test_const_const<TYPE_DECIMAL64, SubOp, false>(test_cases, 18, 15, 18, 15, 18, 15);
+}
+
+using DecimalOverflowTestCase = std::tuple<std::string, std::string, std::string, bool>;
+using DecimalOverflowTestCaseArray = std::vector<DecimalOverflowTestCase>;
+TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s16_div_decimal128p38s16_eq_decimal128p38s16) {
+    DecimalOverflowTestCaseArray test_cases = {{"1384931237.28", "1382967695.28", "0", true},
+                                               {"384931237.28", "1382967695.28", "0", true},
+                                               {"84931237.28", "1382967695.28", "0", true},
+                                               {"4931237.28", "1382967695.28", "0", true},
+                                               {"931237.28", "1382967695.28", "0.0006733615565846", false},
+                                               {"-931237.28", "1382967695.28", "-0.0006733615565846", false}};
+    DecimalTestCaseArray test_case_array;
+    std::vector<bool> overflows;
+    test_case_array.reserve(test_cases.size());
+    overflows.reserve(test_cases.size());
+    for (auto& tc : test_cases) {
+        test_case_array.emplace_back(std::get<0>(tc), std::get<1>(tc), std::get<2>(tc));
+        overflows.emplace_back(std::get<3>(tc));
+    }
+    test_vector_vector_assert_overflow<TYPE_DECIMAL128, DivOp, true>(test_case_array, 38, 16, 38, 16, 38, 16,
+                                                                     overflows);
+}
+
+TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s15_div_decimal128p38s15_eq_decimal128p38s15) {
+    DecimalOverflowTestCaseArray test_cases = {{"1384931237.28", "1382967695.28", "0", true},
+                                               {"384931237.28", "1382967695.28", "0", true},
+                                               {"84931237.28", "1382967695.28", "0.061412307438464", false},
+                                               {"4931237.28", "1382967695.28", "0.003565692312865", false},
+                                               {"931237.28", "1382967695.28", "0.000673361556585", false},
+                                               {"-931237.28", "1382967695.28", "-0.000673361556585", false}};
+    DecimalTestCaseArray test_case_array;
+    std::vector<bool> overflows;
+    test_case_array.reserve(test_cases.size());
+    overflows.reserve(test_cases.size());
+    for (auto& tc : test_cases) {
+        test_case_array.emplace_back(std::get<0>(tc), std::get<1>(tc), std::get<2>(tc));
+        overflows.emplace_back(std::get<3>(tc));
+    }
+    test_vector_vector_assert_overflow<TYPE_DECIMAL128, DivOp, true>(test_case_array, 38, 15, 38, 15, 38, 15,
+                                                                     overflows);
+}
+
+TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s14_div_decimal128p38s14_eq_decimal128p38s14) {
+    DecimalOverflowTestCaseArray test_cases = {{"1384931237.28", "1382967695.28", "1.00141980322946", false},
+                                               {"384931237.28", "1382967695.28", "0.27833711415946", false},
+                                               {"84931237.28", "1382967695.28", "0.06141230743846", false},
+                                               {"4931237.28", "1382967695.28", "0.00356569231286", false},
+                                               {"931237.28", "1382967695.28", "0.00067336155658", false},
+                                               {"-931237.28", "1382967695.28", "-0.00067336155658", false}};
+    DecimalTestCaseArray test_case_array;
+    std::vector<bool> overflows;
+    test_case_array.reserve(test_cases.size());
+    overflows.reserve(test_cases.size());
+    for (auto& tc : test_cases) {
+        test_case_array.emplace_back(std::get<0>(tc), std::get<1>(tc), std::get<2>(tc));
+        overflows.emplace_back(std::get<3>(tc));
+    }
+    test_vector_vector_assert_overflow<TYPE_DECIMAL128, DivOp, true>(test_case_array, 38, 14, 38, 14, 38, 14,
+                                                                     overflows);
 }
 } // namespace starrocks::vectorized

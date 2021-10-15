@@ -79,7 +79,7 @@ private:
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
         if constexpr (pt_is_decimal<LType>) {
-            using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<LType, DivOp, false>;
+            using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<LType, DivOp, true>;
             return VectorizedDiv::template evaluate<LType>(l, r);
         } else {
             using RightZeroCheck = ArithmeticRightZeroCheck<LType>;
