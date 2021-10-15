@@ -328,7 +328,8 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
         _scale = column.frac();
     }
     if (column.has_index_length()) {
-        DCHECK_LE(column.index_length(), UINT8_MAX);
+        // https://github.com/StarRocks/starrocks/issues/677
+        // DCHECK_LE(column.index_length(), UINT8_MAX);
         _index_length = column.index_length();
     }
     if (column.has_aggregation()) {
