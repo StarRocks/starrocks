@@ -254,9 +254,7 @@ void set_tablet_schema_for_cmp_and_aggregate(TabletSchema* tablet_schema) {
 
 class TestRowCursor : public testing::Test {
 public:
-    TestRowCursor() {
-        _mem_pool.reset(new MemPool());
-    }
+    TestRowCursor() { _mem_pool.reset(new MemPool()); }
 
     virtual void SetUp() {}
 
