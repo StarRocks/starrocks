@@ -583,7 +583,7 @@ public:
             case OLAP_FIELD_TYPE_VARCHAR:
                 return new VarcharField(column);
             case OLAP_FIELD_TYPE_ARRAY: {
-                std::unique_ptr<Field> item_field(FieldFactory::create(column.get_sub_column(0)));
+                std::unique_ptr<Field> item_field(FieldFactory::create(column.subcolumn(0)));
                 auto* local = new Field(column);
                 local->add_sub_field(std::move(item_field));
                 return local;
@@ -616,7 +616,7 @@ public:
             case OLAP_FIELD_TYPE_VARCHAR:
                 return new VarcharField(column);
             case OLAP_FIELD_TYPE_ARRAY: {
-                std::unique_ptr<Field> item_field(FieldFactory::create(column.get_sub_column(0)));
+                std::unique_ptr<Field> item_field(FieldFactory::create(column.subcolumn(0)));
                 auto* local = new Field(column);
                 local->add_sub_field(std::move(item_field));
                 return local;

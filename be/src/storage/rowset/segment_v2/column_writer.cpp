@@ -239,8 +239,8 @@ Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn*
     } else {
         switch (column->type()) {
         case FieldType::OLAP_FIELD_TYPE_ARRAY: {
-            DCHECK(column->get_subtype_count() == 1);
-            const TabletColumn& element_column = column->get_sub_column(0);
+            DCHECK(column->subcolumn_count() == 1);
+            const TabletColumn& element_column = column->subcolumn(0);
             ColumnWriterOptions element_options;
             element_options.meta = opts.meta->mutable_children_columns(0);
             element_options.need_zone_map = false;
