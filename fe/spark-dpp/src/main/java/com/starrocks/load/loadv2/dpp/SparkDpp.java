@@ -40,7 +40,6 @@ import org.apache.spark.TaskContext;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.FlatMapFunction;
-import org.apache.spark.api.java.function.ForeachFunction;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.sql.Dataset;
@@ -611,17 +610,37 @@ public final class SparkDpp implements java.io.Serializable {
         return dataframe;
     }
 
+    private StructType constructSrcSchema(EtlJobConfig.EtlFileGroup fileGroup, EtlJobConfig.EtlIndex baseIndex) {
+        List<String> dataSrcColumns = fileGroup.fileFieldNames;
+        if (dataSrcColumns == null) {
+            // if there is no source columns info
+            // use base index columns as source columns
+            dataSrcColumns = new ArrayList<>();
+            for (EtlJobConfig.EtlColumn column : baseIndex.columns) {
+                dataSrcColumns.add(column.columnName);
+            }
+        }
+        List<String> srcColumnsWithColumnsFromPath = new ArrayList<>();
+        srcColumnsWithColumnsFromPath.addAll(dataSrcColumns);
+        if (fileGroup.columnsFromPath != null) {
+            srcColumnsWithColumnsFromPath.addAll(fileGroup.columnsFromPath);
+        }
+        return createScrSchema(srcColumnsWithColumnsFromPath);
+    }
+
     /**
      * Note: parameter fileUrl cannot contain any wildcards to prevent output of wrong results.
      * For example, if fileUrl is specified by regular expression like hdfs://some/p1=*",
      * column value will be extracted as "*" in {@link DppUtils#parseColumnsFromPath},
      * then "*" will likely be cast to wrong output according to its field type such as NULL for INT
-     * in {@link this#convertSrcDataframeToDstDataframe}
+     * in {@link SparkDpp#convertSrcDataframeToDstDataframe}
      */
     private Dataset<Row> loadDataFromPath(SparkSession spark,
                                           EtlJobConfig.EtlFileGroup fileGroup,
-                                          String fileUrl) throws SparkDppException {
+                                          String fileUrl,
+                                          EtlJobConfig.EtlIndex baseIndex) throws SparkDppException {
         List<String> columnValueFromPath = DppUtils.parseColumnsFromPath(fileUrl, fileGroup.columnsFromPath);
+        StructType srcSchema = constructSrcSchema(fileGroup, baseIndex);
         Dataset<Row> sourceData = null;
         if (StringUtils.equalsIgnoreCase(fileGroup.fileFormat, "orc")) {
             sourceData = spark.read().orc(fileUrl);
@@ -633,7 +652,14 @@ public final class SparkDpp implements java.io.Serializable {
                 sourceData = sourceData.withColumn(fileGroup.columnsFromPath.get(i), functions.lit(columnValueFromPath.get(i)));
             }
         }
-        sourceData.foreach((ForeachFunction<Row>) record -> scannedRowsAcc.add(1));
+        // check fields name and size
+        HashSet<String> schemaSet = new HashSet<>(Arrays.asList(sourceData.schema().fieldNames()));
+        schemaSet.addAll(Arrays.asList(srcSchema.fieldNames()));
+        if (sourceData.schema().size() != schemaSet.size()) {
+            throw new SparkDppException("The schema of file and load statement must be equal. " +
+                    "file schema: " + srcSchema.treeString() + ", table schema: " + sourceData.schema().treeString());
+        }
+        scannedRowsAcc.add(sourceData.count());
         // TODO: data quality check for orc/parquet load
         // Check process is roughly the same as the hive load, but there are some bugs to fix.
         // Uncomment below when method checkDataFromHiveWithStrictMode is ready.
@@ -647,7 +673,7 @@ public final class SparkDpp implements java.io.Serializable {
      * For example, if fileUrl is specified by regular expression like hdfs://some/p1=*",
      * column value will be extracted as "*" in {@link DppUtils#parseColumnsFromPath},
      * then "*" will likely be cast to wrong output according to its field type such as NULL for INT
-     * in {@link this#convertSrcDataframeToDstDataframe}
+     * in {@link SparkDpp#convertSrcDataframeToDstDataframe}
      */
     private Dataset<Row> loadDataFromPath(SparkSession spark,
                                           EtlJobConfig.EtlFileGroup fileGroup,
@@ -655,35 +681,19 @@ public final class SparkDpp implements java.io.Serializable {
                                           EtlJobConfig.EtlIndex baseIndex,
                                           List<EtlJobConfig.EtlColumn> columns) throws SparkDppException {
         List<String> columnValueFromPath = DppUtils.parseColumnsFromPath(fileUrl, fileGroup.columnsFromPath);
-        List<String> dataSrcColumns = fileGroup.fileFieldNames;
-        if (dataSrcColumns == null) {
-            // if there is no source columns info
-            // use base index columns as source columns
-            dataSrcColumns = new ArrayList<>();
-            for (EtlJobConfig.EtlColumn column : baseIndex.columns) {
-                dataSrcColumns.add(column.columnName);
-            }
-        }
         // for getting schema to check source data
         Map<String, Integer> dstColumnNameToIndex = new HashMap<String, Integer>();
         for (int i = 0; i < baseIndex.columns.size(); i++) {
             dstColumnNameToIndex.put(baseIndex.columns.get(i).columnName, i);
         }
-        List<String> srcColumnsWithColumnsFromPath = new ArrayList<>();
-        srcColumnsWithColumnsFromPath.addAll(dataSrcColumns);
-        if (fileGroup.columnsFromPath != null) {
-            srcColumnsWithColumnsFromPath.addAll(fileGroup.columnsFromPath);
-        }
-        StructType srcSchema = createScrSchema(srcColumnsWithColumnsFromPath);
+        StructType srcSchema = constructSrcSchema(fileGroup, baseIndex);
         JavaRDD<String> sourceDataRdd = spark.read().textFile(fileUrl).toJavaRDD();
-        int columnSize = dataSrcColumns.size();
+        int columnSize = fileGroup.fileFieldNames.size();
         List<ColumnParser> parsers = new ArrayList<>();
         for (EtlJobConfig.EtlColumn column : baseIndex.columns) {
             parsers.add(ColumnParser.create(column));
         }
         char separator = (char) fileGroup.columnSeparator.getBytes(Charset.forName("UTF-8"))[0];
-        // now we first support csv file
-        // TODO: support parquet file and orc file
         JavaRDD<Row> rowRDD = sourceDataRdd.flatMap(
                 record -> {
                     scannedRowsAcc.add(1);
@@ -907,7 +917,7 @@ public final class SparkDpp implements java.io.Serializable {
                     if (fileGroup.fileFormat != null &&
                             (StringUtils.equalsIgnoreCase(fileGroup.fileFormat, "orc") ||
                                     StringUtils.equalsIgnoreCase(fileGroup.fileFormat, "parquet"))) {
-                        dataframe = loadDataFromPath(spark, fileGroup, fileStatus.getPath().toString());
+                        dataframe = loadDataFromPath(spark, fileGroup, fileStatus.getPath().toString(), baseIndex);
                     } else {
                         dataframe = loadDataFromPath(spark, fileGroup, fileStatus.getPath().toString(),
                                 baseIndex, baseIndex.columns);
