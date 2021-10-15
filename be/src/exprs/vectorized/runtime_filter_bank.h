@@ -68,6 +68,7 @@ public:
 
 private:
     friend class HashJoinNode;
+    friend class HashJoiner;
     int32_t _filter_id;
 
     ExprContext* _build_expr_ctx = nullptr;
@@ -108,6 +109,7 @@ public:
 
 private:
     friend class HashJoinNode;
+    friend class hashJoiner;
     int32_t _filter_id;
     ExprContext* _probe_expr_ctx = nullptr;
     std::atomic<const JoinRuntimeFilter*> _runtime_filter;
