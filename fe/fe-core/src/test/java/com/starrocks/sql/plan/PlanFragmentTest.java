@@ -4336,4 +4336,21 @@ public class PlanFragmentTest extends PlanTestBase {
         String thrift = getThriftPlan(sql);
         Assert.assertTrue(thrift.contains("fid:60010"));
     }
+
+    @Test
+    public void testLimitRightJoin() throws Exception {
+        String sql = "select v1 from t0 right outer join t1 on t0.v1 = t1.v4 limit 100";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  limit: 100"));
+        Assert.assertTrue(plan.contains("  |----3:EXCHANGE\n" +
+                "  |       limit: 100"));
+
+        sql = "select v1 from t0 full outer join t1 on t0.v1 = t1.v4 limit 100";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: FULL OUTER JOIN (PARTITIONED)"));
+    }
 }

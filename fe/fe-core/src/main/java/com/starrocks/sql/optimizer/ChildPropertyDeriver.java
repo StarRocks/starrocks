@@ -114,7 +114,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         LogicalOperator leftChild = (LogicalOperator) context.getChildOperator(0);
         LogicalOperator rightChild = (LogicalOperator) context.getChildOperator(1);
         // If child has limit, we need to gather data to one instance
-        if (leftChild.hasLimit() || rightChild.hasLimit()) {
+        if ((leftChild.hasLimit() || rightChild.hasLimit()) &&
+                !(node.getJoinType().isRightJoin() || node.getJoinType().isFullOuterJoin())) {
             if (leftChild.hasLimit()) {
                 outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
                         Lists.newArrayList(createLimitGatherProperty(leftChild.getLimit()), rightBroadcastProperty)));
