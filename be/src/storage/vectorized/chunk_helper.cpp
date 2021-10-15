@@ -200,7 +200,8 @@ Chunk* ChunkHelper::new_chunk_pooled(const vectorized::Schema& schema, size_t n,
     columns.reserve(schema.num_fields());
     for (size_t i = 0; i < schema.num_fields(); i++) {
         const vectorized::FieldPtr& f = schema.field(i);
-        auto column = force ? column_from_pool<true>(*f) : column_from_pool<false>(*f);
+        auto column =
+                (force && !config::disable_column_pool) ? column_from_pool<true>(*f) : column_from_pool<false>(*f);
         column->reserve(n);
         columns.emplace_back(std::move(column));
     }

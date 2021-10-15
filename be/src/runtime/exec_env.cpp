@@ -201,23 +201,6 @@ Status ExecEnv::_init_mem_tracker() {
         return Status::InternalError(ss.str());
     }
 
-    int64_t buffer_pool_limit = ParseUtil::parse_mem_spec(config::buffer_pool_limit, &is_percent);
-    if (buffer_pool_limit <= 0) {
-        ss << "Invalid --buffer_pool_limit value, must be a percentage or "
-              "positive bytes value or percentage: "
-           << config::buffer_pool_limit;
-        return Status::InternalError(ss.str());
-    }
-    buffer_pool_limit = BitUtil::RoundDown(buffer_pool_limit, config::min_buffer_size);
-
-    int64_t clean_pages_limit = ParseUtil::parse_mem_spec(config::buffer_pool_clean_pages_limit, &is_percent);
-    if (clean_pages_limit <= 0) {
-        ss << "Invalid --buffer_pool_clean_pages_limit value, must be a percentage or "
-              "positive bytes value or percentage: "
-           << config::buffer_pool_clean_pages_limit;
-        return Status::InternalError(ss.str());
-    }
-
     RETURN_IF_ERROR(_disk_io_mgr->init(_mem_tracker));
 
     int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit, &is_percent);

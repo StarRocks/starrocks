@@ -285,9 +285,6 @@ public:
     /// reporting there.
     std::string LogUsage(int max_recursive_depth, const std::string& prefix = "",
                          int64_t* logged_consumption = nullptr) const;
-    /// Unlimited dumping is useful for query memtrackers or error conditions that
-    /// are not performance sensitive
-    static const int UNLIMITED_DEPTH = INT_MAX;
 
     /// Log the memory usage when memory limit is exceeded and return a status object with
     /// details of the allocation which caused the limit to be exceeded.
