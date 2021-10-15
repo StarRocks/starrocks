@@ -21,6 +21,9 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* state) override;
 
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
+
 private:
     Status _build(RuntimeState* state);
     Status _get_next_probe_chunk(RuntimeState* state);
@@ -44,6 +47,11 @@ private:
 
     void _init_row_desc();
     void _init_chunk(ChunkPtr* chunk);
+
+    // Used in operators to reference right table's datas.
+    ChunkPtr _build_chunk_for_pipeline;
+    // used in operators to mark that the right table has been constructed.
+    std::atomic<bool> _right_table_complete = false;
 
     // previsou saved chunk.
     ChunkPtr _pre_output_chunk = nullptr;
