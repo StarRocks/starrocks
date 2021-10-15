@@ -69,7 +69,7 @@ void* tcmalloc_gc_thread(void* dummy) {
     using namespace starrocks::vectorized;
     const static float kFreeRatio = 0.5;
     while (true) {
-        sleep(10);
+        sleep(config::memory_maintenance_sleep_time_s);
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
         MallocExtension::instance()->MarkThreadBusy();
 #endif
