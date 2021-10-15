@@ -23,10 +23,10 @@ package com.starrocks.service;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.common.CIDR;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.NetUtils;
+import org.apache.commons.net.util.SubnetUtils;
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,9 +40,9 @@ import java.util.List;
 public class FrontendOptions {
     private static final Logger LOG = LogManager.getLogger(FrontendOptions.class);
 
-    private static String PRIORITY_CIDR_SEPARATOR = ";";
+    private static final String PRIORITY_CIDR_SEPARATOR = ";";
 
-    private static List<CIDR> priorityCidrs = Lists.newArrayList();
+    private static final List<String> priorityCidrs = Lists.newArrayList();
     private static InetAddress localAddr = InetAddress.getLoopbackAddress();
 
     public static void init() throws UnknownHostException {
@@ -129,15 +129,23 @@ public class FrontendOptions {
 
         String[] cidrList = priorCidrs.split(PRIORITY_CIDR_SEPARATOR);
         List<String> priorNetworks = Lists.newArrayList(cidrList);
-        for (String cidrStr : priorNetworks) {
-            priorityCidrs.add(new CIDR(cidrStr));
-        }
+        priorityCidrs.addAll(priorNetworks);
     }
 
     private static boolean isInPriorNetwork(String ip) {
-        for (CIDR cidr : priorityCidrs) {
-            if (cidr.contains(ip)) {
-                return true;
+        ip = ip.trim();
+        for (String cidr : priorityCidrs) {
+            cidr = cidr.trim();
+            if (!cidr.contains("/")) {
+                // it is not valid CIDR, compare ip directly.
+                if (cidr.equals(ip)) {
+                    return true;
+                }
+            } else {
+                SubnetUtils.SubnetInfo subnetInfo = new SubnetUtils(cidr).getInfo();
+                if (subnetInfo.isInRange(ip)) {
+                    return true;
+                }
             }
         }
         return false;
