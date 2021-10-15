@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -12,6 +13,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Objects;
+import java.util.Set;
 
 public class PhysicalHashJoinOperator extends PhysicalOperator {
     private final JoinOperator joinType;
@@ -90,4 +92,38 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), joinType, joinPredicate);
     }
+
+    @Override
+    public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
+        Preconditions.checkState(!childDictColumns.isEmpty());
+        ColumnRefSet dictSet = new ColumnRefSet();
+        for (Integer id : childDictColumns) {
+            dictSet.union(id);
+        }
+
+        if (predicate != null) {
+            if (predicate.getUsedColumns().isIntersect(dictSet)) {
+                return true;
+            }
+        }
+
+        if (joinPredicate != null) {
+            if (joinPredicate.getUsedColumns().isIntersect(dictSet)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public void fillDisableDictOptimizeColumns(ColumnRefSet columnRefSet) {
+        if (predicate != null) {
+            columnRefSet.union(predicate.getUsedColumns());
+        }
+
+        if (joinPredicate != null) {
+            columnRefSet.union(joinPredicate.getUsedColumns());
+        }
+    }
+
 }

@@ -388,6 +388,7 @@ struct TTabletCommitInfo {
     1: required i64 tabletId
     2: required i64 backendId
     3: optional list<string> invalid_dict_cache_columns
+    4: optional list<string> valid_dict_cache_columns
 }
 
 enum TLoadType {

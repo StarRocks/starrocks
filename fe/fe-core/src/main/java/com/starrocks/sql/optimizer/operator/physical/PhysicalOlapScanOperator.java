@@ -32,7 +32,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private boolean isPreAggregation;
     private String turnOffReason;
 
-    private final List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+    private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
 
     public PhysicalOlapScanOperator(Table table,
                                     List<ColumnRefOperator> outputColumns,
@@ -84,12 +84,9 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         return globalDicts;
     }
 
-    public void addGlobalDictColumns(Pair<Integer, ColumnDict> dict) {
-        globalDicts.add(dict);
-    }
-
-    public boolean couldApplyStringDict(List<Integer> childDictColumns) {
-        return true;
+    public void setGlobalDicts(
+            List<Pair<Integer, ColumnDict>> globalDicts) {
+        this.globalDicts = globalDicts;
     }
 
     @Override

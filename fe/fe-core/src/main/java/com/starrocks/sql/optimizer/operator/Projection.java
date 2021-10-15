@@ -3,6 +3,9 @@ package com.starrocks.sql.optimizer.operator;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -54,18 +57,18 @@ public class Projection {
         }
 
         for (ScalarOperator operator : columnRefMap.values()) {
-            if (!couldApplyStringDict(operator, dictSet)) {
-                return false;
+            if (couldApplyStringDict(operator, dictSet)) {
+                return true;
             }
         }
 
         for (ScalarOperator operator : commonSubOperatorMap.values()) {
-            if (!couldApplyStringDict(operator, dictSet)) {
-                return false;
+            if (couldApplyStringDict(operator, dictSet)) {
+                return true;
             }
         }
 
-        return true;
+        return false;
     }
 
     private boolean couldApplyStringDict(ScalarOperator operator, ColumnRefSet dictSet) {
@@ -74,9 +77,38 @@ public class Projection {
             if (usedColumns.cardinality() > 1) {
                 return false;
             }
-            return operator instanceof ColumnRefOperator;
+            if (operator instanceof ColumnRefOperator) {
+                return true;
+            }  else if (operator instanceof CallOperator) {
+                CallOperator callOperator = (CallOperator) operator;
+                return callOperator.getFunction().isCouldApplyDictOptimize();
+            }
         }
-        return true;
+        return false;
+    }
+
+    public void fillDisableDictOptimizeColumns(ColumnRefSet columnRefSet) {
+        for (ScalarOperator operator : columnRefMap.values()) {
+            fillDisableDictOptimizeColumns(operator, columnRefSet);
+        }
+
+        for (ScalarOperator operator : commonSubOperatorMap.values()) {
+            fillDisableDictOptimizeColumns(operator, columnRefSet);
+        }
+    }
+
+    private void fillDisableDictOptimizeColumns(ScalarOperator operator, ColumnRefSet columnRefSet) {
+        if (operator instanceof CallOperator) {
+            CallOperator callOperator = (CallOperator) operator;
+            if (callOperator instanceof CaseWhenOperator ||
+                    callOperator instanceof CastOperator) {
+                columnRefSet.union(callOperator.getUsedColumns());
+            } else if (!callOperator.getFunction().isCouldApplyDictOptimize()) {
+                columnRefSet.union(callOperator.getUsedColumns());
+            } else if (operator.getUsedColumns().cardinality() > 1) {
+                columnRefSet.union(callOperator.getUsedColumns());
+            }
+        }
     }
 
     @Override

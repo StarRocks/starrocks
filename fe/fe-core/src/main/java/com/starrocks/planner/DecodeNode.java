@@ -2,26 +2,32 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.TupleId;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.thrift.TDecodeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
-import java.util.ArrayList;
 import java.util.Map;
 
 public class DecodeNode extends PlanNode{
+    // The dict id int column ids to dict string column ids
     private final Map<Integer, Integer> dictIdToStringIds;
+    // The string functions have applied global dict optimization
+    private final Map<SlotId, Expr> stringFunctions;
 
     public DecodeNode(PlanNodeId id,
-                      ArrayList<TupleId> tupleIds,
+                      TupleDescriptor tupleDescriptor,
                       PlanNode child,
-                      Map<Integer, Integer> dictIdToStringIds) {
-        super(id, tupleIds, "Decode");
+                      Map<Integer, Integer> dictIdToStringIds,
+                      Map<SlotId, Expr> stringFunctions) {
+        super(id, tupleDescriptor.getId().asList(), "Decode");
         addChild(child);
-        this.tblRefIds = child.tblRefIds;
+        this.tupleIds.addAll(child.tblRefIds);
         this.dictIdToStringIds = dictIdToStringIds;
+        this.stringFunctions = stringFunctions;
     }
 
     @Override
@@ -34,6 +40,7 @@ public class DecodeNode extends PlanNode{
         msg.node_type = TPlanNodeType.DECODE_NODE;
         msg.decode_node = new TDecodeNode();
         msg.decode_node.setDict_id_to_string_ids(dictIdToStringIds);
+        stringFunctions.forEach((key, value) -> msg.decode_node.putToString_functions(key.asInt(), value.treeToThrift()));
     }
 
     @Override
@@ -46,6 +53,18 @@ public class DecodeNode extends PlanNode{
                     append("> : ").
                     append("<string id ").append(kv.getValue()).append(">").
                     append("\n");
+        }
+        if (!stringFunctions.isEmpty()) {
+            output.append(prefix);
+            output.append("string functions:\n");
+            for (Map.Entry<SlotId, Expr> kv : stringFunctions.entrySet()) {
+                output.append(prefix);
+                output.append("<function id ").
+                        append(kv.getKey()).
+                        append("> : ").
+                        append(kv.getValue().toSql()).
+                        append("\n");
+            }
         }
         return output.toString();
     }
