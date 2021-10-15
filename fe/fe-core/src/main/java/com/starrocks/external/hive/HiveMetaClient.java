@@ -36,6 +36,7 @@ import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.util.HashSet;
@@ -444,22 +445,25 @@ public class HiveMetaClient {
     private List<HdfsFileDesc> getHdfsFileDescs(String dirPath) throws Exception {
         URI uri = new URI(dirPath);
         FileSystem fileSystem = getFileSystem(uri);
+        List<HdfsFileDesc> fileDescs = Lists.newArrayList();
         // fileSystem.listLocatedStatus is an api to list all statuses and
         // block locations of the files in the given path in one operation.
         // The performance is better than getting status and block location one by one.
-        RemoteIterator<LocatedFileStatus> blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
-        List<HdfsFileDesc> fileDescs = Lists.newArrayList();
-
-        while (blockIterator.hasNext()) {
-            LocatedFileStatus locatedFileStatus = blockIterator.next();
-            if (!isValidDataFile(locatedFileStatus)) {
-                continue;
+        try {
+            RemoteIterator<LocatedFileStatus> blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
+            while (blockIterator.hasNext()) {
+                LocatedFileStatus locatedFileStatus = blockIterator.next();
+                if (!isValidDataFile(locatedFileStatus)) {
+                    continue;
+                }
+                String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
+                BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
+                List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
+                fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
+                        ImmutableList.copyOf(fileBlockDescs)));
             }
-            String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
-            BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
-            List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
-            fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
-                    ImmutableList.copyOf(fileBlockDescs)));
+        } catch (FileNotFoundException ignored) {
+            // hive empty partition may not create directory
         }
         return fileDescs;
     }
