@@ -261,6 +261,10 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             ConstantOperator result = ((ConstantOperator) op).castTo(descType);
             if (result.toString().equalsIgnoreCase(op.toString())) {
                 return Optional.of(result);
+            } else if (descType.isDate() && (op.getType().isIntegerType() || op.getType().isStringType())) {
+                if (op.toString().equalsIgnoreCase(result.toString().replaceAll("-", ""))) {
+                    return Optional.of(result);
+                }
             }
         } catch (Exception ignored) {
         }
