@@ -908,7 +908,7 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
     } else {
         raw::make_room(&dst_offsets, num_rows + 1);
         dst_offsets[0] = 0;
-        size_t reserved = times * dst_offsets.back();
+        size_t reserved = times * src_offsets.back();
         if (reserved > OLAP_STRING_MAX_LENGTH * num_rows) {
             reserved = 0;
             for (int i = 0; i < num_rows; ++i) {
