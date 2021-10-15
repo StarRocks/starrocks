@@ -31,8 +31,6 @@
 #include "gen_cpp/TFileBrokerService.h"
 #include "plugin/plugin_mgr.h"
 #include "runtime/broker_mgr.h"
-#include "runtime/bufferpool/buffer_pool.h"
-#include "runtime/bufferpool/reservation_tracker.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/disk_io_mgr.h"
@@ -50,7 +48,6 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/thread_resource_mgr.h"
-#include "runtime/tmp_file_mgr.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
@@ -121,7 +118,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
     _disk_io_mgr = new DiskIoMgr();
-    _tmp_file_mgr = new TmpFileMgr(this), _bfd_parser = BfdParser::create();
     _broker_mgr = new BrokerMgr(this);
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
@@ -205,27 +201,7 @@ Status ExecEnv::_init_mem_tracker() {
         return Status::InternalError(ss.str());
     }
 
-    int64_t buffer_pool_limit = ParseUtil::parse_mem_spec(config::buffer_pool_limit, &is_percent);
-    if (buffer_pool_limit <= 0) {
-        ss << "Invalid --buffer_pool_limit value, must be a percentage or "
-              "positive bytes value or percentage: "
-           << config::buffer_pool_limit;
-        return Status::InternalError(ss.str());
-    }
-    buffer_pool_limit = BitUtil::RoundDown(buffer_pool_limit, config::min_buffer_size);
-
-    int64_t clean_pages_limit = ParseUtil::parse_mem_spec(config::buffer_pool_clean_pages_limit, &is_percent);
-    if (clean_pages_limit <= 0) {
-        ss << "Invalid --buffer_pool_clean_pages_limit value, must be a percentage or "
-              "positive bytes value or percentage: "
-           << config::buffer_pool_clean_pages_limit;
-        return Status::InternalError(ss.str());
-    }
-
-    _init_buffer_pool(config::min_buffer_size, buffer_pool_limit, clean_pages_limit);
-
     RETURN_IF_ERROR(_disk_io_mgr->init(_mem_tracker));
-    RETURN_IF_ERROR(_tmp_file_mgr->init(StarRocksMetrics::instance()->metrics()));
 
     int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit, &is_percent);
     if (storage_cache_limit > MemInfo::physical_mem()) {
@@ -237,13 +213,6 @@ Status ExecEnv::_init_mem_tracker() {
     // TODO(zc): The current memory usage configuration is a bit confusing,
     // we need to sort out the use of memory
     return Status::OK();
-}
-
-void ExecEnv::_init_buffer_pool(int64_t min_page_size, int64_t capacity, int64_t clean_pages_limit) {
-    DCHECK(_buffer_pool == nullptr);
-    _buffer_pool = new BufferPool(min_page_size, capacity, clean_pages_limit);
-    _buffer_reservation = new ReservationTracker();
-    _buffer_reservation->InitRootTracker(nullptr, capacity);
 }
 
 void ExecEnv::_destory() {
@@ -275,14 +244,6 @@ void ExecEnv::_destory() {
         delete _storage_engine;
         _storage_engine = nullptr;
     }
-    if (_buffer_pool) {
-        delete _buffer_pool;
-        _buffer_pool = nullptr;
-    }
-    if (_buffer_reservation) {
-        delete _buffer_reservation;
-        _buffer_reservation = nullptr;
-    }
     if (_brpc_stub_cache) {
         delete _brpc_stub_cache;
         _brpc_stub_cache = nullptr;
@@ -302,10 +263,6 @@ void ExecEnv::_destory() {
     if (_bfd_parser) {
         delete _bfd_parser;
         _bfd_parser = nullptr;
-    }
-    if (_tmp_file_mgr) {
-        delete _tmp_file_mgr;
-        _tmp_file_mgr = nullptr;
     }
     if (_disk_io_mgr) {
         delete _disk_io_mgr;

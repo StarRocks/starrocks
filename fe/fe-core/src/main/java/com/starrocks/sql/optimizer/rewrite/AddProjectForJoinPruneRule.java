@@ -14,6 +14,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -30,8 +31,9 @@ public class AddProjectForJoinPruneRule implements PhysicalOperatorTreeRewriteRu
     }
 
     @Override
-    public OptExpression rewrite(OptExpression root, ColumnRefFactory factory) {
-        return addProject(root, (ColumnRefSet) requiredColumns.clone(), factory);
+    public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
+        return addProject(root, (ColumnRefSet) requiredColumns.clone(),
+                taskContext.getOptimizerContext().getColumnRefFactory());
     }
 
     private OptExpression addProject(OptExpression root, ColumnRefSet usedColumns, ColumnRefFactory factory) {

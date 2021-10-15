@@ -28,7 +28,6 @@
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/minidump.h"
-#include "runtime/bufferpool/buffer_pool.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"
@@ -75,11 +74,11 @@ void* tcmalloc_gc_thread(void* dummy) {
     GCHelper gch(config::tc_gc_period, MonoTime::Now());
     while (true) {
         ++tick;
-        sleep(1);
+        sleep(1); // sleep 1s instead of config::memory_maintenance_sleep_time_s to process tcmalloc gc
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
         MallocExtension::instance()->MarkThreadBusy();
 #endif
-        if ((tick % 10) == 0) { // for every 10 second
+        if ((tick % config::memory_maintenance_sleep_time_s) == 0) {
             ReleaseColumnPool releaser(kFreeRatio);
             ForEach<ColumnPoolList>(releaser);
             LOG_IF(INFO, releaser.freed_bytes() > 0)
@@ -126,31 +125,6 @@ void* tcmalloc_gc_thread(void* dummy) {
         }
         MallocExtension::instance()->MarkThreadIdle();
 #endif
-    }
-
-    return nullptr;
-}
-
-void* memory_maintenance_thread(void* dummy) {
-    while (true) {
-        sleep(config::memory_maintenance_sleep_time_s);
-        ExecEnv* env = ExecEnv::GetInstance();
-        // ExecEnv may not have been created yet or this may be the catalogd or statestored,
-        // which don't have ExecEnvs.
-        if (env != nullptr) {
-            BufferPool* buffer_pool = env->buffer_pool();
-            if (buffer_pool != nullptr) buffer_pool->Maintenance();
-
-            // The process limit as measured by our trackers may get out of sync with the
-            // process usage if memory is allocated or freed without updating a MemTracker.
-            // The metric is refreshed whenever memory is consumed or released via a MemTracker,
-            // so on a system with queries executing it will be refreshed frequently. However
-            // if the system is idle, we need to refresh the tracker occasionally since
-            // untracked memory may be allocated or freed, e.g. by background threads.
-            if (env->process_mem_tracker() != nullptr && !env->process_mem_tracker()->is_consumption_metric_null()) {
-                env->process_mem_tracker()->RefreshConsumptionFromMetric();
-            }
-        }
     }
 
     return nullptr;
@@ -312,9 +286,6 @@ void init_daemon(int argc, char** argv, const std::vector<StorePath>& paths) {
 
     pthread_t tc_malloc_pid;
     pthread_create(&tc_malloc_pid, nullptr, tcmalloc_gc_thread, nullptr);
-
-    pthread_t buffer_pool_pid;
-    pthread_create(&buffer_pool_pid, nullptr, memory_maintenance_thread, nullptr);
 
     LOG(INFO) << CpuInfo::debug_string();
     LOG(INFO) << DiskInfo::debug_string();

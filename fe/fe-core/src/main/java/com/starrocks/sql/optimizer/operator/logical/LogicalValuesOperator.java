@@ -23,6 +23,12 @@ public class LogicalValuesOperator extends LogicalOperator {
         this.rows = rows;
     }
 
+    private LogicalValuesOperator(Builder builder) {
+        super(OperatorType.LOGICAL_VALUES, builder.getLimit(), builder.getPredicate());
+        this.columnRefSet = builder.columnRefSet;
+        this.rows = builder.rows;
+    }
+
     public List<ColumnRefOperator> getColumnRefSet() {
         return columnRefSet;
     }
@@ -64,5 +70,24 @@ public class LogicalValuesOperator extends LogicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), columnRefSet, rows);
+    }
+
+    public static class Builder extends LogicalOperator.Builder<LogicalValuesOperator, LogicalValuesOperator.Builder> {
+        private List<ColumnRefOperator> columnRefSet;
+        private List<List<ScalarOperator>> rows;
+
+        @Override
+        public LogicalValuesOperator build() {
+            return new LogicalValuesOperator(this);
+        }
+
+        @Override
+        public Builder withOperator(LogicalValuesOperator valuesOperator) {
+            super.withOperator(valuesOperator);
+
+            this.columnRefSet = valuesOperator.columnRefSet;
+            this.rows = valuesOperator.rows;
+            return this;
+        }
     }
 }

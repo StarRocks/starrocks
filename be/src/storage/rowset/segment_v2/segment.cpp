@@ -21,6 +21,7 @@
 
 #include "storage/rowset/segment_v2/segment.h"
 
+#include <fmt/core.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 
 #include <memory>
@@ -322,7 +323,7 @@ Status Segment::new_column_iterator(uint32_t cid, ColumnIterator** iter) {
         const TabletColumn& tablet_column = _tablet_schema->column(cid);
         if (!tablet_column.has_default_value() && !tablet_column.is_nullable()) {
             return Status::InternalError(
-                    Substitute("invalid nonexistent column($0) without default value.", tablet_column.name()));
+                    fmt::format("invalid nonexistent column({}) without default value.", tablet_column.name()));
         }
         const TypeInfoPtr& type_info = get_type_info(tablet_column);
         std::unique_ptr<DefaultValueColumnIterator> default_value_iter(new DefaultValueColumnIterator(

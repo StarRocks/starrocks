@@ -511,7 +511,6 @@ public class ExpressionAnalyzer {
                     newFn.setFunctionId(fn.getFunctionId());
                     newFn.setChecksum(fn.getChecksum());
                     newFn.setBinaryType(fn.getBinaryType());
-                    newFn.setIsVectorized(fn.isVectorized());
                     newFn.setHasVarArgs(fn.hasVarArgs());
                     newFn.setId(fn.getId());
                     newFn.setUserVisible(fn.isUserVisible());

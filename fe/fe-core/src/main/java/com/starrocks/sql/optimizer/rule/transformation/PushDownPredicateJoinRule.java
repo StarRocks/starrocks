@@ -102,23 +102,12 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         LogicalJoinOperator newJoinOperator;
         if (!remainingFilter.isEmpty()) {
             if (join.getJoinType().isInnerJoin()) {
-                newJoinOperator = new LogicalJoinOperator(
-                        join.getJoinType(),
-                        Utils.compoundAnd(join.getOnPredicate(), Utils.compoundAnd(remainingFilter)),
-                        join.getJoinHint(),
-                        join.getLimit(),
-                        join.getPredicate(),
-                        join.getPruneOutputColumns(),
-                        join.isHasPushDownJoinOnClause());
+                newJoinOperator = new LogicalJoinOperator.Builder().withOperator(join)
+                        .setOnPredicate(Utils.compoundAnd(join.getOnPredicate(), Utils.compoundAnd(remainingFilter)))
+                        .build();
             } else {
-                newJoinOperator = new LogicalJoinOperator(
-                        join.getJoinType(),
-                        join.getOnPredicate(),
-                        join.getJoinHint(),
-                        join.getLimit(),
-                        Utils.compoundAnd(remainingFilter),
-                        join.getPruneOutputColumns(),
-                        join.isHasPushDownJoinOnClause());
+                newJoinOperator = new LogicalJoinOperator.Builder().withOperator(join)
+                        .setPredicate(Utils.compoundAnd(remainingFilter)).build();
             }
         } else {
             newJoinOperator = join;
@@ -137,27 +126,17 @@ public class PushDownPredicateJoinRule extends TransformationRule {
 
         if (join.getJoinType().isLeftOuterJoin()) {
             if (canEliminateNull(rightColumns, filter.getPredicate().clone())) {
-                input.setChild(0, OptExpression.create(new LogicalJoinOperator(
-                        JoinOperator.INNER_JOIN,
-                        join.getOnPredicate(),
-                        join.getJoinHint(),
-                        join.getLimit(),
-                        join.getPredicate(),
-                        join.getPruneOutputColumns(),
-                        join.isHasPushDownJoinOnClause()
-                ), input.inputAt(0).getInputs()));
+                input.setChild(0, OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
+                                .setJoinType(JoinOperator.INNER_JOIN)
+                                .build(),
+                        input.inputAt(0).getInputs()));
             }
         } else if (join.getJoinType().isRightOuterJoin()) {
             if (canEliminateNull(leftColumns, filter.getPredicate().clone())) {
-                input.setChild(0, OptExpression.create(new LogicalJoinOperator(
-                        JoinOperator.INNER_JOIN,
-                        join.getOnPredicate(),
-                        join.getJoinHint(),
-                        join.getLimit(),
-                        join.getPredicate(),
-                        join.getPruneOutputColumns(),
-                        join.isHasPushDownJoinOnClause()
-                ), input.inputAt(0).getInputs()));
+                input.setChild(0, OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
+                                .setJoinType(JoinOperator.INNER_JOIN)
+                                .build(),
+                        input.inputAt(0).getInputs()));
             }
         } else if (join.getJoinType().isFullOuterJoin()) {
             boolean canConvertLeft = false;
@@ -171,35 +150,19 @@ public class PushDownPredicateJoinRule extends TransformationRule {
             }
 
             if (canConvertLeft && canConvertRight) {
-                input.setChild(0, OptExpression.create(new LogicalJoinOperator(
-                        JoinOperator.INNER_JOIN,
-                        join.getOnPredicate(),
-                        join.getJoinHint(),
-                        join.getLimit(),
-                        join.getPredicate(),
-                        join.getPruneOutputColumns(),
-                        join.isHasPushDownJoinOnClause()
-                ), input.inputAt(0).getInputs()));
+                input.setChild(0, OptExpression.create(
+
+                        new LogicalJoinOperator.Builder().withOperator(join)
+                                .setJoinType(JoinOperator.INNER_JOIN)
+                                .build(), input.inputAt(0).getInputs()));
             } else if (canConvertLeft) {
-                input.setChild(0, OptExpression.create(new LogicalJoinOperator(
-                        JoinOperator.LEFT_OUTER_JOIN,
-                        join.getOnPredicate(),
-                        join.getJoinHint(),
-                        join.getLimit(),
-                        join.getPredicate(),
-                        join.getPruneOutputColumns(),
-                        join.isHasPushDownJoinOnClause()
-                ), input.inputAt(0).getInputs()));
+                input.setChild(0, OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
+                                .setJoinType(JoinOperator.LEFT_OUTER_JOIN).build(),
+                        input.inputAt(0).getInputs()));
             } else if (canConvertRight) {
-                input.setChild(0, OptExpression.create(new LogicalJoinOperator(
-                        JoinOperator.RIGHT_OUTER_JOIN,
-                        join.getOnPredicate(),
-                        join.getJoinHint(),
-                        join.getLimit(),
-                        join.getPredicate(),
-                        join.getPruneOutputColumns(),
-                        join.isHasPushDownJoinOnClause()
-                ), input.inputAt(0).getInputs()));
+                input.setChild(0, OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
+                                .setJoinType(JoinOperator.RIGHT_OUTER_JOIN).build(),
+                        input.inputAt(0).getInputs()));
             }
         }
     }

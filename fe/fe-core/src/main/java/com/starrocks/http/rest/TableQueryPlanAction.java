@@ -119,7 +119,7 @@ public class TableQueryPlanAction extends RestBaseAction {
             } catch (JSONException e) {
                 throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST, "malformed json [ " + postContent + " ]");
             }
-            sql = String.valueOf(jsonObject.opt("sql"));
+            sql = jsonObject.optString("sql");
             if (Strings.isNullOrEmpty(sql)) {
                 throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
                         "POST body must contains [sql] root object");

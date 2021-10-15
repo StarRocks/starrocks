@@ -40,6 +40,7 @@
 #include "exec/vectorized/analytic_node.h"
 #include "exec/vectorized/assert_num_rows_node.h"
 #include "exec/vectorized/cross_join_node.h"
+#include "exec/vectorized/dict_decode_node.h"
 #include "exec/vectorized/es_http_scan_node.h"
 #include "exec/vectorized/except_node.h"
 #include "exec/vectorized/file_scan_node.h"
@@ -47,6 +48,7 @@
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "exec/vectorized/intersect_node.h"
 #include "exec/vectorized/mysql_scan_node.h"
+#include "exec/vectorized/olap_meta_scan_node.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/project_node.h"
 #include "exec/vectorized/repeat_node.h"
@@ -58,7 +60,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/initial_reservations.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/row_batch.h"
@@ -358,12 +359,6 @@ Status ExecNode::close(RuntimeState* state) {
         _expr_mem_pool->free_all();
     }
 
-    if (_buffer_pool_client.is_registered()) {
-        VLOG_FILE << _id << " returning reservation " << _resource_profile.min_reservation;
-        state->initial_reservations()->Return(&_buffer_pool_client, _resource_profile.min_reservation);
-        state->exec_env()->buffer_pool()->DeregisterClient(&_buffer_pool_client);
-    }
-
     if (_expr_mem_tracker != nullptr) {
         _expr_mem_tracker->close();
     }
@@ -373,19 +368,6 @@ Status ExecNode::close(RuntimeState* state) {
     }
 
     return result;
-}
-
-void ExecNode::add_runtime_exec_option(const std::string& str) {
-    std::lock_guard<std::mutex> l(_exec_options_lock);
-
-    if (_runtime_exec_options.empty()) {
-        _runtime_exec_options = str;
-    } else {
-        _runtime_exec_options.append(", ");
-        _runtime_exec_options.append(str);
-    }
-
-    runtime_profile()->add_info_string("ExecOption", _runtime_exec_options);
 }
 
 Status ExecNode::create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan, const DescriptorTbl& descs,
@@ -459,6 +441,9 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     switch (tnode.node_type) {
     case TPlanNodeType::OLAP_SCAN_NODE:
         *node = pool->add(new vectorized::OlapScanNode(pool, tnode, descs));
+        return Status::OK();
+    case TPlanNodeType::META_SCAN_NODE:
+        *node = pool->add(new vectorized::OlapMetaScanNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::AGGREGATION_NODE:
         if (tnode.agg_node.__isset.use_streaming_preaggregation && tnode.agg_node.use_streaming_preaggregation) {
@@ -535,6 +520,9 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         return Status::OK();
     case TPlanNodeType::SCHEMA_SCAN_NODE:
         *node = pool->add(new vectorized::SchemaScanNode(pool, tnode, descs));
+        return Status::OK();
+    case TPlanNodeType::DECODE_NODE:
+        *node = pool->add(new vectorized::DictDecodeNode(pool, tnode, descs));
         return Status::OK();
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
@@ -703,7 +691,6 @@ void ExecNode::collect_nodes(TPlanNodeType::type node_type, std::vector<ExecNode
     if (_type == node_type) {
         nodes->push_back(this);
     }
-
     for (auto& i : _children) {
         i->collect_nodes(node_type, nodes);
     }
@@ -715,6 +702,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::ES_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::ES_HTTP_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::HDFS_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::META_SCAN_NODE, nodes);
 }
 
 bool ExecNode::_check_has_vectorized_scan_child() {
@@ -756,64 +744,6 @@ Status ExecNode::exec_debug_action(TExecNodePhase::type phase) {
     }
 
     return Status::OK();
-}
-
-Status ExecNode::claim_buffer_reservation(RuntimeState* state) {
-    DCHECK(!_buffer_pool_client.is_registered());
-    BufferPool* buffer_pool = ExecEnv::GetInstance()->buffer_pool();
-    // Check the minimum buffer size in case the minimum buffer size used by the planner
-    // doesn't match this backend's.
-    std::stringstream ss;
-    if (_resource_profile.__isset.spillable_buffer_size &&
-        _resource_profile.spillable_buffer_size < buffer_pool->min_buffer_len()) {
-        ss << "Spillable buffer size for node " << _id << " of " << _resource_profile.spillable_buffer_size
-           << "bytes is less than the minimum buffer pool buffer size of " << buffer_pool->min_buffer_len() << "bytes";
-        return Status::InternalError(ss.str());
-    }
-
-    ss << print_plan_node_type(_type) << " id=" << _id << " ptr=" << this;
-    RETURN_IF_ERROR(buffer_pool->RegisterClient(ss.str(), state->instance_buffer_reservation(), mem_tracker(),
-                                                buffer_pool->GetSystemBytesLimit(), runtime_profile(),
-                                                &_buffer_pool_client));
-
-    state->initial_reservations()->Claim(&_buffer_pool_client, _resource_profile.min_reservation);
-    /*
-    if (debug_action_ == TDebugAction::SET_DENY_RESERVATION_PROBABILITY &&
-        (debug_phase_ == TExecNodePhase::PREPARE || debug_phase_ == TExecNodePhase::OPEN)) {
-       // We may not have been able to enable the debug action at the start of Prepare() or
-       // Open() because the client is not registered then. Do it now to be sure that it is
-       // effective.
-               RETURN_IF_ERROR(EnableDenyReservationDebugAction());
-    }
-*/
-    return Status::OK();
-}
-
-Status ExecNode::release_unused_reservation() {
-    return _buffer_pool_client.DecreaseReservationTo(_resource_profile.min_reservation);
-}
-/*
-Status ExecNode::enable_deny_reservation_debug_action() {
-  DCHECK_EQ(debug_action_, TDebugAction::SET_DENY_RESERVATION_PROBABILITY);
-  DCHECK(_buffer_pool_client.is_registered());
-  // Parse [0.0, 1.0] probability.
-  StringParser::ParseResult parse_result;
-  double probability = StringParser::StringToFloat<double>(
-      debug_action_param_.c_str(), debug_action_param_.size(), &parse_result);
-  if (parse_result != StringParser::PARSE_SUCCESS || probability < 0.0
-      || probability > 1.0) {
-    return Status::InternalError(strings::Substitute(
-        "Invalid SET_DENY_RESERVATION_PROBABILITY param: '$0'", debug_action_param_));
-  }
-  _buffer_pool_client.SetDebugDenyIncreaseReservation(probability);
-  return Status::OK()();
-}
-*/
-
-Status ExecNode::QueryMaintenance(RuntimeState* state, const std::string& msg) {
-    // TODO chenhao , when introduce latest AnalyticEvalNode open it
-    // ScalarExprEvaluator::FreeLocalAllocations(evals_to_free_);
-    return state->check_query_state(msg);
 }
 
 } // namespace starrocks

@@ -103,7 +103,6 @@ protected:
             }
             res._cols.push_back(col);
         }
-        res._num_columns = columns.size();
         res._num_key_columns = num_key_columns;
         res._num_short_key_columns = num_short_key_columns != -1 ? num_short_key_columns : num_key_columns;
         return res;
@@ -611,7 +610,6 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
     size_t num_rows_per_block = 10;
 
     std::shared_ptr<TabletSchema> tablet_schema(new TabletSchema());
-    tablet_schema->_num_columns = 4;
     tablet_schema->_num_key_columns = 3;
     tablet_schema->_num_short_key_columns = 2;
     tablet_schema->_num_rows_per_row_block = num_rows_per_block;
@@ -780,7 +778,6 @@ TEST_F(SegmentReaderWriterTest, TestStringDict) {
     MemPool pool(&tracker);
 
     std::shared_ptr<TabletSchema> tablet_schema(new TabletSchema());
-    tablet_schema->_num_columns = 4;
     tablet_schema->_num_key_columns = 3;
     tablet_schema->_num_short_key_columns = 2;
     tablet_schema->_num_rows_per_row_block = num_rows_per_block;

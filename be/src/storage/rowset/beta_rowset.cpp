@@ -272,7 +272,7 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
     seg_options.delete_predicates.get_column_ids(&delete_columns);
     for (ColumnId cid : delete_columns) {
         const TabletColumn& col = options.tablet_schema->column(cid);
-        if (segment_schema.get_field_by_name(col.name()) == nullptr) {
+        if (segment_schema.get_field_by_name(std::string(col.name())) == nullptr) {
             auto f = vectorized::ChunkHelper::convert_field_to_format_v2(cid, col);
             segment_schema.append(std::make_shared<vectorized::Field>(std::move(f)));
         }

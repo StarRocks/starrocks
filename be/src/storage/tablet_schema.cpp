@@ -232,110 +232,152 @@ uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_
 
 TabletColumn::TabletColumn() {}
 
-TabletColumn::TabletColumn(FieldAggregationMethod agg, FieldType type) {
-    _aggregation = agg;
-    _type = type;
+TabletColumn::TabletColumn(FieldAggregationMethod agg, FieldType type) : _aggregation(agg), _type(type) {}
+
+TabletColumn::TabletColumn(FieldAggregationMethod agg, FieldType type, bool is_nullable)
+        : _aggregation(agg), _type(type) {
+    _length = get_type_info(type)->size();
+    _set_flag(kIsNullableShift, is_nullable);
 }
 
-TabletColumn::TabletColumn(FieldAggregationMethod agg, FieldType field_type, bool is_nullable) {
-    _aggregation = agg;
-    _type = field_type;
-    _length = get_type_info(field_type)->size();
-    _is_nullable = is_nullable;
+TabletColumn::TabletColumn(FieldAggregationMethod agg, FieldType type, bool is_nullable, int32_t unique_id,
+                           size_t length)
+        : _unique_id(unique_id), _length(length), _aggregation(agg), _type(type) {
+    _set_flag(kIsNullableShift, is_nullable);
 }
 
-TabletColumn::TabletColumn(FieldAggregationMethod agg, FieldType field_type, bool is_nullable, int32_t unique_id,
-                           size_t length) {
-    _aggregation = agg;
-    _type = field_type;
-    _is_nullable = is_nullable;
-    _unique_id = unique_id;
-    _length = length;
+TabletColumn::TabletColumn(const TabletColumn& rhs)
+        : _col_name(rhs._col_name),
+          _unique_id(rhs._unique_id),
+          _length(rhs._length),
+          _aggregation(rhs._aggregation),
+          _type(rhs._type),
+          _index_length(rhs._index_length),
+          _precision(rhs._precision),
+          _scale(rhs._scale),
+          _flags(rhs._flags) {
+    if (rhs._extra_fields != nullptr) {
+        _extra_fields = new ExtraFields(*rhs._extra_fields);
+    }
+}
+
+TabletColumn::TabletColumn(TabletColumn&& rhs)
+        : _col_name(std::move(rhs._col_name)),
+          _unique_id(rhs._unique_id),
+          _length(rhs._length),
+          _aggregation(rhs._aggregation),
+          _type(rhs._type),
+          _index_length(rhs._index_length),
+          _precision(rhs._precision),
+          _scale(rhs._scale),
+          _flags(rhs._flags),
+          _extra_fields(rhs._extra_fields) {
+    rhs._extra_fields = nullptr;
+}
+
+TabletColumn::~TabletColumn() {
+    delete _extra_fields;
+}
+
+void TabletColumn::swap(TabletColumn* rhs) {
+    using std::swap;
+    swap(_col_name, rhs->_col_name);
+    swap(_unique_id, rhs->_unique_id);
+    swap(_length, rhs->_length);
+    swap(_aggregation, rhs->_aggregation);
+    swap(_type, rhs->_type);
+    swap(_index_length, rhs->_index_length);
+    swap(_precision, rhs->_precision);
+    swap(_scale, rhs->_scale);
+    swap(_flags, rhs->_flags);
+    swap(_extra_fields, rhs->_extra_fields);
+}
+
+TabletColumn& TabletColumn::operator=(const TabletColumn& rhs) {
+    TabletColumn tmp(rhs);
+    swap(&tmp);
+    return *this;
+}
+
+TabletColumn& TabletColumn::operator=(TabletColumn&& rhs) {
+    TabletColumn tmp(std::move(rhs));
+    swap(&tmp);
+    return *this;
 }
 
 void TabletColumn::init_from_pb(const ColumnPB& column) {
     _unique_id = column.unique_id();
-    _col_name = column.name();
+    _col_name.assign(column.name());
     _type = TabletColumn::get_field_type_by_string(column.type());
-    _is_key = column.is_key();
-    _is_nullable = column.is_nullable();
 
-    _has_default_value = column.has_default_value();
-    if (_has_default_value) {
-        _default_value = column.default_value();
-    }
+    _set_flag(kIsKeyShift, column.is_key());
+    _set_flag(kIsNullableShift, column.is_nullable());
+    _set_flag(kIsBfColumnShift, column.is_bf_column());
+    _set_flag(kHasBitmapIndexShift, column.has_bitmap_index());
+    _set_flag(kHasPrecisionShift, column.has_precision());
+    _set_flag(kHasScaleShift, column.has_frac());
+
+    _length = column.length();
 
     if (column.has_precision()) {
-        _is_decimal = true;
+        DCHECK_LE(column.precision(), UINT8_MAX);
         _precision = column.precision();
-    } else {
-        _is_decimal = false;
     }
     if (column.has_frac()) {
+        DCHECK_LE(column.frac(), UINT8_MAX);
         _scale = column.frac();
     }
-    _length = column.length();
-    _index_length = column.index_length();
-    if (column.has_is_bf_column()) {
-        _is_bf_column = column.is_bf_column();
-    } else {
-        _is_bf_column = false;
-    }
-    if (column.has_has_bitmap_index()) {
-        _has_bitmap_index = column.has_bitmap_index();
-    } else {
-        _has_bitmap_index = false;
-    }
-    _has_referenced_column = column.has_referenced_column_id();
-    if (_has_referenced_column) {
-        _referenced_column_id = column.referenced_column_id();
+    if (column.has_index_length()) {
+        // https://github.com/StarRocks/starrocks/issues/677
+        // DCHECK_LE(column.index_length(), UINT8_MAX);
+        _index_length = column.index_length();
     }
     if (column.has_aggregation()) {
         _aggregation = get_aggregation_type_by_string(column.aggregation());
     }
-    if (column.has_visible()) {
-        _visible = column.visible();
+    if (column.has_default_value()) {
+        ExtraFields* extra = _get_or_alloc_extra_fields();
+        extra->has_default_value = true;
+        extra->default_value = column.default_value();
     }
     for (size_t i = 0; i < column.children_columns_size(); ++i) {
         TabletColumn sub_column;
         sub_column.init_from_pb(column.children_columns(i));
-        add_sub_column(sub_column);
+        add_sub_column(std::move(sub_column));
     }
 }
 
 void TabletColumn::to_schema_pb(ColumnPB* column) const {
+    column->mutable_name()->assign(_col_name.data(), _col_name.size());
     column->set_unique_id(_unique_id);
-    column->set_name(_col_name);
     column->set_type(get_string_by_field_type(_type));
-    column->set_is_key(_is_key);
-    column->set_is_nullable(_is_nullable);
-    if (_has_default_value) {
-        column->set_default_value(_default_value);
+    column->set_is_key(is_key());
+    column->set_is_nullable(is_nullable());
+    if (has_default_value()) {
+        column->set_default_value(default_value());
     }
-    if (_is_decimal) {
+    if (has_precision()) {
         column->set_precision(_precision);
+    }
+    if (has_scale()) {
         column->set_frac(_scale);
     }
     column->set_length(_length);
     column->set_index_length(_index_length);
-    if (_is_bf_column) {
-        column->set_is_bf_column(_is_bf_column);
-    }
+    column->set_is_bf_column(is_bf_column());
     column->set_aggregation(get_string_by_aggregation_type(_aggregation));
-    if (_has_referenced_column) {
-        column->set_referenced_column_id(_referenced_column_id);
-    }
-    if (_has_bitmap_index) {
-        column->set_has_bitmap_index(_has_bitmap_index);
-    }
-    for (const auto& sub_column : _sub_columns) {
-        sub_column.to_schema_pb(column->add_children_columns());
+    column->set_has_bitmap_index(has_bitmap_index());
+    for (int i = 0; i < subcolumn_count(); i++) {
+        subcolumn(i).to_schema_pb(column->add_children_columns());
     }
 }
 
-void TabletColumn::add_sub_column(TabletColumn& sub_column) {
-    _sub_columns.push_back(sub_column);
-    sub_column._parent = this;
+void TabletColumn::add_sub_column(const TabletColumn& sub_column) {
+    _get_or_alloc_extra_fields()->sub_columns.push_back(sub_column);
+}
+
+void TabletColumn::add_sub_column(TabletColumn&& sub_column) {
+    _get_or_alloc_extra_fields()->sub_columns.emplace_back(std::move(sub_column));
 }
 
 bool TabletColumn::is_format_v1_column() const {
@@ -348,7 +390,6 @@ bool TabletColumn::is_format_v2_column() const {
 
 void TabletSchema::init_from_pb(const TabletSchemaPB& schema) {
     _keys_type = schema.keys_type();
-    _num_columns = 0;
     _num_key_columns = 0;
     _num_null_columns = 0;
     _cols.clear();
@@ -356,7 +397,6 @@ void TabletSchema::init_from_pb(const TabletSchemaPB& schema) {
         TabletColumn column;
         column.init_from_pb(column_pb);
         _cols.push_back(column);
-        _num_columns++;
         if (column.is_key()) {
             _num_key_columns++;
         }
@@ -430,7 +470,7 @@ size_t TabletSchema::row_size() const {
     for (auto& column : _cols) {
         size += column.length();
     }
-    size += (_num_columns + 7) / 8;
+    size += (num_columns() + 7) / 8;
 
     return size;
 }
@@ -453,35 +493,30 @@ const std::vector<TabletColumn>& TabletSchema::columns() const {
 }
 
 const TabletColumn& TabletSchema::column(size_t ordinal) const {
-    DCHECK(ordinal < _num_columns) << "ordinal:" << ordinal << ", _num_columns:" << _num_columns;
+    DCHECK(ordinal < num_columns()) << "ordinal:" << ordinal << ", num_columns:" << num_columns();
     return _cols[ordinal];
 }
 
 bool operator==(const TabletColumn& a, const TabletColumn& b) {
+    if (a._flags != b._flags) return false;
     if (a._unique_id != b._unique_id) return false;
     if (a._col_name != b._col_name) return false;
     if (a._type != b._type) return false;
-    if (a._is_key != b._is_key) return false;
     if (a._aggregation != b._aggregation) return false;
-    if (a._is_nullable != b._is_nullable) return false;
-    if (a._has_default_value != b._has_default_value) return false;
-    if (a._has_default_value) {
-        if (a._default_value != b._default_value) return false;
+    if (a.has_default_value() != b.has_default_value()) return false;
+    if (a.has_default_value()) {
+        if (a.default_value() != b.default_value()) return false;
     }
-    if (a._is_decimal != b._is_decimal) return false;
-    if (a._is_decimal) {
+    if (a.has_precision() != b.has_precision()) return false;
+    if (a.has_precision()) {
         if (a._precision != b._precision) return false;
+    }
+    if (a.has_scale() != b.has_scale()) return false;
+    if (a.has_scale()) {
         if (a._scale != b._scale) return false;
     }
     if (a._length != b._length) return false;
     if (a._index_length != b._index_length) return false;
-    if (a._is_bf_column != b._is_bf_column) return false;
-    if (a._has_referenced_column != b._has_referenced_column) return false;
-    if (a._has_referenced_column) {
-        if (a._referenced_column_id != b._referenced_column_id) return false;
-        if (a._referenced_column != b._referenced_column) return false;
-    }
-    if (a._has_bitmap_index != b._has_bitmap_index) return false;
     return true;
 }
 
@@ -495,7 +530,6 @@ bool operator==(const TabletSchema& a, const TabletSchema& b) {
     for (int i = 0; i < a._cols.size(); ++i) {
         if (a._cols[i] != b._cols[i]) return false;
     }
-    if (a._num_columns != b._num_columns) return false;
     if (a._num_key_columns != b._num_key_columns) return false;
     if (a._num_null_columns != b._num_null_columns) return false;
     if (a._num_short_key_columns != b._num_short_key_columns) return false;
@@ -512,13 +546,13 @@ bool operator==(const TabletSchema& a, const TabletSchema& b) {
 
 std::string TabletColumn::debug_string() const {
     std::stringstream ss;
-    ss << "(unique_id=" << _unique_id << ",name=" << _col_name << ",type=" << _type << ",is_key=" << _is_key
-       << ",aggregation=" << _aggregation << ",is_nullable=" << _is_nullable
-       << ",has_default_value=" << _has_default_value << ",default_value=" << _default_value
-       << ",is_decimal=" << _is_decimal << ",precision=" << _precision << ",frac=" << _scale << ",length=" << _length
-       << ",index_length=" << _index_length << ",is_bf_column=" << _is_bf_column
-       << ",has_reference_column=" << _has_referenced_column << ",referenced_column_id=" << _referenced_column_id
-       << ",referenced_column=" << _referenced_column << ",has_bitmap_index=" << _has_bitmap_index << ")";
+    ss << "(unique_id=" << _unique_id << ",name=" << _col_name << ",type=" << _type << ",is_key=" << is_key()
+       << ",aggregation=" << _aggregation << ",is_nullable=" << is_nullable()
+       << ",default_value=" << (has_default_value() ? default_value() : "N/A")
+       << ",precision=" << (has_precision() ? std::to_string(_precision) : "N/A")
+       << ",frac=" << (has_scale() ? std::to_string(_scale) : "N/A") << ",length=" << _length
+       << ",index_length=" << _index_length << ",is_bf_column=" << is_bf_column()
+       << ",has_bitmap_index=" << has_bitmap_index() << ")";
     return ss.str();
 }
 
@@ -535,7 +569,7 @@ std::string TabletSchema::debug_string() const {
         }
         ss << _cols[i].debug_string();
     }
-    ss << "],keys_type=" << _keys_type << ",num_columns=" << _num_columns << ",num_key_columns=" << _num_key_columns
+    ss << "],keys_type=" << _keys_type << ",num_columns=" << num_columns() << ",num_key_columns=" << _num_key_columns
        << ",num_null_columns=" << _num_null_columns << ",num_short_key_columns=" << _num_short_key_columns
        << ",num_rows_per_row_block=" << _num_rows_per_row_block << ",compress_kind=" << _compress_kind
        << ",next_column_unique_id=" << _next_column_unique_id << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp

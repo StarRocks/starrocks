@@ -16,10 +16,14 @@ public class PhysicalValuesOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> columnRefSet;
     private final List<List<ScalarOperator>> rows;
 
-    public PhysicalValuesOperator(List<ColumnRefOperator> columnRefSet, List<List<ScalarOperator>> rows) {
+    public PhysicalValuesOperator(List<ColumnRefOperator> columnRefSet, List<List<ScalarOperator>> rows,
+                                  long limit,
+                                  ScalarOperator predicate) {
         super(OperatorType.PHYSICAL_VALUES);
         this.columnRefSet = columnRefSet;
         this.rows = rows;
+        this.limit = limit;
+        this.predicate = predicate;
     }
 
     public List<ColumnRefOperator> getColumnRefSet() {

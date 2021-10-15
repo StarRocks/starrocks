@@ -26,36 +26,26 @@
 #include <cstdint> // for intptr_t
 #include <memory>
 
-#include "runtime/buffered_tuple_stream2.inline.h"
+#include "gen_cpp/Data_types.h"
+#include "gen_cpp/data.pb.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "runtime/tuple_row.h"
-//#include "runtime/mem_tracker.h"
-#include "gen_cpp/Data_types.h"
-#include "gen_cpp/data.pb.h"
-#include "util/debug_util.h"
 
 using std::vector;
 
 namespace starrocks {
-
-const int RowBatch::AT_CAPACITY_MEM_USAGE = 8 * 1024 * 1024;
-const int RowBatch::FIXED_LEN_BUFFER_LIMIT = AT_CAPACITY_MEM_USAGE / 2;
 
 RowBatch::RowBatch(const RowDescriptor& row_desc, int capacity, MemTracker* mem_tracker)
         : _mem_tracker(mem_tracker),
           _has_in_flight_row(false),
           _num_rows(0),
           _capacity(capacity),
-          _flush(FlushMode::NO_FLUSH_RESOURCES),
-          _needs_deep_copy(false),
           _num_tuples_per_row(row_desc.tuple_descriptors().size()),
           _row_desc(row_desc),
-          _auxiliary_mem_usage(0),
           _need_to_return(false),
-          _tuple_data_pool(new MemPool(_mem_tracker)),
-          _agg_object_pool(new ObjectPool()) {
+          _tuple_data_pool(new MemPool(_mem_tracker)) {
     DCHECK(_mem_tracker != nullptr);
     DCHECK_GT(capacity, 0);
     _tuple_ptrs_size = _capacity * _num_tuples_per_row * sizeof(Tuple*);
@@ -81,14 +71,10 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const PRowBatch& input_batch, 
           _has_in_flight_row(false),
           _num_rows(input_batch.num_rows()),
           _capacity(_num_rows),
-          _flush(FlushMode::NO_FLUSH_RESOURCES),
-          _needs_deep_copy(false),
           _num_tuples_per_row(input_batch.row_tuples_size()),
           _row_desc(row_desc),
-          _auxiliary_mem_usage(0),
           _need_to_return(false),
-          _tuple_data_pool(new MemPool(_mem_tracker)),
-          _agg_object_pool(new ObjectPool()) {
+          _tuple_data_pool(new MemPool(_mem_tracker)) {
     DCHECK(_mem_tracker != nullptr);
     _tuple_ptrs_size = _num_rows * _num_tuples_per_row * sizeof(Tuple*);
     DCHECK_GT(_tuple_ptrs_size, 0);
@@ -177,14 +163,10 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch, 
           _has_in_flight_row(false),
           _num_rows(input_batch.num_rows),
           _capacity(_num_rows),
-          _flush(FlushMode::NO_FLUSH_RESOURCES),
-          _needs_deep_copy(false),
           _num_tuples_per_row(input_batch.row_tuples.size()),
           _row_desc(row_desc),
-          _auxiliary_mem_usage(0),
           _need_to_return(false),
-          _tuple_data_pool(new MemPool(_mem_tracker)),
-          _agg_object_pool(new ObjectPool()) {
+          _tuple_data_pool(new MemPool(_mem_tracker)) {
     DCHECK(_mem_tracker != nullptr);
     _tuple_ptrs_size = _num_rows * input_batch.row_tuples.size() * sizeof(Tuple*);
     DCHECK_GT(_tuple_ptrs_size, 0);
@@ -273,19 +255,7 @@ void RowBatch::clear() {
     }
 
     _tuple_data_pool->free_all();
-    _agg_object_pool = std::make_unique<ObjectPool>();
-    for (auto& _io_buffer : _io_buffers) {
-        _io_buffer->return_buffer();
-    }
 
-    for (BufferInfo& buffer_info : _buffers) {
-        ExecEnv::GetInstance()->buffer_pool()->FreeBuffer(buffer_info.client, &buffer_info.buffer);
-    }
-
-    close_tuple_streams();
-    for (auto& _block : _blocks) {
-        _block->del();
-    }
     if (config::enable_partitioned_aggregation) {
         DCHECK(_tuple_ptrs != nullptr);
         free(_tuple_ptrs);
@@ -430,43 +400,6 @@ int RowBatch::serialize(PRowBatch* output_batch) {
     return get_batch_size(*output_batch) - mutable_tuple_data->size() + size;
 }
 
-void RowBatch::add_io_buffer(DiskIoMgr::BufferDescriptor* buffer) {
-    DCHECK(buffer != nullptr);
-    _io_buffers.push_back(buffer);
-    _auxiliary_mem_usage += buffer->buffer_len();
-    buffer->set_mem_tracker(_mem_tracker);
-}
-
-Status RowBatch::resize_and_allocate_tuple_buffer(RuntimeState* state, int64_t* tuple_buffer_size, uint8_t** buffer) {
-    const int row_size = _row_desc.get_row_size();
-    // Avoid divide-by-zero. Don't need to modify capacity for empty rows anyway.
-    if (row_size != 0) {
-        _capacity = std::max(1, std::min(_capacity, FIXED_LEN_BUFFER_LIMIT / row_size));
-    }
-    *tuple_buffer_size = static_cast<int64_t>(row_size) * _capacity;
-    // TODO(dhc): change allocate to try_allocate?
-    *buffer = _tuple_data_pool->allocate(*tuple_buffer_size);
-    if (*buffer == nullptr) {
-        std::stringstream ss;
-        ss << "Failed to allocate tuple buffer" << *tuple_buffer_size;
-        LOG(WARNING) << ss.str();
-        return state->set_mem_limit_exceeded(ss.str());
-    }
-    return Status::OK();
-}
-
-void RowBatch::add_tuple_stream(BufferedTupleStream2* stream) {
-    DCHECK(stream != nullptr);
-    _tuple_streams.push_back(stream);
-    _auxiliary_mem_usage += stream->byte_size();
-}
-
-void RowBatch::add_block(BufferedBlockMgr2::Block* block) {
-    DCHECK(block != nullptr);
-    _blocks.push_back(block);
-    _auxiliary_mem_usage += block->buffer_len();
-}
-
 void RowBatch::reset() {
     DCHECK(_tuple_data_pool.get() != nullptr);
     _num_rows = 0;
@@ -475,78 +408,11 @@ void RowBatch::reset() {
 
     // TODO: Change this to Clear() and investigate the repercussions.
     _tuple_data_pool->free_all();
-    _agg_object_pool = std::make_unique<ObjectPool>();
-    for (auto& _io_buffer : _io_buffers) {
-        _io_buffer->return_buffer();
-    }
-    _io_buffers.clear();
 
-    for (BufferInfo& buffer_info : _buffers) {
-        ExecEnv::GetInstance()->buffer_pool()->FreeBuffer(buffer_info.client, &buffer_info.buffer);
-    }
-    _buffers.clear();
-
-    close_tuple_streams();
-    for (auto& _block : _blocks) {
-        _block->del();
-    }
-    _blocks.clear();
-    _auxiliary_mem_usage = 0;
     if (!config::enable_partitioned_aggregation) {
         _tuple_ptrs = reinterpret_cast<Tuple**>(_tuple_data_pool->allocate(_tuple_ptrs_size));
     }
     _need_to_return = false;
-    _flush = FlushMode::NO_FLUSH_RESOURCES;
-    _needs_deep_copy = false;
-}
-
-void RowBatch::close_tuple_streams() {
-    for (auto& _tuple_stream : _tuple_streams) {
-        _tuple_stream->close();
-        delete _tuple_stream;
-    }
-    _tuple_streams.clear();
-}
-
-void RowBatch::transfer_resource_ownership(RowBatch* dest) {
-    dest->_auxiliary_mem_usage += _tuple_data_pool->total_allocated_bytes();
-    dest->_tuple_data_pool->acquire_data(_tuple_data_pool.get(), false);
-    dest->_agg_object_pool->acquire_data(_agg_object_pool.get());
-    for (auto buffer : _io_buffers) {
-        dest->_io_buffers.push_back(buffer);
-        dest->_auxiliary_mem_usage += buffer->buffer_len();
-        buffer->set_mem_tracker(dest->_mem_tracker);
-    }
-    _io_buffers.clear();
-
-    for (BufferInfo& buffer_info : _buffers) {
-        dest->add_buffer(buffer_info.client, std::move(buffer_info.buffer), FlushMode::NO_FLUSH_RESOURCES);
-    }
-    _buffers.clear();
-
-    for (auto& _tuple_stream : _tuple_streams) {
-        dest->_tuple_streams.push_back(_tuple_stream);
-        dest->_auxiliary_mem_usage += _tuple_stream->byte_size();
-    }
-    // Resource release should be done by dest RowBatch. if we don't clear the corresponding resources.
-    // This Rowbatch calls the reset() method, dest Rowbatch will also call the reset() method again,
-    // which will cause the core problem of double delete
-    _tuple_streams.clear();
-
-    for (auto& _block : _blocks) {
-        dest->_blocks.push_back(_block);
-        dest->_auxiliary_mem_usage += _block->buffer_len();
-    }
-    _blocks.clear();
-
-    dest->_need_to_return |= _need_to_return;
-
-    if (_needs_deep_copy) {
-        dest->mark_needs_deep_copy();
-    } else if (_flush == FlushMode::FLUSH_RESOURCES) {
-        dest->mark_flush_resources();
-    }
-    reset();
 }
 
 int RowBatch::get_batch_size(const TRowBatch& batch) {
@@ -561,42 +427,6 @@ int RowBatch::get_batch_size(const PRowBatch& batch) {
     result += batch.row_tuples().size() * sizeof(int32_t);
     result += batch.tuple_offsets().size() * sizeof(int32_t);
     return result;
-}
-
-void RowBatch::acquire_state(RowBatch* src) {
-    // DCHECK(_row_desc.equals(src->_row_desc));
-    DCHECK_EQ(_num_tuples_per_row, src->_num_tuples_per_row);
-    DCHECK_EQ(_tuple_ptrs_size, src->_tuple_ptrs_size);
-    DCHECK_EQ(_auxiliary_mem_usage, 0);
-
-    // The destination row batch should be empty.
-    DCHECK(!_has_in_flight_row);
-    DCHECK_EQ(_num_rows, 0);
-
-    for (auto buffer : src->_io_buffers) {
-        _io_buffers.push_back(buffer);
-        _auxiliary_mem_usage += buffer->buffer_len();
-        buffer->set_mem_tracker(_mem_tracker);
-    }
-    src->_io_buffers.clear();
-    src->_auxiliary_mem_usage = 0;
-
-    DCHECK(src->_tuple_streams.empty());
-    DCHECK(src->_blocks.empty());
-
-    _has_in_flight_row = src->_has_in_flight_row;
-    _num_rows = src->_num_rows;
-    _capacity = src->_capacity;
-    _need_to_return = src->_need_to_return;
-    if (!config::enable_partitioned_aggregation) {
-        // Tuple pointers are allocated from tuple_data_pool_ so are transferred.
-        _tuple_ptrs = src->_tuple_ptrs;
-        src->_tuple_ptrs = nullptr;
-    } else {
-        // tuple_ptrs_ were allocated with malloc so can be swapped between batches.
-        std::swap(_tuple_ptrs, src->_tuple_ptrs);
-    }
-    src->transfer_resource_ownership(this);
 }
 
 // TODO: consider computing size of batches as they are built up
@@ -628,29 +458,6 @@ int RowBatch::total_byte_size() {
     }
 
     return result;
-}
-
-int RowBatch::max_tuple_buffer_size() {
-    int row_size = _row_desc.get_row_size();
-    if (row_size > AT_CAPACITY_MEM_USAGE) {
-        return row_size;
-    }
-    int num_rows = 0;
-    if (row_size != 0) {
-        num_rows = std::min(_capacity, AT_CAPACITY_MEM_USAGE / row_size);
-    }
-    int tuple_buffer_size = num_rows * row_size;
-    DCHECK_LE(tuple_buffer_size, AT_CAPACITY_MEM_USAGE);
-    return tuple_buffer_size;
-}
-
-void RowBatch::add_buffer(BufferPool::ClientHandle* client, BufferPool::BufferHandle&& buffer, FlushMode flush) {
-    _auxiliary_mem_usage += buffer.len();
-    BufferInfo buffer_info;
-    buffer_info.client = client;
-    buffer_info.buffer = std::move(buffer);
-    _buffers.push_back(std::move(buffer_info));
-    if (flush == FlushMode::FLUSH_RESOURCES) mark_flush_resources();
 }
 
 std::string RowBatch::to_string() {

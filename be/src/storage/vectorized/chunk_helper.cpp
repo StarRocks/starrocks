@@ -13,7 +13,7 @@ namespace starrocks::vectorized {
 
 vectorized::Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
     TypeInfoPtr type_info = get_type_info(c);
-    starrocks::vectorized::Field f(id, c.name(), type_info, c.is_nullable());
+    starrocks::vectorized::Field f(id, std::string(c.name()), type_info, c.is_nullable());
     f.set_is_key(c.is_key());
     f.set_short_key_length(c.index_length());
     f.set_aggregate_method(c.aggregation());
@@ -42,11 +42,11 @@ starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id
     } else {
         type_info = get_type_info(type);
     }
-    starrocks::vectorized::Field f(id, c.name(), type_info, c.is_nullable());
+    starrocks::vectorized::Field f(id, std::string(c.name()), type_info, c.is_nullable());
     f.set_is_key(c.is_key());
 
     if (type == OLAP_FIELD_TYPE_ARRAY) {
-        const TabletColumn& sub_column = c.get_sub_column(0);
+        const TabletColumn& sub_column = c.subcolumn(0);
         auto sub_field = convert_field_to_format_v2(id, sub_column);
         f.add_sub_field(sub_field);
     }
@@ -200,7 +200,8 @@ Chunk* ChunkHelper::new_chunk_pooled(const vectorized::Schema& schema, size_t n,
     columns.reserve(schema.num_fields());
     for (size_t i = 0; i < schema.num_fields(); i++) {
         const vectorized::FieldPtr& f = schema.field(i);
-        auto column = force ? column_from_pool<true>(*f) : column_from_pool<false>(*f);
+        auto column =
+                (force && !config::disable_column_pool) ? column_from_pool<true>(*f) : column_from_pool<false>(*f);
         column->reserve(n);
         columns.emplace_back(std::move(column));
     }

@@ -36,6 +36,7 @@ import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.AssertNumRowsNode;
 import com.starrocks.planner.CrossJoinNode;
 import com.starrocks.planner.DataPartition;
+import com.starrocks.planner.DecodeNode;
 import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.EsScanNode;
 import com.starrocks.planner.ExceptNode;
@@ -73,6 +74,7 @@ import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
@@ -265,6 +267,34 @@ public class PlanFragmentBuilder {
         }
 
         @Override
+        public PlanFragment visitPhysicalDecode(OptExpression optExpression, ExecPlan context) {
+            PhysicalDecodeOperator node = (PhysicalDecodeOperator) optExpression.getOp();
+            PlanFragment inputFragment = visit(optExpression.inputAt(0), context);
+
+            TupleDescriptor tupleDescriptor = context.getDescTbl().getTupleDesc(
+                    inputFragment.getPlanRoot().getTupleIds().get(0));
+
+            for (Map.Entry<Integer, Integer> entry : node.getDictToStrings().entrySet()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getValue()));
+                slotDescriptor.setIsNullable(true);
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(Type.VARCHAR);
+
+                context.getColRefToExpr().put(new ColumnRefOperator(entry.getValue(), Type.VARCHAR, "xxx", true),
+                        new SlotRef(entry.getValue().toString(), slotDescriptor));
+            }
+
+            DecodeNode decodeNode = new DecodeNode(context.getPlanCtx().getNextNodeId(),
+                    inputFragment.getPlanRoot().getTupleIds(),
+                    inputFragment.getPlanRoot(),
+                    node.getDictToStrings());
+
+            inputFragment.setPlanRoot(decodeNode);
+            return inputFragment;
+        }
+
+        @Override
         public PlanFragment visitPhysicalOlapScan(OptExpression optExpr, ExecPlan context) {
             PhysicalOlapScanOperator node = (PhysicalOlapScanOperator) optExpr.getOp();
 
@@ -348,6 +378,7 @@ public class PlanFragmentBuilder {
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getPlanCtx().getNextFragmentId(), scanNode, DataPartition.RANDOM);
+            fragment.setGlobalDicts(node.getGlobalDicts());
             context.getFragments().add(fragment);
             return fragment;
         }
@@ -904,6 +935,7 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getPlanCtx().getNextFragmentId(), exchangeNode, dataPartition);
+            fragment.setGlobalDicts(distribution.getGlobalDicts());
             inputFragment.setDestination(exchangeNode);
             inputFragment.setOutputPartition(dataPartition);
 

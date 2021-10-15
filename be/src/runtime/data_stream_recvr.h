@@ -43,7 +43,6 @@ class SortedChunksMerger;
 }
 
 class DataStreamMgr;
-class SortedRunMerger;
 class MemTracker;
 class RowBatch;
 class RuntimeProfile;
@@ -78,14 +77,6 @@ class DataStreamRecvr {
 public:
     ~DataStreamRecvr();
 
-    // Returns next row batch in data stream; blocks if there aren't any.
-    // Retains ownership of the returned batch. The caller must acquire data from the
-    // returned batch before the next call to get_batch(). A NULL returned batch indicated
-    // eos. Must only be called if _is_merging is false.
-    // TODO: This is currently only exposed to the non-merging version of the exchange.
-    // Refactor so both merging and non-merging exchange use get_next(RowBatch*, bool* eos).
-    Status get_batch(RowBatch** next_batch);
-
     Status get_chunk(std::unique_ptr<vectorized::Chunk>* chunk);
 
     // Deregister from DataStreamMgr instance, which shares ownership of this instance.
@@ -94,7 +85,6 @@ public:
     // Create a SortedRunMerger instance to merge rows from multiple sender according to the
     // specified row comparator. Fetches the first batches from the individual sender
     // queues. The exprs used in less_than must have already been prepared and opened.
-    Status create_merger(const TupleRowComparator& less_than);
     Status create_merger(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                          const std::vector<bool>* is_null_first);
     Status create_merger_for_pipeline(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
@@ -102,13 +92,8 @@ public:
 
     // Fill output_batch with the next batch of rows obtained by merging the per-sender
     // input streams. Must only be called if _is_merging is true.
-    Status get_next(RowBatch* output_batch, bool* eos);
     Status get_next(vectorized::ChunkPtr* chunk, bool* eos);
     Status get_next_for_pipeline(vectorized::ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit);
-
-    // Transfer all resources from the current batches being processed from each sender
-    // queue to the specified batch.
-    void transfer_all_resources(RowBatch* transfer_batch);
 
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
     PlanNodeId dest_node_id() const { return _dest_node_id; }
@@ -183,8 +168,6 @@ private:
     // receiver and placed in _sender_queue_pool.
     std::vector<SenderQueue*> _sender_queues;
 
-    // SortedRunMerger used to merge rows from different senders.
-    std::unique_ptr<SortedRunMerger> _merger;
     // vectorized::SortedChunksMerger merges chunks from different senders.
     std::unique_ptr<vectorized::SortedChunksMerger> _chunks_merger;
 

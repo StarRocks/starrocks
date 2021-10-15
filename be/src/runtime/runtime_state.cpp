@@ -25,18 +25,15 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
-#include "runtime/buffered_block_mgr2.h"
-#include "runtime/bufferpool/reservation_tracker.h"
-#include "runtime/bufferpool/reservation_util.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
-#include "runtime/initial_reservations.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_worker.h"
@@ -52,7 +49,6 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
                            const TQueryGlobals& query_globals, ExecEnv* exec_env)
         : _profile("Fragment " + print_id(fragment_instance_id)),
           _unreported_error_idx(0),
-
           _obj_pool(new ObjectPool()),
           _is_cancelled(false),
           _per_fragment_instance_idx(0),
@@ -60,19 +56,16 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
           _num_rows_load_total(0),
           _num_rows_load_filtered(0),
           _num_rows_load_unselected(0),
-          _num_print_error_rows(0),
-
-          _instance_buffer_reservation(new ReservationTracker) {
+          _num_print_error_rows(0) {
     Status status = init(fragment_instance_id, query_options, query_globals, exec_env);
     DCHECK(status.ok());
 }
 
-RuntimeState::RuntimeState(const TExecPlanFragmentParams& fragment_params, const TQueryOptions& query_options,
-                           const TQueryGlobals& query_globals, ExecEnv* exec_env)
-        : _profile("Fragment " + print_id(fragment_params.params.fragment_instance_id)),
+RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
+                           const TQueryOptions& query_options, const TQueryGlobals& query_globals, ExecEnv* exec_env)
+        : _profile("Fragment " + print_id(fragment_instance_id)),
           _unreported_error_idx(0),
-          _query_id(fragment_params.params.query_id),
-
+          _query_id(query_id),
           _obj_pool(new ObjectPool()),
           _is_cancelled(false),
           _per_fragment_instance_idx(0),
@@ -80,10 +73,9 @@ RuntimeState::RuntimeState(const TExecPlanFragmentParams& fragment_params, const
           _num_rows_load_total(0),
           _num_rows_load_filtered(0),
           _num_rows_load_unselected(0),
-          _num_print_error_rows(0),
 
-          _instance_buffer_reservation(new ReservationTracker) {
-    Status status = init(fragment_params.params.fragment_instance_id, query_options, query_globals, exec_env);
+          _num_print_error_rows(0) {
+    Status status = init(fragment_instance_id, query_options, query_globals, exec_env);
     DCHECK(status.ok());
 }
 
@@ -113,7 +105,6 @@ RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
 }
 
 RuntimeState::~RuntimeState() {
-    _block_mgr2.reset();
     // close error log file
     if (_error_log_file != nullptr && _error_log_file->is_open()) {
         _error_log_file->close();
@@ -123,19 +114,6 @@ RuntimeState::~RuntimeState() {
 
     if (_error_hub != nullptr) {
         _error_hub->close();
-    }
-
-    // Release the reservation, which should be unused at the point.
-    if (_instance_buffer_reservation != nullptr) {
-        _instance_buffer_reservation->Close();
-    }
-
-    if (_initial_reservations != nullptr) {
-        _initial_reservations->ReleaseResources();
-    }
-
-    if (_buffer_reservation != nullptr) {
-        _buffer_reservation->Close();
     }
 
     if (_exec_env != nullptr && _exec_env->thread_mgr() != nullptr) {
@@ -215,57 +193,12 @@ Status RuntimeState::init_mem_trackers(const TUniqueId& query_id) {
                                                       _exec_env->query_pool_mem_tracker());
     _instance_mem_tracker =
             std::make_unique<MemTracker>(&_profile, -1, runtime_profile()->name(), _query_mem_tracker.get());
-    RETURN_IF_ERROR(init_buffer_poolstate());
-
-    _initial_reservations =
-            _obj_pool->add(new InitialReservations(_obj_pool.get(), _buffer_reservation, _query_mem_tracker.get(),
-                                                   _query_options.initial_reservation_total_claims));
-    RETURN_IF_ERROR(_initial_reservations->Init(_query_id, min_reservation()));
-    DCHECK_EQ(0, _initial_reservation_refcnt.load());
-
-    if (_instance_buffer_reservation != nullptr) {
-        _instance_buffer_reservation->InitChildTracker(&_profile, _buffer_reservation, _instance_mem_tracker.get(),
-                                                       std::numeric_limits<int64_t>::max());
-    }
 
     return Status::OK();
 }
 
 Status RuntimeState::init_instance_mem_tracker() {
     _instance_mem_tracker = std::make_unique<MemTracker>(-1);
-    return Status::OK();
-}
-
-Status RuntimeState::init_buffer_poolstate() {
-    ExecEnv* exec_env = ExecEnv::GetInstance();
-    int64_t mem_limit = _query_mem_tracker->lowest_limit();
-    int64_t max_reservation;
-    if (query_options().__isset.buffer_pool_limit && query_options().buffer_pool_limit > 0) {
-        max_reservation = query_options().buffer_pool_limit;
-    } else if (mem_limit == -1) {
-        // No query mem limit. The process-wide reservation limit is the only limit on
-        // reservations.
-        max_reservation = std::numeric_limits<int64_t>::max();
-    } else {
-        DCHECK_GE(mem_limit, 0);
-        max_reservation = ReservationUtil::GetReservationLimitFromMemLimit(mem_limit);
-    }
-    _buffer_reservation = _obj_pool->add(new ReservationTracker);
-    _buffer_reservation->InitChildTracker(nullptr, exec_env->buffer_reservation(), _query_mem_tracker.get(),
-                                          max_reservation);
-    return Status::OK();
-}
-
-Status RuntimeState::create_block_mgr() {
-    DCHECK(_block_mgr2.get() == nullptr);
-
-    int64_t block_mgr_limit = _query_mem_tracker->limit();
-    if (block_mgr_limit < 0) {
-        block_mgr_limit = std::numeric_limits<int64_t>::max();
-    }
-    RETURN_IF_ERROR(BufferedBlockMgr2::create(this, _query_mem_tracker.get(), runtime_profile(),
-                                              _exec_env->tmp_file_mgr(), block_mgr_limit,
-                                              _exec_env->disk_io_mgr()->max_read_buffer_size(), &_block_mgr2));
     return Status::OK();
 }
 
@@ -419,6 +352,28 @@ int64_t RuntimeState::get_load_mem_limit() const {
         return _query_options.load_mem_limit;
     }
     return 0;
+}
+
+const vectorized::GlobalDictMaps& RuntimeState::get_global_dict_map() const {
+    return _global_dicts;
+}
+
+Status RuntimeState::init_global_dict(const GlobalDictLists& global_dict_list) {
+    for (const auto& global_dict : global_dict_list) {
+        DCHECK_EQ(global_dict.ids.size(), global_dict.strings.size());
+        vectorized::GlobalDictMap dict_map;
+        vectorized::RGlobalDictMap rdict_map;
+        int dict_sz = global_dict.ids.size();
+        for (int i = 0; i < dict_sz; ++i) {
+            auto str = _obj_pool->add(new std::string(global_dict.strings[i]));
+            Slice slice(str->data(), str->size());
+            dict_map.emplace(slice, global_dict.ids[i]);
+            rdict_map.emplace(global_dict.ids[i], slice);
+        }
+        _global_dicts.emplace(uint32_t(global_dict.columnId),
+                              std::make_pair(std::move(dict_map), std::move(rdict_map)));
+    }
+    return Status::OK();
 }
 
 } // end namespace starrocks

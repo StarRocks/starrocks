@@ -31,7 +31,6 @@
 #include "common/status.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/bufferpool/buffer_pool.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 #include "runtime/query_statistics.h"
@@ -160,7 +159,6 @@ public:
 
     bool _check_has_vectorized_scan_child();
 
-    typedef bool (*EvalConjunctsFn)(ExprContext* const* ctxs, int num_ctxs, TupleRow* row);
     // Evaluate exprs over row.  Returns true if all exprs return true.
     // TODO: This doesn't use the vector<Expr*> signature because I haven't figured
     // out how to deal with declaring a templated std:vector type in IR
@@ -228,25 +226,6 @@ public:
 
 protected:
     friend class DataSink;
-
-    /// Initialize 'buffer_pool_client_' and claim the initial reservation for this
-    /// ExecNode. Only needs to be called by ExecNodes that will use the client.
-    /// The client is automatically cleaned up in Close(). Should not be called if
-    /// the client is already open.
-    /// The ExecNode must return the initial reservation to
-    /// QueryState::initial_reservations(), which is done automatically in Close() as long
-    /// as the initial reservation is not released before Close().
-    Status claim_buffer_reservation(RuntimeState* state);
-
-    /// Release any unused reservation in excess of the node's initial reservation. Returns
-    /// an error if releasing the reservation requires flushing pages to disk, and that
-    /// fails.
-    Status release_unused_reservation();
-
-    /// Enable the increase reservation denial probability on 'buffer_pool_client_' based on
-    /// the 'debug_action_' set on this node. Returns an error if 'debug_action_param_' is
-    /// invalid.
-    //Status enable_deny_reservation_debug_action();
 
     /// Extends blocking queue for row batches. Row batches have a property that
     /// they must be processed in the order they were produced, even in cancellation
@@ -332,19 +311,7 @@ protected:
     // Account for peak memory used by this node
     RuntimeProfile::Counter* _memory_used_counter;
 
-    // Execution options that are determined at runtime.  This is added to the
-    // runtime profile at close().  Examples for options logged here would be
-    // "Codegen Enabled"
-    std::mutex _exec_options_lock;
-    std::string _runtime_exec_options;
-
     bool _use_vectorized;
-
-    /// Buffer pool client for this node. Initialized with the node's minimum reservation
-    /// in ClaimBufferReservation(). After initialization, the client must hold onto at
-    /// least the minimum reservation so that it can be returned to the initial
-    /// reservations pool in Close().
-    BufferPool::ClientHandle _buffer_pool_client;
 
     ExecNode* child(int i) { return _children[i]; }
 
@@ -372,18 +339,6 @@ protected:
     // Executes _debug_action if phase matches _debug_phase.
     // 'phase' must not be INVALID.
     Status exec_debug_action(TExecNodePhase::type phase);
-
-    // Appends option to '_runtime_exec_options'
-    void add_runtime_exec_option(const std::string& option);
-
-    /// Frees any local allocations made by evals_to_free_ and returns the result of
-    /// state->CheckQueryState(). Nodes should call this periodically, e.g. once per input
-    /// row batch. This should not be called outside the main execution thread.
-    //
-    /// Nodes may override this to add extra periodic cleanup, e.g. freeing other local
-    /// allocations. ExecNodes overriding this function should return
-    /// ExecNode::QueryMaintenance().
-    virtual Status QueryMaintenance(RuntimeState* state, const std::string& msg) WARN_UNUSED_RESULT;
 
 private:
     bool _is_closed;

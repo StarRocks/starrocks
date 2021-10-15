@@ -6,6 +6,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 
@@ -13,8 +14,10 @@ public class PhysicalUnionOperator extends PhysicalSetOperation {
     private final boolean isUnionAll;
 
     public PhysicalUnionOperator(List<ColumnRefOperator> columnRef, List<List<ColumnRefOperator>> childOutputColumns,
-                                 boolean isUnionAll) {
-        super(OperatorType.PHYSICAL_UNION, columnRef, childOutputColumns);
+                                 boolean isUnionAll,
+                                 long limit,
+                                 ScalarOperator predicate) {
+        super(OperatorType.PHYSICAL_UNION, columnRef, childOutputColumns, limit, predicate);
         this.isUnionAll = isUnionAll;
     }
 

@@ -359,7 +359,7 @@ public class ExportJob implements Writable {
         try {
             fragment.finalize(analyzer, false);
         } catch (Exception e) {
-            LOG.info("Fragment finalize failed. e= {}", e);
+            LOG.info("Fragment finalize failed. e=", e);
             throw new UserException("Fragment finalize failed");
         }
 

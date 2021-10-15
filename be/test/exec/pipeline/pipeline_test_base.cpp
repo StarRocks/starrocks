@@ -37,7 +37,8 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_id);
     _fragment_ctx->set_runtime_state(
-            std::make_unique<RuntimeState>(_request, _request.query_options, _request.query_globals, _exec_env));
+            std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
+                                           _request.query_options, _request.query_globals, _exec_env));
 
     _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
@@ -46,12 +47,9 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx->set_mem_tracker(std::make_unique<MemTracker>(bytes_limit, "pipeline test mem-limit",
                                                                 _exec_env->query_pool_mem_tracker(), true));
 
-    auto mem_tracker = _fragment_ctx->mem_tracker();
-
     _runtime_state->set_batch_size(config::vector_chunk_size);
     ASSERT_TRUE(_runtime_state->init_mem_trackers(query_id).ok());
     _runtime_state->set_be_number(_request.backend_num);
-    _runtime_state->set_fragment_mem_tracker(mem_tracker);
 
     _obj_pool = _runtime_state->obj_pool();
 

@@ -34,7 +34,6 @@
 #include "gen_cpp/data.pb.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/row_batch.h"
-#include "runtime/sorted_run_merger.h"
 #include "runtime/vectorized/sorted_chunks_merger.h"
 #include "util/block_compression.h"
 #include "util/debug_util.h"
@@ -66,7 +65,6 @@ public:
     // The call blocks until another batch arrives or all senders close
     // their channels. The returned batch is owned by the sender queue. The caller
     // must acquire data from the returned batch before the next call to get_batch().
-    Status get_batch(RowBatch** next_batch);
     Status get_chunk(vectorized::Chunk** chunk);
 
     // check if data has come, work with try_get_chunk.
@@ -142,7 +140,6 @@ private:
     typedef std::list<std::pair<int, ChunkUniquePtr>> ChunkQueue;
     ChunkQueue _chunk_queue;
     vectorized::RuntimeChunkMeta _chunk_meta;
-    vectorized::Buffer<uint8_t> _uncompressed_chunk_data;
 
     // The batch that was most recently returned via get_batch(), i.e. the current batch
     // from this queue being processed by a consumer. Is destroyed when the next batch
@@ -163,53 +160,6 @@ DataStreamRecvr::SenderQueue::SenderQueue(DataStreamRecvr* parent_recvr, int num
           _is_cancelled(false),
           _num_remaining_senders(num_senders),
           _received_first_batch(false) {}
-
-Status DataStreamRecvr::SenderQueue::get_batch(RowBatch** next_batch) {
-    std::unique_lock<std::mutex> l(_lock);
-    // wait until something shows up or we know we're done
-    while (!_is_cancelled && _batch_queue.empty() && _num_remaining_senders > 0) {
-        VLOG_ROW << "wait arrival fragment_instance_id=" << _recvr->fragment_instance_id()
-                 << " node=" << _recvr->dest_node_id();
-        // Don't count time spent waiting on the sender as active time.
-        CANCEL_SAFE_SCOPED_TIMER(_recvr->_data_arrival_timer, &_is_cancelled);
-        CANCEL_SAFE_SCOPED_TIMER(_received_first_batch ? nullptr : _recvr->_first_batch_wait_total_timer,
-                                 &_is_cancelled);
-        _data_arrival_cv.wait(l);
-    }
-
-    // _cur_batch must be replaced with the returned batch.
-    _current_batch.reset();
-    *next_batch = nullptr;
-    if (_is_cancelled) {
-        return Status::Cancelled("Cancelled SenderQueue::get_batch");
-    }
-
-    if (_batch_queue.empty()) {
-        DCHECK_EQ(_num_remaining_senders, 0);
-        return Status::OK();
-    }
-
-    _received_first_batch = true;
-
-    DCHECK(!_batch_queue.empty());
-    RowBatch* result = _batch_queue.front().second;
-    _recvr->_num_buffered_bytes -= _batch_queue.front().first;
-    VLOG_ROW << "fetched #rows=" << result->num_rows();
-    _batch_queue.pop_front();
-    _current_batch.reset(result);
-    *next_batch = _current_batch.get();
-
-    if (!_pending_closures.empty()) {
-        auto closure_pair = _pending_closures.front();
-        closure_pair.first->Run();
-        _pending_closures.pop_front();
-
-        closure_pair.second.stop();
-        _recvr->_buffer_full_total_timer->update(closure_pair.second.elapsed_time());
-    }
-
-    return Status::OK();
-}
 
 bool DataStreamRecvr::SenderQueue::has_output() const {
     std::lock_guard<std::mutex> l(_lock);
@@ -588,22 +538,6 @@ void DataStreamRecvr::SenderQueue::close() {
     _current_batch.reset();
 }
 
-Status DataStreamRecvr::create_merger(const TupleRowComparator& less_than) {
-    DCHECK(_is_merging);
-    vector<SortedRunMerger::RunBatchSupplier> input_batch_suppliers;
-    input_batch_suppliers.reserve(_sender_queues.size());
-
-    // Create the merger that will a single stream of sorted rows.
-    _merger = std::make_unique<SortedRunMerger>(less_than, &_row_desc, _profile.get(), false);
-
-    for (SenderQueue* q : _sender_queues) {
-        auto f = [q](RowBatch** batch) -> Status { return q->get_batch(batch); };
-        input_batch_suppliers.emplace_back(std::move(f));
-    }
-    RETURN_IF_ERROR(_merger->prepare(input_batch_suppliers));
-    return Status::OK();
-}
-
 Status DataStreamRecvr::create_merger(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                                       const std::vector<bool>* is_null_first) {
     DCHECK(_is_merging);
@@ -662,14 +596,6 @@ Status DataStreamRecvr::create_merger_for_pipeline(const SortExecExprs* exprs, c
     return Status::OK();
 }
 
-void DataStreamRecvr::transfer_all_resources(RowBatch* transfer_batch) {
-    for (SenderQueue* sender_queue : _sender_queues) {
-        if (sender_queue->current_batch() != nullptr) {
-            sender_queue->current_batch()->transfer_resource_ownership(transfer_batch);
-        }
-    }
-}
-
 DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_tracker, const RowDescriptor& row_desc,
                                  const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
                                  bool is_merging, int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
@@ -715,11 +641,6 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_t
 
     _sender_total_timer = ADD_TIMER(_profile, "SenderTotalTime");
     _sender_wait_lock_timer = ADD_TIMER(_profile, "SenderWaitLockTime");
-}
-
-Status DataStreamRecvr::get_next(RowBatch* output_batch, bool* eos) {
-    DCHECK(_merger.get() != nullptr);
-    return _merger->get_next(output_batch, eos);
 }
 
 Status DataStreamRecvr::get_next(vectorized::ChunkPtr* chunk, bool* eos) {
@@ -775,7 +696,6 @@ void DataStreamRecvr::close() {
     // TODO: log error msg
     _mgr->deregister_recvr(fragment_instance_id(), dest_node_id());
     _mgr = nullptr;
-    _merger.reset();
     _chunks_merger.reset();
     _mem_tracker->close();
     _mem_tracker.reset();
@@ -783,12 +703,6 @@ void DataStreamRecvr::close() {
 
 DataStreamRecvr::~DataStreamRecvr() {
     DCHECK(_mgr == nullptr) << "Must call close()";
-}
-
-Status DataStreamRecvr::get_batch(RowBatch** next_batch) {
-    DCHECK(!_is_merging);
-    DCHECK_EQ(_sender_queues.size(), 1);
-    return _sender_queues[0]->get_batch(next_batch);
 }
 
 Status DataStreamRecvr::get_chunk(std::unique_ptr<vectorized::Chunk>* chunk) {

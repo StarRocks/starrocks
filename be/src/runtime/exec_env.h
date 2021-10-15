@@ -35,7 +35,6 @@ namespace starrocks {
 class BfdParser;
 class BrokerMgr;
 class BrpcStubCache;
-class BufferPool;
 class DataStreamMgr;
 class DiskIoMgr;
 class EvHttpServer;
@@ -48,19 +47,15 @@ class MetricRegistry;
 class StorageEngine;
 class ThreadPool;
 class PriorityThreadPool;
-class ReservationTracker;
 class ResultBufferMgr;
 class ResultQueueMgr;
 class TMasterInfo;
 class LoadChannelMgr;
-class TestExecEnv;
 class ThreadResourceMgr;
-class TmpFileMgr;
 class WebPageHandler;
 class StreamLoadExecutor;
 class RoutineLoadTaskExecutor;
 class SmallFileMgr;
-class FileBlockManager;
 class PluginMgr;
 class RuntimeFilterWorker;
 
@@ -136,12 +131,9 @@ public:
     TMasterInfo* master_info() { return _master_info; }
     LoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     DiskIoMgr* disk_io_mgr() { return _disk_io_mgr; }
-    TmpFileMgr* tmp_file_mgr() { return _tmp_file_mgr; }
     BfdParser* bfd_parser() const { return _bfd_parser; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
     BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache; }
-    ReservationTracker* buffer_reservation() { return _buffer_reservation; }
-    BufferPool* buffer_pool() { return _buffer_pool; }
     LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
     LoadStreamMgr* load_stream_mgr() { return _load_stream_mgr; }
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
@@ -164,8 +156,6 @@ private:
     void _destory();
 
     Status _init_mem_tracker();
-    /// Initialise 'buffer_pool_' and 'buffer_reservation_' with given capacity.
-    void _init_buffer_pool(int64_t min_page_len, int64_t capacity, int64_t clean_pages_limit);
 
     std::vector<StorePath> _store_paths;
     // Leave protected so that subclasses can override
@@ -222,16 +212,12 @@ private:
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
     DiskIoMgr* _disk_io_mgr = nullptr;
-    TmpFileMgr* _tmp_file_mgr = nullptr;
 
     BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;
     LoadChannelMgr* _load_channel_mgr = nullptr;
     LoadStreamMgr* _load_stream_mgr = nullptr;
     BrpcStubCache* _brpc_stub_cache = nullptr;
-
-    ReservationTracker* _buffer_reservation = nullptr;
-    BufferPool* _buffer_pool = nullptr;
 
     StorageEngine* _storage_engine = nullptr;
 
