@@ -786,10 +786,9 @@ public class DeleteHandler implements Writable {
         long currentTimeMs = System.currentTimeMillis();
         Iterator<Entry<Long, List<MultiDeleteInfo>>> logIterator = dbToDeleteInfos.entrySet().iterator();
         while (logIterator.hasNext()) {
+            List<MultiDeleteInfo> deleteInfos = logIterator.next().getValue();
             lock.writeLock().lock();
             try {
-                List<MultiDeleteInfo> deleteInfos = logIterator.next().getValue();
-
                 deleteInfos.sort((o1, o2) -> Long.signum(o1.getCreateTimeMs() - o2.getCreateTimeMs()));
                 int labelKeepMaxSecond = Config.label_keep_max_second;
                 int numJobsToRemove = deleteInfos.size() - Config.label_keep_max_num;
@@ -806,7 +805,7 @@ public class DeleteHandler implements Writable {
             } finally {
                 lock.writeLock().unlock();
             }
-            if (dbToDeleteInfos.isEmpty()) {
+            if (deleteInfos.isEmpty()) {
                 logIterator.remove();
             }
         }
