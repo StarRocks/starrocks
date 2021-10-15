@@ -261,6 +261,8 @@ CONF_Int64(index_stream_cache_capacity, "10737418240");
 CONF_String(storage_page_cache_limit, "0");
 // whether to disable page cache feature in storage
 CONF_Bool(disable_storage_page_cache, "true");
+// whether to disable column pool
+CONF_Bool(disable_column_pool, "false");
 
 CONF_mInt32(base_compaction_check_interval_seconds, "60");
 CONF_mInt64(base_compaction_num_cumulative_deltas, "5");
@@ -430,12 +432,6 @@ CONF_Bool(madvise_huge_pages, "false");
 
 // whether use mmap to allocate memory
 CONF_Bool(mmap_buffers, "false");
-
-// max memory can be allocated by buffer pool
-CONF_String(buffer_pool_limit, "80G");
-
-// clean page can be hold by buffer pool
-CONF_String(buffer_pool_clean_pages_limit, "20G");
 
 // Sleep time in seconds between memory maintenance iterations
 CONF_mInt64(memory_maintenance_sleep_time_s, "10");
