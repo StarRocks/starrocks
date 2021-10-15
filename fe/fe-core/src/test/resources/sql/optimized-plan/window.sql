@@ -379,3 +379,21 @@ select v1 from (select v1, row_number() over() from t0) temp limit 1;
 [result]
 SCAN (columns[1: v1] predicate[null]) Limit 1
 [end]
+
+[sql]
+select count(*) from (select v1, row_number() over (order by v2, v3) from t0) t
+[result]
+AGGREGATE ([GLOBAL] aggregate [{5: count()=count(5: count())}] group by [[]] having [null]
+    EXCHANGE GATHER
+        AGGREGATE ([LOCAL] aggregate [{5: count()=count()}] group by [[]] having [null]
+            SCAN (columns[1: v1] predicate[null])
+[end]
+
+[sql]
+select count(*) from (select v1, row_number() over (order by v2, v3) from t0 where v2 = 2) t
+[result]
+AGGREGATE ([GLOBAL] aggregate [{5: count()=count(5: count())}] group by [[]] having [null]
+    EXCHANGE GATHER
+        AGGREGATE ([LOCAL] aggregate [{5: count()=count()}] group by [[]] having [null]
+            SCAN (columns[2: v2] predicate[2: v2 = 2])
+[end]
