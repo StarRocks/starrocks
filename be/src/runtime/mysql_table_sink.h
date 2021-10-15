@@ -73,7 +73,6 @@ private:
     MysqlTableWriter* _writer = nullptr;
 
     RuntimeProfile* _profile = nullptr;
-    std::unique_ptr<MemTracker> _mem_tracker;
 };
 
 } // namespace starrocks

@@ -68,7 +68,6 @@ public:
     // It must be okay to call this multiple times. Subsequent calls should
     // be ignored.
     virtual Status close(RuntimeState* state, Status exec_status) {
-        _expr_mem_tracker->close();
         _closed = true;
         return Status::OK();
     }
@@ -90,7 +89,6 @@ protected:
     // Set to true after close() has been called. subclasses should check and set this in
     // close().
     bool _closed{false};
-    std::unique_ptr<MemTracker> _expr_mem_tracker;
 
     // Maybe this will be transferred to BufferControlBlock.
     std::shared_ptr<QueryStatistics> _query_statistics;

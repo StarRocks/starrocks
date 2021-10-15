@@ -275,10 +275,9 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     return Status::OK();
 }
 
-Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, const RowDescriptor& row_desc, MemTracker* tracker,
-                                             RuntimeProfile* p) {
+Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p) {
     if (_probe_expr_ctx != nullptr) {
-        RETURN_IF_ERROR(_probe_expr_ctx->prepare(state, row_desc, tracker));
+        RETURN_IF_ERROR(_probe_expr_ctx->prepare(state, row_desc));
     }
     _open_timestamp = UnixMillis();
     _latency_timer = ADD_COUNTER(p, strings::Substitute("JoinRuntimeFilter/$0/latency", _filter_id), TUnit::TIME_NS);
@@ -301,12 +300,12 @@ void RuntimeFilterProbeDescriptor::close(RuntimeState* state) {
 }
 
 void RuntimeFilterProbeDescriptor::replace_probe_expr_ctx(RuntimeState* state, const RowDescriptor& row_desc,
-                                                          MemTracker* tracker, ExprContext* new_probe_expr_ctx) {
+                                                          ExprContext* new_probe_expr_ctx) {
     // close old probe expr
     _probe_expr_ctx->close(state);
     // create new probe expr and open it.
     _probe_expr_ctx = state->obj_pool()->add(new ExprContext(new_probe_expr_ctx->root()));
-    _probe_expr_ctx->prepare(state, row_desc, tracker);
+    _probe_expr_ctx->prepare(state, row_desc);
     _probe_expr_ctx->open(state);
 }
 
@@ -339,12 +338,11 @@ RuntimeFilterProbeCollector::RuntimeFilterProbeCollector(RuntimeFilterProbeColle
           _input_chunk_nums(that._input_chunk_nums),
           _wait_timeout_ms(that._wait_timeout_ms) {}
 
-Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescriptor& row_desc, MemTracker* tracker,
-                                            RuntimeProfile* profile) {
+Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* profile) {
     _runtime_profile = profile;
     for (auto& it : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = it.second;
-        RETURN_IF_ERROR(rf_desc->prepare(state, row_desc, tracker, profile));
+        RETURN_IF_ERROR(rf_desc->prepare(state, row_desc, profile));
     }
     return Status::OK();
 }

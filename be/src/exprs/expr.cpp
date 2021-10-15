@@ -524,10 +524,9 @@ int Expr::compute_results_layout(const std::vector<ExprContext*>& ctxs, std::vec
     return compute_results_layout(exprs, offsets, var_result_begin);
 }
 
-Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state, const RowDescriptor& row_desc,
-                     MemTracker* tracker) {
+Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state, const RowDescriptor& row_desc) {
     for (auto ctx : ctxs) {
-        RETURN_IF_ERROR(ctx->prepare(state, row_desc, tracker));
+        RETURN_IF_ERROR(ctx->prepare(state, row_desc));
     }
     return Status::OK();
 }

@@ -62,11 +62,11 @@ Status UnionNode::prepare(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
 
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
-        RETURN_IF_ERROR(Expr::prepare(exprs, state, row_desc(), expr_mem_tracker()));
+        RETURN_IF_ERROR(Expr::prepare(exprs, state, row_desc()));
     }
 
     for (size_t i = 0; i < _child_expr_lists.size(); i++) {
-        RETURN_IF_ERROR(Expr::prepare(_child_expr_lists[i], state, child(i)->row_desc(), expr_mem_tracker()));
+        RETURN_IF_ERROR(Expr::prepare(_child_expr_lists[i], state, child(i)->row_desc()));
     }
 
     return Status::OK();

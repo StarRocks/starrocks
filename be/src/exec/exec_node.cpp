@@ -159,7 +159,7 @@ void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>*
         if ((*iter)->root()->is_bound(_tuple_ids)) {
             // LOG(INFO) << "push down success expr is " << (*iter)->debug_string()
             //          << " and node is " << debug_string();
-            (*iter)->prepare(state, row_desc(), _expr_mem_tracker.get());
+            (*iter)->prepare(state, row_desc());
             (*iter)->open(state);
             _conjunct_ctxs.push_back(*iter);
             iter = expr_ctxs->erase(iter);
@@ -225,10 +225,9 @@ Status ExecNode::prepare(RuntimeState* state) {
             "");
     _mem_tracker.reset(
             new MemTracker(_runtime_profile.get(), -1, _runtime_profile->name(), state->instance_mem_tracker()));
-    _expr_mem_tracker.reset(new MemTracker(-1, "Exprs", _mem_tracker.get()));
     _expr_mem_pool.reset(new MemPool());
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc(), expr_mem_tracker()));
-    RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, row_desc(), expr_mem_tracker(), _runtime_profile.get()));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc()));
+    RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, row_desc(), _runtime_profile.get()));
 
     // TODO(zc):
     // AddExprCtxsToFree(_conjunct_ctxs);
@@ -357,10 +356,6 @@ Status ExecNode::close(RuntimeState* state) {
 
     if (expr_mem_pool() != nullptr) {
         _expr_mem_pool->free_all();
-    }
-
-    if (_expr_mem_tracker != nullptr) {
-        _expr_mem_tracker->close();
     }
 
     if (_mem_tracker != nullptr) {
