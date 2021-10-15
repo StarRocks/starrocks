@@ -179,8 +179,6 @@ Status ESScanReader::get_next(bool* scan_eos, std::unique_ptr<T>& scroll_parser)
     return Status::OK();
 }
 
-template Status ESScanReader::get_next<ScrollParser>(bool* scan_eos, std::unique_ptr<ScrollParser>& scroll_parser);
-
 template Status ESScanReader::get_next<vectorized::ScrollParser>(
         bool* scan_eos, std::unique_ptr<vectorized::ScrollParser>& scroll_parser);
 

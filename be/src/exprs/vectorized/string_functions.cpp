@@ -9,12 +9,14 @@
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/nullable_column.h"
 #include "common/status.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/math_functions.h"
 #include "exprs/vectorized/unary_function.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
+#include "storage/olap_define.h"
 #include "util/raw_container.h"
 #include "util/sm3.h"
 #include "util/utf8.h"
@@ -889,31 +891,37 @@ void fast_repeat(uint8_t* dst, const uint8_t* src, size_t src_size, int32_t repe
 
 static inline ColumnPtr repeat_const_not_null(const Columns& columns, const BinaryColumn* src) {
     auto times = ColumnHelper::get_const_value<TYPE_INT>(columns[1]);
-    auto& src_bytes = src->get_bytes();
+
     auto& src_offsets = src->get_offset();
     const auto num_rows = src->size();
-    const auto bytes_size = src_bytes.size();
 
-    auto result = BinaryColumn::create();
-    auto& dst_bytes = result->get_bytes();
-    auto& dst_offsets = result->get_offset();
+    NullableBinaryColumnBuilder builder;
+    auto& dst_nulls = builder.get_null_data();
+    auto& dst_offsets = builder.data_column()->get_offset();
+    auto& dst_bytes = builder.data_column()->get_bytes();
+
+    dst_nulls.resize(num_rows);
+    bool has_null = false;
+
     if (times <= 0) {
         dst_offsets.resize(num_rows + 1);
-        return result;
-    } else if (times == 1) {
-        dst_offsets = src_offsets;
-        dst_bytes = src_bytes;
-        return result;
+        return builder.build(ColumnHelper::is_all_const(columns));
     } else {
         raw::make_room(&dst_offsets, num_rows + 1);
         dst_offsets[0] = 0;
-        constexpr auto LIMIT = std::numeric_limits<size_t>::max();
-        auto reserved = num_rows * OLAP_STRING_MAX_LENGTH;
-        if (LIMIT / times > bytes_size) {
-            reserved = std::min(reserved, times * bytes_size);
+        size_t reserved = times * src_offsets.back();
+        if (reserved > OLAP_STRING_MAX_LENGTH * num_rows) {
+            reserved = 0;
+            for (int i = 0; i < num_rows; ++i) {
+                auto slice_sz = src_offsets[i + 1] - src_offsets[i];
+                if (slice_sz * times < OLAP_STRING_MAX_LENGTH) {
+                    reserved += slice_sz * times;
+                }
+            }
         }
         dst_bytes.resize(reserved);
     }
+
     uint8_t* dst_curr = dst_bytes.data();
     size_t dst_off = 0;
     for (auto i = 0; i < num_rows; ++i) {
@@ -922,16 +930,24 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
             dst_offsets[i + 1] = dst_off;
             continue;
         }
-        auto real_times = std::min(times, (int32_t)(OLAP_STRING_MAX_LENGTH / s.size));
-        real_times = std::max(real_times, 1);
-        fast_repeat(dst_curr, (uint8_t*)s.data, s.size, real_times);
-        const size_t dst_slice_size = s.size * real_times;
+        // if result exceed STRING_MAX_LENGTH
+        // return null
+        if (s.size * times > OLAP_STRING_MAX_LENGTH) {
+            dst_nulls[i] = 1;
+            has_null = true;
+            dst_offsets[i + 1] = dst_off;
+            continue;
+        }
+        fast_repeat(dst_curr, (uint8_t*)s.data, s.size, times);
+        const size_t dst_slice_size = s.size * times;
         dst_curr += dst_slice_size;
         dst_off += dst_slice_size;
         dst_offsets[i + 1] = dst_off;
     }
+
     dst_bytes.resize(dst_off);
-    return result;
+    builder.set_has_null(has_null);
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 static inline ColumnPtr repeat_const(const Columns& columns) {
@@ -953,6 +969,7 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
 
     bool has_null = false;
     size_t dst_off = 0;
+
     for (int i = 0; i < num_rows; ++i) {
         if (str_viewer.is_null(i) || times_viewer.is_null(i)) {
             dst_nulls[i] = 1;
@@ -968,8 +985,14 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
 
         auto s = str_viewer.value(i);
         int32_t n = times_viewer.value(i);
-        n = std::min(n, (int32_t)(OLAP_STRING_MAX_LENGTH / s.size));
-        n = std::max(n, 1);
+
+        if (s.size * n > OLAP_STRING_MAX_LENGTH) {
+            dst_nulls[i] = 1;
+            has_null = true;
+            dst_offsets[i + 1] = dst_off;
+            continue;
+        }
+
         dst_off += n * s.size;
         dst_offsets[i + 1] = dst_off;
     }

@@ -47,7 +47,6 @@ set(EXEC_FILES
     es/es_predicate.cpp
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
-    es/es_scroll_parser.cpp
     es/es_query_builder.cpp
     local_file_writer.cpp
     broker_writer.cpp
@@ -132,6 +131,7 @@ set(EXEC_FILES
     pipeline/exchange/local_exchange_source_operator.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
+    pipeline/operator_with_dependency.cpp
     pipeline/limit_operator.cpp
     pipeline/olap_chunk_source.cpp
     pipeline/pipeline_builder.cpp

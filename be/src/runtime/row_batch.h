@@ -27,8 +27,6 @@
 
 #include "codegen/starrocks_ir.h"
 #include "common/logging.h"
-#include "runtime/buffered_block_mgr2.h" // for BufferedBlockMgr2::Block
-#include "runtime/bufferpool/buffer_pool.h"
 #include "runtime/descriptors.h"
 #include "runtime/disk_io_mgr.h"
 #include "runtime/mem_pool.h"
@@ -36,7 +34,6 @@
 
 namespace starrocks {
 
-class BufferedTupleStream2;
 class TRowBatch;
 class Tuple;
 class TupleRow;

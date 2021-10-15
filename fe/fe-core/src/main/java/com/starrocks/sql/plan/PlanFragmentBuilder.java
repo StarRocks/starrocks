@@ -451,6 +451,7 @@ public class PlanFragmentBuilder {
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getPlanCtx().getNextFragmentId(), scanNode, DataPartition.RANDOM);
+            fragment.setGlobalDicts(node.getGlobalDicts());
             context.getFragments().add(fragment);
             return fragment;
         }
@@ -1007,6 +1008,7 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getPlanCtx().getNextFragmentId(), exchangeNode, dataPartition);
+            fragment.setGlobalDicts(distribution.getGlobalDicts());
             inputFragment.setDestination(exchangeNode);
             inputFragment.setOutputPartition(dataPartition);
 

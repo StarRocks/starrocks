@@ -31,7 +31,6 @@
 #include "common/status.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/bufferpool/buffer_pool.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 #include "runtime/query_statistics.h"
@@ -312,19 +311,7 @@ protected:
     // Account for peak memory used by this node
     RuntimeProfile::Counter* _memory_used_counter;
 
-    // Execution options that are determined at runtime.  This is added to the
-    // runtime profile at close().  Examples for options logged here would be
-    // "Codegen Enabled"
-    std::mutex _exec_options_lock;
-    std::string _runtime_exec_options;
-
     bool _use_vectorized;
-
-    /// Buffer pool client for this node. Initialized with the node's minimum reservation
-    /// in ClaimBufferReservation(). After initialization, the client must hold onto at
-    /// least the minimum reservation so that it can be returned to the initial
-    /// reservations pool in Close().
-    BufferPool::ClientHandle _buffer_pool_client;
 
     ExecNode* child(int i) { return _children[i]; }
 

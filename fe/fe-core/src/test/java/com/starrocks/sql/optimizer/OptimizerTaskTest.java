@@ -88,8 +88,7 @@ public class OptimizerTaskTest {
             call.getFunction();
             minTimes = 0;
             result = AggregateFunction.createBuiltin("sum",
-                    Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, "init", "update", "merge", null,
-                    null, "remove", null, false, true, false);
+                    Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
         }};
 
         columnRefFactory = new ColumnRefFactory();
@@ -702,8 +701,7 @@ public class OptimizerTaskTest {
                 call.getFunction();
                 minTimes = 0;
                 result = AggregateFunction.createBuiltin("sum",
-                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, "init", "update", "merge", null,
-                        null, "remove", null, false, true, false);
+                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT,false, true, false);
             }
         };
 
@@ -1141,8 +1139,7 @@ public class OptimizerTaskTest {
 
                 call.getFunction();
                 result = AggregateFunction.createBuiltin("sum",
-                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, "init", "update", "merge", null,
-                        null, "remove", null, false, true, false);
+                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT,false, true, false);
                 minTimes = 0;
             }
         };
@@ -1219,8 +1216,7 @@ public class OptimizerTaskTest {
 
             call.getFunction();
             result = AggregateFunction.createBuiltin("count",
-                    Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, "init", "update", "merge", null,
-                    null, "remove", null, false, true, false);
+                    Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
             minTimes = 0;
         }};
 

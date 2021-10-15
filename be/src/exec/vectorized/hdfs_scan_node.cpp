@@ -65,7 +65,7 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _hive_column_names = tnode.hdfs_scan_node.hive_column_names;
     }
 
-    _mem_pool = std::make_unique<MemPool>(state->fragment_mem_tracker());
+    _mem_pool = std::make_unique<MemPool>(state->instance_mem_tracker());
 
     return Status::OK();
 }
