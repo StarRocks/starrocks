@@ -119,7 +119,6 @@ private:
     bool _selected_in_use = false;
     uint8_t _block_status = 0;
 
-    std::unique_ptr<MemTracker> _tracker;
     std::unique_ptr<MemPool> _mem_pool;
     uint16_t _limit;
 };

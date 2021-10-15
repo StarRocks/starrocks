@@ -55,8 +55,7 @@ struct TestComparator {
 class SkipTest : public testing::Test {};
 
 TEST_F(SkipTest, Empty) {
-    std::unique_ptr<MemTracker> tracker(new MemTracker(-1));
-    std::unique_ptr<MemPool> mem_pool(new MemPool(tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
 
     TestComparator cmp;
     SkipList<Key, TestComparator> list(cmp, mem_pool.get(), false);
@@ -73,8 +72,7 @@ TEST_F(SkipTest, Empty) {
 }
 
 TEST_F(SkipTest, InsertAndLookup) {
-    std::unique_ptr<MemTracker> tracker(new MemTracker(-1));
-    std::unique_ptr<MemPool> mem_pool(new MemPool(tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
 
     const int N = 2000;
     const int R = 5000;
@@ -153,8 +151,7 @@ TEST_F(SkipTest, InsertAndLookup) {
 
 // Only non-DUP model will use Find() and InsertWithHint().
 TEST_F(SkipTest, InsertWithHintNoneDupModel) {
-    std::unique_ptr<MemTracker> tracker(new MemTracker(-1));
-    std::unique_ptr<MemPool> mem_pool(new MemPool(tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
 
     const int N = 2000;
     const int R = 5000;
@@ -269,7 +266,7 @@ private:
 public:
     ConcurrentTest()
             : _mem_tracker(new MemTracker(-1)),
-              _mem_pool(new MemPool(_mem_tracker.get())),
+              _mem_pool(new MemPool()),
               _list(TestComparator(), _mem_pool.get(), false) {}
 
     // REQUIRES: External synchronization

@@ -932,7 +932,7 @@ bool RowBlockMerger::merge(const std::vector<RowBlock*>& row_block_arr, RowsetWr
     // TODO: add mem_tracker for ObjectPool?
     DeferOp release_object_pool_memory(
             [this] { return this->_mem_tracker->release(this->_mem_tracker->consumption()); });
-    std::unique_ptr<MemPool> mem_pool(new MemPool(_mem_tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
     std::unique_ptr<ObjectPool> agg_object_pool(new ObjectPool());
 
     RowCursor row_cursor;

@@ -40,8 +40,7 @@ void validate_string(const std::string& std_str, const StringBuffer& str) {
 }
 
 TEST(StringBufferTest, Basic) {
-    MemTracker tracker;
-    MemPool pool(&tracker);
+    MemPool pool;
     StringBuffer str(&pool);
     std::string std_str;
 

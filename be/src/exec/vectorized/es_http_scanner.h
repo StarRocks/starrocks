@@ -51,7 +51,6 @@ private:
     int _next_range;
     bool _line_eof;
     bool _batch_eof;
-    std::unique_ptr<MemTracker> _mem_tracker;
     MemPool _mem_pool;
 
     const TupleDescriptor* _tuple_desc;

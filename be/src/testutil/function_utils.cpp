@@ -33,16 +33,14 @@ namespace starrocks {
 FunctionUtils::FunctionUtils() {
     starrocks_udf::FunctionContext::TypeDesc return_type;
     std::vector<starrocks_udf::FunctionContext::TypeDesc> arg_types;
-    _mem_tracker = new MemTracker();
-    _memory_pool = new MemPool(_mem_tracker);
+    _memory_pool = new MemPool();
     _fn_ctx = FunctionContextImpl::create_context(_state, _memory_pool, return_type, arg_types, 0, false);
 }
 FunctionUtils::FunctionUtils(RuntimeState* state) {
     _state = state;
     starrocks_udf::FunctionContext::TypeDesc return_type;
     std::vector<starrocks_udf::FunctionContext::TypeDesc> arg_types;
-    _mem_tracker = new MemTracker();
-    _memory_pool = new MemPool(_mem_tracker);
+    _memory_pool = new MemPool();
     _fn_ctx = FunctionContextImpl::create_context(_state, _memory_pool, return_type, arg_types, 0, false);
 }
 
@@ -50,7 +48,6 @@ FunctionUtils::~FunctionUtils() {
     _fn_ctx->impl()->close();
     delete _fn_ctx;
     delete _memory_pool;
-    delete _mem_tracker;
 }
 
 } // namespace starrocks

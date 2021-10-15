@@ -29,8 +29,7 @@ VectorizedRowBatch::VectorizedRowBatch(const TabletSchema* schema, const std::ve
     _selected_in_use = false;
     _size = 0;
 
-    _tracker = std::make_unique<MemTracker>(-1);
-    _mem_pool = std::make_unique<MemPool>(_tracker.get());
+    _mem_pool = std::make_unique<MemPool>();
 
     _selected = reinterpret_cast<uint16_t*>(new char[sizeof(uint16_t) * _capacity]);
 

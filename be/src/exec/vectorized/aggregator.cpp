@@ -180,7 +180,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* me
         RETURN_IF_ERROR(Expr::prepare(ctx, state, _child_row_desc, expr_mem_tracker));
     }
 
-    _mem_pool = std::make_unique<MemPool>(_mem_tracker);
+    _mem_pool = std::make_unique<MemPool>();
 
     // Initial for FunctionContext of every aggregate functions
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
