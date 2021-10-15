@@ -39,7 +39,8 @@ Status TabletReader::prepare() {
 }
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
-    if (read_params.reader_type != ReaderType::READER_QUERY && !is_compaction(read_params.reader_type)) {
+    if (read_params.reader_type != ReaderType::READER_QUERY && !is_compaction(read_params.reader_type) &&
+        read_params.reader_type != ReaderType::READER_CHECKSUM) {
         return Status::NotSupported("reader type not supported now");
     }
     Status st = _init_collector(read_params);
