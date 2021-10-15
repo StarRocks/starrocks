@@ -2209,6 +2209,7 @@ public class Catalog {
             protected void runAfterCatalogReady() {
                 loadManager.removeOldLoadJob();
                 exportMgr.removeOldExportJobs();
+                deleteHandler.removeOldDeleteInfo();
             }
         };
     }

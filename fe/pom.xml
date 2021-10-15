@@ -164,6 +164,13 @@ under the License.
                 <version>2.2</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/commons-net/commons-net -->
+            <dependency>
+                <groupId>commons-net</groupId>
+                <artifactId>commons-net</artifactId>
+                <version>3.7.2</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->
             <dependency>
                 <groupId>commons-validator</groupId>
