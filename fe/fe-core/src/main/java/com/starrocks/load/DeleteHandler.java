@@ -802,11 +802,11 @@ public class DeleteHandler implements Writable {
                         --numJobsToRemove;
                     }
                 }
+                if (deleteInfos.isEmpty()) {
+                    logIterator.remove();
+                }
             } finally {
                 lock.writeLock().unlock();
-            }
-            if (deleteInfos.isEmpty()) {
-                logIterator.remove();
             }
         }
     }
