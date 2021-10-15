@@ -7,7 +7,7 @@
 namespace starrocks {
 
 static const size_t second_in_ns = size_t(1000) * 1000 * 1000;
-static const size_t gc_period = 120;                                     // 120 second
+static const size_t gc_period = 180;                                     // 180 second
 static const MonoDelta delta = MonoDelta::FromNanoseconds(second_in_ns); // 1 second
 
 TEST(TestGCHelper, TestNormalDecrease) {

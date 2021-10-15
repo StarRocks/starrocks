@@ -72,7 +72,7 @@ void* tcmalloc_gc_thread(void* dummy) {
     using namespace starrocks::vectorized;
     const static float kFreeRatio = 0.5;
     uint64_t tick = 0;
-    GCHelper gch(120 /* second */, MonoTime::Now());
+    GCHelper gch(config::tc_gc_period, MonoTime::Now());
     while (true) {
         ++tick;
         sleep(1);

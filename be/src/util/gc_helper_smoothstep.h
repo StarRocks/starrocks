@@ -6,7 +6,7 @@
 
 namespace starrocks {
 
-#define SMOOTHSTEP_NSTEPS 120
+#define SMOOTHSTEP_NSTEPS 180
 #define SMOOTHSTEP_BFP 24
 
 size_t get_smoothstep_at(size_t index);
