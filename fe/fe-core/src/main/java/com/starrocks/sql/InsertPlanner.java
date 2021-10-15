@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
@@ -43,7 +44,6 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
-import org.apache.parquet.Preconditions;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -146,11 +146,11 @@ public class InsertPlanner {
 
     OptExprBuilder fillDefaultValue(LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
                                     InsertRelation insertRelation, List<ColumnRefOperator> outputColumns) {
-        List<Column> fullSchema = insertRelation.getTargetTable().getFullSchema();
+        List<Column> baseSchema = insertRelation.getTargetTable().getBaseSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
-        for (int columnIdx = 0; columnIdx < insertRelation.getTargetTable().getBaseSchema().size(); ++columnIdx) {
-            Column targetColumn = fullSchema.get(columnIdx);
+        for (int columnIdx = 0; columnIdx < baseSchema.size(); ++columnIdx) {
+            Column targetColumn = baseSchema.get(columnIdx);
             if (insertRelation.getTargetColumnNames() == null) {
                 outputColumns.add(logicalPlan.getOutputColumn().get(columnIdx));
                 columnRefMap.put(logicalPlan.getOutputColumn().get(columnIdx),
@@ -184,7 +184,7 @@ public class InsertPlanner {
         List<Column> fullSchema = insertRelation.getTargetTable().getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
-        for (int columnIdx = 0; columnIdx < insertRelation.getTargetTable().getFullSchema().size(); ++columnIdx) {
+        for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
             Column targetColumn = fullSchema.get(columnIdx);
 
             if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
@@ -192,8 +192,12 @@ public class InsertPlanner {
                 Column originColumn = fullSchema.stream()
                         .filter(c -> c.nameEquals(originName, false)).findFirst().get();
                 ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
-                outputColumns.add(originColRefOp);
-                columnRefMap.put(originColRefOp, originColRefOp);
+
+                ColumnRefOperator columnRefOperator = columnRefFactory.create(
+                        targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
+
+                outputColumns.add(columnRefOperator);
+                columnRefMap.put(columnRefOperator, new CastOperator(targetColumn.getType(), originColRefOp, true));
                 continue;
             }
 
@@ -225,7 +229,20 @@ public class InsertPlanner {
                 continue;
             }
 
-            columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
+            // columnIdx >= outputColumns.size() mean this is a new add schema change column
+            if (columnIdx >= outputColumns.size()) {
+                ColumnRefOperator columnRefOperator = columnRefFactory.create(
+                        targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
+                outputColumns.add(columnRefOperator);
+
+                if (targetColumn.getDefaultValue() == null) {
+                    columnRefMap.put(columnRefOperator, ConstantOperator.createNull(targetColumn.getType()));
+                } else {
+                    columnRefMap.put(columnRefOperator, ConstantOperator.createVarchar(targetColumn.getDefaultValue()));
+                }
+            } else {
+                columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
+            }
         }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
