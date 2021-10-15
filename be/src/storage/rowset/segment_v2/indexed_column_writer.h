@@ -96,7 +96,6 @@ private:
     TypeInfoPtr _typeinfo;
     fs::WritableBlock* _wblock;
     // only used for `_first_value`
-    MemTracker _mem_tracker;
     MemPool _mem_pool;
 
     ordinal_t _num_values;

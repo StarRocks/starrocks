@@ -33,7 +33,7 @@ Status ExceptNode::prepare(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
 
     DCHECK(_tuple_desc != nullptr);
-    _build_pool = std::make_unique<MemPool>(mem_tracker());
+    _build_pool = std::make_unique<MemPool>();
 
     _build_set_timer = ADD_TIMER(runtime_profile(), "BuildSetTime");
     _erase_duplicate_row_timer = ADD_TIMER(runtime_profile(), "EraseDuplicateRowTime");

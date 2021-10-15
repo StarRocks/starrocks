@@ -41,7 +41,7 @@ class BitmapIndexTest : public testing::Test {
 public:
     const std::string kTestDir = "/bitmap_index_test";
 
-    BitmapIndexTest() : _pool(&_tracker) {}
+    BitmapIndexTest() {}
 
 protected:
     void SetUp() override {

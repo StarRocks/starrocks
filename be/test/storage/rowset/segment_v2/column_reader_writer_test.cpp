@@ -55,7 +55,7 @@ static const std::string TEST_DIR = "/column_reader_writer_test";
 
 class ColumnReaderWriterTest : public testing::Test {
 public:
-    ColumnReaderWriterTest() : _pool(&_tracker) {}
+    ColumnReaderWriterTest() {}
 
     ~ColumnReaderWriterTest() override = default;
 
@@ -202,8 +202,7 @@ protected:
                 st = iter.seek_to_first();
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                auto tracker = std::make_shared<MemTracker>();
-                MemPool pool(tracker.get());
+                MemPool pool;
                 std::unique_ptr<ColumnVectorBatch> cvb;
                 ColumnVectorBatch::create(0, true, type_info, nullptr, &cvb);
                 cvb->resize(1024);
@@ -230,8 +229,7 @@ protected:
             }
 
             {
-                auto tracker = std::make_shared<MemTracker>();
-                MemPool pool(tracker.get());
+                MemPool pool;
                 std::unique_ptr<ColumnVectorBatch> cvb;
                 ColumnVectorBatch::create(0, true, type_info, nullptr, &cvb);
                 cvb->resize(1024);

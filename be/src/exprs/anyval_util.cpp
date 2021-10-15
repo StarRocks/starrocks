@@ -21,7 +21,6 @@
 
 #include "exprs/anyval_util.h"
 
-#include "common/compiler_util.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 
@@ -43,75 +42,6 @@ using starrocks_udf::AnyVal;
 // Our new vectorized query executor is more powerful and stable than old query executor,
 // The executor query executor related codes could be deleted safely.
 // TODO: Remove old query executor related codes before 2021-09-30
-
-Status allocate_any_val(RuntimeState* state, MemPool* pool, const TypeDescriptor& type,
-                        const std::string& mem_limit_exceeded_msg, AnyVal** result) {
-    const int anyval_size = AnyValUtil::any_val_size(type);
-    const int anyval_alignment = AnyValUtil::any_val_alignment(type);
-    *result = reinterpret_cast<AnyVal*>(pool->try_allocate_aligned(anyval_size, anyval_alignment));
-    if (*result == nullptr) {
-        return pool->mem_tracker()->MemLimitExceeded(state, mem_limit_exceeded_msg, anyval_size);
-    }
-    DIAGNOSTIC_PUSH
-    DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-    memset(*result, 0, anyval_size);
-    DIAGNOSTIC_POP
-    return Status::OK();
-}
-
-AnyVal* create_any_val(ObjectPool* pool, const TypeDescriptor& type) {
-    switch (type.type) {
-    case TYPE_NULL:
-        return pool->add(new AnyVal);
-
-    case TYPE_BOOLEAN:
-        return pool->add(new BooleanVal);
-
-    case TYPE_TINYINT:
-        return pool->add(new TinyIntVal);
-
-    case TYPE_SMALLINT:
-        return pool->add(new SmallIntVal);
-
-    case TYPE_INT:
-        return pool->add(new IntVal);
-
-    case TYPE_BIGINT:
-        return pool->add(new BigIntVal);
-
-    case TYPE_LARGEINT:
-        return pool->add(new LargeIntVal);
-
-    case TYPE_FLOAT:
-        return pool->add(new FloatVal);
-
-    case TYPE_TIME:
-    case TYPE_DOUBLE:
-        return pool->add(new DoubleVal);
-
-    case TYPE_CHAR:
-    case TYPE_HLL:
-    case TYPE_VARCHAR:
-    case TYPE_OBJECT:
-    case TYPE_PERCENTILE:
-        return pool->add(new StringVal);
-
-    case TYPE_DECIMAL:
-        return pool->add(new DecimalVal);
-
-    case TYPE_DECIMALV2:
-        return pool->add(new DecimalV2Val);
-
-    case TYPE_DATE:
-        return pool->add(new DateTimeVal);
-
-    case TYPE_DATETIME:
-        return pool->add(new DateTimeVal);
-    default:
-        DCHECK(false) << "Unsupported type: " << type.type;
-        return nullptr;
-    }
-}
 
 FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescriptor& type) {
     FunctionContext::TypeDesc out;

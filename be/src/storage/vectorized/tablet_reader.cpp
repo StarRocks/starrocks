@@ -21,7 +21,7 @@
 namespace starrocks::vectorized {
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema)
-        : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version), _mempool(&_memtracker) {}
+        : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version) {}
 
 void TabletReader::close() {
     if (_collect_iter != nullptr) {

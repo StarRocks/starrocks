@@ -46,8 +46,6 @@ IndexedColumnWriter::IndexedColumnWriter(const IndexedColumnWriterOptions& optio
         : _options(options),
           _typeinfo(std::move(typeinfo)),
           _wblock(wblock),
-          _mem_tracker(-1),
-          _mem_pool(&_mem_tracker),
           _num_values(0),
           _num_data_pages(0),
           _validx_key_coder(nullptr),

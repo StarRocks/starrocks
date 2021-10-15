@@ -39,7 +39,6 @@ public:
 
 private:
     RuntimeState* _state = nullptr;
-    MemTracker* _mem_tracker = nullptr;
     MemPool* _memory_pool = nullptr;
     starrocks_udf::FunctionContext* _fn_ctx = nullptr;
 };

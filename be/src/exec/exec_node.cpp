@@ -226,7 +226,7 @@ Status ExecNode::prepare(RuntimeState* state) {
     _mem_tracker.reset(
             new MemTracker(_runtime_profile.get(), -1, _runtime_profile->name(), state->instance_mem_tracker()));
     _expr_mem_tracker.reset(new MemTracker(-1, "Exprs", _mem_tracker.get()));
-    _expr_mem_pool.reset(new MemPool(_expr_mem_tracker.get()));
+    _expr_mem_pool.reset(new MemPool());
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc(), expr_mem_tracker()));
     RETURN_IF_ERROR(_runtime_filter_collector.prepare(state, row_desc(), expr_mem_tracker(), _runtime_profile.get()));
 

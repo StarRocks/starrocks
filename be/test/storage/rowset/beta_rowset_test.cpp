@@ -234,8 +234,7 @@ TEST_F(BetaRowsetTest, BasicFunctionTest) {
         // k2 := k1 * 10
         // k3 := 4096 * i + rid
         for (int i = 0; i < num_segments; ++i) {
-            MemTracker mem_tracker(-1);
-            MemPool mem_pool(&mem_tracker);
+            MemPool mem_pool;
             for (int rid = 0; rid < rows_per_segment; ++rid) {
                 uint32_t k1 = rid * 10 + i;
                 uint32_t k2 = k1 * 10;
@@ -429,8 +428,7 @@ TEST_F(BetaRowsetTest, DiscontinuousRowidTest) {
         input_row.init(tablet_schema);
 
         for (int i = 0; i < num_segments; ++i) {
-            MemTracker mem_tracker(-1);
-            MemPool mem_pool(&mem_tracker);
+            MemPool mem_pool;
             for (int rid = 0; rid < rows_per_segment; ++rid) {
                 uint32_t k1 = rid;
                 uint32_t k2 = rid;
@@ -538,8 +536,7 @@ TEST_F(BetaRowsetTest, DiscontinuousRowid1Test) {
         input_row.init(tablet_schema);
 
         for (int i = 0; i < num_segments; ++i) {
-            MemTracker mem_tracker(-1);
-            MemPool mem_pool(&mem_tracker);
+            MemPool mem_pool;
             for (int rid = 0; rid < rows_per_segment; ++rid) {
                 uint32_t k1 = rid;
                 uint32_t k2 = rid;

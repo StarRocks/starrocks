@@ -463,8 +463,7 @@ struct AggHashMapWithSerializedKey {
     HashMap hash_map;
 
     AggHashMapWithSerializedKey()
-            : tracker(std::make_unique<MemTracker>()),
-              mem_pool(std::make_unique<MemPool>(tracker.get())),
+            : mem_pool(std::make_unique<MemPool>()),
               buffer(mem_pool->allocate(max_one_row_size * config::vector_chunk_size)) {}
 
     template <typename Func>
@@ -563,7 +562,6 @@ struct AggHashMapWithSerializedKey {
     Buffer<uint32_t> slice_sizes;
     uint32_t max_one_row_size = 8;
 
-    std::unique_ptr<MemTracker> tracker;
     std::unique_ptr<MemPool> mem_pool;
     uint8_t* buffer;
     ResultVector results;
@@ -588,7 +586,7 @@ struct AggHashMapWithSerializedKeyFixedSize {
     std::vector<CacheEntry> caches;
 
     AggHashMapWithSerializedKeyFixedSize()
-            : tracker(std::make_unique<MemTracker>()), mem_pool(std::make_unique<MemPool>(tracker.get())) {
+            : mem_pool(std::make_unique<MemPool>()) {
         caches.reserve(config::vector_chunk_size);
         uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
         memset(buffer, 0x0, max_fixed_size * config::vector_chunk_size);
@@ -704,7 +702,6 @@ struct AggHashMapWithSerializedKeyFixedSize {
     static constexpr bool has_single_null_key = false;
 
     Buffer<uint32_t> slice_sizes;
-    std::unique_ptr<MemTracker> tracker;
     std::unique_ptr<MemPool> mem_pool;
     ResultVector results;
     std::vector<Slice> tmp_slices;

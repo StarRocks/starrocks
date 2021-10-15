@@ -70,7 +70,7 @@ public:
     using MemoryIndexType = typename BitmapIndexTraits<CppType>::MemoryIndexType;
 
     explicit BitmapIndexWriterImpl(TypeInfoPtr type_info)
-            : _typeinfo(std::move(type_info)), _reverted_index_size(0), _pool(&_tracker) {}
+            : _typeinfo(std::move(type_info)), _reverted_index_size(0) {}
 
     ~BitmapIndexWriterImpl() override = default;
 

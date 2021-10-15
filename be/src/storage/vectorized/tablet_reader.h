@@ -51,8 +51,6 @@ private:
 
     TabletSharedPtr _tablet;
     Version _version;
-
-    MemTracker _memtracker;
     MemPool _mempool;
 
     PredicateMap _pushdown_predicates;

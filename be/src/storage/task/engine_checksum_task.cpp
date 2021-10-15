@@ -95,13 +95,8 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
     }
 
     RowCursor row;
-    std::unique_ptr<MemTracker> tracker(new MemTracker(-1));
 
-    // release the memory of object pool.
-    // The memory of object allocate from ObjectPool is recorded in the mem_tracker.
-    // TODO: add mem_tracker for ObjectPool?
-    DeferOp release_object_pool_memory([&tracker] { return tracker->release(tracker->consumption()); });
-    std::unique_ptr<MemPool> mem_pool(new MemPool(tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
     std::unique_ptr<ObjectPool> agg_object_pool(new ObjectPool());
     res = row.init(tablet->tablet_schema(), reader_params.return_columns);
     if (res != OLAP_SUCCESS) {

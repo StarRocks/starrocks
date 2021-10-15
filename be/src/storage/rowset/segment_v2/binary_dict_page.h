@@ -108,7 +108,6 @@ private:
     // query for dict item -> dict id
     phmap::flat_hash_map<std::string, uint32_t, HashOfSlice, Eq> _dictionary;
     // TODO(zc): rethink about this mem pool
-    MemTracker _tracker;
     MemPool _pool;
     faststring _first_value;
 };

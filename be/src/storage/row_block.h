@@ -126,7 +126,6 @@ private:
     size_t _limit = 0;
     uint8_t _block_status = DEL_PARTIAL_SATISFIED;
 
-    std::unique_ptr<MemTracker> _tracker;
     std::unique_ptr<MemPool> _mem_pool;
 
     RowBlock(const RowBlock&) = delete;

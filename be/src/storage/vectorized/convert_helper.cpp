@@ -934,7 +934,6 @@ Status BlockConverter::convert(::starrocks::RowBlockV2* dst, ::starrocks::RowBlo
                                 src->_selection_vector, src->_selected_size);
     }
     std::swap(dst->_num_rows, src->_num_rows);
-    std::swap(dst->_tracker, src->_tracker);
     std::swap(dst->_pool, src->_pool);
     std::swap(dst->_selection_vector, src->_selection_vector);
     std::swap(dst->_selected_size, src->_selected_size);

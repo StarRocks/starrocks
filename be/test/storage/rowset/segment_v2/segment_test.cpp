@@ -774,8 +774,7 @@ TEST_F(SegmentReaderWriterTest, TestDefaultValueColumn) {
 
 TEST_F(SegmentReaderWriterTest, TestStringDict) {
     size_t num_rows_per_block = 10;
-    MemTracker tracker;
-    MemPool pool(&tracker);
+    MemPool pool;
 
     std::shared_ptr<TabletSchema> tablet_schema(new TabletSchema());
     tablet_schema->_num_key_columns = 3;

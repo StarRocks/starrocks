@@ -317,8 +317,7 @@ struct AggHashSetOfSerializedKey {
     HashSet hash_set;
 
     AggHashSetOfSerializedKey()
-            : _tracker(std::make_unique<MemTracker>()),
-              _mem_pool(std::make_unique<MemPool>(_tracker.get())),
+            : _mem_pool(std::make_unique<MemPool>()),
               _buffer(_mem_pool->allocate(max_one_row_size * config::vector_chunk_size)) {}
 
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
@@ -409,7 +408,6 @@ struct AggHashSetOfSerializedKey {
     Buffer<uint32_t> slice_sizes;
     size_t max_one_row_size = 8;
 
-    std::unique_ptr<MemTracker> _tracker;
     std::unique_ptr<MemPool> _mem_pool;
     uint8_t* _buffer;
     ResultVector results;
@@ -428,8 +426,7 @@ struct AggHashSetOfSerializedKeyFixedSize {
     static constexpr size_t max_fixed_size = sizeof(FixedSizeSliceKey);
 
     AggHashSetOfSerializedKeyFixedSize()
-            : _tracker(std::make_unique<MemTracker>()),
-              _mem_pool(std::make_unique<MemPool>(_tracker.get())),
+            : _mem_pool(std::make_unique<MemPool>()),
               buffer(_mem_pool->allocate(max_fixed_size * config::vector_chunk_size)) {
         memset(buffer, 0x0, max_fixed_size * config::vector_chunk_size);
     }
@@ -522,7 +519,6 @@ struct AggHashSetOfSerializedKeyFixedSize {
     static constexpr bool has_single_null_key = false;
 
     Buffer<uint32_t> slice_sizes;
-    std::unique_ptr<MemTracker> _tracker;
     std::unique_ptr<MemPool> _mem_pool;
     uint8_t* buffer;
     ResultVector results;
