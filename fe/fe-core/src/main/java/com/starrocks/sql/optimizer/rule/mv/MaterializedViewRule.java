@@ -763,7 +763,8 @@ public class MaterializedViewRule extends Rule {
 
         ColumnRefOperator mvColumnRef = factory.getColumnRef(mvColumnFnChild0.getUsedColumns().getFirstId());
         Column mvColumn = factory.getColumn(mvColumnRef);
-        if (mvColumn.getDefineExpr() != null && queryFnChild0 instanceof CallOperator) {
+        if (mvColumn.getDefineExpr() != null && mvColumn.getDefineExpr() instanceof FunctionCallExpr &&
+                queryFnChild0 instanceof CallOperator) {
             CallOperator queryCall = (CallOperator) queryFnChild0;
             String mvName = ((FunctionCallExpr) mvColumn.getDefineExpr()).getFnName().getFunction();
             String queryName = queryCall.getFnName();
