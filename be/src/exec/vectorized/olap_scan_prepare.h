@@ -363,7 +363,8 @@ static void normalize_join_runtime_filter(const SlotDescriptor& slot, const std:
         if (!desc->is_probe_slot_ref(&slot_id) || slot_id != slot.id()) continue;
 
         const RuntimeBloomFilter<SlotType>* filter = down_cast<const RuntimeBloomFilter<SlotType>*>(rf);
-
+        // For some types, we don't support storing min/max in runtime filter.
+        if (!filter->has_min_max()) continue;
         // If this column doesn't have other filter, we use join runtime filter
         // to fast comput row range in storage engine
         if (range->is_init_state()) {
