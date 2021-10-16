@@ -70,6 +70,7 @@ set(EXEC_FILES
         ./exprs/vectorized/hash_functions_test.cpp
         ./exprs/vectorized/hyperloglog_functions_test.cpp
         ./exprs/vectorized/if_expr_test.cpp
+        ./exprs/vectorized/function_helper_test.cpp
         ./exprs/vectorized/in_iterator_predicate_test.cpp
         ./exprs/vectorized/in_predicate_test.cpp
         ./exprs/vectorized/is_null_predicate_test.cpp

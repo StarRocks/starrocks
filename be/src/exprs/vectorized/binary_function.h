@@ -222,7 +222,11 @@ public:
                     PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(v1, v2));
 
             ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(v1, v2);
-            return NullableColumn::create(std::move(data_result), std::move(null_result));
+            if constexpr (pt_is_decimal<ResultType>) {
+                return FunctionHelper::merge_column_and_null_column(std::move(data_result), std::move(null_result));
+            } else {
+                return NullableColumn::create(std::move(data_result), std::move(null_result));
+            }
         }
 
         const ColumnPtr& data1 = FunctionHelper::get_real_data_column(v1);
@@ -234,8 +238,11 @@ public:
         FunctionHelper::union_produce_nullable_column(v1, v2, &null_result);
 
         ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(data1, data2);
-
-        return NullableColumn::create(std::move(data_result), std::move(null_result));
+        if constexpr (pt_is_decimal<ResultType>) {
+            return FunctionHelper::merge_column_and_null_column(std::move(data_result), std::move(null_result));
+        } else {
+            return NullableColumn::create(std::move(data_result), std::move(null_result));
+        }
     }
 
     template <PrimitiveType Type>
