@@ -22,8 +22,8 @@
 #pragma once
 
 #include "common/status.h"
+#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "gen_cpp/starrocks_internal_service.pb.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace brpc {

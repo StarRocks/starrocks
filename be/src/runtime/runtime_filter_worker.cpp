@@ -4,6 +4,7 @@
 
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
@@ -23,8 +24,8 @@ public:
 
 static const int default_send_rpc_runtime_filter_timeout_ms = 1000;
 
-static void send_rpc_runtime_filter(PBackendService_Stub* stub, RuntimeFilterRpcClosure* rpc_closure, int timeout_ms,
-                                    const PTransmitRuntimeFilterParams& request) {
+static void send_rpc_runtime_filter(doris::PBackendService_Stub* stub, RuntimeFilterRpcClosure* rpc_closure,
+                                    int timeout_ms, const PTransmitRuntimeFilterParams& request) {
     if (rpc_closure->seq != 0) {
         brpc::Join(rpc_closure->cntl.call_id());
     }
@@ -286,7 +287,7 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int32_t filter_id, RuntimeF
     while (index < size) {
         auto& t = targets[index];
         bool is_local = (local == t.first);
-        PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(t.first);
+        doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(t.first);
         request.clear_probe_finst_ids();
         request.clear_forward_targets();
         for (const auto& inst : t.second) {
@@ -432,7 +433,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         TNetworkAddress addr;
         addr.hostname = t.host();
         addr.port = t.port();
-        PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
+        doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
 
         request.clear_probe_finst_ids();
         request.clear_forward_targets();
@@ -512,7 +513,7 @@ void RuntimeFilterWorker::execute() {
 
         case SEND_PART_RF: {
             for (const auto& addr : ev.transmit_addrs) {
-                PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
+                doris::PBackendService_Stub* stub = _exec_env->brpc_stub_cache()->get_stub(addr);
                 send_rpc_runtime_filter(stub, rpc_closure, ev.transmit_timeout_ms, ev.transmit_rf_request);
             }
             break;
