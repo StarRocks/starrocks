@@ -93,7 +93,7 @@ private:
 
     PUniqueId _finst_id;
 
-    PBackendService_Stub* _brpc_stub = nullptr;
+    doris::PBackendService_Stub* _brpc_stub = nullptr;
 
     size_t _current_request_bytes = 0;
 

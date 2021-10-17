@@ -31,6 +31,7 @@
 #include "common/status.h"
 #include "exec/data_sink.h"
 #include "gen_cpp/data.pb.h" // for PRowBatch
+#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
