@@ -12,7 +12,7 @@ namespace starrocks::pipeline {
 
 struct TransmitChunkInfo {
     PTransmitChunkParams params;
-    PBackendService_Stub* brpc_stub;
+    doris::PBackendService_Stub* brpc_stub;
 };
 
 class SinkBuffer {
