@@ -64,7 +64,7 @@ public:
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
 
-    RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+    RuntimeState(const TExecPlanFragmentParams& fragment_params, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
 
     // RuntimeState for executing expr in fe-support.

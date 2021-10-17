@@ -61,11 +61,11 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
     DCHECK(status.ok());
 }
 
-RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
-                           const TQueryOptions& query_options, const TQueryGlobals& query_globals, ExecEnv* exec_env)
-        : _profile("Fragment " + print_id(fragment_instance_id)),
+RuntimeState::RuntimeState(const TExecPlanFragmentParams& fragment_params, const TQueryOptions& query_options,
+                           const TQueryGlobals& query_globals, ExecEnv* exec_env)
+        : _profile("Fragment " + print_id(fragment_params.params.fragment_instance_id)),
           _unreported_error_idx(0),
-          _query_id(query_id),
+          _query_id(fragment_params.params.query_id),
           _obj_pool(new ObjectPool()),
           _is_cancelled(false),
           _per_fragment_instance_idx(0),
@@ -73,9 +73,8 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
           _num_rows_load_total(0),
           _num_rows_load_filtered(0),
           _num_rows_load_unselected(0),
-
           _num_print_error_rows(0) {
-    Status status = init(fragment_instance_id, query_options, query_globals, exec_env);
+    Status status = init(fragment_params.params.fragment_instance_id, query_options, query_globals, exec_env);
     DCHECK(status.ok());
 }
 
