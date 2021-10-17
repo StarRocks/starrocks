@@ -375,7 +375,7 @@ void PInternalServiceImpl<T>::get_info(google::protobuf::RpcController* controll
     Status::OK().to_protobuf(response->mutable_status());
 }
 
-template class PInternalServiceImpl<PBackendService>;
-template class PInternalServiceImpl<starrocks::PInternalService>;
+template class PInternalServiceImpl<PInternalService>;
+template class PInternalServiceImpl<doris::PBackendService>;
 
 } // namespace starrocks
