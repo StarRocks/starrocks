@@ -39,6 +39,9 @@ public:
                                               NullColumnPtr* produce_null_column);
 
     static NullColumnPtr union_null_column(const NullColumnPtr& v1, const NullColumnPtr& v2);
+
+    // merge a column and null_column and generate a column with null values.
+    static ColumnPtr merge_column_and_null_column(ColumnPtr&& column, NullColumnPtr&& null_column);
 };
 
 #define DEFINE_VECTORIZED_FN(NAME) static ColumnPtr NAME(FunctionContext* context, const Columns& columns)
