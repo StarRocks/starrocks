@@ -59,7 +59,7 @@ void PipelineDriverPoller::run_internal() {
             } else if (driver->is_finished()) {
                 local_blocked_drivers.erase(driver_it++);
             } else if (!driver->pending_finish() && driver->query_ctx()->is_expired()) {
-                // there are not any drivers belonging to a query context can make progress for a expiration period
+                // there are not any drivers belonging to a query context can make progress for an expiration period
                 // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
                 // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
                 driver->cancel(driver->fragment_ctx()->runtime_state());

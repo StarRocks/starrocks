@@ -135,7 +135,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         _first_unfinished = _new_first_unfinished;
 
         if (sink_operator()->is_finished()) {
-            cancel(_fragment_ctx->runtime_state());
+            cancel(runtime_state);
             _state = source_operator()->pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH;
             return _state;
         }
