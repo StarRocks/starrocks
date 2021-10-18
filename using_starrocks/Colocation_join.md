@@ -35,7 +35,7 @@ Colocation Join 功能，是将一组拥有相同 CGS 的 Table 组成一个 CG�
 2. Parent Table 中所有 Partition 的 Bucket Seq 和 BE 节点的映射关系和第一个 Partition 一致。
 3. Parent Table 第一个 Partition 的 Bucket Seq 和 BE 节点的映射关系利用原生的 Round Robin 算法决定。
 
-CG内表的一致的数据分布定义和子表副本映射，能够保证分桶键取值相同的数据行一定在相同BE上，因此当分统键做join列时，只需本地join即可。
+CG内表的一致的数据分布定义和子表副本映射，能够保证分桶键取值相同的数据行一定在相同BE上，因此当分桶键做join列时，只需本地join即可。
 
 <br/>
 

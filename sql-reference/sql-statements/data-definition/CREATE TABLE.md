@@ -257,7 +257,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     PARTITION BY RANGE (k1, k2, k3, ...)
     (
     PARTITION partition_name1 VALUES [("k1-lower1", "k2-lower1", "k3-lower1",...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)),
-    PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", MAXVALUE, ))
+    PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", MAXVALUE, )),
     "k3-upper1-2", ...
     )
     ```
