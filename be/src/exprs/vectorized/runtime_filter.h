@@ -251,8 +251,27 @@ public:
 
     RuntimeBloomFilter* create_empty(ObjectPool* pool) override { return pool->add(new RuntimeBloomFilter()); };
 
+    static constexpr bool is_support_min_max() {
+        if constexpr (IsSlice<CppType>) {
+            return true;
+        } else if constexpr (std::is_integral_v<CppType>) {
+            return true;
+        } else if constexpr (std::is_floating_point_v<CppType>) {
+            return true;
+        } else if constexpr (IsDate<CppType>) {
+            return true;
+        } else if constexpr (IsTimestamp<CppType>) {
+            return true;
+        } else if constexpr (IsDecimal<CppType>) {
+            return true;
+        }
+        return false;
+    }
+
     void init_min_max() {
         _has_min_max = false;
+
+        // note: be sure following types are consistent to `is_support_min_max`
         if constexpr (IsSlice<CppType>) {
             _min = Slice::max_value();
             _max = Slice::min_value();
@@ -299,14 +318,19 @@ public:
 
         size_t hash = compute_hash(*value);
         _bf.insert_hash(hash);
-        _min = std::min(*value, _min);
-        _max = std::max(*value, _max);
-        _has_min_max = true;
+
+        if constexpr (is_support_min_max()) {
+            _min = std::min(*value, _min);
+            _max = std::max(*value, _max);
+            _has_min_max = true;
+        }
     }
 
     CppType min_value() const { return _min; }
 
     CppType max_value() const { return _max; }
+
+    bool has_min_max() const { return _has_min_max; }
 
     bool test_data(CppType value) const {
         if constexpr (!IsSlice<CppType>) {
