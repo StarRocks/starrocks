@@ -106,7 +106,7 @@ select array_append([], 10);
 
 * **从CSV文件导入**
 
-  CSV 文件导入数组，默认采用逗号分隔, 可以用 stream load / routine load 导入CSV文本文件或 Kafka 中的 CSV 格式数据。
+  CSV 文件导入数组，默认采用逗号分隔，可以用 stream load / routine load 导入CSV文本文件或 Kafka 中的 CSV 格式数据。
 
 <br/>
 

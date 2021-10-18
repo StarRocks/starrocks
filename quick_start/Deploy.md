@@ -40,7 +40,7 @@ StarRocks-XX-1.0.0
 * Linux (Centos 7+)
 * Java 1.8+
 
-CPU需要支持AVX2指令集， cat /proc/cpuinfo |grep avx2有结果输出表明CPU支持，如果没有支持，建议更换机器，StarRocks使用向量化技术需要一定的指令集支持才能发挥效果。
+CPU需要支持AVX2指令集，cat /proc/cpuinfo |grep avx2有结果输出表明CPU支持，如果没有支持，建议更换机器，StarRocks使用向量化技术需要一定的指令集支持才能发挥效果。
 
 将StarRocks的二进制产品包分发到目标主机的部署路径并解压，可以考虑使用新建的StarRocks用户来管理。
 
@@ -204,7 +204,7 @@ alter system drop observer "fe_host:edit_log_port";
 
 host为helper节点的IP，如果有多个IP，需要选取priority\_networks里的IP。port为edit\_log\_port，默认为9010。
 
-当FE再次启动时，无须指定--helper参数， 因为FE已经将其他FE的配置信息存储于本地目录, 因此可直接启动：
+当FE再次启动时，无须指定--helper参数，因为FE已经将其他FE的配置信息存储于本地目录, 因此可直接启动：
 
 ```shell
 ./bin/start_fe.sh --daemon

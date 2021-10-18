@@ -340,7 +340,7 @@ canal.mq.transaction = false
 }
 ~~~
 
-这里我们只需要导入data中的数据， 所以需要加上 json_root 和 strip_outer_array = true
+这里我们只需要导入data中的数据，所以需要加上 json_root 和 strip_outer_array = true
 
 ~~~sql
 create routine load manual.query_job on query_record   

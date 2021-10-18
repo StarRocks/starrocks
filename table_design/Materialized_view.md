@@ -15,7 +15,7 @@
 1. 业务方需要获取某个商品在某天的销售额是多少，那么仅需要在维度（item\_id, sold\_time）维度上对 price 进行聚合即可。
 2. 分析某个人在某天对某个商品的购买明细数据。
 
-在现有的 StarRocks 数据模型中，如果仅建立一个聚合模型的表，比如（item\_id, sold\_time, customer\_id, sum(price)）。由于聚合损失了数据的部分信息，无法满足用户对明细数据的分析需求。如果仅建立一个 Duplicate 模型，虽可以满足任意维度的分析需求，但由于不支持 Rollup， 分析性能不佳，无法快速完成分析。如果同时建立一个聚合模型和一个 Duplicate 模型，虽可以满足性能和任意维度分析，但两表之间本身无关联，需要业务方自行选择分析表。不灵活也不易用。
+在现有的 StarRocks 数据模型中，如果仅建立一个聚合模型的表，比如（item\_id, sold\_time, customer\_id, sum(price)）。由于聚合损失了数据的部分信息，无法满足用户对明细数据的分析需求。如果仅建立一个 Duplicate 模型，虽可以满足任意维度的分析需求，但由于不支持 Rollup，分析性能不佳，无法快速完成分析。如果同时建立一个聚合模型和一个 Duplicate 模型，虽可以满足性能和任意维度分析，但两表之间本身无关联，需要业务方自行选择分析表。不灵活也不易用。
 
 ## 如何使用
 
@@ -86,7 +86,7 @@ numNodes=1
 tuple ids: 0
 ~~~
 
-其中的RollUp表字段表示到底命中了哪个物化视图。其中的PREAGGREGATION 字段如果是On，就表明查询时不需要在StarRocks存储引擎中现场聚合，查询会更快，如果PREAGGREGATION 字段是Off，后面会显示原因， 比如 PREAGGREGATION: OFF. Reason:  The aggregate operator does not match，表示因为查询的聚合函数和物化视图中定义的聚合函数不一致，所以在StarRocks存储引擎中无法使用物化视图，需要现场聚合。
+其中的RollUp表字段表示到底命中了哪个物化视图。其中的PREAGGREGATION 字段如果是On，就表明查询时不需要在StarRocks存储引擎中现场聚合，查询会更快，如果PREAGGREGATION 字段是Off，后面会显示原因，比如 PREAGGREGATION: OFF. Reason:  The aggregate operator does not match，表示因为查询的聚合函数和物化视图中定义的聚合函数不一致，所以在StarRocks存储引擎中无法使用物化视图，需要现场聚合。
 
 ### **导入数据**
 

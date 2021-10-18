@@ -25,7 +25,7 @@
 
   `GROUPING(expr)` 指示一个列是否为聚合列，如果是聚合列为0，否则为1
 
-  `GROUPING_ID(expr  [ , expr [ , ... ] ])` 与GROUPING 类似， GROUPING_ID根据指定的column 顺序，计算出一个列列表的 bitmap 值，每一位为GROUPING的值. GROUPING_ID()函数返回位向量的十进制值。
+  `GROUPING_ID(expr  [ , expr [ , ... ] ])` 与GROUPING 类似，GROUPING_ID根据指定的column 顺序，计算出一个列列表的 bitmap 值，每一位为GROUPING的值. GROUPING_ID()函数返回位向量的十进制值。
 
 ### Syntax
 

@@ -1,6 +1,6 @@
 # 介绍
 
-StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能。在底层实现上， StarRocksWriter 通过Stream load以csv或 json 格式导入数据至StarRocks。内部将`reader`读取的数据进行缓存后批量导入至StarRocks，以提高写入性能。总体数据流是 `source -> Reader -> DataX channel -> Writer -> StarRocks`。
+StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能。在底层实现上，StarRocksWriter 通过Stream load以csv或 json 格式导入数据至StarRocks。内部将`reader`读取的数据进行缓存后批量导入至StarRocks，以提高写入性能。总体数据流是 `source -> Reader -> DataX channel -> Writer -> StarRocks`。
 
 [点击下载插件](https://github.com/StarRocks/DataX/releases)
 
@@ -186,7 +186,7 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
 ### 类型转换
 
 默认传入的数据均会被转为字符串，并以`\t`作为列分隔符，`\n`作为行分隔符，组成`csv`文件进行StreamLoad导入操作。
-如需更改列分隔符， 则正确配置 `loadProps` 即可：
+如需更改列分隔符，则正确配置 `loadProps` 即可：
 
 ```json
 "loadProps": {
@@ -195,7 +195,7 @@ StarRocksWriter 插件实现了写入数据到 StarRocks 的目的表的功能�
 }
 ```
 
-如需更改导入格式为`json`， 则正确配置 `loadProps` 即可：
+如需更改导入格式为`json`，则正确配置 `loadProps` 即可：
 
 ```json
 "loadProps": {

@@ -262,9 +262,9 @@ FIRST_VALUE(expr) OVER(partition_by_clause order_by_clause [window_clause])
 我们有如下数据
 
 ~~~SQL
- select name, country, greeting
- from mail_merge;
- ~~~
+select name, country, greeting
+from mail_merge;
+~~~
 
 ~~~Plain Text
 +---------+---------+--------------+
@@ -508,7 +508,7 @@ where property in ('prime','square');
 
 ### RANK()
 
-RANK()函数用来表示排名，与DENSE_RANK()不同的是，RANK()会**出现空缺**数字。比如，如果出现了两个并列的1， RANK()的第三个数就是3，而不是2。
+RANK()函数用来表示排名，与DENSE_RANK()不同的是，RANK()会**出现空缺**数字。比如，如果出现了两个并列的1，RANK()的第三个数就是3，而不是2。
 
 语法：
 

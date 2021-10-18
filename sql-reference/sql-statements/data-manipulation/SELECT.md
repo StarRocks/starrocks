@@ -421,8 +421,8 @@ select count(distinct tiny_column) from small_table;
 ```
 
 ```SQL
- -- Counts the unique combinations of values from multiple columns.
- select count(distinct tiny_column, int_column) from big_table limit 2;
+-- Counts the unique combinations of values from multiple columns.
+select count(distinct tiny_column, int_column) from big_table limit 2;
 ```
 
 StarRocks支持多个聚合函数同时使用distinct。
@@ -520,7 +520,7 @@ SQL操作符是一系列用于比较的函数，这些操作符广泛的用于se
 
 算术操作符通常出现在包含左操作数，操作符，右操作数（大部分情况下）组成的表达式中
 
-**+和-**：可以作为单元或2元操作符。当其作为单元操作符时，如+1, -2.5 或者-col_name， 表达的意思是该值乘以+1或者-1。
+**+和-**：可以作为单元或2元操作符。当其作为单元操作符时，如+1, -2.5 或者-col_name，表达的意思是该值乘以+1或者-1。
 
 因此单元操作符+返回的是未发生变化的值，单元操作符-改变了该值的符号位。
 
@@ -585,7 +585,7 @@ In操作符会和VALUE集合进行比较，如果可以匹配该集合中任何�
 举例：
 
 ```sql
- select * from small_table where tiny_column in (1,2);
+select * from small_table where tiny_column in (1,2);
 ```
 
 #### Like操作符

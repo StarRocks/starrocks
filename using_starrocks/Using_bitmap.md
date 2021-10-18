@@ -13,10 +13,10 @@ StarRocks 是基于MPP 架构实现的，在使用count distinct做精准去重�
 
 |  dt   |   page  | user_id |
 | :---: | :---: | :---:|
-|   20191206  |   xiaoxiang  | 101 |
+|   20191206  |   waimai  | 101 |
 |   20191206  |   waimai  | 102 |
 |   20191206  |   xiaoxiang  | 101 |
-|   20191206  |   waimai  | 101 |
+|   20191206  |   xiaoxiang  | 101 |
 |   20191206  |   xiaoxiang  | 101 |
 |   20191206  |   waimai  | 101 |
 
@@ -24,18 +24,18 @@ StarRocks 是基于MPP 架构实现的，在使用count distinct做精准去重�
 
 |  page   |   uv  |
 | :---: | :---: |
-|   xiaoxiang  |  1   |
 |   waimai  |   2  |
+|   xiaoxiang  |  1   |
 
 ```sql
- select page, count(distinct user_id) as uv from table group by page;
+select page, count(distinct user_id) as uv from table group by page;
 ```
 
 对于上图计算 UV 的 SQL，StarRocks 在计算时，会按照下图进行计算，先根据 page 列和 user_id 列 group by，最后再 count。
 
 ![alter](../assets/6.1.2-2.png)
 
-* 注：图中是 6 行数据在 2 个 BE 节点上计算的示意图
+> 注：图中是 6 行数据在 2 个 BE 节点上计算的示意图
 
 显然，上面的计算方式，由于数据需要进行多次shuffle，当数据量越来越大时，所需的计算资源就会越来越多，查询也会越来越慢。使用Bitmap技术，就是为了解决传统count distinct在大量数据场景下的性能问题。
 
@@ -94,7 +94,7 @@ insert into page_uv values
 
 采用本地文件导入
 
-```shell
+```bash
 cat <<<'DONE' | \
     curl --location-trusted -u root: -H "label:label_1600960288796" \
         -H "column_separator:," \
@@ -138,7 +138,7 @@ mysql> select page_id, count(distinct visit_users) from page_uv group by page_id
 这种方案中全局字典本身是一张 Hive 表，Hive 表有两个列，一个是原始值，一个是编码的 Int 值。全局字典的生成步骤：
 
 1. 将事实表的字典列去重生成临时表
-2. 临时表和全局字典进行left join， 悬空的词典项为新value。
+2. 临时表和全局字典进行left join，悬空的词典项为新value。
 3. 对新value进行编码并插入全局字典。
 4. 事实表和更新后的全局字典进行left join ， 将词典项替换为ID。
 
