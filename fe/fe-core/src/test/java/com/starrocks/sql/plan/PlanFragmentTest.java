@@ -4328,4 +4328,12 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertFalse(plan.contains("Decode"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
+
+    @Test
+    public void testLikeFunctionIdThrift() throws Exception {
+        String sql = "select S_ADDRESS from supplier where S_ADDRESS " +
+                "like '%Customer%Complaints%' ";
+        String thrift = getThriftPlan(sql);
+        Assert.assertTrue(thrift.contains("fid:60010"));
+    }
 }
