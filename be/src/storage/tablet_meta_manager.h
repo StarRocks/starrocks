@@ -24,6 +24,7 @@
 
 #include <string>
 
+#include "rapidjson/document.h"
 #include "storage/data_dir.h"
 #include "storage/kv_store.h"
 #include "storage/olap_define.h"

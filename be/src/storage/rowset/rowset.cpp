@@ -21,19 +21,15 @@
 
 #include "storage/rowset/rowset.h"
 
-#include <runtime/mem_tracker.h>
 #include <util/time.h>
 
 namespace starrocks {
 
-Rowset::Rowset(MemTracker* mem_tracker, const TabletSchema* schema, std::string rowset_path,
-               RowsetMetaSharedPtr rowset_meta)
+Rowset::Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta)
         : _schema(schema),
           _rowset_path(std::move(rowset_path)),
           _rowset_meta(std::move(rowset_meta)),
-          _refs_by_reader(0) {
-    _mem_tracker = std::make_unique<MemTracker>(-1, "", mem_tracker, true);
-}
+          _refs_by_reader(0) {}
 
 Status Rowset::load() {
     // if the state is ROWSET_UNLOADING it means close() is called

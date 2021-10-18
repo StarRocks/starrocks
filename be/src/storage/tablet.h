@@ -64,10 +64,9 @@ using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
 
 class Tablet : public BaseTablet {
 public:
-    static TabletSharedPtr create_tablet_from_meta(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta,
-                                                   DataDir* data_dir = nullptr);
+    static TabletSharedPtr create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir = nullptr);
 
-    Tablet(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta, DataDir* data_dir);
+    Tablet(TabletMetaSharedPtr tablet_meta, DataDir* data_dir);
 
     ~Tablet() override;
 

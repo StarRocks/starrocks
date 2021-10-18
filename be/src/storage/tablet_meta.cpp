@@ -224,28 +224,24 @@ Status AlterTabletTask::set_alter_state(AlterTabletState alter_state) {
     return Status::OK();
 }
 
-Status TabletMeta::create(MemTracker* mem_tracker, const TCreateTabletReq& request, const TabletUid& tablet_uid,
-                          uint64_t shard_id, uint32_t next_unique_id,
+Status TabletMeta::create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
+                          uint32_t next_unique_id,
                           const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                           RowsetTypePB rowset_type, TabletMetaSharedPtr* tablet_meta) {
     *tablet_meta = std::make_shared<TabletMeta>(
-            mem_tracker, request.table_id, request.partition_id, request.tablet_id, request.tablet_schema.schema_hash,
-            shard_id, request.tablet_schema, next_unique_id, col_ordinal_to_unique_id, tablet_uid,
+            request.table_id, request.partition_id, request.tablet_id, request.tablet_schema.schema_hash, shard_id,
+            request.tablet_schema, next_unique_id, col_ordinal_to_unique_id, tablet_uid,
             request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK, rowset_type);
     return Status::OK();
 }
 
-TabletMeta::TabletMeta(MemTracker* mem_tracker) : _tablet_uid(0, 0) {
-    _mem_tracker = std::make_unique<MemTracker>(-1, "", mem_tracker);
-}
+TabletMeta::TabletMeta() : _tablet_uid(0, 0) {}
 
-TabletMeta::TabletMeta(MemTracker* mem_tracker, int64_t table_id, int64_t partition_id, int64_t tablet_id,
-                       int32_t schema_hash, uint64_t shard_id, const TTabletSchema& tablet_schema,
-                       uint32_t next_unique_id, const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
+TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash,
+                       uint64_t shard_id, const TTabletSchema& tablet_schema, uint32_t next_unique_id,
+                       const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                        const TabletUid& tablet_uid, TTabletType::type tabletType, RowsetTypePB rowset_type)
         : _tablet_uid(0, 0), _preferred_rowset_type(rowset_type) {
-    _mem_tracker = std::make_unique<MemTracker>(-1, "", mem_tracker);
-    _mem_tracker->consume(sizeof(TabletMeta));
     TabletMetaPB tablet_meta_pb;
     tablet_meta_pb.set_table_id(table_id);
     tablet_meta_pb.set_partition_id(partition_id);
@@ -338,8 +334,7 @@ Status TabletMeta::create_from_file(const string& file_path) {
 
 Status TabletMeta::reset_tablet_uid(const string& file_path) {
     Status res;
-    auto mem_tracker = std::make_unique<MemTracker>();
-    TabletMeta tmp_tablet_meta(mem_tracker.get());
+    TabletMeta tmp_tablet_meta;
     if (res = tmp_tablet_meta.create_from_file(file_path); !res.ok()) {
         LOG(WARNING) << "fail to load tablet meta from " << file_path << ": " << res;
         return res;
@@ -451,7 +446,6 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     // init _schema
     _schema = std::make_shared<TabletSchema>();
     _schema->init_from_pb(tablet_meta_pb.schema());
-    _mem_tracker->consume(_schema->mem_usage());
 
     // init _rs_metas
     for (auto& it : tablet_meta_pb.rs_metas()) {
@@ -460,13 +454,11 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
         if (rs_meta->has_delete_predicate()) {
             add_delete_predicate(rs_meta->delete_predicate(), rs_meta->version().first);
         }
-        _mem_tracker->consume(rs_meta->mem_usage());
         _rs_metas.push_back(std::move(rs_meta));
     }
     for (auto& it : tablet_meta_pb.inc_rs_metas()) {
         RowsetMetaSharedPtr rs_meta(new RowsetMeta());
         rs_meta->init_from_pb(it);
-        _mem_tracker->consume(rs_meta->mem_usage());
         _inc_rs_metas.push_back(std::move(rs_meta));
     }
 
@@ -574,7 +566,6 @@ Status TabletMeta::add_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
         }
     }
 
-    _mem_tracker->consume(rs_meta->mem_usage());
     _rs_metas.push_back(rs_meta);
     if (rs_meta->has_delete_predicate()) {
         add_delete_predicate(rs_meta->delete_predicate(), rs_meta->version().first);
@@ -590,7 +581,6 @@ void TabletMeta::delete_rs_meta_by_version(const Version& version, std::vector<R
             if (deleted_rs_metas != nullptr) {
                 deleted_rs_metas->push_back(*it);
             }
-            _mem_tracker->release((*it)->mem_usage());
             _rs_metas.erase(it);
             return;
         }
@@ -608,7 +598,6 @@ void TabletMeta::modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
                 if ((*it)->has_delete_predicate()) {
                     remove_delete_predicate_by_version((*it)->version());
                 }
-                _mem_tracker->release((*it)->mem_usage());
                 _rs_metas.erase(it);
                 // there should be only one rowset match the version
                 break;
@@ -617,11 +606,9 @@ void TabletMeta::modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
         }
     }
     // put to_delete rowsets in _stale_rs_metas.
-    _mem_tracker->consume(calc_mem_usage_of_rs_metas(to_delete));
     _stale_rs_metas.insert(_stale_rs_metas.end(), to_delete.begin(), to_delete.end());
 
     // put to_add rowsets in _rs_metas.
-    _mem_tracker->consume(calc_mem_usage_of_rs_metas(to_add));
     _rs_metas.insert(_rs_metas.end(), to_add.begin(), to_add.end());
 }
 
@@ -638,9 +625,7 @@ void TabletMeta::revise_inc_rs_metas(std::vector<RowsetMetaSharedPtr> rs_metas) 
     // delete alter task
     _alter_task.reset();
 
-    _mem_tracker->release(calc_mem_usage_of_rs_metas(_inc_rs_metas));
     _inc_rs_metas = std::move(rs_metas);
-    _mem_tracker->consume(calc_mem_usage_of_rs_metas(_inc_rs_metas));
 }
 
 Status TabletMeta::add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
@@ -652,7 +637,6 @@ Status TabletMeta::add_inc_rs_meta(const RowsetMetaSharedPtr& rs_meta) {
         }
     }
 
-    _mem_tracker->consume(rs_meta->mem_usage());
     _inc_rs_metas.push_back(rs_meta);
     return Status::OK();
 }
@@ -661,7 +645,6 @@ void TabletMeta::delete_stale_rs_meta_by_version(const Version& version) {
     auto it = _stale_rs_metas.begin();
     while (it != _stale_rs_metas.end()) {
         if ((*it)->version() == version) {
-            _mem_tracker->release((*it)->mem_usage());
             it = _stale_rs_metas.erase(it);
         } else {
             it++;
@@ -682,7 +665,6 @@ void TabletMeta::delete_inc_rs_meta_by_version(const Version& version) {
     auto it = _inc_rs_metas.begin();
     while (it != _inc_rs_metas.end()) {
         if ((*it)->version() == version) {
-            _mem_tracker->release((*it)->mem_usage());
             _inc_rs_metas.erase(it);
             break;
         } else {

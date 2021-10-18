@@ -33,7 +33,6 @@
 #include "common/status.h"         // for Status
 #include "gen_cpp/segment_v2.pb.h" // for ColumnMetaPB
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/segment_v2/bitmap_index_reader.h"
 #include "storage/rowset/segment_v2/bloom_filter_index_reader.h"
@@ -117,8 +116,8 @@ class ColumnReader {
 public:
     // Create an initialized ColumnReader in *reader.
     // This should be a lightweight operation without I/O.
-    static Status create(MemTracker* mem_tracker, const ColumnReaderOptions& opts, const ColumnMetaPB& meta,
-                         uint64_t num_rows, const std::string& file_name, std::unique_ptr<ColumnReader>* reader);
+    static Status create(const ColumnReaderOptions& opts, const ColumnMetaPB& meta, uint64_t num_rows,
+                         const std::string& file_name, std::unique_ptr<ColumnReader>* reader);
 
     ~ColumnReader() = default;
 
@@ -191,7 +190,7 @@ public:
     Status ensure_index_loaded(ReaderType reader_type);
 
 private:
-    ColumnReader(MemTracker* mem_tracker, const ColumnReaderOptions& opts, const ColumnMetaPB& meta, uint64_t num_rows,
+    ColumnReader(const ColumnReaderOptions& opts, const ColumnMetaPB& meta, uint64_t num_rows,
                  const std::string& file_name);
 
     Status init(const ColumnMetaPB& meta);
@@ -220,8 +219,6 @@ private:
     Status _zone_map_filter(const std::vector<const vectorized::ColumnPredicate*>& predicates,
                             const vectorized::ColumnPredicate* del_predicate,
                             std::unordered_set<uint32_t>* del_partial_filtered_pages, std::vector<uint32_t>* pages);
-
-    MemTracker* _mem_tracker = nullptr;
 
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
@@ -608,7 +605,6 @@ private:
     bool _is_default_value_null;
     size_t _type_size;
     void* _mem_value = nullptr;
-    MemTracker _tracker;
     std::unique_ptr<MemPool> _pool;
 
     // current rowid

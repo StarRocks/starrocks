@@ -258,7 +258,7 @@ Status BetaRowsetWriter::_final_merge() {
         std::string tmp_segment_file =
                 BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
 
-        auto segment_ptr = segment_v2::Segment::open(&tracker, fs::fs_util::block_manager(), tmp_segment_file, seg_id,
+        auto segment_ptr = segment_v2::Segment::open(fs::fs_util::block_manager(), tmp_segment_file, seg_id,
                                                      _context.tablet_schema);
         if (!segment_ptr.ok()) {
             LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
@@ -377,8 +377,7 @@ RowsetSharedPtr BetaRowsetWriter::build() {
 
     RowsetSharedPtr rowset;
     auto status =
-            RowsetFactory::create_rowset(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _context.tablet_schema,
-                                         _context.rowset_path_prefix, _rowset_meta, &rowset);
+            RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, _rowset_meta, &rowset);
     if (!status.ok()) {
         LOG(WARNING) << "Fail to create rowset: " << status;
         return nullptr;

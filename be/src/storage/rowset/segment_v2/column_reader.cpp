@@ -53,30 +53,30 @@ namespace starrocks::segment_v2 {
 
 using strings::Substitute;
 
-Status ColumnReader::create(MemTracker* mem_tracker, const ColumnReaderOptions& opts, const ColumnMetaPB& meta,
-                            uint64_t num_rows, const std::string& file_name, std::unique_ptr<ColumnReader>* reader) {
+Status ColumnReader::create(const ColumnReaderOptions& opts, const ColumnMetaPB& meta, uint64_t num_rows,
+                            const std::string& file_name, std::unique_ptr<ColumnReader>* reader) {
     auto type = static_cast<FieldType>(meta.type());
     if (is_scalar_type(delegate_type(type))) {
-        std::unique_ptr<ColumnReader> reader_local(new ColumnReader(mem_tracker, opts, meta, num_rows, file_name));
+        std::unique_ptr<ColumnReader> reader_local(new ColumnReader(opts, meta, num_rows, file_name));
         RETURN_IF_ERROR(reader_local->init(meta));
         *reader = std::move(reader_local);
         return Status::OK();
     }
 
     if (type == FieldType::OLAP_FIELD_TYPE_ARRAY) {
-        std::unique_ptr<ColumnReader> array_reader(new ColumnReader(mem_tracker, opts, meta, num_rows, file_name));
+        std::unique_ptr<ColumnReader> array_reader(new ColumnReader(opts, meta, num_rows, file_name));
 
         size_t col = 0;
         std::unique_ptr<ColumnReader> element_reader;
-        RETURN_IF_ERROR(ColumnReader::create(mem_tracker, opts, meta.children_columns(col),
-                                             meta.children_columns(col).num_rows(), file_name, &element_reader));
+        RETURN_IF_ERROR(ColumnReader::create(opts, meta.children_columns(col), meta.children_columns(col).num_rows(),
+                                             file_name, &element_reader));
         RETURN_IF_ERROR(element_reader->init(meta.children_columns(col)));
         col++;
         array_reader->_sub_readers.emplace_back(std::move(element_reader));
 
         if (array_reader->is_nullable()) {
             std::unique_ptr<ColumnReader> null_reader;
-            RETURN_IF_ERROR(ColumnReader::create(mem_tracker, opts, meta.children_columns(col),
+            RETURN_IF_ERROR(ColumnReader::create(opts, meta.children_columns(col),
                                                  meta.children_columns(col).num_rows(), file_name, &null_reader));
             RETURN_IF_ERROR(null_reader->init(meta.children_columns(col)));
             col++;
@@ -84,8 +84,8 @@ Status ColumnReader::create(MemTracker* mem_tracker, const ColumnReaderOptions& 
         }
 
         std::unique_ptr<ColumnReader> array_size_reader;
-        RETURN_IF_ERROR(ColumnReader::create(mem_tracker, opts, meta.children_columns(col),
-                                             meta.children_columns(col).num_rows(), file_name, &array_size_reader));
+        RETURN_IF_ERROR(ColumnReader::create(opts, meta.children_columns(col), meta.children_columns(col).num_rows(),
+                                             file_name, &array_size_reader));
         RETURN_IF_ERROR(array_size_reader->init(meta.children_columns(col)));
         array_reader->_sub_readers.emplace_back(std::move(array_size_reader));
 
@@ -97,10 +97,9 @@ Status ColumnReader::create(MemTracker* mem_tracker, const ColumnReaderOptions& 
     return Status::NotSupported("unsupported type for ColumnReader: " + std::to_string(type));
 }
 
-ColumnReader::ColumnReader(MemTracker* mem_tracker, const ColumnReaderOptions& opts, const ColumnMetaPB& meta,
-                           uint64_t num_rows, const std::string& file_name)
-        : _mem_tracker(mem_tracker),
-          _column_length(meta.length()),
+ColumnReader::ColumnReader(const ColumnReaderOptions& opts, const ColumnMetaPB& meta, uint64_t num_rows,
+                           const std::string& file_name)
+        : _column_length(meta.length()),
           _column_type(static_cast<FieldType>(meta.type())),
           _is_nullable(meta.is_nullable()),
           _dict_page_pointer(meta.dict_page()),
@@ -108,9 +107,7 @@ ColumnReader::ColumnReader(MemTracker* mem_tracker, const ColumnReaderOptions& o
           _all_dict_encoded(meta.all_dict_encoded()),
           _opts(opts),
           _num_rows(num_rows),
-          _file_name(file_name) {
-    _mem_tracker->consume(sizeof(ColumnReader));
-}
+          _file_name(file_name) {}
 
 Status ColumnReader::init(const ColumnMetaPB& meta) {
     if (_column_type == OLAP_FIELD_TYPE_ARRAY) {
@@ -347,7 +344,6 @@ Status ColumnReader::_load_ordinal_index(bool use_page_cache, bool kept_in_memor
     _ordinal_index = std::make_unique<OrdinalIndexReader>();
     Status status = _ordinal_index->load(_opts.block_mgr, _file_name, _ordinal_index_meta, _num_rows, use_page_cache,
                                          kept_in_memory);
-    _mem_tracker->consume(_ordinal_index->mem_usage());
     return Status::OK();
 }
 
@@ -356,7 +352,6 @@ Status ColumnReader::_load_zone_map_index(bool use_page_cache, bool kept_in_memo
         _zone_map_index = std::make_unique<ZoneMapIndexReader>();
         Status status = _zone_map_index->load(_opts.block_mgr, _file_name, _zone_map_index_meta, use_page_cache,
                                               kept_in_memory);
-        _mem_tracker->consume(_zone_map_index->mem_usage());
         return status;
     }
     return Status::OK();
@@ -367,7 +362,6 @@ Status ColumnReader::_load_bitmap_index(bool use_page_cache, bool kept_in_memory
         _bitmap_index = std::make_unique<BitmapIndexReader>();
         Status status =
                 _bitmap_index->load(_opts.block_mgr, _file_name, _bitmap_index_meta, use_page_cache, kept_in_memory);
-        _mem_tracker->consume(_bitmap_index->mem_usage());
         return status;
     }
     return Status::OK();
@@ -378,7 +372,6 @@ Status ColumnReader::_load_bloom_filter_index(bool use_page_cache, bool kept_in_
         _bloom_filter_index = std::make_unique<BloomFilterIndexReader>();
         Status status =
                 _bloom_filter_index->load(_opts.block_mgr, _file_name, _bf_index_meta, use_page_cache, kept_in_memory);
-        _mem_tracker->consume(_bloom_filter_index->mem_usage());
         return status;
     }
     return Status::OK();
