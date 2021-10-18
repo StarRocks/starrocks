@@ -338,7 +338,8 @@ RuntimeFilterProbeCollector::RuntimeFilterProbeCollector(RuntimeFilterProbeColle
           _input_chunk_nums(that._input_chunk_nums),
           _wait_timeout_ms(that._wait_timeout_ms) {}
 
-Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* profile) {
+Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescriptor& row_desc,
+                                            RuntimeProfile* profile) {
     _runtime_profile = profile;
     for (auto& it : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = it.second;

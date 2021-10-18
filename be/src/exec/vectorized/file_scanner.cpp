@@ -28,8 +28,7 @@ FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfi
           _counter(counter),
           _row_desc(nullptr),
           _strict_mode(false),
-          _error_counter(0) {
-}
+          _error_counter(0) {}
 
 FileScanner::~FileScanner() {
     Expr::close(_dest_expr_ctx, _state);
