@@ -46,7 +46,8 @@ public class DiskInfo implements Writable {
     private String rootPath;
     // disk capacity
     private long totalCapacityB;
-    // data used + available, no need to persist
+    // dataTotalCapacityB: dataUsedCapacityB + diskAvailableCapacityB
+    // no need to persist
     private long dataTotalCapacityB;
     private long dataUsedCapacityB;
     private long diskAvailableCapacityB;
