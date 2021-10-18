@@ -65,10 +65,6 @@ public:
 
     Status open(RuntimeState* state) override;
 
-    // send data in 'batch' to this backend queue mgr
-    // Blocks until all rows in batch are pushed to the queue
-    Status send(RuntimeState* state, RowBatch* batch) override;
-
     Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 
     Status close(RuntimeState* state, Status exec_status) override;
