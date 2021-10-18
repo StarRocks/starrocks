@@ -1662,5 +1662,10 @@ public class PlanFragmentBuilder {
             inputFragment.setPlanRoot(tableFunctionNode);
             return inputFragment;
         }
+
+        @Override
+        public PlanFragment visitPhysicalLimit(OptExpression optExpression, ExecPlan context) {
+            return visit(optExpression.inputAt(0), context);
+        }
     }
 }
