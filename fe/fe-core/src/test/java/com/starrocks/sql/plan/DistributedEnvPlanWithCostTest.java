@@ -243,8 +243,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         Assert.assertTrue(planFragment.contains("9:Project\n" +
                 "  |  output columns:\n" +
                 "  |  16 <-> [16: S_ACCTBAL, DOUBLE, false]\n" +
-                "  |  1 <-> [1: P_PARTKEY, INT, false]\n" +
                 "  |  17 <-> [17: S_COMMENT, VARCHAR, false]\n" +
+                "  |  1 <-> [1: P_PARTKEY, INT, false]\n" +
                 "  |  3 <-> [3: P_MFGR, VARCHAR, false]\n" +
                 "  |  12 <-> [12: S_NAME, CHAR, false]\n" +
                 "  |  13 <-> [13: S_ADDRESS, VARCHAR, false]\n" +
@@ -450,6 +450,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "                or (n1.n_name = 'IRAN' and n2.n_name = 'CANADA')\n" +
                 "            )";
         String plan = getCostExplain(sql);
+        System.out.println(plan);
         // not eval char/varchar type predicate cardinality in scan node
         Assert.assertTrue(plan.contains("Predicates: 24: N_NAME IN ('IRAN', 'CANADA')"));
         Assert.assertTrue(plan.contains("cardinality: 25"));
@@ -478,6 +479,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "                or (n1.n_nationkey = 2 and n2.n_nationkey = 1)\n" +
                 "            )";
         String plan = getCostExplain(sql);
+        System.out.println(plan);
+
         // eval predicate cardinality in scan node
         Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     table: nation, rollup: nation\n" +
@@ -517,6 +520,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "      ) t1\n" +
                 "  ) t2;";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains(" 11:AGGREGATE (update finalize)"));
         Assert.assertTrue(plan.contains("10:Project"));
     }

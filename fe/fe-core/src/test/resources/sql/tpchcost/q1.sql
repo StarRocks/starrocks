@@ -87,7 +87,7 @@ rollup: lineitem
 tabletRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=600000000
-avgRowSize=38.0
+avgRowSize=54.0
 numNodes=0
 use vectorized: true
 [fragment statistics]
@@ -202,7 +202,7 @@ preAggregation: on
 Predicates: [11: L_SHIPDATE, DATE, false] <= '1998-12-01'
 partitionsRatio=1/1, tabletsRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-actualRows=0, avgRowSize=38.0
+actualRows=0, avgRowSize=54.0
 cardinality: 600000000
 column statistics:
 * L_QUANTITY-->[1.0, 50.0, 0.0, 8.0, 50.0]
@@ -212,6 +212,8 @@ column statistics:
 * L_RETURNFLAG-->[-Infinity, Infinity, 0.0, 1.0, 3.0]
 * L_LINESTATUS-->[-Infinity, Infinity, 0.0, 1.0, 2.0]
 * L_SHIPDATE-->[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0]
+* expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
+* expr-->[810.9, 113345.46, 0.0, 8.0, 932377.0]
 [dump]
 {
   "statement": "select\n    l_returnflag,\n    l_linestatus,\n    sum(l_quantity) as sum_qty,\n    sum(l_extendedprice) as sum_base_price,\n    sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,\n    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,\n    avg(l_quantity) as avg_qty,\n    avg(l_extendedprice) as avg_price,\n    avg(l_discount) as avg_disc,\n    count(*) as count_order\nfrom\n    lineitem\nwhere\n    l_shipdate \u003c\u003d date \u00271998-12-01\u0027\ngroup by\n    l_returnflag,\n    l_linestatus\norder by\n    l_returnflag,\n    l_linestatus ;\n",

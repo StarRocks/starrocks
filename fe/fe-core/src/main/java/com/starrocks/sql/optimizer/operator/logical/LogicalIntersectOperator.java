@@ -11,6 +11,7 @@ public class LogicalIntersectOperator extends LogicalSetOperator {
         super(OperatorType.LOGICAL_INTERSECT,
                 builder.outputColumnRefOp,
                 builder.childOutputColumns,
+                builder.getLimit(),
                 builder.getProjection());
     }
 

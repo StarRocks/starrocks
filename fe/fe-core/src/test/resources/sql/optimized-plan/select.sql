@@ -222,31 +222,36 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-  4:EXCHANGE
-     use vectorized: true
+5:EXCHANGE
+use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 04
+EXCHANGE ID: 05
 UNPARTITIONED
 
-3:Project
+4:Project
 |  <slot 1> : 1: v1
 |  <slot 2> : 2: v2
 |  <slot 5> : 5: expr
 |  use vectorized: true
 |
-2:HASH JOIN
+3:HASH JOIN
 |  join op: INNER JOIN (COLOCATE)
 |  hash predicates:
 |  colocate: true
-|  equal join conjunct: 1: v1 = CAST(4: expr AS BIGINT)
+|  equal join conjunct: 1: v1 = 6: cast
 |  use vectorized: true
 |
-|----1:UNION
+|----2:Project
+|    |  <slot 5> : 5: expr
+|    |  <slot 6> : CAST(4: expr AS BIGINT)
+|    |  use vectorized: true
+|    |
+|    1:UNION
 |       constant exprs:
 |           1 | 2
 |       use vectorized: true

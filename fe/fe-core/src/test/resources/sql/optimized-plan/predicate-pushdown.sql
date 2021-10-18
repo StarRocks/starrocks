@@ -218,9 +218,9 @@ select v1 from t0 right outer join t1 on t0.v1 = t1.v5 where t0.v2 = t1.v6
 [sql]
 select * from t0 left outer join (select v4,max(v5) as m from t1 group by v4) t on v1 = v4 where v2 = case (t.m is null) when true then NULL when false then m end
 [result]
-INNER JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = CASE 7: max(5: v5) IS NULL WHEN true THEN null WHEN false THEN 7: max(5: v5) END] post-join-predicate [null])
+INNER JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 8: CaseWhen] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    EXCHANGE BROADCAST
+    EXCHANGE SHUFFLE[4]
         AGGREGATE ([GLOBAL] aggregate [{7: max(5: v5)=max(7: max(5: v5))}] group by [[4: v4]] having [null]
             AGGREGATE ([LOCAL] aggregate [{7: max(5: v5)=max(5: v5)}] group by [[4: v4]] having [null]
                 SCAN (columns[4: v4, 5: v5] predicate[null])
@@ -229,9 +229,9 @@ INNER JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = CASE 7: max(5: v5) IS NULL
 [sql]
 select * from t0 left outer join (select v4,max(v5) as m from t1 group by v4) t on v1 = v4 where v2 = case (t.m is null) when true then m when false then NULL end
 [result]
-INNER JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = CASE 7: max(5: v5) IS NULL WHEN true THEN 7: max(5: v5) WHEN false THEN null END] post-join-predicate [null])
+INNER JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 8: CaseWhen] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    EXCHANGE BROADCAST
+    EXCHANGE SHUFFLE[4]
         AGGREGATE ([GLOBAL] aggregate [{7: max(5: v5)=max(7: max(5: v5))}] group by [[4: v4]] having [null]
             AGGREGATE ([LOCAL] aggregate [{7: max(5: v5)=max(5: v5)}] group by [[4: v4]] having [null]
                 SCAN (columns[4: v4, 5: v5] predicate[null])
@@ -251,9 +251,9 @@ LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [2: v2 = CAS
 [sql]
 select * from t0 left outer join (select v4,count(v5) as m from t1 group by v4) t on v1 = v4 where v2 = case (t.m is null) when true then m when false then 0 end
 [result]
-INNER JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = CASE 7: count(5: v5) IS NULL WHEN true THEN 7: count(5: v5) WHEN false THEN 0 END] post-join-predicate [null])
+INNER JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 8: CaseWhen] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    EXCHANGE BROADCAST
+    EXCHANGE SHUFFLE[4]
         AGGREGATE ([GLOBAL] aggregate [{7: count(5: v5)=count(7: count(5: v5))}] group by [[4: v4]] having [null]
             AGGREGATE ([LOCAL] aggregate [{7: count(5: v5)=count(5: v5)}] group by [[4: v4]] having [null]
                 SCAN (columns[4: v4, 5: v5] predicate[null])

@@ -155,9 +155,6 @@ public class Optimizer {
         tryOpenPreAggregate(result);
         // Rewrite Exchange on top of Sort to Final Sort
         result = new ExchangeSortToMergeRule().rewrite(result);
-
-        // Add project will case output change, re-derive output columns in property
-        result = new DeriveOutputColumnsRule((ColumnRefSet) requiredColumns.clone()).rewrite(result, rootTaskContext);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         return result;
     }

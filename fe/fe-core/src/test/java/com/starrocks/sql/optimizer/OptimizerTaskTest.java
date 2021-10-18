@@ -159,7 +159,7 @@ public class OptimizerTaskTest {
         assertEquals(memo.getGroups().get(2).getPhysicalExpressions().
                 get(0).getOp().getOpType(), OperatorType.PHYSICAL_HASH_JOIN);
 
-        MemoStatusChecker checker = new MemoStatusChecker(memo, 2, new ColumnRefSet());
+        MemoStatusChecker checker = new MemoStatusChecker(memo, 2, new ColumnRefSet(Lists.newArrayList(column1)));
         checker.checkStatus();
     }
 
@@ -694,10 +694,6 @@ public class OptimizerTaskTest {
         CallOperator call = new CallOperator("sum", Type.BIGINT, Lists.newArrayList(ConstantOperator.createBigint(1)));
         new Expectations(call) {
             {
-                call.getUsedColumns();
-                result = new ColumnRefSet(1);
-                minTimes = 0;
-
                 call.getFunction();
                 minTimes = 0;
                 result = AggregateFunction.createBuiltin("sum",
@@ -757,7 +753,7 @@ public class OptimizerTaskTest {
         Memo memo = optimizer.getContext().getMemo();
         PhysicalOlapScanOperator
                 scan = (PhysicalOlapScanOperator) memo.getGroups().get(0).getPhysicalExpressions().get(0).getOp();
-        assertEquals(scan.getOutputColumns(), Lists.newArrayList(column1, column2, column3));
+        assertEquals(scan.getOutputColumns(), Lists.newArrayList(column2, column3));
 
         assertEquals(optimizer.getContext().getMemo().getRootGroup().
                 getLogicalProperty().getOutputColumns(), new ColumnRefSet(column2.getId()));

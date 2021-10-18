@@ -34,7 +34,8 @@ public class MergeProjectWithChildRule extends TransformationRule {
         Map<ColumnRefOperator, ScalarOperator> resultMap = Maps.newHashMap();
         if (child.getProjection() != null) {
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(child.getProjection().getColumnRefMap());
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : logicalProjectOperator.getColumnRefMap().entrySet()) {
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : logicalProjectOperator.getColumnRefMap()
+                    .entrySet()) {
                 resultMap.put(entry.getKey(), entry.getValue().accept(rewriter, null));
             }
         } else {
@@ -42,8 +43,14 @@ public class MergeProjectWithChildRule extends TransformationRule {
         }
 
         Operator.Builder builder = OperatorBuilderFactory.build(child);
-        Operator op = builder.withOperator(child).setProjection(new Projection(resultMap)).build();
+        builder.withOperator(child).setProjection(new Projection(resultMap));
 
-        return Lists.newArrayList(OptExpression.create(op, input.inputAt(0).getInputs()));
+        if (logicalProjectOperator.getLimit() != -1) {
+            builder.setLimit(logicalProjectOperator.getLimit());
+        } else {
+            builder.setLimit(child.getLimit());
+        }
+        
+        return Lists.newArrayList(OptExpression.create(builder.build(), input.inputAt(0).getInputs()));
     }
 }

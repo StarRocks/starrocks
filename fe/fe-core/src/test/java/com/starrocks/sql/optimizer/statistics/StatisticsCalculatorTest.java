@@ -20,6 +20,8 @@ import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -457,6 +459,7 @@ public class StatisticsCalculatorTest {
         childBuilder1.addColumnStatistics(ImmutableMap.of(v5, new ColumnStatistic(0, 50, 0, 10, 50)));
         Group childGroup1 = new Group(0);
         childGroup1.setStatistics(childBuilder1.build());
+        childGroup1.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(v1, v2, v5))));
         // child 2 statistics
         Statistics.Builder childBuilder2 = Statistics.builder();
         childBuilder2.setOutputRowCount(20000);
@@ -465,6 +468,8 @@ public class StatisticsCalculatorTest {
         childBuilder2.addColumnStatistics(ImmutableMap.of(v6, new ColumnStatistic(0, 100, 0, 10, 100)));
         Group childGroup2 = new Group(1);
         childGroup2.setStatistics(childBuilder2.build());
+        childGroup2.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(v3, v4, v6))));
+
         // record column id to relation id
         columnRefFactory.updateColumnToRelationIds(v1.getId(), 0);
         columnRefFactory.updateColumnToRelationIds(v2.getId(), 0);

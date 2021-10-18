@@ -86,8 +86,8 @@ UNPARTITIONED
 |  <slot 2> : 2: C_NAME
 |  <slot 3> : 3: C_ADDRESS
 |  <slot 5> : 5: C_PHONE
-|  <slot 6> : 6: C_ACCTBAL
 |  <slot 38> : 38: N_NAME
+|  <slot 6> : 6: C_ACCTBAL
 |  <slot 8> : 8: C_COMMENT
 |  use vectorized: true
 |

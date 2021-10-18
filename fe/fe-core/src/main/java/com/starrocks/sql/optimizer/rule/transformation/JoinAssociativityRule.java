@@ -122,7 +122,7 @@ public class JoinAssociativityRule extends TransformationRule {
                 .mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
 
         LogicalJoinOperator.Builder rightChildJoinOperatorBuilder = new LogicalJoinOperator.Builder();
-        LogicalJoinOperator rightChildJoinOperator = (LogicalJoinOperator) rightChildJoinOperatorBuilder
+        LogicalJoinOperator rightChildJoinOperator = rightChildJoinOperatorBuilder
                 .setJoinType(JoinOperator.INNER_JOIN)
                 .setOnPredicate(Utils.compoundAnd(newChildConjuncts))
                 .setProjection(new Projection(newRightOutputColumns.stream()

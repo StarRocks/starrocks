@@ -151,11 +151,10 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds02"));
         SessionVariable replaySessionVariable = replayPair.first.getSessionVariable();
         Assert.assertEquals(replaySessionVariable.getParallelExecInstanceNum(), 4);
-        System.out.println(replayPair.second);
-        Assert.assertTrue(replayPair.second.contains("|----25:EXCHANGE\n" +
+        Assert.assertTrue(replayPair.second.contains("|----24:EXCHANGE\n" +
                 "  |       cardinality: 73049\n" +
                 "  |    \n" +
-                "  19:UNION\n" +
+                "  18:UNION\n" +
                 "  |  child exprs: \n" +
                 "  |      [143, INT, true] | [164, DECIMAL64(7,2), true]\n" +
                 "  |      [179, INT, true] | [200, DECIMAL64(7,2), true]\n"));
@@ -174,11 +173,11 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
         // Check the size of the left and right tables
         Assert.assertTrue(replayPair.second.contains("|  \n" +
-                "  |----21:EXCHANGE\n" +
+                "  |----19:EXCHANGE\n" +
                 "  |       cardinality: 102\n" +
                 "  |    \n" +
                 "  5:OlapScanNode\n" +
-                "     table: customer, rollup: customer\n"));
+                "     table: customer, rollup: customer"));
     }
 
     @Test

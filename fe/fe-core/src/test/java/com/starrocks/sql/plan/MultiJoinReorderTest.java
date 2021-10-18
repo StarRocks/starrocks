@@ -37,6 +37,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
 
         String sql = "select * from t1, t2, t3, t0;";
         String planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("4:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.  |  use vectorized: true\n" +
@@ -59,6 +60,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
         connectContext.getSessionVariable().disableDPJoinReorder();
         String sql = "select * from t1 join t3 on t1.v4 = t3.v1 join t0 join t2";
         String planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  3:OlapScanNode\n" +
                 "     TABLE: t0"));
         Assert.assertTrue(planFragment.contains("  |----4:EXCHANGE\n" +
@@ -93,6 +95,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "join t0 on t1.v4 = t0.v2 " +
                 "join t2 on t1.v5 = t2.v8 ";
         String planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  3:OlapScanNode\n" +
                 "     TABLE: t0"));
         Assert.assertTrue(planFragment.contains("  |----4:EXCHANGE\n" +
@@ -120,7 +123,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "on t1.v6 = a.v5";
         String planFragment = getFragmentPlan(sql);
         System.out.println(planFragment);
-        Assert.assertTrue(planFragment.contains("  16:HASH JOIN\n" +
+        Assert.assertTrue(planFragment.contains("14:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)"));
 
         Assert.assertTrue(planFragment.contains("  |----4:EXCHANGE\n" +
@@ -128,12 +131,12 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |    \n" +
                 "  2:OlapScanNode\n" +
                 "     TABLE: t1"));
-        Assert.assertTrue(planFragment.contains("  |----7:EXCHANGE\n" +
+        Assert.assertTrue(planFragment.contains("  |----6:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  1:OlapScanNode\n" +
                 "     TABLE: t2"));
-        Assert.assertTrue(planFragment.contains("  |----10:EXCHANGE\n" +
+        Assert.assertTrue(planFragment.contains("  |----8:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  0:OlapScanNode\n" +
@@ -148,26 +151,26 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "on b.v5 = a.v5";
         String planFragment = getFragmentPlan(sql);
         System.out.println(planFragment);
-        Assert.assertTrue(planFragment.contains("  25:HASH JOIN\n" +
+        Assert.assertTrue(planFragment.contains("  21:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: v1 = 13: v4\n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
-                "  |----24:EXCHANGE\n" +
+                "  |----20:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
                 "  |    \n" +
-                "  14:OlapScanNode\n" +
+                "  12:OlapScanNode\n" +
                 "     TABLE: t3"));
-        Assert.assertTrue(planFragment.contains("  11:HASH JOIN\n" +
+        Assert.assertTrue(planFragment.contains("  9:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: v1 = 1: v4\n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
-                "  |----10:EXCHANGE\n" +
+                "  |----8:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  0:OlapScanNode\n" +
@@ -186,31 +189,25 @@ public class MultiJoinReorderTest extends PlanTestBase {
 
         // Top join tree
         System.out.println(planFragment);
-        Assert.assertTrue(planFragment.contains("  |  equal join conjunct: 12: v5 = 10: count(2: v5)\n" +
-                "  |  use vectorized: true\n" +
-                "  |  \n" +
-                "  |----25:EXCHANGE\n" +
-                "  |       use vectorized: true\n" +
-                "  |    \n" +
-                "  12:Project\n" +
-                "  |  <slot 12> : 12: v5\n" +
-                "  |  use vectorized: true\n" +
-                "  |  \n" +
-                "  11:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)"));
+        Assert.assertTrue(planFragment.contains("  17:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 12: v5 = 10: count(2: v5)\n" +
+                "  |  use vectorized: true)"));
 
         // Left sub join tree (b)
-        Assert.assertTrue(planFragment.contains("  20:HASH JOIN\n" +
+        Assert.assertTrue(planFragment.contains("  19:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 4: v1 = 1: v4\n" +
+                "  |  equal join conjunct: 14: v1 = 11: v4\n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
-                "  |----19:EXCHANGE\n" +
+                "  |----18:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
                 "  |    \n" +
-                "  13:OlapScanNode\n" +
+                "  0:OlapScanNode\n" +
                 "     TABLE: t3\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=1/1\n" +
@@ -263,6 +260,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
         connectContext.getSessionVariable().enableDPJoinReorder();
         String sql = "select * from t1, t2, t3, t0;";
         String planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("4:CROSS JOIN\n" +
                 "  |  cross join:\n" +
                 "  |  predicates is NULL.  |  use vectorized: true\n" +
@@ -286,6 +284,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
         connectContext.getSessionVariable().disableGreedyJoinReorder();
         String sql = "select * from t1 join t3 on t1.v4 = t3.v1 join t0 join t2";
         String planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  3:OlapScanNode\n" +
                 "     TABLE: t0"));
         Assert.assertTrue(planFragment.contains("  |----4:EXCHANGE\n" +
@@ -320,6 +319,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "join t0 on t1.v4 = t0.v2 " +
                 "join t2 on t1.v5 = t2.v8 ";
         String planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  3:OlapScanNode\n" +
                 "     TABLE: t0"));
         Assert.assertTrue(planFragment.contains("  |----4:EXCHANGE\n" +
@@ -347,7 +347,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "on t1.v6 = a.v5";
         String planFragment = getFragmentPlan(sql);
         System.out.println(planFragment);
-        Assert.assertTrue(planFragment.contains("  16:HASH JOIN\n" +
+        Assert.assertTrue(planFragment.contains("  14:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)"));
 
         Assert.assertTrue(planFragment.contains("  |----4:EXCHANGE\n" +
@@ -355,12 +355,12 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |    \n" +
                 "  2:OlapScanNode\n" +
                 "     TABLE: t1"));
-        Assert.assertTrue(planFragment.contains("  |----7:EXCHANGE\n" +
+        Assert.assertTrue(planFragment.contains("  |----6:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  1:OlapScanNode\n" +
                 "     TABLE: t2"));
-        Assert.assertTrue(planFragment.contains("  |----10:EXCHANGE\n" +
+        Assert.assertTrue(planFragment.contains("  |----8:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  0:OlapScanNode\n" +
@@ -376,26 +376,26 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "on b.v5 = a.v5";
         String planFragment = getFragmentPlan(sql);
         System.out.println(planFragment);
-        Assert.assertTrue(planFragment.contains("  25:HASH JOIN\n" +
+        Assert.assertTrue(planFragment.contains("  21:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: v1 = 13: v4\n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
-                "  |----24:EXCHANGE\n" +
+                "  |----20:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
                 "  |    \n" +
-                "  14:OlapScanNode\n" +
+                "  12:OlapScanNode\n" +
                 "     TABLE: t3"));
-        Assert.assertTrue(planFragment.contains("  11:HASH JOIN\n" +
+        Assert.assertTrue(planFragment.contains("  9:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: v1 = 1: v4\n" +
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
-                "  |----10:EXCHANGE\n" +
+                "  |----8:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
                 "  |    \n" +
                 "  0:OlapScanNode\n" +

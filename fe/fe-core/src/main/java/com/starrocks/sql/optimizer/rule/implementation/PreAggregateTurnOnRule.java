@@ -38,7 +38,7 @@ import java.util.stream.Collectors;
  * and turning on PreAggregation will help optimize the storage layer merge on read.
  * This rule traverses the query plan from the top down, and the Olap Scan node determines
  * whether preAggregation can be turned on or not based on the information recorded by the PreAggregationContext.
- *
+ * <p>
  * A cross join cannot turn on PreAggregation, and other types of joins can only be turn on on one side.
  * If both sides are opened, many-to-many join results will appear, leading to errors in the upper aggregation results
  */
@@ -58,8 +58,6 @@ public class PreAggregateTurnOnRule {
 
         @Override
         public Void visit(OptExpression optExpression, PreAggregationContext context) {
-
-
             // Avoid left child modify context will effect right child
             if (optExpression.getInputs().size() <= 1) {
                 for (OptExpression opt : optExpression.getInputs()) {
@@ -143,7 +141,7 @@ public class PreAggregateTurnOnRule {
             // check has value conjunct
             boolean allKeyConjunct =
                     Utils.extractColumnRef(
-                            Utils.compoundAnd(scan.getPredicate(), Utils.compoundAnd(context.joinPredicates))).stream()
+                                    Utils.compoundAnd(scan.getPredicate(), Utils.compoundAnd(context.joinPredicates))).stream()
                             .map(ref -> scan.getColRefToColumnMetaMap().get(ref)).filter(Objects::nonNull)
                             .allMatch(Column::isKey);
             if (!allKeyConjunct) {

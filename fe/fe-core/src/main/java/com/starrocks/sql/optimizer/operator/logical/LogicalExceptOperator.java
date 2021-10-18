@@ -9,6 +9,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 public class LogicalExceptOperator extends LogicalSetOperator {
     private LogicalExceptOperator(Builder builder) {
         super(OperatorType.LOGICAL_EXCEPT, builder.outputColumnRefOp, builder.childOutputColumns,
+                builder.getLimit(),
                 builder.getProjection());
     }
 

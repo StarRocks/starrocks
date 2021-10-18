@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
@@ -59,6 +60,16 @@ public class Statistics {
 
     public Map<ColumnRefOperator, ColumnStatistic> getColumnStatistics() {
         return columnStatistics;
+    }
+
+    public Map<ColumnRefOperator, ColumnStatistic> getOutputColumnsStatistics(ColumnRefSet outputColumns) {
+        Map<ColumnRefOperator, ColumnStatistic> outputColumnsStatistics = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
+            if (outputColumns.contains(entry.getKey().getId())) {
+                outputColumnsStatistics.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return outputColumnsStatistics;
     }
 
     public boolean isTableRowCountMayInaccurate() {

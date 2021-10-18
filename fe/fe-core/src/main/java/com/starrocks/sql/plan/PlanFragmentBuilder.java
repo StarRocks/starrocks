@@ -99,6 +99,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TPartitionType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -267,6 +268,7 @@ public class PlanFragmentBuilder {
 
             projectNode.setHasNullableGenerateChild();
             projectNode.computeStatistics(optExpr.getStatistics());
+
             for (SlotId sid : projectMap.keySet()) {
                 SlotDescriptor slotDescriptor = tupleDescriptor.getSlot(sid.asInt());
                 slotDescriptor.setIsNullable(slotDescriptor.getIsNullable() | projectNode.isHasNullableGenerateChild());
@@ -283,6 +285,14 @@ public class PlanFragmentBuilder {
             if (node == null) {
                 return inputFragment;
             }
+
+            ColumnRefSet childOutputColumns = new ColumnRefSet();
+            optExpression.getInputs().forEach(c -> childOutputColumns.union(c.getOutputColumns()));
+            ColumnRefSet outputColumns = new ColumnRefSet(node.getOutputColumns());
+            if (outputColumns.equals(childOutputColumns)) {
+                return inputFragment;
+            }
+
             Preconditions.checkState(!node.getColumnRefMap().isEmpty());
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
@@ -327,7 +337,13 @@ public class PlanFragmentBuilder {
                             commonSubOperatorMap);
 
             projectNode.setHasNullableGenerateChild();
-            projectNode.computeStatistics(optExpression.getStatistics());
+
+            Statistics statistics = optExpression.getStatistics();
+            Statistics.Builder b = Statistics.builder();
+            b.setOutputRowCount(statistics.getOutputRowCount());
+            b.addColumnStatistics(statistics.getOutputColumnsStatistics(new ColumnRefSet(node.getOutputColumns())));
+            projectNode.computeStatistics(b.build());
+
             for (SlotId sid : projectMap.keySet()) {
                 SlotDescriptor slotDescriptor = tupleDescriptor.getSlot(sid.asInt());
                 slotDescriptor.setIsNullable(slotDescriptor.getIsNullable() | projectNode.isHasNullableGenerateChild());
