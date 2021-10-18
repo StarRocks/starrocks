@@ -76,6 +76,11 @@ public:
 
     RowsetId rowset_id() override { return _context.rowset_id; }
 
+	std::vector<std::pair<int, bool>> global_dict_efficacy_info() override { 
+		return _global_dict_efficacy_info;
+	} 
+	
+
 private:
     template <typename RowType>
     OLAPStatus _add_row(const RowType& row);
@@ -110,6 +115,7 @@ private:
 
     bool _is_pending = false;
     bool _already_built = false;
+	std::vector<std::pair<int, bool>> _global_dict_efficacy_info;
 };
 
 } // namespace starrocks

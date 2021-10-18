@@ -26,6 +26,7 @@
 #include "common/status.h"         // for Status
 #include "gen_cpp/segment_v2.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
+#include "runtime/global_dicts.h"
 #include "storage/row_cursor_cell.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/page_pointer.h" // for PagePointer
@@ -66,6 +67,10 @@ struct ColumnWriterOptions {
     // for char/varchar will speculate encoding in append
     // for others will decide encoding in init method
     bool need_speculate_encoding = false;
+
+    // when column data is encoding by dict
+    // if global_dict is not nullptr, will checkout whether global_dict can cover all data
+    vectorized::GlobalDictMap* global_dict = nullptr;
 };
 
 class BitmapIndexWriter;
@@ -120,6 +125,11 @@ public:
 
     virtual ordinal_t get_next_rowid() const = 0;
 
+    // only invalid in the case of global_dict is not nullptr
+    // column is not encoding by dict or append new words that
+    // not in global_dict, it will return false
+    virtual bool is_global_dict_efficacy() { return false; }
+
     bool is_nullable() const { return _is_nullable; }
 
     Field* get_field() const { return _field.get(); }
@@ -167,6 +177,17 @@ public:
     Status write_bitmap_index() override;
     Status write_bloom_filter_index() override;
     ordinal_t get_next_rowid() const override { return _next_rowid; }
+
+    bool is_global_dict_efficacy() override { return _is_global_dict_efficacy; }
+
+    void check_global_dict_efficacy(const std::vector<Slice>& dict_body) {
+        for (const auto& item : dict_body) {
+            if (auto iter = _opts.global_dict->find(item); iter == _opts.global_dict->end()) {
+                _is_global_dict_efficacy = false;
+                return;
+            }
+        }
+    }
 
 private:
     // All Pages will be organized into a linked list
@@ -234,6 +255,8 @@ private:
     bool _has_index_builder = false;
     int64_t _element_ordinal = 0;
     int64_t _previous_ordinal = 0;
+
+    bool _is_global_dict_efficacy = true;
 };
 
 class ArrayColumnWriter final : public ColumnWriter {

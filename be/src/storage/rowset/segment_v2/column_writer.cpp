@@ -417,6 +417,13 @@ Status ScalarColumnWriter::write_data() {
         RETURN_IF_ERROR(PageIO::compress_and_write_page(_compress_codec, _opts.compression_min_space_saving, _wblock,
                                                         body, footer, &dict_pp));
         dict_pp.to_proto(_opts.meta->mutable_dict_page());
+        if (_opts.global_dict != nullptr) {
+            check_global_dict_efficacy(body);
+        }
+    } else {
+        if (_opts.global_dict != nullptr) {
+            _is_global_dict_efficacy = false;
+        }
     }
     _opts.meta->set_all_dict_encoded(_page_builder->all_dict_encoded());
     return Status::OK();

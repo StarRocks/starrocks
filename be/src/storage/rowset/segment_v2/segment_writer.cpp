@@ -76,6 +76,7 @@ Status SegmentWriter::init(uint32_t write_mbytes_per_sec __attribute__((unused))
         return Status::InvalidArgument(strings::Substitute("Invalid storage_format_version $0", v));
     }
     _column_writers.reserve(_tablet_schema->columns().size());
+    _global_dict_efficacy_info.reserve(_tablet_schema->columns().size());
     for (const auto& column : _tablet_schema->columns()) {
         ColumnWriterOptions opts;
         opts.page_format = (_opts.storage_format_version == 1) ? 1 : 2;
@@ -102,6 +103,16 @@ Status SegmentWriter::init(uint32_t write_mbytes_per_sec __attribute__((unused))
                 return Status::NotSupported("Do not support bitmap index for array type");
             }
         }
+
+        if (column.type() == FieldType::OLAP_FIELD_TYPE_CHAR && column.type() != FieldType::OLAP_FIELD_TYPE_VARCHAR,
+            _opts.global_dicts != nullptr) {
+            auto iter = _opts.global_dicts->find(column_id);
+            if (iter != _opts.global_dicts->end()) {
+                opts.global_dict = &iter->second.first;
+            }
+        }
+
+	_global_dict_efficacy_info.push_back(std::pair(column_id, true));
 
         std::unique_ptr<ColumnWriter> writer;
         RETURN_IF_ERROR(ColumnWriter::create(opts, &column, _wblock.get(), &writer));
@@ -167,8 +178,13 @@ Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size
 
 // write column data to file one by one
 Status SegmentWriter::_write_data() {
+    size_t loop = 0;
     for (auto& column_writer : _column_writers) {
         RETURN_IF_ERROR(column_writer->write_data());
+	if (column_writer->is_global_dict_efficacy() == false) {
+	    _global_dict_efficacy_info[loop].second = false;
+	}
+	loop++;
     }
     return Status::OK();
 }

@@ -29,6 +29,7 @@
 #include "common/status.h" // Status
 #include "gen_cpp/segment_v2.pb.h"
 #include "gutil/macros.h"
+#include "runtime/global_dicts.h"
 
 namespace starrocks {
 
@@ -58,6 +59,7 @@ struct SegmentWriterOptions {
     uint32_t storage_format_version = 1;
     uint32_t num_rows_per_block = 1024;
     MemTracker* mem_tracker = nullptr;
+    vectorized::GlobalDictMaps* global_dicts = nullptr;
 };
 
 class SegmentWriter {
@@ -84,6 +86,10 @@ public:
 
     uint32_t segment_id() const { return _segment_id; }
 
+	std::vector<std::pair<int, bool>> global_dict_efficacy_info() { 
+		return _global_dict_efficacy_info;
+	} 
+
 private:
     Status _write_data();
     Status _write_ordinal_index();
@@ -106,6 +112,8 @@ private:
     std::unique_ptr<ShortKeyIndexBuilder> _index_builder;
     std::vector<std::unique_ptr<ColumnWriter>> _column_writers;
     uint32_t _row_count = 0;
+
+	std::vector<std::pair<int, bool>> _global_dict_efficacy_info;
 };
 
 } // namespace segment_v2

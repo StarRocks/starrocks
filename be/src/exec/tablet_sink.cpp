@@ -109,6 +109,9 @@ Status NodeChannel::init(RuntimeState* state) {
 
     _rpc_timeout_ms = state->query_options().query_timeout * 1000;
 
+	// get global_dict
+	_global_dict = state->get_global_dict_map();
+
     _load_info = "load_id=" + print_id(_parent->_load_id) + ", txn_id=" + std::to_string(_parent->_txn_id);
     _name = "NodeChannel[" + std::to_string(_index_id) + "-" + std::to_string(_node_id) + "]";
     return Status::OK();
@@ -134,6 +137,19 @@ void NodeChannel::open() {
     request.set_load_channel_timeout_s(_parent->_load_channel_timeout_s);
     request.set_is_vectorized(_parent->_is_vectorized);
 
+	// set global dict
+	for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
+		auto slot = request.mutable_schema()->mutable_slot_descs(i);
+		auto it = _global_dict.find(slot->id()); 	
+		if (it != _global_dict.end()) {
+			auto dict = it->second.first;
+			for (auto& item : dict) {
+				slot->add_global_dict_words(item.first.to_string());
+				slot->add_global_dict_ids(item.second);
+			}
+		}
+	}
+	
     _open_closure = new RefCountClosure<PTabletWriterOpenResult>();
     _open_closure->ref();
 

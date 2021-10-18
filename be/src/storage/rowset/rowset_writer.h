@@ -116,6 +116,11 @@ public:
     virtual int64_t total_data_size() = 0;
 
     virtual RowsetId rowset_id() = 0;
+	
+	virtual std::vector<std::pair<int, bool>> global_dict_efficacy_info() { 
+		std::vector<std::pair<int, bool>> fake;
+		return fake;
+	} 
 
 private:
     RowsetWriter(const RowsetWriter&) = delete;

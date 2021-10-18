@@ -37,6 +37,8 @@ message PSlotDescriptor {
     required string col_name = 8;
     required int32 slot_idx = 9;
     required bool is_materialized = 10;
+    repeated int32 global_dict_ids = 11;
+    repeated string global_dict_words = 12; 
 };
 
 message PTupleDescriptor {
