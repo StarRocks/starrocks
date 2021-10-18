@@ -67,7 +67,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
 
                 // check whether fragment is finished beforehand before pull_chunk
                 if (_fragment_ctx->is_canceled()) {
-                    return _fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED;
+                    cancel(_fragment_ctx->runtime_state());
+                    if (source_operator()->pending_finish()) {
+                        _state = DriverState::PENDING_FINISH;
+                    } else {
+                        _state = _fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED;
+                    }
+                    return _state;
                 }
 
                 // pull chunk from current operator and push the chunk onto next
@@ -81,7 +87,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
 
                 // check whether fragment is finished beforehand before push_chunk
                 if (_fragment_ctx->is_canceled()) {
-                    return _fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED;
+                    cancel(_fragment_ctx->runtime_state());
+                    if (source_operator()->pending_finish()) {
+                        _state = DriverState::PENDING_FINISH;
+                    } else {
+                        _state = _fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED;
+                    }
+                    return _state;
                 }
 
                 if (status.ok()) {
@@ -123,6 +135,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         _first_unfinished = _new_first_unfinished;
 
         if (sink_operator()->is_finished()) {
+            cancel(_fragment_ctx->runtime_state());
             _state = source_operator()->pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH;
             return _state;
         }
