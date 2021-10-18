@@ -64,7 +64,7 @@ public:
 
     // Returns the Schema of the result.
     // If a Field uses the global dictionary strategy, the field will be rewritten as INT
-    const Schema& res_schema() const { return _mapped_schema; }
+    const Schema& res_schema() const { return _encoded_schema; }
 
     virtual Status init_res_schema(std::unordered_map<uint32_t, GlobalDictMap*>& dict_maps) {
         for (const auto& field : schema().fields()) {
@@ -72,9 +72,9 @@ public:
             const auto& name = field->name();
             bool is_nullable = field->is_nullable();
             if (dict_maps.count(cid)) {
-                _mapped_schema.append(std::make_shared<Field>(cid, name, OLAP_FIELD_TYPE_INT, -1, -1, is_nullable));
+                _encoded_schema.append(std::make_shared<Field>(cid, name, OLAP_FIELD_TYPE_INT, -1, -1, is_nullable));
             } else {
-                _mapped_schema.append(field);
+                _encoded_schema.append(field);
             }
         }
         return Status::OK();
@@ -89,7 +89,7 @@ protected:
     }
 
     vectorized::Schema _schema;
-    vectorized::Schema _mapped_schema;
+    vectorized::Schema _encoded_schema;
 
     int _chunk_size = DEFAULT_CHUNK_SIZE;
 };

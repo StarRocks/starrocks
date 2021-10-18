@@ -31,7 +31,7 @@ public:
 
     void reset() {
         _idx = 0;
-        _mapped_schema.clear();
+        _encoded_schema.clear();
     }
 
     static Schema schema() {

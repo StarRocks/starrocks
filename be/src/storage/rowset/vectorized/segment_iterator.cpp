@@ -152,9 +152,8 @@ public:
 
     Status seek_to_ordinal(ordinal_t ord) override { return _col_iter->seek_to_ordinal(ord); }
 
-    // we should remove it ?
     Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override {
-        return _col_iter->next_batch(n, dst, has_null);
+        return Status::InternalError("scalar next_batch() should never be called");
     }
 
     ordinal_t get_current_ordinal() const override { return _col_iter->get_current_ordinal(); }
@@ -182,13 +181,12 @@ public:
         auto& res_data = *container;
         res_data.resize(size);
         for (size_t i = 0; i < size; ++i) {
-            DCHECK(_code_to_global.contains(codes[i]));
-            res_data[i] = _code_to_global.at(codes[i]);
+            DCHECK(_local_to_global.contains(codes[i]));
+            res_data[i] = _local_to_global.at(codes[i]);
         }
         return Status::OK();
     }
 
-    // TODO(stdpain): I'm not sure this function meaning
     Status get_row_ranges_by_zone_map(const std::vector<const vectorized::ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate,
                                       vectorized::SparseRange* row_ranges) override {
@@ -199,7 +197,7 @@ private:
     Status _build_to_global_dict();
     ColumnId _cid;
     ColumnIterator* _col_iter;
-    phmap::parallel_flat_hash_map<int32_t, int32_t> _code_to_global;
+    phmap::flat_hash_map<int32_t, int32_t> _local_to_global;
     // global dict
     GlobalDictMap* _global_dict;
 };
@@ -208,7 +206,7 @@ Status GlobalDictCodeColumnIterator::_build_to_global_dict() {
     DCHECK(_col_iter->all_page_dict_encoded());
 
     // we only have to build code mapping once
-    if (_code_to_global.size() > 0) {
+    if (_local_to_global.size() > 0) {
         return Status::OK();
     }
     auto file_column_iter = down_cast<FileColumnIterator*>(_col_iter);
@@ -231,7 +229,7 @@ Status GlobalDictCodeColumnIterator::_build_to_global_dict() {
                 return Status::InternalError(fmt::format("not found slice:{} in global dict", slice.data));
             }
         } else {
-            _code_to_global[dict_codes[i]] = res->second;
+            _local_to_global[dict_codes[i]] = res->second;
         }
     }
     return Status::OK();

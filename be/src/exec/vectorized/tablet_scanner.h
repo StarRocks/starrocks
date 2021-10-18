@@ -49,7 +49,7 @@ public:
     RuntimeState* runtime_state() { return _runtime_state; }
     int64_t raw_rows_read() const { return _raw_rows_read; }
 
-    // REQUIRES: `init(RuntimeState*, const OlapScannerParams&)` has been called.
+    // REQUIRES: `init(RuntimeState*, const TabletScannerParams&)` has been called.
     const Schema& chunk_schema() const { return _prj_iter->res_schema(); }
 
     void set_keep_priority(bool v) { _keep_priority = v; }
