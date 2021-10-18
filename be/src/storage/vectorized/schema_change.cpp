@@ -1105,8 +1105,7 @@ Status SchemaChangeHandler::_get_versions_to_be_changed(TabletSharedPtr base_tab
     }
 
     std::vector<Version> span_versions;
-    if (base_tablet->capture_consistent_versions(Version(0, rowset->version().second), &span_versions) !=
-        OLAP_SUCCESS) {
+    if (!base_tablet->capture_consistent_versions(Version(0, rowset->version().second), &span_versions).ok()) {
         return Status::InternalError("capture consistent versions failed");
     }
 
@@ -1191,8 +1190,8 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         }
 
         std::unique_ptr<RowsetWriter> rowset_writer;
-        OLAPStatus st = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
-        if (st != OLAP_SUCCESS) {
+        status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
+        if (!status.ok()) {
             status = Status::InternalError("build rowset writer failed");
             LOG(INFO) << "build rowset writer failed";
             return status;
@@ -1215,14 +1214,14 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             break;
         }
         LOG(INFO) << "new rowset has " << new_rowset->num_segments() << " segments";
-        OLAPStatus res = sc_params.new_tablet->add_rowset(new_rowset, false);
-        if (res == OLAP_ERR_PUSH_VERSION_ALREADY_EXIST) {
+        status = sc_params.new_tablet->add_rowset(new_rowset, false);
+        if (status.is_already_exist()) {
             LOG(WARNING) << "version already exist, version revert occured. "
                          << "tablet=" << sc_params.new_tablet->full_name() << ", version='" << sc_params.version.first
                          << "-" << sc_params.version.second;
             StorageEngine::instance()->add_unused_rowset(new_rowset);
             status = Status::OK();
-        } else if (res != OLAP_SUCCESS) {
+        } else if (!status.ok()) {
             LOG(WARNING) << "failed to register new version. "
                          << " tablet=" << sc_params.new_tablet->full_name() << ", version=" << sc_params.version.first
                          << "-" << sc_params.version.second;
@@ -1241,18 +1240,14 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         // because the new Delta has to be converted to the old and new Schema versions
     }
 
-    OLAPStatus res = OLAP_SUCCESS;
     if (status.ok()) {
-        res = sc_params.new_tablet->check_version_integrity(sc_params.version);
+        status = sc_params.new_tablet->check_version_integrity(sc_params.version);
     }
 
     LOG(INFO) << "finish converting rowsets for new_tablet from base_tablet. "
               << "base_tablet=" << sc_params.base_tablet->full_name()
-              << ", new_tablet=" << sc_params.new_tablet->full_name();
+              << ", new_tablet=" << sc_params.new_tablet->full_name() << ", status is " << status.to_string();
 
-    if (res != OLAP_SUCCESS) {
-        status = Status::InternalError("failed to covert historical rowset");
-    }
     return status;
 }
 
@@ -1263,23 +1258,8 @@ Status SchemaChangeHandler::_parse_request(
         const std::unordered_map<std::string, AlterMaterializedViewParam>& materialized_function_map) {
     for (int i = 0, new_schema_size = new_tablet->tablet_schema().num_columns(); i < new_schema_size; ++i) {
         const TabletColumn& new_column = new_tablet->tablet_schema().column(i);
-        const string& column_name = new_column.name();
+        string column_name = std::string(new_column.name());
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
-
-        if (new_column.has_reference_column()) {
-            int32_t column_index = base_tablet->field_index(new_column.referenced_column());
-
-            if (column_index < 0) {
-                LOG(WARNING) << "referenced column was missing. "
-                             << "[column=" << column_name << " referenced_column=" << column_index << "]";
-                return Status::InternalError("referenced column was missing");
-            }
-
-            column_mapping->ref_column = column_index;
-            LOG(INFO) << "A column refered to existed column will be added after schema changing."
-                      << "column=" << column_name << ", ref_column=" << column_index;
-            continue;
-        }
 
         if (materialized_function_map.find(column_name) != materialized_function_map.end()) {
             AlterMaterializedViewParam mvParam = materialized_function_map.find(column_name)->second;
@@ -1311,7 +1291,7 @@ Status SchemaChangeHandler::_parse_request(
                 *sc_directly = true;
             }
 
-            if (!_init_column_mapping(column_mapping, new_column, "").ok()) {
+            if (!_init_column_mapping(column_mapping, new_column, new_column.default_value()).ok()) {
                 return Status::InternalError("init column mapping failed");
             }
 
