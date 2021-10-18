@@ -35,7 +35,8 @@ public:
         this->data(state).initial = false;
     }
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
         DCHECK(columns[0]->is_binary());
         if (ctx->get_num_args() > 1) {
             auto const_column_sep = ctx->get_constant_column(1);
@@ -98,7 +99,7 @@ public:
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
-                                   AggDataPtr state) const override {
+                                   AggDataPtr __restrict state) const override {
         if (ctx->get_num_args() > 1) {
             const InputColumnType* column_val = down_cast<const InputColumnType*>(columns[0]);
             auto const_column_sep = ctx->get_constant_column(1);
@@ -121,7 +122,7 @@ public:
         }
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr state, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
         for (size_t i = frame_start; i < frame_end; ++i) {
@@ -129,7 +130,7 @@ public:
         }
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         Slice slice = column->get(row_num).get_slice();
         char* data = slice.data;
         uint32_t size_value = *reinterpret_cast<uint32_t*>(data);
@@ -145,7 +146,7 @@ public:
         }
     }
 
-    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
 
         auto* column = down_cast<BinaryColumn*>(to);
@@ -258,7 +259,7 @@ public:
         }
     }
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         const std::string& value = this->data(state).intermediate_string;
         // Remove first sep_length.
         const char* data = value.data();

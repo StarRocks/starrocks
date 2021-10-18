@@ -29,7 +29,7 @@ public:
         }
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         const BitmapColumn* col = down_cast<const BitmapColumn*>(column);
         DCHECK(col->is_object());
         if (!this->data(state).initial) {
@@ -40,7 +40,7 @@ public:
         }
     }
 
-    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         BitmapColumn* col = down_cast<BitmapColumn*>(to);
         BitmapValue& bitmap = const_cast<BitmapValue&>(this->data(state).bitmap);
         col->append(std::move(bitmap));
@@ -50,7 +50,7 @@ public:
         *dst = src[0];
     }
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         BitmapValue& bitmap = const_cast<BitmapValue&>(this->data(state).bitmap);
         BitmapColumn* col = down_cast<BitmapColumn*>(to);
         col->append(std::move(bitmap));

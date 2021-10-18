@@ -179,14 +179,15 @@ public:
         this->data(state).reset();
     }
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
         DCHECK(!columns[0]->is_nullable() && !columns[0]->is_binary());
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
         T value = column.get_data()[row_num];
         OP()(this->data(state), value);
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr state, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
         for (size_t i = frame_start; i < frame_end; ++i) {
@@ -194,14 +195,14 @@ public:
         }
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(!column->is_nullable() && !column->is_binary());
         const auto* input_column = down_cast<const InputColumnType*>(column);
         T value = input_column->get_data()[row_num];
         OP()(this->data(state), value);
     }
 
-    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(!to->is_nullable() && !to->is_binary());
         down_cast<InputColumnType*>(to)->append(this->data(state).result);
     }
@@ -210,12 +211,13 @@ public:
         *dst = src[0];
     }
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(!to->is_nullable() && !to->is_binary());
         down_cast<InputColumnType*>(to)->append(this->data(state).result);
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
         DCHECK_GT(end, start);
         InputColumnType* column = down_cast<InputColumnType*>(dst);
         for (size_t i = start; i < end; ++i) {
@@ -230,17 +232,18 @@ template <PrimitiveType PT, typename State, class OP>
 class MaxMinAggregateFunction<PT, State, OP, RunTimeCppType<PT>, BinaryPTGuard<PT>> final
         : public AggregateFunctionBatchHelper<State, MaxMinAggregateFunction<PT, State, OP, RunTimeCppType<PT>>> {
 public:
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).reset();
     }
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
         DCHECK((*columns[0]).is_binary());
         Slice value = columns[0]->get(row_num).get_slice();
         OP()(this->data(state), value);
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr state, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
         for (size_t i = frame_start; i < frame_end; ++i) {
@@ -248,13 +251,13 @@ public:
         }
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
         Slice value = column->get(row_num).get_slice();
         OP()(this->data(state), value);
     }
 
-    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
         BinaryColumn* column = down_cast<BinaryColumn*>(to);
         column->append(this->data(state).slice());
@@ -264,13 +267,14 @@ public:
         *dst = src[0];
     }
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
         BinaryColumn* column = down_cast<BinaryColumn*>(to);
         column->append(this->data(state).slice());
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
         DCHECK_GT(end, start);
         BinaryColumn* column = down_cast<BinaryColumn*>(dst);
         for (size_t i = start; i < end; ++i) {
