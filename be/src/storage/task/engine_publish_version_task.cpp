@@ -62,6 +62,7 @@ OLAPStatus EnginePublishVersionTask::finish() {
         // each tablet
         for (auto& tablet_rs : tablet_related_rs) {
             OLAPStatus publish_status = OLAP_SUCCESS;
+            auto start = UnixMillis();
             const TabletInfo& tablet_info = tablet_rs.first;
             const RowsetSharedPtr& rowset = tablet_rs.second;
             VLOG(1) << "begin to publish version on tablet. "
@@ -121,9 +122,10 @@ OLAPStatus EnginePublishVersionTask::finish() {
                 }
             }
             partition_related_tablet_infos.erase(tablet_info);
-            VLOG(1) << "publish version successfully on tablet. tablet=" << tablet->full_name()
-                    << ", transaction_id=" << transaction_id << ", version=" << version.first
-                    << ", res=" << publish_status;
+            LOG(INFO) << "publish version successfully on tablet. partition="
+                      << partition_id << ", tablet=" << tablet->full_name()
+                      << ", transaction_id=" << transaction_id << ", version=" << version.first
+                      << ", res=" << publish_status << ", cost: " << (UnixMillis() - start) << "ms";
         }
 
         // check if the related tablet remained all have the version
