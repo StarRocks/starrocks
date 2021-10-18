@@ -101,10 +101,6 @@ Status ResultSink::open(RuntimeState* state) {
     return Expr::open(_output_expr_ctxs, state);
 }
 
-Status ResultSink::send(RuntimeState* state, RowBatch* batch) {
-    return _writer->append_row_batch(batch);
-}
-
 Status ResultSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
     return _writer->append_chunk(chunk);
 }
