@@ -44,7 +44,7 @@ partition 支持如下几种修改方式
     语法：
 
     ```sql
-    DROP PARTITION [IF EXISTS] partition_name [FORCE]
+    DROP PARTITION [IF EXISTS | FORCE] partition_name
     ```
 
     注意：
