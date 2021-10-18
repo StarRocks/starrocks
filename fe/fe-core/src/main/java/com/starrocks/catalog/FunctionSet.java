@@ -31,7 +31,6 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LikePredicate;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -212,7 +211,6 @@ public class FunctionSet {
         BinaryPredicate.initBuiltins(this);
         CastExpr.initBuiltins(this);
         IsNullPredicate.initBuiltins(this);
-        LikePredicate.initBuiltins(this);
         InPredicate.initBuiltins(this);
         TableFunction.initBuiltins(this);
 
