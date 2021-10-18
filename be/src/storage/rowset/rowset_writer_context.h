@@ -42,11 +42,6 @@ public:
     RowsetWriterContext(const RowsetWriterContext&) = default;
     RowsetWriterContext& operator=(const RowsetWriterContext&) = default;
 
-    /*
-     * The fields were arranged based on size to reduce sizeof(RowsetWriterContext).
-     */
-    MemTracker* mem_tracker = nullptr;
-
     std::string rowset_path_prefix;
 
     Env* env = Env::Default();

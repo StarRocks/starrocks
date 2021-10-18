@@ -942,7 +942,6 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, Mem
     std::unique_ptr<MemTracker> sub_tracker = std::make_unique<MemTracker>(-1, "update-compation", mem_tracker, true);
     // create rowset writer
     RowsetWriterContext context(kDataFormatV2, config::storage_format_version);
-    context.mem_tracker = sub_tracker.get();
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.tablet_uid = _tablet.tablet_uid();
     context.tablet_id = _tablet.tablet_id();

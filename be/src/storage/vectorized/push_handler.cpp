@@ -424,7 +424,6 @@ Status PushHandler::_convert(const TabletSharedPtr& cur_tablet, const TabletShar
     VLOG(3) << "init rowset builder. tablet=" << cur_tablet->full_name()
             << ", block_row_size=" << cur_tablet->num_rows_per_row_block();
     RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
-    context.mem_tracker = ExecEnv::GetInstance()->load_mem_tracker();
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.tablet_uid = cur_tablet->tablet_uid();
     context.tablet_id = cur_tablet->tablet_id();

@@ -293,7 +293,7 @@ void DataStreamRecvr::SenderQueue::add_batch(const PRowBatch& pb_batch, int be_n
         // Note: if this function makes a row batch, the batch *must* be added
         // to _batch_queue. It is not valid to create the row batch and destroy
         // it in this thread.
-        batch = new RowBatch(_recvr->row_desc(), pb_batch, _recvr->mem_tracker());
+        batch = new RowBatch(_recvr->row_desc(), pb_batch);
     }
 
     VLOG_ROW << "added #rows=" << batch->num_rows() << " batch_size=" << batch_size << "\n";
@@ -615,7 +615,6 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_t
     // TODO: Now the parent tracker may cause problem when we need spill to disk, so we
     // replace parent_tracker with nullptr, fix future
     _mem_tracker = std::make_unique<MemTracker>(_profile.get(), -1, "DataStreamRecvr", nullptr);
-    // _mem_tracker.reset(new MemTracker(_profile.get(), -1, "DataStreamRecvr", parent_tracker));
 
     // Create one queue per sender if is_merging is true.
 

@@ -154,7 +154,6 @@ TEST_F(SegmentReaderWriterTest, normal) {
 
     SegmentWriterOptions opts;
     opts.num_rows_per_block = 10;
-    opts.mem_tracker = _mem_tracker.get();
 
     shared_ptr<Segment> segment;
     build_segment(opts, tablet_schema, tablet_schema, 4096, DefaultIntGenerator, &segment);
@@ -306,7 +305,6 @@ TEST_F(SegmentReaderWriterTest, LateMaterialization) {
     {
         shared_ptr<Segment> segment;
         SegmentWriterOptions opts;
-        opts.mem_tracker = _mem_tracker.get();
         build_segment(opts, tablet_schema, tablet_schema, 100, data_gen, &segment);
         {
             // lazy enabled when predicate is subset of returned columns:
@@ -385,7 +383,6 @@ TEST_F(SegmentReaderWriterTest, LateMaterialization) {
         tablet_schema = create_schema({create_int_key(1, true, false, true), create_int_value(2)});
         shared_ptr<Segment> segment;
         SegmentWriterOptions write_opts;
-        write_opts.mem_tracker = _mem_tracker.get();
         build_segment(write_opts, tablet_schema, tablet_schema, 100, data_gen, &segment);
         ASSERT_TRUE(column_contains_index(segment->footer().columns(0), BITMAP_INDEX));
         {
@@ -422,7 +419,6 @@ TEST_F(SegmentReaderWriterTest, TestIndex) {
 
     SegmentWriterOptions opts;
     opts.num_rows_per_block = 10;
-    opts.mem_tracker = _mem_tracker.get();
 
     std::shared_ptr<Segment> segment;
     // 0, 1, 2, 3
@@ -624,7 +620,6 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
 
     SegmentWriterOptions opts;
     opts.num_rows_per_block = num_rows_per_block;
-    opts.mem_tracker = _mem_tracker.get();
 
     std::string fname = dname + "/int_case";
     std::unique_ptr<fs::WritableBlock> wblock;
@@ -675,7 +670,6 @@ TEST_F(SegmentReaderWriterTest, TestDefaultValueColumn) {
 
         std::shared_ptr<Segment> segment;
         SegmentWriterOptions opts;
-        opts.mem_tracker = _mem_tracker.get();
         build_segment(opts, build_schema, query_schema, 4096, DefaultIntGenerator, &segment);
 
         Schema schema(query_schema);
@@ -727,7 +721,6 @@ TEST_F(SegmentReaderWriterTest, TestDefaultValueColumn) {
 
         std::shared_ptr<Segment> segment;
         SegmentWriterOptions opts;
-        opts.mem_tracker = _mem_tracker.get();
         build_segment(opts, build_schema, query_schema, 4096, DefaultIntGenerator, &segment);
 
         Schema schema(query_schema);
@@ -787,7 +780,6 @@ TEST_F(SegmentReaderWriterTest, TestStringDict) {
 
     SegmentWriterOptions opts;
     opts.num_rows_per_block = num_rows_per_block;
-    opts.mem_tracker = _mem_tracker.get();
 
     std::string fname = kSegmentDir + "/string_case";
     std::unique_ptr<fs::WritableBlock> wblock;
@@ -1006,7 +998,6 @@ TEST_F(SegmentReaderWriterTest, TestBitmapPredicate) {
                            create_int_value(3), create_int_value(4)});
 
     SegmentWriterOptions opts;
-    opts.mem_tracker = _mem_tracker.get();
     shared_ptr<Segment> segment;
     build_segment(opts, tablet_schema, tablet_schema, 4096, DefaultIntGenerator, &segment);
     ASSERT_TRUE(column_contains_index(segment->footer().columns(0), BITMAP_INDEX));
@@ -1141,14 +1132,12 @@ TEST_F(SegmentReaderWriterTest, TestBloomFilterIndexUniqueModel) {
 
     // for not base segment
     SegmentWriterOptions opts1;
-    opts1.mem_tracker = _mem_tracker.get();
     shared_ptr<Segment> seg1;
     build_segment(opts1, schema, schema, 100, DefaultIntGenerator, &seg1);
     ASSERT_TRUE(column_contains_index(seg1->footer().columns(3), BLOOM_FILTER_INDEX));
 
     // for base segment
     SegmentWriterOptions opts2;
-    opts2.mem_tracker = _mem_tracker.get();
     shared_ptr<Segment> seg2;
     build_segment(opts2, schema, schema, 100, DefaultIntGenerator, &seg2);
     ASSERT_TRUE(column_contains_index(seg2->footer().columns(3), BLOOM_FILTER_INDEX));

@@ -96,7 +96,7 @@ Status TabletsChannel::add_batch(const PTabletWriterAddBatchRequest& params) {
         return Status::InternalError("lost data packet");
     }
 
-    RowBatch row_batch(*_row_desc, params.row_batch(), _mem_tracker.get());
+    RowBatch row_batch(*_row_desc, params.row_batch());
 
     // iterator all data
     for (int i = 0; i < params.tablet_ids_size(); ++i) {

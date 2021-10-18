@@ -927,11 +927,6 @@ bool RowBlockMerger::merge(const std::vector<RowBlock*>& row_block_arr, RowsetWr
     };
 
     uint64_t tmp_merged_rows = 0;
-    // release the memory of object pool.
-    // The memory of object allocate from ObjectPool is recorded in the mem_tracker.
-    // TODO: add mem_tracker for ObjectPool?
-    DeferOp release_object_pool_memory(
-            [this] { return this->_mem_tracker->release(this->_mem_tracker->consumption()); });
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     std::unique_ptr<ObjectPool> agg_object_pool(new ObjectPool());
 
@@ -943,11 +938,6 @@ bool RowBlockMerger::merge(const std::vector<RowBlock*>& row_block_arr, RowsetWr
     }
 
     _make_heap(row_block_arr);
-
-    row_cursor.allocate_memory_for_string_type(_tablet->tablet_schema());
-    _mem_tracker->consume(row_cursor.get_variable_len());
-    DeferOp release_row_cursor_memory(
-            [this, &row_cursor] { return this->_mem_tracker->release(row_cursor.get_variable_len()); });
 
     while (!_heap.empty()) {
         init_row_with_others(&row_cursor, *(_heap.top().row_cursor), mem_pool.get(), agg_object_pool.get());
@@ -1448,7 +1438,6 @@ bool SchemaChangeWithSorting::_internal_sorting(const std::vector<RowBlock*>& ro
     RowBlockMerger merger(_mem_tracker.get(), new_tablet);
 
     RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
-    context.mem_tracker = _mem_tracker.get();
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.tablet_uid = new_tablet->tablet_uid();
     context.tablet_id = new_tablet->tablet_id();
@@ -1492,7 +1481,7 @@ bool SchemaChangeWithSorting::_external_sorting(vector<RowsetSharedPtr>& src_row
     }
 
     Merger::Statistics stats;
-    auto res = Merger::merge_rowsets(_mem_tracker.get(), new_tablet, READER_ALTER_TABLE, rs_readers, rowset_writer,
+    auto res = Merger::merge_rowsets(_mem_tracker->limit(), new_tablet, READER_ALTER_TABLE, rs_readers, rowset_writer,
                                      &stats);
     if (res != OLAP_SUCCESS) {
         LOG(WARNING) << "failed to merge rowsets. tablet=" << new_tablet->full_name()
@@ -1856,7 +1845,6 @@ OLAPStatus SchemaChangeHandler::_convert_historical_rowsets(const SchemaChangePa
         TabletSharedPtr new_tablet = sc_params.new_tablet;
 
         RowsetWriterContext writer_context(kDataFormatUnknown, config::storage_format_version);
-        writer_context.mem_tracker = ExecEnv::GetInstance()->schema_change_mem_tracker();
         writer_context.rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.tablet_uid = new_tablet->tablet_uid();
         writer_context.tablet_id = new_tablet->tablet_id();
