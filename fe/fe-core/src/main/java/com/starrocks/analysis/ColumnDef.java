@@ -22,6 +22,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
@@ -85,13 +86,21 @@ public class ColumnDef {
     private boolean isAllowNull;
     private DefaultValue defaultValue;
     private final String comment;
+    private String encoding;
+    private String compression;
 
     public ColumnDef(String name, TypeDef typeDef) {
-        this(name, typeDef, false, null, false, DefaultValue.NOT_SET, "");
+        this(name, typeDef, false, null, false, DefaultValue.NOT_SET, "", "", "");
     }
 
     public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
                      boolean isAllowNull, DefaultValue defaultValue, String comment) {
+        this(name, typeDef, isKey, aggregateType, isAllowNull, defaultValue, comment, "", "");
+    }
+
+    public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
+                     boolean isAllowNull, DefaultValue defaultValue, String comment,
+                     String encoding, String compression) {
         this.name = name;
         this.typeDef = typeDef;
         this.isKey = isKey;
@@ -99,6 +108,8 @@ public class ColumnDef {
         this.isAllowNull = isAllowNull;
         this.defaultValue = defaultValue;
         this.comment = comment;
+        this.encoding = encoding;
+        this.compression = compression;
     }
 
     public boolean isAllowNull() {
@@ -135,6 +146,22 @@ public class ColumnDef {
 
     public Type getType() {
         return typeDef.getType();
+    }
+
+    public String getEncoding() {
+        return this.encoding;
+    }
+
+    public void setEncoding(String encoding) {
+        this.encoding = encoding;
+    }
+
+    public String getCompression() {
+        return this.compression;
+    }
+
+    public void setCompression(String compression) {
+        this.compression = compression;
     }
 
     public void analyze(boolean isOlap) throws AnalysisException {
@@ -214,6 +241,22 @@ public class ColumnDef {
                 validateDefaultValue(type, defaultValue.value);
             } catch (AnalysisException e) {
                 throw new AnalysisException(String.format("Invalid default value for '%s': %s", name, e.getMessage()));
+            }
+        }
+
+        if (!Strings.isNullOrEmpty(this.encoding)) {
+            try {
+                EncodingType.valueOf(this.encoding);
+            } catch (Exception e) {
+                throw new AnalysisException(String.format("invalid encoding type: %s", this.encoding), e);
+            }
+        }
+
+        if (!Strings.isNullOrEmpty(this.compression)) {
+            try {
+                CompressionType.valueOf(this.compression);
+            } catch (Exception e) {
+                throw new AnalysisException(String.format("invalid compression type: %s", this.compression), e);
             }
         }
     }
@@ -297,7 +340,7 @@ public class ColumnDef {
     }
 
     public Column toColumn() {
-        return new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValue.value, comment);
+        return new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValue.value, comment, encoding, compression);
     }
 
     @Override

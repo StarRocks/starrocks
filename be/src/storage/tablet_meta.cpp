@@ -24,6 +24,7 @@
 #include <boost/algorithm/string.hpp>
 #include <memory>
 #include <sstream>
+#include <thrift/protocol/TDebugProtocol.h>
 
 #include "gutil/strings/substitute.h"
 #include "storage/olap_common.h"
@@ -153,6 +154,8 @@ static Status TColumn2ColumnPB(int32_t unique_id, const TColumn& t_column, Field
     column_pb->set_name(c_name);
     column_pb->set_is_key(is_key);
     column_pb->set_is_nullable(is_nullable);
+    column_pb->set_encoding(t_column.encoding);
+    column_pb->set_compression(t_column.compression);
     if (depth > 0 || is_key) {
         auto agg_method = OLAP_FIELD_AGGREGATION_NONE;
         column_pb->set_aggregation(TabletColumn::get_string_by_aggregation_type(agg_method));

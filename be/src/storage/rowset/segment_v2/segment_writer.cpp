@@ -38,6 +38,7 @@
 #include "storage/vectorized/seek_tuple.h"
 #include "util/crc32c.h"
 #include "util/faststring.h"
+#include "storage/rowset/segment_v2/encoding_info.h"
 
 namespace starrocks::segment_v2 {
 
@@ -61,8 +62,36 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t* column_id, c
     meta->set_unique_id(column.unique_id());
     meta->set_type(column.type());
     meta->set_length(column.length());
-    meta->set_encoding(DEFAULT_ENCODING);
-    meta->set_compression(LZ4_FRAME);
+    if (column.encoding() != "") {
+        EncodingTypePB encoding_type = DEFAULT_ENCODING;
+        bool ret = EncodingTypePB_Parse(column.encoding(), &encoding_type);
+        if (!ret) {
+            // if encoding failed, use DEFAULT_ENCODING as default
+            LOG(WARNING) << "invalid encoding:" << column.encoding() << ", use DEFAULT_ENCODING instead";
+            encoding_type = DEFAULT_ENCODING;
+        }
+        meta->set_encoding(encoding_type);
+    } else {
+        // use default encoding
+        meta->set_encoding(DEFAULT_ENCODING);
+    }
+    CompressionTypePB compress_type = LZ4_FRAME;
+    bool ret = CompressionTypePB_Parse(column.compression(), &compress_type);
+    if (!ret) {
+        // if parse compress_type failed, use LZ4_FRAME as default
+        LOG(WARNING) << "parse compress type failed. use default LZ4_FRAME";
+        compress_type = LZ4_FRAME;
+    }
+
+    EncodingTypePB real_encoding_type = meta->encoding();
+    if (real_encoding_type == DEFAULT_ENCODING) {
+        real_encoding_type = EncodingInfo::get_default_encoding(column.type(), false);
+    }
+    // for BIT_SHUFFLE, use NO_COMPRESSION
+    if (real_encoding_type == BIT_SHUFFLE) {
+        compress_type = NO_COMPRESSION;
+    }
+    meta->set_compression(compress_type);
     meta->set_is_nullable(column.is_nullable());
     for (uint32_t i = 0; i < column.subcolumn_count(); ++i) {
         _init_column_meta(meta->add_children_columns(), column_id, column.subcolumn(i));

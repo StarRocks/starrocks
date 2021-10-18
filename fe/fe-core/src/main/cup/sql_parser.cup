@@ -265,7 +265,7 @@ terminal String KW_ADD, KW_ADMIN, KW_AFTER, KW_AGGREGATE, KW_ALL, KW_ALTER, KW_A
     KW_UNCOMMITTED, KW_UNBOUNDED, KW_UNION, KW_UNIQUE, KW_UNSIGNED, KW_USE, KW_USER, KW_USING, KW_UNINSTALL,
     KW_VALUE, KW_VALUES, KW_VARCHAR, KW_VARIABLES, KW_VERBOSE, KW_VIEW,
     KW_WARNINGS, KW_WEEK, KW_WHEN, KW_SQLBLACKLIST, KW_WHITELIST, KW_WHERE, KW_WITH, KW_WORK, KW_WRITE,
-    KW_YEAR, KW_EVERY;
+    KW_YEAR, KW_EVERY, KW_ENCODING, KW_COMPRESSION;
 
 terminal COMMA, DOT, DOTDOTDOT, AT, STAR, LPAREN, RPAREN, COLON, SEMICOLON, LBRACE, RBRACE, LBRACKET, RBRACKET, DIVIDE, MOD, ADD, SUBTRACT;
 terminal BITAND, BITOR, BITXOR, BITNOT;
@@ -469,7 +469,7 @@ nonterminal String keyword, ident, ident_or_text, variable_name, text_or_passwor
         charset_name_or_default, old_or_new_charset_name_or_default, opt_collate,
         collation_name_or_default, type_func_name_keyword, type_function_name, opt_file_format, time_unit;
 
-nonterminal String opt_db, procedure_or_function, opt_comment, opt_engine;
+nonterminal String opt_db, procedure_or_function, opt_comment, opt_engine, opt_encoding, opt_compression;
 nonterminal ColumnDef.DefaultValue opt_default_value;
 nonterminal Boolean opt_if_exists, opt_if_not_exists;
 nonterminal Boolean opt_external;
@@ -2111,9 +2111,9 @@ opt_is_key ::=
 	;
 
 column_definition ::=
-    ident:columnName type_def:typeDef opt_is_key:isKey opt_agg_type:aggType opt_is_allow_null:isAllowNull opt_default_value:defaultValue opt_comment:comment
+    ident:columnName type_def:typeDef opt_is_key:isKey opt_agg_type:aggType opt_is_allow_null:isAllowNull opt_default_value:defaultValue opt_comment:comment opt_encoding:encoding opt_compression:compression
     {:
-        ColumnDef columnDef = new ColumnDef(columnName, typeDef, isKey, aggType, isAllowNull, defaultValue, comment);
+        ColumnDef columnDef = new ColumnDef(columnName, typeDef, isKey, aggType, isAllowNull, defaultValue, comment, encoding, compression);
         RESULT = columnDef;
     :}
     ;
@@ -2147,6 +2147,28 @@ opt_comment ::=
     | KW_COMMENT STRING_LITERAL:comment
     {:
         RESULT = comment;
+    :}
+    ;
+
+opt_encoding ::=
+    /* empty */
+    {:
+        RESULT = "";
+    :}
+    | KW_ENCODING STRING_LITERAL:encoding
+    {:
+        RESULT = encoding;
+    :}
+    ;
+
+opt_compression ::=
+    /* empty */
+    {:
+        RESULT = "";
+    :}
+    | KW_COMPRESSION STRING_LITERAL:compression
+    {:
+        RESULT = compression;
     :}
     ;
 

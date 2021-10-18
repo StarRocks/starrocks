@@ -46,6 +46,8 @@ class TabletColumn {
         std::string default_value;
         std::vector<TabletColumn> sub_columns;
         bool has_default_value = false;
+        std::string encoding;
+        std::string compression;
     };
 
 public:
@@ -153,6 +155,30 @@ public:
             mem_usage += subcolumn(i).mem_usage();
         }
         return mem_usage;
+    }
+
+    std::string encoding() const {
+        if (!_extra_fields) {
+            return "";
+        }
+        return _extra_fields->encoding;
+    }
+
+    void set_encoding(const std::string& encoding) {
+        ExtraFields* ext = _get_or_alloc_extra_fields();
+        ext->encoding = encoding;
+    }
+
+    std::string compression() const {
+        if (!_extra_fields) {
+            return "";
+        }
+        return _extra_fields->compression;
+    }
+
+    void set_compression(const std::string& compression) {
+        ExtraFields* ext = _get_or_alloc_extra_fields();
+        ext->compression = compression;
     }
 
 private:

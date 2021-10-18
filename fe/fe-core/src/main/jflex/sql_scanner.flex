@@ -132,6 +132,8 @@ import com.starrocks.qe.SqlModeHelper;
         keywordMap.put("column", new Integer(SqlParserSymbols.KW_COLUMN));
         keywordMap.put("columns", new Integer(SqlParserSymbols.KW_COLUMNS));
         keywordMap.put("comment", new Integer(SqlParserSymbols.KW_COMMENT));
+        keywordMap.put("compression", new Integer(SqlParserSymbols.KW_COMPRESSION));
+        keywordMap.put("encoding", new Integer(SqlParserSymbols.KW_ENCODING));
         keywordMap.put("commit", new Integer(SqlParserSymbols.KW_COMMIT));
         keywordMap.put("committed", new Integer(SqlParserSymbols.KW_COMMITTED));
         keywordMap.put("config", new Integer(SqlParserSymbols.KW_CONFIG));

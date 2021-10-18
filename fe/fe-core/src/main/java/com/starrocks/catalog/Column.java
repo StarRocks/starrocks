@@ -78,6 +78,10 @@ public class Column implements Writable {
     // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be analyzed.
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
+    @SerializedName(value = "encoding")
+    private String encoding;
+    @SerializedName(value = "compression")
+    private String compression;
 
     public Column() {
         this.name = "";
@@ -104,6 +108,11 @@ public class Column implements Writable {
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
                   String defaultValue, String comment) {
+        this(name, type, isKey, aggregateType, isAllowNull, defaultValue, comment, "", "");
+    }
+
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
+                  String defaultValue, String comment, String encoding, String compression) {
         this.name = name;
         if (this.name == null) {
             this.name = "";
@@ -122,6 +131,8 @@ public class Column implements Writable {
         this.isAllowNull = isAllowNull;
         this.defaultValue = defaultValue;
         this.comment = comment;
+        this.encoding = encoding;
+        this.compression = compression;
 
         this.stats = new ColumnStats();
     }
@@ -137,6 +148,8 @@ public class Column implements Writable {
         this.comment = column.getComment();
         this.stats = column.getStats();
         this.defineExpr = column.getDefineExpr();
+        this.encoding = column.getEncoding();
+        this.compression = column.getCompression();
         Preconditions.checkArgument(this.type.isComplexType() ||
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
     }
@@ -262,6 +275,14 @@ public class Column implements Writable {
         }
     }
 
+    public String getEncoding() {
+        return this.encoding;
+    }
+
+    public String getCompression() {
+        return this.compression;
+    }
+
     public TColumn toThrift() {
         TColumn tColumn = new TColumn();
         tColumn.setColumn_name(this.name);
@@ -280,6 +301,8 @@ public class Column implements Writable {
         // scalar type or nested type
         // If this field is set, column_type will be ignored.
         tColumn.setType_desc(type.toThrift());
+        tColumn.setEncoding(this.encoding);
+        tColumn.setCompression(this.compression);
         return tColumn;
     }
 
@@ -384,6 +407,13 @@ public class Column implements Writable {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         }
         sb.append("COMMENT \"").append(comment).append("\"");
+        if (!Strings.isNullOrEmpty(encoding)) {
+            sb.append(" ENCODING \"").append(encoding).append("\"");
+        }
+
+        if (!Strings.isNullOrEmpty(compression)) {
+            sb.append(" COMPRESSION \"").append(compression).append("\"");
+        }
 
         return sb.toString();
     }

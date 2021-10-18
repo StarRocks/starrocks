@@ -345,6 +345,14 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
         sub_column.init_from_pb(column.children_columns(i));
         add_sub_column(std::move(sub_column));
     }
+
+    if (column.has_encoding()) {
+        set_encoding(column.encoding());
+    }
+
+    if (column.has_compression()) {
+        set_compression(column.compression());
+    }
 }
 
 void TabletColumn::to_schema_pb(ColumnPB* column) const {
@@ -369,6 +377,12 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     column->set_has_bitmap_index(has_bitmap_index());
     for (int i = 0; i < subcolumn_count(); i++) {
         subcolumn(i).to_schema_pb(column->add_children_columns());
+    }
+    if (encoding() != "") {
+        column->set_encoding(encoding());
+    }
+    if (compression() != "") {
+        column->set_compression(compression());
     }
 }
 
