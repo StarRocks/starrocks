@@ -68,7 +68,7 @@ Status Compaction::do_compaction_impl() {
 
     // 2. write combined rows to output rowset
     Statistics stats;
-    auto res = merge_rowsets(_mem_tracker.get(), &stats);
+    auto res = merge_rowsets(_mem_tracker->limit(), &stats);
 
     if (!res.ok()) {
         LOG(WARNING) << "fail to do " << compaction_name() << ". res=" << res.to_string()
@@ -125,7 +125,6 @@ Status Compaction::do_compaction_impl() {
 
 Status Compaction::construct_output_rowset_writer() {
     RowsetWriterContext context(kDataFormatV2, config::storage_format_version);
-    context.mem_tracker = _mem_tracker.get();
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.tablet_uid = _tablet->tablet_uid();
     context.tablet_id = _tablet->tablet_id();
@@ -148,7 +147,7 @@ Status Compaction::construct_output_rowset_writer() {
     return Status::OK();
 }
 
-Status Compaction::merge_rowsets(MemTracker* mem_tracker, Statistics* stats_output) {
+Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
     Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     TabletReader reader(_tablet, _output_rs_writer->version(), schema);
@@ -159,14 +158,14 @@ Status Compaction::merge_rowsets(MemTracker* mem_tracker, Statistics* stats_outp
     int64_t num_rows = 0;
     int64_t total_row_size = 0;
     uint64_t chunk_size = DEFAULT_CHUNK_SIZE;
-    if (mem_tracker->limit() > 0) {
+    if (mem_limit > 0) {
         for (auto& rowset : _input_rowsets) {
             num_rows += rowset->num_rows();
             total_row_size += rowset->total_row_size();
         }
         int64_t avg_row_size = (total_row_size + 1) / (num_rows + 1);
         // The result of thie division operation be zero, so added one
-        chunk_size = 1 + mem_tracker->limit() / (_input_rowsets.size() * avg_row_size + 1);
+        chunk_size = 1 + mem_limit / (_input_rowsets.size() * avg_row_size + 1);
     }
     if (chunk_size > config::vector_chunk_size) {
         chunk_size = config::vector_chunk_size;
@@ -178,11 +177,6 @@ Status Compaction::merge_rowsets(MemTracker* mem_tracker, Statistics* stats_outp
     int64_t output_rows = 0;
 
     auto chunk = ChunkHelper::new_chunk(schema, reader_params.chunk_size);
-
-    auto tracker = std::make_unique<MemTracker>(-1, "merge_rowsets", mem_tracker, true);
-
-    DeferOp memory_tracker_releaser([&tracker] { return tracker->release(tracker->consumption()); });
-
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
     while (true) {

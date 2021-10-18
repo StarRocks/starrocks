@@ -238,7 +238,7 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
     }
     // TODO: figure out how to size _batch
     int capacity = std::max(1, _buffer_size / std::max(_row_desc.get_row_size(), 1));
-    _batch = std::make_unique<RowBatch>(_row_desc, capacity, _parent->_mem_tracker.get());
+    _batch = std::make_unique<RowBatch>(_row_desc, capacity);
 
     if (_brpc_dest_addr.hostname.empty()) {
         LOG(WARNING) << "there is no brpc destination address's hostname"

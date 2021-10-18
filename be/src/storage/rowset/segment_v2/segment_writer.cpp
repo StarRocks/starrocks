@@ -47,13 +47,10 @@ const uint32_t k_segment_magic_length = 4;
 SegmentWriter::SegmentWriter(std::unique_ptr<fs::WritableBlock> wblock, uint32_t segment_id,
                              const TabletSchema* tablet_schema, const SegmentWriterOptions& opts)
         : _segment_id(segment_id), _tablet_schema(tablet_schema), _opts(opts), _wblock(std::move(wblock)) {
-    _mem_tracker = std::make_unique<MemTracker>(-1, "segment_writer", opts.mem_tracker, true);
     CHECK_NOTNULL(_wblock.get());
 }
 
-SegmentWriter::~SegmentWriter() {
-    _mem_tracker->release(_mem_tracker->consumption());
-}
+SegmentWriter::~SegmentWriter() {}
 
 void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t* column_id, const TabletColumn& column) {
     // TODO(zc): Do we need this column_id??
@@ -124,7 +121,6 @@ Status SegmentWriter::append_row(const RowType& row) {
         std::string encoded_key;
         encode_key(&encoded_key, row, _tablet_schema->num_short_key_columns());
         RETURN_IF_ERROR(_index_builder->add_item(encoded_key));
-        _mem_tracker->consume(static_cast<int64_t>(estimate_segment_size()) - _mem_tracker->consumption());
     }
     ++_row_count;
     return Status::OK();
@@ -259,7 +255,6 @@ Status SegmentWriter::append_chunk(const vectorized::Chunk& chunk) {
         }
         ++_row_count;
     }
-    _mem_tracker->consume(static_cast<int64_t>(estimate_segment_size()) - _mem_tracker->consumption());
     return Status::OK();
 }
 

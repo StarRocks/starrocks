@@ -108,7 +108,7 @@ Status NodeChannel::init(RuntimeState* state) {
     } else {
         _row_desc = std::make_unique<RowDescriptor>(_tuple_desc, false);
         _batch_size = state->batch_size();
-        _cur_batch = std::make_unique<RowBatch>(*_row_desc, _batch_size, _mem_tracker.get());
+        _cur_batch = std::make_unique<RowBatch>(*_row_desc, _batch_size);
 
         // Initialize _cur_add_batch_request
         _cur_add_batch_request.set_allocated_id(&_parent->_load_id);
@@ -239,7 +239,7 @@ Status NodeChannel::add_row(Tuple* input_tuple, int64_t tablet_id) {
             _pending_batches_num++;
         }
 
-        _cur_batch = std::make_unique<RowBatch>(*_row_desc, _batch_size, _mem_tracker.get());
+        _cur_batch = std::make_unique<RowBatch>(*_row_desc, _batch_size);
         _cur_add_batch_request.clear_tablet_ids();
 
         row_no = _cur_batch->add_row();
@@ -658,7 +658,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     }
 
     _output_row_desc = _pool->add(new RowDescriptor(_output_tuple_desc, false));
-    _output_batch = std::make_unique<RowBatch>(*_output_row_desc, state->batch_size(), _mem_tracker.get());
+    _output_batch = std::make_unique<RowBatch>(*_output_row_desc, state->batch_size());
 
     _max_decimal_val.resize(_output_tuple_desc->slots().size());
     _min_decimal_val.resize(_output_tuple_desc->slots().size());

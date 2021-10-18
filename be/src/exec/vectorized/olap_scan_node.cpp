@@ -69,7 +69,6 @@ Status OlapScanNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(ExecNode::open(state));
-    CurrentThread::set_mem_tracker(mem_tracker());
 
     for (const auto& ctx_iter : _conjunct_ctxs) {
         // if conjunct is constant, compute direct and set eos = true
@@ -221,7 +220,6 @@ void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
 
 void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
     CurrentThread::set_query_id(scanner->runtime_state()->query_id());
-    CurrentThread::set_mem_tracker(mem_tracker());
 
     Status status = scanner->open(_runtime_state);
     if (!status.ok()) {
@@ -312,7 +310,6 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
     }
     _running_threads.fetch_sub(1, std::memory_order_release);
     CurrentThread::set_query_id(TUniqueId());
-    CurrentThread::set_mem_tracker(nullptr);
     // DO NOT touch any shared variables since here, as they may have been destructed.
 }
 

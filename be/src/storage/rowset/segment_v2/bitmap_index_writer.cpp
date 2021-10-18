@@ -28,7 +28,6 @@
 
 #include "env/env.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/encoding_info.h"
 #include "storage/rowset/segment_v2/indexed_column_writer.h"
@@ -187,7 +186,6 @@ private:
     Roaring _null_bitmap;
     // unique value to its row id list
     MemoryIndexType _mem_index;
-    MemTracker _tracker;
     MemPool _pool;
 };
 

@@ -40,7 +40,7 @@ public:
     // merge rows from `src_rowset_readers` and write into `dst_rowset_writer`.
     // return OLAP_SUCCESS and set statistics into `*stats_output`.
     // return others on error
-    static OLAPStatus merge_rowsets(MemTracker* mem_tracker, const TabletSharedPtr& tablet, ReaderType reader_type,
+    static OLAPStatus merge_rowsets(int64_t mem_limit, const TabletSharedPtr& tablet, ReaderType reader_type,
                                     const std::vector<RowsetReaderSharedPtr>& src_rowset_readers,
                                     RowsetWriter* dst_rowset_writer, Statistics* stats_output);
 };
