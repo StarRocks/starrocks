@@ -1304,5 +1304,11 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long shutdown_hook_timeout_sec = 60;
+
+    /**
+     * connection and socket timeout for broker client
+     */
+    @ConfField()
+    public static int broker_client_timeout_ms = 10000;
 }
 
