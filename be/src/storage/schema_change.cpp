@@ -1481,7 +1481,8 @@ bool SchemaChangeWithSorting::_external_sorting(vector<RowsetSharedPtr>& src_row
     }
 
     Merger::Statistics stats;
-    auto res = Merger::merge_rowsets(_mem_tracker->limit(), new_tablet, READER_ALTER_TABLE, rs_readers, rowset_writer, &stats);
+    auto res = Merger::merge_rowsets(_mem_tracker->limit(), new_tablet, READER_ALTER_TABLE, rs_readers, rowset_writer,
+                                     &stats);
     if (res != OLAP_SUCCESS) {
         LOG(WARNING) << "failed to merge rowsets. tablet=" << new_tablet->full_name()
                      << ", version=" << rowset_writer->version().first << "-" << rowset_writer->version().second;

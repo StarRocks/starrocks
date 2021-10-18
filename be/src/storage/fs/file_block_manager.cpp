@@ -364,8 +364,7 @@ Status FileReadableBlock::readv(uint64_t offset, const Slice* results, size_t re
 ////////////////////////////////////////////////////////////
 
 FileBlockManager::FileBlockManager(Env* env, BlockManagerOptions opts)
-        : _env(DCHECK_NOTNULL(env)),
-          _opts(std::move(opts)) {
+        : _env(DCHECK_NOTNULL(env)), _opts(std::move(opts)) {
     if (_opts.enable_metric) {
         _metrics = std::make_unique<internal::BlockManagerMetrics>();
     }
