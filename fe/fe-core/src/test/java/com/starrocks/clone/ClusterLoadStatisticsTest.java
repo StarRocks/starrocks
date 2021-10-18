@@ -58,18 +58,21 @@ public class ClusterLoadStatisticsTest {
         diskInfo1.setTotalCapacityB(1000000);
         diskInfo1.setAvailableCapacityB(500000);
         diskInfo1.setDataUsedCapacityB(480000);
+        diskInfo1.setDataTotalCapacityB(diskInfo1.getDataUsedCapacityB() + diskInfo1.getAvailableCapacityB());
         disks.put(diskInfo1.getRootPath(), diskInfo1);
 
         DiskInfo diskInfo2 = new DiskInfo("/path2");
         diskInfo2.setTotalCapacityB(2000000);
         diskInfo2.setAvailableCapacityB(100000);
         diskInfo2.setDataUsedCapacityB(80000);
+        diskInfo2.setDataTotalCapacityB(diskInfo2.getDataUsedCapacityB() + diskInfo2.getAvailableCapacityB());
         disks.put(diskInfo2.getRootPath(), diskInfo2);
 
         DiskInfo diskInfo3 = new DiskInfo("/path3");
         diskInfo3.setTotalCapacityB(500000);
         diskInfo3.setAvailableCapacityB(490000);
         diskInfo3.setDataUsedCapacityB(10000);
+        diskInfo3.setDataTotalCapacityB(diskInfo3.getDataUsedCapacityB() + diskInfo3.getAvailableCapacityB());
         disks.put(diskInfo3.getRootPath(), diskInfo3);
 
         be1.setDisks(ImmutableMap.copyOf(disks));
@@ -83,12 +86,14 @@ public class ClusterLoadStatisticsTest {
         diskInfo1.setTotalCapacityB(2000000);
         diskInfo1.setAvailableCapacityB(1900000);
         diskInfo1.setDataUsedCapacityB(480000);
+        diskInfo1.setDataTotalCapacityB(diskInfo1.getDataUsedCapacityB() + diskInfo1.getAvailableCapacityB());
         disks.put(diskInfo1.getRootPath(), diskInfo1);
 
         diskInfo2 = new DiskInfo("/path2");
         diskInfo2.setTotalCapacityB(20000000);
         diskInfo2.setAvailableCapacityB(1000000);
         diskInfo2.setDataUsedCapacityB(80000);
+        diskInfo2.setDataTotalCapacityB(diskInfo2.getDataUsedCapacityB() + diskInfo2.getAvailableCapacityB());
         disks.put(diskInfo2.getRootPath(), diskInfo2);
 
         be2.setDisks(ImmutableMap.copyOf(disks));
@@ -102,18 +107,21 @@ public class ClusterLoadStatisticsTest {
         diskInfo1.setTotalCapacityB(4000000);
         diskInfo1.setAvailableCapacityB(100000);
         diskInfo1.setDataUsedCapacityB(80000);
+        diskInfo1.setDataTotalCapacityB(diskInfo1.getDataUsedCapacityB() + diskInfo1.getAvailableCapacityB());
         disks.put(diskInfo1.getRootPath(), diskInfo1);
 
         diskInfo2 = new DiskInfo("/path2");
         diskInfo2.setTotalCapacityB(2000000);
         diskInfo2.setAvailableCapacityB(100000);
         diskInfo2.setDataUsedCapacityB(80000);
+        diskInfo2.setDataTotalCapacityB(diskInfo2.getDataUsedCapacityB() + diskInfo2.getAvailableCapacityB());
         disks.put(diskInfo2.getRootPath(), diskInfo2);
 
         diskInfo3 = new DiskInfo("/path3");
         diskInfo3.setTotalCapacityB(500000);
         diskInfo3.setAvailableCapacityB(490000);
         diskInfo3.setDataUsedCapacityB(10000);
+        diskInfo3.setDataTotalCapacityB(diskInfo3.getDataUsedCapacityB() + diskInfo3.getAvailableCapacityB());
         disks.put(diskInfo3.getRootPath(), diskInfo3);
 
         be3.setDisks(ImmutableMap.copyOf(disks));

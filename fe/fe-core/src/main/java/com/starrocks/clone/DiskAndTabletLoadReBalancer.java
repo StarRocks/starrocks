@@ -384,7 +384,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         // sort be by disk used percent in asc order
         beStats.sort(new BackendLoadStatistic.BeStatComparatorForUsedPercent(medium));
-        LOG.debug("get backend stats for cluster disk balance. be stats: {}", beStats);
+        LOG.debug("get backend stats for cluster disk balance. medium: {}, avgUsedPercent: {}, be stats: {}", medium,
+                avgUsedPercent, beStats);
 
         // cache selected tablets to avoid select same tablet
         Set<Long> selectedTablets = Sets.newHashSet();
@@ -569,7 +570,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         // sort be by path min|max used percent skew in desc order
         unbalancedBeStats.sort(new BackendLoadStatistic.BeStatComparatorForPathUsedPercentSkew(medium));
-        LOG.debug("select unbalanced backends for backend disk balance. be stats: {}", unbalancedBeStats);
+        LOG.debug("select unbalanced backends for backend disk balance. medium: {}, be stats: {}", medium,
+                unbalancedBeStats);
 
         for (BackendLoadStatistic beStat : unbalancedBeStats) {
             long beId = beStat.getBeId();
@@ -587,7 +589,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             // sort disk by used percent in asc order
             Collections.sort(pathStats);
-            LOG.debug("get backend path stats for backend disk balance. be id: {}, path stats: {}", beId, pathStats);
+            LOG.debug(
+                    "get backend path stats for backend disk balance. medium: {}, be id: {}, avgUsedPercent: {}, path stats: {}",
+                    medium, beId, avgUsedPercent, pathStats);
 
             balanceBackendDisk(clusterName, medium, avgUsedPercent, pathStats, beId, beStats.size(),
                     alternativeTablets);
@@ -933,8 +937,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
             beDisks.put(beStat.getBeId(), new Pair<>(pathHashList, 0));
         }
-        LOG.debug("get backend stats for cluster tablet distribution balance. be stats: {}, be disks: {}", beStats,
-                beDisks);
+        LOG.debug("get backend stats for cluster tablet distribution balance. medium: {}, be stats: {}, be disks: {}",
+                medium, beStats, beDisks);
 
         balanceTablet(clusterName, medium, alternativeTablets, false, beStats, beDisks, null, -1);
         return alternativeTablets;
@@ -959,8 +963,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
 
             List<RootPathLoadStatistic> pathStats = getValidBePathStats(beStat, medium);
-            LOG.debug("get backend path stats for backend tablet distribution balance. be id: {}, path stats: {}", beId,
-                    pathStats);
+            LOG.debug(
+                    "get backend path stats for backend tablet distribution balance. medium: {}, be id: {}, path stats: {}",
+                    medium, beId, pathStats);
             if (pathStats.size() <= 1) {
                 continue;
             }

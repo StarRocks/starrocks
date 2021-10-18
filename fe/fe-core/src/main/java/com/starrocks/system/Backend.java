@@ -324,6 +324,17 @@ public class Backend implements Writable {
         return totalCapacityB;
     }
 
+    public long getDataTotalCapacityB() {
+        ImmutableMap<String, DiskInfo> disks = disksRef;
+        long dataTotalCapacityB = 0L;
+        for (DiskInfo diskInfo : disks.values()) {
+            if (diskInfo.getState() == DiskState.ONLINE) {
+                dataTotalCapacityB += diskInfo.getDataTotalCapacityB();
+            }
+        }
+        return dataTotalCapacityB;
+    }
+
     public long getAvailableCapacityB() {
         // when cluster init, disks is empty, return 1L.
         ImmutableMap<String, DiskInfo> disks = disksRef;
@@ -444,6 +455,7 @@ public class Backend implements Writable {
             newDiskInfos.put(rootPath, diskInfo);
 
             diskInfo.setTotalCapacityB(totalCapacityB);
+            diskInfo.setDataTotalCapacityB(dataUsedCapacityB + diskAvailableCapacityB);
             diskInfo.setDataUsedCapacityB(dataUsedCapacityB);
             diskInfo.setAvailableCapacityB(diskAvailableCapacityB);
             if (tDisk.isSetPath_hash()) {
