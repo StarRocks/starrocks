@@ -688,7 +688,7 @@ public final class SparkDpp implements java.io.Serializable {
         }
         StructType srcSchema = constructSrcSchema(fileGroup, baseIndex);
         JavaRDD<String> sourceDataRdd = spark.read().textFile(fileUrl).toJavaRDD();
-        int columnSize = fileGroup.fileFieldNames.size();
+        int columnSize = srcSchema.size() - columnValueFromPath.size();
         List<ColumnParser> parsers = new ArrayList<>();
         for (EtlJobConfig.EtlColumn column : baseIndex.columns) {
             parsers.add(ColumnParser.create(column));
