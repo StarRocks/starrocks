@@ -433,7 +433,9 @@ Status SnapshotManager::write_meta_snapshot(const TabletSharedPtr& tablet) {
     for (const auto& snapshot_rowset : snapshot_rowsets) {
         snapshot_rowset_metas.emplace_back(snapshot_rowset->rowset_meta());
     }
-    std::string meta_path = tablet->tablet_path() + "/tablet.meta";
+    std::string meta_path = tablet->tablet_path();
+    FileUtils::remove_all(meta_path);
+    RETURN_IF_ERROR(FileUtils::create_dir(meta_path));
     auto st = build_snapshot_meta(SNAPSHOT_TYPE_FULL, meta_path, tablet, snapshot_rowset_metas, snapshot_version,
                                   g_Types_constants.TSNAPSHOT_REQ_VERSION2);
     if (!st.ok()) {
@@ -505,7 +507,11 @@ Status SnapshotManager::build_snapshot_meta(SnapshotTypePB snapshot_type, const 
     }
 
     std::unique_ptr<WritableFile> f;
-    RETURN_IF_ERROR(Env::Default()->new_writable_file(snapshot_dir + "/meta", &f));
+    if (tablet->keys_type() == PRIMARY_KEYS) {
+        RETURN_IF_ERROR(Env::Default()->new_writable_file(snapshot_dir + "/meta.primary", &f));
+    } else {
+        RETURN_IF_ERROR(Env::Default()->new_writable_file(snapshot_dir + "/meta", &f));
+    }
     RETURN_IF_ERROR(snapshot_meta.serialize_to_file(f.get()));
     RETURN_IF_ERROR(f->sync());
     RETURN_IF_ERROR(f->close());
