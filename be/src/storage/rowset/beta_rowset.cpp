@@ -61,11 +61,8 @@ std::string BetaRowset::segment_srcrssid_file_path(const std::string& dir, const
     return strings::Substitute("$0/$1_$2.rssid", dir, rowset_id.to_string(), segment_id);
 }
 
-BetaRowset::BetaRowset(MemTracker* mem_tracker, const TabletSchema* schema, string rowset_path,
-                       RowsetMetaSharedPtr rowset_meta)
-        : Rowset(mem_tracker, schema, std::move(rowset_path), std::move(rowset_meta)) {
-    _mem_tracker->consume(sizeof(BetaRowset));
-}
+BetaRowset::BetaRowset(const TabletSchema* schema, string rowset_path, RowsetMetaSharedPtr rowset_meta)
+        : Rowset(schema, std::move(rowset_path), std::move(rowset_meta)) {}
 
 OLAPStatus BetaRowset::init() {
     return OLAP_SUCCESS; // no op
@@ -74,13 +71,12 @@ OLAPStatus BetaRowset::init() {
 Status BetaRowset::do_load() {
     // TODO: `BlockManager` should be passed in as an argument.
     fs::BlockManager* block_mgr = fs::fs_util::block_manager();
-    MemTracker* mem_tracker = _mem_tracker.get();
 
     _segments.clear();
     size_t footer_size_hint = 4096;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        auto res = segment_v2::Segment::open(mem_tracker, block_mgr, seg_path, seg_id, _schema, &footer_size_hint);
+        auto res = segment_v2::Segment::open(block_mgr, seg_path, seg_id, _schema, &footer_size_hint);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             _segments.clear();

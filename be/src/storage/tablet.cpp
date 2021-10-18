@@ -52,13 +52,12 @@ using std::sort;
 using std::string;
 using std::vector;
 
-TabletSharedPtr Tablet::create_tablet_from_meta(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta,
-                                                DataDir* data_dir) {
-    return std::make_shared<Tablet>(mem_tracker, tablet_meta, data_dir);
+TabletSharedPtr Tablet::create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir) {
+    return std::make_shared<Tablet>(tablet_meta, data_dir);
 }
 
-Tablet::Tablet(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta, DataDir* data_dir)
-        : BaseTablet(mem_tracker, tablet_meta, data_dir),
+Tablet::Tablet(TabletMetaSharedPtr tablet_meta, DataDir* data_dir)
+        : BaseTablet(tablet_meta, data_dir),
           _last_cumu_compaction_failure_millis(0),
           _last_base_compaction_failure_millis(0),
           _last_cumu_compaction_success_millis(0),
@@ -66,12 +65,9 @@ Tablet::Tablet(MemTracker* mem_tracker, TabletMetaSharedPtr tablet_meta, DataDir
           _cumulative_point(kInvalidCumulativePoint) {
     // change _rs_graph to _timestamped_version_tracker
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
-    _mem_tracker->consume(sizeof(Tablet));
 }
 
-Tablet::~Tablet() {
-    _mem_tracker->release(sizeof(Tablet));
-}
+Tablet::~Tablet() {}
 
 Status Tablet::_init_once_action() {
     VLOG(3) << "begin to load tablet. tablet=" << full_name() << ", version_size=" << _tablet_meta->version_count();
@@ -84,8 +80,7 @@ Status Tablet::_init_once_action() {
     for (const auto& rs_meta : _tablet_meta->all_rs_metas()) {
         Version version = rs_meta->version();
         RowsetSharedPtr rowset;
-        auto st = RowsetFactory::create_rowset(_mem_tracker, &_tablet_meta->tablet_schema(), _tablet_path, rs_meta,
-                                               &rowset);
+        auto st = RowsetFactory::create_rowset(&_tablet_meta->tablet_schema(), _tablet_path, rs_meta, &rowset);
         if (!st.ok()) {
             LOG(WARNING) << "fail to init rowset. tablet_id=" << tablet_id() << ", schema_hash=" << schema_hash()
                          << ", version=" << version << ", res=" << st;
@@ -99,8 +94,7 @@ Status Tablet::_init_once_action() {
         Version version = inc_rs_meta->version();
         RowsetSharedPtr rowset = get_rowset_by_version(version);
         if (rowset == nullptr) {
-            auto st = RowsetFactory::create_rowset(_mem_tracker, &_tablet_meta->tablet_schema(), _tablet_path,
-                                                   inc_rs_meta, &rowset);
+            auto st = RowsetFactory::create_rowset(&_tablet_meta->tablet_schema(), _tablet_path, inc_rs_meta, &rowset);
             if (!st.ok()) {
                 LOG(WARNING) << "fail to init incremental rowset. tablet_id:" << tablet_id()
                              << ", schema_hash:" << schema_hash() << ", version=" << version << ", res=" << st;
@@ -137,7 +131,7 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
     Status st;
     do {
         // load new local tablet_meta to operate on
-        TabletMetaSharedPtr new_tablet_meta(new (nothrow) TabletMeta(_mem_tracker));
+        TabletMetaSharedPtr new_tablet_meta(new (nothrow) TabletMeta());
         generate_tablet_meta_copy_unlocked(new_tablet_meta);
         // Segment store the pointer of TabletSchema, so don't release the TabletSchema of old TabletMeta
         // Shared the pointer of TabletSchema to the new TabletMeta
@@ -181,7 +175,7 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
     for (auto& rs_meta : rowsets_to_clone) {
         Version version = {rs_meta->start_version(), rs_meta->end_version()};
         RowsetSharedPtr rowset;
-        st = RowsetFactory::create_rowset(_mem_tracker, &_tablet_meta->tablet_schema(), _tablet_path, rs_meta, &rowset);
+        st = RowsetFactory::create_rowset(&_tablet_meta->tablet_schema(), _tablet_path, rs_meta, &rowset);
         if (!st.ok()) {
             LOG(WARNING) << "fail to init rowset. version=" << version;
             return st;

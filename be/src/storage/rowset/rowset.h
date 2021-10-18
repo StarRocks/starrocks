@@ -30,7 +30,6 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/mem_tracker.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/vectorized/chunk_iterator.h"
 
@@ -268,8 +267,7 @@ protected:
     Rowset(const Rowset&) = delete;
     const Rowset& operator=(const Rowset&) = delete;
     // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
-    Rowset(MemTracker* mem_tracker, const TabletSchema* schema, std::string rowset_path,
-           RowsetMetaSharedPtr rowset_meta);
+    Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
 
     // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
     virtual OLAPStatus init() = 0;
@@ -282,8 +280,6 @@ protected:
 
     // allow subclass to add custom logic when rowset is being published
     virtual void make_visible_extra(Version version, VersionHash version_hash) {}
-
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
     const TabletSchema* _schema;
     std::string _rowset_path;

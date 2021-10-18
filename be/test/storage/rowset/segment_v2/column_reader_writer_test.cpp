@@ -34,7 +34,6 @@
 #include "gen_cpp/segment_v2.pb.h"
 #include "runtime/date_value.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/column_block.h"
 #include "storage/decimal12.h"
 #include "storage/field.h"
@@ -62,7 +61,7 @@ public:
 protected:
     void SetUp() override {}
 
-    void TearDown() override { _tracker.release(_tracker.consumption()); }
+    void TearDown() override {}
 
     template <FieldType type, EncodingTypePB encoding, uint32_t version, bool adaptive = true>
     void test_nullable_data(const vectorized::Column& src) {
@@ -130,7 +129,7 @@ protected:
             reader_opts.storage_format_version = version;
             reader_opts.block_mgr = block_mgr.get();
             std::unique_ptr<ColumnReader> reader;
-            auto st = ColumnReader::create(&_tracker, reader_opts, meta, num_rows, fname, &reader);
+            auto st = ColumnReader::create(reader_opts, meta, num_rows, fname, &reader);
             ASSERT_TRUE(st.ok());
 
             ColumnIterator* iter = nullptr;
@@ -380,7 +379,6 @@ protected:
         test_nullable_data<type, BIT_SHUFFLE, 2>(*col);
     }
 
-    MemTracker _tracker;
     MemPool _pool;
 };
 
@@ -555,7 +553,7 @@ TEST_F(ColumnReaderWriterTest, test_array_int) {
         reader_opts.block_mgr = block_mgr.get();
         reader_opts.storage_format_version = 2;
         std::unique_ptr<ColumnReader> reader;
-        auto st = ColumnReader::create(&_tracker, reader_opts, meta, num_rows, fname, &reader);
+        auto st = ColumnReader::create(reader_opts, meta, num_rows, fname, &reader);
         ASSERT_TRUE(st.ok());
 
         ColumnIterator* iter = nullptr;

@@ -380,7 +380,7 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
             continue;
         }
 
-        TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, data_dir);
+        TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir);
         DCHECK(new_tablet != nullptr);
         return new_tablet;
     }
@@ -754,7 +754,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
                                             const std::string& meta_binary, bool update_meta, bool force, bool restore,
                                             bool check_path) {
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
-    TabletMetaSharedPtr tablet_meta(new TabletMeta(_mem_tracker));
+    TabletMetaSharedPtr tablet_meta(new TabletMeta());
     if (Status st = tablet_meta->deserialize(meta_binary); !st.ok()) {
         LOG(WARNING) << "Fail to load tablet because can not parse meta_binary string. "
                      << "tablet_id=" << tablet_id << " path=" << data_dir->path();
@@ -787,7 +787,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
         tablet_meta->set_tablet_state(TABLET_RUNNING);
     }
 
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, data_dir);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to load tablet_id=" << tablet_id;
         return Status::InternalError("Fail to create tablet");
@@ -850,7 +850,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
         return Status::NotFound("header file not exist");
     }
 
-    TabletMetaSharedPtr tablet_meta(new TabletMeta(_mem_tracker));
+    TabletMetaSharedPtr tablet_meta(new TabletMeta());
     if (Status st = tablet_meta->create_from_file(header_path); !st.ok()) {
         LOG(WARNING) << "Fail to load tablet_meta. file_path=" << header_path;
         return Status::InternalError("fail to create tablet meta from file");
@@ -999,7 +999,7 @@ Status TabletManager::start_trash_sweep() {
                 ++it;
                 continue;
             }
-            TabletMetaSharedPtr tablet_meta(new TabletMeta(_mem_tracker));
+            TabletMetaSharedPtr tablet_meta(new TabletMeta());
             Status st = TabletMetaManager::get_tablet_meta((*it)->data_dir(), (*it)->tablet_id(), (*it)->schema_hash(),
                                                            tablet_meta);
             if (st.ok()) {
@@ -1091,7 +1091,7 @@ void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId t
     std::shared_lock rlock(*shard.lock);
 
     // check if meta already exists
-    TabletMetaSharedPtr tablet_meta(new TabletMeta(_mem_tracker));
+    TabletMetaSharedPtr tablet_meta(new TabletMeta());
     Status st = TabletMetaManager::get_tablet_meta(data_dir, tablet_id, schema_hash, tablet_meta);
     if (st.ok()) {
         LOG(INFO) << "Cannot remove tablet_path=" << schema_hash_path << ", tablet meta exist in meta store";
@@ -1319,8 +1319,8 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
     }
 
     RowsetTypePB rowset_type = RowsetTypePB::BETA_ROWSET;
-    return TabletMeta::create(_mem_tracker, request, TabletUid::gen_uid(), shard_id, next_unique_id,
-                              col_idx_to_unique_id, rowset_type, tablet_meta);
+    return TabletMeta::create(request, TabletUid::gen_uid(), shard_id, next_unique_id, col_idx_to_unique_id,
+                              rowset_type, tablet_meta);
 }
 
 Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, SchemaHash schema_hash, bool keep_state) {
@@ -1460,10 +1460,10 @@ Status TabletManager::create_tablet_from_snapshot(DataDir* store, TTabletId tabl
     }
     RETURN_IF_ERROR(TabletMetaManager::put_tablet_meta(store, &wb, snapshot_meta->tablet_meta()));
 
-    auto tablet_meta = std::make_shared<TabletMeta>(_mem_tracker);
+    auto tablet_meta = std::make_shared<TabletMeta>();
     tablet_meta->init_from_pb(&snapshot_meta->tablet_meta());
     // DO NOT access tablet->updates() until tablet has been init()-ed.
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, store);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, store);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to load tablet " << tablet_id;
         return Status::InternalError("Fail to create tablet");
