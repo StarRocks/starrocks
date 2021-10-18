@@ -64,6 +64,7 @@ ALTER DATABASE example_db SET DATA QUOTA 10T;
     ```
 
 2. 使用stream load / broker load /insert into 等方式导入数据到新表 table2 中；
+
 3. 原子替换 table1 与 table2：
 
     ```SQL
@@ -97,42 +98,42 @@ ALTER DATABASE example_db SET DATA QUOTA 10T;
 
 ## fe重启报错:error to open replicated environment，will exit
 
-### 问题描述
+**问题描述：**
 
 重启集群fe后报该错且fe无法启动。
 
-### 解决方案
+**解决方案：**
 
 是bdbje的一个bug，社区版和1.17版本（不含此版本）以前重启会小概率触发该bug，可以升级到1.17及更高版本，已修复该问题。
 
 ## 创建hive表，查询报错:Broker list path exception
 
-### 问题描述
+**问题描述：**
 
 ```plain text
 msg:Broker list path exception
 path=hdfs://172.31.3.136:9000/user/hive/warehouse/zltest.db/student_info/*, broker=TNetworkAddress(hostname:172.31.4.233, port:8000)
 ```
 
-### 解决方案
+**解决方案：**
 
 namenode的地址和端口跟运维人员确认是否正确，权限有没有开启
 
 ## 创建hive表，查询报错:get hive partition meta data failed
 
-### 问题描述
+**问题描述：**
 
 ```plain text
 msg:get hive partition meta data failed: java.net.UnknownHostException: emr-header-1.cluster-242
 ```
 
-### 解决方案
+**解决方案：**
 
- 需要把集群里的host文件传一份到每个BE机器上，并确认网络是通的。
+需要把集群里的host文件传一份到每个BE机器上，并确认网络是通的。
 
 ## hive外表orc访问失败：do_open failed. reason = Invalid ORC postscript length
 
-### 问题描述
+**问题描述：**
 
 查询同一sql前几次查询还行，后面报错了，重新建表后没报错了。
 
@@ -141,32 +142,44 @@ MySQL [bdp_dim]> select * from dim_page_func_s limit 1;
 ERROR 1064 (HY000): HdfsOrcScanner::do_open failed. reason = Invalid ORC postscript length
 ```
 
-### 解决方案
+**解决方案：**
 
 目前的版本fe和hive的信息同步是有时差的2h，期间表数据有更新或者插入，会导致scan的数据和fe的判断不一致，导致出现这个错。新版本增加手动reflush功能，可以刷新表结构信息同步。
 
 ## mysql外表连接失败：caching_sha2_password cannot be loaded
 
-### 问题描述
+**问题描述：**
 
 MySQL8.0版本默认的认证方式是caching_sha2_password
 MySQL5.7版本默认则为mysql_native_password
 认证方式不同，外表链接出错。
 
-### 解决方案
+**解决方案：**
 
 两种方案：
 
-1. 连接终端
+* 连接终端
 
-    ```sql
-    ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'yourpassword';
-    ```
+```sql
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'yourpassword';
+```
 
-2. 修改my.cnf文件
+* 修改my.cnf文件
 
-    ```plain text
-    vim my.cnf
-    [mysqld]
-    default_authentication_plugin=mysql_native_password
-    ```
+```plain text
+vim my.cnf
+[mysqld]
+default_authentication_plugin=mysql_native_password
+```
+
+## set is_report_success = true;后profile不显示
+
+只有leader所在fe可以查看，因为report信息只汇报给leader节点。
+
+## 给字段加了注释，表里面怎么看呀，没有显示注释一栏，starrocks支持么？
+
+可以通过 `show create table xxx` 查看。
+
+## 建表的时候列不能指定now()这种函数默认值？
+
+目前暂时不支持函数默认值，需要写成常量。

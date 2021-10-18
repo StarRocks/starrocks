@@ -55,7 +55,7 @@ limit 10 offset 0;
 +---------------------+-----------------------------------------+
 ```
 
-**现象描述：**
+**问题描述：**
 
 where里bigint类型，查询加单引号，查出很多无关数据。
 
@@ -76,8 +76,6 @@ StarRocks的后台合并就是参考google的mesa的模型，有两层compaction
 MySQL的“utf8mb4”是真正的“UTF-8”，所以StarRocks是没问题的
 
 ## [Schema change] alter table 时显示：table's state is not normal
-
-**解决方案：**
 
 Alter table 是异步的，之前有过alter table 操作还没完成，可以通过
 
@@ -138,3 +136,20 @@ A JION B ON A.col1=B.col1 JOIN C on A.col1=C.col1 where A.col1='北京'，
 **问题原因：**
 
 上面的SQL只能保证A是有序的，并不能保证每次查询出来的B顺序是一致的，MySQL能保证这点因为它是单机数据库，而StarRocks是分布式数据库，底层表数据存储是sharding的，A的数据分布在多台机器上，每次查询多台机器返回的顺序可能不同，就会导致每次B顺序不一致.
+
+## select * 和select 具体列效率差距过大
+
+select * 和select 时具体列效率差距会很大，这时我们应该去排查profile，看MERGE的具体信息.
+
+* 确认是否是存储层聚合消耗的时间过长。
+* 确认是否指标列有很多，需要对几百万行的几百列进行聚合。
+
+```plain text
+MERGE:
+    - aggr: 26s270ms
+    - sort: 15s551ms
+```
+
+## 目前delete中不支持嵌套函数
+
+类似这种：`DELETE from test_new WHERE to_days(now())-to_days(publish_time) >7;`to_days(now())这个嵌套了，目前不支持。

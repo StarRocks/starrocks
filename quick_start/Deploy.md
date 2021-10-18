@@ -66,7 +66,7 @@ JAVA_OPTS = "-Xmx4096m -XX:+UseMembar -XX:SurvivorRatio=8 -XX:MaxTenuringThresho
 第二步: 创建元数据目录:
 
 ```bash
-mkdir -p starrocks-meta (1.18.2及以前的版本需要使用mkdir -p doris-meta)
+mkdir -p meta (1.19.x及以前的版本需要使用mkdir -p doris-meta)
 ```
 
 <br/>

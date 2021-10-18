@@ -316,8 +316,7 @@
     + [黑名单管理](/administration/Blacklist.md)
     + [内存管理](/administration/Memory_management.md)
     + [负载均衡](/administration/Load_balance.md)
-+ FAQ
-  + [产品FAQ](/faq/Product_faq.md)
++ 常见问题解答
   + [部署运维](/faq/Deploy_faq.md)
   + 数据迁移
     + 导入

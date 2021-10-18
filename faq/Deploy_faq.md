@@ -32,8 +32,6 @@ be安装过程中启动报错 `Doris Be http service did not start correctly,exi
 
 ## 【企业版部署】安装部署过程当中，在配置节点时报错：Failed to Distribute files to node
 
-**解决方案:**
-
 目前安装报错的信息是因为setuptools的版本不对，需要到每台机器上执行下以下命令，因为需要root权限
 
 ```palin text
@@ -45,8 +43,6 @@ wget https://bootstrap.pypa.io/ez_setup.py -O - | python
 ```
 
 ## StarRocks能否临时修改FE、BE的配置让其不重启就能生效，生产环境不能随便重启服务
-
-**解决方案:**
 
 FE配置临时修改：
 
