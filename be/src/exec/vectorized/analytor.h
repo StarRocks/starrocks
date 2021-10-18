@@ -38,8 +38,7 @@ public:
     ~Analytor() = default;
     Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc);
 
-    Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, MemTracker* expr_mem_tracker,
-                   RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, RuntimeProfile* runtime_profile);
     Status open(RuntimeState* state);
     Status close(RuntimeState* state);
 

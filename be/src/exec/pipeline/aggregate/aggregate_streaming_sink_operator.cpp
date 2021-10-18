@@ -9,8 +9,7 @@ Status AggregateStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     // _aggregator is shared by sink operator and source operator
     // we must only prepare it at sink operator
-    RETURN_IF_ERROR(
-            _aggregator->prepare(state, state->obj_pool(), get_memtracker(), get_memtracker(), get_runtime_profile()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), get_memtracker(), get_runtime_profile()));
     return _aggregator->open(state);
 }
 

@@ -101,7 +101,7 @@ void SortSinkOperator::finish(RuntimeState* state) {
 }
 
 Status SortSinkOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
-    RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _parent_node_row_desc, _parent_node_child_row_desc, mem_tracker));
+    RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _parent_node_row_desc, _parent_node_child_row_desc));
     RETURN_IF_ERROR(_sort_exec_exprs.open(state));
     return Status::OK();
 }

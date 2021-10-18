@@ -63,8 +63,7 @@ public:
     ~Aggregator() = default;
 
     Status open(RuntimeState* state);
-    Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, MemTracker* expr_mem_tracker,
-                   RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, RuntimeProfile* runtime_profile);
 
     Status close(RuntimeState* state);
 

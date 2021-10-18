@@ -18,7 +18,7 @@ Status Aggregator::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, MemTracker* expr_mem_tracker,
+Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker,
                            RuntimeProfile* runtime_profile) {
     _pool = pool;
     _mem_tracker = mem_tracker;
@@ -174,10 +174,10 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* me
     _output_tuple_desc = state->desc_tbl().get_tuple_descriptor(_output_tuple_id);
     DCHECK_EQ(_intermediate_tuple_desc->slots().size(), _output_tuple_desc->slots().size());
 
-    RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state, _child_row_desc, expr_mem_tracker));
+    RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state, _child_row_desc));
 
     for (const auto& ctx : _agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::prepare(ctx, state, _child_row_desc, expr_mem_tracker));
+        RETURN_IF_ERROR(Expr::prepare(ctx, state, _child_row_desc));
     }
 
     _mem_pool = std::make_unique<MemPool>();

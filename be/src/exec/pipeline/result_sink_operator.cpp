@@ -93,7 +93,7 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const vectorized::Chu
 Status ResultSinkOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs));
     RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, row_desc, mem_tracker));
+    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, row_desc));
     return Status::OK();
 }
 
