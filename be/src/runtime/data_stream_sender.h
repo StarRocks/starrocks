@@ -30,7 +30,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
-#include "gen_cpp/data.pb.h" // for PRowBatch
+#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
@@ -42,13 +42,11 @@ class IOBuf;
 namespace starrocks {
 
 class ExprContext;
-class RowBatch;
 class RowDescriptor;
 class TDataStreamSink;
 class TNetworkAddress;
 class TPlanFragmentDestination;
 class PartitionInfo;
-class TupleRow;
 class PartRangeKey;
 class MemTracker;
 class BlockCompressionCodec;
@@ -83,25 +81,12 @@ public:
     // compiled (i.e. in an ExecNode's Open() function).
     Status open(RuntimeState* state) override;
 
-    // send data in 'batch' to destination nodes according to partitioning
-    // specification provided in c'tor.
-    // Blocks until all rows in batch are placed in their appropriate outgoing
-    // buffers (ie, blocks if there are still in-flight rpcs from the last
-    // send() call).
-    Status send(RuntimeState* state, RowBatch* batch) override;
-
     // Send a chunk into this sink.
     Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 
     // Flush all buffered data and close all existing channels to destination
     // hosts. Further send() calls are illegal after calling close().
     Status close(RuntimeState* state, Status exec_status) override;
-
-    /// Serializes the src batch into the dest thrift batch. Maintains metrics.
-    /// num_receivers is the number of receivers this batch will be sent to. Only
-    /// used to maintain metrics.
-    template <class T>
-    Status serialize_batch(RowBatch* src, T* dest, int num_receivers = 1);
 
     // For the first chunk , serialize the chunk data and meta to ChunkPB both.
     // For other chunk, only serialize the chunk data to ChunkPB.
@@ -125,13 +110,6 @@ public:
 
 private:
     class Channel;
-    Status compute_range_part_code(RuntimeState* state, TupleRow* row, size_t* hash_value, bool* ignore);
-
-    int binary_find_partition(const PartRangeKey& key) const;
-
-    Status find_partition(RuntimeState* state, TupleRow* row, PartitionInfo** info, bool* ignore);
-
-    Status process_distribute(RuntimeState* state, TupleRow* row, const PartitionInfo* part, size_t* hash_val);
 
     bool _is_vectorized;
 
@@ -150,12 +128,6 @@ private:
 
     TPartitionType::type _part_type;
     bool _ignore_not_found;
-
-    // serialized batches for broadcasting; we need two so we can write
-    // one while the other one is still being sent
-    PRowBatch _pb_batch1;
-    PRowBatch _pb_batch2;
-    PRowBatch* _current_pb_batch = nullptr;
 
     // Only used when broadcast
     PTransmitChunkParams _chunk_request;

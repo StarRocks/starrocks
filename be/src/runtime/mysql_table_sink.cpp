@@ -73,10 +73,6 @@ Status MysqlTableSink::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status MysqlTableSink::send(RuntimeState* state, RowBatch* batch) {
-    return _writer->append(batch);
-}
-
 Status MysqlTableSink::close(RuntimeState* state, Status exec_status) {
     Expr::close(_output_expr_ctxs, state);
     return Status::OK();
