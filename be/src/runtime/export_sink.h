@@ -55,8 +55,6 @@ public:
 
     Status open(RuntimeState* state) override;
 
-    Status send(RuntimeState* state, RowBatch* batch) override;
-
     Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 
     Status close(RuntimeState* state, Status exec_status) override;
@@ -67,7 +65,6 @@ private:
     using ConverterPtr = std::unique_ptr<vectorized::csv::Converter>;
 
     Status open_file_writer(int timeout_ms);
-    Status gen_row_buffer(TupleRow* row, std::stringstream* ss);
     Status gen_file_name(std::string* file_name);
 
     RuntimeState* _state;

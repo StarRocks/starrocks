@@ -51,10 +51,6 @@ public:
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
 
-    // send data in 'batch' to this backend stream mgr
-    // Blocks until all rows in batch are placed in the buffer
-    Status send(RuntimeState* state, RowBatch* batch) override;
-
     Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 
     // Flush all buffered data and close all existing channels to destination
@@ -74,7 +70,6 @@ private:
     // set file options when sink type is FILE
     std::unique_ptr<ResultFileOptions> _file_opts;
 
-    ObjectPool* _obj_pool = nullptr;
     // Owned by the RuntimeState.
     const RowDescriptor& _row_desc;
 
