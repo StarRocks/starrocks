@@ -80,22 +80,59 @@ int FixedLengthColumnBase<T>::compare_at(size_t left, size_t right, const Column
 
 template <typename T>
 uint32_t FixedLengthColumnBase<T>::serialize(size_t idx, uint8_t* pos) {
-    strings::memcpy_inlined(pos, &_data[idx], sizeof(T));
+    memcpy(pos, &_data[idx], sizeof(T));
     return sizeof(T);
 }
 
 template <typename T>
 uint32_t FixedLengthColumnBase<T>::serialize_default(uint8_t* pos) {
     ValueType value{};
-    strings::memcpy_inlined(pos, &value, sizeof(T));
+    memcpy(pos, &value, sizeof(T));
     return sizeof(T);
 }
 
 template <typename T>
-void FixedLengthColumnBase<T>::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                               uint32_t max_one_row_size) {
+void FixedLengthColumnBase<T>::serialize_batch(uint8_t* __restrict__ dst, Buffer<uint32_t>& slice_sizes,
+                                               size_t chunk_size, uint32_t max_one_row_size) {
+    uint32_t* sizes = slice_sizes.data();
+    T* __restrict__ src = _data.data();
+
     for (size_t i = 0; i < chunk_size; ++i) {
-        slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
+        memcpy(dst + i * max_one_row_size + sizes[i], src + i, sizeof(T));
+    }
+
+    for (size_t i = 0; i < chunk_size; i++) {
+        sizes[i] += sizeof(T);
+    }
+}
+
+template <typename T>
+void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restrict__ dst, Buffer<uint32_t>& slice_sizes,
+                                                               size_t chunk_size, uint32_t max_one_row_size,
+                                                               uint8_t* null_masks, bool has_null) {
+    uint32_t* sizes = slice_sizes.data();
+    T* __restrict__ src = _data.data();
+
+    if (!has_null) {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(dst + i * max_one_row_size + sizes[i], &has_null, sizeof(bool));
+            memcpy(dst + i * max_one_row_size + sizes[i] + sizeof(bool), src + i, sizeof(T));
+        }
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            sizes[i] += sizeof(bool) + sizeof(T);
+        }
+    } else {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(dst + i * max_one_row_size + sizes[i], null_masks + i, sizeof(bool));
+            if (!null_masks[i]) {
+                memcpy(dst + i * max_one_row_size + sizes[i] + sizeof(bool), src + i, sizeof(T));
+            }
+        }
+
+        for (size_t i = 0; i < chunk_size; ++i) {
+            sizes[i] += sizeof(bool) + (1 - null_masks[i]) * sizeof(T);
+        }
     }
 }
 
@@ -115,7 +152,7 @@ size_t FixedLengthColumnBase<T>::serialize_batch_at_interval(uint8_t* dst, size_
 template <typename T>
 const uint8_t* FixedLengthColumnBase<T>::deserialize_and_append(const uint8_t* pos) {
     T value{};
-    strings::memcpy_inlined(&value, pos, sizeof(T));
+    memcpy(&value, pos, sizeof(T));
     _data.emplace_back(value);
     return pos + sizeof(T);
 }
@@ -124,7 +161,7 @@ template <typename T>
 void FixedLengthColumnBase<T>::deserialize_and_append_batch(std::vector<Slice>& srcs, size_t batch_size) {
     raw::make_room(&_data, batch_size);
     for (size_t i = 0; i < batch_size; ++i) {
-        strings::memcpy_inlined(&_data[i], srcs[i].data, sizeof(T));
+        memcpy(&_data[i], srcs[i].data, sizeof(T));
         srcs[i].data = srcs[i].data + sizeof(T);
     }
 }

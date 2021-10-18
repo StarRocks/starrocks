@@ -86,4 +86,46 @@ public abstract class Operator {
     public int hashCode() {
         return Objects.hash(opType.ordinal(), limit, predicate);
     }
+
+    public abstract static class Builder<O extends Operator, B extends Builder> {
+        protected OperatorType opType;
+        protected long limit = -1;
+        protected ScalarOperator predicate;
+
+        public B withOperator(O operator) {
+            this.opType = operator.opType;
+            this.limit = operator.limit;
+            this.predicate = operator.predicate;
+            return (B) this;
+        }
+
+        public abstract O build();
+
+        public OperatorType getOpType() {
+            return opType;
+        }
+
+        public B setOpType(OperatorType opType) {
+            this.opType = opType;
+            return (B) this;
+        }
+
+        public long getLimit() {
+            return limit;
+        }
+
+        public B setLimit(long limit) {
+            this.limit = limit;
+            return (B) this;
+        }
+
+        public ScalarOperator getPredicate() {
+            return predicate;
+        }
+
+        public B setPredicate(ScalarOperator predicate) {
+            this.predicate = predicate;
+            return (B) this;
+        }
+    }
 }

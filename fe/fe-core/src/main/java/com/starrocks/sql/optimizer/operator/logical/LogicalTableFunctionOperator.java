@@ -38,6 +38,14 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
         this(fnResultColumnRefSet, fn, fnParamColumnProjectMap, new ColumnRefSet());
     }
 
+    private LogicalTableFunctionOperator(Builder builder) {
+        super(OperatorType.LOGICAL_TABLE_FUNCTION, builder.getLimit(), builder.getPredicate());
+        this.fnResultColumnRefSet = builder.fnResultColumnRefSet;
+        this.fn = builder.fn;
+        this.fnParamColumnProjectMap = builder.fnParamColumnProjectMap;
+        this.outerColumnRefSet = builder.outerColumnRefSet;
+    }
+
     public ColumnRefSet getFnResultColumnRefSet() {
         return fnResultColumnRefSet;
     }
@@ -95,5 +103,29 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), fn, fnResultColumnRefSet, outerColumnRefSet, fnParamColumnProjectMap);
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalTableFunctionOperator, LogicalTableFunctionOperator.Builder> {
+        private TableFunction fn;
+        private ColumnRefSet fnResultColumnRefSet;
+        private ColumnRefSet outerColumnRefSet;
+        private Map<ColumnRefOperator, ScalarOperator> fnParamColumnProjectMap;
+
+        @Override
+        public LogicalTableFunctionOperator build() {
+            return new LogicalTableFunctionOperator(this);
+        }
+
+        @Override
+        public LogicalTableFunctionOperator.Builder withOperator(LogicalTableFunctionOperator tableFunctionOperator) {
+            super.withOperator(tableFunctionOperator);
+
+            this.fnResultColumnRefSet = tableFunctionOperator.fnResultColumnRefSet;
+            this.fn = tableFunctionOperator.fn;
+            this.fnParamColumnProjectMap = tableFunctionOperator.fnParamColumnProjectMap;
+            this.outerColumnRefSet = tableFunctionOperator.outerColumnRefSet;
+            return this;
+        }
     }
 }

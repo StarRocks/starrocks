@@ -12,7 +12,7 @@ import java.util.Objects;
 import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.EQ_FOR_NULL;
 
 public class BinaryPredicateOperator extends PredicateOperator {
-    private static final Map<BinaryType, BinaryType> BINARY_CONVERSE_MAP =
+    private static final Map<BinaryType, BinaryType> BINARY_COMMUTATIVE_MAP =
             ImmutableMap.<BinaryType, BinaryType>builder()
                     .put(BinaryType.EQ, BinaryType.EQ)
                     .put(BinaryType.NE, BinaryType.NE)
@@ -21,6 +21,17 @@ public class BinaryPredicateOperator extends PredicateOperator {
                     .put(BinaryType.GE, BinaryType.LE)
                     .put(BinaryType.GT, BinaryType.LT)
                     .put(BinaryType.EQ_FOR_NULL, BinaryType.EQ_FOR_NULL)
+                    .build();
+
+    private static final Map<BinaryType, BinaryType> BINARY_NEGATIVE_MAP =
+            ImmutableMap.<BinaryType, BinaryType>builder()
+                    .put(BinaryType.EQ, BinaryType.NE)
+                    .put(BinaryType.NE, BinaryType.EQ)
+                    .put(BinaryType.LE, BinaryType.GT)
+                    .put(BinaryType.LT, BinaryType.GE)
+                    .put(BinaryType.GE, BinaryType.LT)
+                    .put(BinaryType.GT, BinaryType.LE)
+                    .put(BinaryType.EQ_FOR_NULL, BinaryType.NE)
                     .build();
 
     private final BinaryType type;
@@ -85,8 +96,6 @@ public class BinaryPredicateOperator extends PredicateOperator {
             return this == EQ || this == EQ_FOR_NULL;
         }
 
-        ;
-
         public boolean isRange() {
             return type.equals(LT.type)
                     || type.equals(LE.type)
@@ -95,10 +104,14 @@ public class BinaryPredicateOperator extends PredicateOperator {
         }
     }
 
-    public BinaryPredicateOperator negative() {
-        return new BinaryPredicateOperator(BINARY_CONVERSE_MAP.get(this.getBinaryType()),
+    public BinaryPredicateOperator commutative() {
+        return new BinaryPredicateOperator(BINARY_COMMUTATIVE_MAP.get(this.getBinaryType()),
                 this.getChild(1),
                 this.getChild(0));
+    }
+
+    public BinaryPredicateOperator negative() {
+        return new BinaryPredicateOperator(BINARY_NEGATIVE_MAP.get(this.getBinaryType()), this.getChildren());
     }
 
     @Override

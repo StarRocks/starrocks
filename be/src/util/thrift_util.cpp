@@ -59,9 +59,12 @@ ThriftSerializer::ThriftSerializer(bool compact, int initial_buffer_size)
 }
 
 std::shared_ptr<apache::thrift::protocol::TProtocol> create_deserialize_protocol(
-        const std::shared_ptr<apache::thrift::transport::TMemoryBuffer>& mem, bool compact) {
-    if (compact) {
+        const std::shared_ptr<apache::thrift::transport::TMemoryBuffer>& mem, TProtocolType type) {
+    if (type == TProtocolType::COMPACT) {
         apache::thrift::protocol::TCompactProtocolFactoryT<apache::thrift::transport::TMemoryBuffer> tproto_factory;
+        return tproto_factory.getProtocol(mem);
+    } else if (type == TProtocolType::JSON) {
+        apache::thrift::protocol::TJSONProtocolFactory tproto_factory;
         return tproto_factory.getProtocol(mem);
     } else {
         apache::thrift::protocol::TBinaryProtocolFactoryT<apache::thrift::transport::TMemoryBuffer> tproto_factory;

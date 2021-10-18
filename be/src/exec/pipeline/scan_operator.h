@@ -62,7 +62,7 @@ public:
     ScanOperatorFactory(int32_t id, int32_t plan_node_id, const TOlapScanNode& olap_scan_node,
                         std::vector<ExprContext*>&& conjunct_ctxs,
                         vectorized::RuntimeFilterProbeCollector&& runtime_filters)
-            : SourceOperatorFactory(id, plan_node_id),
+            : SourceOperatorFactory(id, "olap_scan", plan_node_id),
               _olap_scan_node(olap_scan_node),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
               _runtime_filters(std::move(runtime_filters)) {}
@@ -80,7 +80,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    TOlapScanNode _olap_scan_node;
+    const TOlapScanNode& _olap_scan_node;
     std::vector<ExprContext*> _conjunct_ctxs;
     vectorized::RuntimeFilterProbeCollector _runtime_filters;
 };

@@ -11,6 +11,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -80,7 +81,7 @@ public abstract class BaseApply2OuterJoinRule extends TransformationRule {
 
         // aggregate
         LogicalAggregationOperator aggregate =
-                new LogicalAggregationOperator(new ArrayList<>(pair.second.keySet()), Maps.newHashMap());
+                new LogicalAggregationOperator(AggType.GLOBAL, new ArrayList<>(pair.second.keySet()), Maps.newHashMap());
 
         OptExpression aggregateOptExpression = OptExpression.create(aggregate);
         rootOptExpression = aggregateOptExpression;

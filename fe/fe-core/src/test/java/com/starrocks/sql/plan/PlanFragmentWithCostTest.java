@@ -274,8 +274,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testPredicateRewrittenByProjectWithLowCardinality(
-            @Mocked MockTpchStatisticStorage mockedStatisticStorage)
-            throws Exception {
+            @Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
                 mockedStatisticStorage.getColumnStatistics((Table) any, ImmutableList.of(V2, V3));
@@ -285,8 +284,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
         String sql = "SELECT -v3 from t0 group by v3, v2 having -v3 < 63;";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  4:Project\n"
-                + "  |  <slot 4> : -1 * 3: v3"));
+        Assert.assertTrue(planFragment.contains("  4:Project\n" +
+                "  |  <slot 4> : -1 * 3: v3"));
         Assert.assertTrue(planFragment.contains("PREDICATES: -1 * 3: v3 < 63"));
     }
 
@@ -474,6 +473,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testReplicatedJoin() throws Exception {
+        new Expectations(connectContext.getSessionVariable()) {
+            {
+                connectContext.getSessionVariable().isEnableReplicationJoin();
+                result = true;
+            }
+        };
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select s_name, s_address from supplier, nation where s_suppkey in " +
                 "( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'forest%' ) and ps_availqty > " +
@@ -487,7 +492,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: S_NATIONKEY = 9: N_NATIONKEY"));
-        Assert.assertTrue(plan.contains("19:HASH JOIN\n" +
+        Assert.assertTrue(plan.contains("18:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
@@ -577,5 +582,28 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  1:REPEAT_NODE"));
+    }
+
+    @Test
+    public void testDisableOnePhaseWithTableRowCountMayNotAccurate() throws Exception {
+        // check can not generate 1 phase aggregation if fe do not get real table row count from be.
+        String sql = "select count(1) from orders group by O_CUSTKEY, O_ORDERDATE";
+        String plan = getFragmentPlan(sql);
+        // check has 2 phase aggregation
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
+        sql = "select count(distinct O_ORDERKEY) from orders group by O_CUSTKEY, O_ORDERDATE";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge serialize)"));
+    }
+
+    @Test
+    public void testDisableOnePhaseWithUnknownColumnStatistics() throws Exception {
+        // check can not generate 1 phase aggregation if column statistics is unknown
+        String sql = "select count(v1) from t0 group by v2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
+        sql = "select count(distinct v1) from t0 group by v2";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
     }
 }

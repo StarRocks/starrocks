@@ -101,7 +101,7 @@ TEST(TestPathUtil, file_extension_test) {
     ASSERT_EQ("", path_util::file_extension("/ab/cd"));
     ASSERT_EQ("", path_util::file_extension("../ab/cd"));
 
-    ASSERT_EQ(".a", path_util::file_extension(".a"));
+    ASSERT_EQ("", path_util::file_extension(".a"));
     ASSERT_EQ("", path_util::file_extension("a.b/c"));
     ASSERT_EQ(".d", path_util::file_extension("a.b/c.d"));
     ASSERT_EQ(".c", path_util::file_extension("a/b.c"));

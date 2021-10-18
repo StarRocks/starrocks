@@ -141,6 +141,7 @@ add_library(Olap STATIC
     vectorized/schema_change.cpp
     vectorized/tablet_reader.cpp
     vectorized/tablet_reader_params.cpp
+    vectorized/meta_reader.cpp
     vectorized/seek_tuple.cpp
     vectorized/union_iterator.cpp
     vectorized/unique_iterator.cpp

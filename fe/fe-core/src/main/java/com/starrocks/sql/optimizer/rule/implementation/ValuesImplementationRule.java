@@ -21,10 +21,11 @@ public class ValuesImplementationRule extends ImplementationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalValuesOperator valuesOperator = (LogicalValuesOperator) input.getOp();
-        PhysicalValuesOperator
-                physicalValues = new PhysicalValuesOperator(valuesOperator.getColumnRefSet(), valuesOperator.getRows());
-        physicalValues.setPredicate(valuesOperator.getPredicate());
-        physicalValues.setLimit(valuesOperator.getLimit());
+        PhysicalValuesOperator physicalValues = new PhysicalValuesOperator(
+                valuesOperator.getColumnRefSet(),
+                valuesOperator.getRows(),
+                valuesOperator.getLimit(),
+                valuesOperator.getPredicate());
         return Lists.newArrayList(OptExpression.create(physicalValues, Collections.emptyList()));
     }
 }

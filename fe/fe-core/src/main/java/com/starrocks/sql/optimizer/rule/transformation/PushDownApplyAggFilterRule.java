@@ -11,6 +11,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -128,7 +129,7 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
         Set<ColumnRefOperator> newGroupingKeys = Sets.newHashSet(pair.second.keySet());
         newGroupingKeys.addAll(aggregate.getGroupingKeys());
         OptExpression vectorAggregationOptExpression = new OptExpression(
-                new LogicalAggregationOperator(new ArrayList<>(newGroupingKeys), aggregate.getAggregations()));
+                new LogicalAggregationOperator(AggType.GLOBAL, new ArrayList<>(newGroupingKeys), aggregate.getAggregations()));
 
         // correlation filter
         OptExpression correlationFilterOptExpression =
@@ -168,7 +169,7 @@ public class PushDownApplyAggFilterRule extends TransformationRule {
         OptExpression newApplyOptExpression = new OptExpression(
                 new LogicalApplyOperator(apply.getOutput(), apply.getSubqueryOperator(),
                         apply.getCorrelationColumnRefs(), apply.getCorrelationConjuncts(), apply.getPredicate(),
-                        false, apply.isFromAndScope()));
+                        false, apply.isUseSemiAnti()));
 
         newApplyOptExpression.getInputs().add(input.getInputs().get(0));
         newApplyOptExpression.getInputs().add(correlationFilterOptExpression);

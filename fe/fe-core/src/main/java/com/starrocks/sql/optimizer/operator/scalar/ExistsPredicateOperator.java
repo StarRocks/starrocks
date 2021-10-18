@@ -3,12 +3,18 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+import java.util.List;
 import java.util.Objects;
 
 public class ExistsPredicateOperator extends PredicateOperator {
     private final boolean isNotExists;
 
     public ExistsPredicateOperator(boolean isNotExists, ScalarOperator... arguments) {
+        super(OperatorType.EXISTS, arguments);
+        this.isNotExists = isNotExists;
+    }
+
+    public ExistsPredicateOperator(boolean isNotExists, List<ScalarOperator> arguments) {
         super(OperatorType.EXISTS, arguments);
         this.isNotExists = isNotExists;
     }

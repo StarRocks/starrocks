@@ -125,8 +125,8 @@ public:
 #endif
 
 private:
-    const TPlanNode _tnode;
-    const RowDescriptor _child_row_desc;
+    const TPlanNode& _tnode;
+    const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
     ObjectPool* _pool;
     MemTracker* _mem_tracker;

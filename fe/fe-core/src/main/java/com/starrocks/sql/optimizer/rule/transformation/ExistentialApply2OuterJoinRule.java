@@ -10,6 +10,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -39,7 +40,7 @@ public class ExistentialApply2OuterJoinRule extends BaseApply2OuterJoinRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
-        return !apply.isFromAndScope() && apply.isExistential()
+        return !apply.isUseSemiAnti() && apply.isExistential()
                 && !Utils.containsCorrelationSubquery(input.getGroupExpression());
     }
 
@@ -165,7 +166,8 @@ public class ExistentialApply2OuterJoinRule extends BaseApply2OuterJoinRule {
         Map<ColumnRefOperator, CallOperator> aggregates = Maps.newHashMap();
         aggregates.put(count, countOp);
         OptExpression aggregateExpression =
-                OptExpression.create(new LogicalAggregationOperator(Lists.newArrayList(), aggregates), limitExpression);
+                OptExpression.create(new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(), aggregates),
+                        limitExpression);
 
         // cross join
         OptExpression joinExpression = new OptExpression(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null));

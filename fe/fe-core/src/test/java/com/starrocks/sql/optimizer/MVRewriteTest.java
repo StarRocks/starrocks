@@ -406,6 +406,14 @@ public class MVRewriteTest {
     }
 
     @Test
+    public void testAggregateMVAggregateFuncs6() throws Exception {
+        String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid, count(salary) "
+                + "from " + EMPS_TABLE_NAME + " group by empid, deptno;";
+        String query = "select deptno, sum(if(empid=0,0,1)) from " + EMPS_TABLE_NAME + " group by deptno";
+        System.out.println(starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainQuery());
+    }
+
+    @Test
     public void testAggregateMVCalcGroupByQuery1() throws Exception {
         String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid, sum(salary) "
                 + "from " + EMPS_TABLE_NAME + " group by empid, deptno;";
@@ -821,7 +829,11 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createUserTagMVSql);
         String query =
                 "select empid, percentile_approx(salary, 1), percentile_approx(commission, 1) from emps group by empid";
-        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: percentile_union(5: salary), percentile_union(6: commission)\n" +
+                "  |  group by: 2: empid\n" +
+                "  |  use vectorized: true");
     }
 
     @Test

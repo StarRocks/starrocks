@@ -40,8 +40,10 @@ public class PhysicalHiveScanOperator extends PhysicalScanOperator {
                                     List<ScalarOperator> noEvalPartitionConjuncts,
                                     List<ScalarOperator> nonPartitionConjuncts,
                                     List<ScalarOperator> minMaxConjuncts,
-                                    Map<ColumnRefOperator, Column> minMaxColumnRefMap) {
-        super(OperatorType.PHYSICAL_HIVE_SCAN, table, outputColumns, columnRefMap);
+                                    Map<ColumnRefOperator, Column> minMaxColumnRefMap,
+                                    long limit,
+                                    ScalarOperator predicate) {
+        super(OperatorType.PHYSICAL_HIVE_SCAN, table, outputColumns, columnRefMap, limit, predicate);
         this.selectedPartitionIds = selectedPartitionIds;
         this.idToPartitionKey = idToPartitionKey;
         this.noEvalPartitionConjuncts = noEvalPartitionConjuncts;

@@ -682,6 +682,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
     public:                                                                                                     \
         DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);                                                              \
         Status prepare(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* context) override {     \
+            RETURN_IF_ERROR(Expr::prepare(state, row_desc, context));                                           \
             DateTimeValue dtv;                                                                                  \
             if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone())) {                           \
                 DateValue dv;                                                                                   \

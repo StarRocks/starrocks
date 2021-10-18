@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.SetQualifier;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
@@ -54,6 +55,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -190,18 +192,28 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
 
         LogicalOperator setOperator;
         if (setOperationRelation instanceof UnionRelation) {
-            setOperator = new LogicalUnionOperator(outputColumns, childOutputColumns,
-                    !SetQualifier.DISTINCT.equals(setOperationRelation.getQualifier()));
+            setOperator = new LogicalUnionOperator.Builder()
+                    .setOutputColumnRefOp(outputColumns)
+                    .setChildOutputColumns(childOutputColumns)
+                    .isUnionAll(!SetQualifier.DISTINCT.equals(setOperationRelation.getQualifier()))
+                    .build();
+
             if (setOperationRelation.getQualifier().equals(SetQualifier.DISTINCT)) {
                 OptExprBuilder unionOpt = new OptExprBuilder(setOperator, childPlan, expressionMapping);
                 this.outputColumn = outputColumns;
-                return new OptExprBuilder(new LogicalAggregationOperator(outputColumns, Maps.newHashMap()),
+                return new OptExprBuilder(
+                        new LogicalAggregationOperator(AggType.GLOBAL, outputColumns, Maps.newHashMap()),
                         Lists.newArrayList(unionOpt), expressionMapping);
             }
         } else if (setOperationRelation instanceof ExceptRelation) {
-            setOperator = new LogicalExceptOperator(outputColumns, childOutputColumns);
+            setOperator = new LogicalExceptOperator.Builder()
+                    .setOutputColumnRefOp(outputColumns)
+                    .setChildOutputColumns(childOutputColumns).build();
+
         } else if (setOperationRelation instanceof IntersectRelation) {
-            setOperator = new LogicalIntersectOperator(outputColumns, childOutputColumns);
+            setOperator = new LogicalIntersectOperator.Builder()
+                    .setOutputColumnRefOp(outputColumns)
+                    .setChildOutputColumns(childOutputColumns).build();
         } else {
             throw unsupportedException("New Planner only support Query Statement");
         }
@@ -250,24 +262,30 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
 
             HashDistributionDesc hashDistributionDesc =
                     new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
-            scanOperator = new LogicalOlapScanOperator(node.getTable(),
-                    outputVariables,
-                    colRefToColumnMetaMapBuilder.build(),
-                    columnMetaToColRefMap,
-                    DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
-                    -1,
-                    null,
-                    ((OlapTable) node.getTable()).getBaseIndexId(),
-                    null,
-                    node.getPartitionNames(),
-                    Lists.newArrayList(),
-                    node.getTabletIds());
+            if (node.isMetaQuery()) {
+                scanOperator = new LogicalMetaScanOperator(node.getTable(),
+                        outputVariables, colRefToColumnMetaMapBuilder.build());
+            } else  {
+                scanOperator = new LogicalOlapScanOperator(node.getTable(),
+                        outputVariables,
+                        colRefToColumnMetaMapBuilder.build(),
+                        columnMetaToColRefMap,
+                        DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
+                        -1,
+                        null,
+                        ((OlapTable) node.getTable()).getBaseIndexId(),
+                        null,
+                        node.getPartitionNames(),
+                        Lists.newArrayList(),
+                        node.getTabletIds());
+            }
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), node.getTable().getType(), outputVariables,
                     colRefToColumnMetaMapBuilder.build(), columnMetaToColRefMap, -1, null);
         } else if (Table.TableType.SCHEMA.equals(node.getTable().getType())) {
             scanOperator =
-                    new LogicalSchemaScanOperator(node.getTable(), outputVariables, colRefToColumnMetaMapBuilder.build(),
+                    new LogicalSchemaScanOperator(node.getTable(), outputVariables,
+                            colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, -1,
                             null);
         } else if (Table.TableType.MYSQL.equals(node.getTable().getType())) {
@@ -331,8 +349,13 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
                         .collect(Collectors.toList()));
 
         if (node.getOnPredicate() == null) {
-            return new OptExprBuilder(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null, node.getJoinHint()),
-                    Lists.newArrayList(leftPlan, rightPlan), expressionMapping);
+            return new OptExprBuilder(new LogicalJoinOperator(JoinOperator.CROSS_JOIN,
+                    null,
+                    node.getJoinHint(),
+                    -1,
+                    null,
+                    null,
+                    false), Lists.newArrayList(leftPlan, rightPlan), expressionMapping);
         }
 
         ScalarOperator onPredicateWithoutRewrite = SqlToScalarOperatorTranslator
@@ -362,7 +385,13 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
             onPredicate = Utils.compoundAnd(Utils.compoundAnd(eqConj), onPredicate);
         }
 
-        Operator root = new LogicalJoinOperator(node.getType(), onPredicate, node.getJoinHint());
+        Operator root = new LogicalJoinOperator(node.getType(),
+                onPredicate,
+                node.getJoinHint(),
+                -1,
+                null,
+                null,
+                false);
 
         OptExprBuilder optExprBuilder;
         if (node.getType().isLeftSemiAntiJoin()) {

@@ -10,17 +10,26 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rewrite.AddProjectForJoinOnBinaryPredicatesRule;
 import com.starrocks.sql.optimizer.rewrite.AddProjectForJoinPruneRule;
 import com.starrocks.sql.optimizer.rewrite.ExchangeSortToMergeRule;
+import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
+import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
+import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
-import com.starrocks.sql.optimizer.task.TopDownRewriteTask;
+import com.starrocks.sql.optimizer.task.TopDownRewriteIterativeTask;
+import com.starrocks.sql.optimizer.task.TopDownRewriteOnceTask;
 
 import java.util.Collections;
 import java.util.List;
@@ -65,57 +74,34 @@ public class Optimizer {
         // Note: root group of memo maybe change after rewrite,
         // so we should always get root group and root group expression
         // directly from memo.
-        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
-                memo.getRootGroup(), RuleSetType.MULTI_DISTINCT_REWRITE));
-        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
 
-        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
-                memo.getRootGroup(), RuleSetType.SUBQUERY_REWRITE));
-        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
-
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node
         // cannot merge
-        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
-                memo.getRootGroup(), RuleSetType.PUSH_DOWN_PREDICATE));
-        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+        ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownAggToMetaScanRule());
 
-        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
-                memo.getRootGroup(), RuleSetType.PRUNE_COLUMNS));
-        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
-
+        ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+        ruleRewriteIterative(memo, rootTaskContext, new PruneEmptyWindowRule());
+        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         //Limit push must be after the column prune,
         //otherwise the Node containing limit may be prune
-        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
-                memo.getRootGroup(), RuleSetType.MERGE_LIMIT));
-        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
-
-        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
-                memo.getRootGroup(), RuleSetType.MERGE_AGGREGATE));
-        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
-
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.MERGE_LIMIT);
+        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoAggRule());
         //After the MERGE_LIMIT, ProjectNode that can be merged may appear.
-        //So we do another column cropping
-        rootTaskContext.setRequiredColumns((ColumnRefSet) requiredColumns.clone());
-        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
-                memo.getRootGroup(), RuleSetType.PRUNE_COLUMNS));
-        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
-
-        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
-                memo.getRootGroup(), RuleSetType.PRUNE_ASSERT_ROW));
-        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+        //So we do another MergeTwoProjectRule
+        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
 
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
         tree = new MaterializedViewRule().transform(tree, context).get(0);
         memo.replaceRewriteExpression(memo.getRootGroup(), tree);
 
-        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
-                memo.getRootGroup(), RuleSetType.PARTITION_PRUNE));
-        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
-
-        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
-                memo.getRootGroup(), RuleSetType.SCALAR_OPERATOR_REUSE));
-        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+        ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+        ruleRewriteIterative(memo, rootTaskContext, new PruneProjectRule());
+        ruleRewriteIterative(memo, rootTaskContext, new ScalarOperatorsReuseRule());
 
         // Rewrite maybe produce empty groups, we need to remove them.
         memo.removeAllEmptyGroup();
@@ -165,14 +151,15 @@ public class Optimizer {
 
         OptExpression result = extractBestPlan(requiredProperty, memo.getRootGroup());
         tryOpenPreAggregate(result);
-        result = new AddProjectForJoinOnBinaryPredicatesRule().rewrite(result, columnRefFactory);
+        result = new AddProjectForJoinOnBinaryPredicatesRule().rewrite(result, rootTaskContext);
         result = new AddProjectForJoinPruneRule((ColumnRefSet) requiredColumns.clone())
-                .rewrite(result, columnRefFactory);
+                .rewrite(result, rootTaskContext);
         // Rewrite Exchange on top of Sort to Final Sort
         result = new ExchangeSortToMergeRule().rewrite(result);
 
         // Add project will case output change, re-derive output columns in property
-        result = new DeriveOutputColumnsRule((ColumnRefSet) requiredColumns.clone()).rewrite(result, columnRefFactory);
+        result = new DeriveOutputColumnsRule((ColumnRefSet) requiredColumns.clone()).rewrite(result, rootTaskContext);
+        result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         return result;
     }
 
@@ -218,5 +205,29 @@ public class Optimizer {
         List<LogicalOlapScanOperator> list = Lists.newArrayList();
         Utils.extractOlapScanOperator(tree.getGroupExpression(), list);
         rootTaskContext.setAllScanOperators(Collections.unmodifiableList(list));
+    }
+
+    void ruleRewriteIterative(Memo memo, TaskContext rootTaskContext, RuleSetType ruleSetType) {
+        context.getTaskScheduler().pushTask(new TopDownRewriteIterativeTask(rootTaskContext,
+                memo.getRootGroup(), ruleSetType));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+    }
+
+    void ruleRewriteIterative(Memo memo, TaskContext rootTaskContext, Rule rule) {
+        context.getTaskScheduler().pushTask(new TopDownRewriteIterativeTask(rootTaskContext,
+                memo.getRootGroup(), rule));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+    }
+
+    void ruleRewriteOnlyOnce(Memo memo, TaskContext rootTaskContext, RuleSetType ruleSetType) {
+        context.getTaskScheduler().pushTask(new TopDownRewriteOnceTask(rootTaskContext,
+                memo.getRootGroup(), ruleSetType));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+    }
+
+    void ruleRewriteOnlyOnce(Memo memo, TaskContext rootTaskContext, Rule rule) {
+        context.getTaskScheduler().pushTask(new TopDownRewriteOnceTask(rootTaskContext,
+                memo.getRootGroup(), rule));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
     }
 }

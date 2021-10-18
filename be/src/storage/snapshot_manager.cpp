@@ -147,8 +147,8 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     } else {
         MemTracker mem_tracker;
         TabletMeta cloned_tablet_meta(&mem_tracker);
-        if (cloned_tablet_meta.create_from_file(cloned_header_file) != OLAP_SUCCESS) {
-            LOG(WARNING) << "Fail to create rowset meta from " << cloned_header_file;
+        if (Status st = cloned_tablet_meta.create_from_file(cloned_header_file); !st.ok()) {
+            LOG(WARNING) << "Fail to create rowset meta from " << cloned_header_file << ": " << st;
             return Status::RuntimeError("fail to load cloned header file");
         }
         cloned_tablet_meta.to_meta_pb(&cloned_tablet_meta_pb);
@@ -207,11 +207,7 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
         rowset_meta->set_tablet_schema_hash(schema_hash);
     }
 
-    if (TabletMeta::save(cloned_header_file, new_tablet_meta_pb) != OLAP_SUCCESS) {
-        LOG(WARNING) << "Fail to save new tablet meta to directory " << clone_dir;
-        return Status::RuntimeError("fail to save new tablet meta");
-    }
-    return Status::OK();
+    return TabletMeta::save(cloned_header_file, new_tablet_meta_pb);
 }
 
 Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path,
@@ -221,8 +217,9 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
     rowset_meta->init_from_pb(rs_meta_pb);
     RowsetSharedPtr org_rowset;
-    if (RowsetFactory::create_rowset(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), &tablet_schema, new_path,
-                                     rowset_meta, &org_rowset) != OLAP_SUCCESS) {
+    if (!RowsetFactory::create_rowset(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), &tablet_schema, new_path,
+                                      rowset_meta, &org_rowset)
+                 .ok()) {
         return Status::RuntimeError("fail to create rowset");
     }
     // do not use cache to load index
@@ -246,7 +243,7 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     context.segments_overlap = rowset_meta->segments_overlap();
 
     std::unique_ptr<RowsetWriter> rs_writer;
-    if (RowsetFactory::create_rowset_writer(context, &rs_writer) != OLAP_SUCCESS) {
+    if (!RowsetFactory::create_rowset_writer(context, &rs_writer).ok()) {
         return Status::RuntimeError("fail to create rowset writer");
     }
 
@@ -350,8 +347,7 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
         snapshot_tablet_meta->revise_inc_rs_metas(std::move(snapshot_rowset_metas));
         snapshot_tablet_meta->revise_rs_metas(std::vector<RowsetMetaSharedPtr>());
         std::string header_path = _get_header_full_path(tablet, snapshot_dir);
-        auto ost = snapshot_tablet_meta->save(header_path);
-        if (ost != OLAP_SUCCESS) {
+        if (Status st = snapshot_tablet_meta->save(header_path); !st.ok()) {
             LOG(WARNING) << "Fail to save tablet meta to " << header_path;
             (void)FileUtils::remove_all(snapshot_id_path);
             return Status::RuntimeError("Fail to save tablet meta to header file");
@@ -380,12 +376,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     if (snapshot_version == 0) {
         snapshot_version = tablet->max_version().second;
     }
-    auto ost = tablet->capture_consistent_rowsets(Version(0, snapshot_version), &snapshot_rowsets);
-    if (ost == OLAP_ERR_VERSION_ALREADY_MERGED) {
-        return Status::VersionAlreadyMerged("version already merged");
-    } else if (ost != OLAP_SUCCESS) {
-        return Status::RuntimeError("fail to capture_consistent_rowsets");
-    }
+    RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, snapshot_version), &snapshot_rowsets));
     tablet->generate_tablet_meta_copy_unlocked(snapshot_tablet_meta);
     snapshot_tablet_meta->delete_alter_task();
     rdlock.unlock();
@@ -416,8 +407,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
         snapshot_tablet_meta->revise_inc_rs_metas(vector<RowsetMetaSharedPtr>());
         snapshot_tablet_meta->revise_rs_metas(std::move(snapshot_rowset_metas));
         std::string header_path = _get_header_full_path(tablet, snapshot_dir);
-        ost = snapshot_tablet_meta->save(header_path);
-        if (ost != OLAP_SUCCESS) {
+        if (Status st = snapshot_tablet_meta->save(header_path); !st.ok()) {
             LOG(WARNING) << "Fail to save tablet meta to " << header_path;
             (void)FileUtils::remove_all(snapshot_id_path);
             return Status::RuntimeError("Fail to save tablet meta to header file");
@@ -464,6 +454,7 @@ Status SnapshotManager::build_snapshot_meta(SnapshotTypePB snapshot_type, const 
                 int64_t dummy;
                 const uint32_t old_segment_id = old_rsid + i;
                 const uint32_t new_segment_id = new_rsid + i;
+                CHECK(snapshot_meta.delete_vectors().count(new_segment_id) == 0);
                 DelVector* delvec = &snapshot_meta.delete_vectors()[new_segment_id];
                 RETURN_IF_ERROR(TabletMetaManager::get_del_vector(meta_store, tablet_id, old_segment_id,
                                                                   snapshot_version, delvec, &dummy /*latest_version*/));
@@ -486,7 +477,7 @@ Status SnapshotManager::build_snapshot_meta(SnapshotTypePB snapshot_type, const 
         version->set_creation_time(time(nullptr));
         for (const auto& rm : snapshot_meta.rowset_metas()) {
             auto rsid = rm.rowset_seg_id();
-            next_segment_id = std::max<uint32_t>(next_segment_id, rsid + rm.num_segments());
+            next_segment_id = std::max<uint32_t>(next_segment_id, rsid + std::max(1L, rm.num_segments()));
             version->add_rowsets(rsid);
         }
         meta_pb.mutable_updates()->set_next_rowset_id(next_segment_id);

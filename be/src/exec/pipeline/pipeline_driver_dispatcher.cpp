@@ -10,6 +10,10 @@ GlobalDriverDispatcher::GlobalDriverDispatcher(std::unique_ptr<ThreadPool> threa
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
           _exec_state_reporter(new ExecStateReporter()) {}
 
+GlobalDriverDispatcher::~GlobalDriverDispatcher() {
+    _driver_queue->close();
+}
+
 void GlobalDriverDispatcher::initialize(int num_threads) {
     _blocked_driver_poller->start();
     _num_threads_setter.set_actual_num(num_threads);
@@ -33,6 +37,7 @@ void GlobalDriverDispatcher::finalize_driver(DriverRawPtr driver, RuntimeState* 
     driver->finalize(runtime_state, state);
     if (driver->query_ctx()->is_finished()) {
         auto query_id = driver->query_ctx()->query_id();
+        DCHECK(!driver->source_operator()->pending_finish());
         QueryContextManager::instance()->remove(query_id);
     }
 }
@@ -44,8 +49,13 @@ void GlobalDriverDispatcher::run() {
         }
 
         size_t queue_index;
-        auto driver = this->_driver_queue->take(&queue_index);
+        auto maybe_driver = this->_driver_queue->take(&queue_index);
+        if (maybe_driver.status().is_cancelled()) {
+            return;
+        }
+        auto driver = maybe_driver.value();
         DCHECK(driver != nullptr);
+
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
         auto* runtime_state = fragment_ctx->runtime_state();
@@ -67,6 +77,7 @@ void GlobalDriverDispatcher::run() {
             finalize_driver(driver, runtime_state, driver->driver_state());
             continue;
         }
+
         // query context has ready drivers to run, so extend its lifetime.
         query_ctx->extend_lifetime();
         auto status = driver->process(runtime_state);
@@ -104,7 +115,8 @@ void GlobalDriverDispatcher::run() {
         }
         case INPUT_EMPTY:
         case OUTPUT_FULL:
-        case PENDING_FINISH: {
+        case PENDING_FINISH:
+        case DEPENDENCIES_BLOCK: {
             VLOG_ROW << strings::Substitute("[Driver] Blocked, source=$0, state=$1",
                                             driver->source_operator()->get_name(), ds_to_string(driver_state));
             _blocked_driver_poller->add_blocked_driver(driver);

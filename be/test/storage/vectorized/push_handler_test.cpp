@@ -6,7 +6,6 @@
 
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/bufferpool/reservation_tracker.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "storage/vectorized/chunk_helper.h"
@@ -287,9 +286,6 @@ void PushHandlerTest::_create_expr_info() {
 }
 
 void PushHandlerTest::_init() {
-    ExecEnv::GetInstance()->_thread_mgr = new ThreadResourceMgr();
-    ExecEnv::GetInstance()->_buffer_reservation = new ReservationTracker();
-
     _create_expr_info();
     _t_desc_table = _init_desc_table();
 }

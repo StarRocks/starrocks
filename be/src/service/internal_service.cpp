@@ -235,7 +235,7 @@ Status PInternalServiceImpl<T>::_exec_plan_fragment(brpc::Controller* cntl) {
     {
         const uint8_t* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
-        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, false, &t_request));
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
     }
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
     LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
@@ -375,7 +375,7 @@ void PInternalServiceImpl<T>::get_info(google::protobuf::RpcController* controll
     Status::OK().to_protobuf(response->mutable_status());
 }
 
-template class PInternalServiceImpl<PBackendService>;
-template class PInternalServiceImpl<starrocks::PInternalService>;
+template class PInternalServiceImpl<PInternalService>;
+template class PInternalServiceImpl<doris::PBackendService>;
 
 } // namespace starrocks

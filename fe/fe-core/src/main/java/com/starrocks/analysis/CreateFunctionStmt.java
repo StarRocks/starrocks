@@ -182,11 +182,7 @@ public class CreateFunctionStmt extends DdlStmt {
         if (mergeFnSymbol == null) {
             throw new AnalysisException("No 'merge_fn' in properties");
         }
-        function = builder.initFnSymbol(initFnSymbol)
-                .updateFnSymbol(updateFnSymbol).mergeFnSymbol(mergeFnSymbol)
-                .serializeFnSymbol(properties.get(SERIALIZE_KEY)).finalizeFnSymbol(properties.get(FINALIZE_KEY))
-                .getValueFnSymbol(properties.get(GET_VALUE_KEY)).removeFnSymbol(properties.get(REMOVE_KEY))
-                .build();
+        function = builder.build();
         function.setChecksum(checksum);
     }
 

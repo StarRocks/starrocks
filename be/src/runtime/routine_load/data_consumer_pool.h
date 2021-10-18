@@ -39,9 +39,13 @@ class Status;
 // to be reused
 class DataConsumerPool {
 public:
-    DataConsumerPool(int64_t max_pool_size) : _max_pool_size(max_pool_size) {}
+    DataConsumerPool(int64_t max_pool_size)
+            : _is_closed(std::make_shared<bool>(false)), _max_pool_size(max_pool_size) {}
 
-    ~DataConsumerPool() = default;
+    ~DataConsumerPool() {
+        std::unique_lock<std::mutex> l(_lock);
+        *_is_closed = true;
+    }
 
     // get a already initialized consumer from cache,
     // if not found in cache, create a new one.
@@ -62,6 +66,7 @@ private:
 
 private:
     std::mutex _lock;
+    std::shared_ptr<bool> _is_closed;
     std::list<std::shared_ptr<DataConsumer>> _pool;
     int64_t _max_pool_size;
 

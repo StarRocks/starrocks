@@ -445,9 +445,9 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
         // load src header
         std::string header_file = strings::Substitute("$0/$1.hdr", clone_dir, tablet->tablet_id());
         TabletMeta cloned_tablet_meta(&mem_tracker);
-        if (cloned_tablet_meta.create_from_file(header_file) != OLAP_SUCCESS) {
+        res = cloned_tablet_meta.create_from_file(header_file);
+        if (!res.ok()) {
             LOG(WARNING) << "Fail to load load tablet meta from " << header_file;
-            res = Status::InternalError("fail to load tablet meta from header file");
             break;
         }
 
@@ -543,9 +543,9 @@ Status EngineCloneTask::_clone_incremental_data(Tablet* tablet, const TabletMeta
     }
 
     // clone_data to tablet
-    OLAPStatus ost = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);
-    LOG(INFO) << "finish to incremental clone. [tablet=" << tablet->full_name() << " res=" << ost << "]";
-    return ost == OLAP_SUCCESS ? Status::OK() : Status::InternalError("fail to revise tablet meta");
+    Status st = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);
+    LOG(INFO) << "finish to incremental clone. [tablet=" << tablet->full_name() << " status=" << st << "]";
+    return st;
 }
 
 Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tablet_meta) {
@@ -618,24 +618,23 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
     // 2. local tablet has error in push
     // 3. local tablet cloned rowset from other nodes
     // 4. if cleared alter task info, then push will not write to new tablet, the report info is error
-    OLAPStatus ost = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);
-    LOG(INFO) << "finish to full clone. tablet=" << tablet->full_name() << ", res=" << ost;
+    Status st = tablet->revise_tablet_meta(rowsets_to_clone, versions_to_delete);
+    LOG(INFO) << "finish to full clone. tablet=" << tablet->full_name() << ", res=" << st;
     // in previous step, copy all files from CLONE_DIR to tablet dir
     // but some rowset is useless, so that remove them here
     for (auto& rs_meta_ptr : rs_metas_found_in_src) {
         RowsetSharedPtr rowset_to_remove;
-        auto s = RowsetFactory::create_rowset(_tablet_meta_mem_tracker, &(cloned_tablet_meta->tablet_schema()),
-                                              tablet->tablet_path(), rs_meta_ptr, &rowset_to_remove);
-        if (s != OLAP_SUCCESS) {
+        if (auto s = RowsetFactory::create_rowset(_tablet_meta_mem_tracker, &(cloned_tablet_meta->tablet_schema()),
+                                                  tablet->tablet_path(), rs_meta_ptr, &rowset_to_remove);
+            !s.ok()) {
             LOG(WARNING) << "failed to init rowset to remove: " << rs_meta_ptr->rowset_id().to_string();
             continue;
         }
-        s = rowset_to_remove->remove();
-        if (s != OLAP_SUCCESS) {
-            LOG(WARNING) << "failed to remove rowset " << rs_meta_ptr->rowset_id().to_string() << ", res=" << s;
+        if (auto ost = rowset_to_remove->remove(); ost != OLAP_SUCCESS) {
+            LOG(WARNING) << "failed to remove rowset " << rs_meta_ptr->rowset_id().to_string() << ", res=" << ost;
         }
     }
-    return ost == OLAP_SUCCESS ? Status::OK() : Status::InternalError("fail to revise tablet meta");
+    return st;
 }
 
 Status EngineCloneTask::_finish_clone_updatable(Tablet* tablet, const std::string& clone_dir, int64_t committed_version,

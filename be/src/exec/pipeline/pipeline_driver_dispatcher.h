@@ -40,7 +40,7 @@ public:
 class GlobalDriverDispatcher final : public FactoryMethod<DriverDispatcher, GlobalDriverDispatcher> {
 public:
     explicit GlobalDriverDispatcher(std::unique_ptr<ThreadPool> thread_pool);
-    ~GlobalDriverDispatcher() override = default;
+    ~GlobalDriverDispatcher() override;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
     void dispatch(DriverRawPtr driver) override;

@@ -14,7 +14,7 @@
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/scan_operator.h"
 #include "exec/scan_node.h"
-#include "gen_cpp/starrocks_internal_service.pb.h"
+#include "gen_cpp/doris_internal_service.pb.h"
 #include "gutil/casts.h"
 #include "gutil/map_util.h"
 #include "runtime/data_stream_sender.h"
@@ -35,15 +35,23 @@ Morsels convert_scan_range_to_morsel(const std::vector<TScanRangeParams>& scan_r
 }
 
 Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParams& request) {
-    const TPlanFragmentExecParams& params = request.params;
+    DCHECK(request.__isset.desc_tbl);
+    DCHECK(request.__isset.fragment);
+    const auto& params = request.params;
     const auto& query_id = params.query_id;
-    const auto& fragment_id = params.fragment_instance_id;
+    const auto& fragment_instance_id = params.fragment_instance_id;
+    const auto& coord = request.coord;
+    const auto& query_options = request.query_options;
+    const auto& query_globals = request.query_globals;
+    const auto& backend_num = request.backend_num;
+    const auto& t_desc_tbl = request.desc_tbl;
+    const auto& fragment = request.fragment;
 
     // prevent an identical fragment instance from multiple execution caused by FE's
     // duplicate invocations of rpc exec_plan_fragment.
     auto&& existing_query_ctx = QueryContextManager::instance()->get(query_id);
     if (existing_query_ctx) {
-        auto&& existing_fragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_id);
+        auto&& existing_fragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
         if (existing_fragment_ctx) {
             return Status::DuplicateRpcInvocation("Duplicate invocations of exec_plan_fragment");
         }
@@ -53,47 +61,43 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
     }
-    if (request.query_options.__isset.pipeline_query_expire_seconds) {
-        _query_ctx->set_expire_seconds(std::max<int>(request.query_options.pipeline_query_expire_seconds, 1));
+    if (query_options.__isset.pipeline_query_expire_seconds) {
+        _query_ctx->set_expire_seconds(std::max<int>(query_options.pipeline_query_expire_seconds, 1));
     } else {
         _query_ctx->set_expire_seconds(300);
     }
-    _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
+
+    _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_instance_id);
     _fragment_ctx->set_query_id(query_id);
-    _fragment_ctx->set_fragment_instance_id(fragment_id);
-    _fragment_ctx->set_fe_addr(request.coord);
+    _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
+    _fragment_ctx->set_fe_addr(coord);
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
-              << " fragment_instance_id=" << print_id(params.fragment_instance_id)
-              << " backend_num=" << request.backend_num;
+              << " fragment_instance_id=" << print_id(params.fragment_instance_id) << " backend_num=" << backend_num;
 
     _fragment_ctx->set_runtime_state(
-            std::make_unique<RuntimeState>(request, request.query_options, request.query_globals, exec_env));
+            std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
     auto* runtime_state = _fragment_ctx->runtime_state();
 
-    int64_t bytes_limit = request.query_options.mem_limit;
+    int64_t bytes_limit = query_options.mem_limit;
     // NOTE: this MemTracker only for olap
     _fragment_ctx->set_mem_tracker(
             std::make_unique<MemTracker>(bytes_limit, "fragment mem-limit", exec_env->query_pool_mem_tracker(), true));
-    auto mem_tracker = _fragment_ctx->mem_tracker();
 
     runtime_state->set_batch_size(config::vector_chunk_size);
     RETURN_IF_ERROR(runtime_state->init_mem_trackers(query_id));
-    runtime_state->set_be_number(request.backend_num);
-    runtime_state->set_fragment_mem_tracker(mem_tracker);
+    runtime_state->set_be_number(backend_num);
 
     LOG(INFO) << "Using query memory limit: " << PrettyPrinter::print(bytes_limit, TUnit::BYTES);
 
     // Set up desc tbl
     auto* obj_pool = runtime_state->obj_pool();
     DescriptorTbl* desc_tbl = nullptr;
-    DCHECK(request.__isset.desc_tbl);
-    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool, request.desc_tbl, &desc_tbl));
+    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool, t_desc_tbl, &desc_tbl));
     runtime_state->set_desc_tbl(desc_tbl);
     // Set up plan
     ExecNode* plan = nullptr;
-    DCHECK(request.__isset.fragment);
-    RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, request.fragment.plan, *desc_tbl, &plan));
+    RETURN_IF_ERROR(ExecNode::create_tree(runtime_state, obj_pool, fragment.plan, *desc_tbl, &plan));
     runtime_state->set_fragment_root_id(plan->id());
     _fragment_ctx->set_plan(plan);
 
@@ -106,16 +110,16 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
 
     int32_t degree_of_parallelism = 1;
-    if (request.query_options.__isset.query_threads) {
-        degree_of_parallelism = std::max<int32_t>(request.query_options.query_threads, degree_of_parallelism);
+    if (query_options.__isset.query_threads) {
+        degree_of_parallelism = std::max<int32_t>(query_options.query_threads, degree_of_parallelism);
     }
 
     // pipeline scan mode
     // 0: use sync io
     // 1: use async io and exec->thread_pool()
     int32_t pipeline_scan_mode = 1;
-    if (request.query_options.__isset.pipeline_scan_mode) {
-        pipeline_scan_mode = request.query_options.pipeline_scan_mode;
+    if (query_options.__isset.pipeline_scan_mode) {
+        pipeline_scan_mode = query_options.pipeline_scan_mode;
     }
 
     // set scan ranges
@@ -137,10 +141,10 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     _fragment_ctx->set_pipelines(builder.build(*_fragment_ctx, plan));
     // Set up sink, if required
     std::unique_ptr<DataSink> sink;
-    if (request.fragment.__isset.output_sink) {
+    if (fragment.__isset.output_sink) {
         RowDescriptor row_desc;
-        RETURN_IF_ERROR(DataSink::create_data_sink(obj_pool, request.fragment.output_sink,
-                                                   request.fragment.output_exprs, params, row_desc, &sink));
+        RETURN_IF_ERROR(DataSink::create_data_sink(obj_pool, fragment.output_sink, fragment.output_exprs, params,
+                                                   row_desc, &sink));
         RuntimeProfile* sink_profile = sink->profile();
         if (sink_profile != nullptr) {
             runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);

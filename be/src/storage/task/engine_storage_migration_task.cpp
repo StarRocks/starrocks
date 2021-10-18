@@ -105,7 +105,9 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
             }
 
             end_version = lastest_version->end_version();
-            res = tablet->capture_consistent_rowsets(Version(0, end_version), &consistent_rowsets);
+            res = tablet->capture_consistent_rowsets(Version(0, end_version), &consistent_rowsets).ok()
+                          ? OLAP_SUCCESS
+                          : OLAP_ERR_OTHER_ERROR;
             if (res != OLAP_SUCCESS || consistent_rowsets.empty()) {
                 LOG(WARNING) << "fail to capture consistent rowsets. version=" << end_version;
                 return OLAP_ERR_VERSION_NOT_EXIST;
@@ -222,14 +224,14 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
         }
 
         new_meta_file = schema_hash_path + "/" + std::to_string(_tablet_id) + ".hdr";
-        res = new_tablet_meta->save(new_meta_file);
+        res = new_tablet_meta->save(new_meta_file).ok() ? OLAP_SUCCESS : OLAP_ERR_IO_ERROR;
         if (res != OLAP_SUCCESS) {
             LOG(WARNING) << "failed to save meta to path. file=" << new_meta_file;
             need_remove_new_path = true;
             break;
         }
 
-        res = TabletMeta::reset_tablet_uid(new_meta_file);
+        res = TabletMeta::reset_tablet_uid(new_meta_file).ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
         if (res != OLAP_SUCCESS) {
             LOG(WARNING) << "errors while set tablet uid. file=" << new_meta_file;
             need_remove_new_path = true;

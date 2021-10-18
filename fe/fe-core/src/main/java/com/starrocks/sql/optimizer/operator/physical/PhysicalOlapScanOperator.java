@@ -2,8 +2,10 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -12,50 +14,51 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private final HashDistributionSpec hashDistributionSpec;
-    private long selectedIndexId;
-    private List<Long> selectedTabletId;
-    private List<Long> selectedPartitionId;
+    private final long selectedIndexId;
+    private final List<Long> selectedTabletId;
+    private final List<Long> selectedPartitionId;
 
     private boolean isPreAggregation;
     private String turnOffReason;
 
+    private final List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+
     public PhysicalOlapScanOperator(Table table,
                                     List<ColumnRefOperator> outputColumns,
                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                    HashDistributionSpec hashDistributionDesc) {
-        super(OperatorType.PHYSICAL_OLAP_SCAN, table, outputColumns, colRefToColumnMetaMap);
+                                    HashDistributionSpec hashDistributionDesc,
+                                    long limit,
+                                    ScalarOperator predicate,
+                                    long selectedIndexId,
+                                    List<Long> selectedPartitionId,
+                                    List<Long> selectedTabletId) {
+        super(OperatorType.PHYSICAL_OLAP_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate);
         this.hashDistributionSpec = hashDistributionDesc;
+        this.selectedIndexId = selectedIndexId;
+        this.selectedPartitionId = selectedPartitionId;
+        this.selectedTabletId = selectedTabletId;
     }
 
     public long getSelectedIndexId() {
         return selectedIndexId;
     }
 
-    public void setSelectedIndexId(long selectedIndexId) {
-        this.selectedIndexId = selectedIndexId;
-    }
-
     public List<Long> getSelectedPartitionId() {
         return selectedPartitionId;
     }
 
-    public void setSelectedPartitionId(List<Long> selectedPartitionId) {
-        this.selectedPartitionId = selectedPartitionId;
-    }
-
     public List<Long> getSelectedTabletId() {
         return selectedTabletId;
-    }
-
-    public void setSelectedTabletId(List<Long> selectedTabletId) {
-        this.selectedTabletId = selectedTabletId;
     }
 
     public boolean isPreAggregation() {
@@ -72,6 +75,18 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public void setTurnOffReason(String turnOffReason) {
         this.turnOffReason = turnOffReason;
+    }
+
+    public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
+        return globalDicts;
+    }
+
+    public void addGlobalDictColumns(Pair<Integer, ColumnDict> dict) {
+        globalDicts.add(dict);
+    }
+
+    public boolean couldApplyStringDict(List<Integer> childDictColumns) {
+        return true;
     }
 
     @Override
@@ -102,5 +117,11 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                     HashDistributionDesc.SourceType.LOCAL);
             return DistributionSpec.createHashDistributionSpec(leftHashDesc);
         }
+    }
+
+    // FixMe(KKS): Fix filter
+    @Override
+    public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
+        return true;
     }
 }

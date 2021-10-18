@@ -26,6 +26,7 @@
 #include "storage/vectorized/empty_iterator.h"
 #include "storage/vectorized/union_iterator.h"
 #include "util/defer_op.h"
+#include "util/path_util.h"
 
 namespace starrocks {
 
@@ -47,7 +48,7 @@ public:
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
         std::unique_ptr<RowsetWriter> writer;
-        EXPECT_EQ(OLAP_SUCCESS, RowsetFactory::create_rowset_writer(writer_context, &writer));
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = vectorized::ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = vectorized::ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
@@ -56,9 +57,11 @@ public:
             cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
             cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
         }
-        if (one_delete == nullptr) {
+        if (one_delete == nullptr && !keys.empty()) {
             EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk(*chunk));
-        } else {
+        } else if (one_delete == nullptr) {
+            EXPECT_EQ(OLAP_SUCCESS, writer->flush());
+        } else if (one_delete != nullptr) {
             EXPECT_EQ(OLAP_SUCCESS, writer->flush_chunk_with_deletes(*chunk, *one_delete));
         }
         return writer->build();
@@ -192,6 +195,53 @@ public:
         return st;
     }
 
+    static StatusOr<TabletSharedPtr> clone_a_new_replica(const TabletSharedPtr& source_tablet, int64_t new_tablet_id) {
+        auto clone_version = source_tablet->max_version().second;
+        auto snapshot_dir = SnapshotManager::instance()->snapshot_full(source_tablet, clone_version, 3600);
+        CHECK(snapshot_dir.ok()) << snapshot_dir.status();
+
+        DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
+
+        auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(source_tablet, *snapshot_dir);
+        auto meta_file = meta_dir + "/meta";
+        auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_file);
+        CHECK(snapshot_meta.ok()) << snapshot_meta.status();
+
+        // Assign a new tablet_id and overwrite the meta file.
+        snapshot_meta->tablet_meta().set_tablet_id(new_tablet_id);
+        CHECK(snapshot_meta->serialize_to_file(meta_file).ok());
+
+        RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&(*snapshot_meta), meta_dir));
+
+        auto store = source_tablet->data_dir();
+        auto new_schema_hash = source_tablet->schema_hash();
+        std::string new_tablet_path = store->path() + DATA_PREFIX;
+        new_tablet_path = path_util::join_path_segments(new_tablet_path, std::to_string(source_tablet->shard_id()));
+        new_tablet_path = path_util::join_path_segments(new_tablet_path, std::to_string(new_tablet_id));
+        new_tablet_path = path_util::join_path_segments(new_tablet_path, std::to_string(new_schema_hash));
+        CHECK(std::filesystem::create_directories(new_tablet_path));
+
+        std::set<std::string> files;
+        CHECK(FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default()).ok());
+        for (const auto& f : files) {
+            std::string src = meta_dir + "/" + f;
+            std::string dst = new_tablet_path + "/" + f;
+            Status st = Env::Default()->link_file(src, dst);
+            if (st.ok()) {
+                LOG(INFO) << "Linked " << src << " to " << dst;
+            } else if (st.is_already_exist()) {
+                LOG(INFO) << dst << " already exist";
+            } else {
+                return st;
+            }
+        }
+
+        auto tablet_manager = StorageEngine::instance()->tablet_manager();
+        auto st = tablet_manager->create_tablet_from_snapshot(store, new_tablet_id, new_schema_hash, new_tablet_path);
+        CHECK(st.ok()) << st;
+        return tablet_manager->get_tablet(new_tablet_id, new_schema_hash);
+    }
+
 protected:
     TabletSharedPtr _tablet;
     TabletSharedPtr _tablet2;
@@ -211,12 +261,12 @@ static TabletSharedPtr load_same_tablet_from_store(const TabletSharedPtr& tablet
 
     // Parse tablet meta.
     auto tablet_meta = std::make_shared<TabletMeta>(tablet->mem_tracker());
-    CHECK_EQ(OLAP_SUCCESS, tablet_meta->deserialize(serialized_meta));
+    CHECK(tablet_meta->deserialize(serialized_meta).ok());
 
     // Create a new tablet instance from the latest snapshot.
     auto tablet1 = Tablet::create_tablet_from_meta(tablet->mem_tracker(), tablet_meta, data_dir);
     CHECK(tablet1 != nullptr);
-    CHECK_EQ(OLAP_SUCCESS, tablet1->init());
+    CHECK(tablet1->init().ok());
     CHECK(tablet1->init_succeeded());
     return tablet1;
 }
@@ -1228,6 +1278,57 @@ TEST_F(TabletUpdatesTest, test_issue_4181) {
     auto tablet2 = load_same_tablet_from_store(tablet1);
     ASSERT_EQ(11, tablet2->updates()->max_version());
     EXPECT_EQ(keys0.size(), read_tablet(tablet2, tablet2->updates()->max_version()));
+}
+
+// NOLINTNEXTLINE
+TEST_F(TabletUpdatesTest, snapshot_with_empty_rowset) {
+    srand(GetCurrentTimeMicros());
+    auto tablet0 = create_tablet(rand(), rand());
+
+    DeferOp defer([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
+        (void)FileUtils::remove_all(tablet0->tablet_path());
+    });
+
+    std::vector<int64_t> keys0{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    for (int i = 0; i < 10; i++) {
+        ASSERT_TRUE(tablet0->rowset_commit(i + 2, create_rowset(tablet0, keys0)).ok());
+    }
+    // Empty rowset.
+    ASSERT_TRUE(tablet0->rowset_commit(12, create_rowset(tablet0, std::vector<int64_t>{})).ok());
+
+    auto res = clone_a_new_replica(tablet0, rand());
+    ASSERT_TRUE(res.ok()) << res.status();
+    ASSERT_TRUE(*res != nullptr);
+    auto tablet1 = std::move(res).value();
+
+    DeferOp defer2([&]() {
+        auto tablet_mgr = StorageEngine::instance()->tablet_manager();
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)FileUtils::remove_all(tablet1->tablet_path());
+    });
+
+    ASSERT_EQ(12, tablet1->updates()->max_version());
+    ASSERT_EQ(1, tablet1->updates()->version_history_count());
+
+    MemTracker tracker;
+    Status st = tablet1->updates()->compaction(&tracker);
+    ASSERT_TRUE(st.ok()) << st;
+
+    // Wait until compaction applied.
+    while (true) {
+        std::vector<RowsetSharedPtr> rowsets;
+        EditVersion full_version;
+        ASSERT_TRUE(tablet1->updates()->get_applied_rowsets(12, &rowsets, &full_version).ok());
+        if (full_version.minor() == 1) {
+            break;
+        }
+        std::cerr << "waiting for compaction applied\n";
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    ASSERT_EQ(12, tablet1->updates()->max_version());
+    EXPECT_EQ(keys0.size(), read_tablet(tablet1, tablet1->updates()->max_version()));
 }
 
 } // namespace starrocks

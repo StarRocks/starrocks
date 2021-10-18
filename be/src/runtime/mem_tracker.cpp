@@ -23,13 +23,11 @@
 
 #include <boost/algorithm/string/join.hpp>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <utility>
 
 #include "exec/exec_node.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/bufferpool/reservation_tracker_counters.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -101,20 +99,11 @@ void MemTracker::Init() {
 // TODO chenhao , set MemTracker close state
 void MemTracker::close() {}
 
-void MemTracker::enable_reservation_reporting(const ReservationTrackerCounters& counters) {
-    ReservationTrackerCounters* old = nullptr;
-    ReservationTrackerCounters* new_counters = new ReservationTrackerCounters(counters);
-    if (!_reservation_counters.compare_exchange_strong(old, new_counters, std::memory_order_relaxed)) {
-        delete new_counters;
-    }
-}
-
 MemTracker::~MemTracker() {
     DCHECK_EQ(0, consumption()) << CurrentThread::query_id_string();
     if (UNLIKELY(consumption() > 0)) {
         release(consumption());
     }
-    delete _reservation_counters.load(std::memory_order_relaxed);
     if (_auto_unregister && parent()) {
         unregister_from_parent();
     }
@@ -155,23 +144,6 @@ std::string MemTracker::LogUsage(int max_recursive_depth, const std::string& pre
     if (limit_exceeded()) ss << " memory limit exceeded.";
     if (_limit > 0) ss << " Limit=" << PrettyPrinter::print(_limit, TUnit::BYTES);
 
-    ReservationTrackerCounters* reservation_counters = _reservation_counters.load(std::memory_order_relaxed);
-    if (reservation_counters != nullptr) {
-        int64_t reservation = reservation_counters->peak_reservation->current_value();
-        int64_t used_reservation = reservation_counters->peak_used_reservation->current_value();
-        int64_t reservation_limit = 0;
-        //TODO chenhao, reservation_limit is null when ReservationTracker
-        // does't have reservation limit
-        if (reservation_counters->reservation_limit != nullptr) {
-            reservation_limit = reservation_counters->reservation_limit->value();
-        }
-        ss << " BufferPoolUsed/Reservation=" << PrettyPrinter::print(used_reservation, TUnit::BYTES) << "/"
-           << PrettyPrinter::print(reservation, TUnit::BYTES);
-        if (reservation_limit != std::numeric_limits<int64_t>::max()) {
-            ss << " BufferPoolLimit=" << PrettyPrinter::print(reservation_limit, TUnit::BYTES);
-        }
-        ss << " OtherMemory=" << PrettyPrinter::print(curr_consumption - reservation, TUnit::BYTES);
-    }
     ss << " Total=" << PrettyPrinter::print(curr_consumption, TUnit::BYTES)
        << " Peak=" << PrettyPrinter::print(peak_consumption, TUnit::BYTES);
 
@@ -186,16 +158,6 @@ std::string MemTracker::LogUsage(int max_recursive_depth, const std::string& pre
         child_trackers_usage = LogUsage(max_recursive_depth - 1, new_prefix, _child_trackers, &child_consumption);
     }
     if (!child_trackers_usage.empty()) ss << "\n" << child_trackers_usage;
-
-    if (_consumption_metric != nullptr) {
-        // Log the difference between the metric value and children as "untracked" memory so
-        // that the values always add up. This value is not always completely accurate because
-        // we did not necessarily get a consistent snapshot of the consumption values for all
-        // children at a single moment in time, but is good enough for our purposes.
-        int64_t untracked_bytes = curr_consumption - child_consumption;
-        ss << "\n" << new_prefix << "Untracked Memory: Total=";
-        ss << "\n" << new_prefix << "Untracked Memory: Total=" << PrettyPrinter::print(untracked_bytes, TUnit::BYTES);
-    }
 
     return ss.str();
 }
@@ -245,35 +207,6 @@ Status MemTracker::MemLimitExceeded(RuntimeState* state, const std::string& deta
     // ss << tracker_to_log->LogUsage();
     // Status status = Status::MemLimitExceeded(ss.str());
     LIMIT_EXCEEDED(this, state, ss.str());
-}
-
-bool MemTracker::GcMemory(int64_t max_consumption) {
-    if (max_consumption < 0) return true;
-    std::lock_guard<std::mutex> l(_gc_lock);
-    if (_consumption_metric != nullptr) RefreshConsumptionFromMetric();
-    int64_t pre_gc_consumption = consumption();
-    // Check if someone gc'd before us
-    if (pre_gc_consumption < max_consumption) return false;
-    if (_num_gcs_metric != nullptr) _num_gcs_metric->increment(1);
-
-    int64_t curr_consumption = pre_gc_consumption;
-    // Try to free up some memory
-    for (auto& _gc_function : _gc_functions) {
-        // Try to free up the amount we are over plus some extra so that we don't have to
-        // immediately GC again. Don't free all the memory since that can be unnecessarily
-        // expensive.
-        const int64_t EXTRA_BYTES_TO_FREE = 512L * 1024L * 1024L;
-        int64_t bytes_to_free = curr_consumption - max_consumption + EXTRA_BYTES_TO_FREE;
-        _gc_function(bytes_to_free);
-        if (_consumption_metric != nullptr) RefreshConsumptionFromMetric();
-        curr_consumption = consumption();
-        if (max_consumption - curr_consumption <= EXTRA_BYTES_TO_FREE) break;
-    }
-
-    if (_bytes_freed_by_last_gc_metric != nullptr) {
-        _bytes_freed_by_last_gc_metric->set_value(pre_gc_consumption - curr_consumption);
-    }
-    return curr_consumption > max_consumption;
 }
 
 } // end namespace starrocks

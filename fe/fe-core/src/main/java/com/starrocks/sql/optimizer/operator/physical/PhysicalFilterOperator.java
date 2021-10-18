@@ -8,9 +8,11 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 public class PhysicalFilterOperator extends PhysicalOperator {
-    public PhysicalFilterOperator(ScalarOperator predicate) {
+    public PhysicalFilterOperator(ScalarOperator predicate,
+                                  long limit) {
         super(OperatorType.PHYSICAL_FILTER);
         this.predicate = predicate;
+        this.limit = limit;
     }
 
     public ScalarOperator getPredicate() {

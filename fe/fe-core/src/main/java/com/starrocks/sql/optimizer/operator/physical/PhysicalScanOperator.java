@@ -8,6 +8,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
@@ -24,11 +25,15 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
     public PhysicalScanOperator(OperatorType type, Table table,
                                 List<ColumnRefOperator> outputColumns,
-                                Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+                                Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                long limit,
+                                ScalarOperator predicate) {
         super(type);
         this.table = Objects.requireNonNull(table, "table is null");
         this.outputColumns = ImmutableList.copyOf(outputColumns);
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
+        this.limit = limit;
+        this.predicate = predicate;
     }
 
     public List<ColumnRefOperator> getOutputColumns() {

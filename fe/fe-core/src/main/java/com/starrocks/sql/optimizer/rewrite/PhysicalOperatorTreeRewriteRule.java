@@ -3,8 +3,8 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.task.TaskContext;
 
 public interface PhysicalOperatorTreeRewriteRule {
-    OptExpression rewrite(OptExpression root, ColumnRefFactory factory);
+    OptExpression rewrite(OptExpression root, TaskContext taskContext);
 }

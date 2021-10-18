@@ -234,15 +234,6 @@ public class OlapTable extends Table {
         return indexes;
     }
 
-    public Map<String, Index> getIndexesMap() {
-        Map<String, Index> indexMap = new HashMap<>();
-        if (indexes != null) {
-            Optional.ofNullable(indexes.getIndexes()).orElse(Collections.emptyList()).stream().forEach(
-                    i -> indexMap.put(i.getIndexName(), i));
-        }
-        return indexMap;
-    }
-
     public void checkAndSetName(String newName, boolean onlyCheck) throws DdlException {
         // check if rollup has same name
         for (String idxName : getIndexNameToId().keySet()) {
@@ -558,7 +549,11 @@ public class OlapTable extends Table {
     }
 
     public List<Column> getSchemaByIndexId(Long indexId) {
-        return indexIdToMeta.get(indexId).getSchema();
+        MaterializedIndexMeta meta = indexIdToMeta.get(indexId);
+        if (meta != null) {
+            return meta.getSchema();
+        }
+        return new ArrayList<Column>();
     }
 
     public List<Column> getKeyColumnsByIndexId(Long indexId) {
@@ -623,6 +618,10 @@ public class OlapTable extends Table {
             partitionColumnNames.add(column.getName().toLowerCase());
         }
         return partitionColumnNames;
+    }
+
+    public void setDefaultDistributionInfo(DistributionInfo distributionInfo) {
+        defaultDistributionInfo = distributionInfo;
     }
 
     public DistributionInfo getDefaultDistributionInfo() {
@@ -800,6 +799,10 @@ public class OlapTable extends Table {
     // get all partitions' name except the temp partitions
     public Set<String> getPartitionNames() {
         return Sets.newHashSet(nameToPartition.keySet());
+    }
+
+    public Set<String> getBfColumns() {
+        return bfColumns;
     }
 
     public Set<String> getCopiedBfColumns() {

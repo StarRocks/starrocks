@@ -45,6 +45,14 @@ public class LogicalTopNOperator extends LogicalOperator {
         this.sortPhase = sortPhase;
     }
 
+    private LogicalTopNOperator(Builder builder) {
+        super(OperatorType.LOGICAL_TOPN, builder.getLimit(), builder.getPredicate());
+        this.orderByElements = builder.orderByElements;
+        this.offset = builder.offset;
+        this.sortPhase = builder.sortPhase;
+        this.isSplit = builder.isSplit;
+    }
+
     public SortPhase getSortPhase() {
         return sortPhase;
     }
@@ -114,5 +122,28 @@ public class LogicalTopNOperator extends LogicalOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalTopN(optExpression, context);
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalTopNOperator, LogicalTopNOperator.Builder> {
+        private List<Ordering> orderByElements;
+        private long offset;
+        private SortPhase sortPhase;
+        private boolean isSplit = false;
+
+        @Override
+        public LogicalTopNOperator build() {
+            return new LogicalTopNOperator(this);
+        }
+
+        @Override
+        public LogicalTopNOperator.Builder withOperator(LogicalTopNOperator topNOperator) {
+            super.withOperator(topNOperator);
+            this.orderByElements = topNOperator.orderByElements;
+            this.offset = topNOperator.offset;
+            this.sortPhase = topNOperator.sortPhase;
+            this.isSplit = topNOperator.isSplit;
+            return this;
+        }
     }
 }

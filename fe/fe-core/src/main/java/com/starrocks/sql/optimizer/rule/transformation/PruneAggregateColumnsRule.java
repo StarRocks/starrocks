@@ -8,6 +8,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -75,12 +76,10 @@ public class PruneAggregateColumnsRule extends TransformationRule {
         if (newAggregations.keySet().equals(aggregations.keySet())) {
             return Collections.emptyList();
         }
-
-        LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(
-                aggOperator.getGroupingKeys(),
-                newAggregations);
-        newAggOperator.setPredicate(aggOperator.getPredicate());
-        newAggOperator.setLimit(aggOperator.getLimit());
+        LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator.Builder().withOperator(aggOperator)
+                .setType(AggType.GLOBAL)
+                .setAggregations(newAggregations)
+                .build();
 
         return Lists.newArrayList(OptExpression.create(newAggOperator, input.getInputs()));
     }

@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer.statistics;
 import avro.shaded.com.google.common.collect.ImmutableList;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.JoinOperator;
@@ -20,10 +21,12 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.external.hive.HdfsFileDesc;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HiveTableStats;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -42,6 +45,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -61,6 +65,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
@@ -75,6 +80,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
@@ -176,6 +182,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         long tableRowCount = getTableRowCount(table, node);
         // 2. get required columns statistics
         Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
+        if (tableRowCount <= 1) {
+            builder.setTableRowCountMayInaccurate(true);
+        }
         // 3. deal with column statistics for partition prune
         OlapTable olapTable = (OlapTable) table;
         ColumnStatistic partitionStatistic = adjustPartitionStatistic(selectedPartitionIds, olapTable);
@@ -324,6 +333,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Table table = node.getTable();
         Statistics.Builder builder = estimateScanColumns(table, node.getColRefToColumnMetaMap());
         builder.setOutputRowCount(1);
+        return visitOperator(node, context, builder);
+    }
+
+    @Override
+    public Void visitLogicalMetaScan(LogicalMetaScanOperator node, ExpressionContext context) {
+        Statistics.Builder builder = estimateScanColumns(node.getTable(), node.getColRefToColumnMetaMap());
+        builder.setOutputRowCount(node.getAggColumnIdToNames().size());
+        return visitOperator(node, context, builder);
+    }
+
+    @Override
+    public Void visitPhysicalMetaScan(PhysicalMetaScanOperator node, ExpressionContext context) {
+        Statistics.Builder builder = estimateScanColumns(node.getTable(), node.getColRefToColumnMetaMap());
+        builder.setOutputRowCount(node.getAggColumnIdToNames().size());
         return visitOperator(node, context, builder);
     }
 
@@ -871,10 +894,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (eqOnPredicates.isEmpty()) {
             return statistics.getOutputRowCount();
         }
-        // Join equality clauses are usually correlated. Therefore we shouldn't treat each join equality
-        // clause separately because stats estimates would be way off. Instead we choose so called
-        // "driving predicate" which mostly reduces join output rows cardinality and apply UNKNOWN_FILTER_COEFFICIENT
-        // for other (auxiliary) predicates.
+        if (ConnectContext.get().getSessionVariable().isUseCorrelatedJoinEstimate()) {
+            return estimatedInnerRowCountAssumeCorrelated(statistics, eqOnPredicates);
+        } else {
+            return estimateInnerRowCountMiddleGround(statistics, eqOnPredicates);
+        }
+    }
+
+    // The implementation here refers to Presto
+    // Join equality clauses are usually correlated. Therefore we shouldn't treat each join equality
+    // clause separately because stats estimates would be way off. Instead we choose so called
+    // "driving predicate" which mostly reduces join output rows cardinality and apply UNKNOWN_FILTER_COEFFICIENT
+    // for other (auxiliary) predicates.
+    private double estimatedInnerRowCountAssumeCorrelated(Statistics statistics,
+                                                          List<BinaryPredicateOperator> eqOnPredicates) {
         Queue<BinaryPredicateOperator> remainingEqOnPredicates = new LinkedList<>(eqOnPredicates);
         BinaryPredicateOperator drivingPredicate = remainingEqOnPredicates.poll();
         double result = statistics.getOutputRowCount();
@@ -888,6 +921,83 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             drivingPredicate = remainingEqOnPredicates.poll();
         }
         return result;
+    }
+
+    private double getPredicateSelectivity(PredicateOperator predicateOperator, Statistics statistics) {
+        Statistics estimatedStatistics = estimateStatistics(Lists.newArrayList(predicateOperator), statistics);
+        return estimatedStatistics.getOutputRowCount() / statistics.getOutputRowCount();
+    }
+
+    //  This estimate join row count method refers to ORCA.
+    //  use a damping method to moderately decrease the impact of subsequent predicates to account for correlated columns.
+    //  This damping only occurs on sorted predicates of the same table, otherwise we assume independence.
+    //  complex predicate(such as t1.a + t2.b = t3.c) also assume independence.
+    //  For example, given AND predicates (t1.a = t2.a AND t1.b = t2.b AND t2.b = t3.a) with the given selectivity(Represented as S for simple):
+    //  t1.a = t2.a has selectivity(S1) 0.3
+    //  t1.b = t2.b has selectivity(S2) 0.5
+    //  t2.b = t3.a has selectivity(S3) 0.1
+    //  S1 and S2 would use the sqrt algorithm, and S3 is independent. Additionally,
+    //  S2 has a larger selectivity so it comes first.
+    //  The cumulative selectivity would be as follows:
+    //     S = ( S2 * sqrt(S1) ) * S3
+    //   0.03 = 0.5 * sqrt(0.3) * 0.1
+    //  Note: This will underestimate the cardinality of highly correlated columns and overestimate the
+    //  cardinality of highly independent columns, but seems to be a good middle ground in the absence
+    //  of correlated column statistics
+    private double estimateInnerRowCountMiddleGround(Statistics statistics,
+                                                     List<BinaryPredicateOperator> eqOnPredicates) {
+        Map<Pair<Integer, Integer>, List<Pair<BinaryPredicateOperator, Double>>> tablePairToPredicateWithSelectivity =
+                Maps.newHashMap();
+        List<Double> complexEqOnPredicatesSelectivity = Lists.newArrayList();
+        double cumulativeSelectivity = 1.0;
+        computeJoinOnPredicateSelectivityMap(tablePairToPredicateWithSelectivity, complexEqOnPredicatesSelectivity,
+                eqOnPredicates, statistics);
+
+        for (Map.Entry<Pair<Integer, Integer>, List<Pair<BinaryPredicateOperator, Double>>> entry :
+                tablePairToPredicateWithSelectivity.entrySet()) {
+            entry.getValue().sort((o1, o2) -> ((int) (o2.second - o1.second)));
+            for (int index = 0; index < entry.getValue().size(); ++index) {
+                double selectivity = entry.getValue().get(index).second;
+                double sqrtNum = Math.pow(2, index);
+                cumulativeSelectivity = cumulativeSelectivity * Math.pow(selectivity, 1 / sqrtNum);
+            }
+        }
+        for (double complexSelectivity : complexEqOnPredicatesSelectivity) {
+            cumulativeSelectivity *= complexSelectivity;
+        }
+        return cumulativeSelectivity * statistics.getOutputRowCount();
+    }
+
+    private void computeJoinOnPredicateSelectivityMap(
+            Map<Pair<Integer, Integer>, List<Pair<BinaryPredicateOperator, Double>>> tablePairToPredicateWithSelectivity,
+            List<Double> complexEqOnPredicatesSelectivity, List<BinaryPredicateOperator> eqOnPredicates,
+            Statistics statistics) {
+        for (BinaryPredicateOperator predicateOperator : eqOnPredicates) {
+            // calculate the selectivity of the predicate
+            double selectivity = getPredicateSelectivity(predicateOperator, statistics);
+
+            ColumnRefSet leftChildColumns = predicateOperator.getChild(0).getUsedColumns();
+            ColumnRefSet rightChildColumns = predicateOperator.getChild(1).getUsedColumns();
+            Set<Integer> leftChildRelationIds =
+                    leftChildColumns.getStream().mapToObj(columnRefFactory::getRelationId).collect(Collectors.toSet());
+            Set<Integer> rightChildRelationIds =
+                    rightChildColumns.getStream().mapToObj(columnRefFactory::getRelationId)
+                            .collect(Collectors.toSet());
+
+            // Check that the predicate is complex, such as t1.a + t2.b = t3.c is complex predicate
+            if (leftChildRelationIds.size() == 1 && rightChildRelationIds.size() == 1) {
+                int leftChildRelationId = Lists.newArrayList(leftChildRelationIds).get(0);
+                int rightChildRelationId = Lists.newArrayList(rightChildRelationIds).get(0);
+                Pair<Integer, Integer> relationIdPair = new Pair<>(leftChildRelationId, rightChildRelationId);
+                if (!tablePairToPredicateWithSelectivity.containsKey(relationIdPair)) {
+                    tablePairToPredicateWithSelectivity.put(relationIdPair, Lists.newArrayList());
+                }
+                tablePairToPredicateWithSelectivity.get(relationIdPair).add(new Pair<>(predicateOperator, selectivity));
+            } else {
+                // this equal on predicate is complex
+                complexEqOnPredicatesSelectivity.add(getPredicateSelectivity(predicateOperator, statistics));
+            }
+        }
     }
 
     public Statistics estimateByEqOnPredicates(Statistics statistics, BinaryPredicateOperator divingPredicate,

@@ -508,7 +508,10 @@ OLAPStatus DataDir::load() {
         RowsetSharedPtr rowset;
         OLAPStatus create_status =
                 RowsetFactory::create_rowset(_tablet_manager->tablet_meta_mem_tracker(), &tablet->tablet_schema(),
-                                             tablet->tablet_path(), rowset_meta, &rowset);
+                                             tablet->tablet_path(), rowset_meta, &rowset)
+                                .ok()
+                        ? OLAP_SUCCESS
+                        : OLAP_ERR_OTHER_ERROR;
         if (create_status != OLAP_SUCCESS) {
             LOG(WARNING) << "Fail to create rowset from rowsetmeta,"
                          << " rowset=" << rowset_meta->rowset_id() << " type=" << rowset_meta->rowset_type()
@@ -530,7 +533,10 @@ OLAPStatus DataDir::load() {
             }
         } else if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE &&
                    rowset_meta->tablet_uid() == tablet->tablet_uid()) {
-            OLAPStatus publish_status = tablet->add_rowset(rowset, false);
+            Status st = tablet->add_rowset(rowset, false);
+            OLAPStatus publish_status =
+                    st.ok() ? OLAP_SUCCESS
+                            : st.is_already_exist() ? OLAP_ERR_PUSH_VERSION_ALREADY_EXIST : OLAP_ERR_OTHER_ERROR;
             if (publish_status != OLAP_SUCCESS && publish_status != OLAP_ERR_PUSH_VERSION_ALREADY_EXIST) {
                 LOG(WARNING) << "Fail to add visible rowset=" << rowset->rowset_id()
                              << " to tablet=" << rowset_meta->tablet_id() << " txn id=" << rowset_meta->txn_id()

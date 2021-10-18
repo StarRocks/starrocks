@@ -12,15 +12,25 @@
 
 namespace starrocks::pipeline {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
-    if (_state == DriverState::NOT_READY) {
-        source_operator()->add_morsel_queue(_morsel_queue);
-        for (auto& op : _operators) {
-            RETURN_IF_ERROR(op->prepare(runtime_state));
+    DCHECK(_state == DriverState::NOT_READY);
+    // fill OperatorWithDependency instances into _dependencies from _operators.
+    DCHECK(_dependencies.empty());
+    _dependencies.reserve(_operators.size());
+    for (auto& op : _operators) {
+        if (auto* op_with_dep = dynamic_cast<DriverDependencyPtr>(op.get())) {
+            _dependencies.push_back(op_with_dep);
         }
-        _state = DriverState::READY;
     }
+    source_operator()->add_morsel_queue(_morsel_queue);
+    for (auto& op : _operators) {
+        RETURN_IF_ERROR(op->prepare(runtime_state));
+    }
+    // Driver has no dependencies always sets _all_dependencies_ready to true;
+    _all_dependencies_ready = _dependencies.empty();
+    _state = DriverState::READY;
     return Status::OK();
 }
+
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
     _state = DriverState::RUNNING;
     size_t total_chunks_moved = 0;
@@ -62,8 +72,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
 
                 // pull chunk from current operator and push the chunk onto next
                 // operator
-                auto pulled_chunk = curr_op->pull_chunk(runtime_state);
-                auto status = pulled_chunk.status();
+                auto maybe_chunk = curr_op->pull_chunk(runtime_state);
+                auto status = maybe_chunk.status();
                 if (!status.ok() && !status.is_end_of_file()) {
                     LOG(WARNING) << " status " << status.to_string();
                     return status;
@@ -75,10 +85,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
                 }
 
                 if (status.ok()) {
-                    if (pulled_chunk.value() && pulled_chunk.value()->num_rows() > 0) {
-                        VLOG_ROW << "[Driver] transfer chunk(" << pulled_chunk.value()->num_rows() << ") from "
+                    if (maybe_chunk.value() && maybe_chunk.value()->num_rows() > 0) {
+                        VLOG_ROW << "[Driver] transfer chunk(" << maybe_chunk.value()->num_rows() << ") from "
                                  << curr_op->get_name() << " to " << next_op->get_name() << ", driver=" << this;
-                        next_op->push_chunk(runtime_state, pulled_chunk.value());
+                        next_op->push_chunk(runtime_state, maybe_chunk.value());
                     }
                     num_chunk_moved += 1;
                     total_chunks_moved += 1;
@@ -125,7 +135,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
             driver_acct().increment_schedule_times();
             driver_acct().update_last_chunks_moved(total_chunks_moved);
             driver_acct().update_last_time_spent(time_spent);
-            if (!sink_operator()->is_finished() && !sink_operator()->need_input()) {
+            if (dependencies_block()) {
+                _state = DriverState::DEPENDENCIES_BLOCK;
+                return DriverState::DEPENDENCIES_BLOCK;
+            } else if (!sink_operator()->is_finished() && !sink_operator()->need_input()) {
                 _state = DriverState::OUTPUT_FULL;
                 return DriverState::OUTPUT_FULL;
             }

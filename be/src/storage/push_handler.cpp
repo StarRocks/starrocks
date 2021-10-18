@@ -278,8 +278,8 @@ OLAPStatus PushHandler::_convert(const TabletSharedPtr& cur_tablet, RowsetShared
         context.segments_overlap = OVERLAP_UNKNOWN;
 
         std::unique_ptr<RowsetWriter> rowset_writer;
-        res = RowsetFactory::create_rowset_writer(context, &rowset_writer);
-        if (OLAP_SUCCESS != res) {
+        res = RowsetFactory::create_rowset_writer(context, &rowset_writer).ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
+        if (res != OLAP_SUCCESS) {
             LOG(WARNING) << "failed to init rowset writer, tablet=" << cur_tablet->full_name()
                          << ", txn_id=" << _request.transaction_id << ", res=" << res;
             break;
@@ -342,7 +342,7 @@ OLAPStatus PushHandler::_convert_v2(const TabletSharedPtr& cur_tablet, RowsetSha
         context.segments_overlap = OVERLAP_UNKNOWN;
 
         std::unique_ptr<RowsetWriter> rowset_writer;
-        res = RowsetFactory::create_rowset_writer(context, &rowset_writer);
+        res = RowsetFactory::create_rowset_writer(context, &rowset_writer).ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
         if (OLAP_SUCCESS != res) {
             LOG(WARNING) << "failed to init rowset writer, tablet=" << cur_tablet->full_name()
                          << ", txn_id=" << _request.transaction_id << ", res=" << res;
@@ -469,7 +469,8 @@ OLAPStatus PushBrokerReader::init(const Schema* schema, const TBrokerScanRange& 
     TQueryOptions query_options;
     TQueryGlobals query_globals;
     _runtime_state =
-            std::make_unique<RuntimeState>(fragment_params, query_options, query_globals, ExecEnv::GetInstance());
+            std::make_unique<RuntimeState>(fragment_params.params.query_id, fragment_params.params.fragment_instance_id,
+                                           query_options, query_globals, ExecEnv::GetInstance());
     DescriptorTbl* desc_tbl = nullptr;
     Status status = DescriptorTbl::create(_runtime_state->obj_pool(), t_desc_tbl, &desc_tbl);
     if (UNLIKELY(!status.ok())) {

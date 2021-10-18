@@ -32,20 +32,18 @@
 
 namespace starrocks {
 
-OLAPStatus RowsetFactory::create_rowset(MemTracker* mem_tracker, const TabletSchema* schema,
-                                        const std::string& rowset_path, const RowsetMetaSharedPtr& rowset_meta,
-                                        RowsetSharedPtr* rowset) {
+Status RowsetFactory::create_rowset(MemTracker* mem_tracker, const TabletSchema* schema, const std::string& rowset_path,
+                                    const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset) {
     if (rowset_meta->rowset_type() == BETA_ROWSET) {
-        rowset->reset(new BetaRowset(mem_tracker, schema, rowset_path, rowset_meta));
-        return (*rowset)->init();
+        *rowset = std::make_shared<BetaRowset>(mem_tracker, schema, rowset_path, rowset_meta);
+        return (*rowset)->init() == OLAP_SUCCESS ? Status::OK() : Status::InternalError("fail to init rowset");
     }
-    return OLAP_ERR_ROWSET_TYPE_NOT_FOUND; // should never happen
+    return Status::NotSupported("unsupported rowset type");
 }
 
-OLAPStatus RowsetFactory::create_rowset_writer(const RowsetWriterContext& context,
-                                               std::unique_ptr<RowsetWriter>* output) {
+Status RowsetFactory::create_rowset_writer(const RowsetWriterContext& context, std::unique_ptr<RowsetWriter>* output) {
     if (UNLIKELY(context.rowset_type != BETA_ROWSET)) {
-        return OLAP_ERR_ROWSET_TYPE_NOT_FOUND;
+        return Status::NotSupported("unsupported rowset type");
     }
 
     auto tablet_schema = context.tablet_schema;
@@ -64,11 +62,11 @@ OLAPStatus RowsetFactory::create_rowset_writer(const RowsetWriterContext& contex
 
     if (storage_format_version != kDataFormatV1 && storage_format_version != kDataFormatV2) {
         LOG(WARNING) << "Invalid storage format version " << storage_format_version;
-        return OLAP_ERR_INVALID_SCHEMA;
+        return Status::InvalidArgument("invalid storage_format_version");
     }
     if (memory_format_version != kDataFormatV1 && memory_format_version != kDataFormatV2) {
         LOG(WARNING) << "Invalid memory format version " << memory_format_version;
-        return OLAP_ERR_INVALID_SCHEMA;
+        return Status::InvalidArgument("invalid memory_format_version");
     }
 
     if (memory_format_version != storage_format_version) {
@@ -78,7 +76,7 @@ OLAPStatus RowsetFactory::create_rowset_writer(const RowsetWriterContext& contex
     } else {
         *output = std::make_unique<BetaRowsetWriter>(context);
     }
-    return (*output)->init();
+    return (*output)->init() == OLAP_SUCCESS ? Status::OK() : Status::InternalError("fail to init rowset writer");
 }
 
 } // namespace starrocks

@@ -37,7 +37,6 @@ namespace starrocks {
 
 class ObjectPool;
 class MemTracker;
-class ReservationTrackerCounters;
 class RuntimeState;
 class TQueryOptions;
 
@@ -117,24 +116,13 @@ public:
         _child_tracker_it = _parent->_child_trackers.end();
     }
 
-    /// Include counters from a ReservationTracker in logs and other diagnostics.
-    /// The counters should be owned by the fragment's RuntimeProfile.
-    void enable_reservation_reporting(const ReservationTrackerCounters& counters);
-
     void consume(int64_t bytes) {
         if (bytes <= 0) {
             if (bytes < 0) release(-bytes);
             return;
         }
-        if (_consumption_metric != nullptr) {
-            RefreshConsumptionFromMetric();
-            return;
-        }
         for (auto& _all_tracker : _all_trackers) {
             _all_tracker->_consumption->add(bytes);
-            if (_all_tracker->_consumption_metric == nullptr) {
-                DCHECK_GE(_all_tracker->_consumption->current_value(), 0);
-            }
         }
     }
 
@@ -144,7 +132,6 @@ public:
     /// to update tracking on a particular mem tracker but the consumption against
     /// the limit recorded in one of its ancestors already happened.
     void consume_local(int64_t bytes, MemTracker* end_tracker) {
-        DCHECK(_consumption_metric == nullptr) << "Should not be called on root.";
         for (auto& _all_tracker : _all_trackers) {
             if (_all_tracker == end_tracker) return;
             DCHECK(!_all_tracker->has_limit());
@@ -185,7 +172,6 @@ public:
     WARN_UNUSED_RESULT
     bool try_consume(int64_t bytes) {
         if (UNLIKELY(bytes <= 0)) return true;
-        if (_consumption_metric != nullptr) RefreshConsumptionFromMetric();
         int i;
         // Walk the tracker tree top-down.
         for (i = _all_trackers.size() - 1; i >= 0; --i) {
@@ -194,25 +180,14 @@ public:
             if (limit < 0) {
                 tracker->_consumption->add(bytes); // No limit at this tracker.
             } else {
-                // If TryConsume fails, we can try to GC, but we may need to try several times if
-                // there are concurrent consumers because we don't take a lock before trying to
-                // update _consumption.
-                while (true) {
-                    if (LIKELY(tracker->_consumption->try_add(bytes, limit))) break;
-
-                    VLOG_RPC << "TryConsume failed, bytes=" << bytes
-                             << " consumption=" << tracker->_consumption->current_value() << " limit=" << limit
-                             << " attempting to GC";
-                    if (UNLIKELY(tracker->GcMemory(limit - bytes))) {
-                        DCHECK_GE(i, 0);
-                        // Failed for this mem tracker. Roll back the ones that succeeded.
-                        for (int j = _all_trackers.size() - 1; j > i; --j) {
-                            _all_trackers[j]->_consumption->add(-bytes);
-                        }
-                        return false;
+                if (LIKELY(tracker->_consumption->try_add(bytes, limit))) {
+                    continue;
+                } else {
+                    // Failed for this mem tracker. Roll back the ones that succeeded.
+                    for (int j = _all_trackers.size() - 1; j > i; --j) {
+                        _all_trackers[j]->_consumption->add(-bytes);
                     }
-                    VLOG_RPC << "GC succeeded, TryConsume bytes=" << bytes
-                             << " consumption=" << tracker->_consumption->current_value() << " limit=" << limit;
+                    return false;
                 }
             }
         }
@@ -227,22 +202,8 @@ public:
             if (bytes < 0) consume(-bytes);
             return;
         }
-        if (_consumption_metric != nullptr) {
-            RefreshConsumptionFromMetric();
-            return;
-        }
         for (auto& _all_tracker : _all_trackers) {
             _all_tracker->_consumption->add(-bytes);
-            /// If a UDF calls FunctionContext::TrackAllocation() but allocates less than the
-            /// reported amount, the subsequent call to FunctionContext::Free() may cause the
-            /// process mem tracker to go negative until it is synced back to the tcmalloc
-            /// metric. Don't blow up in this case. (Note that this doesn't affect non-process
-            /// trackers since we can enforce that the reported memory usage is internally
-            /// consistent.)
-            if (_all_tracker->_consumption_metric == nullptr) {
-                DCHECK_GE(_all_tracker->_consumption->current_value(), 0) << std::endl
-                                                                          << _all_tracker->LogUsage(UNLIMITED_DEPTH);
-            }
         }
 
         /// TODO: Release brokered memory?
@@ -280,14 +241,6 @@ public:
         return result;
     }
 
-    /// Refresh the memory consumption value from the consumption metric. Only valid to
-    /// call if this tracker has a consumption metric.
-    void RefreshConsumptionFromMetric() {
-        DCHECK(_consumption_metric != nullptr);
-        DCHECK(_parent == nullptr);
-        _consumption->set(_consumption_metric->value());
-    }
-
     bool limit_exceeded() const { return _limit >= 0 && _limit < consumption(); }
 
     void set_limit(int64_t limit) { _limit = limit; }
@@ -312,9 +265,6 @@ public:
 
     int64_t consumption() const { return _consumption->current_value(); }
 
-    /// Note that if _consumption is based on _consumption_metric, this will the max value
-    /// we've recorded in consumption(), not necessarily the highest value
-    /// _consumption_metric has ever reached.
     int64_t peak_consumption() const { return _consumption->value(); }
 
     MemTracker* parent() const { return _parent; }
@@ -335,9 +285,6 @@ public:
     /// reporting there.
     std::string LogUsage(int max_recursive_depth, const std::string& prefix = "",
                          int64_t* logged_consumption = nullptr) const;
-    /// Unlimited dumping is useful for query memtrackers or error conditions that
-    /// are not performance sensitive
-    static const int UNLIMITED_DEPTH = INT_MAX;
 
     /// Log the memory usage when memory limit is exceeded and return a status object with
     /// details of the allocation which caused the limit to be exceeded.
@@ -358,16 +305,9 @@ public:
         return msg.str();
     }
 
-    bool is_consumption_metric_null() { return _consumption_metric == nullptr; }
-
     Type type() const { return _type; }
 
 private:
-    /// If consumption is higher than max_consumption, attempts to free memory by calling
-    /// any added GC functions.  Returns true if max_consumption is still exceeded. Takes
-    /// gc_lock. Updates metrics if initialized.
-    bool GcMemory(int64_t max_consumption);
-
     // Walks the MemTracker hierarchy and populates _all_trackers and _limit_trackers
     void Init();
 
@@ -383,9 +323,6 @@ private:
     static std::string LogUsage(int max_recursive_depth, const std::string& prefix,
                                 const std::list<MemTracker*>& trackers, int64_t* logged_consumption);
 
-    /// Lock to protect GcMemory(). This prevents many GCs from occurring at once.
-    std::mutex _gc_lock;
-
     Type _type{NO_SET};
 
     int64_t _limit; // in bytes
@@ -399,16 +336,6 @@ private:
     /// holds _consumption counter if not tied to a profile
     RuntimeProfile::HighWaterMarkCounter _local_counter;
 
-    /// If non-NULL, used to measure consumption (in bytes) rather than the values provided
-    /// to Consume()/Release(). Only used for the process tracker, thus parent_ should be
-    /// NULL if _consumption_metric is set.
-    UIntGauge* _consumption_metric = nullptr;
-
-    /// If non-NULL, counters from a corresponding ReservationTracker that should be
-    /// reported in logs and other diagnostics. Owned by this MemTracker. The counters
-    /// are owned by the fragment's RuntimeProfile.
-    std::atomic<ReservationTrackerCounters*> _reservation_counters{nullptr};
-
     std::vector<MemTracker*> _all_trackers;   // this tracker plus all of its ancestors
     std::vector<MemTracker*> _limit_trackers; // _all_trackers with valid limits
 
@@ -420,19 +347,9 @@ private:
     // remove.
     std::list<MemTracker*>::iterator _child_tracker_it;
 
-    /// Functions to call after the limit is reached to free memory.
-    std::vector<GcFunction> _gc_functions;
-
     /// If false, this tracker (and its children) will not be included in LogUsage() output
     /// if consumption is 0.
     bool _log_usage_if_zero;
-
-    /// The number of times the GcFunctions were called.
-    IntCounter* _num_gcs_metric = nullptr;
-
-    /// The number of bytes freed by the last round of calling the GcFunctions (-1 before any
-    /// GCs are performed).
-    IntGauge* _bytes_freed_by_last_gc_metric = nullptr;
 
     // If true, calls unregister_from_parent() in the dtor. This is only used for
     // the query wide trackers to remove it from the process mem tracker. The

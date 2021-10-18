@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -87,8 +88,7 @@ public class OptimizerTaskTest {
             call.getFunction();
             minTimes = 0;
             result = AggregateFunction.createBuiltin("sum",
-                    Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, "init", "update", "merge", null,
-                    null, "remove", null, false, true, false);
+                    Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
         }};
 
         columnRefFactory = new ColumnRefFactory();
@@ -698,8 +698,7 @@ public class OptimizerTaskTest {
                 call.getFunction();
                 minTimes = 0;
                 result = AggregateFunction.createBuiltin("sum",
-                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, "init", "update", "merge", null,
-                        null, "remove", null, false, true, false);
+                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT,false, true, false);
             }
         };
 
@@ -721,7 +720,7 @@ public class OptimizerTaskTest {
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column2, call);
         LogicalAggregationOperator aggregationOperator =
-                new LogicalAggregationOperator(Lists.newArrayList(column3), map);
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(column3), map);
 
         OptExpression expression = OptExpression.create(new LogicalProjectOperator(projectColumnMap),
                 OptExpression.create(aggregationOperator,
@@ -807,7 +806,7 @@ public class OptimizerTaskTest {
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column5, call);
         LogicalAggregationOperator aggregationOperator =
-                new LogicalAggregationOperator(Lists.newArrayList(), map);
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(), map);
 
         OptExpression expression = OptExpression.create(new LogicalProjectOperator(projectColumnMap),
                 OptExpression.create(aggregationOperator,
@@ -853,7 +852,7 @@ public class OptimizerTaskTest {
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column3, call);
         LogicalAggregationOperator aggregationOperator =
-                new LogicalAggregationOperator(Lists.newArrayList(), map);
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(), map);
 
         OptExpression expression = OptExpression.create(new LogicalProjectOperator(projectColumnMap),
                 OptExpression.create(aggregationOperator,
@@ -902,7 +901,7 @@ public class OptimizerTaskTest {
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column3, call);
         LogicalAggregationOperator aggregationOperator =
-                new LogicalAggregationOperator(Lists.newArrayList(), map);
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(), map);
 
         OptExpression agg = OptExpression.create(aggregationOperator,
                 OptExpression.create(
@@ -1014,7 +1013,7 @@ public class OptimizerTaskTest {
 
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         LogicalAggregationOperator aggregationOperator =
-                new LogicalAggregationOperator(Lists.newArrayList(column1), map);
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(column1), map);
 
         OptExpression expression = OptExpression.create(aggregationOperator,
                 OptExpression.create(
@@ -1078,7 +1077,7 @@ public class OptimizerTaskTest {
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column3, call);
         LogicalAggregationOperator aggregationOperator =
-                new LogicalAggregationOperator(Lists.newArrayList(), map);
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(), map);
         LogicalOlapScanOperator scanOperator =
                 new LogicalOlapScanOperator(olapTable1, scanColumns, scanColumnMap, Maps.newHashMap(), null, -1, null);
 
@@ -1134,8 +1133,7 @@ public class OptimizerTaskTest {
 
                 call.getFunction();
                 result = AggregateFunction.createBuiltin("sum",
-                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, "init", "update", "merge", null,
-                        null, "remove", null, false, true, false);
+                        Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT,false, true, false);
                 minTimes = 0;
             }
         };
@@ -1149,7 +1147,7 @@ public class OptimizerTaskTest {
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column3, call);
         LogicalAggregationOperator aggregationOperator =
-                new LogicalAggregationOperator(Lists.newArrayList(column2), map);
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(column2), map);
 
         OptExpression expression = OptExpression.create(aggregationOperator,
                 OptExpression.create(
@@ -1211,8 +1209,7 @@ public class OptimizerTaskTest {
 
             call.getFunction();
             result = AggregateFunction.createBuiltin("count",
-                    Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, "init", "update", "merge", null,
-                    null, "remove", null, false, true, false);
+                    Lists.<Type>newArrayList(Type.INT), Type.BIGINT, Type.BIGINT, false, true, false);
             minTimes = 0;
         }};
 
@@ -1225,7 +1222,7 @@ public class OptimizerTaskTest {
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column3, call);
         LogicalAggregationOperator aggregationOperator =
-                new LogicalAggregationOperator(Lists.newArrayList(), map);
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(), map);
 
         OptExpression expression = OptExpression.create(aggregationOperator,
                 OptExpression.create(
@@ -1295,7 +1292,7 @@ public class OptimizerTaskTest {
 
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         LogicalAggregationOperator aggregationOperator =
-                new LogicalAggregationOperator(Lists.newArrayList(column1), map);
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(column1), map);
 
         Map<ColumnRefOperator, ScalarOperator> projectColumnMap2 = Maps.newHashMap();
         projectColumnMap2.put(column2, column1);
@@ -1358,7 +1355,7 @@ public class OptimizerTaskTest {
         Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
         map.put(column5, call);
         LogicalAggregationOperator aggregationOperator =
-                new LogicalAggregationOperator(Lists.newArrayList(column4), map);
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(column4), map);
 
         BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT,
                 column5,
@@ -1416,7 +1413,7 @@ public class OptimizerTaskTest {
         projectColumnMap1.put(column3, column1);
 
         LogicalAggregationOperator aggregationOperator =
-                new LogicalAggregationOperator(Lists.newArrayList(column3), Maps.newHashMap());
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(column3), Maps.newHashMap());
 
         BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GT,
                 column3,

@@ -151,6 +151,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE_USE_DP = "cbo_max_reorder_node_use_dp";
     public static final String CBO_ENABLE_GREEDY_JOIN_REORDER = "cbo_enable_greedy_join_reorder";
     public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
+    public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
+    public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -284,9 +286,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DISABLE_COLOCATE_JOIN)
     private boolean disableColocateJoin = false;
 
-    @VariableMgr.VarAttr(name = CBO_ENABLE_REPLICATED_JOIN)
-    private boolean enableReplicationJoin = true;
-
+    @VariableMgr.VarAttr(name = CBO_USE_CORRELATED_JOIN_ESTIMATE)
+    private boolean useCorrelatedJoinEstimate = true;
     /*
      * the parallel exec instance num for one Fragment in one BE
      * 1 means disable this feature
@@ -368,6 +369,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DUMP)
     private boolean enableQueryDump = false;
+
+    @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE)
+    private boolean enableLowCardinalityOptimize = false;
 
     // value should be 0~4
     // 0 represents automatic selection, and 1, 2, 3, and 4 represent forced selection of AGG of
@@ -662,12 +666,37 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePipelineEngine;
     }
 
+    // @FIXME:
+    // Forbidden replicate join now, it's will cause bug:
+    // 1. Always cover colocate join if colocate join and replicate join are satisfied at the same time
+    //    a. Resolve the bug is complicated because Join choose Replicate or Colocate dependent on children is
+    //       ExchangeNode in PlanFragmentBuilder.java
+    // 2. If right node is Aggregate(Local update finalize)-Scan in replicate join, the result is wrong
+    //    a. Coordinator will take left scan node choose colocate node selector, actually only right aggregate
+    //       is colocate
+    // 3. If right node contains join other scan node(ES/Hive), replicate join result is wrong.
     public boolean isEnableReplicationJoin() {
-        return enableReplicationJoin;
+        return false;
     }
 
     public void setEnableReplicationJoin(boolean enableReplicationJoin) {
-        this.enableReplicationJoin = enableReplicationJoin;
+    }
+
+    public boolean isUseCorrelatedJoinEstimate() {
+        return useCorrelatedJoinEstimate;
+    }
+
+    public void setUseCorrelatedJoinEstimate(boolean useCorrelatedJoinEstimate) {
+        this.useCorrelatedJoinEstimate = useCorrelatedJoinEstimate;
+    }
+
+
+    public boolean isEnableLowCardinalityOptimize() {
+        return enableLowCardinalityOptimize;
+    }
+
+    public void setEnableLowCardinalityOptimize(boolean enableLowCardinalityOptimize) {
+        this.enableLowCardinalityOptimize = enableLowCardinalityOptimize;
     }
 
     // Serialize to thrift object

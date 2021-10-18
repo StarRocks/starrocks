@@ -32,14 +32,17 @@ usage() {
   echo "
 Usage: $0 <options>
   Optional options:
-     --clean    clean and build ut
-     --run    build and run ut
+     --clean                        clean and build ut
+     --run                          build and run ut
+     --gtest_filter                 specify test cases
 
   Eg.
-    $0                      build ut
-    $0 --run                build and run ut
-    $0 --clean              clean and build ut
-    $0 --clean --run        clean, build and run ut
+    $0                              build ut
+    $0 --run                        build and run ut
+    $0 --run --gtest_filter scan*   build and run ut of specified cases
+    $0 --clean                      clean and build ut
+    $0 --clean --run                clean, build and run ut
+    $0 --help                       display usage
   "
   exit 1
 }
@@ -49,6 +52,8 @@ OPTS=$(getopt \
   -o '' \
   -l 'run' \
   -l 'clean' \
+  -l "gtest_filter:" \
+  -l 'help' \
   -- "$@")
 
 if [ $? != 0 ] ; then
@@ -57,23 +62,24 @@ fi
 
 eval set -- "$OPTS"
 
-CLEAN=
-RUN=
-if [ $# == 1 ] ; then
-    #default
-    CLEAN=0
-    RUN=0
-else
-    CLEAN=0
-    RUN=0
-    while true; do
-        case "$1" in
-            --clean) CLEAN=1 ; shift ;;
-            --run) RUN=1 ; shift ;;
-            --) shift ;  break ;;
-            *) ehco "Internal error" ; exit 1 ;;
-        esac
-    done
+CLEAN=0
+RUN=0
+TEST_FILTER=*
+HELP=0
+while true; do
+    case "$1" in
+        --clean) CLEAN=1 ; shift ;;
+        --run) RUN=1 ; shift ;;
+        --gtest_filter) TEST_FILTER=$2 ; shift 2;; 
+        --help) HELP=1 ; shift ;; 
+        --) shift ;  break ;;
+        *) echo "Internal error" ; exit 1 ;;
+    esac
+done
+
+if [ ${HELP} -eq 1 ]; then
+    usage
+    exit 0
 fi
 
 CMAKE_BUILD_TYPE=${BUILD_TYPE:-ASAN}
@@ -144,9 +150,9 @@ test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" |
 # run cases in starrocks_test in parallel if has gtest-parallel script.
 # reference: https://github.com/google/gtest-parallel
 if [ -x ${GTEST_PARALLEL} ]; then
-    ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
+    ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_filter=${TEST_FILTER} --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
 else
-    ${STARROCKS_TEST_BINARY_DIR}/starrocks_test
+    ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_filter=${TEST_FILTER}
 fi
 
 for test in ${test_files[@]}

@@ -99,6 +99,10 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         return keys;
     }
 
+    public List<PrimitiveType> getTypes() {
+        return types;
+    }
+
     public boolean isMinValue() {
         for (LiteralExpr literalExpr : keys) {
             if (!literalExpr.isMinValue()) {

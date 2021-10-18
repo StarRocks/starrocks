@@ -18,9 +18,14 @@
 
 ##############################################################
 # This script is used to compile StarRocks
-# Usage:
-#    sh build.sh        build both Backend and Frontend.
-#    sh build.sh -clean clean previous output and build.
+# Usage: 
+#    sh build.sh --help
+# Eg:
+#    sh build.sh                            build all
+#    sh build.sh  --be                      build Backend without clean
+#    sh build.sh  --fe --clean              clean and build Frontend and Spark Dpp application
+#    sh build.sh  --fe --be --clean         clean and build Frontend, Spark Dpp application and Backend
+#    sh build.sh  --spark-dpp               build Spark DPP application alone
 #
 # You need to make sure all thirdparty libraries have been
 # compiled and installed correctly.
@@ -61,7 +66,6 @@ Usage: $0 <options>
   Eg.
     $0                                      build all
     $0 --be                                 build Backend without clean
-    $0 --be --without-lzo                   build Backend with LZO disable
     $0 --fe --clean                         clean and build Frontend and Spark Dpp application
     $0 --fe --be --clean                    clean and build Frontend, Spark Dpp application and Backend
     $0 --spark-dpp                          build Spark DPP application alone

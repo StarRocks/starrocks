@@ -37,6 +37,18 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
         this.esTablePartitions = ((EsTable) table).getEsTablePartitions();
     }
 
+    private LogicalEsScanOperator(Builder builder) {
+        super(OperatorType.LOGICAL_ES_SCAN,
+                builder.table,
+                builder.outputColumns,
+                builder.colRefToColumnMetaMap,
+                builder.columnMetaToColRefMap,
+                builder.getLimit(), builder.getPredicate());
+        Preconditions.checkState(builder.table instanceof EsTable);
+        this.esTablePartitions = builder.esTablePartitions;
+        this.selectedIndex.addAll(builder.selectedIndex);
+    }
+
     public EsTablePartitions getEsTablePartitions() {
         return this.esTablePartitions;
     }
@@ -48,5 +60,23 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalEsScan(this, context);
+    }
+
+    public static class Builder extends LogicalScanOperator.Builder<LogicalEsScanOperator, LogicalEsScanOperator.Builder> {
+        private EsTablePartitions esTablePartitions;
+        private List<EsShardPartitions> selectedIndex = Lists.newArrayList();
+
+        @Override
+        public LogicalEsScanOperator build() {
+            return new LogicalEsScanOperator(this);
+        }
+
+        @Override
+        public LogicalEsScanOperator.Builder withOperator(LogicalEsScanOperator esScanOperator) {
+            super.withOperator(esScanOperator);
+            this.esTablePartitions = esScanOperator.esTablePartitions;
+            this.selectedIndex = esScanOperator.selectedIndex;
+            return this;
+        }
     }
 }
