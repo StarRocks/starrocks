@@ -8,7 +8,6 @@
 
 #include "exec/exec_node.h"
 #include "exprs/expr.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {

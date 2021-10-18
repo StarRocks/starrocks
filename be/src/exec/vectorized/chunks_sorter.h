@@ -273,7 +273,7 @@ public:
                  const std::vector<bool>* is_null_first, size_t size_of_chunk_batch = 1000);
     virtual ~ChunksSorter();
 
-    void setup_runtime(MemTracker* mem_tracker, RuntimeProfile* profile, const std::string& parent_timer);
+    void setup_runtime(RuntimeProfile* profile, const std::string& parent_timer);
 
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
@@ -292,8 +292,6 @@ public:
 protected:
     inline size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
 
-    Status _consume_and_check_memory_limit(RuntimeState* state, int64_t mem_bytes);
-
     // sort rules
     const std::vector<ExprContext*>* _sort_exprs;
     std::vector<int> _sort_order_flag; // 1 for ascending, -1 for descending.
@@ -302,7 +300,6 @@ protected:
     size_t _next_output_row = 0;
 
     const size_t _size_of_chunk_batch;
-    MemTracker* _mem_tracker;
     int64_t _last_memory_usage;
 
     RuntimeProfile::Counter* _build_timer = nullptr;

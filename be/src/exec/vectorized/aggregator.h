@@ -63,7 +63,7 @@ public:
     ~Aggregator() = default;
 
     Status open(RuntimeState* state);
-    Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
 
     Status close(RuntimeState* state);
 
@@ -129,9 +129,6 @@ public:
     // selection[1] = 1: not found in hash table
     void output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* chunk);
 
-    Status check_hash_map_memory_usage(RuntimeState* state);
-    Status check_hash_set_memory_usage(RuntimeState* state);
-
     // At first, we use single hash map, if hash map is too big,
     // we convert the single hash map to two level hash map.
     // two level hash map is better in large data set.
@@ -153,7 +150,6 @@ private:
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
-    MemTracker* _mem_tracker;
     RuntimeProfile* _runtime_profile;
 
     int64_t _limit = -1;

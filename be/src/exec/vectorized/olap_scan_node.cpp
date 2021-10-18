@@ -3,7 +3,6 @@
 #include "exec/vectorized/olap_scan_node.h"
 
 #include <chrono>
-#include <limits>
 #include <thread>
 
 #include "column/column_pool.h"
@@ -13,13 +12,10 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan_operator.h"
 #include "exec/vectorized/olap_scan_prepare.h"
-#include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
-#include "gutil/casts.h"
 #include "gutil/map_util.h"
-#include "runtime/current_mem_tracker.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -145,7 +141,6 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         // true to ensure that the newly allocated column objects will be returned back into the column
         // pool.
         _fill_chunk_pool(1, first_call);
-        mem_tracker()->release(ptr->memory_usage());
         *chunk = std::shared_ptr<Chunk>(ptr);
         eval_join_runtime_filters(chunk);
         _num_rows_returned += (*chunk)->num_rows();
@@ -186,14 +181,12 @@ Status OlapScanNode::close(RuntimeState* state) {
     // free chunks in _chunk_pool.
     while (!_chunk_pool.empty()) {
         Chunk* chunk = _chunk_pool.pop();
-        mem_tracker()->release(chunk->memory_usage());
         delete chunk;
     }
 
     // free chunks in _result_chunks and release memory tracker.
     Chunk* chunk = nullptr;
     while (_result_chunks.blocking_get(&chunk)) {
-        mem_tracker()->release(chunk->memory_usage());
         delete chunk;
     }
 
@@ -211,7 +204,6 @@ void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
     const size_t capacity = config::vector_chunk_size;
     for (int i = 0; i < count; i++) {
         Chunk* chk = ChunkHelper::new_chunk_pooled(*_chunk_schema, capacity, force_column_pool);
-        mem_tracker()->consume(chk->memory_usage());
 
         std::lock_guard<std::mutex> l(_mtx);
         _chunk_pool.push(chk);
@@ -259,7 +251,6 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
         DCHECK_CHUNK(chunk);
         // _result_chunks will be shutdown if error happened or has reached limit.
         if (!_result_chunks.put(chunk)) {
-            mem_tracker()->release(chunk->memory_usage());
             status = Status::Aborted("_result_chunks has been shutdown");
             delete chunk;
             break;

@@ -182,7 +182,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     }
 }
 
-Status ScanOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RowDescriptor row_desc;
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));

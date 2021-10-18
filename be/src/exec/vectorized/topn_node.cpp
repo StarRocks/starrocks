@@ -15,7 +15,6 @@
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "gutil/casts.h"
-#include "runtime/mem_tracker.h"
 
 namespace starrocks::vectorized {
 
@@ -146,7 +145,7 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
     }
 
     bool eos = false;
-    _chunks_sorter->setup_runtime(mem_tracker(), runtime_profile(), "ChunksSorter");
+    _chunks_sorter->setup_runtime(runtime_profile(), "ChunksSorter");
     do {
         RETURN_IF_CANCELLED(state);
         ChunkPtr chunk;

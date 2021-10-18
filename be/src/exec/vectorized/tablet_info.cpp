@@ -7,7 +7,6 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks::vectorized {
