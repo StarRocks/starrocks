@@ -231,7 +231,11 @@ bool DeleteHandler::parse_condition(const std::string& condition_str, TCondition
     }
 
     condition->column_name = what[1].str();
-    condition->condition_op = what[2].str();
+    if ((what[2].str().size() == 4 && strcasecmp(what[2].str().c_str(), " is ")) == 0) {
+        condition->condition_op = "IS";
+    } else {
+        condition->condition_op = what[2].str();
+    }
     condition->condition_values.push_back(what[3].str());
 
     return true;
