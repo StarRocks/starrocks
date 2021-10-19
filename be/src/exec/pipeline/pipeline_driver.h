@@ -136,7 +136,7 @@ public:
 
     // Notify all the unfinished operators to be finished.
     // It is usually used when the sink operator is finished, or the fragment is cancelled or expired.
-    void cancel_if_necessary(RuntimeState* state);
+    void finish_operators(RuntimeState* state);
 
     Operator* sink_operator() { return _operators.back().get(); }
     bool is_finished() {

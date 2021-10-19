@@ -121,7 +121,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         _first_unfinished = _new_first_unfinished;
 
         if (sink_operator()->is_finished()) {
-            cancel_if_necessary(runtime_state);
+            finish_operators(runtime_state);
             _state = source_operator()->pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH;
             return _state;
         }
@@ -151,7 +151,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
     }
 }
 
-void PipelineDriver::cancel_if_necessary(RuntimeState* state) {
+void PipelineDriver::finish_operators(RuntimeState* state) {
     for (auto i = _first_unfinished; i < _operators.size(); ++i) {
         _operators[i]->finish(state);
     }
@@ -208,7 +208,7 @@ std::string PipelineDriver::to_debug_string() const {
 
 bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
     if (_fragment_ctx->is_canceled()) {
-        cancel_if_necessary(runtime_state);
+        finish_operators(runtime_state);
         // If the fragment is cancelled after the source operator commits an i/o task to i/o threads,
         // the driver cannot be finished immediately and should wait for the completion of the pending i/o task.
         if (source_operator()->pending_finish()) {
