@@ -1157,6 +1157,54 @@ public class CreateMaterializedViewStmtTest {
 
     }
 
+
+    @Test
+    public void testCountDistinct(@Injectable SlotRef slotRef1,
+                                  @Injectable TableRef tableRef,
+                                  @Injectable SelectStmt selectStmt,
+                                  @Injectable AggregateInfo aggregateInfo) throws UserException {
+        SelectList selectList = new SelectList();
+        SelectListItem selectListItem1 = new SelectListItem(slotRef1, null);
+        selectList.addItem(selectListItem1);
+        final String columnName1 = "k1";
+        new Expectations() {
+            {
+                analyzer.getClusterName();
+                result = "default";
+                selectStmt.getAggInfo();
+                result = aggregateInfo;
+                selectStmt.getSelectList();
+                result = selectList;
+                selectStmt.analyze(analyzer);
+                selectStmt.getTableRefs();
+                result = Lists.newArrayList(tableRef);
+                selectStmt.getWhereClause();
+                result = null;
+                slotRef1.getColumnName();
+                result = columnName1;
+                slotRef1.getType();
+                result = Type.INT;
+                selectStmt.getHavingPred();
+                result = null;
+                selectStmt.getLimit();
+                result = -1;
+            }
+        };
+
+        CreateMaterializedViewStmt createMaterializedViewStmt =
+                new CreateMaterializedViewStmt("test", selectStmt, null);
+        try {
+            createMaterializedViewStmt.analyze(analyzer);
+            Assert.assertEquals(KeysType.AGG_KEYS, createMaterializedViewStmt.getMVKeysType());
+            List<MVColumnItem> mvSchema = createMaterializedViewStmt.getMVColumnItemList();
+            Assert.assertEquals(1, mvSchema.size());
+            Assert.assertTrue(mvSchema.get(0).isKey());
+        } catch (UserException e) {
+            Assert.fail(e.getMessage());
+        }
+
+    }
+
     @Test
     public void testBuildMVColumnItem(@Injectable SelectStmt selectStmt,
                                       @Injectable Column column1,
