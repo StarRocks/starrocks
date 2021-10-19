@@ -402,7 +402,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("7:CROSS JOIN\n" +
                 "  |  cross join:\n" +
-                "  |  predicates is NULL.  |  use vectorized: true\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----6:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
