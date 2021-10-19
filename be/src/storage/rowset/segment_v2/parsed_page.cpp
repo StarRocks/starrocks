@@ -33,6 +33,7 @@
 #include "storage/rowset/segment_v2/options.h"
 #include "storage/rowset/segment_v2/page_handle.h"
 #include "util/rle_encoding.h"
+#include "util/block_compression.h"
 
 namespace starrocks::segment_v2 {
 
@@ -252,6 +253,9 @@ private:
     friend Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,
                                 const PagePointer& page_pointer, uint32_t page_index);
+    friend Status parse_page_v3(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
+                                const DataPageFooterPB& footer, const EncodingInfo* encoding,
+                                const PagePointer& page_pointer, uint32_t page_index);
 
     faststring _null_flags;
     PageHandle _page_handle;
@@ -328,6 +332,46 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     return Status::OK();
 }
 
+Status parse_page_v3(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
+                     const DataPageFooterPB& footer, const EncodingInfo* encoding, const PagePointer& page_pointer,
+                     uint32_t page_index) {
+    auto page = std::make_unique<ParsedPageV2>();
+    page->_page_handle = std::move(handle);
+
+    auto null_size = footer.nullmap_size();
+    if (null_size > 0) {
+        // decompress null flags by lz4
+        Slice null_flags(body.data + body.size - null_size, null_size);
+        size_t elements = footer.num_values();
+        page->_null_flags.resize(elements * sizeof(uint8_t));
+        const BlockCompressionCodec* codec = nullptr;
+        CompressionTypePB type = CompressionTypePB::LZ4;
+        RETURN_IF_ERROR(get_block_compression_codec(type, &codec));
+        Slice decompressed_slice(page->_null_flags.data(), elements);
+        RETURN_IF_ERROR(codec->decompress(null_flags, &decompressed_slice));
+    }
+
+    Slice data_slice(body.data, body.size - null_size);
+    PageDecoder* decoder = nullptr;
+    PageDecoderOptions opts;
+    RETURN_IF_ERROR(encoding->create_page_decoder(data_slice, opts, &decoder));
+    page->_data_decoder.reset(decoder);
+    RETURN_IF_ERROR(page->_data_decoder->init());
+    page->_first_ordinal = footer.first_ordinal();
+    page->_num_rows = footer.num_values();
+    page->_page_pointer = page_pointer;
+    page->_page_index = page_index;
+    page->_corresponding_element_ordinal = footer.corresponding_element_ordinal();
+
+    if (encoding->encoding() == EncodingTypePB::BIT_SHUFFLE) {
+        // When using BIT_SHUFFLE encoding, the original data is not used after decoded.
+        // So the memory can be released to reduce the memory usage.
+        page->_page_handle.release_memory();
+    }
+    *result = std::move(page);
+    return Status::OK();
+}
+
 Status parse_page(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                   const DataPageFooterPB& footer, const EncodingInfo* encoding, const PagePointer& page_pointer,
                   uint32_t page_index) {
@@ -337,6 +381,9 @@ Status parse_page(std::unique_ptr<ParsedPage>* result, PageHandle handle, const 
     }
     if (version == 2) {
         return parse_page_v2(result, std::move(handle), body, footer, encoding, page_pointer, page_index);
+    }
+    if (version == 3) {
+        return parse_page_v3(result, std::move(handle), body, footer, encoding, page_pointer, page_index);
     }
     return Status::InternalError(strings::Substitute("Unknown page format version $0", version));
 }

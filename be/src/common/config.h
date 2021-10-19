@@ -583,6 +583,7 @@ CONF_Bool(bitmap_filter_enable_not_equal, "false");
 // When storage_format_version is 2, DATE_V2, TIMESTAMP and DECIMAL_V2 will be used as
 // storage format.
 CONF_mInt16(storage_format_version, "2");
+CONF_mInt16(default_page_format, "3");
 
 // do pre-aggregate if effect great than the factor, factor range:[1-100].
 CONF_Int16(pre_aggregate_factor, "80");
