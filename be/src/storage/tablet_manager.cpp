@@ -1019,9 +1019,9 @@ Status TabletManager::start_trash_sweep() {
                 std::string tablet_path = tablet->tablet_path();
                 if (Env::Default()->path_exists(tablet_path).ok()) {
                     if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
-                        Status st = SnapshotManager::instance()->write_meta_snapshot(tablet);
+                        Status st = SnapshotManager::instance()->build_latest_full_snapshot_meta(tablet);
                         if (!st.ok()) {
-                            LOG(WARNING) << "Fail to write_meta_snapshot, tablet_id=" << tablet->tablet_id()
+                            LOG(WARNING) << "Fail to build_latest_full_snapshot_meta, tablet_id=" << tablet->tablet_id()
                                          << " schema_hash=" << tablet->schema_hash() << ", status=" << st.to_string();
                         }
                     } else {
@@ -1408,16 +1408,10 @@ TabletManager::tablets_shard& TabletManager::_get_tablets_shard(TTabletId tablet
     return _tablets_shards[tabletId & _tablets_shards_mask];
 }
 
-Status TabletManager::create_tablet_from_snapshot(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
-                                                  const string& schema_hash_path, bool is_primary_key) {
+Status TabletManager::create_tablet_from_primary_snapshot(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
+                                                          const string& schema_hash_path, bool restore) {
     LOG(INFO) << "Loading tablet " << tablet_id << " from snapshot " << schema_hash_path;
-    std::string meta_path;
-    if (is_primary_key) {
-        meta_path = strings::Substitute("$0/meta.primary", schema_hash_path);
-    } else {
-        meta_path = strings::Substitute("$0/meta", schema_hash_path);
-    }
-    // auto meta_path = strings::Substitute("$0/meta", schema_hash_path);
+    auto meta_path = strings::Substitute("$0/meta", schema_hash_path);
     auto shard_path = path_util::dir_name(path_util::dir_name(path_util::dir_name(meta_path)));
     auto shard_str = shard_path.substr(shard_path.find_last_of('/') + 1);
     auto shard = stol(shard_str);
@@ -1474,7 +1468,7 @@ Status TabletManager::create_tablet_from_snapshot(DataDir* store, TTabletId tabl
 
     auto tablet_meta = std::make_shared<TabletMeta>(_mem_tracker);
     tablet_meta->init_from_pb(&snapshot_meta->tablet_meta());
-    if (is_primary_key) {
+    if (restore && tablet_meta->tablet_state() == TABLET_SHUTDOWN) {
         // we're restoring tablet from trash, tablet state should be changed from shutdown back to running
         tablet_meta->set_tablet_state(TABLET_RUNNING);
     }

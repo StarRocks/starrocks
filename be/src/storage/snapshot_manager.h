@@ -81,7 +81,7 @@ public:
     // On success, return the absolute path of the root directory of snapshot.
     StatusOr<std::string> snapshot_full(const TabletSharedPtr& tablet, int64_t snapshot_version, int64_t timeout_s);
 
-    Status write_meta_snapshot(const TabletSharedPtr& tablet);
+    Status build_latest_full_snapshot_meta(const TabletSharedPtr& tablet);
 
     Status assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir);
 

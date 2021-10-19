@@ -146,7 +146,7 @@ Status RestoreTabletAction::_restore(const std::string& key, int64_t tablet_id, 
     }
     LOG(INFO) << "tablet path in trash:" << latest_tablet_path;
     std::string original_header_path = latest_tablet_path + "/" + std::to_string(tablet_id) + ".hdr";
-    std::string original_meta_path = latest_tablet_path + "/meta.primary";
+    std::string original_meta_path = latest_tablet_path + "/meta";
     auto mem_tracker = std::make_unique<MemTracker>();
     TabletMeta tablet_meta(mem_tracker.get());
     if (FileUtils::check_exist(original_header_path)) {

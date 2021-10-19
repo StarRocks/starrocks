@@ -161,7 +161,7 @@ public:
         DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
 
         auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(source_tablet, *snapshot_dir);
-        auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta.primary");
+        auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
         CHECK(snapshot_meta.ok()) << snapshot_meta.status();
 
         RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&(*snapshot_meta), meta_dir));
@@ -169,7 +169,7 @@ public:
         std::set<std::string> files;
         auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
         CHECK(st.ok()) << st;
-        files.erase("meta.primary");
+        files.erase("meta");
 
         for (const auto& f : files) {
             std::string src = meta_dir + "/" + f;
@@ -203,7 +203,7 @@ public:
         DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
 
         auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(source_tablet, *snapshot_dir);
-        auto meta_file = meta_dir + "/meta.primary";
+        auto meta_file = meta_dir + "/meta";
         auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_file);
         CHECK(snapshot_meta.ok()) << snapshot_meta.status();
 
@@ -237,8 +237,8 @@ public:
         }
 
         auto tablet_manager = StorageEngine::instance()->tablet_manager();
-        auto st = tablet_manager->create_tablet_from_snapshot(store, new_tablet_id, new_schema_hash, new_tablet_path,
-                                                              true);
+        auto st = tablet_manager->create_tablet_from_primary_snapshot(store, new_tablet_id, new_schema_hash,
+                                                                      new_tablet_path);
         CHECK(st.ok()) << st;
         return tablet_manager->get_tablet(new_tablet_id, new_schema_hash);
     }
@@ -790,13 +790,13 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental) {
     DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
-    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta.primary");
+    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
     auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
     ASSERT_TRUE(st.ok()) << st;
-    files.erase("meta.primary");
+    files.erase("meta");
 
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
@@ -854,13 +854,13 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_ignore_already_committed_ver
     DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
-    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta.primary");
+    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
     auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
     ASSERT_TRUE(st.ok()) << st;
-    files.erase("meta.primary");
+    files.erase("meta");
 
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
@@ -918,13 +918,13 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_mismatched_tablet_id) {
     DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
-    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta.primary");
+    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
     auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
     ASSERT_TRUE(st.ok()) << st;
-    files.erase("meta.primary");
+    files.erase("meta");
 
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
@@ -969,13 +969,13 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_data_file_not_exist) {
     DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
-    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta.primary");
+    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
     auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
     ASSERT_TRUE(st.ok()) << st;
-    files.erase("meta.primary");
+    files.erase("meta");
 
     // Pretend that tablet0 is a peer replica of tablet1
     snapshot_meta->tablet_meta().set_tablet_id(tablet1->tablet_id());
@@ -1022,13 +1022,13 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_incorrect_version) {
     DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
-    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta.primary");
+    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
     auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
     ASSERT_TRUE(st.ok()) << st;
-    files.erase("meta.primary");
+    files.erase("meta");
 
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;
@@ -1115,13 +1115,13 @@ TEST_F(TabletUpdatesTest, load_snapshot_full_file_not_exist) {
     DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
-    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta.primary");
+    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
     auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
     ASSERT_TRUE(st.ok()) << st;
-    files.erase("meta.primary");
+    files.erase("meta");
 
     // Pretend that tablet0 is a peer replica of tablet1
     snapshot_meta->tablet_meta().set_tablet_id(tablet1->tablet_id());
@@ -1175,13 +1175,13 @@ TEST_F(TabletUpdatesTest, load_snapshot_full_mismatched_tablet_id) {
     DeferOp defer1([&]() { (void)FileUtils::remove_all(*snapshot_dir); });
 
     auto meta_dir = SnapshotManager::instance()->get_schema_hash_full_path(tablet0, *snapshot_dir);
-    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta.primary");
+    auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
     auto st = FileUtils::list_dirs_files(meta_dir, NULL, &files, Env::Default());
     ASSERT_TRUE(st.ok()) << st;
-    files.erase("meta.primary");
+    files.erase("meta");
 
     for (const auto& f : files) {
         std::string src = meta_dir + "/" + f;

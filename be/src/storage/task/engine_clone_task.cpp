@@ -159,7 +159,8 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
             }
         } else if (FileUtils::check_exist(clone_meta_file)) {
             DCHECK(!FileUtils::check_exist(clone_header_file));
-            status = tablet_manager->create_tablet_from_snapshot(store, tablet_id, schema_hash, schema_hash_dir);
+            status =
+                    tablet_manager->create_tablet_from_primary_snapshot(store, tablet_id, schema_hash, schema_hash_dir);
             if (!status.ok()) {
                 LOG(WARNING) << "Fail to load tablet from snapshot: " << status
                              << ". schema_hash_dir=" << schema_hash_dir << " signature=" << _signature;
