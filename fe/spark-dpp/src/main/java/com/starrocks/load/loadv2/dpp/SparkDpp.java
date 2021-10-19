@@ -656,8 +656,8 @@ public final class SparkDpp implements java.io.Serializable {
         HashSet<String> schemaSet = new HashSet<>(Arrays.asList(sourceData.schema().fieldNames()));
         schemaSet.addAll(Arrays.asList(srcSchema.fieldNames()));
         if (sourceData.schema().size() != schemaSet.size()) {
-            throw new SparkDppException("The schema of file and load statement must be equal. " +
-                    "file schema: " + srcSchema.treeString() + ", table schema: " + sourceData.schema().treeString());
+            throw new SparkDppException("The schema of file and table must be equal. " +
+                    "file schema: " + sourceData.schema().treeString() + ", table schema: " + srcSchema.treeString());
         }
         scannedRowsAcc.add(sourceData.count());
         // TODO: data quality check for orc/parquet load
