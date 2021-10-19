@@ -18,6 +18,12 @@ public:
     ~SourceOperator() override = default;
 
     bool need_input() const override { return false; }
+    // pending_finish returns whether this source operator still has pending i/o task which executed in i/o threads
+    // and has reference to the object outside (such as desc_tbl) owned by FragmentContext.
+    // It can ONLY be called after calling finish().
+    // When a driver's sink operator is finished, the driver should wait for pending i/o task completion.
+    // Otherwise, pending tasks shall reference to destructed objects in FragmentContext,
+    // since FragmentContext is unregistered prematurely after all the drivers are finalized.
     virtual bool pending_finish() { return false; }
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override {
         return Status::InternalError("Shouldn't push chunk to source operator");
