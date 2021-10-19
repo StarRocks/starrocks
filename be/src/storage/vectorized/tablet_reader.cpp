@@ -21,7 +21,9 @@
 namespace starrocks::vectorized {
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema)
-        : ChunkIterator(std::move(schema)), _tablet(std::move(tablet)), _version(version), _mempool(&_memtracker) {}
+        : ChunkIterator(std::move(schema)), _tablet(tablet), _version(version), _mempool(&_memtracker) {
+    _delete_predicates_version = version;
+}
 
 void TabletReader::close() {
     if (_collect_iter != nullptr) {
@@ -39,8 +41,8 @@ Status TabletReader::prepare() {
 }
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
-    if (read_params.reader_type != ReaderType::READER_QUERY && !is_compaction(read_params.reader_type) &&
-        read_params.reader_type != ReaderType::READER_CHECKSUM) {
+    if (read_params.reader_type != ReaderType::READER_QUERY && read_params.reader_type != ReaderType::READER_CHECKSUM &&
+        read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type)) {
         return Status::NotSupported("reader type not supported now");
     }
     Status st = _init_collector(read_params);
@@ -202,7 +204,7 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
     _tablet->obtain_header_rdlock();
 
     for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {
-        if (pred_pb.version() > _version.second) {
+        if (pred_pb.version() > _delete_predicates_version.second) {
             continue;
         }
 
