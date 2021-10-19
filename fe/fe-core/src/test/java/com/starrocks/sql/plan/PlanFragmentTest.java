@@ -157,6 +157,10 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select sin(v1) + cos(v2) as a from t0";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("sin(CAST(1: v1 AS DOUBLE)) + cos(CAST(2: v2 AS DOUBLE))"));
+
+        sql = "select * from test_all_type where id_date = 20200202";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("PREDICATES: 9: id_date = '2020-02-02'"));
     }
 
     @Test
@@ -2835,12 +2839,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql =
                 "select k2 from baseall group by ((10800861)/(((NULL)%(((-1114980787)+(-1182952114)))))), ((10800861)*(-9223372036854775808)), k2";
         starRocksAssert.query(sql).explainContains("group by: 2: k2");
-    }
-
-    @Test
-    public void testBinaryDateAndInt() throws Exception {
-        String sql = "select k10 = 20200812 from baseall;";
-        starRocksAssert.query(sql).explainContains("<slot 12> : CAST(7: k10 AS DOUBLE) = 2.0200812E7");
     }
 
     @Test
