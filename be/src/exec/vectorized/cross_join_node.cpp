@@ -536,6 +536,7 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
 
     // step 0: construct pipeline end with cross join right operator.
     OpFactories operator_before_cross_join_right = _children[1]->decompose_to_pipeline(context);
+    operator_before_cross_join_right = context->maybe_interpolate_local_exchange(operator_before_cross_join_right);
 
     // communication with CrossJoinLeft through shared_datas.
     auto right_factory =
@@ -546,6 +547,7 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
 
     // step 1: construct pipeline end with cross join left operator(cross join left maybe not sink operator).
     OpFactories operator_before_cross_join_left = _children[0]->decompose_to_pipeline(context);
+    operator_before_cross_join_left = context->maybe_interpolate_local_exchange(operator_before_cross_join_left);
 
     // communication with CrossJoioRight through shared_datas.
     auto left_factory = std::make_shared<CrossJoinLeftOperatorFactory>(
