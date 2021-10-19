@@ -35,13 +35,16 @@ void TabletReader::close() {
 }
 
 Status TabletReader::prepare() {
+    SCOPED_RAW_TIMER(&_stats.tablet_reader_prepare_timer);
     _tablet->obtain_header_rdlock();
     auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
+    _stats.rowsets_read_count += _rowsets.size();
     _tablet->release_header_lock();
     return st;
 }
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
+    SCOPED_RAW_TIMER(&_stats.tablet_reader_open_timer);
     if (read_params.reader_type != ReaderType::READER_QUERY && read_params.reader_type != ReaderType::READER_CHECKSUM &&
         read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type)) {
         return Status::NotSupported("reader type not supported now");
@@ -52,6 +55,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
 }
 
 Status TabletReader::do_get_next(Chunk* chunk) {
+    SCOPED_RAW_TIMER(&_stats.tablet_reader_read_data_timer);
     return _collect_iter->get_next(chunk);
 }
 

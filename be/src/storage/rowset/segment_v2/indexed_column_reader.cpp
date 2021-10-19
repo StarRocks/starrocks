@@ -117,7 +117,8 @@ Status IndexedColumnIterator::_read_data_page(const PagePointer& pp) {
     RETURN_IF_ERROR(_reader->read_page(_rblock.get(), pp, &handle, &body, &footer));
     // parse data page
     // note that page_index is not used in IndexedColumnIterator, so we pass 0
-    return parse_page(&_data_page, std::move(handle), body, footer.data_page_footer(), _reader->encoding_info(), pp, 0);
+    OlapReaderStatistics tmp_stats;
+    return parse_page(&tmp_stats, &_data_page, std::move(handle), body, footer.data_page_footer(), _reader->encoding_info(), pp, 0);
 }
 
 Status IndexedColumnIterator::seek_to_ordinal(ordinal_t idx) {

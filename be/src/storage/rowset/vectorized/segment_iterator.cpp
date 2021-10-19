@@ -417,6 +417,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::S
 Status SegmentIterator::_init() {
     SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
     if (_opts.is_primary_keys && _opts.version > 0) {
+        SCOPED_RAW_TIMER(&_opts.stats->segment_delvec_init_time);
         TabletSegmentId tsid;
         tsid.tablet_id = _opts.tablet_id;
         tsid.segment_id = _opts.rowset_id + segment_id();
@@ -449,10 +450,13 @@ Status SegmentIterator::_init() {
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators(_schema));
     RETURN_IF_ERROR(_init_bitmap_index_iterators());
-    RETURN_IF_ERROR(_get_row_ranges_by_keys());
-    RETURN_IF_ERROR(_apply_bitmap_index());
-    RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
-    RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->segment_index_time);
+        RETURN_IF_ERROR(_get_row_ranges_by_keys());
+        RETURN_IF_ERROR(_apply_bitmap_index());
+        RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
+        RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    }
     _rewrite_predicates();
     RETURN_IF_ERROR(_init_context());
     _init_column_predicates();
@@ -533,6 +537,7 @@ void SegmentIterator::_init_column_predicates() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_keys() {
+    SCOPED_RAW_TIMER(&_opts.stats->short_key_index_time);
     StarRocksMetrics::instance()->segment_row_total.increment(num_rows());
 
     if (_opts.ranges.empty()) {
@@ -563,6 +568,7 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_zone_map() {
+    SCOPED_RAW_TIMER(&_opts.stats->zone_map_index_time);
     SparseRange zm_range(0, num_rows());
 
     // -------------------------------------------------------------
@@ -1407,6 +1413,7 @@ Status SegmentIterator::_apply_bitmap_index() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
+    SCOPED_RAW_TIMER(&_opts.stats->bloom_filter_index_time);
     RETURN_IF(_opts.predicates.empty(), Status::OK());
     size_t prev_size = _scan_range.span_size();
     for (const auto& [cid, preds] : _opts.predicates) {

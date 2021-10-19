@@ -427,6 +427,33 @@ struct OlapReaderStatistics {
     int64_t bitmap_index_filter_timer = 0;
 
     int64_t rows_del_vec_filtered = 0;
+
+    int64_t segment_delvec_init_time = 0;
+    int64_t zone_map_index_time = 0;
+    int64_t bloom_filter_index_time = 0;
+    int64_t short_key_index_time = 0;
+    int64_t segment_index_time = 0;
+    int64_t read_and_decompress_page_time = 0;
+    int64_t read_page_io_time = 0;
+    int64_t parse_page_time = 0;
+    int64_t init_page_time = 0;
+    int64_t decode_page_time = 0;
+    int64_t decode_page_null_flag_time = 0;
+    int64_t decode_page_data_time = 0;
+    int64_t page_null_flag_compressed_size = 0;
+    int64_t page_null_flag_decompressed_size = 0;
+    int64_t parse_page_null_flag_time = 0;
+    int64_t page_checksum_time = 0;
+    int64_t parse_page_footer_time = 0;
+    int64_t load_next_page_time = 0;
+
+    int64_t tablet_reader_read_data_timer = 0;
+    int64_t tablet_reader_prepare_timer = 0;
+    int64_t tablet_reader_open_timer = 0;
+    int64_t load_rowset_timer = 0;
+    int64_t rowsets_read_count = 0;
+    int64_t segments_read_count = 0;
+    int64_t load_index_time = 0;
 };
 
 typedef uint32_t ColumnId;

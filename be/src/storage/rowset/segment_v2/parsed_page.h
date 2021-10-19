@@ -120,7 +120,7 @@ protected:
     PagePointer _page_pointer;
 };
 
-Status parse_page(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
+Status parse_page(OlapReaderStatistics* stats, std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                   const DataPageFooterPB& footer, const EncodingInfo* encoding, const PagePointer& page_pointer,
                   uint32_t page_index);
 

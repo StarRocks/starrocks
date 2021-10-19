@@ -279,6 +279,7 @@ void TabletScanner::update_counter() {
     COUNTER_UPDATE(_parent->_read_compressed_counter, _reader->stats().compressed_bytes_read);
     _compressed_bytes_read += _reader->stats().compressed_bytes_read;
     COUNTER_UPDATE(_parent->_decompress_timer, _reader->stats().decompress_ns);
+    COUNTER_UPDATE(_parent->_decompress_page_timer, _reader->stats().decompress_ns);
     COUNTER_UPDATE(_parent->_read_uncompressed_counter, _reader->stats().uncompressed_bytes_read);
     COUNTER_UPDATE(_parent->bytes_read_counter(), _reader->stats().bytes_read);
 
@@ -310,6 +311,33 @@ void TabletScanner::update_counter() {
     COUNTER_UPDATE(_parent->_block_seek_counter, _reader->stats().block_seek_num);
 
     COUNTER_SET(_parent->_pushdown_predicates_counter, (int64_t)_params.predicates.size());
+
+    COUNTER_UPDATE(_parent->_tablet_reader_read_data_timer, _reader->stats().tablet_reader_read_data_timer);
+    COUNTER_UPDATE(_parent->_tablet_reader_prepare_timer, _reader->stats().tablet_reader_prepare_timer);
+    COUNTER_UPDATE(_parent->_load_rowset_timer, _reader->stats().load_rowset_timer);
+    COUNTER_UPDATE(_parent->_rowsets_read_count, _reader->stats().rowsets_read_count);
+    COUNTER_UPDATE(_parent->_segments_read_count, _reader->stats().segments_read_count);
+    COUNTER_UPDATE(_parent->_segment_delvec_init_time, _reader->stats().segment_delvec_init_time);
+    COUNTER_UPDATE(_parent->_zone_map_index_time, _reader->stats().zone_map_index_time);
+    COUNTER_UPDATE(_parent->_bloom_filter_index_time, _reader->stats().bloom_filter_index_time);
+    COUNTER_UPDATE(_parent->_short_key_index_time, _reader->stats().short_key_index_time);
+    COUNTER_UPDATE(_parent->_segment_index_time, _reader->stats().segment_index_time);
+    COUNTER_UPDATE(_parent->_read_and_decompress_page_time, _reader->stats().read_and_decompress_page_time);
+    COUNTER_UPDATE(_parent->_read_page_io_time, _reader->stats().read_page_io_time);
+    COUNTER_UPDATE(_parent->_parse_page_time, _reader->stats().parse_page_time);
+    COUNTER_UPDATE(_parent->_init_page_time, _reader->stats().init_page_time);
+    COUNTER_UPDATE(_parent->_decode_page_time, _reader->stats().decode_page_time);
+    COUNTER_UPDATE(_parent->_decode_page_null_flag_time, _reader->stats().decode_page_null_flag_time);
+    COUNTER_UPDATE(_parent->_page_null_flag_compressed_size, _reader->stats().page_null_flag_compressed_size);
+    COUNTER_UPDATE(_parent->_page_null_flag_decompressed_size, _reader->stats().page_null_flag_decompressed_size);
+    COUNTER_UPDATE(_parent->_parse_page_null_flag_time, _reader->stats().parse_page_null_flag_time);
+    COUNTER_UPDATE(_parent->_page_checksum_time, _reader->stats().page_checksum_time);
+    COUNTER_UPDATE(_parent->_parse_page_footer_time, _reader->stats().parse_page_footer_time);
+    COUNTER_UPDATE(_parent->_load_index_time, _reader->stats().load_index_time);
+    COUNTER_UPDATE(_parent->_decode_page_data_time, _reader->stats().decode_page_data_time);
+    COUNTER_UPDATE(_parent->_decode_page_null_flag_time, _reader->stats().decode_page_null_flag_time);
+    COUNTER_UPDATE(_parent->_load_next_page_time, _reader->stats().load_next_page_time);
+    COUNTER_UPDATE(_parent->_tablet_reader_open_timer, _reader->stats().tablet_reader_open_timer);
 
     StarRocksMetrics::instance()->query_scan_bytes.increment(_compressed_bytes_read);
     StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);

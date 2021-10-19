@@ -249,8 +249,11 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
                                          std::vector<vectorized::ChunkIteratorPtr>* segment_iterators) {
     RowsetReleaseGuard guard(shared_from_this());
 
-    RETURN_IF_ERROR(load());
-
+    {
+        SCOPED_RAW_TIMER(&options.stats->load_rowset_timer);
+        RETURN_IF_ERROR(load());
+    }
+    
     vectorized::SegmentReadOptions seg_options;
     seg_options.block_mgr = options.block_mgr;
     seg_options.stats = options.stats;
@@ -286,6 +289,9 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
 
     std::vector<vectorized::ChunkIteratorPtr> tmp_seg_iters;
     tmp_seg_iters.reserve(num_segments());
+    if (options.stats) {
+        options.stats->segments_read_count += num_segments();
+    }
     for (auto& seg_ptr : segments()) {
         if (seg_ptr->num_rows() == 0) {
             continue;
@@ -334,6 +340,9 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> BetaRowset::get_segment_iter
     seg_options.version = version;
     seg_options.meta = meta;
 
+    if (stats) {
+        stats->segments_read_count += num_segments();
+    }
     std::vector<vectorized::ChunkIteratorPtr> seg_iterators(num_segments());
     TabletSegmentId tsid;
     tsid.tablet_id = rowset_meta()->tablet_id();

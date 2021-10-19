@@ -157,10 +157,7 @@ private:
     RuntimeProfile::Counter* _del_vec_filter_counter = nullptr;
     RuntimeProfile::Counter* _pred_filter_timer = nullptr;
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
-    RuntimeProfile::Counter* _seg_init_timer = nullptr;
-    RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
-    RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
+
     RuntimeProfile::Counter* _block_seek_timer = nullptr;
     RuntimeProfile::Counter* _block_seek_counter = nullptr;
     RuntimeProfile::Counter* _block_load_timer = nullptr;
@@ -169,9 +166,53 @@ private:
     RuntimeProfile::Counter* _index_load_timer = nullptr;
     RuntimeProfile::Counter* _total_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
+
+    RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
+
+    RuntimeProfile::Counter* _tablet_reader_read_data_timer = nullptr;
+    RuntimeProfile::Counter* _tablet_reader_prepare_timer = nullptr;
+    RuntimeProfile::Counter* _tablet_reader_open_timer = nullptr;
+    RuntimeProfile::Counter* _load_rowset_timer = nullptr;
+    RuntimeProfile::Counter* _rowsets_read_count = nullptr;
+    RuntimeProfile::Counter* _segments_read_count = nullptr;
+
+    // segment init
+    RuntimeProfile::Counter* _seg_init_timer = nullptr;
+    RuntimeProfile::Counter* _segment_delvec_init_time = nullptr;
+    // bitmap index
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
-    RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
+
+    // zone map
+    RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _zone_map_index_time = nullptr;
+
+    // bloom filter
+    RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _bloom_filter_index_time = nullptr;
+
+    // short key
+    RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _short_key_index_time = nullptr;
+
+    RuntimeProfile::Counter* _segment_index_time = nullptr;
+
+    // segment read
+    RuntimeProfile::Counter* _read_and_decompress_page_time = nullptr;
+    RuntimeProfile::Counter* _decompress_page_timer = nullptr;
+    RuntimeProfile::Counter* _read_page_io_time = nullptr;
+    RuntimeProfile::Counter* _parse_page_time = nullptr;
+    RuntimeProfile::Counter* _init_page_time = nullptr;
+    RuntimeProfile::Counter* _load_next_page_time = nullptr;
+    RuntimeProfile::Counter* _decode_page_time = nullptr;
+    RuntimeProfile::Counter* _decode_page_null_flag_time = nullptr;
+    RuntimeProfile::Counter* _decode_page_data_time = nullptr;
+    RuntimeProfile::Counter* _page_null_flag_compressed_size = nullptr;
+    RuntimeProfile::Counter* _page_null_flag_decompressed_size = nullptr;
+    RuntimeProfile::Counter* _parse_page_null_flag_time = nullptr;
+    RuntimeProfile::Counter* _page_checksum_time = nullptr;
+    RuntimeProfile::Counter* _parse_page_footer_time = nullptr;
+    RuntimeProfile::Counter* _load_index_time = nullptr;
 };
 
 } // namespace starrocks::vectorized

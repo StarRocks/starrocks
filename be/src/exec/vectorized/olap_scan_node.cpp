@@ -377,11 +377,18 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
 
     /// SegmentInit
     _seg_init_timer = ADD_TIMER(_scan_profile, "SegmentInit");
-    _bi_filter_timer = ADD_CHILD_TIMER(_scan_profile, "BitmapIndexFilter", "SegmentInit");
+    _segment_index_time = ADD_CHILD_TIMER(_scan_profile, "SegmentIndexFilterTime", "SegmentInit");
+    _bi_filter_timer = ADD_CHILD_TIMER(_scan_profile, "BitmapIndexTime", "SegmentIndexFilterTime");
+    _zone_map_index_time = ADD_CHILD_TIMER(_scan_profile, "ZonemapIndexTime", "SegmentIndexFilterTime");
+    _bloom_filter_index_time = ADD_CHILD_TIMER(_scan_profile, "BloomFilterIndexTime", "SegmentIndexFilterTime");
+    _short_key_index_time = ADD_CHILD_TIMER(_scan_profile, "ShortKeyIndexTime", "SegmentIndexFilterTime");
+
     _bi_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BitmapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _bf_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BloomFilterFilterRows", TUnit::UNIT, "SegmentInit");
     _zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _sk_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
+    _segment_delvec_init_time = ADD_CHILD_TIMER(_scan_profile, "SegmentDelVecInitTime", "SegmentInit");
+    _load_index_time = ADD_CHILD_TIMER(_scan_profile, "SegmentLoadIndexTime", "SegmentInit");
 
     /// SegmentRead
     _block_load_timer = ADD_TIMER(_scan_profile, "SegmentRead");
@@ -395,6 +402,29 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _chunk_copy_timer = ADD_CHILD_TIMER(_scan_profile, "ChunkCopy", "SegmentRead");
     _decompress_timer = ADD_CHILD_TIMER(_scan_profile, "DecompressT", "SegmentRead");
     _index_load_timer = ADD_CHILD_TIMER(_scan_profile, "IndexLoad", "SegmentRead");
+    _read_and_decompress_page_time = ADD_CHILD_TIMER(_scan_profile, "ReadAndDecompressPageTime", "SegmentRead");
+    _read_page_io_time = ADD_CHILD_TIMER(_scan_profile, "ReadPageIOTime", "ReadAndDecompressPageTime");
+    _decompress_page_timer = ADD_CHILD_TIMER(_scan_profile, "DecompressPageTime", "ReadAndDecompressPageTime");
+    _page_checksum_time = ADD_CHILD_TIMER(_scan_profile, "ChecksumPageTime", "ReadAndDecompressPageTime");
+    _parse_page_footer_time = ADD_CHILD_TIMER(_scan_profile, "ParsePageFooterTime", "ReadAndDecompressPageTime");
+    _load_next_page_time = ADD_CHILD_TIMER(_scan_profile, "LoadNextPageTime", "SegmentRead");
+
+    _parse_page_time = ADD_CHILD_TIMER(_scan_profile, "ParsePageTime", "SegmentRead");
+    _init_page_time = ADD_CHILD_TIMER(_scan_profile, "InitPageTime", "ParsePageTime");
+    _parse_page_null_flag_time = ADD_CHILD_TIMER(_scan_profile, "ParsePageNullFlagsTime", "ParsePageTime");
+    _decode_page_time = ADD_CHILD_TIMER(_scan_profile, "DecodePageTime", "SegmentRead");
+    _decode_page_null_flag_time = ADD_CHILD_TIMER(_scan_profile, "DecodePageNullFlagsTime", "DecodePageTime");
+    _decode_page_data_time = ADD_CHILD_TIMER(_scan_profile, "DecodePageDataTime", "DecodePageTime");
+    _page_null_flag_compressed_size = ADD_CHILD_COUNTER(_scan_profile, "PageNullFlagCompressedSize", TUnit::UNIT, "SegmentRead");
+    _page_null_flag_decompressed_size = ADD_CHILD_COUNTER(_scan_profile, "PageNullFlagDecompressedSize", TUnit::UNIT, "SegmentRead");
+
+    // tablet reader
+    _tablet_reader_prepare_timer = ADD_TIMER(_scan_profile, "TabletReaderPrepareTime");
+    _tablet_reader_open_timer = ADD_TIMER(_scan_profile, "TabletReaderOpenTime");
+    _load_rowset_timer = ADD_CHILD_TIMER(_scan_profile, "LoadRowsetTime", "TabletReaderOpenTime");
+    _tablet_reader_read_data_timer = ADD_TIMER(_scan_profile, "TabletReaderReadDataTime");
+    _rowsets_read_count = ADD_COUNTER(_scan_profile, "RowsetsReadCount", TUnit::UNIT);
+    _segments_read_count = ADD_COUNTER(_scan_profile, "SegmentsReadCount", TUnit::UNIT);
 
     /// IOTime
     _io_timer = ADD_TIMER(_scan_profile, "IOTime");

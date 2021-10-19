@@ -667,7 +667,10 @@ FileColumnIterator::~FileColumnIterator() = default;
 
 Status FileColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
-    RETURN_IF_ERROR(_reader->ensure_index_loaded(_opts.reader_type));
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->load_index_time);
+        RETURN_IF_ERROR(_reader->ensure_index_loaded(_opts.reader_type));
+    }
 
     if (_reader->encoding_info()->encoding() != DICT_ENCODING) {
         return Status::OK();
@@ -742,7 +745,10 @@ Status FileColumnIterator::seek_to_ordinal_and_calc_element_ordinal(ordinal_t or
     _current_ordinal = _page->first_ordinal();
     _seek_to_pos_in_page(_page.get(), 0);
     size_t size_to_read = ord - _current_ordinal;
-    RETURN_IF_ERROR(_page->read(&_array_size, &size_to_read));
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->decode_page_time);
+        RETURN_IF_ERROR(_page->read(&_array_size, &size_to_read));
+    }
     _current_ordinal += size_to_read;
     CHECK_EQ(ord, _current_ordinal);
     for (auto e : _array_size.get_data()) {
@@ -774,7 +780,10 @@ Status FileColumnIterator::next_batch(size_t* n, ColumnBlockView* dst, bool* has
         contain_deleted_row |= _delete_partial_satisfied_pages.count(_page->page_index());
         // number of rows to be read from this page
         size_t nread = remaining;
-        RETURN_IF_ERROR(_page->read(dst, &nread));
+        {
+            SCOPED_RAW_TIMER(&_opts.stats->decode_page_time);
+            RETURN_IF_ERROR(_page->read(dst, &nread));
+        }
         _current_ordinal += nread;
         remaining -= nread;
     }
@@ -803,7 +812,10 @@ Status FileColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
         contain_deleted_row = contain_deleted_row || _contains_deleted_row(_page->page_index());
         // number of rows to be read from this page
         size_t nread = remaining;
-        RETURN_IF_ERROR(_page->read(dst, &nread));
+        {
+            SCOPED_RAW_TIMER(&_opts.stats->decode_page_time);
+            RETURN_IF_ERROR(_page->read(dst, &nread));
+        }
         _current_ordinal += nread;
         remaining -= nread;
     }
@@ -814,6 +826,7 @@ Status FileColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
 }
 
 Status FileColumnIterator::_load_next_page(bool* eos) {
+    SCOPED_RAW_TIMER(&_opts.stats->load_next_page_time);
     _page_iter.next();
     if (!_page_iter.valid()) {
         *eos = true;
@@ -860,9 +873,16 @@ Status FileColumnIterator::_read_data_page(const OrdinalPageIndexIterator& iter)
     PageHandle handle;
     Slice page_body;
     PageFooterPB footer;
-    RETURN_IF_ERROR(_reader->read_page(_opts, iter.page(), &handle, &page_body, &footer));
-    RETURN_IF_ERROR(parse_page(&_page, std::move(handle), page_body, footer.data_page_footer(),
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->read_and_decompress_page_time);
+        RETURN_IF_ERROR(_reader->read_page(_opts, iter.page(), &handle, &page_body, &footer));
+    }
+
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->parse_page_time);
+        RETURN_IF_ERROR(parse_page(_opts.stats, &_page, std::move(handle), page_body, footer.data_page_footer(),
                                _reader->encoding_info(), iter.page(), iter.page_index()));
+    }
 
     // dictionary page is read when the first data page that uses it is read,
     // this is to optimize the memory usage: when there is no query on one column, we could
@@ -1031,7 +1051,10 @@ Status FileColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t s
                 curr = *p++;
             }
             size_t nread = p - rowids;
-            RETURN_IF_ERROR(_page->read(values, &nread));
+            {
+                SCOPED_RAW_TIMER(&_opts.stats->decode_page_time);
+                RETURN_IF_ERROR(_page->read(values, &nread));
+            }
             _current_ordinal += nread;
             rowids = p;
         }

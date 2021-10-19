@@ -100,7 +100,6 @@ private:
     std::unique_ptr<ParsedPage> _data_page;
     // next_batch() will read from this position
     ordinal_t _current_ordinal = 0;
-    // open file handle
 };
 
 // thread-safe reader for IndexedColumn (see comments of `IndexedColumnWriter` to understand what IndexedColumn is)

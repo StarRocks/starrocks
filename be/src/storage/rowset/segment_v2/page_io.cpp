@@ -144,11 +144,13 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     Slice page_slice(page.get(), page_size);
     {
         SCOPED_RAW_TIMER(&opts.stats->io_ns);
+        SCOPED_RAW_TIMER(&opts.stats->read_page_io_time);
         RETURN_IF_ERROR(opts.rblock->read(opts.page_pointer.offset, page_slice));
         opts.stats->compressed_bytes_read += page_size;
     }
 
     if (opts.verify_checksum) {
+        SCOPED_RAW_TIMER(&opts.stats->page_checksum_time);
         uint32_t expect = decode_fixed32_le((uint8_t*)page_slice.data + page_slice.size - 4);
         uint32_t actual = crc32c::Value(page_slice.data, page_slice.size - 4);
         if (expect != actual) {
@@ -161,8 +163,11 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     page_slice.size -= 4;
     // parse and set footer
     uint32_t footer_size = decode_fixed32_le((uint8_t*)page_slice.data + page_slice.size - 4);
-    if (!footer->ParseFromArray(page_slice.data + page_slice.size - 4 - footer_size, footer_size)) {
-        return Status::Corruption("Bad page: invalid footer");
+    {
+        SCOPED_RAW_TIMER(&opts.stats->parse_page_footer_time);
+        if (!footer->ParseFromArray(page_slice.data + page_slice.size - 4 - footer_size, footer_size)) {
+            return Status::Corruption("Bad page: invalid footer");
+        }
     }
 
     uint32_t body_size = page_slice.size - 4 - footer_size;

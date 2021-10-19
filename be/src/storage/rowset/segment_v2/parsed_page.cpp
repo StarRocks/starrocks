@@ -96,9 +96,14 @@ public:
         if (_has_null) {
             while (nrows_to_read > 0) {
                 bool is_null = false;
-                size_t this_run = _null_decoder.GetNextRun(&is_null, nrows_to_read);
+                size_t this_run = 0;
+                {
+                    SCOPED_RAW_TIMER(&_stats->decode_page_null_flag_time);
+                    this_run = _null_decoder.GetNextRun(&is_null, nrows_to_read);
+                }
                 size_t expect = this_run;
                 if (!is_null) {
+                    SCOPED_RAW_TIMER(&_stats->decode_page_data_time);
                     RETURN_IF_ERROR(_data_decoder->next_batch(&this_run, column));
                     DCHECK_EQ(expect, this_run);
                 } else {
@@ -109,6 +114,7 @@ public:
                 _offset_in_page += this_run;
             }
         } else {
+            SCOPED_RAW_TIMER(&_stats->decode_page_data_time);
             RETURN_IF_ERROR(_data_decoder->next_batch(&nrows_to_read, column));
             DCHECK_EQ(nrows_to_read, *count);
             _offset_in_page += nrows_to_read;
@@ -182,7 +188,7 @@ public:
     }
 
 private:
-    friend Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
+    friend Status parse_page_v1(OlapReaderStatistics* stats, std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,
                                 const PagePointer& page_pointer, uint32_t page_index);
 
@@ -190,6 +196,7 @@ private:
     Slice _null_bitmap;
     RleDecoder<bool> _null_decoder;
     PageHandle _page_handle;
+    OlapReaderStatistics* _stats;
 };
 
 class ParsedPageV2 : public ParsedPage {
@@ -204,12 +211,19 @@ public:
     Status read(vectorized::Column* column, size_t* count) override {
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
         if (_null_flags.size() == 0) {
+            SCOPED_RAW_TIMER(&_stats->decode_page_data_time);
             RETURN_IF_ERROR(_data_decoder->next_batch(count, column));
         } else {
             auto nc = down_cast<vectorized::NullableColumn*>(column);
-            RETURN_IF_ERROR(_data_decoder->next_batch(count, nc->data_column().get()));
-            nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, *count);
-            nc->update_has_null();
+            {
+                SCOPED_RAW_TIMER(&_stats->decode_page_data_time);
+                RETURN_IF_ERROR(_data_decoder->next_batch(count, nc->data_column().get()));
+            }
+            {
+                SCOPED_RAW_TIMER(&_stats->decode_page_null_flag_time);
+                nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, *count);
+                nc->update_has_null();
+            }
         }
         _offset_in_page += *count;
         return Status::OK();
@@ -249,25 +263,31 @@ public:
     }
 
 private:
-    friend Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
+    friend Status parse_page_v2(OlapReaderStatistics* stats, std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,
                                 const PagePointer& page_pointer, uint32_t page_index);
 
     faststring _null_flags;
     PageHandle _page_handle;
+    OlapReaderStatistics* _stats;
 };
 
-Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
+Status parse_page_v1(OlapReaderStatistics* stats, std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                      const DataPageFooterPB& footer, const EncodingInfo* encoding, const PagePointer& page_pointer,
                      uint32_t page_index) {
+    DCHECK(stats);
     auto page = std::make_unique<ParsedPageV1>();
     page->_page_handle = std::move(handle);
+    page->_stats = stats;
 
     auto null_size = footer.nullmap_size();
     page->_has_null = null_size > 0;
     if (page->_has_null) {
+        stats->page_null_flag_compressed_size += null_size;
+        SCOPED_RAW_TIMER(&stats->parse_page_null_flag_time);
         page->_null_bitmap = Slice(body.data + body.size - null_size, null_size);
         page->_null_decoder = RleDecoder<bool>((const uint8_t*)page->_null_bitmap.data, null_size, 1);
+        stats->page_null_flag_decompressed_size += null_size;
     }
 
     Slice data_slice(body.data, body.size - null_size);
@@ -275,7 +295,10 @@ Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     PageDecoderOptions opts;
     RETURN_IF_ERROR(encoding->create_page_decoder(data_slice, opts, &decoder));
     page->_data_decoder.reset(decoder);
-    RETURN_IF_ERROR(page->_data_decoder->init());
+    {
+        SCOPED_RAW_TIMER(&stats->init_page_time);
+        RETURN_IF_ERROR(page->_data_decoder->init());
+    }
 
     page->_first_ordinal = footer.first_ordinal();
     page->_num_rows = footer.num_values();
@@ -287,14 +310,17 @@ Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     return Status::OK();
 }
 
-Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
+Status parse_page_v2(OlapReaderStatistics* stats, std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                      const DataPageFooterPB& footer, const EncodingInfo* encoding, const PagePointer& page_pointer,
                      uint32_t page_index) {
     auto page = std::make_unique<ParsedPageV2>();
     page->_page_handle = std::move(handle);
+    page->_stats = stats;
 
     auto null_size = footer.nullmap_size();
     if (null_size > 0) {
+        stats->page_null_flag_compressed_size += null_size;
+        SCOPED_RAW_TIMER(&stats->parse_page_null_flag_time);
         Slice null_flags(body.data + body.size - null_size, null_size);
         size_t elements = footer.num_values();
         size_t elements_pad = ALIGN_UP(elements, 8u);
@@ -305,6 +331,7 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
             return Status::Corruption("bitshuffle decompress failed: " + bitshuffle_error_msg(r));
         }
         page->_null_flags.resize(elements);
+        stats->page_null_flag_decompressed_size += elements;
     }
 
     Slice data_slice(body.data, body.size - null_size);
@@ -312,7 +339,10 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     PageDecoderOptions opts;
     RETURN_IF_ERROR(encoding->create_page_decoder(data_slice, opts, &decoder));
     page->_data_decoder.reset(decoder);
-    RETURN_IF_ERROR(page->_data_decoder->init());
+    {
+        SCOPED_RAW_TIMER(&stats->init_page_time);
+        RETURN_IF_ERROR(page->_data_decoder->init());
+    }
     page->_first_ordinal = footer.first_ordinal();
     page->_num_rows = footer.num_values();
     page->_page_pointer = page_pointer;
@@ -328,15 +358,15 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     return Status::OK();
 }
 
-Status parse_page(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
+Status parse_page(OlapReaderStatistics* stats, std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                   const DataPageFooterPB& footer, const EncodingInfo* encoding, const PagePointer& page_pointer,
                   uint32_t page_index) {
     uint32_t version = footer.has_format_version() ? footer.format_version() : 1;
     if (version == 1) {
-        return parse_page_v1(result, std::move(handle), body, footer, encoding, page_pointer, page_index);
+        return parse_page_v1(stats, result, std::move(handle), body, footer, encoding, page_pointer, page_index);
     }
     if (version == 2) {
-        return parse_page_v2(result, std::move(handle), body, footer, encoding, page_pointer, page_index);
+        return parse_page_v2(stats, result, std::move(handle), body, footer, encoding, page_pointer, page_index);
     }
     return Status::InternalError(strings::Substitute("Unknown page format version $0", version));
 }
