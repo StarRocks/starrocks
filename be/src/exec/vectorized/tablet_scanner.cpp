@@ -206,7 +206,6 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
         }
 
         if (!_predicates.empty()) {
-            int64_t old_mem_usage = chunk->memory_usage();
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
@@ -215,7 +214,6 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
             DCHECK_CHUNK(chunk);
         }
         if (!_conjunct_ctxs.empty()) {
-            int64_t old_mem_usage = chunk->memory_usage();
             SCOPED_TIMER(_expr_filter_timer);
             ExecNode::eval_conjuncts(_conjunct_ctxs, chunk);
             DCHECK_CHUNK(chunk);
