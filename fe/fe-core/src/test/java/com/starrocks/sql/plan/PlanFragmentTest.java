@@ -388,7 +388,8 @@ public class PlanFragmentTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  3:CROSS JOIN\n" +
                 "  |  cross join:\n" +
-                "  |  predicates is NULL.  |  use vectorized: true\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
@@ -1346,10 +1347,11 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select * from (select v1, v2 from t0 limit 10) a join [shuffle] " +
                 "(select v1, v2 from t0 limit 1) b on a.v1 = b.v1";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("join op: INNER JOIN (BROADCAST)"));
-        Assert.assertTrue(plan.contains("  |----3:EXCHANGE\n" +
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (PARTITIONED)"));
+        Assert.assertTrue(plan.contains("  |----5:EXCHANGE\n" +
                 "  |       limit: 1"));
-        Assert.assertTrue(plan.contains("  1:EXCHANGE\n" +
+        Assert.assertTrue(plan.contains("  2:EXCHANGE\n" +
                 "     limit: 10"));
     }
 
@@ -1358,7 +1360,8 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select * from (select v1, v2 from t0) a join [shuffle] " +
                 "(select v4 from t1 limit 1) b on a.v1 = b.v4";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("join op: INNER JOIN (BROADCAST)"));
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (PARTITIONED)"));
     }
 
     @Test
@@ -1366,7 +1369,8 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select * from (select v1, v2 from t0 limit 10) a join [shuffle] " +
                 "(select v4 from t1 ) b on a.v1 = b.v4";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("join op: INNER JOIN (BROADCAST)"));
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("join op: INNER JOIN (PARTITIONED)"));
     }
 
     @Test
@@ -1530,18 +1534,18 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testJoinLimitLeft() throws Exception {
         String sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 limit 10";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  |  join op: RIGHT OUTER JOIN (BROADCAST)\n"
-                + "  |  hash predicates:\n"
-                + "  |  colocate: false, reason: \n"
-                + "  |  equal join conjunct: 4: v4 = 1: v1\n"
-                + "  |  limit: 10\n"
-                + "  |  use vectorized: true\n"
-                + "  |  \n"
-                + "  |----2:EXCHANGE\n"
-                + "  |       limit: 10\n"
-                + "  |       use vectorized: true\n"
-                + "  |    \n"
-                + "  0:OlapScanNode\n"));
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  limit: 10\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  0:OlapScanNode"));
         Assert.assertTrue(plan.contains("     TABLE: t0\n"
                 + "     PREAGGREGATION: ON\n"
                 + "     partitions=0/1\n"
@@ -1561,7 +1565,7 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select * from t0 full outer join t1 on t0.v1 = t1.v4 limit 10";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  4:HASH JOIN\n"
-                + "  |  join op: FULL OUTER JOIN (BROADCAST)\n"
+                + "  |  join op: FULL OUTER JOIN (PARTITIONED)\n"
                 + "  |  hash predicates:\n"
                 + "  |  colocate: false, reason: \n"
                 + "  |  equal join conjunct: 1: v1 = 4: v4\n"
@@ -1578,18 +1582,19 @@ public class PlanFragmentTest extends PlanTestBase {
 
         sql = "select * from t0, t1 limit 10";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  4:CROSS JOIN\n"
-                + "  |  cross join:\n"
-                + "  |  predicates is NULL.  |  limit: 10\n"
-                + "  |  use vectorized: true\n"
-                + "  |  \n"
-                + "  |----3:EXCHANGE\n"
-                + "  |       limit: 10\n"
-                + "  |       use vectorized: true\n"
-                + "  |    \n"
-                + "  1:EXCHANGE\n"
-                + "     limit: 10\n"
-                + "     use vectorized: true\n"));
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("3:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  limit: 10\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |       limit: 10\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0"));
     }
 
     @Test
@@ -4084,4 +4089,116 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  0:SCAN SCHEMA\n" +
                 "     use vectorized: true"));
     }
+
+    @Test
+    public void testLimitRightJoin() throws Exception {
+        String sql = "select v1 from t0 right outer join t1 on t0.v1 = t1.v4 limit 100";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  limit: 100"));
+        Assert.assertTrue(plan.contains("  |----3:EXCHANGE\n" +
+                "  |       limit: 100"));
+
+        sql = "select v1 from t0 full outer join t1 on t0.v1 = t1.v4 limit 100";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: FULL OUTER JOIN (PARTITIONED)"));
+    }
+
+    @Test
+    public void testLimitLeftJoin() throws Exception {
+        String sql = "select v1 from (select * from t0 limit 1) x0 left outer join t1 on x0.v1 = t1.v4";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v4 = 1: v1"));
+        Assert.assertTrue(plan.contains("  |----4:EXCHANGE\n" +
+                "  |       limit: 1"));
+
+        sql = "select v1 from (select * from t0 limit 10) x0 left outer join t1 on x0.v1 = t1.v4 limit 1";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  limit: 1\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----2:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  0:OlapScanNode"));
+        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=1.0\n" +
+                "     numNodes=0\n" +
+                "     limit: 1"));
+
+        sql = "select v1 from (select * from t0 limit 10) x0 left outer join t1 on x0.v1 = t1.v4 limit 100";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  5:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v4 = 1: v1\n" +
+                "  |  limit: 100\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |       limit: 10\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  1:EXCHANGE"));
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 04\n" +
+                "    HASH_PARTITIONED: 1: v1\n" +
+                "\n" +
+                "  3:EXCHANGE\n" +
+                "     limit: 10\n" +
+                "     use vectorized: true\n"));
+
+        sql =
+                "select v1 from (select * from t0 limit 10) x0 left outer join (select * from t1 limit 5) x1 on x0.v1 = x1.v4 limit 7";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  limit: 7\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----3:EXCHANGE\n" +
+                "  |       limit: 5\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  0:OlapScanNode"));
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  2:EXCHANGE\n" +
+                "     limit: 5\n" +
+                "     use vectorized: true\n" +
+                "\n" +
+                "PLAN FRAGMENT 2"));
+    }
+
 }

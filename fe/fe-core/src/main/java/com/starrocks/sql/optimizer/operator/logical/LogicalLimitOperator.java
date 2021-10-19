@@ -6,6 +6,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
 import java.util.Objects;
 
@@ -39,6 +40,11 @@ public class LogicalLimitOperator extends LogicalOperator {
 
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalLimit(optExpression, context);
+    }
+
+    @Override
+    public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
+        return visitor.visitLogicalLimit(this, context);
     }
 
     @Override

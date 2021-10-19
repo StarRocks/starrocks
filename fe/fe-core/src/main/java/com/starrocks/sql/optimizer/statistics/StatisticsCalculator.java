@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -61,6 +62,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
@@ -993,5 +995,25 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             statistics = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
         }
         return statistics;
+    }
+
+    @Override
+    public Void visitLogicalLimit(LogicalLimitOperator node, ExpressionContext context) {
+        Statistics inputStatistics = context.getChildStatistics(0);
+
+        Statistics.Builder builder = Statistics.builder();
+        builder.addColumnStatistics(inputStatistics.getColumnStatistics());
+        builder.setOutputRowCount(node.getLimit());
+        return visitOperator(node, context, builder);
+    }
+
+    @Override
+    public Void visitPhysicalLimit(PhysicalLimitOperator node, ExpressionContext context) {
+        Statistics inputStatistics = context.getChildStatistics(0);
+
+        Statistics.Builder builder = Statistics.builder();
+        builder.addColumnStatistics(inputStatistics.getColumnStatistics());
+        builder.setOutputRowCount(node.getLimit());
+        return visitOperator(node, context, builder);
     }
 }

@@ -115,6 +115,10 @@ public class Optimizer {
                 memo.getRootGroup(), RuleSetType.SCALAR_OPERATOR_REUSE));
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
 
+        context.getTaskScheduler().pushTask(new TopDownRewriteTask(rootTaskContext,
+                memo.getRootGroup(), RuleSetType.JOIN_FORCE_LIMIT));
+        context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
+
         // Rewrite maybe produce empty groups, we need to remove them.
         memo.removeAllEmptyGroup();
 

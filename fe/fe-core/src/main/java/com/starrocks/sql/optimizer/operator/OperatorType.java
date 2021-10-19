@@ -52,6 +52,7 @@ public enum OperatorType {
     PHYSICAL_REPEAT,
     PHYSICAL_FILTER,
     PHYSICAL_TABLE_FUNCTION,
+    PHYSICAL_LIMIT,
 
     /**
      * Scalar operator

@@ -13,4 +13,5 @@ public enum RuleSetType {
     PRUNE_ASSERT_ROW,
     MULTI_DISTINCT_REWRITE,
     MERGE_AGGREGATE,
+    JOIN_FORCE_LIMIT,
 }

@@ -160,4 +160,8 @@ public abstract class OptExpressionVisitor<R, C> {
     public R visitPhysicalTableFunction(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
+
+    public R visitPhysicalLimit(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
 }
