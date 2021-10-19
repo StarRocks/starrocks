@@ -214,7 +214,7 @@ public:
 
         size_t max_fetch = std::min(*count, static_cast<size_t>(_num_elems - _cur_idx));
         int n = dst->append_numbers(&_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE], max_fetch * SIZE_OF_TYPE);
-        CHECK_EQ(*count, n);
+        DCHECK_EQ(max_fetch, n);
         _cur_idx += max_fetch;
         *count = max_fetch;
         return Status::OK();
