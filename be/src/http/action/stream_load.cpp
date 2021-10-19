@@ -258,7 +258,8 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
             if (!ignore_json_size && ctx->body_bytes > max_body_bytes) {
                 std::stringstream ss;
                 ss << "The size of this batch exceed the max size [" << max_body_bytes << "]  of json type data "
-                   << " data [ " << ctx->body_bytes << " ]. Set ignore_json_size to skip the check, although it may lead huge memory consuming.";
+                   << " data [ " << ctx->body_bytes
+                   << " ]. Set ignore_json_size to skip the check, although it may lead huge memory consuming.";
                 return Status::InternalError(ss.str());
             }
         }
