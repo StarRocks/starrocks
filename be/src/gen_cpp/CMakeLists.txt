@@ -77,7 +77,7 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/data.pb.cc
     ${GEN_CPP_DIR}/descriptors.pb.cc
     ${GEN_CPP_DIR}/internal_service.pb.cc
-    ${GEN_CPP_DIR}/starrocks_internal_service.pb.cc
+    ${GEN_CPP_DIR}/doris_internal_service.pb.cc
     ${GEN_CPP_DIR}/types.pb.cc
     ${GEN_CPP_DIR}/snapshot.pb.cc
     ${GEN_CPP_DIR}/status.pb.cc

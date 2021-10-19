@@ -75,7 +75,6 @@ public:
             const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int buffer_size, bool is_transfer_chain,
             bool send_query_statistics_with_every_batch)
             : _parent(parent),
-              _buffer_size(buffer_size),
               _row_desc(row_desc),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
@@ -103,22 +102,11 @@ public:
     // Returns OK if successful, error indication otherwise.
     Status init(RuntimeState* state);
 
-    // Copies a single row into this channel's output buffer and flushes buffer
-    // if it reaches capacity.
-    // Returns error status if any of the preceding rpcs failed, OK otherwise.
-    Status add_row(TupleRow* row);
-
     // Used when doing shuffle.
     // This function will copy selective rows in chunks to batch.
     // indexes contains row index of chunk and this function will copy from input
     // 'from' and copy 'size' rows
     Status add_rows_selective(vectorized::Chunk* chunk, const uint32_t* row_indexes, uint32_t from, uint32_t size);
-
-    // Asynchronously sends a row batch.
-    // Returns the status of the most recently finished transmit_data
-    // rpc (or OK if there wasn't one that hasn't been reported yet).
-    // if batch is nullptr, send the eof packet
-    Status send_batch(PRowBatch* batch, bool eos = false);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
     // When the chunk is sent really rather than bachend, *is_real_sent will
@@ -141,8 +129,6 @@ public:
 
     int64_t num_data_bytes_sent() const { return _num_data_bytes_sent; }
 
-    PRowBatch* pb_batch() { return &_pb_batch; }
-
     std::string get_fragment_instance_id_str() {
         UniqueId uid(_fragment_instance_id);
         return uid.to_string();
@@ -151,18 +137,6 @@ public:
     TUniqueId get_fragment_instance_id() { return _fragment_instance_id; }
 
 private:
-    inline Status _wait_last_brpc() {
-        auto cntl = &_closure->cntl;
-        brpc::Join(cntl->call_id());
-        if (cntl->Failed()) {
-            LOG(WARNING) << "fail to send brpc batch, error=" << berror(cntl->ErrorCode())
-                         << ", error_text=" << cntl->ErrorText();
-            return Status::ThriftRpcError("fail to send batch");
-        } else {
-            return {_closure->result.status()};
-        }
-    }
-
     inline Status _wait_prev_request() {
         SCOPED_TIMER(_parent->_wait_response_timer);
         if (_request_seq == 0) {
@@ -179,9 +153,6 @@ private:
     }
 
 private:
-    // Serialize _batch into _thrift_batch and send via send_batch().
-    // Returns send_batch() status.
-    Status send_current_batch(bool eos = false);
     Status _send_current_chunk(bool eos);
 
     Status _do_send_chunk_rpc(PTransmitChunkParams* request, const butil::IOBuf& attachment);
@@ -189,7 +160,6 @@ private:
     Status close_internal();
 
     DataStreamSender* _parent;
-    int _buffer_size;
 
     const RowDescriptor& _row_desc;
     TUniqueId _fragment_instance_id;
@@ -199,8 +169,6 @@ private:
     int64_t _num_data_bytes_sent;
     int64_t _request_seq;
 
-    // we're accumulating rows into this batch
-    std::unique_ptr<RowBatch> _batch;
     std::unique_ptr<vectorized::Chunk> _chunk;
     bool _is_first_chunk = true;
 
@@ -210,7 +178,6 @@ private:
 
     // TODO(zc): initused for brpc
     PUniqueId _finst_id;
-    PRowBatch _pb_batch;
 
     PTransmitDataParams _brpc_request;
 
@@ -222,7 +189,7 @@ private:
 
     size_t _current_request_bytes = 0;
 
-    PBackendService_Stub* _brpc_stub = nullptr;
+    doris::PBackendService_Stub* _brpc_stub = nullptr;
     RefCountClosure<PTransmitDataResult>* _closure = nullptr;
 
     int32_t _brpc_timeout_ms = 500;
@@ -236,9 +203,6 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
     if (_is_inited) {
         return Status::OK();
     }
-    // TODO: figure out how to size _batch
-    int capacity = std::max(1, _buffer_size / std::max(_row_desc.get_row_size(), 1));
-    _batch = std::make_unique<RowBatch>(_row_desc, capacity, _parent->_mem_tracker.get());
 
     if (_brpc_dest_addr.hostname.empty()) {
         LOG(WARNING) << "there is no brpc destination address's hostname"
@@ -272,35 +236,6 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
 
     _need_close = true;
     _is_inited = true;
-    return Status::OK();
-}
-
-Status DataStreamSender::Channel::send_batch(PRowBatch* batch, bool eos) {
-    if (_closure == nullptr) {
-        _closure = new RefCountClosure<PTransmitDataResult>();
-        _closure->ref();
-    } else {
-        RETURN_IF_ERROR(_wait_last_brpc());
-        _closure->cntl.Reset();
-    }
-    VLOG_ROW << "Channel::send_batch() instance_id=" << _fragment_instance_id << " dest_node=" << _dest_node_id;
-    if (_is_transfer_chain && (_send_query_statistics_with_every_batch || eos)) {
-        auto statistic = _brpc_request.mutable_query_statistics();
-        _parent->_query_statistics->to_pb(statistic);
-    }
-
-    _brpc_request.set_eos(eos);
-    if (batch != nullptr) {
-        _brpc_request.set_allocated_row_batch(batch);
-    }
-    _brpc_request.set_packet_seq(_request_seq++);
-
-    _closure->ref();
-    _closure->cntl.set_timeout_ms(_brpc_timeout_ms);
-    _brpc_stub->transmit_data(&_closure->cntl, &_brpc_request, &_closure->result, _closure);
-    if (batch != nullptr) {
-        _brpc_request.release_row_batch();
-    }
     return Status::OK();
 }
 
@@ -365,33 +300,6 @@ Status DataStreamSender::Channel::_do_send_chunk_rpc(PTransmitChunkParams* reque
     return Status::OK();
 }
 
-Status DataStreamSender::Channel::add_row(TupleRow* row) {
-    int row_num = _batch->add_row();
-
-    if (row_num == RowBatch::INVALID_ROW_INDEX) {
-        // _batch is full, let's send it; but first wait for an ongoing
-        // transmission to finish before modifying _thrift_batch
-        RETURN_IF_ERROR(send_current_batch());
-        row_num = _batch->add_row();
-        DCHECK_NE(row_num, RowBatch::INVALID_ROW_INDEX);
-    }
-
-    TupleRow* dest = _batch->get_row(row_num);
-    _batch->copy_row(row, dest);
-    const std::vector<TupleDescriptor*>& descs = _row_desc.tuple_descriptors();
-
-    for (int i = 0; i < descs.size(); ++i) {
-        if (UNLIKELY(row->get_tuple(i) == nullptr)) {
-            dest->set_tuple(i, nullptr);
-        } else {
-            dest->set_tuple(i, row->get_tuple(i)->deep_copy(*descs[i], _batch->tuple_data_pool()));
-        }
-    }
-
-    _batch->commit_last_row();
-    return Status::OK();
-}
-
 Status DataStreamSender::Channel::add_rows_selective(vectorized::Chunk* chunk, const uint32_t* indexes, uint32_t from,
                                                      uint32_t size) {
     // TODO(kks): find a way to remove this if condition
@@ -407,13 +315,6 @@ Status DataStreamSender::Channel::add_rows_selective(vectorized::Chunk* chunk, c
     }
 
     _chunk->append_selective(*chunk, indexes, from, size);
-    return Status::OK();
-}
-
-Status DataStreamSender::Channel::send_current_batch(bool eos) {
-    _parent->serialize_batch(_batch.get(), &_pb_batch, 1);
-    _batch->reset();
-    RETURN_IF_ERROR(send_batch(&_pb_batch, eos));
     return Status::OK();
 }
 
@@ -443,13 +344,7 @@ Status DataStreamSender::Channel::close_internal() {
             RETURN_IF_ERROR(send_one_chunk(nullptr, true, &is_real_sent));
         }
     } else {
-        VLOG_RPC << "Channel::close() instance_id=" << _fragment_instance_id << " dest_node=" << _dest_node_id
-                 << " #rows= " << ((_batch == nullptr) ? 0 : _batch->num_rows());
-        if (_batch != nullptr && _batch->num_rows() > 0) {
-            RETURN_IF_ERROR(send_current_batch(true));
-        } else {
-            RETURN_IF_ERROR(send_batch(nullptr, true));
-        }
+        return Status::InternalError("Non-vectorized execute engine is not supported");
     }
     // Don't wait for the last packet to finish, left it to close_wait.
     return Status::OK();
@@ -471,12 +366,9 @@ void DataStreamSender::Channel::close_wait(RuntimeState* state) {
                     _parent->_close_status = st;
                 }
             }
-        } else {
-            state->log_error(_wait_last_brpc().get_error_msg());
         }
         _need_close = false;
     }
-    _batch.reset();
     _chunk.reset();
 }
 
@@ -491,7 +383,6 @@ DataStreamSender::DataStreamSender(ObjectPool* pool, bool is_vectorized, int sen
           _current_channel_idx(0),
           _part_type(sink.output_partition.type),
           _ignore_not_found(!sink.__isset.ignore_not_found || sink.ignore_not_found),
-          _current_pb_batch(&_pb_batch1),
           _profile(nullptr),
           _serialize_batch_timer(nullptr),
           _bytes_sent_counter(nullptr),
@@ -648,64 +539,6 @@ Status DataStreamSender::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status DataStreamSender::send(RuntimeState* state, RowBatch* batch) {
-    SCOPED_TIMER(_profile->total_time_counter());
-
-    // Unpartition or _channel size
-    if (_part_type == TPartitionType::UNPARTITIONED || _channels.size() == 1) {
-        RETURN_IF_ERROR(serialize_batch(batch, _current_pb_batch, _channels.size()));
-        for (auto channel : _channels) {
-            RETURN_IF_ERROR(channel->send_batch(_current_pb_batch));
-        }
-        _current_pb_batch = (_current_pb_batch == &_pb_batch1 ? &_pb_batch2 : &_pb_batch1);
-    } else if (_part_type == TPartitionType::RANDOM) {
-        // Round-robin batches among channels. Wait for the current channel to finish its
-        // rpc before overwriting its batch.
-        Channel* current_channel = _channels[_current_channel_idx];
-        RETURN_IF_ERROR(serialize_batch(batch, current_channel->pb_batch()));
-        RETURN_IF_ERROR(current_channel->send_batch(current_channel->pb_batch()));
-        _current_channel_idx = (_current_channel_idx + 1) % _channels.size();
-    } else if (_part_type == TPartitionType::HASH_PARTITIONED) {
-        // hash-partition batch's rows across channels
-        int num_channels = _channels.size();
-
-        for (int i = 0; i < batch->num_rows(); ++i) {
-            TupleRow* row = batch->get_row(i);
-            size_t hash_val = 0;
-
-            for (auto ctx : _partition_expr_ctxs) {
-                void* partition_val = ctx->get_value(row);
-                // We can't use the crc hash function here because it does not result
-                // in uncorrelated hashes with different seeds.  Instead we must use
-                // fvn hash.
-                // TODO: fix crc hash/GetHashValue()
-                hash_val = RawValue::get_hash_value_fvn(partition_val, ctx->root()->type(), hash_val);
-            }
-            auto target_channel_id = hash_val % num_channels;
-            RETURN_IF_ERROR(_channels[target_channel_id]->add_row(row));
-        }
-    } else {
-        // Range partition
-        int num_channels = _channels.size();
-        int ignore_rows = 0;
-        for (int i = 0; i < batch->num_rows(); ++i) {
-            TupleRow* row = batch->get_row(i);
-            size_t hash_val = 0;
-            bool ignore = false;
-            RETURN_IF_ERROR(compute_range_part_code(state, row, &hash_val, &ignore));
-            if (ignore) {
-                // skip this row
-                ignore_rows++;
-                continue;
-            }
-            RETURN_IF_ERROR(_channels[hash_val % num_channels]->add_row(row));
-        }
-        COUNTER_UPDATE(_ignore_rows, ignore_rows);
-    }
-
-    return Status::OK();
-}
-
 Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
     SCOPED_TIMER(_profile->total_time_counter());
     uint16_t num_rows = chunk->num_rows();
@@ -806,99 +639,6 @@ Status DataStreamSender::send_chunk(RuntimeState* state, vectorized::Chunk* chun
     return Status::OK();
 }
 
-int DataStreamSender::binary_find_partition(const PartRangeKey& key) const {
-    int low = 0;
-    int high = _partition_infos.size() - 1;
-
-    VLOG_ROW << "range key: " << key.debug_string() << std::endl;
-    while (low <= high) {
-        int mid = low + (high - low) / 2;
-        int cmp = _partition_infos[mid]->range().compare_key(key);
-        if (cmp == 0) {
-            return mid;
-        } else if (cmp < 0) { // current < partition[mid]
-            low = mid + 1;
-        } else {
-            high = mid - 1;
-        }
-    }
-
-    return -1;
-}
-
-Status DataStreamSender::find_partition(RuntimeState* state, TupleRow* row, PartitionInfo** info, bool* ignore) {
-    (void)state;
-    if (_partition_expr_ctxs.empty()) {
-        *info = _partition_infos[0];
-        return Status::OK();
-    } else {
-        *ignore = false;
-        // use binary search to get the right partition.
-        ExprContext* ctx = _partition_expr_ctxs[0];
-        void* partition_val = ctx->get_value(row);
-        // construct a PartRangeKey
-        PartRangeKey tmpPartKey;
-        if (nullptr != partition_val) {
-            RETURN_IF_ERROR(PartRangeKey::from_value(ctx->root()->type().type, partition_val, &tmpPartKey));
-        } else {
-            tmpPartKey = PartRangeKey::neg_infinite();
-        }
-
-        int part_index = binary_find_partition(tmpPartKey);
-        if (part_index < 0) {
-            if (_ignore_not_found) {
-                // TODO(zc): add counter to compute its
-                std::stringstream error_log;
-                error_log << "there is no corresponding partition for this key: ";
-                LOG(INFO) << error_log.str();
-                *ignore = true;
-                return Status::OK();
-            } else {
-                std::stringstream error_log;
-                error_log << "there is no corresponding partition for this key: ";
-                return Status::InternalError(error_log.str());
-            }
-        }
-        *info = _partition_infos[part_index];
-    }
-    return Status::OK();
-}
-
-Status DataStreamSender::process_distribute(RuntimeState* state, TupleRow* row, const PartitionInfo* part,
-                                            size_t* code) {
-    (void)state;
-    uint32_t hash_val = 0;
-    for (auto& ctx : part->distributed_expr_ctxs()) {
-        void* partition_val = ctx->get_value(row);
-        if (partition_val != nullptr) {
-            hash_val = RawValue::zlib_crc32(partition_val, ctx->root()->type(), hash_val);
-        } else {
-            //NULL is treat as 0 when hash
-            static const int INT_VALUE = 0;
-            static const TypeDescriptor INT_TYPE(TYPE_INT);
-            hash_val = RawValue::zlib_crc32(&INT_VALUE, INT_TYPE, hash_val);
-        }
-    }
-    hash_val %= part->distributed_bucket();
-
-    int64_t part_id = part->id();
-    *code = RawValue::get_hash_value_fvn(&part_id, TypeDescriptor(TYPE_BIGINT), hash_val);
-
-    return Status::OK();
-}
-
-Status DataStreamSender::compute_range_part_code(RuntimeState* state, TupleRow* row, size_t* hash_value, bool* ignore) {
-    // process partition
-    PartitionInfo* part = nullptr;
-    RETURN_IF_ERROR(find_partition(state, row, &part, ignore));
-    if (*ignore) {
-        return Status::OK();
-    }
-    // process distribute
-    RETURN_IF_ERROR(process_distribute(state, row, part, hash_value));
-    return Status::OK();
-}
-
 Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
     ScopedTimer<MonotonicStopWatch> close_timer(_profile != nullptr ? _profile->total_time_counter() : nullptr);
     // TODO: only close channels that didn't have any errors
@@ -935,28 +675,6 @@ Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
     Expr::close(_partition_expr_ctxs, state);
 
     return _close_status;
-}
-
-template <typename T>
-Status DataStreamSender::serialize_batch(RowBatch* src, T* dest, int num_receivers) {
-    VLOG_ROW << "serializing " << src->num_rows() << " rows";
-    {
-        // TODO(zc)
-        // SCOPED_TIMER(_profile->total_time_counter());
-        SCOPED_TIMER(_serialize_batch_timer);
-        // TODO(zc)
-        // RETURN_IF_ERROR(src->serialize(dest));
-        int uncompressed_bytes = src->serialize(dest);
-        int bytes = RowBatch::get_batch_size(*dest);
-        // TODO(zc)
-        // int uncompressed_bytes = bytes - dest->tuple_data.size() + dest->uncompressed_size;
-        // The size output_batch would be if we didn't compress tuple_data (will be equal to
-        // actual batch size if tuple_data isn't compressed)
-        COUNTER_UPDATE(_bytes_sent_counter, bytes * num_receivers);
-        COUNTER_UPDATE(_uncompressed_bytes_counter, uncompressed_bytes * num_receivers);
-    }
-
-    return Status::OK();
 }
 
 Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst, bool* is_first_chunk,

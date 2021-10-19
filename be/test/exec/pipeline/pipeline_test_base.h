@@ -2,6 +2,9 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/exchange/local_exchange.h"
+#include "exec/pipeline/exchange/local_exchange_sink_operator.h"
+#include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"
@@ -33,6 +36,12 @@ protected:
     // Entry of test, subclass should call this method to start test
     void start_test();
 
+    size_t next_operator_id() { return ++_next_operator_id; }
+    size_t next_plan_node_id() { return ++_next_plan_node_id; }
+    uint32_t next_pipeline_id() { return ++_next_pipeline_id; }
+
+    OpFactories maybe_interpolate_local_exchange(OpFactories& pred_operators);
+
     // SubClass can init request in this method
     virtual void _prepare_request() {}
 
@@ -46,5 +55,9 @@ private:
 
     // execute pipeline
     void _execute();
+
+    size_t _next_operator_id = 0;
+    size_t _next_plan_node_id = 0;
+    uint32_t _next_pipeline_id = 0;
 };
 }; // namespace starrocks::pipeline

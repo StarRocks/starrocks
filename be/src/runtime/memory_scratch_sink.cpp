@@ -85,16 +85,6 @@ Status MemoryScratchSink::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status MemoryScratchSink::send(RuntimeState* state, RowBatch* batch) {
-    if (nullptr == batch || 0 == batch->num_rows()) {
-        return Status::OK();
-    }
-    std::shared_ptr<arrow::RecordBatch> result;
-    RETURN_IF_ERROR(convert_to_arrow_batch(*batch, _arrow_schema, arrow::default_memory_pool(), &result));
-    _queue->blocking_put(result);
-    return Status::OK();
-}
-
 Status MemoryScratchSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return Status::OK();

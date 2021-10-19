@@ -35,6 +35,7 @@
 #include "exec/tablet_info.h"
 #include "exec/vectorized/tablet_info.h"
 #include "gen_cpp/Types_types.h"
+#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "util/bitmap.h"
 #include "util/ref_count_closure.h"
@@ -160,8 +161,6 @@ public:
     void open();
     Status open_wait();
 
-    Status add_row(Tuple* tuple, int64_t tablet_id);
-
     Status add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_ids, const uint32_t* indexes, uint32_t from,
                      uint32_t size);
 
@@ -172,13 +171,6 @@ public:
     Status close_wait(RuntimeState* state);
 
     void cancel();
-
-    // return:
-    // 0: stopped, send finished(eos request has been sent), or any internal error;
-    // 1: running, haven't reach eos.
-    // only allow 1 rpc in flight
-    // plz make sure, this func should be called after open_wait().
-    int try_send_and_fetch_status();
 
     int try_send_chunk_and_fetch_status();
 
@@ -229,17 +221,12 @@ private:
     bool _eos_is_produced{false}; // only for restricting producer behaviors
 
     std::unique_ptr<RowDescriptor> _row_desc;
-    int _batch_size = 0;
-    std::unique_ptr<RowBatch> _cur_batch;
-    PTabletWriterAddBatchRequest _cur_add_batch_request;
 
     std::mutex _pending_batches_lock;
-    using AddBatchReq = std::pair<std::unique_ptr<RowBatch>, PTabletWriterAddBatchRequest>;
-    std::queue<AddBatchReq> _pending_batches;
     std::atomic<int> _pending_batches_num{0};
     size_t _max_pending_batches_num = 16;
 
-    PBackendService_Stub* _stub = nullptr;
+    doris::PBackendService_Stub* _stub = nullptr;
     RefCountClosure<PTabletWriterOpenResult>* _open_closure = nullptr;
     ReusableClosure<PTabletWriterAddBatchResult>* _add_batch_closure = nullptr;
 
@@ -268,8 +255,6 @@ public:
     ~IndexChannel();
 
     Status init(RuntimeState* state, const std::vector<TTabletWithPartition>& tablets);
-
-    Status add_row(Tuple* tuple, int64_t tablet_id);
 
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
         for (auto& it : _node_channels) {
@@ -313,8 +298,6 @@ public:
 
     Status open(RuntimeState* state) override;
 
-    Status send(RuntimeState* state, RowBatch* batch) override;
-
     Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 
     // close() will send RPCs too. If RPCs failed, return error.
@@ -324,15 +307,6 @@ public:
     RuntimeProfile* profile() override { return _profile; }
 
 private:
-    // convert input batch to output batch which will be loaded into OLAP table.
-    // this is only used in insert statement.
-    void _convert_batch(RuntimeState* state, RowBatch* input_batch, RowBatch* output_batch);
-
-    // make input data valid for OLAP table
-    // return number of invalid/filtered rows.
-    // invalid row number is set in Bitmap
-    int _validate_data(RuntimeState* state, RowBatch* batch, Bitmap* filter_bitmap);
-
     template <PrimitiveType PT>
     void _validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
                            std::vector<uint8_t>* validate_selection);
@@ -346,11 +320,6 @@ private:
     void _print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc);
 
     void _print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc);
-
-    // the consumer func of sending pending batches in every NodeChannel.
-    // use polling & NodeChannel::try_send_and_fetch_status() to achieve nonblocking sending.
-    // only focus on pending batches and channel status, the internal errors of NodeChannels will be handled by the productor
-    void _send_batch_process();
 
     // the consumer func of sending pending chunks in every NodeChannel.
     // use polling & NodeChannel::try_send_chunk_and_fetch_status() to achieve nonblocking sending.
@@ -377,9 +346,7 @@ private:
 
     // this is tuple descriptor of destination OLAP table
     TupleDescriptor* _output_tuple_desc = nullptr;
-    RowDescriptor* _output_row_desc = nullptr;
     std::vector<ExprContext*> _output_expr_ctxs;
-    std::unique_ptr<RowBatch> _output_batch;
 
     bool _need_validate_data = false;
 
@@ -432,7 +399,6 @@ private:
     int64_t _validate_data_ns = 0;
     int64_t _send_data_ns = 0;
     int64_t _non_blocking_send_ns = 0;
-    int64_t _serialize_batch_ns = 0;
     int64_t _number_input_rows = 0;
     int64_t _number_output_rows = 0;
     int64_t _number_filtered_rows = 0;
