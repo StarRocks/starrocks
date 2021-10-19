@@ -254,10 +254,11 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 
         if (ctx->format == TFileFormatType::FORMAT_JSON) {
             size_t max_body_bytes = config::streaming_load_max_batch_size_mb * 1024 * 1024;
-            if (ctx->body_bytes > max_body_bytes) {
+            auto ignore_json_size = boost::iequals(http_req->header(HTTP_IGNORE_JSON_SIZE), "true");
+            if (!ignore_json_size && ctx->body_bytes > max_body_bytes) {
                 std::stringstream ss;
                 ss << "The size of this batch exceed the max size [" << max_body_bytes << "]  of json type data "
-                   << " data [ " << ctx->body_bytes << " ]";
+                   << " data [ " << ctx->body_bytes << " ]. Set ignore_json_size to skip the check, although it may lead huge memory consuming.";
                 return Status::InternalError(ss.str());
             }
         }
