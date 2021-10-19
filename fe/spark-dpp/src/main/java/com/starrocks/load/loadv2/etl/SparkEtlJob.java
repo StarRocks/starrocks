@@ -158,6 +158,7 @@ public class SparkEtlJob {
         String starrocksHiveDB = sourceHiveDBTableName.split("\\.")[0];
         String taskId = etlJobConfig.outputPath.substring(etlJobConfig.outputPath.lastIndexOf("/") + 1);
         String globalDictTableName = String.format(EtlJobConfig.GLOBAL_DICT_TABLE_NAME, tableId);
+        String dorisGlobalDictTableName = String.format(EtlJobConfig.DORIS_GLOBAL_DICT_TABLE_NAME, tableId);
         String distinctKeyTableName = String.format(EtlJobConfig.DISTINCT_KEY_TABLE_NAME, tableId, taskId);
         String starrocksIntermediateHiveTable =
                 String.format(EtlJobConfig.STARROCKS_INTERMEDIATE_HIVE_TABLE_NAME, tableId, taskId);
@@ -182,6 +183,7 @@ public class SparkEtlJob {
                     sourceHiveFilter, starrocksHiveDB, distinctKeyTableName, globalDictTableName,
                     starrocksIntermediateHiveTable,
                     buildConcurrency, veryHighCardinalityColumn, veryHighCardinalityColumnSplitNum, spark);
+            globalDictBuilder.checkGlobalDictTableName(dorisGlobalDictTableName);
             globalDictBuilder.createHiveIntermediateTable();
             globalDictBuilder.extractDistinctColumn();
             globalDictBuilder.buildGlobalDict();
