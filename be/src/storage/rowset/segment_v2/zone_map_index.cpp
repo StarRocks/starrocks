@@ -22,7 +22,6 @@
 #include "storage/rowset/segment_v2/zone_map_index.h"
 
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/column_block.h"
 #include "storage/fs/block_manager.h"
 #include "storage/olap_define.h"

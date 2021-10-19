@@ -8,7 +8,6 @@
 #include "column/nullable_column.h"
 #include "common/config.h"
 #include "gutil/casts.h"
-#include "runtime/current_mem_tracker.h"
 #include "storage/vectorized/chunk_aggregator.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/defer_op.h"
@@ -72,18 +71,12 @@ private:
 };
 
 Status AggregateIterator::do_get_next(Chunk* chunk) {
-    CurrentMemTracker::release(chunk->memory_usage());
-    DeferOp defer([&]() { CurrentMemTracker::consume(chunk->memory_usage()); });
-
     while (!_fetch_finish) {
         // fetch chunk
         if (_aggregator.source_exhausted()) {
             _curr_chunk->reset();
-            CurrentMemTracker::consume(_curr_chunk->memory_usage());
 
             Status st = _child->get_next(_curr_chunk.get());
-
-            CurrentMemTracker::release(_curr_chunk->memory_usage());
             if (st.is_end_of_file()) {
                 _fetch_finish = true;
                 break;

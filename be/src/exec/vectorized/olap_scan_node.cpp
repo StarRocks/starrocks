@@ -211,7 +211,7 @@ void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
 }
 
 void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
-    CurrentThread::set_query_id(scanner->runtime_state()->query_id());
+    tls_thread_status.set_query_id(scanner->runtime_state()->query_id());
 
     Status status = scanner->open(_runtime_state);
     if (!status.ok()) {
@@ -300,7 +300,7 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
         _result_chunks.shutdown();
     }
     _running_threads.fetch_sub(1, std::memory_order_release);
-    CurrentThread::set_query_id(TUniqueId());
+    tls_thread_status.set_query_id(TUniqueId());
     // DO NOT touch any shared variables since here, as they may have been destructed.
 }
 

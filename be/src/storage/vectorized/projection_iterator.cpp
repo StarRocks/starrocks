@@ -5,7 +5,6 @@
 #include <unordered_set>
 
 #include "column/chunk.h"
-#include "runtime/current_mem_tracker.h"
 #include "storage/vectorized/chunk_helper.h"
 
 namespace starrocks::vectorized {
@@ -52,7 +51,6 @@ void ProjectionIterator::build_index_map(const Schema& output, const Schema& inp
 Status ProjectionIterator::do_get_next(Chunk* chunk) {
     if (_chunk == nullptr) {
         _chunk = ChunkHelper::new_chunk(_child->schema(), _chunk_size);
-        CurrentMemTracker::consume(_chunk->memory_usage());
     }
     _chunk->reset();
     Status st = _child->get_next(_chunk.get());
@@ -72,7 +70,6 @@ Status ProjectionIterator::do_get_next(Chunk* chunk) {
 
 void ProjectionIterator::close() {
     if (_chunk != nullptr) {
-        CurrentMemTracker::release(_chunk->memory_usage());
         _chunk.reset();
     }
     if (_child != nullptr) {
