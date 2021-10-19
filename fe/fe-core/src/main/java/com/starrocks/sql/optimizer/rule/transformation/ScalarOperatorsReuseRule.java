@@ -21,7 +21,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import static com.facebook.presto.hive.$internal.com.google.common.collect.ImmutableMap.toImmutableMap;
+import static com.google.common.collect.ImmutableMap.toImmutableMap;
 
 public class ScalarOperatorsReuseRule extends TransformationRule {
     public ScalarOperatorsReuseRule() {

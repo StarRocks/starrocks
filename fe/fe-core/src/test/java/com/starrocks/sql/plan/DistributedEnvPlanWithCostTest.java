@@ -239,7 +239,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  and p_size = 12\n" +
                 "  and p_type like '%COPPER'";
         String planFragment = getCostExplain(sql);
-        System.out.println("FIXME : " + planFragment);
         Assert.assertTrue(planFragment.contains("9:Project\n" +
                 "  |  output columns:\n" +
                 "  |  16 <-> [16: S_ACCTBAL, DOUBLE, false]\n" +
@@ -285,7 +284,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "'FRANCE') ) and l_shipdate between date '1995-01-01' and date '1996-12-31' ) as shipping "
                 + "group by supp_nation, cust_nation, l_year order by supp_nation, cust_nation, l_year;";
         String plan = getCostExplain(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("     probe runtime filters:\n"
                 + "     - filter_id = 2, probe_expr = (11: L_SUPPKEY)\n"));
     }
@@ -416,7 +414,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testJoinOnExpression() throws Exception {
         String sql = "SELECT COUNT(*)  FROM lineitem JOIN [shuffle] orders ON l_orderkey = o_orderkey + 1  GROUP BY l_shipmode, l_shipinstruct, o_orderdate, o_orderstatus;";
         String plan = getCostExplain(sql);
-        System.out.println("FIXME : " + plan);
         Assert.assertTrue(plan.contains("6:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [29: cast, BIGINT, true] = [30: add, BIGINT, true]\n" +
@@ -450,7 +447,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "                or (n1.n_name = 'IRAN' and n2.n_name = 'CANADA')\n" +
                 "            )";
         String plan = getCostExplain(sql);
-        System.out.println(plan);
         // not eval char/varchar type predicate cardinality in scan node
         Assert.assertTrue(plan.contains("Predicates: 24: N_NAME IN ('IRAN', 'CANADA')"));
         Assert.assertTrue(plan.contains("cardinality: 25"));
@@ -479,7 +475,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "                or (n1.n_nationkey = 2 and n2.n_nationkey = 1)\n" +
                 "            )";
         String plan = getCostExplain(sql);
-        System.out.println(plan);
 
         // eval predicate cardinality in scan node
         Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
@@ -520,7 +515,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "      ) t1\n" +
                 "  ) t2;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains(" 11:AGGREGATE (update finalize)"));
         Assert.assertTrue(plan.contains("10:Project"));
     }

@@ -140,7 +140,7 @@ public class Optimizer {
         }
 
         if (connectContext.getSessionVariable().isEnableNewPlannerPushDownJoinToAgg()) {
-             //context.getRuleSet().addPushDownJoinToAggRule();
+            context.getRuleSet().addPushDownJoinToAggRule();
         }
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(

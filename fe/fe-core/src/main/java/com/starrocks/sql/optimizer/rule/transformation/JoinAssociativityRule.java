@@ -64,7 +64,6 @@ public class JoinAssociativityRule extends TransformationRule {
         if (leftChildJoin.getProjection() != null) {
             Projection projection = leftChildJoin.getProjection();
             if (projection.getColumnRefMap().values().stream().anyMatch(s -> !s.isColumnRef())) {
-                //Preconditions.checkState(false);
                 return Collections.emptyList();
             }
         }
@@ -103,17 +102,6 @@ public class JoinAssociativityRule extends TransformationRule {
                 .setJoinType(JoinOperator.INNER_JOIN)
                 .setOnPredicate(Utils.compoundAnd(newParentConjuncts))
                 .build();
-
-        // compute right child join output columns
-        // right child join output columns not only contains the parent join output, but also contains the parent conjuncts used columns
-        /*
-        ColumnRefSet parentJoinOutputColumns = parentJoin.getOutputColumns(new ExpressionContext(input));
-        newParentConjuncts.forEach(conjunct -> parentJoinOutputColumns.union(conjunct.getUsedColumns()));
-        List<ColumnRefOperator> newRightOutputColumns =
-                newRightChildColumns.getStream().filter(outputColumns::contains).
-                        mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
-
-         */
 
         ColumnRefSet parentJoinRequiredColumns = parentJoin.getOutputColumns(new ExpressionContext(input));
         parentJoinRequiredColumns.union(topJoinOperator.getRequiredChildInputColumns());

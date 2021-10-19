@@ -62,6 +62,10 @@ public abstract class Operator {
         return projection;
     }
 
+    public void setProjection(Projection projection) {
+        this.projection = projection;
+    }
+
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitOperator(this, context);
     }

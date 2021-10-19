@@ -19,12 +19,12 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -43,14 +43,14 @@ import java.util.Map;
 /**
  * For a low cardinality string column with global dict, we will rewrite the plan to
  * speed up query with global dict.
- *
+ * <p>
  * 1. Check the olap scan nodes have low cardinality global dict string column
  * 2. Replace the string column with the dict encoded int column
  * 3. Bottom up traverse the plan tree, if the operator could apply global dict, then
- *    Replace the string column with the dict encoded int column,
- *    else insert the decode operator into the tree
+ * Replace the string column with the dict encoded int column,
+ * else insert the decode operator into the tree
  * 4. The decode operator will translate the encoded int column to string column
- *
+ * <p>
  * The concrete example could refer to testDecodeNodeRewriteXXX in PlanFragmentTest
  */
 public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewriteRule {
@@ -82,13 +82,13 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     insertDecodeExpr(optExpression, Collections.singletonList(newChildExpr), i, context);
                 }
             }
-            return optExpression;
+            return buildProjection(optExpression, context);
         }
 
         @Override
         public OptExpression visitPhysicalDecode(OptExpression optExpression, DecodeContext context) {
             context.hasChanged = false;
-            return optExpression;
+            return buildProjection(optExpression, context);
         }
 
         @Override
@@ -147,17 +147,17 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                             scanOperator.getProjection());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
 
-                    OptExpression result =  new OptExpression(newOlapScan);
+                    OptExpression result = new OptExpression(newOlapScan);
                     result.setLogicalProperty(optExpression.getLogicalProperty());
                     result.setStatistics(optExpression.getStatistics());
-                    return result;
+                    return buildProjection(result, context);
                 }
             }
-            return optExpression;
+            return buildProjection(optExpression, context);
         }
 
-        private PhysicalProjectOperator rewriteProjectOperator(PhysicalProjectOperator projectOperator,
-                                                               DecodeContext context) {
+        private Projection rewriteProjectOperator(Projection projectOperator,
+                                                  DecodeContext context) {
             Map<Integer, Integer> newStringToDicts = Maps.newHashMap();
 
             Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap(projectOperator.getColumnRefMap());
@@ -197,7 +197,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             if (newStringToDicts.isEmpty()) {
                 context.hasChanged = false;
             }
-            return new PhysicalProjectOperator(newProjectMap, newCommonProjectMap);
+            return new Projection(newProjectMap, newCommonProjectMap);
         }
 
         private PhysicalDistributionOperator rewriteDistribution(PhysicalDistributionOperator exchangeOperator,
@@ -284,27 +284,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         }
 
         @Override
-        public OptExpression visitPhysicalProject(OptExpression projectExpr, DecodeContext context) {
-            OptExpression childExpr = projectExpr.inputAt(0);
-            context.hasChanged = false;
-            OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
-            if (context.hasChanged) {
-                PhysicalProjectOperator projectOperator = (PhysicalProjectOperator) projectExpr.getOp();
-                if (projectOperator.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet())) {
-                    PhysicalProjectOperator newProjectOper = rewriteProjectOperator(projectOperator,
-                            context);
-                    OptExpression result = OptExpression.create(newProjectOper, newChildExpr);
-                    result.setStatistics(projectExpr.getStatistics());
-                    result.setLogicalProperty(projectExpr.getLogicalProperty());
-                    return result;
-                } else {
-                    insertDecodeExpr(projectExpr, Collections.singletonList(newChildExpr), 0, context);
-                }
-            }
-            return projectExpr;
-        }
-
-        @Override
         public OptExpression visitPhysicalHashAggregate(OptExpression aggExpr, DecodeContext context) {
             OptExpression childExpr = aggExpr.inputAt(0);
             context.hasChanged = false;
@@ -317,13 +296,13 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     OptExpression result = OptExpression.create(newAggOper, newChildExpr);
                     result.setStatistics(aggExpr.getStatistics());
                     result.setLogicalProperty(aggExpr.getLogicalProperty());
-                    return result;
+                    return buildProjection(result, context);
                 } else {
                     insertDecodeExpr(aggExpr, Collections.singletonList(newChildExpr), 0, context);
                 }
             }
 
-            return aggExpr;
+            return buildProjection(aggExpr, context);
         }
 
         @Override
@@ -334,7 +313,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             if (context.hasChanged) {
                 PhysicalDistributionOperator exchangeOperator = (PhysicalDistributionOperator) exchangeExpr.getOp();
                 if (!(exchangeOperator.getDistributionSpec() instanceof HashDistributionSpec)) {
-                    return exchangeExpr;
+                    return buildProjection(exchangeExpr, context);
                 }
                 if (exchangeOperator.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet())) {
                     PhysicalDistributionOperator newExchangeOper = rewriteDistribution(exchangeOperator,
@@ -343,12 +322,34 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     OptExpression result = OptExpression.create(newExchangeOper, newChildExpr);
                     result.setStatistics(exchangeExpr.getStatistics());
                     result.setLogicalProperty(exchangeExpr.getLogicalProperty());
-                    return result;
+                    return buildProjection(result, context);
                 } else {
                     insertDecodeExpr(exchangeExpr, Collections.singletonList(newChildExpr), 0, context);
                 }
             }
-            return exchangeExpr;
+            return buildProjection(exchangeExpr, context);
+        }
+
+        public OptExpression buildProjection(OptExpression childExpr, DecodeContext context) {
+            if (childExpr.getOp().getProjection() == null) {
+                return childExpr;
+            }
+
+            if (context.hasChanged) {
+                Projection projection = childExpr.getOp().getProjection();
+                if (projection.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet())) {
+                    Projection newProjection = rewriteProjectOperator(projection, context);
+                    childExpr.getOp().setProjection(newProjection);
+                    return childExpr;
+                } else {
+                    OptExpression decodeExp = generateDecodeOExpr(context, Collections.singletonList(childExpr));
+                    decodeExp.getOp().setProjection(projection);
+                    context.hasChanged = false;
+                    context.stringColumnIdToDictColumnIds.clear();
+                    return decodeExp;
+                }
+            }
+            return childExpr;
         }
     }
 

@@ -1,6 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.optimizer.operator;
 
+import com.google.common.base.Preconditions;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -9,10 +11,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public class Projection {
-    public static Long totalTime = 0L;
-
     private final Map<ColumnRefOperator, ScalarOperator> columnRefMap;
     // Used for common operator compute result reuse, we need to compute
     // common sub operators firstly in BE
@@ -45,9 +46,41 @@ public class Projection {
         return commonSubOperatorMap;
     }
 
+    public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
+        Preconditions.checkState(!childDictColumns.isEmpty());
+        ColumnRefSet dictSet = new ColumnRefSet();
+        for (Integer id : childDictColumns) {
+            dictSet.union(id);
+        }
+
+        for (ScalarOperator operator : columnRefMap.values()) {
+            if (!couldApplyStringDict(operator, dictSet)) {
+                return false;
+            }
+        }
+
+        for (ScalarOperator operator : commonSubOperatorMap.values()) {
+            if (!couldApplyStringDict(operator, dictSet)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private boolean couldApplyStringDict(ScalarOperator operator, ColumnRefSet dictSet) {
+        ColumnRefSet usedColumns = operator.getUsedColumns();
+        if (usedColumns.isIntersect(dictSet)) {
+            if (usedColumns.cardinality() > 1) {
+                return false;
+            }
+            return operator instanceof ColumnRefOperator;
+        }
+        return true;
+    }
+
     @Override
     public boolean equals(Object o) {
-        Long start = System.currentTimeMillis();
         if (this == o) {
             return true;
         }
@@ -55,11 +88,7 @@ public class Projection {
             return false;
         }
         Projection that = (Projection) o;
-        boolean b = columnRefMap.keySet().equals(that.columnRefMap.keySet());
-        Long end = System.currentTimeMillis();
-
-        totalTime += (end - start);
-        return b;
+        return columnRefMap.keySet().equals(that.columnRefMap.keySet());
     }
 
     @Override

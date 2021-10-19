@@ -11,7 +11,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -24,9 +26,11 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 // Push down Join
@@ -127,15 +131,6 @@ public class PushDownJoinAggRule extends TransformationRule {
             }
         }
 
-        LogicalJoinOperator newJoin = new LogicalJoinOperator.Builder().withOperator(inputJoinOperator)
-                .setOnPredicate(Utils.compoundAnd(newJoinOnPredicate))
-                .setPredicate(Utils.compoundAnd(newJoinFilterPredicate))
-                .build();
-
-        OptExpression newJoinExpression = new OptExpression(newJoin);
-        newJoinExpression.getInputs().add(input.getInputs().get(0));
-        newJoinExpression.getInputs().addAll(rightAggExpression.getInputs());
-
         List<ScalarOperator> requiredOutput =
                 Arrays.stream(context.getTaskContext().get(0).getRequiredColumns().getColumnIds())
                         .mapToObj(factory::getColumnRef).collect(Collectors.toList());
@@ -154,6 +149,19 @@ public class PushDownJoinAggRule extends TransformationRule {
                 }
             }
         }
+
+        ColumnRefSet newJoinPruneOutPutColumns = new ColumnRefSet(leftOutput);
+        newJoinPruneOutPutColumns.union(rightAggExpression.inputAt(0).getOutputColumns());
+        LogicalJoinOperator newJoin = new LogicalJoinOperator.Builder().withOperator(inputJoinOperator)
+                .setOnPredicate(Utils.compoundAnd(newJoinOnPredicate))
+                .setPredicate(Utils.compoundAnd(newJoinFilterPredicate))
+                .setProjection(new Projection(newJoinPruneOutPutColumns.getStream().mapToObj(factory::getColumnRef)
+                        .collect(Collectors.toMap(Function.identity(), Function.identity())), new HashMap<>()))
+                .build();
+
+        OptExpression newJoinExpression = new OptExpression(newJoin);
+        newJoinExpression.getInputs().add(input.getInputs().get(0));
+        newJoinExpression.getInputs().addAll(rightAggExpression.getInputs());
 
         LogicalAggregationOperator newAgg = new LogicalAggregationOperator(rightAggOperator.getType(), leftOutput,
                 rightAggOperator.getAggregations());
