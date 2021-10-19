@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MysqlScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
@@ -113,7 +114,8 @@ public class RuleSet {
             new ValuesImplementationRule(),
             new RepeatImplementationRule(),
             new FilterImplementationRule(),
-            new TableFunctionImplementationRule()
+            new TableFunctionImplementationRule(),
+            new LimitImplementationRule()
     );
 
     private final List<Rule> transformRules = Lists.newArrayList();
