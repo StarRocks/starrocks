@@ -134,6 +134,20 @@ public class GlobalDictBuilder {
         spark.sql("use " + starrocksHiveDB);
     }
 
+    /**
+     * Check if doris global dict table already exist.
+     * If exist, use old name for compatibility.
+     *
+     * @param dorisGlobalDictTableName old global dict table name in previous version
+     */
+    public void checkGlobalDictTableName(String dorisGlobalDictTableName) {
+        Dataset<Row> result = spark.sql("show tables like '" + dorisGlobalDictTableName + "'");
+        if (result.count() > 0) {
+            globalDictTableName = dorisGlobalDictTableName;
+        }
+        LOG.info("global dict table name: " + globalDictTableName);
+    }
+
     public void createHiveIntermediateTable() throws AnalysisException {
         Map<String, String> sourceHiveTableColumn = spark.catalog()
                 .listColumns(sourceHiveDBTableName)
