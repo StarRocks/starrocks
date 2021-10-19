@@ -128,13 +128,19 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
                   << " by clone. committed_version=" << _clone_req.committed_version << " signature=" << _signature;
         std::string shard_path;
         DataDir* store = nullptr;
-        auto ost = StorageEngine::instance()->obtain_shard_path(_clone_req.storage_medium, &shard_path, &store);
+        int64_t dest_path_hash = -1;
+        if (_clone_req.__isset.dest_path_hash) {
+            dest_path_hash = _clone_req.dest_path_hash;
+        }
+        auto ost = StorageEngine::instance()->obtain_shard_path(_clone_req.storage_medium, dest_path_hash, &shard_path,
+                                                                &store);
         if (ost != OLAP_SUCCESS) {
             LOG(WARNING) << "Fail to obtain shard path. tablet_id=" << _clone_req.tablet_id
                          << " signature=" << _signature;
             _error_msgs->push_back("fail to obtain shard path");
             return Status::InternalError("fail to obtain shard path");
         }
+
         auto tablet_manager = StorageEngine::instance()->tablet_manager();
         auto tablet_id = _clone_req.tablet_id;
         auto schema_hash = _clone_req.schema_hash;

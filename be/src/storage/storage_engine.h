@@ -107,9 +107,14 @@ public:
 
     // Obtain shard path for new tablet.
     //
-    // @param [out] shard_path choose an available root_path to clone new tablet
+    // @param [in] storage_medium specify medium needed
+    // @param [in] path_hash: If path_hash is not -1, get store by path hash.
+    //                        Else get store randomly by the specified medium.
+    // @param [out] shard_path choose an available shard_path to clone new tablet
+    // @param [out] store choose an available root_path to clone new tablet
     // @return error code
-    OLAPStatus obtain_shard_path(TStorageMedium::type storage_medium, std::string* shared_path, DataDir** store);
+    OLAPStatus obtain_shard_path(TStorageMedium::type storage_medium, int64_t path_hash, std::string* shared_path,
+                                 DataDir** store);
 
     // Load new tablet to make it effective.
     //
