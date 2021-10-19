@@ -8,12 +8,14 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 
 /**
  * This class represents a set of inner joins that can be executed in any order.
@@ -62,9 +64,17 @@ public class MultiJoinNode {
 
         if (joinOperator.getProjection() != null) {
             Projection projection = joinOperator.getProjection();
-            if (projection.getColumnRefMap().values().stream().anyMatch(s -> !s.isColumnRef())) {
-                atoms.add(node);
-                return;
+
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
+                if (!entry.getValue().isColumnRef()) {
+                    atoms.add(node);
+                    return;
+                }
+
+                if (!entry.getKey().equals(entry.getValue())) {
+                    atoms.add(node);
+                    return;
+                }
             }
         }
 

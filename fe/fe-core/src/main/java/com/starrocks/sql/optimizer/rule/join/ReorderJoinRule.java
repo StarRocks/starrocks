@@ -14,14 +14,16 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -73,15 +75,17 @@ public class ReorderJoinRule extends Rule {
             }
         }
 
-        List<OptExpression> pruneToKResult = new ArrayList<>();
         OutputColumnsPrune prune = new OutputColumnsPrune(context);
         if (oldRoot.getProjection() != null) {
             for (OptExpression joinExpr : reorderTopKResult) {
-                OptExpression optExpression =
-                        prune.rewrite(joinExpr, new ColumnRefSet(oldRoot.getProjection().getOutputColumns()));
-                pruneToKResult.add(optExpression);
+                joinExpr.getOp().setProjection(oldRoot.getProjection());
+                ColumnRefSet requireInputColumns = ((LogicalJoinOperator) joinExpr.getOp()).getRequiredChildInputColumns();
+
+                for (int i = 0; i < joinExpr.arity(); ++i) {
+                    OptExpression optExpression = prune.rewrite(joinExpr.inputAt(i), requireInputColumns);
+                    joinExpr.setChild(i, optExpression);
+                }
             }
-            reorderTopKResult = pruneToKResult;
         }
 
         for (OptExpression joinExpr : reorderTopKResult) {
@@ -124,6 +128,21 @@ public class ReorderJoinRule extends Rule {
         }
 
         public OptExpression rewrite(OptExpression optExpression, ColumnRefSet pruneOutputColumns) {
+            Operator operator = optExpression.getOp();
+            if (operator.getProjection() != null) {
+                Projection projection = operator.getProjection();
+
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
+                    if (!entry.getValue().isColumnRef()) {
+                        return optExpression;
+                    }
+
+                    if (!entry.getKey().equals(entry.getValue())) {
+                        return optExpression;
+                    }
+                }
+            }
+
             return optExpression.getOp().accept(this, optExpression, pruneOutputColumns);
         }
 

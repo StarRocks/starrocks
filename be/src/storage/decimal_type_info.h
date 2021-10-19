@@ -120,6 +120,48 @@ public:
         }
     }
 
+    static inline OLAPStatus to_decimal(FieldType src_type, FieldType dst_type, const Datum& src_datum,
+                                        Datum& dst_datum, int src_precision, int src_scale, int dst_precision,
+                                        int dst_scale) {
+#define TO_DECIMAL_MACRO(n, m)                                                                           \
+                                                                                                         \
+    if (src_type == OLAP_FIELD_TYPE_DECIMAL##n && dst_type == OLAP_FIELD_TYPE_DECIMAL##m) {              \
+        int##m##_t dst_val = 0;                                                                          \
+        int##n##_t src_val = src_datum.get_int##n();                                                     \
+        auto overflow = to_decimal<int##n##_t, int##m##_t>(&src_val, &dst_val, src_precision, src_scale, \
+                                                           dst_precision, dst_scale);                    \
+        dst_datum.set_int##m(dst_val);                                                                   \
+        return overflow;                                                                                 \
+    }
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+        TO_DECIMAL_MACRO(32, 32)
+        TO_DECIMAL_MACRO(32, 64)
+        TO_DECIMAL_MACRO(32, 128)
+        TO_DECIMAL_MACRO(64, 32)
+        TO_DECIMAL_MACRO(64, 64)
+        TO_DECIMAL_MACRO(64, 128)
+        TO_DECIMAL_MACRO(128, 32)
+        TO_DECIMAL_MACRO(128, 64)
+        TO_DECIMAL_MACRO(128, 128)
+#pragma GCC diagnostic pop
+#undef TO_DECIMAL_MACRO
+        return OLAP_ERR_INVALID_SCHEMA;
+    }
+
+    //convert and deep copy value from other type's source
+    OLAPStatus convert_from(Datum& dest, const Datum& src, const TypeInfoPtr& src_type) const {
+        switch (src_type->type()) {
+        case OLAP_FIELD_TYPE_DECIMAL32:
+        case OLAP_FIELD_TYPE_DECIMAL64:
+        case OLAP_FIELD_TYPE_DECIMAL128:
+            return to_decimal(src_type->type(), type(), src, dest, src_type->precision(), src_type->scale(),
+                              precision(), scale());
+        default:
+            return OLAPStatus::OLAP_ERR_INVALID_SCHEMA;
+        }
+    }
+
     OLAPStatus from_string(void* buf, const std::string& scan_key) const override {
         CppType* data_ptr = reinterpret_cast<CppType*>(buf);
         // Decimal strings in some predicates use decimal_precision_limit as precision,

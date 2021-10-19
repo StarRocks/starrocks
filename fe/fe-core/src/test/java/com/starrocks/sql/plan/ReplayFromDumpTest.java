@@ -172,8 +172,8 @@ public class ReplayFromDumpTest {
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
         // Check the size of the left and right tables
-        Assert.assertTrue(replayPair.second.contains("|  \n" +
-                "  |----19:EXCHANGE\n" +
+        Assert.assertTrue(replayPair.second.contains("  |  \n" +
+                "  |----21:EXCHANGE\n" +
                 "  |       cardinality: 102\n" +
                 "  |    \n" +
                 "  5:OlapScanNode\n" +

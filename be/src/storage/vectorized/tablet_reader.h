@@ -35,7 +35,9 @@ public:
 
     size_t merged_rows() const override { return _collect_iter->merged_rows(); }
 
-protected:
+    void set_delete_predicates_version(Version version) { _delete_predicates_version = version; }
+
+public:
     Status do_get_next(Chunk* chunk) override;
 
 private:
@@ -51,6 +53,9 @@ private:
 
     TabletSharedPtr _tablet;
     Version _version;
+    // version of delete predicates, equal as _version by default
+    // _delete_predicates_version will be set as max_version of tablet in schema change vectorized
+    Version _delete_predicates_version;
 
     MemTracker _memtracker;
     MemPool _mempool;

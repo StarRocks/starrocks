@@ -37,8 +37,10 @@
 #include "util/cpu_info.h"
 #include "util/debug_util.h"
 #include "util/disk_info.h"
+#include "util/gc_helper.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
+#include "util/monotime.h"
 #include "util/network_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/system_metrics.h"
@@ -68,6 +70,7 @@ private:
 void* tcmalloc_gc_thread(void* dummy) {
     using namespace starrocks::vectorized;
     const static float kFreeRatio = 0.5;
+    GCHelper gch(config::tc_gc_period, config::memory_maintenance_sleep_time_s, MonoTime::Now());
     while (true) {
         sleep(config::memory_maintenance_sleep_time_s);
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
@@ -97,10 +100,22 @@ void* tcmalloc_gc_thread(void* dummy) {
         MallocExtension::instance()->GetNumericProperty("generic.current_allocated_bytes", &used_size);
         MallocExtension::instance()->GetNumericProperty("tcmalloc.pageheap_free_bytes", &free_size);
         size_t phy_size = used_size + free_size; // physical memory usage
+        size_t total_bytes_to_gc = 0;
         if (phy_size > config::tc_use_memory_min) {
             size_t max_free_size = phy_size * config::tc_free_memory_rate / 100;
             if (free_size > max_free_size) {
-                MallocExtension::instance()->ReleaseToSystem(free_size - max_free_size);
+                total_bytes_to_gc = free_size - max_free_size;
+            }
+        }
+        size_t bytes_to_gc = gch.bytes_should_gc(MonoTime::Now(), total_bytes_to_gc);
+        if (bytes_to_gc > 0) {
+            size_t bytes = bytes_to_gc;
+            while (bytes >= GCBYTES_ONE_STEP) {
+                MallocExtension::instance()->ReleaseToSystem(GCBYTES_ONE_STEP);
+                bytes -= GCBYTES_ONE_STEP;
+            }
+            if (bytes > 0) {
+                MallocExtension::instance()->ReleaseToSystem(bytes);
             }
         }
         MallocExtension::instance()->MarkThreadIdle();

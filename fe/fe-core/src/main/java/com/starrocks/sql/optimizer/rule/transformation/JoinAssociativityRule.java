@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -41,7 +42,7 @@ public class JoinAssociativityRule extends TransformationRule {
 
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
-        if (!joinOperator.getJoinHint().isEmpty() ||
+        if (!joinOperator.getJoinHint().isEmpty() || input.inputAt(0).getOp().hasLimit() ||
                 !((LogicalJoinOperator) input.inputAt(0).getOp()).getJoinHint().isEmpty()) {
             return false;
         }
@@ -63,8 +64,15 @@ public class JoinAssociativityRule extends TransformationRule {
 
         if (leftChildJoin.getProjection() != null) {
             Projection projection = leftChildJoin.getProjection();
-            if (projection.getColumnRefMap().values().stream().anyMatch(s -> !s.isColumnRef())) {
-                return Collections.emptyList();
+
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
+                if (!entry.getValue().isColumnRef()) {
+                    return Collections.emptyList();
+                }
+
+                if (!entry.getKey().equals(entry.getValue())) {
+                    return Collections.emptyList();
+                }
             }
         }
 

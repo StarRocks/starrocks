@@ -105,6 +105,8 @@ set(UTIL_FILES
   buffered_stream.cpp
   int96.cpp
   hdfs_util.cpp
+  gc_helper.cpp
+  gc_helper_smoothstep.cpp
 )
 
 set(UTIL_FILES ${UTIL_FILES}

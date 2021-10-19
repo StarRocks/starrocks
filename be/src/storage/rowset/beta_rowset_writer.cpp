@@ -43,6 +43,7 @@
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/merge_iterator.h"
 #include "storage/vectorized/type_utils.h"
+#include "storage/vectorized/union_iterator.h"
 #include "util/defer_op.h"
 #include "util/pretty_printer.h"
 
@@ -279,7 +280,30 @@ Status BetaRowsetWriter::_final_merge() {
         }
     }
 
-    auto itr = new_aggregate_iterator(new_merge_iterator(seg_iterators), 0);
+    ChunkIteratorPtr itr = nullptr;
+    // schema change vecotrized
+    // schema change with sorting create temporary segment files first
+    // merge them and create final segment files if _context.write_tmp is true
+    if (_context.write_tmp) {
+        if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS) {
+            itr = new_merge_iterator(seg_iterators);
+        } else if (_context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
+            itr = new_aggregate_iterator(new_merge_iterator(seg_iterators), 0);
+        } else {
+            for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
+                auto old_path =
+                        BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
+                auto new_path = BetaRowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
+                auto st = _context.env->rename_file(old_path, new_path);
+                RETURN_IF_ERROR_WITH_WARN(st, "Fail to rename file");
+            }
+            _context.write_tmp = false;
+            return Status::OK();
+        }
+        _context.write_tmp = false;
+    } else {
+        itr = new_aggregate_iterator(new_merge_iterator(seg_iterators), 0);
+    }
 
     auto chunk_shared_ptr = vectorized::ChunkHelper::new_chunk(schema, config::vector_chunk_size);
     auto chunk = chunk_shared_ptr.get();
@@ -390,7 +414,9 @@ RowsetSharedPtr BetaRowsetWriter::build() {
 std::unique_ptr<SegmentWriter> BetaRowsetWriter::_create_segment_writer() {
     std::lock_guard<std::mutex> l(_lock);
     std::string path;
-    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.segments_overlap != NONOVERLAPPING) {
+    if ((_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
+         _context.segments_overlap != NONOVERLAPPING) ||
+        _context.write_tmp) {
         path = BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
         _tmp_segment_files.emplace_back(path);
     } else {

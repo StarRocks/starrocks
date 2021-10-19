@@ -24,6 +24,7 @@ package com.starrocks.analysis;
 import com.google.common.base.Joiner;
 import com.google.common.base.Joiner.MapJoiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.PartitionKeyDesc.PartitionRangeType;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.common.AnalysisException;
@@ -32,6 +33,7 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.sql.optimizer.base.Property;
 import com.starrocks.thrift.TTabletType;
 
 import java.util.Map;
@@ -110,8 +112,21 @@ public class SingleRangePartitionDesc extends PartitionDesc {
 
         partitionKeyDesc.analyze(partColNum);
 
+
         if (otherProperties != null) {
-            this.properties = otherProperties;
+            if (properties == null) {
+                this.properties = otherProperties;
+            } else {
+                // The priority of the partition attribute is higher than that of the table
+                Map<String, String> partitionProperties = Maps.newHashMap();
+                for (String key : otherProperties.keySet()) {
+                    partitionProperties.put(key, otherProperties.get(key));
+                }
+                for (String key : properties.keySet()) {
+                    partitionProperties.put(key, properties.get(key));
+                }
+                this.properties = partitionProperties;
+            }
         }
 
         // analyze data property

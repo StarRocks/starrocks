@@ -117,6 +117,8 @@ import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
+import com.starrocks.thrift.TSetConfigRequest;
+import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TShowVariableRequest;
 import com.starrocks.thrift.TShowVariableResult;
 import com.starrocks.thrift.TSnapshotLoaderReportRequest;
@@ -139,6 +141,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -990,6 +993,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         return masterImpl.abortRemoteTxn(request);
     }
+
+    @Override
+    public TSetConfigResponse setConfig(TSetConfigRequest request) throws TException {
+        try {
+            Preconditions.checkState(request.getKeys().size() == request.getValues().size());
+            Map<String, String> configs = new HashMap<>();
+            for (int i = 0; i < request.getKeys().size(); i++) {
+                configs.put(request.getKeys().get(i), request.getValues().get(i));
+            }
+
+            Catalog.getCurrentCatalog().setFrontendConfig(configs);
+            return new TSetConfigResponse(new TStatus(TStatusCode.OK));
+        } catch (DdlException e) {
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            return new TSetConfigResponse(status);
+        }
+    }
 }
-
-

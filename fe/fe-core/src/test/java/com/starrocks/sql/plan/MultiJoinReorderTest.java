@@ -39,7 +39,8 @@ public class MultiJoinReorderTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("4:CROSS JOIN\n" +
                 "  |  cross join:\n" +
-                "  |  predicates is NULL.  |  use vectorized: true\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE"));
         Assert.assertTrue(planFragment.contains("9:CROSS JOIN"));
@@ -231,7 +232,8 @@ public class MultiJoinReorderTest extends PlanTestBase {
         // Right sub join tree (a)
         Assert.assertTrue(planFragment.contains("  16:CROSS JOIN\n" +
                 "  |  cross join:\n" +
-                "  |  predicates is NULL.  |  use vectorized: true\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----15:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
@@ -275,7 +277,8 @@ public class MultiJoinReorderTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("4:CROSS JOIN\n" +
                 "  |  cross join:\n" +
-                "  |  predicates is NULL.  |  use vectorized: true\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE"));
         Assert.assertTrue(planFragment.contains("9:CROSS JOIN"));
@@ -460,7 +463,8 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  \n" +
                 "  19:CROSS JOIN\n" +
                 "  |  cross join:\n" +
-                "  |  predicates is NULL.  |  use vectorized: true\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----18:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
@@ -488,7 +492,8 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  \n" +
                 "  16:CROSS JOIN\n" +
                 "  |  cross join:\n" +
-                "  |  predicates is NULL.  |  use vectorized: true\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----15:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +

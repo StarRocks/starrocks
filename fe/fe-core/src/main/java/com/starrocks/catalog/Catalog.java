@@ -123,7 +123,6 @@ import com.starrocks.cluster.BaseParam;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
@@ -212,6 +211,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -233,6 +233,8 @@ import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
+import com.starrocks.thrift.TSetConfigRequest;
+import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageFormat;
@@ -247,6 +249,7 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.thrift.TException;
 import org.codehaus.jackson.map.ObjectMapper;
 
 import java.io.BufferedInputStream;
@@ -6593,37 +6596,25 @@ public class Catalog {
                                                 List<String> partitions) {
         int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000;
         FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
-            FrontendService.Client client = null;
-            try {
-                client = ClientPool.frontendPool.borrowObject(thriftAddress, timeout);
-            } catch (Exception e) {
-                LOG.warn("get frontend client from pool failed", e);
-                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
-                status.setError_msgs(Lists.newArrayList(e.getMessage()));
-                return status;
-            }
-
             TRefreshTableRequest request = new TRefreshTableRequest();
             request.setDb_name(dbName);
             request.setTable_name(tableName);
             request.setPartitions(partitions);
-            boolean returnToPool = false;
-            TStatus status;
             try {
-                TRefreshTableResponse response = client.refreshTable(request);
-                returnToPool = true;
-                status = response.getStatus();
+                TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress, timeout,
+                            new FrontendServiceProxy.MethodCallable<TRefreshTableResponse>() {
+                                @Override
+                                public TRefreshTableResponse invoke(FrontendService.Client client) throws TException {
+                                    return client.refreshTable(request);
+                                }
+                            });
+                return response.getStatus();
             } catch (Exception e) {
                 LOG.warn("call fe {} refreshTable rpc method failed", thriftAddress, e);
-                status = new TStatus(TStatusCode.INTERNAL_ERROR);
+                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
                 status.setError_msgs(Lists.newArrayList(e.getMessage()));
+                return status;
             }
-            if (returnToPool) {
-                ClientPool.frontendPool.returnObject(thriftAddress, client);
-            } else {
-                ClientPool.frontendPool.invalidateObject(thriftAddress, client);
-            }
-            return status;
         });
 
         new Thread(task).start();
@@ -7053,6 +7044,50 @@ public class Catalog {
         Map<String, String> configs = stmt.getConfigs();
         Preconditions.checkState(configs.size() == 1);
 
+        setFrontendConfig(configs);
+
+        List<Frontend> allFrontends = Catalog.getCurrentCatalog().getFrontends(null);
+        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000;
+        StringBuilder errMsg = new StringBuilder();
+        for (Frontend fe : allFrontends) {
+            if (fe.getHost().equals(Catalog.getCurrentCatalog().getSelfNode().first)) {
+                continue;
+            }
+
+            TSetConfigRequest request = new TSetConfigRequest();
+            request.setKeys(new ArrayList<>(configs.keySet()));
+            request.setValues(new ArrayList<>(configs.values()));
+            try {
+                TSetConfigResponse response = FrontendServiceProxy
+                        .call(new TNetworkAddress(fe.getHost(),
+                                fe.getRpcPort()),
+                                timeout,
+                                new FrontendServiceProxy.MethodCallable<TSetConfigResponse>() {
+                                    @Override
+                                    public TSetConfigResponse invoke(FrontendService.Client client) throws TException {
+                                        return client.setConfig(request);
+                                    }
+                                }
+                        );
+                TStatus status = response.getStatus();
+                if (status.getStatus_code() != TStatusCode.OK) {
+                    errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
+                    if (status.getError_msgs() != null && status.getError_msgs().size() > 0) {
+                        errMsg.append(String.join(",", status.getError_msgs()));
+                    }
+                    errMsg.append(";");
+                }
+            } catch (Exception e) {
+                LOG.warn("set remote fe[%s] config failed", fe.getHost(), e);
+                errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ").append(e.getMessage());
+            }
+        }
+        if (errMsg.length() > 0) {
+            ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
+        }
+    }
+
+    public void setFrontendConfig(Map<String, String> configs) throws DdlException {
         for (Map.Entry<String, String> entry : configs.entrySet()) {
             ConfigBase.setMutableConfig(entry.getKey(), entry.getValue());
         }

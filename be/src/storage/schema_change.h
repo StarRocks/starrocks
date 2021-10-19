@@ -193,7 +193,7 @@ public:
     virtual ~SchemaChangeHandler() = default;
 
     // schema change v2, it will not set alter task in base tablet
-    OLAPStatus process_alter_tablet_v2(const TAlterTabletReqV2& request);
+    Status process_alter_tablet_v2(const TAlterTabletReqV2& request);
 
 private:
     OLAPStatus _get_versions_to_be_changed(const TabletSharedPtr& base_tablet,

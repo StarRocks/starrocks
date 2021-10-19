@@ -134,7 +134,9 @@ public:
     void set_driver_state(DriverState state) { _state = state; }
     SourceOperator* source_operator() { return down_cast<SourceOperator*>(_operators.front().get()); }
 
-    void cancel(RuntimeState* state);
+    // Notify all the unfinished operators to be finished.
+    // It is usually used when the sink operator is finished, or the fragment is cancelled or expired.
+    void finish_operators(RuntimeState* state);
 
     Operator* sink_operator() { return _operators.back().get(); }
     bool is_finished() {
@@ -168,6 +170,9 @@ public:
     std::string to_debug_string() const;
 
 private:
+    // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
+    bool _check_fragment_is_canceled(RuntimeState* runtime_state);
+
     Operators _operators;
     DriverDependencies _dependencies;
     bool _all_dependencies_ready = false;

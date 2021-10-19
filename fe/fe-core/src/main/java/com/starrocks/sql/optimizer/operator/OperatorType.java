@@ -55,6 +55,7 @@ public enum OperatorType {
     PHYSICAL_FILTER,
     PHYSICAL_TABLE_FUNCTION,
     PHYSICAL_DECODE,
+    PHYSICAL_LIMIT,
 
     /**
      * Scalar operator

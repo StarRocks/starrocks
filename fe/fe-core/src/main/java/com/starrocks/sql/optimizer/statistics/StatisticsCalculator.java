@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -66,6 +67,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
@@ -542,19 +544,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics.Builder builder = Statistics.builder();
         Statistics inputStatistics = context.getChildStatistics(0);
         builder.setOutputRowCount(inputStatistics.getOutputRowCount());
-
-        // if required columns is nothing, such as select count(*) from lineitems, project node use child statistics
-        /*
-        if (requiredCols.cardinality() == 0) {
-            for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : inputStatistics.getColumnStatistics()
-                    .entrySet()) {
-                builder.addColumnStatistic(entry.getKey(), entry.getValue());
-            }
-            context.setStatistics(builder.build());
-            return visitOperator(context.getOp(), context);
-        }
-         */
-        Preconditions.checkState(!columnRefMap.isEmpty());
 
         for (ColumnRefOperator requiredColumnRefOperator : columnRefMap.keySet()) {
             // derive stats from child
@@ -1134,5 +1123,29 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             statistics = PredicateStatisticsCalculator.statisticsCalculate(predicate, statistics);
         }
         return statistics;
+    }
+
+    @Override
+    public Void visitLogicalLimit(LogicalLimitOperator node, ExpressionContext context) {
+        Statistics inputStatistics = context.getChildStatistics(0);
+
+        Statistics.Builder builder = Statistics.builder();
+        builder.addColumnStatistics(inputStatistics.getColumnStatistics());
+        builder.setOutputRowCount(node.getLimit());
+
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalLimit(PhysicalLimitOperator node, ExpressionContext context) {
+        Statistics inputStatistics = context.getChildStatistics(0);
+
+        Statistics.Builder builder = Statistics.builder();
+        builder.addColumnStatistics(inputStatistics.getColumnStatistics());
+        builder.setOutputRowCount(node.getLimit());
+
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
     }
 }

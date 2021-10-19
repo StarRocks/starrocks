@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
@@ -110,24 +111,8 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         // 1 For broadcast join
         PhysicalPropertySet rightBroadcastProperty =
                 new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
-
-        LogicalOperator leftChild = (LogicalOperator) context.getChildOperator(0);
-        LogicalOperator rightChild = (LogicalOperator) context.getChildOperator(1);
-        // If child has limit, we need to gather data to one instance
-        if (leftChild.hasLimit() || rightChild.hasLimit()) {
-            if (leftChild.hasLimit()) {
-                outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
-                        Lists.newArrayList(createLimitGatherProperty(leftChild.getLimit()), rightBroadcastProperty)));
-            } else {
-                outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
-                        Lists.newArrayList(new PhysicalPropertySet(), rightBroadcastProperty)));
-            }
-            // If child has limit, only do broadcast join
-            return visitJoinRequirements(node, context, false);
-        } else {
-            outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
-                    Lists.newArrayList(new PhysicalPropertySet(), rightBroadcastProperty)));
-        }
+        outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY,
+                Lists.newArrayList(new PhysicalPropertySet(), rightBroadcastProperty)));
 
         ColumnRefSet leftChildColumns = context.getChildOutputColumns(0);
         ColumnRefSet rightChildColumns = context.getChildOutputColumns(1);
@@ -1015,6 +1000,17 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
             return visitOperator(node, context);
         }
         outputInputProps.add(new Pair<>(PhysicalPropertySet.EMPTY, Lists.newArrayList(PhysicalPropertySet.EMPTY)));
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalLimit(PhysicalLimitOperator node, ExpressionContext context) {
+        if (getRequiredLocalDesc().isPresent()) {
+            return visitOperator(node, context);
+        }
+
+        outputInputProps.add(new Pair<>(createLimitGatherProperty(node.getLimit()),
+                Lists.newArrayList(createLimitGatherProperty(node.getLimit()))));
         return visitOperator(node, context);
     }
 
