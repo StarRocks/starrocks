@@ -38,11 +38,15 @@ public:
     }
 
     int8_t get_int8() const { return get<int8_t>(); }
+    uint8_t get_uint8() const { return get<uint8_t>(); }
     int16_t get_int16() const { return get<int16_t>(); }
+    uint16_t get_uint16() const { return get<uint16_t>(); }
     uint24_t get_uint24() const { return get<uint24_t>(); }
     int96_t get_int96() const { return get<int96_t>(); }
     int32_t get_int32() const { return get<int32_t>(); }
+    uint32_t get_uint32() const { return get<uint32_t>(); }
     int64_t get_int64() const { return get<int64_t>(); }
+    uint64_t get_uint64() const { return get<uint64_t>(); }
     float get_float() const { return get<float>(); }
     double get_double() const { return get<double>(); }
     TimestampValue get_timestamp() const { return get<TimestampValue>(); }
@@ -55,6 +59,22 @@ public:
     const HyperLogLog* get_hyperloglog() const { return get<HyperLogLog*>(); }
     const BitmapValue* get_bitmap() const { return get<BitmapValue*>(); }
     const PercentileValue* get_percentile() const { return get<PercentileValue*>(); }
+
+    int32_t get_datev1() const {
+        if (std::get_if<uint24_t>(&_value)) {
+            return get_uint24();
+        } else {
+            return get_int32();
+        }
+    }
+
+    const DecimalV2Value from_decimal_v1() const {
+        if (auto pval = std::get_if<decimal12_t>(&_value)) {
+            return DecimalV2Value((*pval).integer, (*pval).fraction);
+        } else {
+            return std::get<DecimalV2Value>(_value);
+        }
+    }
 
     void set_int8(int8_t v) { set<decltype(v)>(v); }
     void set_uint8(uint8_t v) { set<decltype(v)>(v); }
@@ -121,9 +141,9 @@ public:
     }
 
 private:
-    using Variant = std::variant<std::monostate, int8_t, int16_t, uint24_t, int32_t, int64_t, int96_t, int128_t, Slice,
-                                 decimal12_t, DecimalV2Value, float, double, DatumArray, HyperLogLog*, BitmapValue*,
-                                 PercentileValue*>;
+    using Variant = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t,
+                                 int64_t, uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float,
+                                 double, DatumArray, HyperLogLog*, BitmapValue*, PercentileValue*>;
     Variant _value;
 };
 

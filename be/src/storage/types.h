@@ -101,6 +101,10 @@ public:
     virtual OLAPStatus convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                     MemPool* mem_pool) const = 0;
 
+    virtual OLAPStatus convert_from(Datum& dest, const Datum& src, const TypeInfoPtr& src_type) const {
+        return OLAPStatus::OLAP_ERR_FUNC_NOT_IMPLEMENTED;
+    }
+
     virtual OLAPStatus from_string(void* buf, const std::string& scan_key) const = 0;
 
     virtual std::string to_string(const void* src) const = 0;
