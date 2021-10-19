@@ -23,6 +23,7 @@ import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
@@ -60,6 +61,7 @@ import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.common.UnsupportedException;
 import org.apache.commons.lang3.StringUtils;
 
+import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -372,6 +374,13 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitLiteral(LiteralExpr node, Scope scope) {
+            if (node instanceof LargeIntLiteral) {
+                BigInteger value = ((LargeIntLiteral) node).getValue();
+                if (value.compareTo(LargeIntLiteral.LARGE_INT_MIN) < 0 ||
+                        value.compareTo(LargeIntLiteral.LARGE_INT_MAX) > 0) {
+                    throw new SemanticException("Number Overflow. literal: " + value);
+                }
+            }
             return null;
         }
 
