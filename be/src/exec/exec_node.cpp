@@ -358,10 +358,6 @@ Status ExecNode::close(RuntimeState* state) {
         _expr_mem_pool->free_all();
     }
 
-    if (_mem_tracker != nullptr) {
-        _mem_tracker->close();
-    }
-
     return result;
 }
 

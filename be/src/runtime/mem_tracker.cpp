@@ -96,13 +96,9 @@ void MemTracker::Init() {
     DCHECK_EQ(_all_trackers[0], this);
 }
 
-// TODO chenhao , set MemTracker close state
-void MemTracker::close() {}
-
 MemTracker::~MemTracker() {
-    DCHECK_EQ(0, consumption()) << tls_thread_status.query_id_string();
-    if (UNLIKELY(consumption() > 0)) {
-        release(consumption());
+    if (consumption() != 0) {
+        release_without_root(consumption());
     }
     if (_auto_unregister && parent()) {
         unregister_from_parent();

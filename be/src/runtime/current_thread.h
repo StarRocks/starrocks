@@ -5,6 +5,7 @@
 #include <string>
 
 #include "gen_cpp/Types_types.h"
+#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "util/uid_util.h"
 
@@ -18,8 +19,9 @@ public:
     ~CurrentThread() { commit(); }
 
     void commit() {
-        if (_cache_size != 0 && _mem_tracker != nullptr) {
-            _mem_tracker->release(_cache_size);
+        MemTracker* cur_tracker = mem_tracker();
+        if (_cache_size != 0 && cur_tracker != nullptr) {
+            cur_tracker->consume(_cache_size);
             _cache_size = 0;
         }
     }
@@ -34,38 +36,48 @@ public:
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
+        commit();
         auto* prev = _mem_tracker;
         _mem_tracker = mem_tracker;
         return prev;
     }
 
-    starrocks::MemTracker* mem_tracker() { return _mem_tracker; }
+    starrocks::MemTracker* mem_tracker() {
+        if (UNLIKELY(_mem_tracker == nullptr)) {
+            _mem_tracker = ExecEnv::GetInstance()->process_mem_tracker();
+        }
+        return _mem_tracker;
+    }
 
     void mem_consume(int64_t size) {
+        MemTracker* cur_tracker = mem_tracker();
         _cache_size += size;
-        if (_mem_tracker != nullptr && _cache_size >= BATCH_SIZE) {
-            _mem_tracker->consume(_cache_size);
+        if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
+            cur_tracker->consume(_cache_size);
             _cache_size = 0;
         }
     }
 
     void mem_consume_without_cache(int64_t size) {
-        if (_mem_tracker != nullptr && size != 0) {
-            _mem_tracker->consume(size);
+        MemTracker* cur_tracker = mem_tracker();
+        if (cur_tracker != nullptr && size != 0) {
+            cur_tracker->consume(size);
         }
     }
 
     void mem_release(int64_t size) {
+        MemTracker* cur_tracker = mem_tracker();
         _cache_size -= size;
-        if (_mem_tracker != nullptr && _cache_size <= -1 * BATCH_SIZE) {
-            _mem_tracker->release(_cache_size);
+        if (cur_tracker != nullptr && _cache_size <= -BATCH_SIZE) {
+            cur_tracker->release(-_cache_size);
             _cache_size = 0;
         }
     }
 
     void mem_release_without_cache(int64_t size) {
-        if (_mem_tracker != nullptr && size != 0) {
-            _mem_tracker->release(size);
+        MemTracker* cur_tracker = mem_tracker();
+        if (cur_tracker != nullptr && size != 0) {
+            cur_tracker->release(size);
         }
     }
 
