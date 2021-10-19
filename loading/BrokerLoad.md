@@ -404,3 +404,9 @@ LoadFinishTime: 2019-07-27 11:50:16
   A：需要将 ViewFs 相关的配置 core-site.xml 和 hdfs-site.xml 拷贝到 broker/conf 目录中。
 
     如果有自定义的 FileSystem，需要将相关的 jar 拷贝到 broker/lib 目录中。
+
+* Q：访问kerberos认证的集群时，报错：`Can't get Kerberos realm`
+
+  A：首先检查是不是所有的broker所在机器是否都配置了`/etc/krb5.conf`文件。
+
+    如果配置了仍然报错，需要在broker的启动脚本中的`JAVA_OPTS`变量最后，加上`-Djava.security.krb5.conf:/etc/krb5.conf`。
