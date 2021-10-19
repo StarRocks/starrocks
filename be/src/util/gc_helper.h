@@ -13,7 +13,7 @@ namespace starrocks {
 // for each gc, call `bytes_should_gc` to calculate how many bytes should gc for current time
 class GCHelper {
 public:
-    GCHelper(const size_t period, const MonoTime& now);
+    GCHelper(const size_t period, const size_t interval, const MonoTime& now);
 
     size_t bytes_should_gc(const MonoTime& now, const size_t current_bytes);
 
@@ -24,7 +24,7 @@ private:
 
     size_t _period;                     // gc period in second
     size_t _interval;                   // gc interval for period
-    MonoTime _epoch;                    // last time `bytes_should_gc` is called
+    MonoTime _epoch;                    // last timestamp `bytes_should_gc` is called
     size_t _bytes_limit;                // how many bytes should limit to
     size_t _remained_bytes;             // how many bytes there are remained
     size_t _backlog[SMOOTHSTEP_NSTEPS]; // preserve last period gc info, each interval occupies one

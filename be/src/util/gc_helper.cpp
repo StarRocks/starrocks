@@ -2,11 +2,13 @@
 
 #include "util/gc_helper.h"
 
+#include <iostream>
+
 namespace starrocks {
 
-GCHelper::GCHelper(const size_t period, const MonoTime& now)
+GCHelper::GCHelper(const size_t period, const size_t interval, const MonoTime& now)
         : _period(period),
-          _interval(period * 1000 * 1000 * 1000 / SMOOTHSTEP_NSTEPS),
+          _interval(interval * period * 1000 * 1000 * 1000 / SMOOTHSTEP_NSTEPS),
           _epoch(now),
           _bytes_limit(0),
           _remained_bytes(0) {
@@ -15,7 +17,8 @@ GCHelper::GCHelper(const size_t period, const MonoTime& now)
 
 // compute how many bytes we should gc based on `current_bytes`
 size_t GCHelper::bytes_should_gc(const MonoTime& now, const size_t current_bytes) {
-    if (_epoch >= now) // time went backward
+    // step 1: compute how many steps we can move forward since last call
+    if (_epoch >= now) // time went backward, defensive code
         return 0;
 
     MonoDelta delta = now - _epoch;
@@ -27,9 +30,13 @@ size_t GCHelper::bytes_should_gc(const MonoTime& now, const size_t current_bytes
     delta = MonoDelta::FromNanoseconds(_interval * nadvance);
     _epoch += delta;
 
+    // step 2: update backlog accroding to steps `nadvance`
     _backlog_update(nadvance, current_bytes);
 
+    // step 3: compute bytes limit according to backlog
     _bytes_limit = _backlog_bytes_limit();
+
+    // step 4: record how many bytes there will be left
     _remained_bytes = (_bytes_limit > current_bytes) ? _bytes_limit : current_bytes;
 
     return current_bytes > _bytes_limit ? (current_bytes - _bytes_limit) : 0;

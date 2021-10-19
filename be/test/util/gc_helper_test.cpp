@@ -7,12 +7,13 @@
 namespace starrocks {
 
 static const size_t second_in_ns = size_t(1000) * 1000 * 1000;
-static const size_t gc_period = 180;                                     // 180 second
+static const size_t gc_period = 60;
+static const size_t gc_interval = 1;                                     // 1 second
 static const MonoDelta delta = MonoDelta::FromNanoseconds(second_in_ns); // 1 second
 
 TEST(TestGCHelper, TestNormalDecrease) {
     MonoTime t(second_in_ns); // second 1
-    GCHelper gch(gc_period /* second */, t);
+    GCHelper gch(gc_period, gc_interval, t);
 
     size_t total = size_t(1024) * 1024 * 1024; // 1G
     size_t bytes;
@@ -26,7 +27,7 @@ TEST(TestGCHelper, TestNormalDecrease) {
 
 TEST(TestGCHelper, TestAccumulation) {
     MonoTime t(second_in_ns); // second 1
-    GCHelper gch(gc_period /* second */, t);
+    GCHelper gch(gc_period, gc_interval, t);
 
     size_t total = size_t(1024) * 1024 * 1024; // 1G
     size_t bytes;
@@ -39,7 +40,7 @@ TEST(TestGCHelper, TestAccumulation) {
 
 TEST(TestGCHelper, TestInterrupt) {
     MonoTime t(second_in_ns); // second 1
-    GCHelper gch(gc_period /* second */, t);
+    GCHelper gch(gc_period, gc_interval, t);
 
     size_t total = size_t(1024) * 1024 * 1024; // 1G
     size_t bytes;
@@ -52,6 +53,20 @@ TEST(TestGCHelper, TestInterrupt) {
     }
     bytes = gch.bytes_should_gc(t, 0);
     ASSERT_TRUE(bytes == 0);
+}
+
+TEST(TestGCHelper, TestDifferentConfig) {
+    MonoTime t(10 * second_in_ns);                                   // second 10
+    MonoDelta delta = MonoDelta::FromNanoseconds(10 * second_in_ns); // 10 second
+    GCHelper gch(1, 10, t);
+
+    size_t total = size_t(1024) * 1024 * 1024; // 1G
+    size_t bytes;
+    t += delta; // add 1 second
+    bytes = gch.bytes_should_gc(t, total);
+    t += delta; // add 1 second
+    bytes = gch.bytes_should_gc(t, total);
+    ASSERT_TRUE(bytes == total);
 }
 
 } // namespace starrocks

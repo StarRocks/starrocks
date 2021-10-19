@@ -70,33 +70,28 @@ private:
 void* tcmalloc_gc_thread(void* dummy) {
     using namespace starrocks::vectorized;
     const static float kFreeRatio = 0.5;
-    uint64_t tick = 0;
-    GCHelper gch(config::tc_gc_period, MonoTime::Now());
+    GCHelper gch(config::tc_gc_period, config::memory_maintenance_sleep_time_s, MonoTime::Now());
     while (true) {
-        ++tick;
-        sleep(1); // sleep 1s instead of config::memory_maintenance_sleep_time_s to process tcmalloc gc
+        sleep(config::memory_maintenance_sleep_time_s);
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
         MallocExtension::instance()->MarkThreadBusy();
 #endif
-        if ((tick % config::memory_maintenance_sleep_time_s) == 0) {
-            ReleaseColumnPool releaser(kFreeRatio);
-            ForEach<ColumnPoolList>(releaser);
-            LOG_IF(INFO, releaser.freed_bytes() > 0)
-                    << "Released " << releaser.freed_bytes() << " bytes from column pool";
-            auto* local_column_pool_mem_tracker = ExecEnv::GetInstance()->local_column_pool_mem_tracker();
-            if (local_column_pool_mem_tracker != nullptr) {
-                // Frequent update MemTracker where allocate or release column may affect performance,
-                // so here update MemTracker regularly
-                local_column_pool_mem_tracker->consume(g_column_pool_total_local_bytes.get_value() -
-                                                       local_column_pool_mem_tracker->consumption());
-            }
-            auto* central_column_pool_mem_tracker = ExecEnv::GetInstance()->central_column_pool_mem_tracker();
-            if (central_column_pool_mem_tracker != nullptr) {
-                // Frequent update MemTracker where allocate or release column may affect performance,
-                // so here update MemTracker regularly
-                central_column_pool_mem_tracker->consume(g_column_pool_total_central_bytes.get_value() -
-                                                         central_column_pool_mem_tracker->consumption());
-            }
+        ReleaseColumnPool releaser(kFreeRatio);
+        ForEach<ColumnPoolList>(releaser);
+        LOG_IF(INFO, releaser.freed_bytes() > 0) << "Released " << releaser.freed_bytes() << " bytes from column pool";
+        auto* local_column_pool_mem_tracker = ExecEnv::GetInstance()->local_column_pool_mem_tracker();
+        if (local_column_pool_mem_tracker != nullptr) {
+            // Frequent update MemTracker where allocate or release column may affect performance,
+            // so here update MemTracker regularly
+            local_column_pool_mem_tracker->consume(g_column_pool_total_local_bytes.get_value() -
+                                                   local_column_pool_mem_tracker->consumption());
+        }
+        auto* central_column_pool_mem_tracker = ExecEnv::GetInstance()->central_column_pool_mem_tracker();
+        if (central_column_pool_mem_tracker != nullptr) {
+            // Frequent update MemTracker where allocate or release column may affect performance,
+            // so here update MemTracker regularly
+            central_column_pool_mem_tracker->consume(g_column_pool_total_central_bytes.get_value() -
+                                                     central_column_pool_mem_tracker->consumption());
         }
 
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
