@@ -765,6 +765,54 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
             ASSERT_EQ(nullable->is_null(i), null_expect[i]);
         }
     }
+
+    {
+        Columns binary_columns;
+        auto tc1 = DoubleColumn::create();
+        tc1->append(-0.9);
+        tc1->append(0.2);
+        tc1->append(0.3);
+        binary_columns.emplace_back(tc1);
+
+        auto tc2 = DoubleColumn::create();
+        tc2->append(0.8);
+        tc2->append(0.2);
+        tc2->append(0.3);
+        binary_columns.emplace_back(tc2);
+
+        std::vector<bool> null_expect = {true, false, false};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::pow(ctx.get(), binary_columns);
+        auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
+        ASSERT_EQ(nullable->size(), null_expect.size());
+        for (size_t i = 0; i < nullable->size(); i++) {
+            ASSERT_EQ(nullable->is_null(i), null_expect[i]);
+        }
+    }
+
+    {
+        Columns binary_columns;
+        auto tc1 = DoubleColumn::create();
+        tc1->append(std::nan("not a double number"));
+        tc1->append(0.2);
+        tc1->append(0.3);
+        binary_columns.emplace_back(tc1);
+
+        auto tc2 = DoubleColumn::create();
+        tc2->append(0.8);
+        tc2->append(0.2);
+        tc2->append(0.3);
+        binary_columns.emplace_back(tc2);
+
+        std::vector<bool> null_expect = {true, false, false};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::atan2(ctx.get(), binary_columns);
+        auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
+        ASSERT_EQ(nullable->size(), null_expect.size());
+        for (size_t i = 0; i < nullable->size(); i++) {
+            ASSERT_EQ(nullable->is_null(i), null_expect[i]);
+        }
+    }
 }
 
 } // namespace vectorized
