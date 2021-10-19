@@ -46,9 +46,6 @@ public class DiskInfo implements Writable {
     private String rootPath;
     // disk capacity
     private long totalCapacityB;
-    // dataTotalCapacityB: dataUsedCapacityB + diskAvailableCapacityB
-    // no need to persist
-    private long dataTotalCapacityB;
     private long dataUsedCapacityB;
     private long diskAvailableCapacityB;
     private DiskState state;
@@ -64,7 +61,6 @@ public class DiskInfo implements Writable {
     public DiskInfo(String rootPath) {
         this.rootPath = rootPath;
         this.totalCapacityB = DEFAULT_CAPACITY_B;
-        this.dataTotalCapacityB = totalCapacityB;
         this.dataUsedCapacityB = 0;
         this.diskAvailableCapacityB = totalCapacityB;
         this.state = DiskState.ONLINE;
@@ -84,12 +80,13 @@ public class DiskInfo implements Writable {
         this.totalCapacityB = totalCapacityB;
     }
 
+    /**
+     * OtherUsed (totalCapacityB - diskAvailableCapacityB - dataUsedCapacityB) may hold a lot of disk space,
+     * disk usage percent = DataUsedCapacityB / TotalCapacityB in balance,
+     * using dataUsedCapacityB + diskAvailableCapacityB as total capacity is more reasonable.
+     */
     public long getDataTotalCapacityB() {
-        return dataTotalCapacityB;
-    }
-
-    public void setDataTotalCapacityB(long dataTotalCapacityB) {
-        this.dataTotalCapacityB = dataTotalCapacityB;
+        return dataUsedCapacityB + diskAvailableCapacityB;
     }
 
     public long getDataUsedCapacityB() {
@@ -167,7 +164,7 @@ public class DiskInfo implements Writable {
     @Override
     public String toString() {
         return "DiskInfo [rootPath=" + rootPath + "(" + pathHash + "), totalCapacityB=" + totalCapacityB
-                + ", dataTotalCapacityB=" + dataTotalCapacityB + ", dataUsedCapacityB=" + dataUsedCapacityB
+                + ", dataTotalCapacityB=" + getDataTotalCapacityB() + ", dataUsedCapacityB=" + dataUsedCapacityB
                 + ", diskAvailableCapacityB=" + diskAvailableCapacityB + ", state=" + state
                 + ", medium: " + storageMedium + "]";
     }
@@ -187,12 +184,10 @@ public class DiskInfo implements Writable {
         if (Catalog.getCurrentCatalogJournalVersion() >= FeMetaVersion.VERSION_36) {
             this.dataUsedCapacityB = in.readLong();
             this.diskAvailableCapacityB = in.readLong();
-            this.dataTotalCapacityB = dataUsedCapacityB + diskAvailableCapacityB;
         } else {
             long availableCapacityB = in.readLong();
             this.dataUsedCapacityB = this.totalCapacityB - availableCapacityB;
             this.diskAvailableCapacityB = availableCapacityB;
-            this.dataTotalCapacityB = totalCapacityB;
         }
         this.state = DiskState.valueOf(Text.readString(in));
     }

@@ -529,7 +529,6 @@ public class DiskAndTabletLoadReBalancerTest {
         diskInfo.setAvailableCapacityB(availableCapB);
         diskInfo.setDataUsedCapacityB(dataUsedCapB);
         diskInfo.setTotalCapacityB(totalCapB);
-        diskInfo.setDataTotalCapacityB(availableCapB + dataUsedCapB);
         diskInfo.setPathHash(pathHash);
         diskInfo.setState(DiskState.ONLINE);
         diskInfo.setStorageMedium(TStorageMedium.HDD);
@@ -545,7 +544,6 @@ public class DiskAndTabletLoadReBalancerTest {
         diskInfo.setAvailableCapacityB(availableCapB);
         diskInfo.setDataUsedCapacityB(dataUsedCapB);
         diskInfo.setTotalCapacityB(totalCapB);
-        diskInfo.setDataTotalCapacityB(availableCapB + dataUsedCapB);
         diskInfo.setPathHash(pathHash);
         diskInfo.setState(DiskState.ONLINE);
         diskInfo.setStorageMedium(medium);

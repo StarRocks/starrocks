@@ -455,7 +455,6 @@ public class Backend implements Writable {
             newDiskInfos.put(rootPath, diskInfo);
 
             diskInfo.setTotalCapacityB(totalCapacityB);
-            diskInfo.setDataTotalCapacityB(dataUsedCapacityB + diskAvailableCapacityB);
             diskInfo.setDataUsedCapacityB(dataUsedCapacityB);
             diskInfo.setAvailableCapacityB(diskAvailableCapacityB);
             if (tDisk.isSetPath_hash()) {
