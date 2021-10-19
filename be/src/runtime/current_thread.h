@@ -5,8 +5,8 @@
 #include <string>
 
 #include "gen_cpp/Types_types.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
