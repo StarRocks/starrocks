@@ -14,7 +14,6 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf.h"
 #include "util/runtime_profile.h"
@@ -80,10 +79,8 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
              << " _rows_end_offset " << _rows_end_offset;
 }
 
-Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker,
-                         RuntimeProfile* runtime_profile) {
+Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
     _pool = pool;
-    _mem_tracker = mem_tracker;
     _runtime_profile = runtime_profile;
     _limit = _tnode.limit;
     _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
@@ -271,8 +268,6 @@ Status Analytor::close(RuntimeState* state) {
     if (_mem_pool != nullptr) {
         _mem_pool->free_all();
     }
-
-    _mem_tracker->release(_last_memory_usage);
 
     Expr::close(_order_ctxs, state);
     Expr::close(_partition_ctxs, state);

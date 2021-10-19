@@ -33,6 +33,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 #include "service/backend_options.h"
 #include "util/blocking_queue.hpp"

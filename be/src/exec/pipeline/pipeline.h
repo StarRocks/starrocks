@@ -37,9 +37,9 @@ public:
         return down_cast<SourceOperatorFactory*>(_op_factories[0].get());
     }
 
-    Status prepare(RuntimeState* state, MemTracker* mem_tracker) {
+    Status prepare(RuntimeState* state) {
         for (auto& op : _op_factories) {
-            RETURN_IF_ERROR(op->prepare(state, mem_tracker));
+            RETURN_IF_ERROR(op->prepare(state));
         }
         return Status::OK();
     }

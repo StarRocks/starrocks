@@ -17,7 +17,6 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf.h"
 #include "util/runtime_profile.h"
@@ -64,7 +63,7 @@ Status AnalyticNode::prepare(RuntimeState* state) {
     DCHECK(child(0)->row_desc().is_prefix_of(row_desc()));
 
     _analytor = std::make_shared<Analytor>(_tnode, child(0)->row_desc(), _result_tuple_desc);
-    RETURN_IF_ERROR(_analytor->prepare(state, _pool, mem_tracker(), runtime_profile()));
+    RETURN_IF_ERROR(_analytor->prepare(state, _pool, runtime_profile()));
 
     return Status::OK();
 }
@@ -98,15 +97,6 @@ Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     RETURN_IF_ERROR((this->*_get_next)(state, chunk, eos));
     if (*eos) {
         return Status::OK();
-    }
-
-    if (_analytor->input_rows() > 0 &&
-        (_analytor->input_rows() & Analytor::memory_check_batch_size) < config::vector_chunk_size) {
-        int64_t cur_memory_usage = _analytor->compute_memory_usage();
-        int64_t delta_memory_usage = cur_memory_usage - _analytor->last_memory_usage();
-        mem_tracker()->consume(delta_memory_usage);
-        _analytor->set_last_memory_usage(cur_memory_usage);
-        RETURN_IF_ERROR(state->check_query_state("Analytic Node"));
     }
 
     DCHECK(!(*chunk)->has_const_column());

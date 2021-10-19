@@ -90,7 +90,7 @@ public:
 
     Status prepare_all_pipelines() {
         for (auto& pipe : _pipelines) {
-            RETURN_IF_ERROR(pipe->prepare(_runtime_state.get(), _mem_tracker.get()));
+            RETURN_IF_ERROR(pipe->prepare(_runtime_state.get()));
         }
         return Status::OK();
     }

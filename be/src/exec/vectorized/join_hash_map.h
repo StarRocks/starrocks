@@ -9,7 +9,6 @@
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
-#include "runtime/mem_tracker.h"
 #include "util/phmap/phmap.h"
 
 #if defined(__aarch64__)
@@ -98,7 +97,6 @@ struct JoinHashTableItems {
 
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
 
-    MemTracker* mem_tracker = nullptr;
     std::unique_ptr<MemPool> build_pool = nullptr;
     std::unique_ptr<MemPool> probe_pool = nullptr;
     uint64_t last_memory_usage = 0;
@@ -152,7 +150,6 @@ struct HashTableParam {
     bool with_other_conjunct = false;
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
     const RowDescriptor* row_desc = nullptr;
-    MemTracker* mem_tracker = nullptr;
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;
     std::vector<JoinKeyDesc> join_keys;
@@ -236,13 +233,6 @@ public:
         probe_state->probe_match_index.resize(config::vector_chunk_size);
         probe_state->probe_match_filter.resize(config::vector_chunk_size);
         probe_state->buckets.resize(config::vector_chunk_size);
-    }
-
-    static Status check_and_add_memory_usage(RuntimeState* state, JoinHashTableItems* table_items, size_t size) {
-        table_items->mem_tracker->consume(size);
-        table_items->last_memory_usage += size;
-        RETURN_IF_ERROR(state->check_query_state("HashJoinNode"));
-        return Status::OK();
     }
 
     static Slice get_hash_key(const Columns& key_columns, size_t row_idx, uint8_t* buffer) {

@@ -481,7 +481,7 @@ OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, i
     }
 }
 
-Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
         RowDescriptor row_desc;

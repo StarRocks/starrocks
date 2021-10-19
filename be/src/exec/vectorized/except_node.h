@@ -12,7 +12,6 @@
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
@@ -55,7 +54,6 @@ class ExceptNode : public ExecNode {
 
         HashSetFromExprs()
                 : hash_set(std::make_unique<HashSet>()),
-                  _tracker(std::make_unique<MemTracker>()),
                   _mem_pool(std::make_unique<MemPool>()),
                   _buffer(_mem_pool->allocate(_max_one_row_size * config::vector_chunk_size)) {}
 
@@ -162,7 +160,6 @@ class ExceptNode : public ExecNode {
 
         Buffer<uint32_t> _slice_sizes;
         size_t _max_one_row_size = 8;
-        std::unique_ptr<MemTracker> _tracker;
         std::unique_ptr<MemPool> _mem_pool;
         uint8_t* _buffer;
         ResultVector _results;

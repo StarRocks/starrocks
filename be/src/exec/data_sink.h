@@ -35,10 +35,8 @@
 namespace starrocks {
 
 class ObjectPool;
-class RowBatch;
 class RuntimeProfile;
 class RuntimeState;
-class TPlanExecParams;
 class TPlanFragmentExecParams;
 class RowDescriptor;
 
