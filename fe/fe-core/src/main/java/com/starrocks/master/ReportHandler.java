@@ -21,6 +21,7 @@
 
 package com.starrocks.master;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.LinkedListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
@@ -28,6 +29,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -1021,9 +1023,22 @@ public class ReportHandler extends Daemon {
             }
 
             // colocate table will delete Replica in meta when balance
-            // but we need to rely on MetaNotFoundException to decide whether delete the tablet in backend
-            if (Catalog.getCurrentColocateIndex().isColocateTable(olapTable.getId())) {
-                return;
+            // but we need to rely on MetaNotFoundException to decide whether delete the tablet in backend.
+            // delete tablet from backend if colocate tablet is healthy.
+            ColocateTableIndex colocateTableIndex = Catalog.getCurrentColocateIndex();
+            if (colocateTableIndex.isColocateTable(olapTable.getId())) {
+                ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
+                Preconditions.checkState(groupId != null);
+                int tabletOrderIdx = materializedIndex.getTabletOrderIdx(tabletId);
+                Preconditions.checkState(tabletOrderIdx != -1);
+                Set<Long> backendsSet = colocateTableIndex.getTabletBackendsByGroup(groupId, tabletOrderIdx);
+                TabletStatus status =
+                        tablet.getColocateHealthStatus(visibleVersion, visibleVersionHash, replicationNum, backendsSet);
+                if (status == TabletStatus.HEALTHY) {
+                    throw new MetaNotFoundException("colocate tablet [" + tableId + "] is healthy");
+                } else {
+                    return;
+                }
             }
 
             List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(db.getClusterName(), true);
