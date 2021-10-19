@@ -625,7 +625,7 @@ public final class SparkDpp implements java.io.Serializable {
         if (fileGroup.columnsFromPath != null) {
             srcColumnsWithColumnsFromPath.addAll(fileGroup.columnsFromPath);
         }
-        return createScrSchema(srcColumnsWithColumnsFromPath);
+        return createSrcSchema(srcColumnsWithColumnsFromPath);
     }
 
     /**
@@ -770,7 +770,7 @@ public final class SparkDpp implements java.io.Serializable {
         return dataframe;
     }
 
-    private StructType createScrSchema(List<String> srcColumns) {
+    private StructType createSrcSchema(List<String> srcColumns) {
         List<StructField> fields = new ArrayList<>();
         for (String srcColumn : srcColumns) {
             // user StringType to load source data
