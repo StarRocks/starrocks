@@ -37,7 +37,8 @@ public class JoinForceLimitRule extends TransformationRule {
         long leftLimit = left.hasLimit() ? left.getLimit() : Long.MAX_VALUE;
         long rightLimit = right.hasLimit() ? right.getLimit() : Long.MAX_VALUE;
 
-        return nodeLimit > leftLimit || nodeLimit > rightLimit;
+        return (nodeLimit > leftLimit && left.getOpType() != OperatorType.LOGICAL_VALUES) ||
+                (nodeLimit > rightLimit && right.getOpType() != OperatorType.LOGICAL_VALUES);
     }
 
     @Override
@@ -53,11 +54,11 @@ public class JoinForceLimitRule extends TransformationRule {
         OptExpression newLeft = input.getInputs().get(0);
         OptExpression newRight = input.getInputs().get(1);
 
-        if (nodeLimit > leftLimit) {
+        if (nodeLimit > leftLimit && left.getOpType() != OperatorType.LOGICAL_VALUES) {
             newLeft = OptExpression.create(new LogicalLimitOperator(left.getLimit()), newLeft);
         }
 
-        if (nodeLimit > rightLimit) {
+        if (nodeLimit > rightLimit && right.getOpType() != OperatorType.LOGICAL_VALUES) {
             newRight = OptExpression.create(new LogicalLimitOperator(right.getLimit()), newRight);
         }
 

@@ -389,7 +389,8 @@ public class PlanFragmentTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  3:CROSS JOIN\n" +
                 "  |  cross join:\n" +
-                "  |  predicates is NULL.  |  use vectorized: true\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
