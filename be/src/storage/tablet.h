@@ -134,10 +134,6 @@ public:
 
     using IteratorList = std::vector<ChunkIteratorPtr>;
 
-    // Get the segment iterators for the specified version |spec_version|.
-    StatusOr<IteratorList> capture_segment_iterators(const Version& spec_version, const vectorized::Schema& schema,
-                                                     const vectorized::RowsetReadOptions& options) const;
-
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     void add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version);
     bool version_for_delete_predicate(const Version& version);
@@ -195,10 +191,6 @@ public:
     // This function to find max continuous version from the beginning.
     // For example: If there are 1, 2, 3, 5, 6, 7 versions belongs tablet, then 3 is target.
     Version max_continuous_version_from_beginning() const;
-
-    // operation for query
-    Status split_range(const OlapTuple& start_key_strings, const OlapTuple& end_key_strings,
-                       uint64_t request_block_row_count, vector<OlapTuple>* ranges);
 
     int64_t last_cumu_compaction_failure_time() { return _last_cumu_compaction_failure_millis; }
     void set_last_cumu_compaction_failure_time(int64_t millis) { _last_cumu_compaction_failure_millis = millis; }

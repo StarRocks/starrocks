@@ -31,6 +31,8 @@
 #include <memory>
 #include <utility>
 
+#include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/reader.h"
@@ -41,6 +43,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
+#include "util/defer_op.h"
 #include "util/path_util.h"
 #include "util/time.h"
 
@@ -193,6 +196,9 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
 }
 
 Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     CHECK(!_updates) << "updatable tablet should not call add_rowset";
     DCHECK(rowset != nullptr);
     std::unique_lock wrlock(_meta_lock);
@@ -231,6 +237,9 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
 }
 
 void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const std::vector<RowsetSharedPtr>& to_delete) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     CHECK(!_updates) << "updatable tablet should not call modify_rowsets";
     // the compaction process allow to compact the single version, eg: version[4-4].
     // this kind of "single version compaction" has same "input version" and "output version".
@@ -320,6 +329,9 @@ RowsetSharedPtr Tablet::_rowset_with_largest_size() {
 
 // add inc rowset should not persist tablet meta, because it will be persisted when publish txn.
 Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->tablet_meta_mem_tracker());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     CHECK(!_updates) << "updatable tablet should not call add_inc_rowset";
     DCHECK(rowset != nullptr);
     std::unique_lock wrlock(_meta_lock);
@@ -879,68 +891,6 @@ void Tablet::calculate_cumulative_point() {
     }
 }
 
-Status Tablet::split_range(const OlapTuple& start_key_strings, const OlapTuple& end_key_strings,
-                           uint64_t request_block_row_count, std::vector<OlapTuple>* ranges) {
-    DCHECK(ranges != nullptr);
-
-    RowCursor start_key;
-    // If startkey is valid, use startkey, otherwise use minkey
-    if (start_key_strings.size() > 0) {
-        if (start_key.init_scan_key(_tablet_meta->tablet_schema(), start_key_strings.values()) != OLAP_SUCCESS) {
-            LOG(WARNING) << "fail to initial key strings with RowCursor type.";
-            return Status::InvalidArgument("invalid start key strings");
-        }
-
-        if (start_key.from_tuple(start_key_strings) != OLAP_SUCCESS) {
-            LOG(WARNING) << "init end key failed";
-            return Status::InvalidArgument("invalid start key strings");
-        }
-    } else {
-        if (start_key.init(_tablet_meta->tablet_schema(), num_short_key_columns()) != OLAP_SUCCESS) {
-            LOG(WARNING) << "fail to initial key strings with RowCursor type.";
-            return Status::InvalidArgument("invalid start key strings");
-        }
-
-        start_key.allocate_memory_for_string_type(_tablet_meta->tablet_schema());
-        start_key.build_min_key();
-    }
-
-    RowCursor end_key;
-    // same with startkey
-    if (end_key_strings.size() > 0) {
-        if (OLAP_SUCCESS != end_key.init_scan_key(_tablet_meta->tablet_schema(), end_key_strings.values())) {
-            LOG(WARNING) << "fail to parse strings to key with RowCursor type.";
-            return Status::InvalidArgument("invalid end key strings");
-        }
-
-        if (end_key.from_tuple(end_key_strings) != OLAP_SUCCESS) {
-            LOG(WARNING) << "init end key failed";
-            return Status::InvalidArgument("invalid end key strings");
-        }
-    } else {
-        if (end_key.init(_tablet_meta->tablet_schema(), num_short_key_columns()) != OLAP_SUCCESS) {
-            LOG(WARNING) << "fail to initial key strings with RowCursor type.";
-            return Status::InvalidArgument("invalid end key strings");
-        }
-
-        end_key.allocate_memory_for_string_type(_tablet_meta->tablet_schema());
-        end_key.build_max_key();
-    }
-
-    std::shared_lock rdlock(_meta_lock);
-    RowsetSharedPtr rowset = _rowset_with_largest_size();
-
-    if (rowset == nullptr) {
-        VLOG(3) << "there is no base file now, may be tablet is empty.";
-        // it may be right if the tablet is empty, so we return success.
-        ranges->emplace_back(start_key.to_tuple());
-        ranges->emplace_back(end_key.to_tuple());
-        return Status::OK();
-    }
-    OLAPStatus ost = rowset->split_range(start_key, end_key, request_block_row_count, ranges);
-    return ost == OLAP_SUCCESS ? Status::OK() : Status::InternalError("fail to split rowset range");
-}
-
 // NOTE: only used when create_table, so it is sure that there is no concurrent reader and writer.
 void Tablet::delete_all_files() {
     // Release resources like memory and disk space.
@@ -1274,31 +1224,6 @@ void Tablet::generate_tablet_meta_copy_unlocked(const TabletMetaSharedPtr& new_t
 Status Tablet::rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
     CHECK(_updates) << "updates should exists";
     return _updates->rowset_commit(version, rowset);
-}
-
-StatusOr<Tablet::IteratorList> Tablet::capture_segment_iterators(const Version& spec_version,
-                                                                 const vectorized::Schema& schema,
-                                                                 const vectorized::RowsetReadOptions& options) const {
-    if (_updates) {
-        if (spec_version.first != 0) {
-            LOG(WARNING) << "cannot capture with version.first:" << spec_version.first;
-            return Status::InvalidArgument("cannot capture with version.first != 0");
-        }
-        return _updates->read(spec_version.second, schema, options);
-    }
-    std::shared_lock rdlock(_meta_lock);
-    std::vector<Version> version_path;
-    std::vector<RowsetSharedPtr> rowsets;
-    RETURN_IF_ERROR(capture_consistent_versions(spec_version, &version_path));
-    RETURN_IF_ERROR(_capture_consistent_rowsets_unlocked(version_path, &rowsets));
-    // Release lock before acquiring segment iterators.
-    rdlock.unlock();
-
-    IteratorList iterators;
-    for (auto& rowset : rowsets) {
-        RETURN_IF_ERROR(rowset->get_segment_iterators(schema, options, &iterators));
-    }
-    return std::move(iterators);
 }
 
 void Tablet::on_shutdown() {

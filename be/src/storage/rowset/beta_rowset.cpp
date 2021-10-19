@@ -93,13 +93,6 @@ OLAPStatus BetaRowset::create_reader(RowsetReaderSharedPtr* result) {
     return OLAP_SUCCESS;
 }
 
-OLAPStatus BetaRowset::split_range(const RowCursor& start_key, const RowCursor& end_key,
-                                   uint64_t request_block_row_count, std::vector<OlapTuple>* ranges) {
-    ranges->emplace_back(start_key.to_tuple());
-    ranges->emplace_back(end_key.to_tuple());
-    return OLAP_SUCCESS;
-}
-
 OLAPStatus BetaRowset::remove() {
     // TODO should we close and remove all segment reader first?
     VLOG(1) << "Removing files in rowsset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
@@ -222,19 +215,6 @@ private:
     RowsetReleaseGuard _guard;
     vectorized::ChunkIteratorPtr _iter;
 };
-
-StatusOr<vectorized::ChunkIteratorPtr> BetaRowset::new_iterator(const vectorized::Schema& schema,
-                                                                const vectorized::RowsetReadOptions& options) {
-    std::vector<vectorized::ChunkIteratorPtr> seg_iters;
-    RETURN_IF_ERROR(get_segment_iterators(schema, options, &seg_iters));
-    if (seg_iters.empty()) {
-        return vectorized::new_empty_iterator(schema, options.chunk_size);
-    } else if (options.sorted) {
-        return vectorized::new_merge_iterator(seg_iters);
-    } else {
-        return vectorized::new_union_iterator(std::move(seg_iters));
-    }
-}
 
 Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const vectorized::RowsetReadOptions& options,
                                          std::vector<vectorized::ChunkIteratorPtr>* segment_iterators) {

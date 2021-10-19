@@ -48,9 +48,6 @@ public:
 
     OLAPStatus create_reader(RowsetReaderSharedPtr* result) override;
 
-    StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
-                                                        const vectorized::RowsetReadOptions& options) override;
-
     Status get_segment_iterators(const vectorized::Schema& schema, const vectorized::RowsetReadOptions& options,
                                  std::vector<vectorized::ChunkIteratorPtr>* seg_iterators) override;
 
@@ -75,9 +72,6 @@ public:
 
     static std::string segment_srcrssid_file_path(const std::string& segment_dir, const RowsetId& rowset_id,
                                                   int segment_id);
-
-    OLAPStatus split_range(const RowCursor& start_key, const RowCursor& end_key, uint64_t request_block_row_count,
-                           std::vector<OlapTuple>* ranges) override;
 
     OLAPStatus remove() override;
 

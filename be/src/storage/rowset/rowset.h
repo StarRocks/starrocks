@@ -129,25 +129,11 @@ public:
     // returns OLAP_ERR_ROWSET_CREATE_READER when failed to create reader
     virtual OLAPStatus create_reader(std::shared_ptr<RowsetReader>* result) = 0;
 
-    virtual StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
-                                                                const vectorized::RowsetReadOptions& options) = 0;
-
     // For each segment in this rowset, create a `ChunkIterator` for it and *APPEND* it into
     // |segment_iterators|. If segments in this rowset has no overlapping, a single `UnionIterator`,
     // instead of multiple `ChunkIterator`s, will be created and appended into |segment_iterators|.
     virtual Status get_segment_iterators(const vectorized::Schema& schema, const vectorized::RowsetReadOptions& options,
                                          std::vector<vectorized::ChunkIteratorPtr>* seg_iterators) = 0;
-
-    // Split range denoted by `start_key` and `end_key` into sub-ranges, each contains roughly
-    // `request_block_row_count` rows. Sub-range is represented by pair of OlapTuples and added to `ranges`.
-    //
-    // e.g., if the function generates 2 sub-ranges, the result `ranges` should contain 4 tuple: t1, t2, t2, t3.
-    // Note that the end tuple of sub-range i is the same as the start tuple of sub-range i+1.
-    //
-    // The first/last tuple must be start_key/end_key.to_tuple(). If we can't divide the input range,
-    // the result `ranges` should be [start_key.to_tuple(), end_key.to_tuple()]
-    virtual OLAPStatus split_range(const RowCursor& start_key, const RowCursor& end_key,
-                                   uint64_t request_block_row_count, std::vector<OlapTuple>* ranges) = 0;
 
     const RowsetMetaSharedPtr& rowset_meta() const { return _rowset_meta; }
 
