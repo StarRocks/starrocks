@@ -9,19 +9,22 @@
 namespace starrocks {
 class ExprContext;
 namespace pipeline {
+class CrossJoinContext;
 class CrossJoinLeftOperator final : public OperatorWithDependency {
 public:
-    CrossJoinLeftOperator(int32_t id, int32_t plan_node_id, const RowDescriptor& row_descriptor,
-                          const RowDescriptor& left_row_desc, const RowDescriptor& right_row_desc,
-                          const std::vector<ExprContext*>& conjunct_ctxs, vectorized::ChunkPtr* build_chunk_ptr,
-                          std::atomic<bool>* right_table_complete_ptr)
+    CrossJoinLeftOperator(int32_t id, int32_t plan_node_id, const std::vector<ExprContext*>& conjunct_ctxs,
+                          const vectorized::Buffer<SlotDescriptor*>& col_types,
+                          const vectorized::Buffer<TupleId>& output_build_tuple_ids,
+                          const vectorized::Buffer<TupleId>& output_probe_tuple_ids, const size_t& probe_column_count,
+                          const size_t& build_column_count, const std::shared_ptr<CrossJoinContext>& cross_join_context)
             : OperatorWithDependency(id, "cross_join_left", plan_node_id),
-              _row_descriptor(row_descriptor),
-              _left_row_desc(left_row_desc),
-              _right_row_desc(right_row_desc),
+              _col_types(col_types),
+              _output_build_tuple_ids(output_build_tuple_ids),
+              _output_probe_tuple_ids(output_probe_tuple_ids),
+              _probe_column_count(probe_column_count),
+              _build_column_count(build_column_count),
               _conjunct_ctxs(conjunct_ctxs),
-              _build_chunk_ptr(build_chunk_ptr),
-              _right_table_complete_ptr(right_table_complete_ptr) {}
+              _cross_join_context(cross_join_context) {}
 
     ~CrossJoinLeftOperator() override = default;
 
@@ -40,7 +43,6 @@ public:
     void _copy_build_rows_with_index_base_probe(vectorized::ColumnPtr& dest_col, vectorized::ColumnPtr& src_col,
                                                 size_t start_row, size_t row_count);
 
-    void _init_row_desc();
     void _init_chunk(vectorized::ChunkPtr* chunk);
     Status prepare(RuntimeState* state) override;
 
@@ -54,17 +56,13 @@ public:
 
     void finish(RuntimeState* state) override { _is_finished = true; }
 
-    bool is_ready() override;
+    bool is_ready() const override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
-    const RowDescriptor& _row_descriptor;
-    const RowDescriptor& _left_row_desc;
-    const RowDescriptor& _right_row_desc;
-
     // previsou saved chunk.
     vectorized::ChunkPtr _pre_output_chunk = nullptr;
 
@@ -84,6 +82,55 @@ private:
     // And is used when _probe_chunk_index == _probe_chunk->num_rows().
     size_t _probe_rows_index = 0;
 
+    const vectorized::Buffer<SlotDescriptor*>& _col_types;
+    const vectorized::Buffer<TupleId>& _output_build_tuple_ids;
+    const vectorized::Buffer<TupleId>& _output_probe_tuple_ids;
+    const size_t& _probe_column_count;
+    const size_t& _build_column_count;
+
+    const std::vector<ExprContext*>& _conjunct_ctxs;
+
+    size_t mutable _number_of_build_rows = 0;
+    size_t mutable _build_chunks_size = 0;
+
+    bool _is_finished = false;
+    vectorized::ChunkPtr _cur_chunk = nullptr;
+
+    std::vector<uint32_t> _buf_selective;
+
+    const std::shared_ptr<CrossJoinContext>& _cross_join_context;
+};
+
+class CrossJoinLeftOperatorFactory final : public OperatorWithDependencyFactory {
+public:
+    CrossJoinLeftOperatorFactory(int32_t id, int32_t plan_node_id, const RowDescriptor& row_descriptor,
+                                 const RowDescriptor& left_row_desc, const RowDescriptor& right_row_desc,
+                                 const std::vector<ExprContext*>& conjunct_ctxs,
+                                 std::shared_ptr<CrossJoinContext> cross_join_context)
+            : OperatorWithDependencyFactory(id, "cross_join_left", plan_node_id),
+              _row_descriptor(row_descriptor),
+              _left_row_desc(left_row_desc),
+              _right_row_desc(right_row_desc),
+              _conjunct_ctxs(conjunct_ctxs),
+              _cross_join_context(cross_join_context) {}
+
+    ~CrossJoinLeftOperatorFactory() override = default;
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
+        return std::make_shared<CrossJoinLeftOperator>(_id, _plan_node_id, _conjunct_ctxs, _col_types,
+                                                       _output_build_tuple_ids, _output_probe_tuple_ids,
+                                                       _probe_column_count, _build_column_count, _cross_join_context);
+    }
+
+    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
+    void close(RuntimeState* state) override;
+
+private:
+    void _init_row_desc();
+    const RowDescriptor& _row_descriptor;
+    const RowDescriptor& _left_row_desc;
+    const RowDescriptor& _right_row_desc;
+
     vectorized::Buffer<SlotDescriptor*> _col_types;
     vectorized::Buffer<TupleId> _output_build_tuple_ids;
     vectorized::Buffer<TupleId> _output_probe_tuple_ids;
@@ -92,56 +139,7 @@ private:
 
     const std::vector<ExprContext*>& _conjunct_ctxs;
 
-    // Reference right table's data
-    vectorized::ChunkPtr* _build_chunk_ptr = nullptr;
-    // Used to mark that the right table has been constructed
-    std::atomic<bool>* _right_table_complete_ptr = nullptr;
-
-    size_t _number_of_build_rows = 0;
-    size_t _build_chunks_size = 0;
-
-    bool _is_finished = false;
-    vectorized::ChunkPtr _cur_chunk = nullptr;
-
-    std::vector<uint32_t> _buf_selective;
-};
-
-class CrossJoinLeftOperatorFactory final : public OperatorWithDependencyFactory {
-public:
-    CrossJoinLeftOperatorFactory(int32_t id, int32_t plan_node_id, const RowDescriptor& row_descriptor,
-                                 const RowDescriptor& left_row_desc, const RowDescriptor& right_row_desc,
-                                 const std::vector<ExprContext*>& conjunct_ctxs, vectorized::ChunkPtr* build_chunk_ptr,
-                                 std::atomic<bool>* right_table_complete_ptr)
-            : OperatorWithDependencyFactory(id, "cross_join_left", plan_node_id),
-              _row_descriptor(row_descriptor),
-              _left_row_desc(left_row_desc),
-              _right_row_desc(right_row_desc),
-              _conjunct_ctxs(conjunct_ctxs),
-              _build_chunk_ptr(build_chunk_ptr),
-              _right_table_complete_ptr(right_table_complete_ptr) {}
-
-    ~CrossJoinLeftOperatorFactory() override = default;
-
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<CrossJoinLeftOperator>(_id, _plan_node_id, _row_descriptor, _left_row_desc,
-                                                       _right_row_desc, _conjunct_ctxs, _build_chunk_ptr,
-                                                       _right_table_complete_ptr);
-    }
-
-    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
-    void close(RuntimeState* state) override;
-
-private:
-    const RowDescriptor& _row_descriptor;
-    const RowDescriptor& _left_row_desc;
-    const RowDescriptor& _right_row_desc;
-
-    const std::vector<ExprContext*>& _conjunct_ctxs;
-
-    // Reference right table's data
-    vectorized::ChunkPtr* _build_chunk_ptr = nullptr;
-    // Used to mark that the right table has been constructed
-    std::atomic<bool>* _right_table_complete_ptr = nullptr;
+    std::shared_ptr<CrossJoinContext> _cross_join_context;
 };
 
 } // namespace pipeline

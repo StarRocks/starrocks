@@ -5,7 +5,8 @@
 #include "column/chunk.h"
 #include "exec/exec_node.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
+namespace vectorized {
 class CrossJoinNode : public ExecNode {
 public:
     CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -48,11 +49,6 @@ private:
     void _init_row_desc();
     void _init_chunk(ChunkPtr* chunk);
 
-    // Used in operators to reference right table's datas.
-    ChunkPtr _build_chunk_for_pipeline;
-    // used in operators to mark that the right table has been constructed.
-    std::atomic<bool> _right_table_complete = false;
-
     // previsou saved chunk.
     ChunkPtr _pre_output_chunk = nullptr;
     // used as right table's chunk.
@@ -93,4 +89,5 @@ private:
 
     std::vector<uint32_t> _buf_selective;
 };
-} // namespace starrocks::vectorized
+} // namespace vectorized
+} // namespace starrocks

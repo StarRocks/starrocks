@@ -6,36 +6,15 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exec/exec_node.h"
+#include "exec/pipeline/crossjoin/cross_join_context.h"
 #include "exprs/expr.h"
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
-void CrossJoinLeftOperator::_init_row_desc() {
-    for (auto& tuple_desc : _left_row_desc.tuple_descriptors()) {
-        for (auto& slot : tuple_desc->slots()) {
-            _col_types.emplace_back(slot);
-            _probe_column_count++;
-        }
-        if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
-            _output_probe_tuple_ids.emplace_back(tuple_desc->id());
-        }
-    }
-    for (auto& tuple_desc : _right_row_desc.tuple_descriptors()) {
-        for (auto& slot : tuple_desc->slots()) {
-            _col_types.emplace_back(slot);
-            _build_column_count++;
-        }
-        if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
-            _output_build_tuple_ids.emplace_back(tuple_desc->id());
-        }
-    }
-}
-
 Status CrossJoinLeftOperator::prepare(RuntimeState* state) {
     Operator::prepare(state);
-    _init_row_desc();
     return Status::OK();
 }
 
@@ -47,7 +26,7 @@ Status CrossJoinLeftOperator::close(RuntimeState* state) {
 void CrossJoinLeftOperator::_init_chunk(vectorized::ChunkPtr* chunk) {
     vectorized::ChunkPtr new_chunk = std::make_shared<vectorized::Chunk>();
 
-    // init columns for the new chunk from _probe_chunk and (*_build_chunk_ptr)
+    // init columns for the new chunk from _probe_chunk and _cross_join_context->_build_chunk
     for (size_t i = 0; i < _probe_column_count; ++i) {
         SlotDescriptor* slot = _col_types[i];
         vectorized::ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
@@ -56,7 +35,7 @@ void CrossJoinLeftOperator::_init_chunk(vectorized::ChunkPtr* chunk) {
     }
     for (size_t i = 0; i < _build_column_count; ++i) {
         SlotDescriptor* slot = _col_types[_probe_column_count + i];
-        vectorized::ColumnPtr& src_col = (*_build_chunk_ptr)->get_column_by_slot_id(slot->id());
+        vectorized::ColumnPtr& src_col = _cross_join_context->_build_chunk->get_column_by_slot_id(slot->id());
         vectorized::ColumnPtr new_col = vectorized::ColumnHelper::create_column(slot->type(), src_col->is_nullable());
         new_chunk->append_column(std::move(new_col), slot->id());
     }
@@ -68,7 +47,7 @@ void CrossJoinLeftOperator::_init_chunk(vectorized::ChunkPtr* chunk) {
         }
     }
     for (int tuple_id : _output_build_tuple_ids) {
-        if ((*_build_chunk_ptr)->is_tuple_exist(tuple_id)) {
+        if (_cross_join_context->_build_chunk->is_tuple_exist(tuple_id)) {
             vectorized::ColumnPtr dest_col = vectorized::BooleanColumn::create();
             new_chunk->append_tuple_column(dest_col, tuple_id);
         }
@@ -90,7 +69,7 @@ void CrossJoinLeftOperator::_copy_joined_rows_with_index_base_probe(vectorized::
     for (size_t i = 0; i < _build_column_count; i++) {
         SlotDescriptor* slot = _col_types[i + _probe_column_count];
         vectorized::ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
-        vectorized::ColumnPtr& src_col = (*_build_chunk_ptr)->get_column_by_slot_id(slot->id());
+        vectorized::ColumnPtr& src_col = _cross_join_context->_build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_probe(dest_col, src_col, build_index, row_count);
     }
 
@@ -107,8 +86,8 @@ void CrossJoinLeftOperator::_copy_joined_rows_with_index_base_probe(vectorized::
     }
 
     for (int tuple_id : _output_build_tuple_ids) {
-        if ((*_build_chunk_ptr)->is_tuple_exist(tuple_id)) {
-            vectorized::ColumnPtr& src_col = (*_build_chunk_ptr)->get_tuple_column_by_id(tuple_id);
+        if (_cross_join_context->_build_chunk->is_tuple_exist(tuple_id)) {
+            vectorized::ColumnPtr& src_col = _cross_join_context->_build_chunk->get_tuple_column_by_id(tuple_id);
             auto& src_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(src_col)->get_data();
             vectorized::ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
             auto& dest_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(dest_col)->get_data();
@@ -132,7 +111,7 @@ void CrossJoinLeftOperator::_copy_joined_rows_with_index_base_build(vectorized::
     for (size_t i = 0; i < _build_column_count; i++) {
         SlotDescriptor* slot = _col_types[i + _probe_column_count];
         vectorized::ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
-        vectorized::ColumnPtr& src_col = (*_build_chunk_ptr)->get_column_by_slot_id(slot->id());
+        vectorized::ColumnPtr& src_col = _cross_join_context->_build_chunk->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_build(dest_col, src_col, build_index, row_count);
     }
 
@@ -149,8 +128,8 @@ void CrossJoinLeftOperator::_copy_joined_rows_with_index_base_build(vectorized::
     }
 
     for (int tuple_id : _output_build_tuple_ids) {
-        if ((*_build_chunk_ptr)->is_tuple_exist(tuple_id)) {
-            vectorized::ColumnPtr& src_col = (*_build_chunk_ptr)->get_tuple_column_by_id(tuple_id);
+        if (_cross_join_context->_build_chunk->is_tuple_exist(tuple_id)) {
+            vectorized::ColumnPtr& src_col = _cross_join_context->_build_chunk->get_tuple_column_by_id(tuple_id);
             auto& src_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(src_col)->get_data();
             vectorized::ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
             auto& dest_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(dest_col)->get_data();
@@ -369,18 +348,18 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
 // (_probe_chunk == nullptr || _probe_chunk->num_rows() == 0) means that
 // need take next chunk from left table.
 bool CrossJoinLeftOperator::need_input() const {
-    DCHECK((*_right_table_complete_ptr) && (*_build_chunk_ptr));
+    DCHECK(_cross_join_context->_right_table_complete && _cross_join_context->_build_chunk);
     return _number_of_build_rows > 0 && (_probe_chunk == nullptr || _probe_chunk->num_rows() == 0);
 }
 
-bool CrossJoinLeftOperator::is_ready() {
+bool CrossJoinLeftOperator::is_ready() const {
     // woke from blocking througth cross join right sink operator by shared _right_table_complete_ptr.
-    bool is_complete = *_right_table_complete_ptr;
+    bool is_complete = _cross_join_context->_right_table_complete;
     if (is_complete) {
-        DCHECK(*_build_chunk_ptr);
-        if ((*_build_chunk_ptr)->num_rows() > 0) {
+        DCHECK(_cross_join_context->_build_chunk);
+        if (_cross_join_context->_build_chunk->num_rows() > 0) {
             // Set fields for left table.
-            _number_of_build_rows = (*_build_chunk_ptr)->num_rows();
+            _number_of_build_rows = _cross_join_context->_build_chunk->num_rows();
             _build_chunks_size = (_number_of_build_rows / config::vector_chunk_size) * config::vector_chunk_size;
         }
     }
@@ -395,7 +374,29 @@ Status CrossJoinLeftOperator::push_chunk(RuntimeState* state, const vectorized::
     return Status::OK();
 }
 
+void CrossJoinLeftOperatorFactory::_init_row_desc() {
+    for (auto& tuple_desc : _left_row_desc.tuple_descriptors()) {
+        for (auto& slot : tuple_desc->slots()) {
+            _col_types.emplace_back(slot);
+            _probe_column_count++;
+        }
+        if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
+            _output_probe_tuple_ids.emplace_back(tuple_desc->id());
+        }
+    }
+    for (auto& tuple_desc : _right_row_desc.tuple_descriptors()) {
+        for (auto& slot : tuple_desc->slots()) {
+            _col_types.emplace_back(slot);
+            _build_column_count++;
+        }
+        if (_row_descriptor.get_tuple_idx(tuple_desc->id()) != RowDescriptor::INVALID_IDX) {
+            _output_build_tuple_ids.emplace_back(tuple_desc->id());
+        }
+    }
+}
+
 Status CrossJoinLeftOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+    _init_row_desc();
     return Status::OK();
 }
 

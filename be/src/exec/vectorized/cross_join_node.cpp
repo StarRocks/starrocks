@@ -4,6 +4,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "exec/pipeline/crossjoin/cross_join_context.h"
 #include "exec/pipeline/crossjoin/cross_join_left_operator.h"
 #include "exec/pipeline/crossjoin/cross_join_right_sink_operator.h"
 #include "exec/pipeline/operator.h"
@@ -531,14 +532,14 @@ void CrossJoinNode::_init_chunk(ChunkPtr* chunk) {
 pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    _build_chunk_for_pipeline = std::make_shared<vectorized::Chunk>();
+    std::shared_ptr<pipeline::CrossJoinContext> cross_join_context = std::make_shared<pipeline::CrossJoinContext>();
 
     // step 0: construct pipeline end with cross join right operator.
     OpFactories operator_before_cross_join_right = _children[1]->decompose_to_pipeline(context);
 
     // communication with CrossJoinLeft through shared_datas.
-    auto right_factory = std::make_shared<CrossJoinRightSinkOperatorFactory>(
-            context->next_operator_id(), id(), &_build_chunk_for_pipeline, &_right_table_complete);
+    auto right_factory =
+            std::make_shared<CrossJoinRightSinkOperatorFactory>(context->next_operator_id(), id(), cross_join_context);
     operator_before_cross_join_right.emplace_back(std::move(right_factory));
     // cross_join_right as sink operator
     context->add_pipeline(operator_before_cross_join_right);
@@ -549,7 +550,7 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     // communication with CrossJoioRight through shared_datas.
     auto left_factory = std::make_shared<CrossJoinLeftOperatorFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
-            _conjunct_ctxs, &_build_chunk_for_pipeline, &_right_table_complete);
+            _conjunct_ctxs, cross_join_context);
     operator_before_cross_join_left.emplace_back(std::move(left_factory));
 
     // return as the following pipeline

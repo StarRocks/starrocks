@@ -32,7 +32,7 @@ public:
     OperatorWithDependency(int32_t id, const std::string& name, int32_t plan_node_id);
     ~OperatorWithDependency() = default;
     // return true if the corresponding right operator is full materialized, otherwise return false.
-    virtual bool is_ready() = 0;
+    virtual bool is_ready() const = 0;
 };
 
 class OperatorWithDependencyFactory : public OperatorFactory {

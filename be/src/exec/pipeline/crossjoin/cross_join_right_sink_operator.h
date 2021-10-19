@@ -18,13 +18,12 @@ class ChunksSorter;
 }
 
 namespace pipeline {
+class CrossJoinContext;
 class CrossJoinRightSinkOperator final : public Operator {
 public:
-    CrossJoinRightSinkOperator(int32_t id, int32_t plan_node_id, vectorized::ChunkPtr* build_chunk_ptr,
-                               std::atomic<bool>* right_table_complete_ptr)
-            : Operator(id, "cross_join_right_sink", plan_node_id),
-              _build_chunk_ptr(build_chunk_ptr),
-              _right_table_complete_ptr(right_table_complete_ptr) {}
+    CrossJoinRightSinkOperator(int32_t id, int32_t plan_node_id,
+                               const std::shared_ptr<CrossJoinContext>& cross_join_context)
+            : Operator(id, "cross_join_right_sink", plan_node_id), _cross_join_context(cross_join_context) {}
 
     ~CrossJoinRightSinkOperator() override = default;
 
@@ -46,25 +45,20 @@ public:
 
 private:
     bool _is_finished = false;
-    // Reference right table's data
-    vectorized::ChunkPtr* _build_chunk_ptr = nullptr;
-    // Used to mark that the right table has been constructed
-    std::atomic<bool>* _right_table_complete_ptr = nullptr;
+
+    const std::shared_ptr<CrossJoinContext>& _cross_join_context;
 };
 
 class CrossJoinRightSinkOperatorFactory final : public OperatorFactory {
 public:
-    CrossJoinRightSinkOperatorFactory(int32_t id, int32_t plan_node_id, vectorized::ChunkPtr* build_chunk_ptr,
-                                      std::atomic<bool>* right_table_complete_ptr)
-            : OperatorFactory(id, "cross_join_right_sink", plan_node_id),
-              _build_chunk_ptr(build_chunk_ptr),
-              _right_table_complete_ptr(right_table_complete_ptr) {}
+    CrossJoinRightSinkOperatorFactory(int32_t id, int32_t plan_node_id,
+                                      std::shared_ptr<CrossJoinContext> cross_join_context)
+            : OperatorFactory(id, "cross_join_right_sink", plan_node_id), _cross_join_context(cross_join_context) {}
 
     ~CrossJoinRightSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        auto ope = std::make_shared<CrossJoinRightSinkOperator>(_id, _plan_node_id, _build_chunk_ptr,
-                                                                _right_table_complete_ptr);
+        auto ope = std::make_shared<CrossJoinRightSinkOperator>(_id, _plan_node_id, _cross_join_context);
         return ope;
     }
 
@@ -72,10 +66,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    // Reference right table's data
-    vectorized::ChunkPtr* _build_chunk_ptr = nullptr;
-    // Used to mark that the right table has been constructed
-    std::atomic<bool>* _right_table_complete_ptr = nullptr;
+    std::shared_ptr<CrossJoinContext> _cross_join_context;
 };
 
 } // namespace pipeline
