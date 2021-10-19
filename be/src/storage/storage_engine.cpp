@@ -824,33 +824,42 @@ Status StorageEngine::create_tablet(const TCreateTabletReq& request) {
     return _tablet_manager->create_tablet(request, stores);
 }
 
-OLAPStatus StorageEngine::obtain_shard_path(TStorageMedium::type storage_medium, std::string* shard_path,
-                                            DataDir** store) {
+OLAPStatus StorageEngine::obtain_shard_path(TStorageMedium::type storage_medium, int64_t path_hash,
+                                            std::string* shard_path, DataDir** store) {
     if (shard_path == nullptr) {
         LOG(WARNING) << "invalid output parameter which is null pointer.";
         return OLAP_ERR_CE_CMD_PARAMS_ERROR;
     }
 
-    auto stores = get_stores_for_create_tablet(storage_medium);
-    if (stores.empty()) {
-        LOG(WARNING) << "Fail to obtain shard_path: empty store list";
-        return OLAP_ERR_NO_AVAILABLE_ROOT_PATH;
+    if (path_hash != -1) {
+        // get store by path hash
+        *store = StorageEngine::instance()->get_store(path_hash);
+        if (*store == nullptr) {
+            LOG(WARNING) << "Fail to get store. path_hash=" << path_hash;
+            return OLAP_ERR_NO_AVAILABLE_ROOT_PATH;
+        }
+    } else {
+        // get store randomly by the specified medium
+        auto stores = get_stores_for_create_tablet(storage_medium);
+        if (stores.empty()) {
+            LOG(WARNING) << "Fail to obtain shard_path: empty store list";
+            return OLAP_ERR_NO_AVAILABLE_ROOT_PATH;
+        }
+        *store = stores[0];
     }
 
-    OLAPStatus res = OLAP_SUCCESS;
     uint64_t shard = 0;
-    res = stores[0]->get_shard(&shard);
+    OLAPStatus res = (*store)->get_shard(&shard);
     if (res != OLAP_SUCCESS) {
         LOG(WARNING) << "Fail to obtain shard path. res=" << res;
         return res;
     }
 
     std::stringstream root_path_stream;
-    root_path_stream << stores[0]->path() << DATA_PREFIX << "/" << shard;
+    root_path_stream << (*store)->path() << DATA_PREFIX << "/" << shard;
     *shard_path = root_path_stream.str();
-    *store = stores[0];
 
-    LOG(INFO) << "Obtained shard path=" << shard_path;
+    LOG(INFO) << "Obtained shard path=" << *shard_path;
     return res;
 }
 
