@@ -83,6 +83,8 @@ public enum RuleType {
     TF_REWRITE_BITMAP_COUNT_DISTINCT,
     TF_REWRITE_HLL_COUNT_DISTINCT,
 
+    TF_JOIN_FORCE_LIMIT,
+
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,
@@ -103,6 +105,7 @@ public enum RuleType {
     IMP_REPEAT,
     IMP_FILTER,
     IMP_TABLE_FUNCTION,
+    IMP_LIMIT,
 
     NUM_RULES;
 

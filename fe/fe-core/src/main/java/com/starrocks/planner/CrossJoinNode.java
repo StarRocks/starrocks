@@ -98,7 +98,7 @@ public class CrossJoinNode extends PlanNode {
         if (!conjuncts.isEmpty()) {
             output.append(detailPrefix + "predicates: ").append(getExplainString(conjuncts) + "\n");
         } else {
-            output.append(detailPrefix + "predicates is NULL.");
+            output.append(detailPrefix + "predicates is NULL.\n");
         }
         return output.toString();
     }

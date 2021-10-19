@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MysqlScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ProjectImplementationRule;
@@ -34,6 +35,7 @@ import com.starrocks.sql.optimizer.rule.transformation.HiveScanPartitionPruneRul
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityWithOutInnerRule;
+import com.starrocks.sql.optimizer.rule.transformation.JoinForceLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeApplyWithTableFunction;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
@@ -112,7 +114,8 @@ public class RuleSet {
             new ValuesImplementationRule(),
             new RepeatImplementationRule(),
             new FilterImplementationRule(),
-            new TableFunctionImplementationRule()
+            new TableFunctionImplementationRule(),
+            new LimitImplementationRule()
     );
 
     private final List<Rule> transformRules = Lists.newArrayList();
@@ -219,6 +222,10 @@ public class RuleSet {
 
         rewriteRules.put(RuleSetType.MERGE_AGGREGATE, ImmutableList.of(
                 new MergeTwoAggRule()
+        ));
+
+        rewriteRules.put(RuleSetType.JOIN_FORCE_LIMIT, ImmutableList.of(
+                new JoinForceLimitRule()
         ));
     }
 
