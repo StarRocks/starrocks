@@ -897,6 +897,15 @@ struct TAbortRemoteTxnResponse {
     1: optional Status.TStatus status
 }
 
+struct TSetConfigRequest {
+    1: optional list<string> keys
+    2: optional list<string> values
+}
+
+struct TSetConfigResponse {
+    1: required Status.TStatus status
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -936,5 +945,7 @@ service FrontendService {
     TBeginRemoteTxnResponse  beginRemoteTxn(1: TBeginRemoteTxnRequest request)
     TCommitRemoteTxnResponse commitRemoteTxn(1: TCommitRemoteTxnRequest request)
     TAbortRemoteTxnResponse  abortRemoteTxn(1: TAbortRemoteTxnRequest request)
+
+    TSetConfigResponse setConfig(1: TSetConfigRequest request)
 }
 
