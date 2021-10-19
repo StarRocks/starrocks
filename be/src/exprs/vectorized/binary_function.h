@@ -16,6 +16,13 @@
 namespace starrocks {
 namespace vectorized {
 
+class ResultNopCheck {
+    template <typename Type, typename ResultType>
+    static inline ResultType apply(const Type& VALUE) {
+        return false;
+    }
+};
+
 /**
  * Execute vector vector operator function
  * @param OP: the operations impl, like NullUnion
@@ -180,6 +187,40 @@ public:
     template <PrimitiveType Type, PrimitiveType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
         return evaluate<Type, Type, ResultType>(v1, v2);
+    }
+};
+
+template <typename FN, typename NULL_OP = ResultNopCheck>
+class CheckOutputBinaryFunction {
+public:
+    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
+        ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(v1, v2);
+
+        NullColumnPtr nulls;
+        if (data_result->has_null()) {
+            nulls = ColumnHelper::as_raw_column<NullableColumn>(data_result)->null_column();
+        } else {
+            nulls = RunTimeColumnType<TYPE_NULL>::create();
+            nulls->resize(data_result->size());
+        }
+        auto* ns = nulls->get_data().data();
+
+        const ColumnPtr& data = FunctionHelper::get_real_data_column(data_result);
+        auto& r1 = ColumnHelper::cast_to_raw<ResultType>(data)->get_data();
+        if constexpr (!std::is_same<NULL_OP, ResultNopCheck>::value) {
+            for (size_t i = 0; i < data_result->size(); ++i) {
+                ns[i] = NULL_OP::template apply<RunTimeCppType<ResultType>, RunTimeCppType<ResultType>>(r1[i]);
+            }
+        }
+
+        if (!data_result->is_nullable()) {
+            if (SIMD::count_nonzero(nulls->get_data())) {
+                return NullableColumn::create(data_result, nulls);
+            }
+        }
+
+        return data_result;
     }
 };
 
@@ -479,6 +520,10 @@ public:
  */
 template <typename OP>
 using VectorizedStrictBinaryFunction = UnionNullableColumnBinaryFunction<UnpackConstColumnBinaryFunction<OP>>;
+
+template <typename OP, typename NULL_OP>
+using VectorizedOuputCheckBinaryFunction =
+        CheckOutputBinaryFunction<UnionNullableColumnBinaryFunction<UnpackConstColumnBinaryFunction<OP>>, NULL_OP>;
 
 /**
 * Use for unstrict binary operations function, usually the result
