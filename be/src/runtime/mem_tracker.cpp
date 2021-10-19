@@ -100,7 +100,7 @@ void MemTracker::Init() {
 void MemTracker::close() {}
 
 MemTracker::~MemTracker() {
-    DCHECK_EQ(0, consumption()) << CurrentThread::query_id_string();
+    DCHECK_EQ(0, consumption()) << tls_thread_status.query_id_string();
     if (UNLIKELY(consumption() > 0)) {
         release(consumption());
     }

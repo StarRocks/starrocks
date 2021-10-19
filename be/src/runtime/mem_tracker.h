@@ -269,12 +269,6 @@ public:
 
     MemTracker* parent() const { return _parent; }
 
-    /// Signature for function that can be called to free some memory after limit is
-    /// reached. The function should try to free at least 'bytes_to_free' bytes of
-    /// memory. See the class header for further details on the expected behaviour of
-    /// these functions.
-    typedef std::function<void(int64_t bytes_to_free)> GcFunction;
-
     /// Logs the usage of this tracker and optionally its children (recursively).
     /// If 'logged_consumption' is non-NULL, sets the consumption value logged.
     /// 'max_recursive_depth' specifies the maximum number of levels of children
