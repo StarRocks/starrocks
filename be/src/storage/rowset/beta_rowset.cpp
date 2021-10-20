@@ -93,13 +93,6 @@ OLAPStatus BetaRowset::create_reader(RowsetReaderSharedPtr* result) {
     return OLAP_SUCCESS;
 }
 
-OLAPStatus BetaRowset::split_range(const RowCursor& start_key, const RowCursor& end_key,
-                                   uint64_t request_block_row_count, std::vector<OlapTuple>* ranges) {
-    ranges->emplace_back(start_key.to_tuple());
-    ranges->emplace_back(end_key.to_tuple());
-    return OLAP_SUCCESS;
-}
-
 OLAPStatus BetaRowset::remove() {
     // TODO should we close and remove all segment reader first?
     VLOG(1) << "Removing files in rowsset id=" << unique_id() << " version=" << start_version() << "-" << end_version()

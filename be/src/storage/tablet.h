@@ -196,10 +196,6 @@ public:
     // For example: If there are 1, 2, 3, 5, 6, 7 versions belongs tablet, then 3 is target.
     Version max_continuous_version_from_beginning() const;
 
-    // operation for query
-    Status split_range(const OlapTuple& start_key_strings, const OlapTuple& end_key_strings,
-                       uint64_t request_block_row_count, vector<OlapTuple>* ranges);
-
     int64_t last_cumu_compaction_failure_time() { return _last_cumu_compaction_failure_millis; }
     void set_last_cumu_compaction_failure_time(int64_t millis) { _last_cumu_compaction_failure_millis = millis; }
 

@@ -130,8 +130,6 @@ public:
     void register_clone_tablet(int64_t tablet_id);
     void unregister_clone_tablet(int64_t tablet_id);
 
-    MemTracker* tablet_meta_mem_tracker() { return _mem_tracker; }
-
 private:
     // Add a tablet pointer to StorageEngine
     // If force, drop the existing tablet add this new one

@@ -30,6 +30,7 @@
 
 #include "env/env.h"
 #include "gutil/strings/strcat.h"
+#include "runtime/current_thread.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
 #include "storage/reader.h"
@@ -43,6 +44,7 @@
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
+#include "util/defer_op.h"
 #include "util/file_utils.h"
 #include "util/path_util.h"
 #include "util/scoped_cleanup.h"
@@ -231,6 +233,9 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
         stores.push_back(base_tablet->data_dir());
     }
 
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     // set alter type to schema-change. it is useless
     TabletSharedPtr tablet = _internal_create_tablet_unlocked(AlterTabletType::SCHEMA_CHANGE, request, is_schema_change,
                                                               base_tablet.get(), stores);
@@ -388,6 +393,9 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
 }
 
 Status TabletManager::drop_tablet(TTabletId tablet_id, SchemaHash schema_hash, bool keep_state) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
     return _drop_tablet_unlocked(tablet_id, schema_hash, keep_state);
 }
@@ -479,6 +487,9 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, SchemaHash sche
 }
 
 Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletInfo>& tablet_info_vec) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     if (tablet_info_vec.empty()) {
         return Status::OK();
     }
@@ -753,6 +764,9 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
 Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_id, TSchemaHash schema_hash,
                                             const std::string& meta_binary, bool update_meta, bool force, bool restore,
                                             bool check_path) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
     if (Status st = tablet_meta->deserialize(meta_binary); !st.ok()) {
@@ -830,6 +844,9 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
 
 Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
                                            const string& schema_hash_path, bool force, bool restore) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     LOG(INFO) << "Loading tablet " << tablet_id << " from " << schema_hash_path << ". force=" << force
               << " restore=" << restore;
     // not add lock here, because load_tablet_from_meta already add lock
@@ -939,6 +956,9 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
 }
 
 Status TabletManager::start_trash_sweep() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     {
         std::vector<int64_t> tablets_to_clean;
         // we use this vector to save all tablet ptr for saving lock time.
@@ -1072,12 +1092,18 @@ Status TabletManager::start_trash_sweep() {
 } // start_trash_sweep
 
 void TabletManager::register_clone_tablet(int64_t tablet_id) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     tablets_shard& shard = _get_tablets_shard(tablet_id);
     std::unique_lock wlock(*shard.lock);
     shard.tablets_under_clone.insert(tablet_id);
 }
 
 void TabletManager::unregister_clone_tablet(int64_t tablet_id) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     tablets_shard& shard = _get_tablets_shard(tablet_id);
     std::unique_lock wlock(*shard.lock);
     shard.tablets_under_clone.erase(tablet_id);
@@ -1085,6 +1111,9 @@ void TabletManager::unregister_clone_tablet(int64_t tablet_id) {
 
 void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId tablet_id, SchemaHash schema_hash,
                                                   const std::string& schema_hash_path) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     // acquire the read lock, so that there is no creating tablet or load tablet from meta tasks
     // create tablet and load tablet task should check whether the dir exists
     tablets_shard& shard = _get_tablets_shard(tablet_id);
@@ -1160,6 +1189,9 @@ void TabletManager::get_partition_related_tablets(int64_t partition_id, std::set
 }
 
 void TabletManager::do_tablet_meta_checkpoint(DataDir* data_dir) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     std::vector<TabletSharedPtr> related_tablets;
     {
         for (const auto& tablets_shard : _tablets_shards) {
@@ -1403,6 +1435,9 @@ TabletManager::tablets_shard& TabletManager::_get_tablets_shard(TTabletId tablet
 
 Status TabletManager::create_tablet_from_snapshot(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
                                                   const string& schema_hash_path) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     LOG(INFO) << "Loading tablet " << tablet_id << " from snapshot " << schema_hash_path;
     auto meta_path = strings::Substitute("$0/meta", schema_hash_path);
     auto shard_path = path_util::dir_name(path_util::dir_name(path_util::dir_name(meta_path)));
