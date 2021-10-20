@@ -101,7 +101,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         this.properties = properties;
     }
 
-    public void setIsReplay(boolean isReplay){
+    public void setIsReplay(boolean isReplay) {
         this.isReplay = isReplay;
     }
 
@@ -204,7 +204,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItemExpr;
                 String functionName = functionCallExpr.getFnName().getFunction();
                 // current version not support count(distinct) function in creating materialized view
-                if (!isReplay && (functionName.toLowerCase().equals("count") || functionName.toLowerCase().equals("sum")) && functionCallExpr.isDistinct()) {
+                if (!isReplay && functionName.toLowerCase().equals("count") && functionCallExpr.isDistinct()) {
                     throw new AnalysisException(
                             "Materialized view does not support distinct function " + functionCallExpr.toSqlImpl());
                 }
