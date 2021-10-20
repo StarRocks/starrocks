@@ -88,6 +88,10 @@ public class LargeIntLiteral extends LiteralExpr {
         value = other.value;
     }
 
+    public BigInteger getValue() {
+        return value;
+    }
+
     @Override
     public Expr clone() {
         return new LargeIntLiteral(this);
