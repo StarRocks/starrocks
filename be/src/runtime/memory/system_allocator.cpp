@@ -29,7 +29,6 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "runtime/mem_tracker.h"
-#include <gperftools/nallocx.h>
 
 namespace starrocks {
 
