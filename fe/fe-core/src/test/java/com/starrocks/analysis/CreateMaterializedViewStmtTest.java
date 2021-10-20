@@ -22,7 +22,14 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.*;
+import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;

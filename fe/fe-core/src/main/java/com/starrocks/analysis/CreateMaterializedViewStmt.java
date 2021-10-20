@@ -92,13 +92,17 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     private String baseIndexName;
     private String dbName;
     private KeysType mvKeysType = KeysType.DUP_KEYS;
-    //if process is replaying log, isReplay is true, otherwise is false
-    public boolean isReplay = false;
+    //if process is replaying log, isReplay is true, otherwise is false, avoid replay process error report, only in Rollup or MaterializedIndexMeta is true
+    private boolean isReplay;
 
     public CreateMaterializedViewStmt(String mvName, SelectStmt selectStmt, Map<String, String> properties) {
         this.mvName = mvName;
         this.selectStmt = selectStmt;
         this.properties = properties;
+    }
+
+    public void setIsReplay(boolean isReplay){
+        this.isReplay = isReplay;
     }
 
     public String getMVName() {
@@ -200,7 +204,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItemExpr;
                 String functionName = functionCallExpr.getFnName().getFunction();
                 // current version not support count(distinct) function in creating materialized view
-                if (!isReplay && functionName.toLowerCase().equals("count") && functionCallExpr.isDistinct()) {
+                if (!isReplay && (functionName.toLowerCase().equals("count") || functionName.toLowerCase().equals("sum")) && functionCallExpr.isDistinct()) {
                     throw new AnalysisException(
                             "Materialized view does not support distinct function " + functionCallExpr.toSqlImpl());
                 }
