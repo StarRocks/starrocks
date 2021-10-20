@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
@@ -19,6 +20,8 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -392,5 +395,16 @@ public class Utils {
             }
         }
         return true;
+    }
+
+    public static boolean canOnlyDoBroadcast(PhysicalHashJoinOperator node,
+                                             List<BinaryPredicateOperator> equalOnPredicate, String hint) {
+        // Cross join only support broadcast join
+        if (node.getJoinType().isCrossJoin() || JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN.equals(node.getJoinType())
+                || (node.getJoinType().isInnerJoin() && equalOnPredicate.isEmpty())
+                || "BROADCAST".equalsIgnoreCase(hint)) {
+            return true;
+        }
+        return false;
     }
 }

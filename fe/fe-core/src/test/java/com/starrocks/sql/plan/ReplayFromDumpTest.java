@@ -188,4 +188,11 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second.contains("AGGREGATE (merge finalize)"));
         Assert.assertTrue(replayPair.second.contains("AGGREGATE (update serialize)"));
     }
+
+    @Test
+    public void testTPCDS77() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds77"));
+        // check can generate plan without exception
+        System.out.println(replayPair.second);
+    }
 }
