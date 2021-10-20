@@ -5,6 +5,7 @@
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/memory/chunk_allocator.h"
@@ -17,7 +18,6 @@
 #include "util/disk_info.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
-#include "runtime/current_thread.h"
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);

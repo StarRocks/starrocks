@@ -23,8 +23,9 @@
 
 #include <gtest/gtest.h>
 
-#include "common/config.h"
 #include <memory>
+
+#include "common/config.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {

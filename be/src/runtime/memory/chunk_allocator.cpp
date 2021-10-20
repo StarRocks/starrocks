@@ -46,6 +46,18 @@ static IntCounter system_free_count(MetricUnit::NOUNIT);
 static IntCounter system_alloc_cost_ns(MetricUnit::NANOSECONDS);
 static IntCounter system_free_cost_ns(MetricUnit::NANOSECONDS);
 
+#ifdef BE_TEST
+static std::mutex s_mutex;
+ChunkAllocator* ChunkAllocator::instance() {
+    std::lock_guard<std::mutex> l(s_mutex);
+    if (_s_instance == nullptr) {
+        CpuInfo::init();
+        ChunkAllocator::init_instance(nullptr, 4096);
+    }
+    return _s_instance;
+}
+#endif
+
 // Keep free chunk's ptr in size separated free list.
 // This class is thread-safe.
 class ChunkArena {

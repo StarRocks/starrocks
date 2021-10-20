@@ -56,7 +56,11 @@ class ChunkAllocator {
 public:
     static void init_instance(MemTracker* mem_tracker, size_t reserve_limit);
 
+#ifdef BE_TEST
+    static ChunkAllocator* instance();
+#else
     static ChunkAllocator* instance() { return _s_instance; }
+#endif
 
     ChunkAllocator(MemTracker* mem_tracker, size_t reserve_limit);
 
