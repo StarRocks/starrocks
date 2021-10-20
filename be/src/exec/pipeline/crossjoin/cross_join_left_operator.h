@@ -90,12 +90,14 @@ private:
 
     const std::vector<ExprContext*>& _conjunct_ctxs;
 
-    // Decompose all rows into multiples of 4096 and remainder of 4096
+    // Decompose all rows into multiples of 4096 rows and remainder of 4096 rows.
     size_t mutable _total_build_rows = 0;
     // multiples of 4096
     size_t mutable _build_rows_threshold = 0;
     // remainder of 4096
     size_t mutable _build_rows_remainder = 0;
+    // means right table is constructed completely.
+    bool mutable _is_right_complete = false;
 
     bool _is_finished = false;
     vectorized::ChunkPtr _cur_chunk = nullptr;
