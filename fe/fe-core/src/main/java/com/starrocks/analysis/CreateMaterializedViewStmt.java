@@ -93,7 +93,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     private String dbName;
     private KeysType mvKeysType = KeysType.DUP_KEYS;
     //if process is replaying log, isReplay is true, otherwise is false, avoid replay process error report, only in Rollup or MaterializedIndexMeta is true
-    private boolean isReplay;
+    private boolean isReplay = false;
 
     public CreateMaterializedViewStmt(String mvName, SelectStmt selectStmt, Map<String, String> properties) {
         this.mvName = mvName;
