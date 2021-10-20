@@ -172,6 +172,42 @@ vim my.cnf
 default_authentication_plugin=mysql_native_password
 ```
 
+## drop table 后磁盘空间没有立即释放
+
+执行drop table时磁盘空间会过一会释放,如果想要快速释放磁盘空间可以使用drop table force,使用force会有短暂的等待时间,如果执行 drop table force,则系统不会检查该表是否存在未完成的事务,表将直接被删除并且不能被恢复,一般不建议执行此操作。
+
+## 怎么查看StarRocks版本
+
+可以通过`select current_version();`或者CLI执行`sh bin/show_fe_version.sh`查看版本
+
+## fe内存大小如何设置
+
+可以参考tablet数量,元数据信息都保存在fe的内存,一千万个tablet内存使用在20G左右,目前支持的meta上限约为该级别。
+
+## StarRocks查询时间是如何计算的
+
+StarRocks是多线程计算,查询时间是查询线程所用的时间,ScanTime是所有线程使用的时间加起来的时间,查询时间可以通过执行计划下的Query下的Total查看。
+
+## export目前是否支持导出数据到本地时设置路径
+
+不支持
+
+## StarRocks的并发是什么量级
+
+StarRocks的并发量级建议根据业务场景,或模拟业务场景实际测试一下。在客户的一些场景下,压到过2、3万的QPS。
+
+## StarRocks的ssb测试为什么第一次执行速度较慢,后面较快
+
+第一次查询读盘跟磁盘性能相关,第一次后操作系统的pagecache生效,再次查询会先扫描pagecache,速度提升
+
+## 集群BE最小配置数量是多少,是否支持单节点部署
+
+BE节点最小配置个数是1个,支持单节点部署,推荐集群部署性能更好,be节点需要支持avx2,推荐配置8核16G及以上机器配置
+
+## superset+StarRocks如何配置数据权限
+
+可以通过创建单独用户后,创建View授权给用户进行数据权限控制
+
 ## set is_report_success = true;后profile不显示
 
 只有leader所在fe可以查看，因为report信息只汇报给leader节点。
