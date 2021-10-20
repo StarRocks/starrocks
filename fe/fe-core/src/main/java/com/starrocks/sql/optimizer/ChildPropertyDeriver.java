@@ -118,10 +118,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
         List<BinaryPredicateOperator> equalOnPredicate =
                 getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getJoinPredicate()));
 
-        // Cross join only support broadcast join
-        if (node.getJoinType().isCrossJoin() || JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN.equals(node.getJoinType())
-                || (node.getJoinType().isInnerJoin() && equalOnPredicate.isEmpty())
-                || "BROADCAST".equalsIgnoreCase(hint)) {
+        if (Utils.canOnlyDoBroadcast(node, equalOnPredicate, hint)) {
             tryReplicatedCrossJoin(context);
             return visitJoinRequirements(node, context, false);
         }
