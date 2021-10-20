@@ -220,13 +220,13 @@ public:
             const ColumnPtr& real_data = FunctionHelper::get_real_data_column(data);
             auto& r1 = ColumnHelper::cast_to_raw<ResultType>(real_data)->get_data();
 
-            for (size_t i = 0; i < data_result->size(); ++i) {
+            for (size_t i = 0; i < data->size(); ++i) {
                 ns[i] = NULL_OP::template apply<RunTimeCppType<ResultType>, RunTimeCppType<ResultType>>(r1[i]);
             }
 
             if (!data->is_nullable()) {
                 if (SIMD::count_nonzero(nulls->get_data())) {
-                    auto null_result = NullableColumn::create(data_result, nulls);
+                    auto null_result = NullableColumn::create(data, nulls);
                     if (data_result->is_constant()) {
                         return ConstColumn::create(null_result, data_result->size());
                     }
