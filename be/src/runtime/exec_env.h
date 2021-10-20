@@ -119,6 +119,7 @@ public:
     MemTracker* central_column_pool_mem_tracker() { return _central_column_pool_mem_tracker; }
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker; }
     MemTracker* update_mem_tracker() { return _update_mem_tracker; }
+    MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker; }
 
     ThreadResourceMgr* thread_mgr() { return _thread_mgr; }
     PriorityThreadPool* thread_pool() { return _thread_pool; }
@@ -201,6 +202,8 @@ private:
 
     // The memory tracker for update manager
     MemTracker* _update_mem_tracker = nullptr;
+
+    MemTracker* _chunk_allocator_mem_tracker = nullptr;
 
     ThreadResourceMgr* _thread_mgr = nullptr;
     PriorityThreadPool* _thread_pool = nullptr;

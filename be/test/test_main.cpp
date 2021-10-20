@@ -17,6 +17,7 @@
 #include "util/disk_info.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
+#include "runtime/current_thread.h"
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
@@ -42,8 +43,6 @@ int main(int argc, char** argv) {
 
     starrocks::vectorized::ColumnHelper::init_static_variable();
     starrocks::vectorized::date::init_date_cache();
-
-    starrocks::ChunkAllocator::init_instance(starrocks::config::chunk_reserved_bytes_limit);
 
     std::vector<starrocks::StorePath> paths;
     paths.emplace_back(starrocks::config::storage_root_path, -1);
@@ -79,6 +78,7 @@ int main(int argc, char** argv) {
     (void)butil::DeleteFile(storage_root, true);
     starrocks::vectorized::TEST_clear_all_columns_this_thread();
     // destroy exec env
+    starrocks::tls_thread_status.set_mem_tracker(nullptr);
     starrocks::ExecEnv::destroy(exec_env);
 
     return r;
