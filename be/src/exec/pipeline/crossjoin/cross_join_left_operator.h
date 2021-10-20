@@ -66,10 +66,10 @@ private:
     // previsou saved chunk.
     vectorized::ChunkPtr _pre_output_chunk = nullptr;
 
-    // used when scan rows in [0, _build_chunks_size) rows.
-    size_t _build_chunks_index = 0;
-    // used when scan rows in [_build_chunks_size, _number_of_built_rows) rows.
-    size_t _build_rows_index = 0;
+    // used when scan rows in [0, _build_rows_threshold) rows.
+    size_t _within_threshold_build_rows_index = 0;
+    // used when scan rows in [_build_rows_threshold, _number_of_built_rows) rows.
+    size_t _beyond_threshold_build_rows_index = 0;
 
     // used as left table's chunk.
     // _probe_chunk about one chunk_size(maybe 4096) of left table.
@@ -90,8 +90,12 @@ private:
 
     const std::vector<ExprContext*>& _conjunct_ctxs;
 
-    size_t mutable _number_of_build_rows = 0;
-    size_t mutable _build_chunks_size = 0;
+    // Decompose all rows into multiples of 4096 and remainder of 4096
+    size_t mutable _total_build_rows = 0;
+    // multiples of 4096
+    size_t mutable _build_rows_threshold = 0;
+    // remainder of 4096
+    size_t mutable _build_rows_remainder = 0;
 
     bool _is_finished = false;
     vectorized::ChunkPtr _cur_chunk = nullptr;

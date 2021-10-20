@@ -8,15 +8,6 @@
 #include "exec/pipeline/operator.h"
 
 namespace starrocks {
-class BufferControlBlock;
-class ExprContext;
-class ResultWriter;
-class ExecNode;
-
-namespace vectorized {
-class ChunksSorter;
-}
-
 namespace pipeline {
 class CrossJoinContext;
 class CrossJoinRightSinkOperator final : public Operator {

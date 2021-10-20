@@ -260,35 +260,37 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
         if (_probe_chunk_index == _probe_chunk->num_rows()) {
             // step 2:
             // if left chunk is bigger than right, we shuld scan left based on right.
-            if (_probe_chunk_index > _number_of_build_rows - _build_chunks_size) {
+            if (_probe_chunk_index > _build_rows_remainder) {
                 if (row_count > _probe_chunk_index - _probe_rows_index) {
                     row_count = _probe_chunk_index - _probe_rows_index;
                 }
 
-                _copy_joined_rows_with_index_base_build(chunk, row_count, _probe_rows_index, _build_rows_index);
+                _copy_joined_rows_with_index_base_build(chunk, row_count, _probe_rows_index,
+                                                        _beyond_threshold_build_rows_index);
                 _probe_rows_index += row_count;
 
                 if (_probe_rows_index == _probe_chunk_index) {
-                    ++_build_rows_index;
+                    ++_beyond_threshold_build_rows_index;
                     _probe_rows_index = 0;
                 }
 
                 // _probe_chunk is done with _build_chunk.
-                if (_build_rows_index >= _number_of_build_rows) {
+                if (_beyond_threshold_build_rows_index >= _total_build_rows) {
                     _probe_chunk = nullptr;
                 }
             } else {
                 // if remain rows of right is bigger than left, we should scan right based on left.
-                if (row_count > _number_of_build_rows - _build_rows_index) {
-                    row_count = _number_of_build_rows - _build_rows_index;
+                if (row_count > _total_build_rows - _beyond_threshold_build_rows_index) {
+                    row_count = _total_build_rows - _beyond_threshold_build_rows_index;
                 }
 
-                _copy_joined_rows_with_index_base_probe(chunk, row_count, _probe_rows_index, _build_rows_index);
-                _build_rows_index += row_count;
+                _copy_joined_rows_with_index_base_probe(chunk, row_count, _probe_rows_index,
+                                                        _beyond_threshold_build_rows_index);
+                _beyond_threshold_build_rows_index += row_count;
 
-                if (_build_rows_index == _number_of_build_rows) {
+                if (_beyond_threshold_build_rows_index == _total_build_rows) {
                     ++_probe_rows_index;
-                    _build_rows_index = _build_chunks_size;
+                    _beyond_threshold_build_rows_index = _build_rows_threshold;
                 }
 
                 // _probe_chunk is done with _build_chunk.
@@ -296,37 +298,38 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
                     _probe_chunk = nullptr;
                 }
             }
-        } else if (_build_chunks_index < _build_chunks_size) {
+        } else if (_within_threshold_build_rows_index < _build_rows_threshold) {
             // step 1:
             // we scan all chunks of right table.
-            if (row_count > _build_chunks_size - _build_chunks_index) {
-                row_count = _build_chunks_size - _build_chunks_index;
+            if (row_count > _build_rows_threshold - _within_threshold_build_rows_index) {
+                row_count = _build_rows_threshold - _within_threshold_build_rows_index;
             }
 
-            _copy_joined_rows_with_index_base_probe(chunk, row_count, _probe_chunk_index, _build_chunks_index);
-            _build_chunks_index += row_count;
+            _copy_joined_rows_with_index_base_probe(chunk, row_count, _probe_chunk_index,
+                                                    _within_threshold_build_rows_index);
+            _within_threshold_build_rows_index += row_count;
         } else {
             // step policy decision:
-            DCHECK_EQ(_build_chunks_index, _build_chunks_size);
+            DCHECK_EQ(_within_threshold_build_rows_index, _build_rows_threshold);
 
-            if (_build_chunks_size != 0) {
+            if (_build_rows_threshold != 0) {
                 // scan right chunk_size rows for next row of left chunk.
                 ++_probe_chunk_index;
                 if (_probe_chunk_index < _probe_chunk->num_rows()) {
-                    _build_chunks_index = 0;
+                    _within_threshold_build_rows_index = 0;
                 } else {
                     // if right table is all about chunks, means _probe_chunk is done.
-                    if (_build_chunks_size == _number_of_build_rows) {
+                    if (_build_rows_threshold == _total_build_rows) {
                         _probe_chunk = nullptr;
                     } else {
-                        _build_rows_index = _build_chunks_size;
+                        _beyond_threshold_build_rows_index = _build_rows_threshold;
                         _probe_rows_index = 0;
                     }
                 }
             } else {
                 // optimized for smaller right table < 4096 rows.
                 _probe_chunk_index = _probe_chunk->num_rows();
-                _build_rows_index = _build_chunks_size;
+                _beyond_threshold_build_rows_index = _build_rows_threshold;
                 _probe_rows_index = 0;
             }
             continue;
@@ -349,7 +352,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
 // need take next chunk from left table.
 bool CrossJoinLeftOperator::need_input() const {
     DCHECK(_cross_join_context->_right_table_complete && _cross_join_context->_build_chunk);
-    return _number_of_build_rows > 0 && (_probe_chunk == nullptr || _probe_chunk->num_rows() == 0);
+    return _total_build_rows > 0 && (_probe_chunk == nullptr || _probe_chunk->num_rows() == 0);
 }
 
 bool CrossJoinLeftOperator::is_ready() const {
@@ -359,8 +362,9 @@ bool CrossJoinLeftOperator::is_ready() const {
         DCHECK(_cross_join_context->_build_chunk);
         if (_cross_join_context->_build_chunk->num_rows() > 0) {
             // Set fields for left table.
-            _number_of_build_rows = _cross_join_context->_build_chunk->num_rows();
-            _build_chunks_size = (_number_of_build_rows / config::vector_chunk_size) * config::vector_chunk_size;
+            _total_build_rows = _cross_join_context->_build_chunk->num_rows();
+            _build_rows_threshold = (_total_build_rows / config::vector_chunk_size) * config::vector_chunk_size;
+            _build_rows_remainder = _total_build_rows - _build_rows_threshold;
         }
     }
 
@@ -369,7 +373,7 @@ bool CrossJoinLeftOperator::is_ready() const {
 
 Status CrossJoinLeftOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     _probe_chunk = chunk;
-    _build_chunks_index = 0;
+    _within_threshold_build_rows_index = 0;
     _probe_chunk_index = 0;
     return Status::OK();
 }
