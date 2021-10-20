@@ -129,9 +129,9 @@ struct TColumn {
     5: optional bool is_allow_null                                                                    
     6: optional string default_value               
     7: optional bool is_bloom_filter_column     
-    8: optional Exprs.TExpr define_expr
-    9: optional string encoding
-    10: optional string compression
+    8: optional Exprs.TExpr define_expr                                                               
+    9: optional Types.TEncodingType encoding
+    10: optional Types.TCompressionType compression
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.

@@ -170,8 +170,8 @@ message ColumnPB {
     optional bool has_bitmap_index = 15 [default=false]; // ColumnMessage.has_bitmap_index
     optional bool visible = 16 [default=true]; // used for hided column
     repeated ColumnPB children_columns = 17;
-    optional string encoding = 18;
-    optional string compression = 19;
+    optional EncodingTypePB encoding = 18;
+    optional CompressionTypePB compression = 19;
 }
 
 message TabletSchemaPB {

@@ -431,3 +431,13 @@ enum TCompressionType {
     LZO = 11; // Deprecated
 }
 
+enum TEncodingType {
+    UNKNOWN_ENCODING,
+    DEFAULT_ENCODING,
+    PLAIN_ENCODING,
+    PREFIX_ENCODING,
+    RLE,
+    DICT_ENCODING,
+    BIT_SHUFFLE,
+    FOR_ENCODING
+}

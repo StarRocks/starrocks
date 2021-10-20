@@ -24,7 +24,6 @@
 #include <boost/algorithm/string.hpp>
 #include <memory>
 #include <sstream>
-#include <thrift/protocol/TDebugProtocol.h>
 
 #include "gutil/strings/substitute.h"
 #include "storage/olap_common.h"
@@ -134,6 +133,63 @@ static FieldType TPrimitiveType2FieldType(TPrimitiveType::type primitive_type, F
     return OLAP_FIELD_TYPE_UNKNOWN;
 }
 
+// convert thrift encoding type to protobuf encoding type
+static EncodingTypePB convertEncodingType(TEncodingType::type encoding_type) {
+    switch (encoding_type) {
+    case TEncodingType::UNKNOWN_ENCODING:
+        return EncodingTypePB::UNKNOWN_ENCODING;
+    case TEncodingType::DEFAULT_ENCODING:
+        return EncodingTypePB::DEFAULT_ENCODING;
+    case TEncodingType::PLAIN_ENCODING:
+        return EncodingTypePB::PLAIN_ENCODING;
+    case TEncodingType::PREFIX_ENCODING:
+        return EncodingTypePB::PREFIX_ENCODING;
+    case TEncodingType::RLE:
+        return EncodingTypePB::RLE;
+    case TEncodingType::DICT_ENCODING:
+        return EncodingTypePB::DICT_ENCODING;
+    case TEncodingType::BIT_SHUFFLE:
+        return EncodingTypePB::BIT_SHUFFLE;
+    case TEncodingType::FOR_ENCODING:
+        return EncodingTypePB::FOR_ENCODING;
+    default:
+        return EncodingTypePB::DEFAULT_ENCODING; 
+    }
+}
+
+// convert thrift encoding type to protobuf encoding type
+static CompressionTypePB convertCompressionType(TCompressionType::type compression_type) {
+    switch (compression_type)
+    {
+    case TCompressionType::UNKNOWN_COMPRESSION:
+       return CompressionTypePB::UNKNOWN_COMPRESSION;
+    case TCompressionType::DEFAULT_COMPRESSION:
+       return CompressionTypePB::DEFAULT_COMPRESSION;
+    case TCompressionType::NO_COMPRESSION:
+       return CompressionTypePB::NO_COMPRESSION;
+    case TCompressionType::SNAPPY:
+       return CompressionTypePB::SNAPPY;
+    case TCompressionType::LZ4:
+       return CompressionTypePB::LZ4;
+    case TCompressionType::LZ4_FRAME:
+       return CompressionTypePB::LZ4_FRAME;
+    case TCompressionType::ZLIB:
+       return CompressionTypePB::ZLIB;
+    case TCompressionType::ZSTD:
+       return CompressionTypePB::ZSTD;
+    case TCompressionType::GZIP:
+       return CompressionTypePB::GZIP;
+    case TCompressionType::DEFLATE:
+       return CompressionTypePB::DEFLATE;
+    case TCompressionType::BZIP2:
+       return CompressionTypePB::BZIP2;
+    case TCompressionType::LZO:
+       return CompressionTypePB::LZO;
+    default:
+        return CompressionTypePB::DEFAULT_COMPRESSION;
+    }
+}
+
 static Status TColumn2ColumnPB(int32_t unique_id, const TColumn& t_column, FieldTypeVersion v, ColumnPB* column_pb,
                                size_t depth = 0) {
     const int32_t kFakeUniqueId = -1;
@@ -154,8 +210,13 @@ static Status TColumn2ColumnPB(int32_t unique_id, const TColumn& t_column, Field
     column_pb->set_name(c_name);
     column_pb->set_is_key(is_key);
     column_pb->set_is_nullable(is_nullable);
-    column_pb->set_encoding(t_column.encoding);
-    column_pb->set_compression(t_column.compression);
+    if (t_column.__isset.encoding) {
+        column_pb->set_encoding(convertEncodingType(t_column.encoding));
+    }
+    if (t_column.__isset.compression) {
+        column_pb->set_compression(convertCompressionType(t_column.compression));
+    }
+    
     if (depth > 0 || is_key) {
         auto agg_method = OLAP_FIELD_AGGREGATION_NONE;
         column_pb->set_aggregation(TabletColumn::get_string_by_aggregation_type(agg_method));

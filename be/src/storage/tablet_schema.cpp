@@ -378,10 +378,10 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     for (int i = 0; i < subcolumn_count(); i++) {
         subcolumn(i).to_schema_pb(column->add_children_columns());
     }
-    if (encoding() != "") {
+    if (encoding() != EncodingTypePB::DEFAULT_ENCODING) {
         column->set_encoding(encoding());
     }
-    if (compression() != "") {
+    if (compression() != CompressionTypePB::DEFAULT_COMPRESSION) {
         column->set_compression(compression());
     }
 }

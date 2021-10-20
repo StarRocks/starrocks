@@ -336,11 +336,34 @@ public class ColumnDef {
         }
         sb.append("COMMENT \"").append(comment).append("\"");
 
+        if (!Strings.isNullOrEmpty(encoding)) {
+            sb.append(" ENCODING \"").append(encoding).append("\"");
+        }
+        if (!Strings.isNullOrEmpty(compression)) {
+            sb.append(" COMPRESSION \"").append(compression).append("\"");
+        }
+
         return sb.toString();
     }
 
     public Column toColumn() {
-        return new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValue.value, comment, encoding, compression);
+        EncodingType encodingType = null;
+        if (!Strings.isNullOrEmpty(encoding)) {
+            try {
+                encodingType = EncodingType.valueOf(encoding);
+            } catch (Exception e) {
+                LOG.warn("invalid encoding type:" + encoding + ", will use default encoding", e);
+            }
+        }
+        CompressionType compressionType = null;
+        if (!Strings.isNullOrEmpty(compression)) {
+            try {
+                compressionType = CompressionType.valueOf(compression);
+            } catch (Exception e) {
+                LOG.warn("invalid compression type:" + compression + ", will use default compression", e);
+            }
+        }
+        return new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValue.value, comment, encodingType, compressionType);
     }
 
     @Override

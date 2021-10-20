@@ -37,17 +37,6 @@ message MetadataPairPB {
   optional bytes value = 2;
 }
 
-enum EncodingTypePB {
-    UNKNOWN_ENCODING = 0;
-    DEFAULT_ENCODING = 1;
-    PLAIN_ENCODING = 2;
-    PREFIX_ENCODING = 3;
-    RLE = 4;
-    DICT_ENCODING = 5;
-    BIT_SHUFFLE = 6;
-    FOR_ENCODING = 7; // Frame-Of-Reference
-}
-
 enum PageTypePB {
     UNKNOWN_PAGE_TYPE = 0;
     DATA_PAGE = 1;

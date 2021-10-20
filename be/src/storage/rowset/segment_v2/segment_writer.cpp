@@ -62,27 +62,8 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t* column_id, c
     meta->set_unique_id(column.unique_id());
     meta->set_type(column.type());
     meta->set_length(column.length());
-    if (column.encoding() != "") {
-        EncodingTypePB encoding_type = DEFAULT_ENCODING;
-        bool ret = EncodingTypePB_Parse(column.encoding(), &encoding_type);
-        if (!ret) {
-            // if encoding failed, use DEFAULT_ENCODING as default
-            LOG(WARNING) << "invalid encoding:" << column.encoding() << ", use DEFAULT_ENCODING instead";
-            encoding_type = DEFAULT_ENCODING;
-        }
-        meta->set_encoding(encoding_type);
-    } else {
-        // use default encoding
-        meta->set_encoding(DEFAULT_ENCODING);
-    }
-    CompressionTypePB compress_type = LZ4_FRAME;
-    bool ret = CompressionTypePB_Parse(column.compression(), &compress_type);
-    if (!ret) {
-        // if parse compress_type failed, use LZ4_FRAME as default
-        LOG(WARNING) << "parse compress type failed. use default LZ4_FRAME";
-        compress_type = LZ4_FRAME;
-    }
-
+    meta->set_encoding(column.encoding());
+    CompressionTypePB compress_type = column.compression();
     EncodingTypePB real_encoding_type = meta->encoding();
     if (real_encoding_type == DEFAULT_ENCODING) {
         real_encoding_type = EncodingInfo::get_default_encoding(column.type(), false);

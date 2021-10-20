@@ -25,6 +25,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.analysis.CompressionType;
+import com.starrocks.analysis.EncodingType;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.CaseSensibility;
@@ -79,9 +81,9 @@ public class Column implements Writable {
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
     @SerializedName(value = "encoding")
-    private String encoding;
+    private EncodingType encoding;
     @SerializedName(value = "compression")
-    private String compression;
+    private CompressionType compression;
 
     public Column() {
         this.name = "";
@@ -108,11 +110,11 @@ public class Column implements Writable {
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
                   String defaultValue, String comment) {
-        this(name, type, isKey, aggregateType, isAllowNull, defaultValue, comment, "", "");
+        this(name, type, isKey, aggregateType, isAllowNull, defaultValue, comment, null, null);
     }
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
-                  String defaultValue, String comment, String encoding, String compression) {
+                  String defaultValue, String comment, EncodingType encoding, CompressionType compression) {
         this.name = name;
         if (this.name == null) {
             this.name = "";
@@ -217,6 +219,14 @@ public class Column implements Writable {
         return this.aggregationType;
     }
 
+    public EncodingType getEncoding() {
+        return this.encoding;
+    }
+
+    public CompressionType getCompression() {
+        return this.compression;
+    }
+
     public boolean isAggregated() {
         return aggregationType != null && aggregationType != AggregateType.NONE;
     }
@@ -275,14 +285,6 @@ public class Column implements Writable {
         }
     }
 
-    public String getEncoding() {
-        return this.encoding;
-    }
-
-    public String getCompression() {
-        return this.compression;
-    }
-
     public TColumn toThrift() {
         TColumn tColumn = new TColumn();
         tColumn.setColumn_name(this.name);
@@ -301,8 +303,12 @@ public class Column implements Writable {
         // scalar type or nested type
         // If this field is set, column_type will be ignored.
         tColumn.setType_desc(type.toThrift());
-        tColumn.setEncoding(this.encoding);
-        tColumn.setCompression(this.compression);
+        if (this.encoding != null) {
+            tColumn.setEncoding(this.encoding.toThrift());
+        }
+        if (this.compression != null) {
+            tColumn.setCompression(this.compression.toThrift());
+        }
         return tColumn;
     }
 
@@ -407,12 +413,12 @@ public class Column implements Writable {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         }
         sb.append("COMMENT \"").append(comment).append("\"");
-        if (!Strings.isNullOrEmpty(encoding)) {
-            sb.append(" ENCODING \"").append(encoding).append("\"");
+        if (encoding != null && encoding != EncodingType.DEFAULT_ENCODING) {
+            sb.append(" ENCODING \"").append(encoding.name()).append("\"");
         }
 
-        if (!Strings.isNullOrEmpty(compression)) {
-            sb.append(" COMPRESSION \"").append(compression).append("\"");
+        if (compression != null && compression != CompressionType.DEFAULT_COMPRESSION) {
+            sb.append(" COMPRESSION \"").append(compression.name()).append("\"");
         }
 
         return sb.toString();

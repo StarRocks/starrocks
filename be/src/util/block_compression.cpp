@@ -453,6 +453,7 @@ Status get_block_compression_codec(CompressionTypePB type, const BlockCompressio
     case CompressionTypePB::LZ4:
         *codec = Lz4BlockCompression::instance();
         break;
+    case CompressionTypePB::DEFAULT_COMPRESSION:
     case CompressionTypePB::LZ4_FRAME:
         *codec = Lz4fBlockCompression::instance();
         break;
