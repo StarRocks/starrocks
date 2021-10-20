@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "column/datum.h"
+#include "runtime/global_dicts.h"
 #include "storage/fs/fs_util.h"
 #include "storage/vectorized/disjunctive_predicates.h"
 #include "storage/vectorized/seek_range.h"
@@ -55,6 +56,8 @@ public:
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
+
+    const std::unordered_map<ColumnId, GlobalDictMap*>* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 };
 
 } // namespace starrocks::vectorized

@@ -106,7 +106,7 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params,
         }
     }
     for (const auto& r : _scanner_params.scan_ranges) {
-        _scan_ranges.insert(make_pair(r->offset + r->length, r->offset));
+        _scan_ranges.insert(std::make_pair(r->offset + r->length, r->offset));
     }
 }
 

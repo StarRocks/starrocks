@@ -27,6 +27,11 @@ public:
     void insert(size_t idx, const FieldPtr& field);
     void remove(size_t idx);
     void set_fields(Fields fields);
+    void clear() {
+        _fields.clear();
+        _num_keys = 0;
+        _name_to_index.clear();
+    }
 
     const FieldPtr& field(size_t idx) const;
     const Fields& fields() const { return _fields; }

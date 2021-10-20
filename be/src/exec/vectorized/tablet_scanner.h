@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include "column/chunk.h"
@@ -10,6 +12,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
+#include "runtime/global_dicts.h"
 #include "runtime/runtime_state.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/conjunctive_predicates.h"
@@ -47,7 +50,7 @@ public:
     int64_t raw_rows_read() const { return _raw_rows_read; }
 
     // REQUIRES: `init(RuntimeState*, const TabletScannerParams&)` has been called.
-    const Schema& chunk_schema() const { return _prj_iter->schema(); }
+    const Schema& chunk_schema() const { return _prj_iter->res_schema(); }
 
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
@@ -56,6 +59,7 @@ private:
     Status _get_tablet(const TInternalScanRange* scan_range);
     Status _init_reader_params(const std::vector<OlapScanRange*>* key_ranges);
     Status _init_return_columns();
+    Status _init_global_dicts();
     void _update_realtime_counter();
     void update_counter();
 

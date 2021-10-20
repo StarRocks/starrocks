@@ -37,7 +37,8 @@ public:
                     FieldType key = column->get_data()[i];
                     auto iter = dict.find(key);
                     if (iter == dict.end()) {
-                        return Status::InternalError("Dict Decode failed, Dict can't take cover all key.");
+                        return Status::InternalError(
+                                fmt::format("Dict Decode failed, Dict can't take cover all key :{}", key));
                     }
                     res_column->append(iter->second);
                 }
@@ -57,7 +58,8 @@ public:
                     FieldType key = data_column->get_data()[i];
                     auto iter = dict.find(key);
                     if (iter == dict.end()) {
-                        return Status::InternalError("Dict Decode failed, Dict can't take cover all key.");
+                        return Status::InternalError(
+                                fmt::format("Dict Decode failed, Dict can't take cover all key :{}", key));
                     }
                     res_data_column->append(iter->second);
                 } else {
