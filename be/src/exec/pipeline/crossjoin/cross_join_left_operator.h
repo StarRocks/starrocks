@@ -90,7 +90,7 @@ private:
 
     const std::vector<ExprContext*>& _conjunct_ctxs;
 
-    // Decompose all rows into multiples of 4096 rows and remainder of 4096 rows.
+    // Decompose right table rows into multiples of 4096 rows and remainder of 4096 rows.
     size_t mutable _total_build_rows = 0;
     // multiples of 4096
     size_t mutable _build_rows_threshold = 0;
