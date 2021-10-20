@@ -138,7 +138,7 @@ public class CreateMaterializedViewStmtTest {
     public void testCountDistinct(@Injectable SlotRef slotRef, @Injectable ArithmeticExpr arithmeticExpr,
                                   @Injectable SelectStmt selectStmt, @Injectable Column column,
                                   @Injectable TableRef tableRef,
-                                  @Injectable SlotDescriptor slotDescriptor) throws UserException  {
+                                  @Injectable SlotDescriptor slotDescriptor) throws UserException {
         SelectList selectList = new SelectList();
         SelectListItem selectListItem = new SelectListItem(slotRef, null);
         selectList.addItem(selectListItem);
@@ -165,17 +165,23 @@ public class CreateMaterializedViewStmtTest {
                 result = "a+b";
                 slotRef.getColumnName();
                 result = "k1";
-                selectStmt.getWhereClause(); minTimes=0;
+                selectStmt.getWhereClause();
+                minTimes = 0;
                 result = null;
-                selectStmt.getHavingPred(); minTimes=0;
+                selectStmt.getHavingPred();
+                minTimes = 0;
                 result = null;
-                selectStmt.getTableRefs(); minTimes=0;
+                selectStmt.getTableRefs();
+                minTimes = 0;
                 result = Lists.newArrayList(tableRef);
-                slotDescriptor.getColumn(); minTimes=0;
+                slotDescriptor.getColumn();
+                minTimes = 0;
                 result = column;
-                selectStmt.getLimit();minTimes=0;
+                selectStmt.getLimit();
+                minTimes = 0;
                 result = -1;
-                column.getType(); minTimes=0;
+                column.getType();
+                minTimes = 0;
                 result = Type.INT;
                 slotRef.getType();
                 result = Type.INT;
