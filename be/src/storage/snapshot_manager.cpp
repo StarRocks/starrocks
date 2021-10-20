@@ -352,8 +352,9 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
         }
         return snapshot_id_path;
     } else {
-        auto st = build_snapshot_meta(SNAPSHOT_TYPE_INCREMENTAL, snapshot_dir, tablet, snapshot_rowset_metas,
-                                      0 /*snapshot_version, unused*/, g_Types_constants.TSNAPSHOT_REQ_VERSION2);
+        auto st =
+                make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_INCREMENTAL, snapshot_dir, tablet, snapshot_rowset_metas,
+                                             0 /*snapshot_version, unused*/, g_Types_constants.TSNAPSHOT_REQ_VERSION2);
         if (!st.ok()) {
             (void)FileUtils::remove_all(snapshot_id_path);
             return st;
@@ -412,8 +413,8 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
         }
         return snapshot_id_path;
     } else {
-        auto st = build_snapshot_meta(SNAPSHOT_TYPE_FULL, snapshot_dir, tablet, snapshot_rowset_metas, snapshot_version,
-                                      g_Types_constants.TSNAPSHOT_REQ_VERSION2);
+        auto st = make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_FULL, snapshot_dir, tablet, snapshot_rowset_metas,
+                                               snapshot_version, g_Types_constants.TSNAPSHOT_REQ_VERSION2);
         if (!st.ok()) {
             (void)FileUtils::remove_all(snapshot_id_path);
             return st;
@@ -422,7 +423,7 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     }
 }
 
-Status SnapshotManager::build_latest_full_snapshot_meta(const TabletSharedPtr& tablet) {
+Status SnapshotManager::make_snapshot_on_tablet_meta(const TabletSharedPtr& tablet) {
     std::vector<RowsetSharedPtr> snapshot_rowsets;
     std::shared_lock rdlock(tablet->get_header_lock());
     int64_t snapshot_version = tablet->max_version().second;
@@ -436,8 +437,8 @@ Status SnapshotManager::build_latest_full_snapshot_meta(const TabletSharedPtr& t
     std::string meta_path = tablet->tablet_path();
     (void)FileUtils::remove_all(meta_path);
     RETURN_IF_ERROR(FileUtils::create_dir(meta_path));
-    auto st = build_snapshot_meta(SNAPSHOT_TYPE_FULL, meta_path, tablet, snapshot_rowset_metas, snapshot_version,
-                                  g_Types_constants.TSNAPSHOT_REQ_VERSION2);
+    auto st = make_snapshot_on_tablet_meta(SNAPSHOT_TYPE_FULL, meta_path, tablet, snapshot_rowset_metas,
+                                           snapshot_version, g_Types_constants.TSNAPSHOT_REQ_VERSION2);
     if (!st.ok()) {
         (void)FileUtils::remove(meta_path);
         return st;
@@ -445,15 +446,15 @@ Status SnapshotManager::build_latest_full_snapshot_meta(const TabletSharedPtr& t
     return Status::OK();
 }
 
-Status SnapshotManager::build_snapshot_meta(SnapshotTypePB snapshot_type, const std::string& snapshot_dir,
-                                            const TabletSharedPtr& tablet,
-                                            const std::vector<RowsetMetaSharedPtr>& rowset_metas,
-                                            int64_t snapshot_version, int32_t snapshot_format) {
+Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_type, const std::string& snapshot_dir,
+                                                     const TabletSharedPtr& tablet,
+                                                     const std::vector<RowsetMetaSharedPtr>& rowset_metas,
+                                                     int64_t snapshot_version, int32_t snapshot_format) {
     if (snapshot_format != g_Types_constants.TSNAPSHOT_REQ_VERSION2) {
         return Status::NotSupported("unsupported snapshot format");
     }
     if (tablet->updates() == nullptr) {
-        return Status::InternalError("build_snapshot_meta only support updatable tablet");
+        return Status::InternalError("make_snapshot_on_tablet_meta only support updatable tablet");
     }
 
     SnapshotMeta snapshot_meta;
@@ -514,7 +515,7 @@ Status SnapshotManager::build_snapshot_meta(SnapshotTypePB snapshot_type, const 
     return Status::OK();
 }
 
-// See `SnapshotManager::build_snapshot_meta` for the file format.
+// See `SnapshotManager::make_snapshot_on_tablet_meta` for the file format.
 StatusOr<SnapshotMeta> SnapshotManager::parse_snapshot_meta(const std::string& filename) {
     SnapshotMeta snapshot_meta;
     std::unique_ptr<RandomAccessFile> file;

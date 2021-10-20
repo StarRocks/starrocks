@@ -833,26 +833,26 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
     LOG(INFO) << "Loading tablet " << tablet_id << " from " << schema_hash_path << ". force=" << force
               << " restore=" << restore;
     // not add lock here, because load_tablet_from_meta already add lock
-    std::string header_path = TabletMeta::construct_header_file_path(schema_hash_path, tablet_id);
+    std::string meta_path = TabletMeta::construct_header_file_path(schema_hash_path, tablet_id);
     // should change shard id before load tablet
-    std::string shard_path = path_util::dir_name(path_util::dir_name(path_util::dir_name(header_path)));
+    std::string shard_path = path_util::dir_name(path_util::dir_name(path_util::dir_name(meta_path)));
     std::string shard_str = shard_path.substr(shard_path.find_last_of('/') + 1);
     int32_t shard = stol(shard_str);
     // load dir is called by clone, restore, storage migration
     // should change tablet uid when tablet object changed
-    if (!TabletMeta::reset_tablet_uid(header_path).ok()) {
-        LOG(WARNING) << "Fail to set tablet uid when copied meta file. header_path=" << header_path;
+    if (!TabletMeta::reset_tablet_uid(meta_path).ok()) {
+        LOG(WARNING) << "Fail to set tablet uid when copied meta file. meta_path=" << meta_path;
         return Status::InternalError("reset tablet uid failed");
     }
 
-    if (!Env::Default()->path_exists(header_path).ok()) {
-        LOG(WARNING) << "Fail to find header file. header_path=" << header_path;
+    if (!Env::Default()->path_exists(meta_path).ok()) {
+        LOG(WARNING) << "Fail to find header file. meta_path=" << meta_path;
         return Status::NotFound("header file not exist");
     }
 
     TabletMetaSharedPtr tablet_meta(new TabletMeta(_mem_tracker));
-    if (!tablet_meta->create_from_file(header_path).ok()) {
-        LOG(WARNING) << "Fail to load tablet_meta. file_path=" << header_path;
+    if (!tablet_meta->create_from_file(meta_path).ok()) {
+        LOG(WARNING) << "Fail to load tablet_meta. file_path=" << meta_path;
         return Status::InternalError("fail to create tablet meta from file");
     }
     // has to change shard id here, because meta file maybe copied from other source
@@ -861,7 +861,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
     std::string meta_binary;
     tablet_meta->serialize(&meta_binary);
     auto st = load_tablet_from_meta(store, tablet_id, schema_hash, meta_binary, true, force, restore, true);
-    LOG_IF(WARNING, !st.ok()) << "fail to load tablet. header_path=" << header_path;
+    LOG_IF(WARNING, !st.ok()) << "fail to load tablet. meta_path=" << meta_path;
     return st;
 }
 
@@ -1019,9 +1019,9 @@ Status TabletManager::start_trash_sweep() {
                 std::string tablet_path = tablet->tablet_path();
                 if (Env::Default()->path_exists(tablet_path).ok()) {
                     if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
-                        Status st = SnapshotManager::instance()->build_latest_full_snapshot_meta(tablet);
+                        Status st = SnapshotManager::instance()->make_snapshot_on_tablet_meta(tablet);
                         if (!st.ok()) {
-                            LOG(WARNING) << "Fail to build_latest_full_snapshot_meta, tablet_id=" << tablet->tablet_id()
+                            LOG(WARNING) << "Fail to make_snapshot_on_tablet_meta, tablet_id=" << tablet->tablet_id()
                                          << " schema_hash=" << tablet->schema_hash() << ", status=" << st.to_string();
                         }
                     } else {
@@ -1408,8 +1408,9 @@ TabletManager::tablets_shard& TabletManager::_get_tablets_shard(TTabletId tablet
     return _tablets_shards[tabletId & _tablets_shards_mask];
 }
 
-Status TabletManager::create_tablet_from_primary_snapshot(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
-                                                          const string& schema_hash_path, bool restore) {
+Status TabletManager::create_primary_tablet_from_meta_snapshot(DataDir* store, TTabletId tablet_id,
+                                                               SchemaHash schema_hash, const string& schema_hash_path,
+                                                               bool restore) {
     LOG(INFO) << "Loading tablet " << tablet_id << " from snapshot " << schema_hash_path;
     auto meta_path = strings::Substitute("$0/meta", schema_hash_path);
     auto shard_path = path_util::dir_name(path_util::dir_name(path_util::dir_name(meta_path)));

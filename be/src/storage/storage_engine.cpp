@@ -880,8 +880,8 @@ OLAPStatus StorageEngine::load_header(const string& shard_path, const TCloneReq&
         st = _tablet_manager->load_tablet_from_dir(store, request.tablet_id, request.schema_hash,
                                                    schema_hash_path_stream.str(), false, restore);
     } else {
-        st = _tablet_manager->create_tablet_from_primary_snapshot(store, request.tablet_id, request.schema_hash,
-                                                                  schema_hash_path_stream.str(), true);
+        st = _tablet_manager->create_primary_tablet_from_meta_snapshot(store, request.tablet_id, request.schema_hash,
+                                                                       schema_hash_path_stream.str(), true);
     }
 
     if (!st.ok()) {
