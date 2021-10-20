@@ -734,13 +734,15 @@ public class ShowExecutor {
         db.readLock();
         try {
             Table table = db.getTable(showStmt.getTableName().getTbl());
-            if (table != null && table instanceof OlapTable) {
+            if (table instanceof OlapTable) {
                 List<Index> indexes = ((OlapTable) table).getIndexes();
                 for (Index index : indexes) {
                     rows.add(Lists.newArrayList(showStmt.getTableName().toString(), "", index.getIndexName(),
-                            "", index.getColumns().stream().collect(Collectors.joining(",")), "", "", "", "",
+                            "", String.join(",", index.getColumns()), "", "", "", "",
                             "", index.getIndexType().name(), index.getComment()));
                 }
+            } else if (table instanceof View) {
+                // do nothing
             } else {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR,
                         db.getFullName() + "." + showStmt.getTableName().toString());
