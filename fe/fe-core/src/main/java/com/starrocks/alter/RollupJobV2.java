@@ -837,7 +837,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             stmt = (CreateMaterializedViewStmt) SqlParserUtils.getStmt(parser, origStmt.idx);
             stmt.analyze(analyzer);
         } catch (Exception e) {
-            if (e instanceof AnalysisException && e.getMessage().contains("Materialized view does not support count(distinct)/sum(distinct) function")) {
+            if (e instanceof AnalysisException && e.getMessage().contains("Materialized view does not support distinct function")) {
                 return;
             }
             // Under normal circumstances, the stmt will not fail to analyze.
