@@ -134,6 +134,10 @@ public:
 
     using IteratorList = std::vector<ChunkIteratorPtr>;
 
+    // Get the segment iterators for the specified version |spec_version|.
+    StatusOr<IteratorList> capture_segment_iterators(const Version& spec_version, const vectorized::Schema& schema,
+                                                     const vectorized::RowsetReadOptions& options) const;
+
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     void add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version);
     bool version_for_delete_predicate(const Version& version);

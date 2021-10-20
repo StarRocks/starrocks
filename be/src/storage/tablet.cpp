@@ -1226,6 +1226,31 @@ Status Tablet::rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
     return _updates->rowset_commit(version, rowset);
 }
 
+StatusOr<Tablet::IteratorList> Tablet::capture_segment_iterators(const Version& spec_version,
+                                                                 const vectorized::Schema& schema,
+                                                                 const vectorized::RowsetReadOptions& options) const {
+    if (_updates) {
+        if (spec_version.first != 0) {
+            LOG(WARNING) << "cannot capture with version.first:" << spec_version.first;
+            return Status::InvalidArgument("cannot capture with version.first != 0");
+        }
+        return _updates->read(spec_version.second, schema, options);
+    }
+    std::shared_lock rdlock(_meta_lock);
+    std::vector<Version> version_path;
+    std::vector<RowsetSharedPtr> rowsets;
+    RETURN_IF_ERROR(capture_consistent_versions(spec_version, &version_path));
+    RETURN_IF_ERROR(_capture_consistent_rowsets_unlocked(version_path, &rowsets));
+    // Release lock before acquiring segment iterators.
+    rdlock.unlock();
+
+    IteratorList iterators;
+    for (auto& rowset : rowsets) {
+        RETURN_IF_ERROR(rowset->get_segment_iterators(schema, options, &iterators));
+    }
+    return std::move(iterators);
+}
+
 void Tablet::on_shutdown() {
     if (_updates) {
         _updates->_stop_and_wait_apply_done();

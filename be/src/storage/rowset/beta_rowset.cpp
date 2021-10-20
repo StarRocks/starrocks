@@ -216,6 +216,19 @@ private:
     vectorized::ChunkIteratorPtr _iter;
 };
 
+StatusOr<vectorized::ChunkIteratorPtr> BetaRowset::new_iterator(const vectorized::Schema& schema,
+                                                                const vectorized::RowsetReadOptions& options) {
+    std::vector<vectorized::ChunkIteratorPtr> seg_iters;
+    RETURN_IF_ERROR(get_segment_iterators(schema, options, &seg_iters));
+    if (seg_iters.empty()) {
+        return vectorized::new_empty_iterator(schema, options.chunk_size);
+    } else if (options.sorted) {
+        return vectorized::new_merge_iterator(seg_iters);
+    } else {
+        return vectorized::new_union_iterator(std::move(seg_iters));
+    }
+}
+
 Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const vectorized::RowsetReadOptions& options,
                                          std::vector<vectorized::ChunkIteratorPtr>* segment_iterators) {
     RowsetReleaseGuard guard(shared_from_this());

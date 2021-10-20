@@ -48,6 +48,9 @@ public:
 
     OLAPStatus create_reader(RowsetReaderSharedPtr* result) override;
 
+    StatusOr<vectorized::ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
+                                                        const vectorized::RowsetReadOptions& options) override;
+
     Status get_segment_iterators(const vectorized::Schema& schema, const vectorized::RowsetReadOptions& options,
                                  std::vector<vectorized::ChunkIteratorPtr>* seg_iterators) override;
 
