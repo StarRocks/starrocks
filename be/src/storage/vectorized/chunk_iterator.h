@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "column/schema.h"
+#include "storage/vectorized/tablet_reader_params.h"
 #include "util/runtime_profile.h"
 #ifndef NDEBUG
 #include "column/chunk.h"
@@ -61,6 +62,24 @@ public:
 
     const Schema& schema() const { return _schema; }
 
+    // Returns the Schema of the result.
+    // If a Field uses the global dictionary strategy, the field will be rewritten as INT
+    const Schema& res_schema() const { return _encoded_schema; }
+
+    virtual Status init_res_schema(std::unordered_map<uint32_t, GlobalDictMap*>& dict_maps) {
+        for (const auto& field : schema().fields()) {
+            const auto cid = field->id();
+            const auto& name = field->name();
+            bool is_nullable = field->is_nullable();
+            if (dict_maps.count(cid)) {
+                _encoded_schema.append(std::make_shared<Field>(cid, name, OLAP_FIELD_TYPE_INT, -1, -1, is_nullable));
+            } else {
+                _encoded_schema.append(field);
+            }
+        }
+        return Status::OK();
+    }
+
     int chunk_size() const { return _chunk_size; }
 
 protected:
@@ -70,6 +89,7 @@ protected:
     }
 
     vectorized::Schema _schema;
+    vectorized::Schema _encoded_schema;
 
     int _chunk_size = DEFAULT_CHUNK_SIZE;
 };
@@ -90,6 +110,12 @@ public:
     }
 
     size_t merged_rows() const override { return _iter->merged_rows(); }
+
+    virtual Status init_res_schema(std::unordered_map<uint32_t, GlobalDictMap*>& dict_maps) override {
+        ChunkIterator::init_res_schema(dict_maps);
+        _iter->init_res_schema(dict_maps);
+        return Status::OK();
+    }
 
 private:
     Status do_get_next(Chunk* chunk) override {

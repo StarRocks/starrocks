@@ -216,6 +216,11 @@ public:
         _iter.reset();
     }
 
+    virtual Status init_res_schema(std::unordered_map<uint32_t, vectorized::GlobalDictMap*>& dict_maps) override {
+        RETURN_IF_ERROR(vectorized::ChunkIterator::init_res_schema(dict_maps));
+        return _iter->init_res_schema(dict_maps);
+    }
+
 protected:
     Status do_get_next(vectorized::Chunk* chunk) override { return _iter->get_next(chunk); }
     Status do_get_next(vectorized::Chunk* chunk, vector<uint32_t>* rowid) override {
@@ -255,6 +260,7 @@ Status BetaRowset::get_segment_iterators(const vectorized::Schema& schema, const
     seg_options.profile = options.profile;
     seg_options.reader_type = options.reader_type;
     seg_options.chunk_size = options.chunk_size;
+    seg_options.global_dictmaps = options.global_dictmaps;
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }

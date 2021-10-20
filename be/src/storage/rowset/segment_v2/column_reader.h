@@ -616,5 +616,20 @@ private:
     ordinal_t _num_rows = 0;
 };
 
+// To handle DictDecode
+class ColumnDecoder {
+public:
+    ColumnDecoder() : _iter(nullptr) {}
+    ColumnDecoder(ColumnIterator* iter) : _iter(iter) {}
+    void set_iterator(ColumnIterator* iter) { _iter = iter; }
+    Status decode_dict_codes(const vectorized::Column& codes, vectorized::Column* words) {
+        DCHECK(_iter != nullptr);
+        return _iter->decode_dict_codes(codes, words);
+    }
+
+private:
+    ColumnIterator* _iter;
+};
+
 } // namespace segment_v2
 } // namespace starrocks
