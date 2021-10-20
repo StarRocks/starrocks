@@ -30,13 +30,13 @@ Status CrossJoinRightSinkOperator::push_chunk(RuntimeState* state, const vectori
     if (chunk) {
         const size_t row_number = chunk->num_rows();
         if (row_number > 0) {
-            if (_cross_join_context->_build_chunk->num_rows() == 0) {
-                _cross_join_context->_build_chunk = chunk;
+            if (_cross_join_context->get_build_chunk()->num_rows() == 0) {
+                _cross_join_context->set_build_chunk(chunk);
             } else {
                 // merge chunks from right table.
                 size_t col_number = chunk->num_columns();
                 for (size_t col = 0; col < col_number; ++col) {
-                    _cross_join_context->_build_chunk->get_column_by_index(col)->append(
+                    _cross_join_context->get_build_chunk()->get_column_by_index(col)->append(
                             *(chunk->get_column_by_index(col).get()), 0, row_number);
                 }
             }
@@ -49,7 +49,7 @@ Status CrossJoinRightSinkOperator::push_chunk(RuntimeState* state, const vectori
 void CrossJoinRightSinkOperator::finish(RuntimeState* state) {
     if (!_is_finished) {
         // Used to notify cross_join_left_operator.
-        _cross_join_context->_right_table_complete = true;
+        _cross_join_context->set_right_complete();
         _is_finished = true;
     }
 }

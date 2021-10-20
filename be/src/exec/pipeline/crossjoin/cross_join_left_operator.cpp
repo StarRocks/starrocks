@@ -26,7 +26,7 @@ Status CrossJoinLeftOperator::close(RuntimeState* state) {
 void CrossJoinLeftOperator::_init_chunk(vectorized::ChunkPtr* chunk) {
     vectorized::ChunkPtr new_chunk = std::make_shared<vectorized::Chunk>();
 
-    // init columns for the new chunk from _probe_chunk and _cross_join_context->_build_chunk
+    // init columns for the new chunk from _probe_chunk and _cross_join_context->get_build_chunk()
     for (size_t i = 0; i < _probe_column_count; ++i) {
         SlotDescriptor* slot = _col_types[i];
         vectorized::ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
@@ -35,7 +35,7 @@ void CrossJoinLeftOperator::_init_chunk(vectorized::ChunkPtr* chunk) {
     }
     for (size_t i = 0; i < _build_column_count; ++i) {
         SlotDescriptor* slot = _col_types[_probe_column_count + i];
-        vectorized::ColumnPtr& src_col = _cross_join_context->_build_chunk->get_column_by_slot_id(slot->id());
+        vectorized::ColumnPtr& src_col = _cross_join_context->get_build_chunk()->get_column_by_slot_id(slot->id());
         vectorized::ColumnPtr new_col = vectorized::ColumnHelper::create_column(slot->type(), src_col->is_nullable());
         new_chunk->append_column(std::move(new_col), slot->id());
     }
@@ -47,7 +47,7 @@ void CrossJoinLeftOperator::_init_chunk(vectorized::ChunkPtr* chunk) {
         }
     }
     for (int tuple_id : _output_build_tuple_ids) {
-        if (_cross_join_context->_build_chunk->is_tuple_exist(tuple_id)) {
+        if (_cross_join_context->get_build_chunk()->is_tuple_exist(tuple_id)) {
             vectorized::ColumnPtr dest_col = vectorized::BooleanColumn::create();
             new_chunk->append_tuple_column(dest_col, tuple_id);
         }
@@ -69,7 +69,7 @@ void CrossJoinLeftOperator::_copy_joined_rows_with_index_base_probe(vectorized::
     for (size_t i = 0; i < _build_column_count; i++) {
         SlotDescriptor* slot = _col_types[i + _probe_column_count];
         vectorized::ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
-        vectorized::ColumnPtr& src_col = _cross_join_context->_build_chunk->get_column_by_slot_id(slot->id());
+        vectorized::ColumnPtr& src_col = _cross_join_context->get_build_chunk()->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_probe(dest_col, src_col, build_index, row_count);
     }
 
@@ -86,8 +86,8 @@ void CrossJoinLeftOperator::_copy_joined_rows_with_index_base_probe(vectorized::
     }
 
     for (int tuple_id : _output_build_tuple_ids) {
-        if (_cross_join_context->_build_chunk->is_tuple_exist(tuple_id)) {
-            vectorized::ColumnPtr& src_col = _cross_join_context->_build_chunk->get_tuple_column_by_id(tuple_id);
+        if (_cross_join_context->get_build_chunk()->is_tuple_exist(tuple_id)) {
+            vectorized::ColumnPtr& src_col = _cross_join_context->get_build_chunk()->get_tuple_column_by_id(tuple_id);
             auto& src_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(src_col)->get_data();
             vectorized::ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
             auto& dest_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(dest_col)->get_data();
@@ -111,7 +111,7 @@ void CrossJoinLeftOperator::_copy_joined_rows_with_index_base_build(vectorized::
     for (size_t i = 0; i < _build_column_count; i++) {
         SlotDescriptor* slot = _col_types[i + _probe_column_count];
         vectorized::ColumnPtr& dest_col = chunk->get_column_by_slot_id(slot->id());
-        vectorized::ColumnPtr& src_col = _cross_join_context->_build_chunk->get_column_by_slot_id(slot->id());
+        vectorized::ColumnPtr& src_col = _cross_join_context->get_build_chunk()->get_column_by_slot_id(slot->id());
         _copy_build_rows_with_index_base_build(dest_col, src_col, build_index, row_count);
     }
 
@@ -128,8 +128,8 @@ void CrossJoinLeftOperator::_copy_joined_rows_with_index_base_build(vectorized::
     }
 
     for (int tuple_id : _output_build_tuple_ids) {
-        if (_cross_join_context->_build_chunk->is_tuple_exist(tuple_id)) {
-            vectorized::ColumnPtr& src_col = _cross_join_context->_build_chunk->get_tuple_column_by_id(tuple_id);
+        if (_cross_join_context->get_build_chunk()->is_tuple_exist(tuple_id)) {
+            vectorized::ColumnPtr& src_col = _cross_join_context->get_build_chunk()->get_tuple_column_by_id(tuple_id);
             auto& src_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(src_col)->get_data();
             vectorized::ColumnPtr& dest_col = chunk->get_tuple_column_by_id(tuple_id);
             auto& dest_data = vectorized::ColumnHelper::as_raw_column<vectorized::BooleanColumn>(dest_col)->get_data();
@@ -361,13 +361,13 @@ bool CrossJoinLeftOperator::need_input() const {
 }
 
 bool CrossJoinLeftOperator::is_ready() const {
-    // woke from blocking througth cross join right sink operator by shared _right_table_complete_ptr.
-    bool is_complete = _cross_join_context->_right_table_complete;
+    // woke from blocking througth cross join right sink operator by shared _cross_join_context.
+    bool is_complete = _cross_join_context->is_right_complete();
     if (is_complete) {
         _is_right_complete = true;
-        if (_cross_join_context->_build_chunk->num_rows() > 0) {
+        if (_cross_join_context->get_build_chunk()->num_rows() > 0) {
             // Set fields for left table.
-            _total_build_rows = _cross_join_context->_build_chunk->num_rows();
+            _total_build_rows = _cross_join_context->get_build_chunk()->num_rows();
             _build_rows_threshold = (_total_build_rows / config::vector_chunk_size) * config::vector_chunk_size;
             _build_rows_remainder = _total_build_rows - _build_rows_threshold;
         }
