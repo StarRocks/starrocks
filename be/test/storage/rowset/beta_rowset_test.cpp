@@ -448,7 +448,6 @@ TEST_F(BetaRowsetTest, DiscontinuousRowidTest) {
         ASSERT_EQ(num_segments * rows_per_segment, rowset->rowset_meta()->num_rows());
     }
 
-
     {
         auto& schema = rowset->schema();
         vector<uint32_t> pk_columns;
