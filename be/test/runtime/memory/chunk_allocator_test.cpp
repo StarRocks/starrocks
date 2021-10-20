@@ -25,16 +25,11 @@
 
 #include "common/config.h"
 #include "runtime/memory/chunk.h"
-#include "runtime/mem_tracker.h"
-#include "runtime/current_thread.h"
 
 namespace starrocks {
 
 TEST(ChunkAllocatorTest, Normal) {
     config::use_mmap_allocate_chunk = true;
-    std::unique_ptr<MemTracker> tls_tracker = std::make_unique<MemTracker>(-1);
-    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1);
-    tls_thread_status.set_mem_tracker(tls_tracker.get());
     for (size_t size = 4096; size <= 1024 * 1024; size <<= 1) {
         Chunk chunk;
         ASSERT_TRUE(ChunkAllocator::instance()->allocate(size, &chunk));
