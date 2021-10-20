@@ -13,7 +13,6 @@ RepeatNode::RepeatNode(ObjectPool* pool, const TPlanNode& tnode, const Descripto
           _repeat_id_list(tnode.repeat_node.repeat_id_list),
           _repeat_times_required(_repeat_id_list.size()),
           _repeat_times_last(_repeat_times_required),
-          _curr_columns(_all_slot_ids.size()),
           _grouping_list(tnode.repeat_node.grouping_list),
           _output_tuple_id(tnode.repeat_node.output_tuple_id),
           _tuple_desc(descs.get_tuple_descriptor(_output_tuple_id)) {
