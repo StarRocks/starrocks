@@ -1408,9 +1408,8 @@ TabletManager::tablets_shard& TabletManager::_get_tablets_shard(TTabletId tablet
     return _tablets_shards[tabletId & _tablets_shards_mask];
 }
 
-Status TabletManager::create_primary_tablet_from_meta_snapshot(DataDir* store, TTabletId tablet_id,
-                                                               SchemaHash schema_hash, const string& schema_hash_path,
-                                                               bool restore) {
+Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
+                                                       const string& schema_hash_path, bool restore) {
     LOG(INFO) << "Loading tablet " << tablet_id << " from snapshot " << schema_hash_path;
     auto meta_path = strings::Substitute("$0/meta", schema_hash_path);
     auto shard_path = path_util::dir_name(path_util::dir_name(path_util::dir_name(meta_path)));
