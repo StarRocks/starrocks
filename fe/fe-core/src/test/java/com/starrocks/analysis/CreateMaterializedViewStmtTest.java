@@ -193,7 +193,8 @@ public class CreateMaterializedViewStmtTest {
             createMaterializedViewStmt.analyze(analyzer);
             Assert.fail();
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view does not support count(distinct) function now"));
+            Assert.assertTrue(
+                    e.getMessage().contains("Materialized view does not support count(distinct) function now"));
             System.out.print(e.getMessage());
         }
     }
