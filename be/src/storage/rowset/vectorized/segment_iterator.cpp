@@ -171,7 +171,9 @@ public:
     Status decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) override {
         RETURN_IF_ERROR(_build_to_global_dict());
         vectorized::Int32Column::Container* container;
-        if (words->is_nullable()) {
+        bool output_nullable = words->is_nullable();
+
+        if (output_nullable) {
             vectorized::ColumnPtr& data_column = down_cast<vectorized::NullableColumn*>(words)->data_column();
             container = &down_cast<vectorized::Int32Column*>(data_column.get())->get_data();
         } else {
@@ -181,9 +183,23 @@ public:
         auto& res_data = *container;
         res_data.resize(size);
         for (size_t i = 0; i < size; ++i) {
-            DCHECK(_local_to_global.contains(codes[i]));
-            res_data[i] = _local_to_global.at(codes[i]);
+            if (codes[i] >= 0) {
+                DCHECK(_local_to_global.contains(codes[i]));
+                res_data[i] = _local_to_global.at(codes[i]);
+            } else {
+                res_data[i] = -1;
+                DCHECK(output_nullable);
+            }
         }
+
+        if (output_nullable) {
+            auto& null_data = down_cast<vectorized::NullableColumn*>(words)->null_column_data();
+            null_data.resize(size);
+            for (int i = 0; i < size; ++i) {
+                null_data[i] = (res_data[i] == -1);
+            }
+        }
+
         return Status::OK();
     }
 
@@ -886,8 +902,8 @@ void SegmentIterator::_switch_context(ScanContext* to) {
 
     if (to->_late_materialize) {
         if (to->_final_chunk == nullptr) {
-            DCHECK_GT(this->res_schema().num_fields(), 0);
-            to->_final_chunk = ChunkHelper::new_chunk(this->res_schema(), _opts.chunk_size);
+            DCHECK_GT(this->encoded_schema().num_fields(), 0);
+            to->_final_chunk = ChunkHelper::new_chunk(this->encoded_schema(), _opts.chunk_size);
             CurrentMemTracker::consume(to->_final_chunk->memory_usage());
         }
     } else {

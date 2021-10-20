@@ -2,18 +2,29 @@
 
 #include "exec/vectorized/project_node.h"
 
+#include <algorithm>
+#include <cstring>
 #include <memory>
+#include <set>
+#include <vector>
 
+#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/project_operator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/runtime_filter.h"
+#include "fmt/compile.h"
+#include "glog/logging.h"
+#include "gutil/casts.h"
+#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
@@ -67,6 +78,28 @@ Status ProjectNode::prepare(RuntimeState* state) {
 
     _expr_compute_timer = ADD_TIMER(runtime_profile(), "ExprComputeTime");
     _common_sub_expr_compute_timer = ADD_TIMER(runtime_profile(), "CommonSubExprComputeTime");
+
+    GlobalDictMaps* mdict_maps = state->mutable_global_dict_map();
+    _dict_optimize_parser.set_mutable_dict_maps(mdict_maps);
+
+    _common_sub_dict_optimize_ctxs.resize(_common_sub_expr_ctxs.size());
+    for (int i = 0; i < _common_sub_expr_ctxs.size(); ++i) {
+        _dict_optimize_parser.check_could_apply_dict_optimize(_common_sub_expr_ctxs[i],
+                                                              &_common_sub_dict_optimize_ctxs[i]);
+        if (_common_sub_dict_optimize_ctxs[i].could_apply_dict_optimize) {
+            _dict_optimize_parser.eval_expr(state, _common_sub_expr_ctxs[i], &_common_sub_dict_optimize_ctxs[i],
+                                            _common_sub_slot_ids[i]);
+        }
+    }
+
+    _dict_optimize_ctxs.resize(_expr_ctxs.size());
+    for (int i = 0; i < _expr_ctxs.size(); ++i) {
+        _dict_optimize_parser.check_could_apply_dict_optimize(_expr_ctxs[i], &_dict_optimize_ctxs[i]);
+        if (_dict_optimize_ctxs[i].could_apply_dict_optimize) {
+            _dict_optimize_parser.eval_expr(state, _expr_ctxs[i], &_dict_optimize_ctxs[i], _slot_ids[i]);
+        }
+    }
+
     return Status::OK();
 }
 
@@ -103,7 +136,15 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     {
         SCOPED_TIMER(_common_sub_expr_compute_timer);
         for (size_t i = 0; i < _common_sub_slot_ids.size(); ++i) {
-            (*chunk)->append_column(_common_sub_expr_ctxs[i]->evaluate((*chunk).get()), _common_sub_slot_ids[i]);
+            if (_common_sub_dict_optimize_ctxs[i].could_apply_dict_optimize) {
+                auto cid = _common_sub_dict_optimize_ctxs[i].column_ref->slot_id();
+                auto& src_col = (*chunk)->get_column_by_slot_id(cid);
+                ColumnPtr result_column;
+                _dict_optimize_parser.eval_code_convert(_common_sub_dict_optimize_ctxs[i], src_col, &result_column);
+                (*chunk)->append_column(std::move(result_column), _common_sub_slot_ids[i]);
+            } else {
+                (*chunk)->append_column(_common_sub_expr_ctxs[i]->evaluate((*chunk).get()), _common_sub_slot_ids[i]);
+            }
         }
     }
 
@@ -112,7 +153,13 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     {
         SCOPED_TIMER(_expr_compute_timer);
         for (size_t i = 0; i < _slot_ids.size(); ++i) {
-            result_columns[i] = _expr_ctxs[i]->evaluate((*chunk).get());
+            if (_dict_optimize_ctxs[i].could_apply_dict_optimize) {
+                auto cid = _dict_optimize_ctxs[i].column_ref->slot_id();
+                auto& src_col = (*chunk)->get_column_by_slot_id(cid);
+                _dict_optimize_parser.eval_code_convert(_dict_optimize_ctxs[i], src_col, &result_columns[i]);
+            } else {
+                result_columns[i] = _expr_ctxs[i]->evaluate((*chunk).get());
+            }
 
             if (result_columns[i]->only_null()) {
                 result_columns[i] = ColumnHelper::create_column(_expr_ctxs[i]->root()->type(), true);

@@ -48,7 +48,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     }
 
     DCHECK(_params.global_dictmaps != nullptr);
-    RETURN_IF_ERROR(_prj_iter->init_res_schema(*_params.global_dictmaps));
+    RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
 
     Status st = _reader->prepare();
     if (!st.ok()) {
