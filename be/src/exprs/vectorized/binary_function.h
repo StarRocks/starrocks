@@ -197,26 +197,41 @@ public:
     static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
         ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(v1, v2);
 
-        NullColumnPtr nulls;
-        if (data_result->has_null()) {
-            nulls = ColumnHelper::as_raw_column<NullableColumn>(data_result)->null_column();
-        } else {
-            nulls = RunTimeColumnType<TYPE_NULL>::create();
-            nulls->resize(data_result->size());
-        }
-        auto* ns = nulls->get_data().data();
-
-        const ColumnPtr& data = FunctionHelper::get_real_data_column(data_result);
-        auto& r1 = ColumnHelper::cast_to_raw<ResultType>(data)->get_data();
         if constexpr (!std::is_same<NULL_OP, ResultNopCheck>::value) {
-            for (size_t i = 0; i < data_result->size(); ++i) {
+            ColumnPtr data;
+            if (data_result->is_constant()) {
+                if (data_result->only_null()) {
+                    return data_result;
+                }
+                data = ColumnHelper::as_column<ConstColumn>(data_result)->data_column();
+            } else {
+                data = data_result;
+            }
+
+            NullColumnPtr nulls;
+            if (data->is_nullable()) {
+                nulls = ColumnHelper::as_raw_column<NullableColumn>(data)->null_column();
+            } else {
+                nulls = RunTimeColumnType<TYPE_NULL>::create();
+                nulls->resize(data->size());
+            }
+            auto* ns = nulls->get_data().data();
+
+            const ColumnPtr& real_data = FunctionHelper::get_real_data_column(data);
+            auto& r1 = ColumnHelper::cast_to_raw<ResultType>(real_data)->get_data();
+
+            for (size_t i = 0; i < data->size(); ++i) {
                 ns[i] = NULL_OP::template apply<RunTimeCppType<ResultType>, RunTimeCppType<ResultType>>(r1[i]);
             }
-        }
 
-        if (!data_result->is_nullable()) {
-            if (SIMD::count_nonzero(nulls->get_data())) {
-                return NullableColumn::create(data_result, nulls);
+            if (!data->is_nullable()) {
+                if (SIMD::count_nonzero(nulls->get_data())) {
+                    auto null_result = NullableColumn::create(data, nulls);
+                    if (data_result->is_constant()) {
+                        return ConstColumn::create(null_result, data_result->size());
+                    }
+                    return null_result;
+                }
             }
         }
 
