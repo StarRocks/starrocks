@@ -260,18 +260,21 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
             // this condition will always true for this _probe_chunk,
             // Until _probe_chunk be done.
             if (_probe_chunk_index == _probe_chunk->num_rows()) {
+                // get left chunk's size.
+                size_t probe_chunk_size = _probe_chunk_index;
                 // step 2:
                 // if left chunk is bigger than right, we shuld scan left based on right.
-                if (_probe_chunk_index > _build_rows_remainder) {
-                    if (row_count > _probe_chunk_index - _probe_rows_index) {
-                        row_count = _probe_chunk_index - _probe_rows_index;
+                if (probe_chunk_size > _build_rows_remainder) {
+                    if (row_count > probe_chunk_size - _probe_rows_index) {
+                        row_count = probe_chunk_size - _probe_rows_index;
                     }
 
                     _copy_joined_rows_with_index_base_build(chunk, row_count, _probe_rows_index,
                                                             _beyond_threshold_build_rows_index);
                     _probe_rows_index += row_count;
-
-                    if (_probe_rows_index == _probe_chunk_index) {
+                    // if _probe_rows_index is equal with probe_chunk_size, 
+                    // means left chunk is done with the right row, so we get next right row.
+                    if (_probe_rows_index == probe_chunk_size) {
                         ++_beyond_threshold_build_rows_index;
                         _probe_rows_index = 0;
                     }
@@ -296,7 +299,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
                     }
 
                     // _probe_chunk is done with _build_chunk.
-                    if (_probe_rows_index >= _probe_chunk_index) {
+                    if (_probe_rows_index >= probe_chunk_size) {
                         _probe_chunk = nullptr;
                     }
                 }
