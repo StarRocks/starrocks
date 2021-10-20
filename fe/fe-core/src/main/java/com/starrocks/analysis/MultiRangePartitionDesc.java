@@ -134,11 +134,15 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         long currentLoopNum = 0;
         long maxAllowedLimit = Config.max_partitions_in_one_batch;
 
-        // By default, the dayOfWeek parameter are the same as those of dynamic partition.
+        // In china, the Monday is the first day of week. In western country, the Sunday is the first day of week.
+        // The semantics is should be consistent between batching partition and dynamic partition.
+        // If the option is not set, the Monday will be the first day of week.
+        // The 1st January is the first week of every year. Every year have 52 weeks.
+        // The last week will end at 31st December.
         // If user set dynamic_partition.start_day_of_week table properties
         // it will follow this configuration to set day of week
         int dayOfWeek = 1;
-        if (properties != null && properties.get(DynamicPartitionProperty.START_DAY_OF_WEEK) != null) {
+        if (properties != null && properties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
             String dayOfWeekStr = properties.get(DynamicPartitionProperty.START_DAY_OF_WEEK);
             try {
                 DynamicPartitionUtil.checkStartDayOfWeek(dayOfWeekStr);
