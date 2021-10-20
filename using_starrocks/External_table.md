@@ -303,6 +303,7 @@ PROPERTIES (
     |  CHAR  | CHAR   |
     |  DOUBLE | DOUBLE |
     | FLOATE | FLOAT|
+    | DECIMAL | DECIMAL |
 
     说明：
 
