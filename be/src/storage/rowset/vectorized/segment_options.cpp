@@ -30,6 +30,7 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     dst->stats = stats;
     dst->use_page_cache = use_page_cache;
     dst->profile = profile;
+    dst->global_dictmaps = global_dictmaps;
     return Status::OK();
 }
 

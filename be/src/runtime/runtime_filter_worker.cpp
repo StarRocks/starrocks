@@ -196,7 +196,7 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
     }
 
     status->arrives.insert(be_number);
-    status->filters.insert(make_pair(be_number, rf));
+    status->filters.insert(std::make_pair(be_number, rf));
 
     // not ready. still have to wait more filters.
     if (status->filters.size() < status->expect_number) return;
@@ -495,7 +495,7 @@ void RuntimeFilterWorker::execute() {
                 VLOG_QUERY << "open query: rf merger initialization failed. error = " << st.get_error_msg();
                 break;
             }
-            _mergers.insert(make_pair(ev.query_id, std::move(merger)));
+            _mergers.insert(std::make_pair(ev.query_id, std::move(merger)));
             break;
         }
 

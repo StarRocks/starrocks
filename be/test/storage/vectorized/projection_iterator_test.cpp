@@ -29,7 +29,10 @@ public:
         return n > 0 ? Status::OK() : Status::EndOfFile("eof");
     }
 
-    void reset() { _idx = 0; }
+    void reset() {
+        _idx = 0;
+        _encoded_schema.clear();
+    }
 
     static Schema schema() {
         FieldPtr f1 = std::make_shared<Field>(0, "c1", get_type_info(OLAP_FIELD_TYPE_INT), false);
@@ -61,14 +64,14 @@ TEST_F(ProjectionIteratorTest, all) {
     std::vector<int32_t> c3{10, 11, 12, 13, 14};
 
     auto child = std::make_shared<VectorIterator>(c1, c2, c3);
-
     // select c1
     {
         Schema schema = child->schema();
         schema.remove(2);
         schema.remove(1);
         auto iter = new_projection_iterator(schema, child);
-        ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+        iter->init_res_schema(EMPTY_GLOBAL_DICTMAPS);
+        ChunkPtr chunk = ChunkHelper::new_chunk(iter->res_schema(), config::vector_chunk_size);
         auto st = iter->get_next(chunk.get());
         ASSERT_TRUE(st.ok());
         ASSERT_EQ(5u, chunk->num_rows());
@@ -83,7 +86,8 @@ TEST_F(ProjectionIteratorTest, all) {
         Schema schema = child->schema();
         schema.remove(0);
         auto iter = new_projection_iterator(schema, child);
-        ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+        iter->init_res_schema(EMPTY_GLOBAL_DICTMAPS);
+        ChunkPtr chunk = ChunkHelper::new_chunk(iter->res_schema(), config::vector_chunk_size);
         auto st = iter->get_next(chunk.get());
         ASSERT_TRUE(st.ok());
         ASSERT_EQ(5u, chunk->num_rows());
@@ -100,7 +104,8 @@ TEST_F(ProjectionIteratorTest, all) {
         FieldPtr f3 = child->schema().field(2);
         Schema schema({f3, f1});
         auto iter = new_projection_iterator(schema, child);
-        ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+        iter->init_res_schema(EMPTY_GLOBAL_DICTMAPS);
+        ChunkPtr chunk = ChunkHelper::new_chunk(iter->res_schema(), config::vector_chunk_size);
         auto st = iter->get_next(chunk.get());
         ASSERT_TRUE(st.ok());
         ASSERT_EQ(5u, chunk->num_rows());
