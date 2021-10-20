@@ -483,7 +483,7 @@ LoadFinishTime: 2019-07-27 11:50:16
 
 使用 Spark Load 最适合的场景是原始数据在文件系统（HDFS）中，数据量在几十GB到TB级别。小数据量还是建议使用Stream Load或者Broker Load。
 
-* 完整spark load导入示例，参考github上的demo: [sparkLoad2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/cn/03_sparkLoad2StarRocks.md)
+* 完整spark load导入示例，参考github上的demo: [sparkLoad2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/03_sparkLoad2StarRocks.md)
 
 ---
 

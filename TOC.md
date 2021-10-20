@@ -43,6 +43,7 @@
   + [窗口函数](/using_starrocks/Window_function.md)
   + [CBO优化器](/using_starrocks/Cost_based_optimizer.md)
   + [Lateral Join](/using_starrocks/Lateral_join.md)
+  + [时区](/using_starrocks/timezone.md)
 + 参考手册
   + SQL参考
     + 用户账户管理
