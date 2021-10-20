@@ -22,13 +22,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.AggregateType;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.*;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -140,13 +135,25 @@ public class CreateMaterializedViewStmtTest {
     }
 
     @Test
-    public void testCountDistinct(@Injectable ArithmeticExpr arithmeticExpr,
-                                  @Injectable SelectStmt selectStmt) throws UserException  {
-
-        FunctionCallExpr functionCallExpr = new FunctionCallExpr("count distinct", Lists.newArrayList(arithmeticExpr));
+    public void testCountDistinct(@Injectable SlotRef slotRef, @Injectable ArithmeticExpr arithmeticExpr,
+                                  @Injectable SelectStmt selectStmt, @Injectable Column column,
+                                  @Injectable TableRef tableRef,
+                                  @Injectable SlotDescriptor slotDescriptor) throws UserException  {
         SelectList selectList = new SelectList();
-        SelectListItem selectListItem = new SelectListItem(functionCallExpr, null);
+        SelectListItem selectListItem = new SelectListItem(slotRef, null);
         selectList.addItem(selectListItem);
+
+        TableName tableName = new TableName("db", "table");
+        SlotRef slotRef2 = new SlotRef(tableName, "v1");
+        List<Expr> fnChildren = Lists.newArrayList(slotRef2);
+        Deencapsulation.setField(slotRef2, "desc", slotDescriptor);
+        FunctionParams functionParams = new FunctionParams(true, fnChildren);
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(FunctionSet.COUNT, functionParams);
+        functionCallExpr.setFn(AggregateFunction.createBuiltin(FunctionSet.COUNT,
+                new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
+        SelectListItem selectListItem2 = new SelectListItem(functionCallExpr, null);
+        selectList.addItem(selectListItem2);
+
         new Expectations() {
             {
                 analyzer.getClusterName();
@@ -156,6 +163,22 @@ public class CreateMaterializedViewStmtTest {
                 result = selectList;
                 arithmeticExpr.toString();
                 result = "a+b";
+                slotRef.getColumnName();
+                result = "k1";
+                selectStmt.getWhereClause(); minTimes=0;
+                result = null;
+                selectStmt.getHavingPred(); minTimes=0;
+                result = null;
+                selectStmt.getTableRefs(); minTimes=0;
+                result = Lists.newArrayList(tableRef);
+                slotDescriptor.getColumn(); minTimes=0;
+                result = column;
+                selectStmt.getLimit();minTimes=0;
+                result = -1;
+                column.getType(); minTimes=0;
+                result = Type.INT;
+                slotRef.getType();
+                result = Type.INT;
             }
         };
         CreateMaterializedViewStmt createMaterializedViewStmt =
@@ -163,7 +186,8 @@ public class CreateMaterializedViewStmtTest {
         try {
             createMaterializedViewStmt.analyze(analyzer);
             Assert.fail();
-        } catch (IllegalArgumentException e) {
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("Materialized view does not support count(distinct) function now"));
             System.out.print(e.getMessage());
         }
     }

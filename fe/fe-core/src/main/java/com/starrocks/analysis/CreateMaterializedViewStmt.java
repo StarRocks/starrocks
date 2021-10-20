@@ -197,12 +197,12 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 // Function must match pattern.
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItemExpr;
                 String functionName = functionCallExpr.getFnName().getFunction();
-                MVColumnPattern mvColumnPattern = FN_NAME_TO_PATTERN.get(functionName.toLowerCase());
                 // current version not support count(distinct) function in creating materialized view
                 if (functionName.toLowerCase().equals(FunctionSet.COUNT) && functionCallExpr.isDistinct()){
                     throw new AnalysisException(
                             "Materialized view does not support count(distinct) function now, the function would support at late versions " + functionCallExpr.toSqlImpl());
                 }
+                MVColumnPattern mvColumnPattern = FN_NAME_TO_PATTERN.get(functionName.toLowerCase());
                 if (mvColumnPattern == null) {
                     throw new AnalysisException(
                             "Materialized view does not support this function:" + functionCallExpr.toSqlImpl());
