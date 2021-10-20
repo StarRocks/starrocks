@@ -92,6 +92,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     private String baseIndexName;
     private String dbName;
     private KeysType mvKeysType = KeysType.DUP_KEYS;
+    //if process is replaying log, isReplay is true, otherwise is false
+    public boolean isReplay = false;
 
     public CreateMaterializedViewStmt(String mvName, SelectStmt selectStmt, Map<String, String> properties) {
         this.mvName = mvName;
@@ -198,7 +200,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) selectListItemExpr;
                 String functionName = functionCallExpr.getFnName().getFunction();
                 // current version not support count(distinct) function in creating materialized view
-                if (functionName.toLowerCase().equals("count") && functionCallExpr.isDistinct()) {
+                if (!isReplay && functionName.toLowerCase().equals("count") && functionCallExpr.isDistinct()) {
                     throw new AnalysisException(
                             "Materialized view does not support distinct function " + functionCallExpr.toSqlImpl());
                 }

@@ -835,14 +835,11 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         CreateMaterializedViewStmt stmt = null;
         try {
             stmt = (CreateMaterializedViewStmt) SqlParserUtils.getStmt(parser, origStmt.idx);
+            stmt.isReplay = true;
             stmt.analyze(analyzer);
         } catch (Exception e) {
-            if (!(e instanceof AnalysisException) ||
-                    !e.getMessage().contains("Materialized view does not support distinct function")) {
-                // Under normal circumstances, the stmt will not fail to analyze.
-                throw new IOException("error happens when parsing create materialized view stmt: " + stmt, e);
-            }
-
+            // Under normal circumstances, the stmt will not fail to analyze.
+            throw new IOException("error happens when parsing create materialized view stmt: " + stmt, e);
         }
         setColumnsDefineExpr(stmt.getMVColumnItemList());
     }
