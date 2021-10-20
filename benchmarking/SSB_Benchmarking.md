@@ -145,7 +145,10 @@ order by d_year, s_city, p_brand;
 #### 下载ssb-poc工具包并编译
 
 ~~~shell
-make && make install
+wget https://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/ssb-poc-0.9.2.zip
+unzip ssb-poc-0.9.2.zip
+cd ssb-poc
+make && make install  
 ~~~
 
 所有相关工具安装到output目录
