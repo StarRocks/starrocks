@@ -1049,12 +1049,13 @@ public class Catalog {
 
         if (isFirstTimeStartUp) {
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                LOG.info("first time start failed, clean image dir");
+                String distDir = this.imageDir + "." + System.currentTimeMillis();
+                LOG.info("first time start failed, move image dir to {}", distDir);
                 if (listener == null) {
                     try {
-                        FileUtils.deleteDirectory(new File(this.imageDir));
+                        FileUtils.moveDirectory(new File(this.imageDir), new File(distDir));
                     } catch (IOException e) {
-                        LOG.warn("clean image dir failed", e);
+                        LOG.warn("move image dir failed", e);
                     }
                 }
             }));
