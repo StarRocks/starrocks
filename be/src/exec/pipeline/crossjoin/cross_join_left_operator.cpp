@@ -401,9 +401,14 @@ void CrossJoinLeftOperatorFactory::_init_row_desc() {
 
 Status CrossJoinLeftOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
     _init_row_desc();
+    RowDescriptor row_desc;
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc, mem_tracker));
+    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     return Status::OK();
 }
 
-void CrossJoinLeftOperatorFactory::close(RuntimeState* state) {}
+void CrossJoinLeftOperatorFactory::close(RuntimeState* state) {
+    Expr::close(_conjunct_ctxs, state);
+}
 
 } // namespace starrocks::pipeline

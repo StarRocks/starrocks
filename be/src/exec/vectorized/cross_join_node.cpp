@@ -552,7 +552,7 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     // communication with CrossJoioRight through shared_datas.
     auto left_factory = std::make_shared<CrossJoinLeftOperatorFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
-            _conjunct_ctxs, cross_join_context);
+            std::move(_conjunct_ctxs), cross_join_context);
     operator_before_cross_join_left.emplace_back(std::move(left_factory));
 
     // return as the following pipeline

@@ -109,13 +109,13 @@ class CrossJoinLeftOperatorFactory final : public OperatorWithDependencyFactory 
 public:
     CrossJoinLeftOperatorFactory(int32_t id, int32_t plan_node_id, const RowDescriptor& row_descriptor,
                                  const RowDescriptor& left_row_desc, const RowDescriptor& right_row_desc,
-                                 const std::vector<ExprContext*>& conjunct_ctxs,
+                                 std::vector<ExprContext*>&& conjunct_ctxs,
                                  std::shared_ptr<CrossJoinContext> cross_join_context)
             : OperatorWithDependencyFactory(id, "cross_join_left", plan_node_id),
               _row_descriptor(row_descriptor),
               _left_row_desc(left_row_desc),
               _right_row_desc(right_row_desc),
-              _conjunct_ctxs(conjunct_ctxs),
+              _conjunct_ctxs(std::move(conjunct_ctxs)),
               _cross_join_context(cross_join_context) {}
 
     ~CrossJoinLeftOperatorFactory() override = default;
@@ -141,7 +141,7 @@ private:
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
 
-    const std::vector<ExprContext*>& _conjunct_ctxs;
+    std::vector<ExprContext*> _conjunct_ctxs;
 
     std::shared_ptr<CrossJoinContext> _cross_join_context;
 };
