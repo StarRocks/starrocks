@@ -729,23 +729,24 @@ public class ShowExecutor {
         List<List<String>> rows = Lists.newArrayList();
         Database db = ctx.getCatalog().getDb(showStmt.getDbName());
         if (db == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTableName().toString());
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDbName());
         }
         db.readLock();
         try {
             Table table = db.getTable(showStmt.getTableName().getTbl());
-            if (table instanceof OlapTable) {
+            if (table == null) {
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR,
+                        db.getFullName() + "." + showStmt.getTableName().toString());
+            } else if (table instanceof OlapTable) {
                 List<Index> indexes = ((OlapTable) table).getIndexes();
                 for (Index index : indexes) {
                     rows.add(Lists.newArrayList(showStmt.getTableName().toString(), "", index.getIndexName(),
                             "", String.join(",", index.getColumns()), "", "", "", "",
                             "", index.getIndexType().name(), index.getComment()));
                 }
-            } else if (table instanceof View) {
-                // do nothing
             } else {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR,
-                        db.getFullName() + "." + showStmt.getTableName().toString());
+                // other type view, mysql, hive, es
+                // do nothing
             }
         } finally {
             db.readUnlock();
