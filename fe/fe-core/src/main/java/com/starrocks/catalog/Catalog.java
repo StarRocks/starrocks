@@ -3073,11 +3073,13 @@ public class Catalog {
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
             db.readLock();
             RangePartitionInfo rangePartitionInfo;
+            Map<String, String> tableProperties;
             try {
                 Table table = db.getTable(tableName);
                 CatalogChecker.checkTableExist(db, tableName);
                 CatalogChecker.checkTableTypeOLAP(db, table);
                 OlapTable olapTable = (OlapTable) table;
+                tableProperties = olapTable.getTableProperty().getProperties();
                 PartitionInfo partitionInfo = olapTable.getPartitionInfo();
                 rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             } finally {
@@ -3095,8 +3097,16 @@ public class Catalog {
 
             Column firstPartitionColumn = partitionColumns.get(0);
             MultiRangePartitionDesc multiRangePartitionDesc = (MultiRangePartitionDesc) partitionDesc;
+            Map<String, String> properties = addPartitionClause.getProperties();
+            if (properties == null) {
+                properties = Maps.newHashMap();
+            }
+            if (tableProperties != null && tableProperties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
+                properties.put(DynamicPartitionProperty.START_DAY_OF_WEEK,
+                        tableProperties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
+            }
             List<SingleRangePartitionDesc> singleRangePartitionDescs = multiRangePartitionDesc
-                    .convertToSingle(firstPartitionColumn.getType(), addPartitionClause.getProperties());
+                    .convertToSingle(firstPartitionColumn.getType(), properties);
             addPartitions(db, tableName, singleRangePartitionDescs, addPartitionClause);
         }
     }
