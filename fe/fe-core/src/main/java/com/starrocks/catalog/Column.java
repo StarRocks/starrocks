@@ -371,7 +371,7 @@ public class Column implements Writable {
         sb.append("`").append(name).append("` ");
         String typeStr = type.toSql();
         sb.append(typeStr).append(" ");
-        if (aggregationType != null && aggregationType != AggregateType.NONE && !isAggregationTypeImplicit) {
+        if (isAggregated() && !isAggregationTypeImplicit) {
             sb.append(aggregationType.name()).append(" ");
         }
         if (isAllowNull) {

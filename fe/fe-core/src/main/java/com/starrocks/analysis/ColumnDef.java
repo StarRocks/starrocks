@@ -297,7 +297,9 @@ public class ColumnDef {
     }
 
     public Column toColumn() {
-        return new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValue.value, comment);
+        Column col = new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValue.value, comment);
+        col.setAggregationTypeImplicit(true);
+        return col;
     }
 
     @Override
