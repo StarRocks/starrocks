@@ -246,7 +246,6 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -262,7 +261,10 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
+import java.net.InetAddress;
+import java.net.Socket;
 import java.net.URL;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -796,7 +798,7 @@ public class Catalog {
         setMetaDir();
 
         // 0. get local node and helper node info
-        getSelfHostPort();
+        getCheckedSelfHostPort();
         getHelperNodes(args);
 
         // 1. check and create dirs and files
@@ -1047,20 +1049,6 @@ public class Catalog {
             getNewImage(rightHelperNode);
         }
 
-        if (isFirstTimeStartUp) {
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                String distDir = this.imageDir + "." + System.currentTimeMillis();
-                LOG.info("first time start failed, move image dir to {}", distDir);
-                if (listener == null) {
-                    try {
-                        FileUtils.moveDirectory(new File(this.imageDir), new File(distDir));
-                    } catch (IOException e) {
-                        LOG.warn("move image dir failed", e);
-                    }
-                }
-            }));
-        }
-
         if (Config.cluster_id != -1 && clusterId != Config.cluster_id) {
             LOG.error("cluster id is not equal with config item cluster_id. will exit.");
             System.exit(-1);
@@ -1141,8 +1129,17 @@ public class Catalog {
         return true;
     }
 
-    private void getSelfHostPort() {
+    private void getCheckedSelfHostPort() {
         selfNode = new Pair<String, Integer>(FrontendOptions.getLocalHostAddress(), Config.edit_log_port);
+        try {
+            if (isPortUsing(selfNode.first, selfNode.second)) {
+                LOG.error("edit_log_port {} is already in use. will exit.", selfNode.second);
+                System.exit(-1);
+            }
+        } catch (UnknownHostException e) {
+            LOG.error(e);
+            System.exit(-1);
+        }
         LOG.debug("get self node: {}", selfNode);
     }
 
@@ -7434,6 +7431,19 @@ public class Catalog {
 
     public void setImageJournalId(long imageJournalId) {
         this.imageJournalId = imageJournalId;
+    }
+
+    private boolean isPortUsing(String host, int port) throws UnknownHostException {
+        boolean flag = false;
+        InetAddress theAddress = InetAddress.getByName(host);
+        try {
+            Socket socket = new Socket(theAddress, port);
+            flag = true;
+            socket.close();
+        } catch (IOException e) {
+            // do nothing
+        }
+        return flag;
     }
 }
 

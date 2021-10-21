@@ -44,9 +44,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.InetAddress;
-import java.net.Socket;
-import java.net.UnknownHostException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -81,18 +78,10 @@ public class BDBJEJournal implements Journal {
      */
     private void initBDBEnv(String nodeName) {
         environmentPath = Catalog.getCurrentCatalog().getBdbDir();
-        try {
-            Pair<String, Integer> selfNode = Catalog.getCurrentCatalog().getSelfNode();
-            if (isPortUsing(selfNode.first, selfNode.second)) {
-                LOG.error("edit_log_port {} is already in use. will exit.", selfNode.second);
-                System.exit(-1);
-            }
-            selfNodeName = nodeName;
-            selfNodeHostPort = selfNode.first + ":" + selfNode.second;
-        } catch (IOException e) {
-            LOG.error(e);
-            System.exit(-1);
-        }
+        Pair<String, Integer> selfNode = Catalog.getCurrentCatalog().getSelfNode();
+        selfNodeName = nodeName;
+        selfNodeHostPort = selfNode.first + ":" + selfNode.second;
+
     }
 
     /*
@@ -388,16 +377,5 @@ public class BDBJEJournal implements Journal {
         return bdbEnvironment;
     }
 
-    public boolean isPortUsing(String host, int port) throws UnknownHostException {
-        boolean flag = false;
-        InetAddress theAddress = InetAddress.getByName(host);
-        try {
-            Socket socket = new Socket(theAddress, port);
-            flag = true;
-            socket.close();
-        } catch (IOException e) {
-            // do nothing
-        }
-        return flag;
-    }
+
 }
