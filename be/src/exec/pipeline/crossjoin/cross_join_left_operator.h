@@ -52,7 +52,13 @@ public:
 
     bool need_input() const override;
 
-    bool is_finished() const override { return _is_finished && _probe_chunk == nullptr; }
+    bool is_finished() const override {
+        if (_is_right_complete && !_total_build_rows) {
+            return true;
+        }
+
+        return _is_finished && _probe_chunk == nullptr;
+    }
 
     void finish(RuntimeState* state) override { _is_finished = true; }
 
@@ -112,13 +118,13 @@ public:
     CrossJoinLeftOperatorFactory(int32_t id, int32_t plan_node_id, const RowDescriptor& row_descriptor,
                                  const RowDescriptor& left_row_desc, const RowDescriptor& right_row_desc,
                                  std::vector<ExprContext*>&& conjunct_ctxs,
-                                 std::shared_ptr<CrossJoinContext> cross_join_context)
+                                 std::shared_ptr<CrossJoinContext>&& cross_join_context)
             : OperatorWithDependencyFactory(id, "cross_join_left", plan_node_id),
               _row_descriptor(row_descriptor),
               _left_row_desc(left_row_desc),
               _right_row_desc(right_row_desc),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
-              _cross_join_context(cross_join_context) {}
+              _cross_join_context(std::move(cross_join_context)) {}
 
     ~CrossJoinLeftOperatorFactory() override = default;
 

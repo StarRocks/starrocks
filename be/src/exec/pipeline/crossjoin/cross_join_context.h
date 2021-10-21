@@ -14,9 +14,9 @@ public:
 
     void set_build_chunk(const vectorized::ChunkPtr& build_chunk) { _build_chunk = build_chunk; }
 
-    bool is_right_complete() { return _right_table_complete; }
+    bool is_right_complete() { return _right_table_complete.load(std::memory_order_acquire); }
 
-    void set_right_complete() { _right_table_complete = true; }
+    void set_right_complete() { _right_table_complete.store(true, std::memory_order_release); }
 
 private:
     // Used in operators to reference right table's datas.

@@ -360,10 +360,18 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
 // (_probe_chunk == nullptr || _probe_chunk->num_rows() == 0) means that
 // need take next chunk from left table.
 bool CrossJoinLeftOperator::need_input() const {
-    return _is_right_complete && (_total_build_rows == 0 || (_probe_chunk == nullptr || _probe_chunk->num_rows() == 0));
+    if (!_is_right_complete || !_total_build_rows) {
+        return false;
+    }
+
+    return _probe_chunk == nullptr || _probe_chunk->num_rows() == 0;
 }
 
 bool CrossJoinLeftOperator::is_ready() const {
+    if (_is_right_complete) {
+        return true;
+    }
+
     // woke from blocking througth cross join right sink operator by shared _cross_join_context.
     bool is_complete = _cross_join_context->is_right_complete();
     if (is_complete) {
