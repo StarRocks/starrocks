@@ -7,6 +7,7 @@
 #include "exec/olap_common.h"
 #include "exec/olap_utils.h"
 #include "exec/pipeline/chunk_source.h"
+#include "exec/vectorized/olap_scan_prepare.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
@@ -69,26 +70,19 @@ private:
 
     Status _status = Status::OK();
     StatusOr<vectorized::ChunkUniquePtr> _chunk;
-    // Same size with |_conjunct_ctxs|, indicate which element has been normalized.
-    std::vector<bool> _normalized_conjuncts;
     // The conjuncts couldn't push down to storage engine
-    std::vector<ExprContext*> _un_push_down_conjuncts;
-    vectorized::ConjunctivePredicates _un_push_down_predicates;
+    std::vector<ExprContext*> _not_push_down_conjuncts;
+    vectorized::ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
 
     ObjectPool _obj_pool;
     TabletSharedPtr _tablet;
     int64_t _version = 0;
 
-    // Constructed from params
     RuntimeState* _runtime_state = nullptr;
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     std::vector<OlapScanRange*> _scanner_ranges;
-    std::map<std::string, ColumnValueRangeType> _column_value_ranges;
-    OlapScanKeys _scan_keys;
-    std::vector<std::unique_ptr<OlapScanRange>> _cond_ranges;
-    std::vector<TCondition> _olap_filter;
-    std::vector<TCondition> _is_null_vector;
+    vectorized::OlapScanConjunctsManager _conjuncts_manager;
 
     std::shared_ptr<vectorized::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.

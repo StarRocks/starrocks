@@ -10,6 +10,7 @@
 #include "column/chunk.h"
 #include "exec/olap_common.h"
 #include "exec/scan_node.h"
+#include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/vectorized/tablet_scanner.h"
 
 namespace starrocks {
@@ -105,26 +106,16 @@ private:
     void _close_pending_scanners();
     int _compute_priority(int32_t num_submitted_tasks);
 
-    // params
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     RuntimeState* _runtime_state = nullptr;
-
-    // constructed from params
-    const TupleDescriptor* _tuple_desc = nullptr;                     // from _runtime_state
-    std::map<std::string, ColumnValueRangeType> _column_value_ranges; // from expr
-    OlapScanKeys _scan_keys;                                          // from _column_value_ranges
-    std::vector<TCondition> _olap_filter;                             // from _column_value_ranges
-    std::vector<TCondition> _is_null_vector;                          // from expr
-
+    const TupleDescriptor* _tuple_desc = nullptr;
+    OlapScanConjunctsManager _conjuncts_manager;
+    const Schema* _chunk_schema = nullptr;
     ObjectPool _obj_pool;
 
-    const Schema* _chunk_schema = nullptr;
-    // same size with |_conjunct_ctxs|, indicate which element has been normalized.
-    std::vector<bool> _normalized_conjuncts;
     int32_t _num_scanners = 0;
     int32_t _chunks_per_scanner = 10;
-    int32_t _max_scan_key_num = 1024;
     bool _start = false;
 
     mutable SpinLock _status_mutex;
