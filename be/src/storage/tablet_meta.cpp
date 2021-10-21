@@ -27,12 +27,12 @@
 
 #include "gutil/strings/substitute.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
 #include "storage/protobuf_file.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/uid_util.h"
 #include "util/url_coding.h"
+#include "storage/tablet_schema_map.h"
 
 namespace starrocks {
 
@@ -449,8 +449,7 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     }
 
     // init _schema
-    _schema = std::make_shared<TabletSchema>();
-    _schema->init_from_pb(tablet_meta_pb.schema());
+    _schema = TabletSchemaMap::Instance()->get_or_create(_schema_hash, tablet_meta_pb.schema());
     _mem_tracker->consume(_schema->mem_usage());
 
     // init _rs_metas

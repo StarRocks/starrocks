@@ -25,6 +25,7 @@
 #include <cctype>
 #include <vector>
 
+#include "storage/tablet_schema_map.h"
 #include "storage/vectorized/type_utils.h"
 
 namespace starrocks {
@@ -386,6 +387,16 @@ bool TabletColumn::is_format_v1_column() const {
 
 bool TabletColumn::is_format_v2_column() const {
     return TypeUtils::specific_type_of_format_v2(_type);
+}
+
+/******************************************************************
+ * TabletSchema
+ ******************************************************************/
+
+TabletSchema::~TabletSchema() {
+    if (_share_key != 0) {
+        TabletSchemaMap::Instance()->erase(_share_key);
+    }
 }
 
 void TabletSchema::init_from_pb(const TabletSchemaPB& schema) {

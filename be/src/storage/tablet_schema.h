@@ -35,6 +35,8 @@
 
 namespace starrocks {
 
+class TabletSchemaMap;
+
 namespace segment_v2 {
 class SegmentReaderWriterTest;
 class SegmentReaderWriterTest_estimate_segment_size_Test;
@@ -207,6 +209,9 @@ bool operator!=(const TabletColumn& a, const TabletColumn& b);
 class TabletSchema {
 public:
     TabletSchema() = default;
+    explicit TabletSchema(const TabletSchemaPB& schema_pb) { init_from_pb(schema_pb); }
+    ~TabletSchema();
+
     void init_from_pb(const TabletSchemaPB& schema);
     void to_schema_pb(TabletSchemaPB* tablet_meta_pb) const;
     size_t row_size() const;
@@ -238,6 +243,8 @@ public:
         return mem_usage;
     }
 
+    void set_share_key(int32_t share_key) { _share_key = share_key; }
+
 private:
     friend class segment_v2::SegmentReaderWriterTest;
     FRIEND_TEST(segment_v2::SegmentReaderWriterTest, estimate_segment_size);
@@ -251,6 +258,8 @@ private:
     std::vector<TabletColumn> _cols;
     size_t _num_rows_per_row_block = 0;
     size_t _next_column_unique_id = 0;
+
+    int32_t _share_key = 0;
 
     CompressKind _compress_kind = COMPRESS_NONE;
     KeysType _keys_type = DUP_KEYS;
