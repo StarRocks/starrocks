@@ -33,6 +33,7 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
@@ -78,10 +79,18 @@ public class BDBJEJournal implements Journal {
      */
     private void initBDBEnv(String nodeName) {
         environmentPath = Catalog.getCurrentCatalog().getBdbDir();
-        Pair<String, Integer> selfNode = Catalog.getCurrentCatalog().getSelfNode();
-        selfNodeName = nodeName;
-        selfNodeHostPort = selfNode.first + ":" + selfNode.second;
-
+        try {
+            Pair<String, Integer> selfNode = Catalog.getCurrentCatalog().getSelfNode();
+            if (NetUtils.isPortUsing(selfNode.first, selfNode.second)) {
+                LOG.error("edit_log_port {} is already in use. will exit.", selfNode.second);
+                System.exit(-1);
+            }
+            selfNodeName = nodeName;
+            selfNodeHostPort = selfNode.first + ":" + selfNode.second;
+        } catch (IOException e) {
+            LOG.error(e);
+            System.exit(-1);
+        }
     }
 
     /*

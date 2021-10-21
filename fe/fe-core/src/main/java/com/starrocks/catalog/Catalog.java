@@ -140,6 +140,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.QueryableReentrantLock;
@@ -261,8 +262,6 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
-import java.net.InetAddress;
-import java.net.Socket;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -1130,9 +1129,13 @@ public class Catalog {
     }
 
     private void getCheckedSelfHostPort() {
-        selfNode = new Pair<String, Integer>(FrontendOptions.getLocalHostAddress(), Config.edit_log_port);
+        selfNode = new Pair<>(FrontendOptions.getLocalHostAddress(), Config.edit_log_port);
+        /*
+         * For the first time, if the master start up failed, it will also fail to restart.
+         * Check port using before create meta files to avoid this problem.
+         */
         try {
-            if (isPortUsing(selfNode.first, selfNode.second)) {
+            if (NetUtils.isPortUsing(selfNode.first, selfNode.second)) {
                 LOG.error("edit_log_port {} is already in use. will exit.", selfNode.second);
                 System.exit(-1);
             }
@@ -7433,17 +7436,5 @@ public class Catalog {
         this.imageJournalId = imageJournalId;
     }
 
-    private boolean isPortUsing(String host, int port) throws UnknownHostException {
-        boolean flag = false;
-        InetAddress theAddress = InetAddress.getByName(host);
-        try {
-            Socket socket = new Socket(theAddress, port);
-            flag = true;
-            socket.close();
-        } catch (IOException e) {
-            // do nothing
-        }
-        return flag;
-    }
 }
 
