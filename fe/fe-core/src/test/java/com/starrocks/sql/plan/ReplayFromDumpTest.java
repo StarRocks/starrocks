@@ -196,4 +196,11 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"));
         Assert.assertTrue(replayPair.second.contains("2:AGGREGATE (update finalize)"));
     }
+
+    @Test
+    public void testTPCDS77() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds77"));
+        // check can generate plan without exception
+        System.out.println(replayPair.second);
+    }
 }
