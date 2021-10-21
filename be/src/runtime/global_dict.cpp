@@ -127,7 +127,7 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
             rresult_map.emplace(res.first->second, slice);
         }
     }
-    LOG(INFO) << "result has key:0 " << rresult_map.count(0);
+
     DCHECK_EQ(_mutable_dict_maps->count(targetSlotId), 0);
     _mutable_dict_maps->emplace(targetSlotId, std::make_pair(std::move(result_map), std::move(rresult_map)));
 }
