@@ -145,14 +145,14 @@ fi
 cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util/
 cp -r ${STARROCKS_HOME}/be/test/plugin/plugin_test ${STARROCKS_TEST_BINARY_DIR}/plugin/
 
-test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" | grep -v starrocks_test`
+test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" | grep -v starrocks_be_test`
 
-# run cases in starrocks_test in parallel if has gtest-parallel script.
+# run cases in starrocks_be_test in parallel if has gtest-parallel script.
 # reference: https://github.com/google/gtest-parallel
 if [ -x ${GTEST_PARALLEL} ]; then
-    ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_filter=${TEST_FILTER} --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
+    ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_be_test --gtest_filter=${TEST_FILTER} --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
 else
-    ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_filter=${TEST_FILTER}
+    ${STARROCKS_TEST_BINARY_DIR}/starrocks_be_test --gtest_filter=${TEST_FILTER}
 fi
 
 for test in ${test_files[@]}
