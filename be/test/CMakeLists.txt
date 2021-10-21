@@ -174,6 +174,7 @@ set(EXEC_FILES
         ./storage/vectorized/cumulative_compaction_test.cpp
         ./storage/vectorized/base_compaction_test.cpp
         ./storage/vectorized/rowset_merger_test.cpp
+        ./storage/vectorized/schema_change_test.cpp
         ./plugin/plugin_mgr_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp

@@ -629,7 +629,7 @@ CONF_Int64(pipeline_exec_thread_pool_thread_num, "3");
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");
 // schema change vectorized
-CONF_Bool(enable_schema_change_vectorized, "false");
+CONF_Bool(enable_schema_change_vectorized, "true");
 
 } // namespace config
 
