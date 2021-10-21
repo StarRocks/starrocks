@@ -31,6 +31,7 @@ namespace starrocks {
 
 class Chunk;
 class ChunkArena;
+class MemTracker;
 
 // Used to allocate memory with power-of-two length.
 // This Allocator allocate memory from system and cache free chunks for
@@ -53,7 +54,7 @@ class ChunkArena;
 // before first object is created. And call init_instance() before use instance is called.
 class ChunkAllocator {
 public:
-    static void init_instance(size_t reserve_limit);
+    static void init_instance(MemTracker* mem_tracker, size_t reserve_limit);
 
 #ifdef BE_TEST
     static ChunkAllocator* instance();
@@ -61,7 +62,7 @@ public:
     static ChunkAllocator* instance() { return _s_instance; }
 #endif
 
-    ChunkAllocator(size_t reserve_limit);
+    ChunkAllocator(MemTracker* mem_tracker, size_t reserve_limit);
 
     // Allocate a Chunk with a power-of-two length "size".
     // Return true if success and allocated chunk is saved in "chunk".
@@ -71,9 +72,12 @@ public:
     // Free chunk allocated from this allocator
     void free(const Chunk& chunk);
 
+    void set_mem_tracker(MemTracker* mem_tracker) { _mem_tracker = mem_tracker; }
+
 private:
     static ChunkAllocator* _s_instance;
 
+    MemTracker* _mem_tracker = nullptr;
     size_t _reserve_bytes_limit;
     std::atomic<int64_t> _reserved_bytes;
     // each core has a ChunkArena

@@ -25,13 +25,9 @@
 
 #include <string>
 
-#include "runtime/mem_tracker.h"
-#include "util/logging.h"
-
 namespace starrocks {
 
 TEST(MemPoolTest, Basic) {
-    MemTracker tracker(-1);
     MemPool p;
     MemPool p2;
     MemPool p3;
@@ -105,7 +101,6 @@ TEST(MemPoolTest, Basic) {
 // remaining chunks are consistent if there were more than one used chunk and some
 // free chunks.
 TEST(MemPoolTest, Keep) {
-    MemTracker tracker(-1);
     MemPool p;
     p.allocate(4 * 1024);
     p.allocate(8 * 1024);
@@ -138,7 +133,6 @@ TEST(MemPoolTest, MaxAllocation) {
     int64_t int_max_rounded = BitUtil::round_up(LARGE_ALLOC_SIZE, 8);
 
     // Allocate a single LARGE_ALLOC_SIZE chunk
-    MemTracker tracker(-1);
     MemPool p1;
     uint8_t* ptr = p1.allocate(LARGE_ALLOC_SIZE);
     EXPECT_TRUE(ptr != NULL);

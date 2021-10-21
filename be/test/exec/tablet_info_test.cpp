@@ -34,7 +34,10 @@ class OlapTablePartitionParamTest : public testing::Test {
 public:
     OlapTablePartitionParamTest() {}
     virtual ~OlapTablePartitionParamTest() {}
-    void SetUp() override {}
+    void SetUp() override {
+        CpuInfo::init();
+        ChunkAllocator::init_instance(nullptr, 2 * 1024 * 1024);
+    }
 
 private:
 };

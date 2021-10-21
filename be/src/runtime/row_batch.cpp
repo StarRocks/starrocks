@@ -24,7 +24,6 @@
 #include <snappy/snappy.h>
 
 #include <cstdint> // for intptr_t
-#include <memory>
 
 #include "gen_cpp/Data_types.h"
 #include "gen_cpp/data.pb.h"
