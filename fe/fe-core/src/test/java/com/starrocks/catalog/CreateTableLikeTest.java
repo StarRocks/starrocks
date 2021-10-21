@@ -77,9 +77,9 @@ public class CreateTableLikeTest {
 
     private static void checkTableEqual(Table newTable, Table existedTable) {
         List<String> newCreateTableStmt = Lists.newArrayList();
-        Catalog.getDdlStmt(newTable, newCreateTableStmt, null, null, false, true /* hide password */, false /* show aggregate type name */);
+        Catalog.getDdlStmt(newTable, newCreateTableStmt, null, null, false, true /* hide password */);
         List<String> existedTableStmt = Lists.newArrayList();
-        Catalog.getDdlStmt(existedTable, existedTableStmt, null, null, false, true /* hide password */, false /* show aggregate type name */);
+        Catalog.getDdlStmt(existedTable, existedTableStmt, null, null, false, true /* hide password */);
         Assert.assertEquals(newCreateTableStmt.get(0).replace(newTable.getName(), existedTable.getName()),
                 existedTableStmt.get(0));
     }

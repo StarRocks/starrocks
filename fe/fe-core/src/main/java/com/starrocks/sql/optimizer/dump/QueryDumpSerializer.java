@@ -32,8 +32,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Pair<String, com.starrocks.catalog.Table> entry : dumpInfo.getTableMap().values()) {
             String tableName = entry.first + "." + entry.second.getName();
             List<String> createTableStmt = Lists.newArrayList();
-            Catalog.getDdlStmt(entry.second, createTableStmt, null, null, false,
-                    true /* hide password */, false /* show aggregate type name */);
+            Catalog.getDdlStmt(entry.second, createTableStmt, null, null, false, true /* hide password */);
             tableMetaData.addProperty(tableName, createTableStmt.get(0));
         }
         dumpJson.add("table_meta", tableMetaData);
