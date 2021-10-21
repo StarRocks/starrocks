@@ -272,7 +272,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
                     _copy_joined_rows_with_index_base_build(chunk, row_count, _probe_rows_index,
                                                             _beyond_threshold_build_rows_index);
                     _probe_rows_index += row_count;
-                    // if _probe_rows_index is equal with probe_chunk_size, 
+                    // if _probe_rows_index is equal with probe_chunk_size,
                     // means left chunk is done with the right row, so we get next right row.
                     if (_probe_rows_index == probe_chunk_size) {
                         ++_beyond_threshold_build_rows_index;
