@@ -19,7 +19,6 @@ CREATE TABLE site_access_aggregate
 (
 site_id INT DEFAULT '10',
 city_code SMALLINT,
-user_name VARCHAR(32) DEFAULT '',
 pv BIGINT SUM DEFAULT '0'
 )
 AGGREGATE KEY(site_id, city_code)

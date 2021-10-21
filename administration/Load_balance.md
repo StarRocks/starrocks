@@ -98,12 +98,13 @@ save mysql servers to disk;
 ### 11. 配置用户名和密码
 
 ~~~sql
-insert into mysql_users(username, password, active, default_hostgroup, backend, frontend) values('root', '*FAAFFE644E901CFAFAEC7562415E5FAEC243B8B2', 1, 1, 1, 1);
+insert into mysql_users(username, password, active, default_hostgroup, backend, frontend) 
+values('root', '*FAAFFE644E901CFAFAEC7562415E5FAEC243B8B2', 1, 1, 1, 1);
 ~~~
 
 注：这里password输入值为密文。比如root用户密码为root123,则password输入为'*FAAFFE644E901CFAFAEC7562415E5FAEC243B8B2'。具体输入的加密value可以通过 `password()`函数获取。示例如下：
 
-~~~sql
+~~~plain text
 mysql> select password('root123');
 +---------------------------------------------+
 | '*FAAFFE644E901CFAFAEC7562415E5FAEC243B8B2' |
