@@ -140,6 +140,10 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
                                     request.params.debug_action, _plan);
     }
 
+    if (request.fragment.__isset.global_dicts) {
+        RETURN_IF_ERROR(_runtime_state->init_global_dict(request.fragment.global_dicts));
+    }
+
     // set #senders of exchange nodes before calling Prepare()
     std::vector<ExecNode*> exch_nodes;
     _plan->collect_nodes(TPlanNodeType::EXCHANGE_NODE, &exch_nodes);
@@ -214,6 +218,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         _is_runtime_filter_merge_node = true;
         _exec_env->runtime_filter_worker()->open_query(_query_id, request.query_options, params.runtime_filter_params);
     }
+
     return Status::OK();
 }
 

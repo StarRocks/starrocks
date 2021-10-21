@@ -51,6 +51,7 @@ public class QueryProfileAction extends WebBaseAction {
 
         String queryProfileStr = ProfileManager.getInstance().getProfile(queryId);
         if (queryProfileStr != null) {
+            appendCopyButton(response.getContent());
             appendQueryProfile(response.getContent(), queryProfileStr);
             getPageFooter(response.getContent());
             writeResponse(request, response);
@@ -62,9 +63,24 @@ public class QueryProfileAction extends WebBaseAction {
     }
 
     private void appendQueryProfile(StringBuilder buffer, String queryProfileStr) {
-        buffer.append("<pre>");
+        buffer.append("<pre id='profile'>");
         buffer.append(queryProfileStr);
         buffer.append("</pre>");
     }
 
+    private void appendCopyButton(StringBuilder buffer) {
+        buffer.append("<script type=\"text/javascript\">\n" +
+                "function copyProfile(){\n" +
+                "  v = $('#profile').html()\n" +
+                "  const t = document.createElement('textarea')\n" +
+                "  t.style.cssText = 'position: absolute;top:0;left:0;opacity:0'\n" +
+                "  document.body.appendChild(t)\n" +
+                "  t.value = v\n" +
+                "  t.select()\n" +
+                "  document.execCommand('copy')\n" +
+                "  document.body.removeChild(t)\n" +
+                "}\n" +
+                "</script>");
+        buffer.append("<input type=\"button\" onclick=\"copyProfile();\" value=\"Copy Profile\"></input>");
+    }
 }

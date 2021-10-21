@@ -237,7 +237,8 @@ public:
         }
 
         auto tablet_manager = StorageEngine::instance()->tablet_manager();
-        auto st = tablet_manager->create_tablet_from_snapshot(store, new_tablet_id, new_schema_hash, new_tablet_path);
+        auto st = tablet_manager->create_tablet_from_meta_snapshot(store, new_tablet_id, new_schema_hash,
+                                                                   new_tablet_path);
         CHECK(st.ok()) << st;
         return tablet_manager->get_tablet(new_tablet_id, new_schema_hash);
     }

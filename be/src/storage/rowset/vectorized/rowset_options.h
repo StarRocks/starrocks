@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "runtime/global_dicts.h"
 #include "storage/fs/fs_util.h"
 #include "storage/olap_common.h"
 #include "storage/vectorized/seek_range.h"
@@ -54,6 +55,8 @@ public:
     starrocks::RuntimeState* runtime_state = nullptr;
     starrocks::RuntimeProfile* profile = nullptr;
     bool use_page_cache = false;
+
+    std::unordered_map<ColumnId, GlobalDictMap*>* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 };
 
 } // namespace starrocks::vectorized

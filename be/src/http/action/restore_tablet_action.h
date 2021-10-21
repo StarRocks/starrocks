@@ -64,7 +64,8 @@ private:
     // key: tablet_id + schema_hash
     // value: "" or tablet path in trash
     std::map<std::string, std::string> _tablet_path_map;
-}; // end class RestoreTabletAction
+    bool _is_primary_key = false;
+};
 
 } // end namespace starrocks
 #endif // STARROCKS_BE_SRC_HTTP_RESTORE_TABLET_ACTION_H

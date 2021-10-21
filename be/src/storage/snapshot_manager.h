@@ -68,9 +68,10 @@ public:
     //  - |tablet| is a updatable tablet, i.e, tablet->keys_type() is PRIMARY_KEYS
     //  - |snapshot_dir| is an existing directory with write permission.
     //  - |snapshot_version| will NOT be removed until end of this method.
-    Status build_snapshot_meta(SnapshotTypePB snapshot_type, const std::string& snapshot_dir,
-                               const TabletSharedPtr& tablet, const std::vector<RowsetMetaSharedPtr>& rowset_metas,
-                               int64_t snapshot_version, int32_t snapshot_format);
+    Status make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_type, const std::string& snapshot_dir,
+                                        const TabletSharedPtr& tablet,
+                                        const std::vector<RowsetMetaSharedPtr>& rowset_metas, int64_t snapshot_version,
+                                        int32_t snapshot_format);
 
     StatusOr<SnapshotMeta> parse_snapshot_meta(const std::string& filename);
 
@@ -80,6 +81,8 @@ public:
 
     // On success, return the absolute path of the root directory of snapshot.
     StatusOr<std::string> snapshot_full(const TabletSharedPtr& tablet, int64_t snapshot_version, int64_t timeout_s);
+
+    Status make_snapshot_on_tablet_meta(const TabletSharedPtr& tablet);
 
     Status assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir);
 

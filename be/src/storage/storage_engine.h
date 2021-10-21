@@ -122,7 +122,8 @@ public:
     // @param [in] request specify new tablet info
     // @param [in] restore whether we're restoring a tablet from trash
     // @return OLAP_SUCCESS if load tablet success
-    OLAPStatus load_header(const std::string& shard_path, const TCloneReq& request, bool restore = false);
+    OLAPStatus load_header(const std::string& shard_path, const TCloneReq& request, bool restore = false,
+                           bool is_primary_key = false);
 
     // To trigger a disk-stat and tablet report
     void trigger_report() {
