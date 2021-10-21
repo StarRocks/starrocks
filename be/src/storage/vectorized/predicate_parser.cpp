@@ -3,7 +3,9 @@
 #include "storage/vectorized/predicate_parser.h"
 
 #include "chunk_helper.h"
+#include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
+#include "runtime/descriptors.h"
 #include "storage/tablet_schema.h"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/type_utils.h"
@@ -17,7 +19,7 @@ bool PredicateParser::can_pushdown(const ColumnPredicate* predicate) const {
            column.aggregation() == FieldAggregationMethod::OLAP_FIELD_AGGREGATION_NONE;
 }
 
-ColumnPredicate* PredicateParser::parse(const TCondition& condition) const {
+ColumnPredicate* PredicateParser::parse_thrift_cond(const TCondition& condition) const {
     const size_t index = _schema.field_index(condition.column_name);
     RETURN_IF(index >= _schema.num_columns(), nullptr);
     const TabletColumn& col = _schema.column(index);
@@ -58,6 +60,17 @@ ColumnPredicate* PredicateParser::parse(const TCondition& condition) const {
         pred->padding_zeros(col.length());
     }
     return pred;
+}
+
+ColumnPredicate* PredicateParser::parse_expr_ctx(const SlotDescriptor& slot_desc, ExprContext* expr_ctx) const {
+    const size_t column_id = _schema.field_index(slot_desc.col_name());
+    RETURN_IF(column_id >= _schema.num_columns(), nullptr);
+    const TabletColumn& col = _schema.column(column_id);
+    auto precision = col.precision();
+    auto scale = col.scale();
+    auto type = TypeUtils::to_storage_format_v2(col.type());
+    auto&& type_info = get_type_info(type, precision, scale);
+    return new_column_expr_predicate(type_info, column_id, expr_ctx, slot_desc.id());
 }
 
 } // namespace starrocks::vectorized

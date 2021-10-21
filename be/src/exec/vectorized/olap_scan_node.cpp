@@ -336,12 +336,8 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     } else {
         max_scan_key_num = config::doris_max_scan_key_num;
     }
-    bool no_limit = (limit() == -1);
-
-    cm.normalize_conjuncts();
-    cm.build_olap_filters();
-    cm.build_scan_keys(no_limit, max_scan_key_num);
-
+    bool scan_keys_unlimited = (limit() == -1);
+    cm.parse_conjuncts(scan_keys_unlimited, max_scan_key_num);
     RETURN_IF_ERROR(_start_scan_thread(state));
 
     return Status::OK();

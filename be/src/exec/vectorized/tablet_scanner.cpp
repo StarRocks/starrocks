@@ -122,7 +122,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
 
     PredicateParser parser(_tablet->tablet_schema());
     std::vector<vectorized::ColumnPredicate*> preds;
-    _parent->_conjuncts_manager.parse_to_column_predicates(&parser, &preds);
+    _parent->_conjuncts_manager.get_column_predicates(&parser, &preds);
     for (auto* p : preds) {
         _predicate_free_pool.emplace_back(p);
         if (parser.can_pushdown(p)) {

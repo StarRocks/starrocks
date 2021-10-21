@@ -6,6 +6,8 @@ namespace starrocks {
 
 class TabletSchema;
 class TCondition;
+class ExprContext;
+class SlotDescriptor;
 
 namespace vectorized {
 
@@ -19,7 +21,9 @@ public:
 
     // Parse |condition| into a predicate that can be pushed down.
     // return nullptr if parse failed.
-    ColumnPredicate* parse(const TCondition& condition) const;
+    ColumnPredicate* parse_thrift_cond(const TCondition& condition) const;
+
+    ColumnPredicate* parse_expr_ctx(const SlotDescriptor& slot_desc, ExprContext* expr_ctx) const;
 
 private:
     const TabletSchema& _schema;

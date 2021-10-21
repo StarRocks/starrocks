@@ -39,10 +39,7 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     } else {
         max_scan_key_num = config::doris_max_scan_key_num;
     }
-
-    cm.normalize_conjuncts();
-    cm.build_olap_filters();
-    cm.build_scan_keys(true, max_scan_key_num);
+    cm.parse_conjuncts(true, max_scan_key_num);
 
     // 4. Build olap scanner range
     RETURN_IF_ERROR(_build_scan_range(_runtime_state));
@@ -102,7 +99,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
 
     PredicateParser parser(_tablet->tablet_schema());
     std::vector<vectorized::ColumnPredicate*> preds;
-    _conjuncts_manager.parse_to_column_predicates(&parser, &preds);
+    _conjuncts_manager.get_column_predicates(&parser, &preds);
     for (auto* p : preds) {
         _predicate_free_pool.emplace_back(p);
         if (parser.can_pushdown(p)) {
