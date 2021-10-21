@@ -47,9 +47,9 @@ Status SnapshotMeta::serialize_to_file(WritableFile* file) {
     footer.set_format_version(_format_version);
     footer.set_snapshot_type(_snapshot_type);
     footer.set_snapshot_version(_snapshot_version);
-    for (const auto& m : _rowset_metas) {
+    for (const auto& rowset_meta : _rowset_metas) {
         footer.add_rowset_meta_offsets(static_cast<int64_t>(stream.size()));
-        if (!m.SerializeToOstream(&stream)) {
+        if (!rowset_meta.SerializeToOstream(&stream)) {
             return Status::IOError("fail to serialize rowset meta to file");
         }
     }

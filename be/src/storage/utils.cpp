@@ -90,9 +90,7 @@ OLAPStatus move_to_trash(const std::filesystem::path& schema_hash_root, const st
     // 1. get timestamp string
     string time_str;
     if ((res = gen_timestamp_string(&time_str)) != OLAP_SUCCESS) {
-        LOG(WARNING) << "failed to generate time_string when move file to trash."
-                        " err code="
-                     << res;
+        LOG(WARNING) << "failed to generate time_string when move file to trash. err code=" << res;
         return res;
     }
 
@@ -128,7 +126,7 @@ OLAPStatus move_to_trash(const std::filesystem::path& schema_hash_root, const st
     std::set<std::string> sub_dirs, sub_files;
 
     RETURN_CODE_IF_ERROR_WITH_WARN(FileUtils::list_dirs_files(source_parent_dir, &sub_dirs, &sub_files, Env::Default()),
-                                   OLAP_SUCCESS, "access dir failed. [dir=" + source_parent_dir);
+                                   OLAP_SUCCESS, "access dir failed. [dir=" + source_parent_dir + "].");
 
     if (sub_dirs.empty() && sub_files.empty()) {
         LOG(INFO) << "remove empty dir " << source_parent_dir;

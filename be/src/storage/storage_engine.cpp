@@ -863,9 +863,8 @@ OLAPStatus StorageEngine::obtain_shard_path(TStorageMedium::type storage_medium,
     return res;
 }
 
-OLAPStatus StorageEngine::load_header(const string& shard_path, const TCloneReq& request, bool restore) {
-    OLAPStatus res = OLAP_SUCCESS;
-
+OLAPStatus StorageEngine::load_header(const string& shard_path, const TCloneReq& request, bool restore,
+                                      bool is_primary_key) {
     DataDir* store = nullptr;
     {
         // TODO(zc)
@@ -885,24 +884,22 @@ OLAPStatus StorageEngine::load_header(const string& shard_path, const TCloneReq&
     std::stringstream schema_hash_path_stream;
     schema_hash_path_stream << shard_path << "/" << request.tablet_id << "/" << request.schema_hash;
     // not surely, reload and restore tablet action call this api
-    // reset tablet uid here
-
-    string header_path = TabletMeta::construct_header_file_path(schema_hash_path_stream.str(), request.tablet_id);
-    res = TabletMeta::reset_tablet_uid(header_path).ok() ? OLAP_SUCCESS : OLAP_ERR_OTHER_ERROR;
-    if (res != OLAP_SUCCESS) {
-        LOG(WARNING) << "Fail to reset tablet uid, "
-                     << "tablet_id=" << request.tablet_id << " file path=" << header_path << " res=" << res;
-        return res;
+    Status st;
+    if (!is_primary_key) {
+        st = _tablet_manager->load_tablet_from_dir(store, request.tablet_id, request.schema_hash,
+                                                   schema_hash_path_stream.str(), false, restore);
+    } else {
+        st = _tablet_manager->create_tablet_from_meta_snapshot(store, request.tablet_id, request.schema_hash,
+                                                               schema_hash_path_stream.str(), true);
     }
-    Status st = _tablet_manager->load_tablet_from_dir(store, request.tablet_id, request.schema_hash,
-                                                      schema_hash_path_stream.str(), false, restore);
+
     if (!st.ok()) {
         LOG(WARNING) << "Fail to load headers, "
-                     << "tablet_id=" << request.tablet_id << " res=" << st.to_string();
+                     << "tablet_id=" << request.tablet_id << " status=" << st;
         return OLAP_ERR_TABLE_NOT_FOUND;
     }
     LOG(INFO) << "Loaded headers tablet_id=" << request.tablet_id << " schema_hash=" << request.schema_hash;
-    return res;
+    return OLAP_SUCCESS;
 }
 
 OLAPStatus StorageEngine::execute_task(EngineTask* task) {
