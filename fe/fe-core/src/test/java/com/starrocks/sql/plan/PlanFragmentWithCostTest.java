@@ -80,6 +80,23 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     private static final String V3 = "v3";
 
     @Test
+    public void testCrossJoinBroadCast() throws Exception {
+        // check cross join generate plan without exception
+        Catalog catalog = connectContext.getCatalog();
+        OlapTable table2 = (OlapTable) catalog.getDb("default_cluster:test").getTable("test_all_type");
+        setTableStatistics(table2, 20000000);
+        OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
+        setTableStatistics(t0, 20000000);
+
+        String sql = "select t1a,v1 from test_all_type, t0";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("3:CROSS JOIN"));
+
+        setTableStatistics(table2, 10000);
+        setTableStatistics(t0, 10000);
+    }
+
+    @Test
     public void testAggWithLowCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
             {
