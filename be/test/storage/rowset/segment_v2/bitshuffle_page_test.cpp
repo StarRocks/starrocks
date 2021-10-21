@@ -113,7 +113,7 @@ public:
     }
 
     template <FieldType Type, class PageBuilderType, class PageDecoderType>
-    void test_encode_decode_page_vectorize() {
+    void test_encode_decode_page_vectorized() {
         using CppType = typename CppTypeTraits<Type>::CppType;
         auto src = vectorized::ChunkHelper::column_from_field_type(Type, false);
         CppType value = 0;
@@ -425,13 +425,13 @@ TEST_F(BitShufflePageTest, TestReserveHead) {
 }
 
 TEST_F(BitShufflePageTest, TestDecodeVectorized) {
-    test_encode_decode_page_vectorize<OLAP_FIELD_TYPE_TINYINT, segment_v2::BitshufflePageBuilder<OLAP_FIELD_TYPE_TINYINT>,
+    test_encode_decode_page_vectorized<OLAP_FIELD_TYPE_TINYINT, segment_v2::BitshufflePageBuilder<OLAP_FIELD_TYPE_TINYINT>,
                                      segment_v2::BitShufflePageDecoder<OLAP_FIELD_TYPE_TINYINT>>();
-    test_encode_decode_page_vectorize<OLAP_FIELD_TYPE_SMALLINT, segment_v2::BitshufflePageBuilder<OLAP_FIELD_TYPE_SMALLINT>,
+    test_encode_decode_page_vectorized<OLAP_FIELD_TYPE_SMALLINT, segment_v2::BitshufflePageBuilder<OLAP_FIELD_TYPE_SMALLINT>,
                                      segment_v2::BitShufflePageDecoder<OLAP_FIELD_TYPE_SMALLINT>>();
-    test_encode_decode_page_vectorize<OLAP_FIELD_TYPE_INT, segment_v2::BitshufflePageBuilder<OLAP_FIELD_TYPE_INT>,
+    test_encode_decode_page_vectorized<OLAP_FIELD_TYPE_INT, segment_v2::BitshufflePageBuilder<OLAP_FIELD_TYPE_INT>,
                                      segment_v2::BitShufflePageDecoder<OLAP_FIELD_TYPE_INT>>();
-    test_encode_decode_page_vectorize<OLAP_FIELD_TYPE_BIGINT, segment_v2::BitshufflePageBuilder<OLAP_FIELD_TYPE_BIGINT>,
+    test_encode_decode_page_vectorized<OLAP_FIELD_TYPE_BIGINT, segment_v2::BitshufflePageBuilder<OLAP_FIELD_TYPE_BIGINT>,
                                      segment_v2::BitShufflePageDecoder<OLAP_FIELD_TYPE_BIGINT>>();
 }
 
