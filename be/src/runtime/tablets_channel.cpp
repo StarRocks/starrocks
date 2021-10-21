@@ -466,6 +466,7 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
             request.load_id = params.id();
             request.tuple_desc = _tuple_desc;
             request.slots = index_slots;
+	    request.global_dicts = &_global_dicts;
 
             vectorized::DeltaWriter* writer = nullptr;
             auto st = vectorized::DeltaWriter::open(&request, _mem_tracker.get(), &writer);
