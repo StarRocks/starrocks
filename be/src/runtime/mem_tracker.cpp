@@ -97,9 +97,8 @@ void MemTracker::Init() {
 }
 
 MemTracker::~MemTracker() {
-    if (consumption() != 0) {
-        release_without_root(consumption());
-    }
+    // return memory to root mem_tracker
+    release_without_root();
     if (_auto_unregister && parent()) {
         unregister_from_parent();
     }

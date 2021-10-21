@@ -119,29 +119,14 @@ public:
         }
     }
 
-    void consume_without_root(int64_t bytes) {
-        if (bytes <= 0) {
-            if (bytes < 0) {
-                release_without_root(-bytes);
+    void release_without_root() {
+        int64_t bytes = consumption();
+        if (bytes != 0) {
+            for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
+                _all_trackers[i]->_consumption->add(-bytes);
             }
-            return;
         }
-
-        for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
-            _all_trackers[i]->consume(bytes);
-        }
-    }
-
-    void release_without_root(int64_t bytes) {
-        if (bytes <= 0) {
-            if (bytes < 0) {
-                consume_without_root(-bytes);
-            }
-            return;
-        }
-        for (size_t i = 0; i < _all_trackers.size() - 1; i++) {
-            _all_trackers[i]->release(bytes);
-        }
+        return;
     }
 
     /// Increases/Decreases the consumption of this tracker and the ancestors up to (but

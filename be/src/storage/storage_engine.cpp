@@ -39,6 +39,7 @@
 
 #include "common/status.h"
 #include "env/env.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/data_dir.h"
 #include "storage/fs/file_block_manager.h"
@@ -56,6 +57,7 @@
 #include "storage/utils.h"
 #include "storage/vectorized/base_compaction.h"
 #include "storage/vectorized/cumulative_compaction.h"
+#include "util/defer_op.h"
 #include "util/file_utils.h"
 #include "util/pretty_printer.h"
 #include "util/scoped_cleanup.h"
@@ -531,7 +533,10 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
 
     StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
-    vectorized::CumulativeCompaction cumulative_compaction(_options.compaction_mem_tracker, best_tablet);
+
+    std::unique_ptr<MemTracker> mem_tracker =
+            std::make_unique<MemTracker>(config::compaction_mem_limit, "", _options.compaction_mem_tracker);
+    vectorized::CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
 
     Status res = cumulative_compaction.compact();
     if (!res.ok()) {
@@ -567,7 +572,11 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
     TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
 
     StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
-    vectorized::BaseCompaction base_compaction(_options.compaction_mem_tracker, best_tablet);
+
+    std::unique_ptr<MemTracker> mem_tracker =
+            std::make_unique<MemTracker>(config::compaction_mem_limit, "", _options.compaction_mem_tracker);
+    vectorized::BaseCompaction base_compaction(mem_tracker.get(), best_tablet);
+
     Status res = base_compaction.compact();
     if (!res.ok()) {
         best_tablet->set_last_base_compaction_failure_time(UnixMillis());
@@ -608,7 +617,9 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     {
         StarRocksMetrics::instance()->update_compaction_request_total.increment(1);
         SCOPED_RAW_TIMER(&duration_ns);
-        res = best_tablet->updates()->compaction(_options.compaction_mem_tracker);
+
+        std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "", _options.compaction_mem_tracker);
+        res = best_tablet->updates()->compaction(mem_tracker.get());
     }
     StarRocksMetrics::instance()->update_compaction_duration_us.increment(duration_ns / 1000);
     if (!res.ok()) {

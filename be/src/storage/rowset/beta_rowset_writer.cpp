@@ -251,9 +251,6 @@ Status BetaRowsetWriter::_final_merge() {
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
 
-    MemTracker tracker;
-    DeferOp memory_tracker_releaser([&tracker] { return tracker.release(tracker.consumption()); });
-
     for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
         std::string tmp_segment_file =
                 BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
