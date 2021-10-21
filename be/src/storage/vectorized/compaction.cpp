@@ -20,13 +20,12 @@ namespace starrocks::vectorized {
 Semaphore Compaction::_concurrency_sem;
 
 Compaction::Compaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
-        : _tablet(std::move(tablet)),
+        : _mem_tracker(mem_tracker),
+          _tablet(std::move(tablet)),
           _input_rowsets_size(0),
           _input_row_num(0),
           _state(CompactionState::INITED),
-          _runtime_profile("compaction") {
-    _mem_tracker = std::make_unique<MemTracker>(config::compaction_mem_limit, "", mem_tracker, true);
-}
+          _runtime_profile("compaction") {}
 
 Compaction::~Compaction() = default;
 

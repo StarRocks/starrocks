@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "gen_cpp/AgentService_types.h"
+#include "runtime/mem_tracker.h"
 #include "storage/column_mapping.h"
 #include "storage/delete_handler.h"
 #include "storage/rowset/rowset.h"

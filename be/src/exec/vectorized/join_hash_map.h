@@ -99,7 +99,6 @@ struct JoinHashTableItems {
 
     std::unique_ptr<MemPool> build_pool = nullptr;
     std::unique_ptr<MemPool> probe_pool = nullptr;
-    uint64_t last_memory_usage = 0;
     std::vector<JoinKeyDesc> join_keys;
 
     RuntimeProfile::Counter* search_ht_timer = nullptr;

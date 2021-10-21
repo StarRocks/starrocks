@@ -28,7 +28,6 @@
 #include "gen_cpp/segment_v2.pb.h"
 #include "gutil/hash/string_hash.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/column_block.h"
 #include "storage/column_vector.h"
 #include "storage/olap_common.h"

@@ -25,9 +25,6 @@ public:
     ~PushBrokerReader() {
         _counter.reset();
         _scanner.reset();
-        if (_runtime_state != nullptr && _runtime_state->instance_mem_tracker() != nullptr) {
-            _runtime_state->instance_mem_tracker()->release(_runtime_state->instance_mem_tracker()->consumption());
-        }
     }
 
     Status init(const TBrokerScanRange& t_scan_range, const TDescriptorTable& t_desc_tbl);
