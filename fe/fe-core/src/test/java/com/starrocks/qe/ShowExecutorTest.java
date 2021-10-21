@@ -200,10 +200,10 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = catalog;
 
-                Catalog.getDdlStmt((Table) any, (List) any, (List) any, (List) any, anyBoolean, anyBoolean);
+                Catalog.getDdlStmt((Table) any, (List) any, (List) any, (List) any, anyBoolean, anyBoolean, false /* show aggregate type name */);
                 minTimes = 0;
 
-                Catalog.getDdlStmt((Table) any, (List) any, null, null, anyBoolean, anyBoolean);
+                Catalog.getDdlStmt((Table) any, (List) any, null, null, anyBoolean, anyBoolean, false /* show aggregate type name */);
                 minTimes = 0;
             }
         };

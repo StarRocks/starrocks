@@ -3049,7 +3049,7 @@ public class Catalog {
                 if (table == null) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, stmt.getExistedTableName());
                 }
-                Catalog.getDdlStmt(stmt.getDbName(), table, createTableStmt, null, null, false, false);
+                Catalog.getDdlStmt(stmt.getDbName(), table, createTableStmt, null, null, false, false, false);
                 if (createTableStmt.isEmpty()) {
                     ErrorReport.reportDdlException(ErrorCode.ERROR_CREATE_TABLE_LIKE_EMPTY, "CREATE");
                 }
@@ -4220,13 +4220,16 @@ public class Catalog {
     }
 
     public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
-                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
-        getDdlStmt(null, table, createTableStmt, addPartitionStmt, createRollupStmt, separatePartition, hidePassword);
+                                  List<String> createRollupStmt, boolean separatePartition,
+                                  boolean hidePassword, boolean hideAggregateTypeName) {
+        getDdlStmt(null, table, createTableStmt, addPartitionStmt, createRollupStmt,
+                separatePartition, hidePassword, hideAggregateTypeName);
     }
 
     public static void getDdlStmt(String dbName, Table table, List<String> createTableStmt,
                                   List<String> addPartitionStmt,
-                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
+                                  List<String> createRollupStmt, boolean separatePartition,
+                boolean hidePassword, boolean hideAggregateTypeName) {
         StringBuilder sb = new StringBuilder();
 
         // 1. create table
@@ -4258,7 +4261,11 @@ public class Catalog {
             }
             // There MUST BE 2 space in front of each column description line
             // sqlalchemy requires this to parse SHOW CREATE TAEBL stmt.
-            sb.append("  ").append(column.toSqlWithoutAggregateTypeName());
+            if (hideAggregateTypeName) {
+                sb.append("  ").append(column.toSqlWithoutAggregateTypeName());
+            } else {
+                sb.append("  ").append(column.toSql());
+            }
         }
         if (table.getType() == TableType.OLAP || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;

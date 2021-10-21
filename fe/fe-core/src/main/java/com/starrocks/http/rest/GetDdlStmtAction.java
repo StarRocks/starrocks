@@ -90,7 +90,7 @@ public class GetDdlStmtAction extends RestBaseAction {
             }
 
             Catalog.getDdlStmt(table, createTableStmt, addPartitionStmt, createRollupStmt, true,
-                    false /* show password */);
+                    false /* show password */, false /* show aggregate type name */);
 
         } finally {
             db.readUnlock();

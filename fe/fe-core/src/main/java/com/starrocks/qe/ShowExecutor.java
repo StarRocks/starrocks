@@ -630,7 +630,8 @@ public class ShowExecutor {
             }
 
             List<String> createTableStmt = Lists.newArrayList();
-            Catalog.getDdlStmt(table, createTableStmt, null, null, false, true /* hide password */);
+            Catalog.getDdlStmt(table, createTableStmt, null, null, false, true /* hide password */,
+                        true /* hide aggregate type name */);
             if (createTableStmt.isEmpty()) {
                 resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
                 return;
