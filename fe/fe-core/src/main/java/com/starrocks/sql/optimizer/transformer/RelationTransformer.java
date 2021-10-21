@@ -354,7 +354,7 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
             return new OptExprBuilder(new LogicalJoinOperator.Builder()
                     .setJoinType(JoinOperator.CROSS_JOIN)
                     .setJoinHint(node.getJoinHint())
-                    .setProjection(new Projection(expressionMapping.getFieldMappings().stream()
+                    .setProjection(new Projection(expressionMapping.getFieldMappings().stream().distinct()
                             .collect(Collectors.toMap(Function.identity(), Function.identity()))))
                     .build(), Lists.newArrayList(leftPlan, rightPlan), expressionMapping);
         }
@@ -403,7 +403,7 @@ public class RelationTransformer extends RelationVisitor<OptExprBuilder, Express
                 .setJoinType(node.getType())
                 .setOnPredicate(onPredicate)
                 .setJoinHint(node.getJoinHint())
-                .setProjection(new Projection(outputExpressionMapping.getFieldMappings().stream()
+                .setProjection(new Projection(outputExpressionMapping.getFieldMappings().stream().distinct()
                         .collect(Collectors.toMap(Function.identity(), Function.identity()))))
                 .build();
         return new OptExprBuilder(joinOperator, Lists.newArrayList(leftPlan, rightPlan), outputExpressionMapping);
