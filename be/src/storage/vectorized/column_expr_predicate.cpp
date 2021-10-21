@@ -5,22 +5,26 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "runtime/primitive_type.h"
+#include "runtime/runtime_state.h"
 #include "storage/vectorized/column_predicate.h"
-
 namespace starrocks::vectorized {
 
 using starrocks::ExprContext;
 
 class ColumnExprPredicate : public ColumnPredicate {
 public:
-    ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, ExprContext* expr_ctx, SlotId slot_id)
-            : ColumnPredicate(type_info, column_id), _expr_ctx(expr_ctx), _slot_id(slot_id) {}
-    ~ColumnExprPredicate() override = default;
+    ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state, ExprContext* expr_ctx,
+                        SlotId slot_id)
+            : ColumnPredicate(type_info, column_id), _state(state), _expr_ctx(nullptr), _slot_id(slot_id) {
+        // note: conjuncts would be shared by multiple scanners
+        // so here we have to clone one to keep thread safe.
+        expr_ctx->clone(state, &_expr_ctx);
+    }
+    ~ColumnExprPredicate() override { _expr_ctx->close(_state); }
 
     void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         Chunk chunk;
-        ColumnPtr column_ptr(const_cast<Column*>(column));
-        chunk.update_column(column_ptr, _slot_id);
+        chunk.append_raw_column(column, _slot_id);
         ColumnPtr bits = _expr_ctx->evaluate(&chunk);
 
         // deal with constant.
@@ -98,13 +102,14 @@ public:
     }
 
 private:
+    RuntimeState* _state;
     ExprContext* _expr_ctx;
     SlotId _slot_id;
 };
 
-ColumnPredicate* new_column_expr_predicate(const TypeInfoPtr& type, ColumnId column_id, ExprContext* expr_ctx,
-                                           SlotId slot_id) {
-    return new ColumnExprPredicate(type, column_id, expr_ctx, slot_id);
+ColumnPredicate* new_column_expr_predicate(const TypeInfoPtr& type, ColumnId column_id, RuntimeState* state,
+                                           ExprContext* expr_ctx, SlotId slot_id) {
+    return new ColumnExprPredicate(type, column_id, state, expr_ctx, slot_id);
 }
 
 } // namespace starrocks::vectorized

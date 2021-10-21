@@ -84,6 +84,7 @@ Status TabletScanner::close(RuntimeState* state) {
     _prj_iter->close();
     update_counter();
     _reader.reset();
+    _predicate_free_pool.clear();
     Expr::close(_conjunct_ctxs, state);
     // Reduce the memory usage if the the average string size is greater than 512.
     release_large_columns<BinaryColumn>(config::vector_chunk_size * 512);

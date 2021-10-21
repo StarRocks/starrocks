@@ -328,6 +328,7 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     cm.obj_pool = &_obj_pool;
     cm.key_column_names = &_olap_scan_node.key_column_name;
     cm.runtime_filters = &_runtime_filter_collector;
+    cm.runtime_state = state;
 
     const TQueryOptions& query_options = state->query_options();
     int32_t max_scan_key_num;

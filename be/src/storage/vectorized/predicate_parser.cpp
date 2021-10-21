@@ -6,6 +6,7 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "storage/tablet_schema.h"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/type_utils.h"
@@ -62,7 +63,8 @@ ColumnPredicate* PredicateParser::parse_thrift_cond(const TCondition& condition)
     return pred;
 }
 
-ColumnPredicate* PredicateParser::parse_expr_ctx(const SlotDescriptor& slot_desc, ExprContext* expr_ctx) const {
+ColumnPredicate* PredicateParser::parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState* state,
+                                                 ExprContext* expr_ctx) const {
     const size_t column_id = _schema.field_index(slot_desc.col_name());
     RETURN_IF(column_id >= _schema.num_columns(), nullptr);
     const TabletColumn& col = _schema.column(column_id);
@@ -70,7 +72,7 @@ ColumnPredicate* PredicateParser::parse_expr_ctx(const SlotDescriptor& slot_desc
     auto scale = col.scale();
     auto type = TypeUtils::to_storage_format_v2(col.type());
     auto&& type_info = get_type_info(type, precision, scale);
-    return new_column_expr_predicate(type_info, column_id, expr_ctx, slot_desc.id());
+    return new_column_expr_predicate(type_info, column_id, state, expr_ctx, slot_desc.id());
 }
 
 } // namespace starrocks::vectorized

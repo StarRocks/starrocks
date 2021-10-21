@@ -8,6 +8,7 @@ class TabletSchema;
 class TCondition;
 class ExprContext;
 class SlotDescriptor;
+class RuntimeState;
 
 namespace vectorized {
 
@@ -23,7 +24,7 @@ public:
     // return nullptr if parse failed.
     ColumnPredicate* parse_thrift_cond(const TCondition& condition) const;
 
-    ColumnPredicate* parse_expr_ctx(const SlotDescriptor& slot_desc, ExprContext* expr_ctx) const;
+    ColumnPredicate* parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState*, ExprContext* expr_ctx) const;
 
 private:
     const TabletSchema& _schema;

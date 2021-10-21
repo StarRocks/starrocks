@@ -31,6 +31,7 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     cm.obj_pool = &_obj_pool;
     cm.key_column_names = &_key_column_names;
     cm.runtime_filters = &_runtime_filters;
+    cm.runtime_state = state;
 
     const TQueryOptions& query_options = state->query_options();
     int32_t max_scan_key_num;
@@ -258,6 +259,7 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
 Status OlapChunkSource::close(RuntimeState* state) {
     _prj_iter->close();
     _reader.reset();
+    _predicate_free_pool.clear();
     return Status::OK();
 }
 

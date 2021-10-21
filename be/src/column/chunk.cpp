@@ -86,6 +86,13 @@ void Chunk::update_column(ColumnPtr column, SlotId slot_id) {
     check_or_die();
 }
 
+void Chunk::append_raw_column(const Column* c, SlotId slot_id) {
+    _slot_id_to_index[slot_id] = _columns.size();
+    ColumnPtr p(const_cast<Column*>(c), [](auto p) {});
+    _columns.emplace_back(p);
+    check_or_die();
+}
+
 void Chunk::insert_column(size_t idx, ColumnPtr column, const FieldPtr& field) {
     DCHECK_LT(idx, _columns.size());
     _columns.emplace(_columns.begin() + idx, std::move(column));

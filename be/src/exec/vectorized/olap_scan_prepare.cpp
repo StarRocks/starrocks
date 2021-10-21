@@ -721,7 +721,7 @@ void OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser, st
         auto& expr_ctxs = iter.second;
         const SlotDescriptor* slot_desc = slots[slot_index];
         for (ExprContext* ctx : expr_ctxs) {
-            ColumnPredicate* p = parser->parse_expr_ctx(*slot_desc, ctx);
+            ColumnPredicate* p = parser->parse_expr_ctx(*slot_desc, runtime_state, ctx);
             preds->push_back(p);
         }
     }
