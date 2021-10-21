@@ -388,6 +388,25 @@ public class Column implements Writable {
         return sb.toString();
     }
 
+    public String toSqlWithoutAggregateTypeName() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("`").append(name).append("` ");
+        String typeStr = type.toSql();
+        sb.append(typeStr).append(" ");
+        if (isAllowNull) {
+            sb.append("NULL ");
+        } else {
+            sb.append("NOT NULL ");
+        }
+        if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
+                getPrimitiveType() != PrimitiveType.BITMAP) {
+            sb.append("DEFAULT \"").append(defaultValue).append("\" ");
+        }
+        sb.append("COMMENT \"").append(comment).append("\"");
+
+        return sb.toString();
+    }
+
     @Override
     public String toString() {
         return toSql();
