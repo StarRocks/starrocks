@@ -126,7 +126,6 @@ public:
                 _all_trackers[i]->_consumption->add(-bytes);
             }
         }
-        return;
     }
 
     /// Increases/Decreases the consumption of this tracker and the ancestors up to (but

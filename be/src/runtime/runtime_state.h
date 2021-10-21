@@ -82,7 +82,7 @@ public:
     // Specific parts of the fragment (i.e. exec nodes, sinks, data stream senders, etc)
     // will add a fourth level when they are initialized.
     // This function also initializes a user function mem tracker (in the fourth level).
-    Status init_mem_trackers(const TUniqueId& query_id);
+    void init_mem_trackers(const TUniqueId& query_id);
 
     // for ut only
     Status init_instance_mem_tracker();
@@ -105,6 +105,8 @@ public:
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
     ExecEnv* exec_env() { return _exec_env; }
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
+    std::shared_ptr<MemTracker> query_mem_tracker_ptr() { return _query_mem_tracker; }
+    std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
     ThreadResourceMgr::ResourcePool* resource_pool() { return _resource_pool; }
     RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
 
@@ -114,7 +116,8 @@ public:
     }
 
     // Returns runtime state profile
-    RuntimeProfile* runtime_profile() { return &_profile; }
+    RuntimeProfile* runtime_profile() { return _profile.get(); }
+    std::shared_ptr<RuntimeProfile> runtime_profile_ptr() { return _profile; }
 
     Status query_status() {
         std::lock_guard<std::mutex> l(_process_status_lock);
@@ -273,7 +276,7 @@ private:
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some of object in _obj_pool will use profile when deconstructing.
-    RuntimeProfile _profile;
+    std::shared_ptr<RuntimeProfile> _profile;
 
     DescriptorTbl* _desc_tbl = nullptr;
 
@@ -306,10 +309,10 @@ private:
 
     // MemTracker that is shared by all fragment instances running on this host.
     // The query mem tracker must be released after the _instance_mem_tracker.
-    std::unique_ptr<MemTracker> _query_mem_tracker;
+    std::shared_ptr<MemTracker> _query_mem_tracker;
 
     // Memory usage of this fragment instance
-    std::unique_ptr<MemTracker> _instance_mem_tracker;
+    std::shared_ptr<MemTracker> _instance_mem_tracker;
 
     std::shared_ptr<ObjectPool> _obj_pool;
 
@@ -327,7 +330,6 @@ private:
     // will not necessarily be set in all error cases.
     std::mutex _process_status_lock;
     Status _process_status;
-    //std::unique_ptr<MemPool> _udf_pool;
 
     // This is the node id of the root node for this plan fragment. This is used as the
     // hash seed and has two useful properties:

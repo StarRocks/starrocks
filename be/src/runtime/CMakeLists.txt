@@ -49,7 +49,6 @@ set(RUNTIME_FILES
     runtime_state.cpp
     string_value.cpp
     thread_resource_mgr.cpp
-    #  timestamp_value.cpp
     decimal_value.cpp
     decimalv2_value.cpp
     large_int_value.cpp
@@ -65,7 +64,6 @@ set(RUNTIME_FILES
     disk_io_mgr_scan_range.cc 
     mem_tracker.cpp
     data_stream_recvr.cc
-    #  export_task_mgr.cpp
     export_sink.cpp
     load_channel_mgr.cpp
     load_channel.cpp
