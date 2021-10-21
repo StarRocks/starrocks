@@ -401,16 +401,19 @@ void DataDir::find_tablet_in_trash(int64_t tablet_id, std::vector<std::string>* 
             continue;
         }
         std::string tablet_path = sub_path + "/" + std::to_string(tablet_id);
-        bool exist = FileUtils::check_exist(tablet_path);
-        if (exist) {
+        if (FileUtils::check_exist(tablet_path)) {
             paths->emplace_back(std::move(tablet_path));
         }
     }
 }
 
 std::string DataDir::get_root_path_from_schema_hash_path_in_trash(const std::string& schema_hash_dir_in_trash) {
-    std::filesystem::path schema_hash_path_in_trash(schema_hash_dir_in_trash);
-    return schema_hash_path_in_trash.parent_path().parent_path().parent_path().parent_path().string();
+    return std::filesystem::path(schema_hash_dir_in_trash)
+            .parent_path()
+            .parent_path()
+            .parent_path()
+            .parent_path()
+            .string();
 }
 
 // TODO(ygl): deal with rowsets and tablets when load failed
