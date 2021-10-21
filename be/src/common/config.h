@@ -583,7 +583,13 @@ CONF_Bool(bitmap_filter_enable_not_equal, "false");
 // When storage_format_version is 2, DATE_V2, TIMESTAMP and DECIMAL_V2 will be used as
 // storage format.
 CONF_mInt16(storage_format_version, "2");
-CONF_mInt16(default_page_format, "3");
+
+// IMPORTANT NOTE: changing 0 from 1 must require all BEs to be upgraded to new versions,
+// which support this config.
+// DO NOT change this config unless you known how.
+// 0 for bitshuffle
+// 1 for lz4
+CONF_mInt16(null_flag_version, "0");
 
 // do pre-aggregate if effect great than the factor, factor range:[1-100].
 CONF_Int16(pre_aggregate_factor, "80");

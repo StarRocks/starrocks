@@ -65,7 +65,10 @@ protected:
     void TearDown() override { _tracker.release(_tracker.consumption()); }
 
     template <FieldType type, EncodingTypePB encoding, uint32_t version, bool adaptive = true>
-    void test_nullable_data(const vectorized::Column& src) {
+    void test_nullable_data(const vectorized::Column& src, const std::string null_flag_version = "0") {
+
+        config::set_config("null_flag_version", null_flag_version);
+
         using Type = typename TypeTraits<type>::CppType;
         TypeInfoPtr type_info = get_type_info(type);
         int num_rows = src.size();
@@ -265,7 +268,10 @@ protected:
     }
 
     template <uint32_t version>
-    void test_int_array() {
+    void test_int_array(std::string null_flag_version = "0") {
+        
+        config::set_config("null_flag_version", null_flag_version);
+        
         auto env = std::make_unique<EnvMemory>();
         auto block_mgr = std::make_unique<fs::FileBlockManager>(env.get(), fs::BlockManagerOptions());
         ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
@@ -488,17 +494,17 @@ protected:
         auto col = numeric_data<type>(1);
         test_nullable_data<type, BIT_SHUFFLE, 1>(*col);
         test_nullable_data<type, BIT_SHUFFLE, 2>(*col);
-        test_nullable_data<type, BIT_SHUFFLE, 3>(*col);
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1");
 
         col = numeric_data<type>(4);
         test_nullable_data<type, BIT_SHUFFLE, 1>(*col);
         test_nullable_data<type, BIT_SHUFFLE, 2>(*col);
-        test_nullable_data<type, BIT_SHUFFLE, 3>(*col);
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1");
 
         col = numeric_data<type>(10000);
         test_nullable_data<type, BIT_SHUFFLE, 1>(*col);
         test_nullable_data<type, BIT_SHUFFLE, 2>(*col);
-        test_nullable_data<type, BIT_SHUFFLE, 3>(*col);
+        test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1");
     }
 
     MemTracker _tracker;
@@ -520,7 +526,7 @@ TEST_F(ColumnReaderWriterTest, test_date) {
     auto col = date_values(100);
     test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 1>(*col);
     test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col);
-    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 3>(*col);
+    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "1");
 }
 
 // NOLINTNEXTLINE
@@ -528,7 +534,7 @@ TEST_F(ColumnReaderWriterTest, test_datetime) {
     auto col = datetime_values(100);
     test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 1>(*col);
     test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col);
-    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 3>(*col);
+    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "1");
 }
 
 // NOLINTNEXTLINE
@@ -536,20 +542,20 @@ TEST_F(ColumnReaderWriterTest, test_binary) {
     auto c = low_cardinality_strings(10000);
     test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c);
     test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c);
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 3>(*c);
+    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1");
 
     test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c);
     test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c);
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 3>(*c);
+    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1");
 
     c = high_cardinality_strings(100);
     test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c);
     test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c);
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 3>(*c);
+    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1");
 
     test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c);
     test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c);
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 3>(*c);
+    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1");
 }
 
 // NOLINTNEXTLINE
@@ -603,7 +609,7 @@ TEST_F(ColumnReaderWriterTest, test_default_value) {
 // test array<int>, and nullable
 TEST_F(ColumnReaderWriterTest, test_array_int) {
     test_int_array<2>();
-    test_int_array<3>();
+    test_int_array<2>("1");
 }
 
 } // namespace starrocks::segment_v2

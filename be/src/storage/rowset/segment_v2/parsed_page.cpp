@@ -253,9 +253,6 @@ private:
     friend Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,
                                 const PagePointer& page_pointer, uint32_t page_index);
-    friend Status parse_page_v3(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
-                                const DataPageFooterPB& footer, const EncodingInfo* encoding,
-                                const PagePointer& page_pointer, uint32_t page_index);
 
     faststring _null_flags;
     PageHandle _page_handle;
@@ -299,56 +296,41 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
 
     auto null_size = footer.nullmap_size();
     if (null_size > 0) {
-        Slice null_flags(body.data + body.size - null_size, null_size);
-        size_t elements = footer.num_values();
-        size_t elements_pad = ALIGN_UP(elements, 8u);
-        page->_null_flags.resize(elements_pad * sizeof(uint8_t));
-        int64_t r =
-                bitshuffle::decompress_lz4(null_flags.data, page->_null_flags.data(), elements_pad, sizeof(uint8_t), 0);
-        if (r < 0) {
-            return Status::Corruption("bitshuffle decompress failed: " + bitshuffle_error_msg(r));
+        LOG(INFO) << "footer.has_null_flag_version():" << footer.has_null_flag_version();
+        std::cout << "footer.has_null_flag_version():" << footer.has_null_flag_version() << std::endl;
+        if (footer.has_null_flag_version()) {
+            LOG(INFO) << "footer.null_flag_version():" << footer.null_flag_version();
+            std::cout << "footer.null_flag_version():" << footer.null_flag_version() << std::endl;
         }
-        page->_null_flags.resize(elements);
-    }
-
-    Slice data_slice(body.data, body.size - null_size);
-    PageDecoder* decoder = nullptr;
-    PageDecoderOptions opts;
-    RETURN_IF_ERROR(encoding->create_page_decoder(data_slice, opts, &decoder));
-    page->_data_decoder.reset(decoder);
-    RETURN_IF_ERROR(page->_data_decoder->init());
-    page->_first_ordinal = footer.first_ordinal();
-    page->_num_rows = footer.num_values();
-    page->_page_pointer = page_pointer;
-    page->_page_index = page_index;
-    page->_corresponding_element_ordinal = footer.corresponding_element_ordinal();
-
-    if (encoding->encoding() == EncodingTypePB::BIT_SHUFFLE) {
-        // When using BIT_SHUFFLE encoding, the original data is not used after decoded.
-        // So the memory can be released to reduce the memory usage.
-        page->_page_handle.release_memory();
-    }
-    *result = std::move(page);
-    return Status::OK();
-}
-
-Status parse_page_v3(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
-                     const DataPageFooterPB& footer, const EncodingInfo* encoding, const PagePointer& page_pointer,
-                     uint32_t page_index) {
-    auto page = std::make_unique<ParsedPageV2>();
-    page->_page_handle = std::move(handle);
-
-    auto null_size = footer.nullmap_size();
-    if (null_size > 0) {
-        // decompress null flags by lz4
-        Slice null_flags(body.data + body.size - null_size, null_size);
-        size_t elements = footer.num_values();
-        page->_null_flags.resize(elements * sizeof(uint8_t));
-        const BlockCompressionCodec* codec = nullptr;
-        CompressionTypePB type = CompressionTypePB::LZ4;
-        RETURN_IF_ERROR(get_block_compression_codec(type, &codec));
-        Slice decompressed_slice(page->_null_flags.data(), elements);
-        RETURN_IF_ERROR(codec->decompress(null_flags, &decompressed_slice));
+        uint32_t null_flag_version = footer.has_null_flag_version() ? footer.null_flag_version() : 0;
+        if (null_flag_version == 0) {
+            LOG(INFO) << "parse null flag use bitshuffle";
+            std::cout << "parse null flag use bitshuffle" << std::endl;
+            Slice null_flags(body.data + body.size - null_size, null_size);
+            size_t elements = footer.num_values();
+            size_t elements_pad = ALIGN_UP(elements, 8u);
+            page->_null_flags.resize(elements_pad * sizeof(uint8_t));
+            int64_t r = bitshuffle::decompress_lz4(null_flags.data, page->_null_flags.data(), elements_pad,
+                                                   sizeof(uint8_t), 0);
+            if (r < 0) {
+                return Status::Corruption("bitshuffle decompress failed: " + bitshuffle_error_msg(r));
+            }
+            page->_null_flags.resize(elements);
+        } else if (null_flag_version == 1) {
+            LOG(INFO) << "parse null flag use lz4";
+            std::cout << "parse null flag use lz4" << std::endl;
+            // decompress null flags by lz4
+            Slice null_flags(body.data + body.size - null_size, null_size);
+            size_t elements = footer.num_values();
+            page->_null_flags.resize(elements * sizeof(uint8_t));
+            const BlockCompressionCodec* codec = nullptr;
+            CompressionTypePB type = CompressionTypePB::LZ4;
+            RETURN_IF_ERROR(get_block_compression_codec(type, &codec));
+            Slice decompressed_slice(page->_null_flags.data(), elements);
+            RETURN_IF_ERROR(codec->decompress(null_flags, &decompressed_slice));
+        } else {
+            return Status::Corruption("invalid null flag version: " + null_flag_version);
+        }
     }
 
     Slice data_slice(body.data, body.size - null_size);
@@ -381,9 +363,6 @@ Status parse_page(std::unique_ptr<ParsedPage>* result, PageHandle handle, const 
     }
     if (version == 2) {
         return parse_page_v2(result, std::move(handle), body, footer, encoding, page_pointer, page_index);
-    }
-    if (version == 3) {
-        return parse_page_v3(result, std::move(handle), body, footer, encoding, page_pointer, page_index);
     }
     return Status::InternalError(strings::Substitute("Unknown page format version $0", version));
 }

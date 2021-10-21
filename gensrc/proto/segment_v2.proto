@@ -77,6 +77,9 @@ message DataPageFooterPB {
     // another difference is that the format 1 use Run-Length encoding to encode the null map,
     // while format 2 use the bitshuffle.
     optional uint32 format_version = 20;
+    // 0 for bitshuffle
+    // 1 for lz4
+    optional uint32 null_flag_version = 21;
 }
 
 message IndexPageFooterPB {

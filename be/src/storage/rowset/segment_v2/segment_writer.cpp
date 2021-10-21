@@ -78,7 +78,7 @@ Status SegmentWriter::init(uint32_t write_mbytes_per_sec __attribute__((unused))
     _column_writers.reserve(_tablet_schema->columns().size());
     for (const auto& column : _tablet_schema->columns()) {
         ColumnWriterOptions opts;
-        opts.page_format = (_opts.storage_format_version == 1) ? 1 : config::default_page_format;
+        opts.page_format = (_opts.storage_format_version == 1) ? 1 : 2;
         opts.adaptive_page_format = (_opts.storage_format_version > 1);
         opts.meta = _footer.add_columns();
 
