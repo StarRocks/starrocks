@@ -61,11 +61,11 @@ UNPARTITIONED
 |
 34:Project
 |  <slot 69> : 69: year
-|  <slot 74> : 72: sum(71: expr) / 73: sum(70: expr)
+|  <slot 74> : 72: sum(71: case) / 73: sum(70: expr)
 |  use vectorized: true
 |
 33:AGGREGATE (merge finalize)
-|  output: sum(72: sum(71: expr)), sum(73: sum(70: expr))
+|  output: sum(72: sum(71: case)), sum(73: sum(70: expr))
 |  group by: 69: year
 |  use vectorized: true
 |
@@ -82,7 +82,7 @@ HASH_PARTITIONED: 69: year
 
 31:AGGREGATE (update serialize)
 |  STREAMING
-|  output: sum(71: expr), sum(70: expr)
+|  output: sum(71: case), sum(70: expr)
 |  group by: 69: year
 |  use vectorized: true
 |

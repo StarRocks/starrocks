@@ -3,6 +3,8 @@ package com.starrocks.sql.optimizer.base;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.CaseExpr;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
@@ -10,6 +12,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -31,6 +35,10 @@ public class ColumnRefFactory {
             nameHint = ((SlotRef) expression).getColumnName();
         } else if (expression instanceof FunctionCallExpr) {
             nameHint = ((FunctionCallExpr) expression).getFnName().toString();
+        } else if (expression instanceof CaseExpr) {
+            nameHint = "case";
+        } else if (expression instanceof CastExpr) {
+            nameHint = "cast";
         }
         return create(nextId++, nameHint, type, nullable);
     }
@@ -40,7 +48,13 @@ public class ColumnRefFactory {
         if (operator.isColumnRef()) {
             nameHint = ((ColumnRefOperator) operator).getName();
         } else if (operator instanceof CallOperator) {
-            nameHint = ((CallOperator) operator).getFnName();
+            if (operator instanceof CaseWhenOperator) {
+                nameHint = "case";
+            } else if (operator instanceof CastOperator) {
+                nameHint = "cast";
+            } else {
+                nameHint = ((CallOperator) operator).getFnName();
+            }
         }
         return create(nextId++, nameHint, type, nullable);
     }
