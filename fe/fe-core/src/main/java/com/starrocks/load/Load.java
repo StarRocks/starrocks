@@ -135,7 +135,7 @@ public class Load {
         return shadowColumnDescs;
     }
 
-    public static boolean tableSupportsOpColumn(Table tbl) {
+    public static boolean tableSupportOpColumn(Table tbl) {
         return tbl instanceof OlapTable && ((OlapTable) tbl).getKeysType() == KeysType.PRIMARY_KEYS;
     }
 
@@ -208,7 +208,7 @@ public class Load {
         // to the columnExprs will not affect the original columnExprs.
         List<ImportColumnDesc> copiedColumnExprs = Lists.newArrayList(columnExprs);
 
-        if (tbl instanceof OlapTable && ((OlapTable) tbl).getKeysType() == KeysType.PRIMARY_KEYS) {
+        if (tableSupportOpColumn(tbl)) {
             boolean found = false;
             for (ImportColumnDesc c : copiedColumnExprs) {
                 if (c.getColumnName().equals(Load.LOAD_OP_COLUMN)) {
