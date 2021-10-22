@@ -32,8 +32,8 @@
 #include "storage/rowset/segment_v2/encoding_info.h"
 #include "storage/rowset/segment_v2/options.h"
 #include "storage/rowset/segment_v2/page_handle.h"
-#include "util/rle_encoding.h"
 #include "util/block_compression.h"
+#include "util/rle_encoding.h"
 
 namespace starrocks::segment_v2 {
 
@@ -296,17 +296,8 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
 
     auto null_size = footer.nullmap_size();
     if (null_size > 0) {
-        LOG(INFO) << "footer.has_null_flag_version():" << footer.has_null_flag_version();
-        std::cout << "footer.has_null_flag_version():" << footer.has_null_flag_version() << std::endl;
-        if (footer.has_null_flag_version()) {
-            LOG(INFO) << "footer.null_flag_version():" << footer.null_flag_version();
-            std::cout << "footer.null_flag_version():" << footer.null_flag_version() << std::endl;
-        }
         uint32_t null_flag_version = footer.has_null_flag_version() ? footer.null_flag_version() : 0;
         if (null_flag_version == 0) {
-            LOG(INFO) << "parse null flag use bitshuffle";
-            std::cout << "parse null flag use bitshuffle" << std::endl;
-            Slice null_flags(body.data + body.size - null_size, null_size);
             size_t elements = footer.num_values();
             size_t elements_pad = ALIGN_UP(elements, 8u);
             page->_null_flags.resize(elements_pad * sizeof(uint8_t));
@@ -317,8 +308,6 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
             }
             page->_null_flags.resize(elements);
         } else if (null_flag_version == 1) {
-            LOG(INFO) << "parse null flag use lz4";
-            std::cout << "parse null flag use lz4" << std::endl;
             // decompress null flags by lz4
             Slice null_flags(body.data + body.size - null_size, null_size);
             size_t elements = footer.num_values();

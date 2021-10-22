@@ -135,8 +135,6 @@ public:
 
     OwnedSlice finish() {
         if (_null_flag_version == 0) {
-            LOG(INFO) << "use bitsshuffle to encoding null flag, _null_flag_version:" << _null_flag_version;
-            std::cout << " use bitsshuffle to encoding null flag, _null_flag_version:" << _null_flag_version << std::endl;
             size_t old_size = _null_map.size();
             _null_map.resize(ALIGN_UP(_null_map.size(), 8u));
             memset(_null_map.data() + old_size, 0, _null_map.size() - old_size);
@@ -148,8 +146,6 @@ public:
             }
             return _encode_buf.build();
         } else if (_null_flag_version == 1) {
-            LOG(INFO) << "use bitsshuffle to encoding null flag, _null_flag_version:" << _null_flag_version;
-            std::cout << "use bitsshuffle to encoding null flag, _null_flag_version:" << _null_flag_version << std::endl;
             const BlockCompressionCodec* codec = nullptr;
             CompressionTypePB type = CompressionTypePB::LZ4;
             Status status = get_block_compression_codec(type, &codec);
@@ -188,9 +184,7 @@ public:
     }
 
     // add this api for config::null_flag_version can be modified online
-    int16_t null_flag_version() {
-        return _null_flag_version;
-    }
+    int16_t null_flag_version() { return _null_flag_version; }
 
 private:
     bool _has_null{false};
@@ -556,8 +550,6 @@ Status ScalarColumnWriter::finish_current_page() {
     data_page_footer->set_format_version(_curr_page_format);
     data_page_footer->set_corresponding_element_ordinal(_element_ordinal);
     if (is_nullable() && (_curr_page_format == 2)) {
-        LOG(INFO) << "set null flag version in footer:" << _null_map_builder_v2->null_flag_version();
-        std::cout << "set null flag version in footer:" << _null_map_builder_v2->null_flag_version() << std::endl;
         data_page_footer->set_null_flag_version(_null_map_builder_v2->null_flag_version());
     }
     // trying to compress page body
