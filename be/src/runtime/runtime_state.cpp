@@ -31,7 +31,6 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/exec_node.h"
-#include "exprs/vectorized/runtime_filter_bank.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
@@ -47,24 +46,22 @@ namespace starrocks {
 // for ut only
 RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                            const TQueryGlobals& query_globals, ExecEnv* exec_env)
-        : _profile("Fragment " + print_id(fragment_instance_id)),
-          _unreported_error_idx(0),
+        : _unreported_error_idx(0),
           _obj_pool(new ObjectPool()),
           _is_cancelled(false),
           _per_fragment_instance_idx(0),
-
           _num_rows_load_total(0),
           _num_rows_load_filtered(0),
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
+    _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
     Status status = init(fragment_instance_id, query_options, query_globals, exec_env);
     DCHECK(status.ok());
 }
 
 RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
                            const TQueryOptions& query_options, const TQueryGlobals& query_globals, ExecEnv* exec_env)
-        : _profile("Fragment " + print_id(fragment_instance_id)),
-          _unreported_error_idx(0),
+        : _unreported_error_idx(0),
           _query_id(query_id),
           _obj_pool(new ObjectPool()),
           _is_cancelled(false),
@@ -75,16 +72,14 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
           _num_rows_load_unselected(0),
 
           _num_print_error_rows(0) {
+    _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
     Status status = init(fragment_instance_id, query_options, query_globals, exec_env);
     DCHECK(status.ok());
 }
 
 RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
-        : _profile("<unnamed>"),
-          _unreported_error_idx(0),
-          _obj_pool(new ObjectPool()),
-          _is_cancelled(false),
-          _per_fragment_instance_idx(0) {
+        : _unreported_error_idx(0), _obj_pool(new ObjectPool()), _is_cancelled(false), _per_fragment_instance_idx(0) {
+    _profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_BATCH_SIZE;
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
@@ -169,18 +164,16 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
     return Status::OK();
 }
 
-Status RuntimeState::init_mem_trackers(const TUniqueId& query_id) {
+void RuntimeState::init_mem_trackers(const TUniqueId& query_id) {
     bool has_query_mem_tracker = _query_options.__isset.mem_limit && (_query_options.mem_limit > 0);
     int64_t bytes_limit = has_query_mem_tracker ? _query_options.mem_limit : -1;
-    auto* mem_tracker_counter = ADD_COUNTER(&_profile, "MemoryLimit", TUnit::BYTES);
+    auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "MemoryLimit", TUnit::BYTES);
     mem_tracker_counter->set(bytes_limit);
 
-    _query_mem_tracker = std::make_unique<MemTracker>(MemTracker::QUERY, bytes_limit, runtime_profile()->name(),
+    _query_mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, runtime_profile()->name(),
                                                       _exec_env->query_pool_mem_tracker());
     _instance_mem_tracker =
-            std::make_unique<MemTracker>(&_profile, -1, runtime_profile()->name(), _query_mem_tracker.get());
-
-    return Status::OK();
+            std::make_shared<MemTracker>(_profile.get(), -1, runtime_profile()->name(), _query_mem_tracker.get());
 }
 
 Status RuntimeState::init_instance_mem_tracker() {

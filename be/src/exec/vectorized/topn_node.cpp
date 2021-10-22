@@ -5,8 +5,6 @@
 #include <memory>
 
 #include "column/column_helper.h"
-#include "exec/pipeline/exchange/local_exchange.h"
-#include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sort/sort_sink_operator.h"

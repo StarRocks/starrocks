@@ -85,7 +85,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             std::make_unique<MemTracker>(bytes_limit, "fragment mem-limit", exec_env->query_pool_mem_tracker(), true));
 
     runtime_state->set_batch_size(config::vector_chunk_size);
-    RETURN_IF_ERROR(runtime_state->init_mem_trackers(query_id));
+    runtime_state->init_mem_trackers(query_id);
     runtime_state->set_be_number(backend_num);
 
     LOG(INFO) << "Using query memory limit: " << PrettyPrinter::print(bytes_limit, TUnit::BYTES);

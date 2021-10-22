@@ -18,8 +18,8 @@
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::vectorized {
@@ -211,6 +211,9 @@ void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
 }
 
 void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     tls_thread_status.set_query_id(scanner->runtime_state()->query_id());
 
     Status status = scanner->open(_runtime_state);

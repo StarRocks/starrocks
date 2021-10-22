@@ -41,7 +41,7 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TDescr
     _runtime_profile = _runtime_state->runtime_profile();
     _runtime_profile->set_name("PushBrokerReader");
 
-    RETURN_IF_ERROR(_runtime_state->init_mem_trackers(dummy_id));
+    _runtime_state->init_mem_trackers(dummy_id);
 
     // init tuple desc
     auto tuple_id = t_scan_range.params.dest_tuple_id;
