@@ -23,6 +23,7 @@ namespace starrocks {
 class BloomFilter;
 class Slice;
 class ObjectPool;
+class ExprContext;
 } // namespace starrocks
 
 namespace starrocks::segment_v2 {
@@ -46,6 +47,7 @@ enum class PredicateType {
     kNotNull = 9,
     kAnd = 10,
     kOr = 11,
+    kExpr = 12,
 };
 
 template <typename T>
@@ -270,6 +272,7 @@ ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type, ColumnId id,
 ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type, ColumnId id,
                                              const std::vector<std::string>& operands);
 ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type, ColumnId, bool is_null);
+ColumnPredicate* new_column_expr_predicate(const TypeInfoPtr& type, ColumnId, ExprContext* expr_ctx, SlotId slot_id);
 
 template <FieldType field_type, template <FieldType> typename Predicate, typename NewColumnPredicateFunc>
 Status predicate_convert_to(Predicate<field_type> const& input_predicate,
