@@ -59,9 +59,6 @@ set(RUNTIME_FILES
     dpp_sink_internal.cpp
     load_path_mgr.cpp
     types.cpp
-    disk_io_mgr.cc
-    disk_io_mgr_reader_context.cc
-    disk_io_mgr_scan_range.cc 
     mem_tracker.cpp
     data_stream_recvr.cc
     export_sink.cpp
