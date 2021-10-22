@@ -289,10 +289,10 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
 
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
         int ref_column = _schema_mapping[i].ref_column;
-        FieldType ref_type = base_tablet->tablet_meta()->tablet_schema().column(ref_column).type();
-        FieldType new_type = new_tablet->tablet_meta()->tablet_schema().column(i).type();
 
         if (_schema_mapping[i].ref_column >= 0) {
+            FieldType ref_type = base_tablet->tablet_meta()->tablet_schema().column(ref_column).type();
+            FieldType new_type = new_tablet->tablet_meta()->tablet_schema().column(i).type();
             if (!_schema_mapping[i].materialized_function.empty()) {
                 const MaterializeTypeConverter* converter = nullptr;
                 if (_schema_mapping[i].materialized_function == "to_bitmap") {

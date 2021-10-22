@@ -121,20 +121,9 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     _params.chunk_size = config::vector_chunk_size;
 
     PredicateParser parser(_tablet->tablet_schema());
-
-    // Condition
-    for (auto& filter : _parent->_olap_filter) {
-        ColumnPredicate* p = parser.parse(filter);
-        p->set_index_filter_only(filter.is_index_filter_only);
-        _predicate_free_pool.emplace_back(p);
-        if (parser.can_pushdown(p)) {
-            _params.predicates.push_back(p);
-        } else {
-            _predicates.add(p);
-        }
-    }
-    for (auto& is_null_str : _parent->_is_null_vector) {
-        ColumnPredicate* p = parser.parse(is_null_str);
+    std::vector<vectorized::ColumnPredicate*> preds;
+    _parent->_conjuncts_manager.parse_to_column_predicates(&parser, &preds);
+    for (auto* p : preds) {
         _predicate_free_pool.emplace_back(p);
         if (parser.can_pushdown(p)) {
             _params.predicates.push_back(p);

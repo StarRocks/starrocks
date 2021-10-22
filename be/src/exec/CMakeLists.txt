@@ -64,6 +64,7 @@ set(EXEC_FILES
     vectorized/csv_scanner.cpp
     vectorized/tablet_scanner.cpp
     vectorized/olap_scan_node.cpp
+    vectorized/olap_scan_prepare.cpp
     vectorized/olap_meta_scanner.cpp
     vectorized/olap_meta_scan_node.cpp
     vectorized/hash_join_node.cpp
@@ -138,6 +139,8 @@ set(EXEC_FILES
     pipeline/project_operator.cpp
     pipeline/result_sink_operator.cpp
     pipeline/scan_operator.cpp
+    pipeline/crossjoin/cross_join_right_sink_operator.cpp
+    pipeline/crossjoin/cross_join_left_operator.cpp
     pipeline/sort/sort_sink_operator.cpp
     pipeline/sort/sort_source_operator.cpp
     pipeline/pipeline_driver_dispatcher.cpp
