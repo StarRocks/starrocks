@@ -81,6 +81,7 @@ private:
 
     RuntimeState* _runtime_state = nullptr;
     const std::vector<SlotDescriptor*>* _slots = nullptr;
+    std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
     std::vector<OlapScanRange*> _scanner_ranges;
     vectorized::OlapScanConjunctsManager _conjuncts_manager;
 

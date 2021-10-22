@@ -53,21 +53,20 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
 }
 
 Status OlapChunkSource::_build_scan_range(RuntimeState* state) {
-    std::vector<std::unique_ptr<OlapScanRange>> key_ranges;
-    RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&key_ranges));
+    RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
 
     // FixMe(kks): Ensure this logic is right.
     int scanners_per_tablet = 64;
-    int num_ranges = key_ranges.size();
+    int num_ranges = _key_ranges.size();
     int ranges_per_scanner = std::max(1, num_ranges / scanners_per_tablet);
     for (int i = 0; i < num_ranges;) {
-        _scanner_ranges.push_back(key_ranges[i].get());
+        _scanner_ranges.push_back(_key_ranges[i].get());
         i++;
         for (int j = 1;
-             i < num_ranges && j < ranges_per_scanner && key_ranges[i]->end_include == key_ranges[i - 1]->end_include;
+             i < num_ranges && j < ranges_per_scanner && _key_ranges[i]->end_include == _key_ranges[i - 1]->end_include;
              ++j, ++i) {
-            _scanner_ranges.push_back(key_ranges[i].get());
+            _scanner_ranges.push_back(_key_ranges[i].get());
         }
     }
     return Status::OK();
