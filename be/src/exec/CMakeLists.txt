@@ -64,6 +64,7 @@ set(EXEC_FILES
     vectorized/csv_scanner.cpp
     vectorized/tablet_scanner.cpp
     vectorized/olap_scan_node.cpp
+    vectorized/olap_scan_prepare.cpp
     vectorized/olap_meta_scanner.cpp
     vectorized/olap_meta_scan_node.cpp
     vectorized/hash_join_node.cpp
