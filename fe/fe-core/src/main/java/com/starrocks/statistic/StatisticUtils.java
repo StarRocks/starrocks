@@ -80,8 +80,7 @@ public class StatisticUtils {
     }
 
     public static boolean isEmptyTable(Table table) {
-        return ((OlapTable) table).getPartitions().stream()
-                .allMatch(partition -> partition.getVisibleVersion() == Partition.PARTITION_INIT_VERSION);
+        return ((OlapTable) table).getPartitions().stream().noneMatch(Partition::hasData);
     }
 
 }
