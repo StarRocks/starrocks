@@ -30,18 +30,17 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
-        this(table, Lists.newArrayList(), Maps.newHashMap(), Maps.newHashMap(), null, -1, null);
+        this(table, Maps.newHashMap(), Maps.newHashMap(), null, -1, null);
     }
 
     public LogicalOlapScanOperator(
             Table table,
-            List<ColumnRefOperator> outputColumns,
             Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
             Map<Column, ColumnRefOperator> columnMetaToColRefMap,
             HashDistributionSpec hashDistributionSpec,
             long limit,
             ScalarOperator predicate) {
-        this(table, outputColumns, colRefToColumnMetaMap, columnMetaToColRefMap, hashDistributionSpec, limit, predicate,
+        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, hashDistributionSpec, limit, predicate,
                 ((OlapTable) table).getBaseIndexId(),
                 null,
                 null,
@@ -51,7 +50,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     public LogicalOlapScanOperator(
             Table table,
-            List<ColumnRefOperator> outputColumns,
             Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
             Map<Column, ColumnRefOperator> columnMetaToColRefMap,
             HashDistributionSpec hashDistributionSpec,
@@ -62,8 +60,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             PartitionNames partitionNames,
             List<Long> selectedTabletId,
             List<Long> hintsTabletIds) {
-        super(OperatorType.LOGICAL_OLAP_SCAN, table, outputColumns,
-                colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, null);
+        super(OperatorType.LOGICAL_OLAP_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
+                null);
 
         Preconditions.checkState(table instanceof OlapTable);
         this.hashDistributionSpec = hashDistributionSpec;
@@ -75,7 +73,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     }
 
     private LogicalOlapScanOperator(Builder builder) {
-        super(OperatorType.LOGICAL_OLAP_SCAN, builder.table, builder.outputColumns,
+        super(OperatorType.LOGICAL_OLAP_SCAN, builder.table,
                 builder.colRefToColumnMetaMap, builder.columnMetaToColRefMap,
                 builder.getLimit(),
                 builder.getPredicate(),

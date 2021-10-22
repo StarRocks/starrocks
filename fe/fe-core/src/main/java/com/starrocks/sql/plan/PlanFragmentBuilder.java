@@ -286,6 +286,7 @@ public class PlanFragmentBuilder {
                 return inputFragment;
             }
 
+            /*
             ColumnRefSet childOutputColumns = new ColumnRefSet();
             optExpression.getInputs().forEach(c -> childOutputColumns.union(c.getOutputColumns()));
             ColumnRefSet outputColumns = new ColumnRefSet(node.getOutputColumns());
@@ -293,6 +294,25 @@ public class PlanFragmentBuilder {
                 return inputFragment;
             }
 
+            if (optExpression.getOp() instanceof PhysicalHashAggregateOperator) {
+                if (node.getOutputColumns().)
+            }
+
+            if (optExpression.getOp() instanceof PhysicalScanOperator) {
+                PhysicalScanOperator scanOperator = (PhysicalScanOperator) optExpression.getOp();
+                if (node.getOutputColumns().equals(
+                        new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet()))) {
+                    return inputFragment;
+                }
+            }
+
+            if (optExpression.getOp() instanceof PhysicalValuesOperator) {
+                PhysicalValuesOperator valuesOperator = (PhysicalValuesOperator) optExpression.getOp();
+                if (node.getOutputColumns().equals(valuesOperator.getColumnRefSet())) {
+                    return inputFragment;
+                }
+            }
+            */
             Preconditions.checkState(!node.getColumnRefMap().isEmpty());
 
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();

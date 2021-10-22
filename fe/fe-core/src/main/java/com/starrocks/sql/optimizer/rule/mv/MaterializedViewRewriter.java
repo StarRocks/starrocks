@@ -23,9 +23,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
@@ -77,10 +75,6 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) optExpression.getOp();
 
         if (olapScanOperator.getColRefToColumnMetaMap().containsKey(context.queryColumnRef)) {
-            List<ColumnRefOperator> outputColumns = new ArrayList<>(olapScanOperator.getOutputColumns());
-            outputColumns.remove(context.queryColumnRef);
-            outputColumns.add(context.mvColumnRef);
-
             Map<ColumnRefOperator, Column> columnRefOperatorColumnMap =
                     new HashMap<>(olapScanOperator.getColRefToColumnMetaMap());
             columnRefOperatorColumnMap.remove(context.queryColumnRef);
@@ -88,7 +82,6 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
 
             LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
                     olapScanOperator.getTable(),
-                    outputColumns,
                     columnRefOperatorColumnMap,
                     olapScanOperator.getColumnMetaToColRefMap(),
                     olapScanOperator.getDistributionSpec(),

@@ -25,6 +25,11 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
 
+/**
+ * Because the children of Join need to shuffle data
+ * according to the equivalence conditions in onPredicate, if there is an expression on predicate,
+ * we need to push the expression down to the project of the child
+ */
 public class PushDownJoinOnExpressionToChildProject extends TransformationRule {
     public PushDownJoinOnExpressionToChildProject() {
         super(RuleType.TF_PUSH_DOWN_JOIN_ON_EXPRESSION_TO_CHILD_PROJECT, Pattern.create(OperatorType.LOGICAL_JOIN).

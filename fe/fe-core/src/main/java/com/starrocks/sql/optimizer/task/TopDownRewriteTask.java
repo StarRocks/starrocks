@@ -60,15 +60,13 @@ public abstract class TopDownRewriteTask extends OptimizerTask {
 
                     if (rewriteOnlyOnce) {
                         curGroupExpression = group.getFirstLogicalExpression();
+                        break;
                     } else {
                         pushTask(new TopDownRewriteIterativeTask(context, group, candidateRules));
                         return;
                     }
                 }
 
-                if (rewriteOnlyOnce) {
-                    break;
-                }
                 extractExpr = binder.next();
             }
         }

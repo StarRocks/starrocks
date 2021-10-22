@@ -11,6 +11,12 @@ public abstract class Operator {
     protected final OperatorType opType;
     protected long limit = -1;
     protected ScalarOperator predicate;
+    /**
+     * Before entering the Cascades search framework,
+     * we need to merge LogicalProject and child children into one node
+     * to reduce the impact of LogicalProject on RULE matching
+     * such as Join reorder
+     */
     protected Projection projection;
 
     public Operator(OperatorType opType) {

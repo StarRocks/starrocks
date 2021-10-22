@@ -50,7 +50,6 @@ public class PushDownPredicateScanRule extends TransformationRule {
             LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) logicalScanOperator;
             LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
                     olapScanOperator.getTable(),
-                    olapScanOperator.getOutputColumns(),
                     olapScanOperator.getColRefToColumnMetaMap(),
                     olapScanOperator.getColumnMetaToColRefMap(),
                     olapScanOperator.getDistributionSpec(),
@@ -72,7 +71,6 @@ public class PushDownPredicateScanRule extends TransformationRule {
             LogicalEsScanOperator esScanOperator = (LogicalEsScanOperator) logicalScanOperator;
             LogicalEsScanOperator newScanOperator = new LogicalEsScanOperator(
                     esScanOperator.getTable(),
-                    esScanOperator.getOutputColumns(),
                     esScanOperator.getColRefToColumnMetaMap(),
                     esScanOperator.getColumnMetaToColRefMap(),
                     esScanOperator.getLimit(),

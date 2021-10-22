@@ -41,14 +41,12 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
 
     public LogicalHiveScanOperator(Table table,
                                    Table.TableType tableType,
-                                   List<ColumnRefOperator> outputColumns,
                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                    Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                    long limit,
                                    ScalarOperator predicate) {
         super(OperatorType.LOGICAL_HIVE_SCAN,
                 table,
-                outputColumns,
                 colRefToColumnMetaMap,
                 columnMetaToColRefMap,
                 limit,
@@ -63,7 +61,6 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
     private LogicalHiveScanOperator(LogicalHiveScanOperator.Builder builder) {
         super(OperatorType.LOGICAL_HIVE_SCAN,
                 builder.table,
-                builder.outputColumns,
                 builder.colRefToColumnMetaMap,
                 builder.columnMetaToColRefMap,
                 builder.getLimit(),

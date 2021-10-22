@@ -120,6 +120,11 @@ public class ReorderJoinRule extends Rule {
         return Collections.emptyList();
     }
 
+    /**
+     * Because the order of Join has changed,
+     * the outputColumns of Join will also change accordingly.
+     * Here we need to perform column cropping again on Join.
+     */
     public static class OutputColumnsPrune extends OptExpressionVisitor<OptExpression, ColumnRefSet> {
         private final OptimizerContext optimizerContext;
 

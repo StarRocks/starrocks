@@ -194,7 +194,6 @@ public class StatisticsCalculatorTest {
         }
 
         LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
-                Lists.newArrayList(),
                 Maps.newHashMap(), Maps.newHashMap(),
                 null, -1, null,
                 ((OlapTable) table).getBaseIndexId(),
@@ -270,7 +269,6 @@ public class StatisticsCalculatorTest {
 
         LogicalOlapScanOperator olapScanOperator =
                 new LogicalOlapScanOperator(table,
-                        Lists.newArrayList(),
                         ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
                         ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date),
                         null, -1,
@@ -301,7 +299,6 @@ public class StatisticsCalculatorTest {
                 mapToLong(Partition::getId).boxed().collect(Collectors.toList());
         olapScanOperator =
                 new LogicalOlapScanOperator(table,
-                        Lists.newArrayList(),
                         ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
                         ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date),
                         null, -1, null, ((OlapTable) table).getBaseIndexId(),
@@ -385,7 +382,7 @@ public class StatisticsCalculatorTest {
         }
 
         LogicalOlapScanOperator olapScanOperator =
-                new LogicalOlapScanOperator(table, Lists.newArrayList(id_date),
+                new LogicalOlapScanOperator(table,
                         ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
                         ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date), null, -1, null,
                         ((OlapTable) table).getBaseIndexId(),
@@ -414,7 +411,7 @@ public class StatisticsCalculatorTest {
         partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                 mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
         olapScanOperator =
-                new LogicalOlapScanOperator(table, Lists.newArrayList(id_date),
+                new LogicalOlapScanOperator(table,
                         ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
                         ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date), null, -1, null,
                         ((OlapTable) table).getBaseIndexId(),

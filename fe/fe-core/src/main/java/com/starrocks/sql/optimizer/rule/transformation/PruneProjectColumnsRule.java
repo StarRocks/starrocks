@@ -40,6 +40,15 @@ public class PruneProjectColumnsRule extends TransformationRule {
             }
         }));
 
+        /*
+        if (newMap.isEmpty()) {
+            ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(input.inputAt(0).getOutputColumns().getStream().
+                    mapToObj(context.getColumnRefFactory()::getColumnRef).collect(Collectors.toList()));
+            newMap.put(smallestColumn, smallestColumn);
+            requiredInputColumns.union(smallestColumn);
+        }
+         */
+
         // Change the requiredOutputColumns in context
         requiredOutputColumns.union(requiredInputColumns);
 

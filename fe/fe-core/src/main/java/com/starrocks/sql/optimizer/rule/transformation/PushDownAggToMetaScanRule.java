@@ -77,7 +77,7 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
             newScanColumnRefs.put(metaColumn, metaScan.getColRefToColumnMetaMap().get(usedColumn));
 
-            Function aggFunction =  aggCall.getFunction();
+            Function aggFunction = aggCall.getFunction();
             // DictMerge meta aggregate function is special, need change the are type from
             // VARCHAR to ARRAY_VARCHAR
             if (aggCall.getFnName().equals(FunctionSet.DICT_MERGE)) {
@@ -90,8 +90,8 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             newAggCalls.put(kv.getKey(), newAggCall);
         }
 
-        LogicalMetaScanOperator newMetaScan = new LogicalMetaScanOperator(metaScan.getTable(),
-                metaScan.getOutputColumns(), newScanColumnRefs, aggColumnIdToNames);
+        LogicalMetaScanOperator newMetaScan =
+                new LogicalMetaScanOperator(metaScan.getTable(), newScanColumnRefs, aggColumnIdToNames);
 
         OptExpression newProject = new OptExpression(project);
         newProject.getInputs().add(OptExpression.create(newMetaScan));

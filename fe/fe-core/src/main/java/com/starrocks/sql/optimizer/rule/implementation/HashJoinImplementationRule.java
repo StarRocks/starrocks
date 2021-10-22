@@ -3,20 +3,15 @@
 package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 public class HashJoinImplementationRule extends ImplementationRule {
     public HashJoinImplementationRule() {
@@ -28,24 +23,13 @@ public class HashJoinImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
 
-        Projection projection;
-        if (joinOperator.getProjection() == null) {
-            projection = new Projection(
-                    joinOperator.getOutputColumns(new ExpressionContext(input))
-                            .getStream().boxed().map(c -> context.getColumnRefFactory().getColumnRef(c))
-                            .collect(Collectors.toMap(Function.identity(), Function.identity())),
-                    new HashMap<>());
-        } else {
-            projection = joinOperator.getProjection();
-        }
-
         PhysicalHashJoinOperator physicalHashJoin = new PhysicalHashJoinOperator(
                 joinOperator.getJoinType(),
                 joinOperator.getOnPredicate(),
                 joinOperator.getJoinHint(),
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),
-                projection);
+                joinOperator.getProjection());
         OptExpression result = OptExpression.create(physicalHashJoin, input.getInputs());
         return Lists.newArrayList(result);
     }

@@ -22,7 +22,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,21 +93,16 @@ public class MVProjectAggProjectScanRewrite {
     // Use mv column instead of query column
     protected static void rewriteOlapScanOperator(OptExpression optExpression, LogicalOlapScanOperator olapScanOperator,
                                                   List<MaterializedViewRule.RewriteContext> rewriteContexts) {
-        List<ColumnRefOperator> outputColumns = new ArrayList<>(olapScanOperator.getOutputColumns());
         Map<ColumnRefOperator, Column> columnRefOperatorColumnMap =
                 new HashMap<>(olapScanOperator.getColRefToColumnMetaMap());
 
         for (MaterializedViewRule.RewriteContext rewriteContext : rewriteContexts) {
-            outputColumns.remove(rewriteContext.queryColumnRef);
-            outputColumns.add(rewriteContext.mvColumnRef);
-
             columnRefOperatorColumnMap.remove(rewriteContext.queryColumnRef);
             columnRefOperatorColumnMap.put(rewriteContext.mvColumnRef, rewriteContext.mvColumn);
         }
 
         LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
                 olapScanOperator.getTable(),
-                outputColumns,
                 columnRefOperatorColumnMap,
                 olapScanOperator.getColumnMetaToColRefMap(),
                 olapScanOperator.getDistributionSpec(),

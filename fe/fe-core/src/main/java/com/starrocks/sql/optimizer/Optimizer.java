@@ -81,6 +81,7 @@ public class Optimizer {
         // because of the Filter node needs to be merged first to avoid the Limit node
         // cannot merge
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownAggToMetaScanRule());
 
         ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
@@ -93,8 +94,8 @@ public class Optimizer {
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoAggRule());
         //After the MERGE_LIMIT, ProjectNode that can be merged may appear.
         //So we do another MergeTwoProjectRule
-        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
+        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
 
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
         tree = new MaterializedViewRule().transform(tree, context).get(0);
@@ -102,10 +103,9 @@ public class Optimizer {
 
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteIterative(memo, rootTaskContext, new PruneProjectRule());
-        ruleRewriteOnlyOnce(memo, rootTaskContext, new JoinForceLimitRule());
-        ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ScalarOperatorsReuseRule());
-
+        ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
+        ruleRewriteOnlyOnce(memo, rootTaskContext, new JoinForceLimitRule());
 
         // Rewrite maybe produce empty groups, we need to remove them.
         memo.removeAllEmptyGroup();

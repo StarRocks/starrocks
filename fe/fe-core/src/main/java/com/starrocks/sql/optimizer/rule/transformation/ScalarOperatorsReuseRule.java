@@ -7,10 +7,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -26,21 +24,19 @@ import static com.google.common.collect.ImmutableMap.toImmutableMap;
 public class ScalarOperatorsReuseRule extends TransformationRule {
     public ScalarOperatorsReuseRule() {
         super(RuleType.TF_SCALAR_OPERATORS_REUSE,
-                Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF));
+                Pattern.create(OperatorType.LOGICAL_PROJECT, OperatorType.PATTERN_LEAF));
+    }
+
+    public boolean check(final OptExpression input, OptimizerContext context) {
+        LogicalProjectOperator projectOperator = (LogicalProjectOperator) input.getOp();
+        return projectOperator.getCommonSubOperatorMap().isEmpty();
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        Projection projection = input.getOp().getProjection();
-        if (input.getOp().getProjection() == null) {
-            return Collections.emptyList();
-        }
+        LogicalProjectOperator projectOperator = (LogicalProjectOperator) input.getOp();
 
-        if (!projection.getCommonSubOperatorMap().isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        Map<ColumnRefOperator, ScalarOperator> columnRefMap = projection.getColumnRefMap();
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = projectOperator.getColumnRefMap();
         List<ScalarOperator> scalarOperators = Lists.newArrayList(columnRefMap.values());
 
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>>
@@ -85,11 +81,8 @@ public class ScalarOperatorsReuseRule extends TransformationRule {
                     newCommonMap.put(kv.getValue(), kv.getKey());
                 }
 
-                Operator.Builder builder = OperatorBuilderFactory.build(input.getOp());
-                Operator op = builder.withOperator(input.getOp()).setProjection(new Projection(newMap, newCommonMap))
-                        .build();
-
-                return Lists.newArrayList(OptExpression.create(op, input.getInputs()));
+                return Lists.newArrayList(OptExpression.create(
+                        new LogicalProjectOperator(newMap, newCommonMap), input.getInputs()));
             }
         }
 

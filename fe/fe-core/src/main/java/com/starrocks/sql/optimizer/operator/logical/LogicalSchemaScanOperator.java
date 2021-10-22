@@ -12,12 +12,10 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.List;
 import java.util.Map;
 
 public class LogicalSchemaScanOperator extends LogicalScanOperator {
     public LogicalSchemaScanOperator(Table table,
-                                     List<ColumnRefOperator> outputColumns,
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                      Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                      long limit,
@@ -25,7 +23,6 @@ public class LogicalSchemaScanOperator extends LogicalScanOperator {
                                      Projection projection) {
         super(OperatorType.LOGICAL_SCHEMA_SCAN,
                 table,
-                outputColumns,
                 colRefToColumnMetaMap,
                 columnMetaToColRefMap,
                 limit,
@@ -37,7 +34,6 @@ public class LogicalSchemaScanOperator extends LogicalScanOperator {
     private LogicalSchemaScanOperator(Builder builder) {
         super(OperatorType.LOGICAL_SCHEMA_SCAN,
                 builder.table,
-                builder.outputColumns,
                 builder.colRefToColumnMetaMap,
                 builder.columnMetaToColRefMap,
                 builder.getLimit(),

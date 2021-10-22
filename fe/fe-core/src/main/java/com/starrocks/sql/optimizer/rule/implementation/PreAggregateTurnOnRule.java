@@ -62,18 +62,7 @@ public class PreAggregateTurnOnRule {
             if (optExpression.getInputs().size() <= 1) {
                 for (OptExpression opt : optExpression.getInputs()) {
                     if (opt.getOp().getProjection() != null) {
-                        Projection projection = opt.getOp().getProjection();
-                        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
-                        ReplaceColumnRefRewriter subRewriter =
-                                new ReplaceColumnRefRewriter(projection.getCommonSubOperatorMap(), true);
-
-                        context.aggregations = context.aggregations.stream()
-                                .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
-                                .collect(Collectors.toList());
-
-                        context.groupings = context.groupings.stream()
-                                .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
-                                .collect(Collectors.toList());
+                        rewriteProject(opt, context);
                     }
 
                     opt.getOp().accept(this, opt, context);
@@ -81,18 +70,7 @@ public class PreAggregateTurnOnRule {
             } else {
                 for (OptExpression opt : optExpression.getInputs()) {
                     if (opt.getOp().getProjection() != null) {
-                        Projection projection = opt.getOp().getProjection();
-                        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
-                        ReplaceColumnRefRewriter subRewriter =
-                                new ReplaceColumnRefRewriter(projection.getCommonSubOperatorMap(), true);
-
-                        context.aggregations = context.aggregations.stream()
-                                .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
-                                .collect(Collectors.toList());
-
-                        context.groupings = context.groupings.stream()
-                                .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
-                                .collect(Collectors.toList());
+                        rewriteProject(opt, context);
                     }
 
                     opt.getOp().accept(this, opt, context.clone());
@@ -100,6 +78,21 @@ public class PreAggregateTurnOnRule {
             }
 
             return null;
+        }
+
+        void rewriteProject(OptExpression opt, PreAggregationContext context) {
+            Projection projection = opt.getOp().getProjection();
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projection.getColumnRefMap());
+            ReplaceColumnRefRewriter subRewriter =
+                    new ReplaceColumnRefRewriter(projection.getCommonSubOperatorMap(), true);
+
+            context.aggregations = context.aggregations.stream()
+                    .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
+                    .collect(Collectors.toList());
+
+            context.groupings = context.groupings.stream()
+                    .map(d -> d.accept(rewriter, null).accept(subRewriter, null))
+                    .collect(Collectors.toList());
         }
 
         @Override

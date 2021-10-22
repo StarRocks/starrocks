@@ -23,7 +23,6 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
     private final List<EsShardPartitions> selectedIndex = Lists.newArrayList();
 
     public LogicalEsScanOperator(Table table,
-                                 List<ColumnRefOperator> outputColumns,
                                  Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                  Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                  long limit,
@@ -31,7 +30,6 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
                                  Projection projection) {
         super(OperatorType.LOGICAL_ES_SCAN,
                 table,
-                outputColumns,
                 colRefToColumnMetaMap,
                 columnMetaToColRefMap,
                 limit, predicate, projection);
@@ -42,7 +40,6 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
     private LogicalEsScanOperator(Builder builder) {
         super(OperatorType.LOGICAL_ES_SCAN,
                 builder.table,
-                builder.outputColumns,
                 builder.colRefToColumnMetaMap,
                 builder.columnMetaToColRefMap,
                 builder.getLimit(), builder.getPredicate(), builder.getProjection());

@@ -242,8 +242,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         Assert.assertTrue(planFragment.contains("9:Project\n" +
                 "  |  output columns:\n" +
                 "  |  16 <-> [16: S_ACCTBAL, DOUBLE, false]\n" +
-                "  |  17 <-> [17: S_COMMENT, VARCHAR, false]\n" +
                 "  |  1 <-> [1: P_PARTKEY, INT, false]\n" +
+                "  |  17 <-> [17: S_COMMENT, VARCHAR, false]\n" +
                 "  |  3 <-> [3: P_MFGR, VARCHAR, false]\n" +
                 "  |  12 <-> [12: S_NAME, CHAR, false]\n" +
                 "  |  13 <-> [13: S_ADDRESS, VARCHAR, false]\n" +

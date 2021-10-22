@@ -85,7 +85,6 @@ public class PruneScanColumnRule extends TransformationRule {
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
                 LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
                         olapScanOperator.getTable(),
-                        new ArrayList<>(outputColumns),
                         newColumnRefMap,
                         olapScanOperator.getColumnMetaToColRefMap(),
                         olapScanOperator.getDistributionSpec(),
@@ -102,9 +101,9 @@ public class PruneScanColumnRule extends TransformationRule {
                 try {
                     Class<? extends LogicalScanOperator> classType = scanOperator.getClass();
                     LogicalScanOperator newScanOperator =
-                            classType.getConstructor(Table.class, List.class, Map.class, Map.class, long.class,
+                            classType.getConstructor(Table.class, Map.class, Map.class, long.class,
                                     ScalarOperator.class, Projection.class).newInstance(
-                                    scanOperator.getTable(), new ArrayList<>(outputColumns),
+                                    scanOperator.getTable(),
                                     newColumnRefMap,
                                     scanOperator.getColumnMetaToColRefMap(),
                                     scanOperator.getLimit(),
