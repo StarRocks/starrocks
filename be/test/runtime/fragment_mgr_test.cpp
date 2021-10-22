@@ -25,6 +25,7 @@
 
 #include "common/config.h"
 #include "exec/data_sink.h"
+#include "runtime/exec_env.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/row_batch.h"
 #include "util/monotime.h"
@@ -71,7 +72,7 @@ protected:
 };
 
 TEST_F(FragmentMgrTest, Normal) {
-    FragmentMgr mgr(nullptr);
+    FragmentMgr mgr(ExecEnv::GetInstance());
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(100);
