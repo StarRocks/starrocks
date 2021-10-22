@@ -237,7 +237,7 @@ Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn*
         auto column_writer = std::make_unique<ScalarColumnWriter>(str_opts, std::move(field_clone), _wblock);
         *writer = std::make_unique<StringColumnWriter>(str_opts, std::move(field), std::move(column_writer));
         return Status::OK();
-    } else if (is_scalar_type(delegate_type(column->type()))) {
+    } else if (is_scalar_field_type(delegate_type(column->type()))) {
         std::unique_ptr<ColumnWriter> writer_local =
                 std::unique_ptr<ColumnWriter>(new ScalarColumnWriter(opts, std::move(field), _wblock));
         *writer = std::move(writer_local);

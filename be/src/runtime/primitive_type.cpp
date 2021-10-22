@@ -394,4 +394,37 @@ TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name)
     return type_desc;
 }
 
+static std::vector<std::pair<FieldType, PrimitiveType> > _ftype_to_ptype_map = {
+        {OLAP_FIELD_TYPE_BOOL, TYPE_BOOLEAN},
+        {OLAP_FIELD_TYPE_TINYINT, TYPE_TINYINT},
+        {OLAP_FIELD_TYPE_SMALLINT, TYPE_SMALLINT},
+        {OLAP_FIELD_TYPE_INT, TYPE_INT},
+        {OLAP_FIELD_TYPE_BIGINT, TYPE_BIGINT},
+        {OLAP_FIELD_TYPE_LARGEINT, TYPE_LARGEINT},
+        {OLAP_FIELD_TYPE_FLOAT, TYPE_FLOAT},
+        {OLAP_FIELD_TYPE_DOUBLE, TYPE_DOUBLE},
+        {OLAP_FIELD_TYPE_CHAR, TYPE_CHAR},
+        {OLAP_FIELD_TYPE_VARCHAR, TYPE_VARCHAR},
+        {OLAP_FIELD_TYPE_DATE, TYPE_DATE},
+        {OLAP_FIELD_TYPE_TIMESTAMP, TYPE_TIME},
+        {OLAP_FIELD_TYPE_DATETIME, TYPE_DATETIME},
+        {OLAP_FIELD_TYPE_DECIMAL, TYPE_DECIMAL},
+        {OLAP_FIELD_TYPE_DECIMAL_V2, TYPE_DECIMALV2},
+        {OLAP_FIELD_TYPE_DECIMAL32, TYPE_DECIMAL32},
+        {OLAP_FIELD_TYPE_DECIMAL64, TYPE_DECIMAL64},
+        {OLAP_FIELD_TYPE_DECIMAL128, TYPE_DECIMAL128},
+};
+
+PrimitiveType field_type_to_primitive_type(FieldType field_type) {
+    for (size_t i = 0; i < _ftype_to_ptype_map.size(); i++) {
+        if (_ftype_to_ptype_map[i].first == field_type) {
+            return _ftype_to_ptype_map[i].second;
+        }
+    }
+    __builtin_unreachable();
+    PrimitiveType ptype = INVALID_TYPE;
+    DCHECK(ptype != INVALID_TYPE);
+    return ptype;
+}
+
 } // namespace starrocks

@@ -786,6 +786,11 @@ void OlapScanConjunctsManager::build_slot_index_to_expr_ctxs_mapping() {
             if (iter == slot_id_to_index.end()) continue;
             index = iter->second;
         }
+        // note(yan): we only handles scalar type now to avoid complex type mismatch.
+        // otherwise we don't need this limitation.
+        const SlotDescriptor* slot_desc = slots[index];
+        PrimitiveType ptype = slot_desc->type().type;
+        if (!is_scalar_primitive_type(ptype)) continue;
         {
             auto iter = slot_index_to_expr_ctxs.find(index);
             if (iter == slot_index_to_expr_ctxs.end()) {

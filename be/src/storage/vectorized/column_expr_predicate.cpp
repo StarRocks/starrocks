@@ -15,17 +15,41 @@ class ColumnExprPredicate : public ColumnPredicate {
 public:
     ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state, ExprContext* expr_ctx,
                         SlotId slot_id)
-            : ColumnPredicate(type_info, column_id), _state(state), _expr_ctx(nullptr), _slot_id(slot_id) {
+            : ColumnPredicate(type_info, column_id), _state(state), _slot_id(slot_id) {
         // note: conjuncts would be shared by multiple scanners
         // so here we have to clone one to keep thread safe.
-        expr_ctx->clone(state, &_expr_ctx);
+        add_expr_ctx(expr_ctx);
     }
-    ~ColumnExprPredicate() override { _expr_ctx->close(_state); }
+
+    ~ColumnExprPredicate() override {
+        for (ExprContext* ctx : _expr_ctxs) {
+            ctx->close(_state);
+        }
+    }
+
+    void add_expr_ctx(ExprContext* expr_ctx) {
+        if (expr_ctx != nullptr) {
+            DCHECK(expr_ctx->opened());
+            ExprContext* ctx = nullptr;
+            expr_ctx->clone(_state, &ctx);
+            _expr_ctxs.emplace_back(ctx);
+        }
+    }
 
     void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         Chunk chunk;
-        chunk.append_raw_column(column, _slot_id);
-        ColumnPtr bits = _expr_ctx->evaluate(&chunk);
+        ColumnPtr bits = nullptr;
+
+        // theoretically there will be a chain of expr contexts.
+        // The first one is expr context from planner
+        // and others will be some cast exprs from one type to another
+        // eg. [x as int >= 10]  [string->int] <- column(x as string)
+        for (int i = _expr_ctxs.size() - 1; i >= 0; i--) {
+            ExprContext* ctx = _expr_ctxs[i];
+            chunk.append_raw_column(column, _slot_id);
+            bits = ctx->evaluate(&chunk);
+            column = bits.get();
+        }
 
         // deal with constant.
         if (bits->is_constant()) {
@@ -97,13 +121,17 @@ public:
 
     std::string debug_string() const override {
         std::stringstream ss;
-        ss << "(ColumnExprPredicate: " << _expr_ctx->root()->debug_string() << ")";
+        ss << "(ColumnExprPredicate: ";
+        for (ExprContext* ctx : _expr_ctxs) {
+            ss << "[" << ctx->root()->debug_string() << "]";
+        }
+        ss << ")";
         return ss.str();
     }
 
 private:
     RuntimeState* _state;
-    ExprContext* _expr_ctx;
+    std::vector<ExprContext*> _expr_ctxs;
     SlotId _slot_id;
 };
 
