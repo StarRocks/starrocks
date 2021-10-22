@@ -170,7 +170,9 @@ void HdfsScanner::update_counter() {
 #ifndef BE_TEST
     HdfsReadStats hdfs_stats;
     auto hdfs_file = down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->hdfs_file();
-    get_hdfs_statistics(hdfs_file, &hdfs_stats);
+    if (_scanner_params.parent->_is_hdfs_fs) {
+        get_hdfs_statistics(hdfs_file, &hdfs_stats);
+    }
 
     COUNTER_UPDATE(_scanner_params.parent->_bytes_total_read, hdfs_stats.bytes_total_read);
     COUNTER_UPDATE(_scanner_params.parent->_bytes_read_local, hdfs_stats.bytes_read_local);
