@@ -24,6 +24,7 @@
 #include <ostream>
 
 #include "gutil/strings/substitute.h"
+#include "storage/types.h"
 
 namespace starrocks {
 
@@ -234,6 +235,16 @@ std::string TypeDescriptor::debug_string() const {
     default:
         return type_to_string(type);
     }
+}
+
+TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
+    FieldType ftype = type_info->type();
+    PrimitiveType ptype = field_type_to_primitive_type(ftype);
+    DCHECK(ptype != INVALID_TYPE);
+    int len = TypeDescriptor::MAX_VARCHAR_LENGTH;
+    int precision = type_info->precision();
+    int scale = type_info->scale();
+    return TypeDescriptor::from_primtive_type(ptype, len, precision, scale);
 }
 
 } // namespace starrocks

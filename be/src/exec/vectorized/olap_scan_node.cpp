@@ -338,7 +338,11 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
         max_scan_key_num = config::doris_max_scan_key_num;
     }
     bool scan_keys_unlimited = (limit() == -1);
-    cm.parse_conjuncts(scan_keys_unlimited, max_scan_key_num);
+    bool enable_column_expr_predicate = false;
+    if (_olap_scan_node.__isset.enable_column_expr_predicate) {
+        enable_column_expr_predicate = _olap_scan_node.enable_column_expr_predicate;
+    }
+    cm.parse_conjuncts(scan_keys_unlimited, max_scan_key_num, enable_column_expr_predicate);
     RETURN_IF_ERROR(_start_scan_thread(state));
 
     return Status::OK();

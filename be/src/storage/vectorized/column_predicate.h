@@ -25,6 +25,7 @@ class Slice;
 class ObjectPool;
 class ExprContext;
 class RuntimeState;
+class SlotDescriptor;
 } // namespace starrocks
 
 namespace starrocks::segment_v2 {
@@ -274,7 +275,7 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type, ColumnId i
                                              const std::vector<std::string>& operands);
 ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type, ColumnId, bool is_null);
 ColumnPredicate* new_column_expr_predicate(const TypeInfoPtr& type, ColumnId, RuntimeState*, ExprContext* expr_ctx,
-                                           SlotId slot_id);
+                                           const SlotDescriptor* slot_desc);
 
 template <FieldType field_type, template <FieldType> typename Predicate, typename NewColumnPredicateFunc>
 Status predicate_convert_to(Predicate<field_type> const& input_predicate,

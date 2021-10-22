@@ -763,7 +763,7 @@ void OlapScanConjunctsManager::get_not_push_down_conjuncts(std::vector<ExprConte
     }
 }
 
-void OlapScanConjunctsManager::build_slot_index_to_expr_ctxs_mapping() {
+void OlapScanConjunctsManager::build_column_expr_predicates() {
     std::map<SlotId, int> slot_id_to_index;
     const auto& slots = tuple_desc->slots();
     for (int i = 0; i < slots.size(); i++) {
@@ -803,11 +803,15 @@ void OlapScanConjunctsManager::build_slot_index_to_expr_ctxs_mapping() {
     }
 }
 
-void OlapScanConjunctsManager::parse_conjuncts(bool scan_keys_unlimited, int32_t max_scan_key_num) {
+void OlapScanConjunctsManager::parse_conjuncts(bool scan_keys_unlimited, int32_t max_scan_key_num,
+                                               bool enable_column_expr_predicate) {
     normalize_conjuncts();
     build_olap_filters();
     build_scan_keys(scan_keys_unlimited, max_scan_key_num);
-    build_slot_index_to_expr_ctxs_mapping();
+    if (enable_column_expr_predicate) {
+        VLOG_FILE << "OlapScanConjunctsManager: enable_column_expr_predicate = true. push down column expr predicates";
+        build_column_expr_predicates();
+    }
 }
 
 } // namespace vectorized

@@ -4,18 +4,19 @@
 #include "column/column_helper.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/vectorized/cast_expr.h"
+#include "exprs/vectorized/column_ref.h"
+#include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "storage/vectorized/column_predicate.h"
 namespace starrocks::vectorized {
 
-using starrocks::ExprContext;
-
 class ColumnExprPredicate : public ColumnPredicate {
 public:
     ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state, ExprContext* expr_ctx,
-                        SlotId slot_id)
-            : ColumnPredicate(type_info, column_id), _state(state), _slot_id(slot_id) {
+                        const SlotDescriptor* slot_desc)
+            : ColumnPredicate(type_info, column_id), _state(state), _slot_desc(slot_desc) {
         // note: conjuncts would be shared by multiple scanners
         // so here we have to clone one to keep thread safe.
         add_expr_ctx(expr_ctx);
@@ -46,7 +47,7 @@ public:
         // eg. [x as int >= 10]  [string->int] <- column(x as string)
         for (int i = _expr_ctxs.size() - 1; i >= 0; i--) {
             ExprContext* ctx = _expr_ctxs[i];
-            chunk.append_raw_column(column, _slot_id);
+            chunk.append_raw_column(column, _slot_desc->id());
             bits = ctx->evaluate(&chunk);
             column = bits.get();
         }
@@ -116,7 +117,26 @@ public:
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                       ObjectPool* obj_pool) const override {
         // todo(yan): do we really need convert to.
-        return Status::NotSupported("ColumnExprPredicate does not support `convert_to`");
+        // return Status::NotSupported("ColumnExprPredicate does not support `convert_to`");
+
+        TypeDescriptor input_type = TypeDescriptor::from_storage_type_info(target_type_info.get());
+        TypeDescriptor to_type = TypeDescriptor::from_storage_type_info(_type_info.get());
+        Expr* column_ref = obj_pool->add(new ColumnRef(_slot_desc));
+        Expr* cast_expr = VectorizedCastExprFactory::from_type(input_type, to_type, column_ref, obj_pool);
+        ExprContext* cast_expr_ctx = obj_pool->add(new ExprContext(cast_expr));
+
+        RowDescriptor row_desc; // I think we don't need to use it at all.
+        RETURN_IF_ERROR(cast_expr_ctx->prepare(_state, row_desc, _state->instance_mem_tracker()));
+        RETURN_IF_ERROR(cast_expr_ctx->open(_state));
+
+        ColumnExprPredicate* pred =
+                obj_pool->add(new ColumnExprPredicate(target_type_info, _column_id, _state, nullptr, _slot_desc));
+        for (ExprContext* ctx : _expr_ctxs) {
+            pred->add_expr_ctx(ctx);
+        }
+        pred->add_expr_ctx(cast_expr_ctx);
+        *output = pred;
+        return Status::OK();
     }
 
     std::string debug_string() const override {
@@ -132,12 +152,12 @@ public:
 private:
     RuntimeState* _state;
     std::vector<ExprContext*> _expr_ctxs;
-    SlotId _slot_id;
+    const SlotDescriptor* _slot_desc;
 };
 
 ColumnPredicate* new_column_expr_predicate(const TypeInfoPtr& type, ColumnId column_id, RuntimeState* state,
-                                           ExprContext* expr_ctx, SlotId slot_id) {
-    return new ColumnExprPredicate(type, column_id, state, expr_ctx, slot_id);
+                                           ExprContext* expr_ctx, const SlotDescriptor* slot_desc) {
+    return new ColumnExprPredicate(type, column_id, state, expr_ctx, slot_desc);
 }
 
 } // namespace starrocks::vectorized

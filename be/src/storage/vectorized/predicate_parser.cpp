@@ -72,7 +72,7 @@ ColumnPredicate* PredicateParser::parse_expr_ctx(const SlotDescriptor& slot_desc
     auto scale = col.scale();
     auto type = TypeUtils::to_storage_format_v2(col.type());
     auto&& type_info = get_type_info(type, precision, scale);
-    return new_column_expr_predicate(type_info, column_id, state, expr_ctx, slot_desc.id());
+    return new_column_expr_predicate(type_info, column_id, state, expr_ctx, &slot_desc);
 }
 
 } // namespace starrocks::vectorized
