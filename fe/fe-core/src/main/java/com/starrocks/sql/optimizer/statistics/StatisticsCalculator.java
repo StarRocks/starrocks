@@ -647,6 +647,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 break;
             case LEFT_OUTER_JOIN:
                 builder.setOutputRowCount(max(innerRowCount, leftRowCount));
+                computeNullFractionForOuterJoin(leftRowCount, innerRowCount, rightStatistics, builder);
                 break;
             case LEFT_SEMI_JOIN:
             case RIGHT_SEMI_JOIN:
@@ -658,12 +659,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 break;
             case RIGHT_OUTER_JOIN:
                 builder.setOutputRowCount(max(innerRowCount, rightRowCount));
+                computeNullFractionForOuterJoin(rightRowCount, innerRowCount, leftStatistics, builder);
                 break;
             case RIGHT_ANTI_JOIN:
                 builder.setOutputRowCount(max(0, rightRowCount - innerRowCount));
                 break;
             case FULL_OUTER_JOIN:
                 builder.setOutputRowCount(leftRowCount + rightRowCount - innerRowCount);
+                computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, leftStatistics, builder);
+                computeNullFractionForOuterJoin(leftRowCount + rightRowCount, innerRowCount, rightStatistics, builder);
                 break;
             case MERGE_JOIN:
                 // TODO
@@ -700,6 +704,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         context.setStatistics(joinBuilder.build());
         return visitOperator(context.getOp(), context);
+    }
+
+    private void computeNullFractionForOuterJoin(double outerTableRowCount, double innerJoinRowCount,
+                                                 Statistics statistics, Statistics.Builder builder) {
+        if (outerTableRowCount > innerJoinRowCount) {
+            double nullRowCount = outerTableRowCount - innerJoinRowCount;
+            for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : statistics.getColumnStatistics().entrySet()) {
+                ColumnStatistic columnStatistic = entry.getValue();
+                double columnNullCount = columnStatistic.getNullsFraction() * innerJoinRowCount;
+                double newNullFraction = (columnNullCount + nullRowCount) / outerTableRowCount;
+                builder.addColumnStatistic(entry.getKey(),
+                        ColumnStatistic.buildFrom(columnStatistic).setNullsFraction(newNullFraction).build());
+            }
+        }
     }
 
     @Override
