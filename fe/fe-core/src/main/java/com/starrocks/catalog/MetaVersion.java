@@ -43,10 +43,10 @@ public class MetaVersion implements Writable {
     public void write(DataOutput out) throws IOException {
         JsonObject jsonObject = new JsonObject();
         jsonObject.addProperty(KEY_COMMUNITY_VERSION, communityVersion);
-        jsonObject.addProperty(KEY_STARROCKS_VERSION, starrocksVersion);
 
         // For rollback compatibility, save the starrocksVersion both to
         // KEY_STARROCKS_VERSION and KEY_DORISDB_VERSION
+        jsonObject.addProperty(KEY_STARROCKS_VERSION, starrocksVersion);
         jsonObject.addProperty(KEY_DORISDB_VERSION, starrocksVersion);
         Text.writeString(out, jsonObject.toString());
     }
