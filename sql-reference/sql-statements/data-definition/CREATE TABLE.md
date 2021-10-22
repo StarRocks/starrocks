@@ -207,11 +207,11 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     key_type支持以下类型：
     AGGREGATE KEY:key列相同的记录，value列按照指定的聚合类型进行聚合，
     适合报表、多维分析等业务场景。
-    UNIQUE KEY:key列相同的记录，value列按导入顺序进行覆盖，
+    UNIQUE KEY/PRIMARY KEY:key列相同的记录，value列按导入顺序进行覆盖，
     适合按key列进行增删改查的点查询业务。
     DUPLICATE KEY:key列相同的记录，同时存在于StarRocks中，
     适合存储明细数据或者数据无聚合特性的业务场景。
-    默认为DUPLICATE KEY，key列为列定义中前36个字节, 如果前36个字节的列数小于3，将使用前三列。
+    默认为DUPLICATE KEY，数据按key列做排序。
 
     注意：
     除AGGREGATE KEY外，其他key_type在建表时，value列不需要指定聚合类型。
@@ -388,13 +388,33 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
     ```sql
     CREATE TABLE example_db.table_hash
     (
-    k1 BIGINT,
-    k2 LARGEINT,
-    v1 VARCHAR(2048) REPLACE,
-    v2 SMALLINT SUM DEFAULT "10"
+        k1 BIGINT,
+        k2 LARGEINT,
+        v1 VARCHAR(2048) REPLACE,
+        v2 SMALLINT SUM DEFAULT "10"
     )
     ENGINE=olap
     UNIQUE KEY(k1, k2)
+    DISTRIBUTED BY HASH (k1, k2) BUCKETS 32
+    PROPERTIES(
+        "storage_type"="column"，
+        "storage_medium" = "SSD",
+        "storage_cooldown_time" = "2015-06-04 00:00:00"
+    );
+    ```
+
+    或
+
+    ```sql
+    CREATE TABLE example_db.table_hash
+    (
+        k1 BIGINT,
+        k2 LARGEINT,
+        v1 VARCHAR(2048) REPLACE,
+        v2 SMALLINT SUM DEFAULT "10"
+    )
+    ENGINE=olap
+    PRIMARY KEY(k1, k2)
     DISTRIBUTED BY HASH (k1, k2) BUCKETS 32
     PROPERTIES(
         "storage_type"="column"，

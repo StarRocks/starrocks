@@ -1,6 +1,6 @@
 # 数据模型介绍
 
-目前，StarRocks根据摄入数据和实际存储数据之间的映射关系, 将数据表的明细表, 聚合表和更新表, 分别对应有明细模型, 聚合模型和更新模型。为了描述方便, 我们借鉴关系模式中的主键概念, 称StarRocks表的维度列的取值构成数据表的排序键, StarRocks的排序键对比传统的主键具有:
+目前，StarRocks根据摄入数据和实际存储数据之间的映射关系, 其中明细表对应明细模型（Duplicate Key），聚合表对应聚合模型（Aggregate Key），更新表对应更新模型（Unique Key）和主键模型（Primary Key）。为了描述方便, 我们借鉴关系模式中的主键概念, 称StarRocks表的维度列的取值构成数据表的排序键, StarRocks的排序键对比传统的主键具有:
 
 * 数据表所有维度列构成排序键, 所以后文中提及的排序列, key列本质上都是维度列.
 * 排序键可重复, 不必满足唯一性约束.
@@ -11,13 +11,13 @@
 
 * 明细模型:  表中存在主键重复的数据行, 和摄入数据行一一对应, 用户可以召回所摄入的全部历史数据.
 * 聚合模型:  表中不存在主键重复的数据行, 摄入的主键重复的数据行合并为一行, 这些数据行的指标列通过聚合函数合并, 用户可以召回所摄入的全部历史数据的累积结果, 但无法召回全部历史数据.
-* 更新模型:  聚合模型的特殊情形, 主键满足唯一性约束, 最近摄入的数据行, 替换掉其他主键重复的数据行. 相当于在聚合模型中, 为数据表的指标列指定的聚合函数为REPLACE, REPLACE函数返回一组数据中的最新数据.
+* 更新模型&主键模型:  聚合模型的特殊情形, 主键满足唯一性约束, 最近导入的数据行, 替换掉其他主键重复的数据行. 相当于在聚合模型中, 为数据表的指标列指定的聚合函数为REPLACE, REPLACE函数返回一组数据中的最新数据.
 
 需要注意:
 
 * 建表语句, 排序列的定义必须出现在指标列定义之前.
 * 排序列在建表语句中的出现次序为数据行的多重排序的次序.
-* 排序键的稀疏索引(shortkey index)会选择排序键的若干前缀列.
+* 排序键的稀疏索引(Shortkey Index)会选择排序键的若干前缀列.
 
 本章介绍特种模型的特点和使用场景, 帮助用户选择匹配业务需求的最佳模型.
 
@@ -25,7 +25,7 @@
 
 ### 明细模型适用场景
 
-StarRocks建表的默认模型是明细模型。
+StarRocks建表的默认模型是明细模型（Duplicate Key）。
 
   <br/>
 
@@ -43,13 +43,13 @@ StarRocks建表的默认模型是明细模型。
 
 ### 明细模型如何使用
 
-数据表默认采用明细模型. 排序列使用shortkey index,  可快速过滤数据.  用户可以考虑将过滤条件中频繁使用的维度列的定义放置其他列的定义之前. 例如用户经常查看某时间范围的某一类事件的数据，可以将事件时间和事件类型作为排序键。
+数据表默认采用明细模型. 排序列使用shortkey index, 可快速过滤数据. 用户可以考虑将过滤条件中频繁使用的维度列的定义放置其他列的定义之前. 例如用户经常查看某时间范围的某一类事件的数据，可以将事件时间和事件类型作为排序键。
 
   <br/>
 
 以下是一个使用明细模型创建数据表的例子
 
-* 其中DUPLICATE KEY(event\_time, event\_type)说明采用明细模型, 并且指定了排序键, 并且排序列的定义在其他列定义之前.
+* 其中`DUPLICATE KEY(event_time, event_type)`说明采用明细模型, 并且指定了排序键, 并且排序列的定义在其他列定义之前.
 
 ~~~sql
 CREATE TABLE IF NOT EXISTS detail (
@@ -74,7 +74,7 @@ DISTRIBUTED BY HASH(user_id) BUCKETS 8
 
 ### 聚合模型适用场景
 
-在数据分析领域，有很多需要对数据进行统计和汇总操作的场景。比如:
+在数据分析领域，有很多需要对数据进行统计和汇总操作的场景，就需要使用聚合模型（Aggregate Key）。比如:
 
 * 分析网站或APP访问流量，统计用户的访问总时长、访问总次数;
 * 广告厂商为广告主提供的广告点击总量、展示总量、消费统计等;
@@ -82,7 +82,7 @@ DISTRIBUTED BY HASH(user_id) BUCKETS 8
 
 适合采用聚合模型来分析的场景具有如下特点：
 
-1. 业务方进行的查询为汇总类查询，比如sum、count、 max等类型的查询；
+1. 业务方进行的查询为汇总类查询，比如sum、count、max等类型的查询；
 2. 不需要召回原始的明细数据；
 3. 老数据不会被频繁更新，只会追加新数据。
 
@@ -110,7 +110,7 @@ StarRocks会将指标列按照相同维度列进行聚合。当多条数据具�
 
 ### 聚合模型如何使用
 
-在建表时, 只要给指标列的定义指明聚合函数, 就会启用聚合模型; 用户可以使用AGGREGATE KEY显示地定义排序建.
+在建表时, 只要给指标列的定义指明聚合函数, 就会启用聚合模型; 用户可以使用`AGGREGATE KEY`显示地定义排序建.
 
 以下是一个使用聚合模型创建数据表的例子：
 
@@ -139,7 +139,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 8;
 
 ### 更新模型适用场景
 
-有些分析场景之下，数据会更新, StarRocks采用更新模型来满足这种需求。比如在电商场景中，定单的状态经常会发生变化，每天的订单更新量可突破上亿。在这种量级的更新场景下进行实时数据分析，如果在明细模型下通过delete+insert的方式，是无法满足频繁更新需求的; 因此, 用户需要使用更新模型来满足数据分析需求。
+有些分析场景之下，数据会更新, StarRocks采用更新模型来满足这种需求。比如在电商场景中，定单的状态经常会发生变化，每天的订单更新量可突破上亿。在这种量级的更新场景下进行实时数据分析，如果在明细模型下通过delete+insert的方式，是无法满足频繁更新需求的; 因此, 用户需要使用更新模型来满足数据分析需求。如用户需要更加实时/频繁的更新功能，建议使用[主键模型](##主键模型)。
 
   <br/>
 
@@ -173,13 +173,13 @@ StarRocks存储内部会给每一个批次导入数据分配一个版本号, 同
 
 ### 更新模型如何使用
 
-在电商订单分析场景中，经常根据订单状态进行的统计分析。因为订单状态经常改变，而create\_time和order\_id不会改变，并且经常会在查询中作为过滤条件。所以可以将 create\_time和order\_id 两个列作为这个表的主键（即，在建表时用UNIQUE KEY关键字定义），这样既能够满足订单状态的更新需求，又能够在查询中进行快速过滤。
+在电商订单分析场景中，经常根据订单状态进行的统计分析。因为订单状态经常改变，而create\_time和order\_id不会改变，并且经常会在查询中作为过滤条件。所以可以将 create\_time和order\_id 两个列作为这个表的主键（即，在建表时用`UNIQUE KEY`关键字定义），这样既能够满足订单状态的更新需求，又能够在查询中进行快速过滤。
 
   <br/>
 
 以下是一个使用更新模型创建数据表的例子：
 
-* 用UNIQUE KEY(create\_time, order\_id)做主键, 其中create\_time, order\_id为排序列, 其定义在其他列定义之前出现;
+* 用`UNIQUE KEY(create_time, order_id)`做主键, 其中create\_time, order\_id为排序列, 其定义在其他列定义之前出现;
 * order\_state和total\_price为指标列, 其聚合类型为REPLACE.
 
 ~~~sql
@@ -204,33 +204,39 @@ DISTRIBUTED BY HASH(order_id) BUCKETS 8
 
 ### 适用场景
 
-为更好地支持实时/频繁更新的功能，StarRocks新增了一种表的类型: 主键模型（Primary Key）。该类型的表要求有唯一的主键，支持对表中的行按主键进行更新和删除操作。
-该模型适合需要对数据进行实时的更新场景，特别适合MySQL或其他数据库同步到StarRocks的场景。虽然原有的Unique模型也可以实现对数据的更新，但Merge-on-Read的策略大大限制了查询性能。Primary模型更好地解决了行级别的更新操作，打破了Unique模型同步MySQL数据库的局限性。
+相较更新模型，主键模型（Primary Key）可以更好地支持实时/频繁更新的功能。该类型的表要求有唯一的主键，支持对表中的行按主键进行更新和删除操作。
+
+该模型适合需要对数据进行实时更新的场景，特别适合MySQL或其他数据库同步到StarRocks的场景。虽然原有的Unique模型也可以实现对数据的更新，但Merge-on-Read的策略大大限制了查询性能。Primary模型更好地解决了行级别的更新操作，配合Flink-connector-starrocks可以完成MySQL数据库的同步。具体使用方式详见[文档](loading/Flink-connector-starrocks.md)。
+
 需要注意的是：由于存储引擎会为主键建立索引，而在导入数据时会把主键索引加载在内存中，所以主键模型对内存的要求比较高，还不适合主键特别多的场景。目前比较适合的两个场景是：
 
-* 数据有冷热特征，即最近几天的热数据才经常被修改，老的冷数据很少被修改。典型的例子如MySQL订单表实时同步到StarRocks中提供分析查询。其中，数据按天分区，对订单的修改集中在最近几天新创建的订单，老的订单完成后就不再更新。其主键索引不会加载，也就不会占用内存，内存中仅会加载最近几天的索引。
+* 数据有冷热特征，即最近几天的热数据才经常被修改，老的冷数据很少被修改。典型的例子如MySQL订单表实时同步到StarRocks中提供分析查询。其中，数据按天分区，对订单的修改集中在最近几天新创建的订单，老的订单完成后就不再更新，因此导入时其主键索引就不会加载，也就不会占用内存，内存中仅会加载最近几天的索引。
 
 ![主键1](../assets/3.2-1.png)
+>如图所示，数据按天分区，对最近分区的Primary Key相关数据的修改更加频繁。
 
 * 大宽表(数百到数千列)。主键只占整个数据的很小一部分，其内存开销比较低。比如用户状态/画像表，虽然列非常多，但总的用户数不大(千万-亿级别)，主键索引内存占用相对可控。
 
 ![主键2](../assets/3.2-2.png)
+>如图所示，大宽表中Priamry Key只占一小部分，且数据行数不高。
 
 ### 原理
 
 主键模型是由StarRocks全新设计开发的存储引擎支持的，其元数据组织、读取、写入方式和原有的表模型完全不同。
+
 原有的表模型整体上采用了读时合并(Merge-On-Read)的策略，写入时处理简单高效，但是读取(查询)时需要在线合并多版本。由于Merge算子的存在使得谓词无法下推和索引无法使用，严重影响了查询性能。而主键模型通过主键约束，保证同一个主键下仅存在一条记录，这样就完全避免了Merge操作。具体实现步骤：
 
 * StarRocks收到对某记录的更新操作时，会通过主键索引找到该条记录的位置，并对其标记为删除，再插入一条新的记录。相当于把Update改写为Delete+Insert。
 
 * StarRocks收到对某记录的删除操作时，会通过主键索引找到该条记录的位置，对其标记为删除。这样在查询时不影响谓词下推和索引的使用, 保证了查询的高效执行。
-可见，相比Unique模型，主键模型通过牺牲微小的写入性能和内存占用，极大提升了查询性能。
+
+可见，相比更新模型，主键模型通过牺牲微小的写入性能和内存占用，极大提升了查询性能。
 
 ### 如何使用
 
 #### 建表
 
-和其他数据库类似，在建表时通过PRIMARY KEY指定最前的若干列为主键，即可启用主键模型。
+和其他数据库类似，在建表时通过`PRIMARY KEY`指定最前的若干列为主键，即可启用主键模型。
 
 例:
 
@@ -284,28 +290,28 @@ PROPERTIES("replication_num" = "3");
 
 1. 主键列仅支持类型: boolean, tinyint, smallint, int, bigint, largeint, string/varchar, date, datetime, 不允许NULL
 2. 分区列(partition)、分桶列(bucket)必须在主键列中
-3. 和Unique表模型不同，主键模型允许为非主键列创建bitmap等索引，注意需要建表是指定
+3. 和更新模型不同，主键模型允许为非主键列创建bitmap等索引，注意需要建表是指定
 4. 由于其列值可能会更新，主键模型目前还不支持rollup index和物化视图
 5. Alter table目前仅支持添加/删除列，还不支持更改列类型和添加删除索引等操作
 6. 在设计表时应尽量减少主键的列数和大小以节约内存，建议使用int/bigint等占用空间少的类型。暂时不建议使用varchar。建议提前根据表的行数和主键列类型来预估内存使用量，避免出现OOM。内存估算举例：  
   a. 假设表的主键为:  `dt date (4byte), id bigint(8byte) = 12byte`  
   b. 假设热数据有1000W行, 存储3副本  
   c. 则内存占用: `(12 + 9(每行固定开销) ) * 1000W * 3 * 1.5(hash表平均额外开销) = 945M`  
-7. 用户误删除表后数据文件会先移动到trash目录中, 在特殊情况下研发人员可以从trash文件手工帮助恢复, 目前primary tablet的在删除时只有其文件会被移动到trash目录中, 另外一部分并不以文件的形式存储所以会丢失, 导致信息不完整无法手工恢复。
+7. 目前主键模型只支持整行更新，还不支持部分列更新。
 
 #### 插入/更新/删除操作
 
-插入/更新/删除目前推荐使用导入的方式完成，通过SQL语句(`insert`/`update`/`delete`)来操作数据的功能会在未来版本中支持。目前支持的导入方式有stream load、broker load、routine load、Json load。当前Spark load还未支持。
+插入/更新/删除目前支持使用导入的方式完成，通过SQL语句(`insert`/`update`/`delete`)来操作数据的功能会在未来版本中支持。目前支持的导入方式有stream load、broker load、routine load、Json数据导入。当前Spark load还未支持。
 
 StarRocks目前不会区分`insert`/`upsert`，所有的操作默认都为`upsert`操作，使用原有的stream load/broker load功能导入数据时默认为upsert操作。
 
 为了在导入中同时支持upsert和delete操作，StarRocks在stream load和broker load语法中加入了特殊字段`__op`。该字段用来表示该行的操作类型，其取值为 0时代表`upsert`操作，取值为1时为`delete`操作。在导入的数据中, 可以添加一列, 用来存储`__op` 操作类型, 其值只能是0(表示`upsert`)或者1(表示`delete`)。
 
-#### 使用Stream Load / Broker Load导入
+#### 使用 Stream Load / Broker Load 导入
 
 Stream load和broker load的操作方式类似，根据导入的数据文件的操作形式有如下几种情况。这里通过一些例子来展示具体的导入操作：
 
-1. 当导入的数据文件只有`upsert`操作时可以不添加op列。可以指定`__op`为`upsert`，也可以不做任何指定，StarRocks会默认导入为`upsert`。例如想要向表t中导入如下内容：
+1. 当导入的数据文件只有`upsert`操作时可以不添加`__op`列。可以指定`__op`为`upsert`，也可以不做任何指定，StarRocks会默认导入为`upsert`。例如想要向表t中导入如下内容：
 
     ~~~text
     # 导入内容
@@ -343,7 +349,7 @@ Stream load和broker load的操作方式类似，根据导入的数据文件的�
     ) with broker "broker1";
     ~~~
 
-2. 当导入的数据文件只有delete操作时，也可以不添加op列，只需指定op为delete。例如想要删除如下内容：
+2. 当导入的数据文件只有delete操作时，也可以不添加`__op`列，只需指定`__op`为delete。例如想要删除如下内容：
 
     ~~~text
     #导入内容
@@ -358,8 +364,19 @@ Stream load和broker load的操作方式类似，根据导入的数据文件的�
       ~~~bash
       curl --location-trusted -u root: -H "label:lineorder" -H "column_separator:," -H "columns:__op='delete'" -T demo.csv http://localhost:8030/api/demo/demo/_stream_load
       ~~~
+  
+    Broker load导入语句：
+  
+      ~~~bash
+      load label demo.ttt3 (
+        data infile("hdfs://localhost:9000/demo.csv")
+        into table t
+        format as "csv"
+        set (__op='delete')
+      ) with broker "broker1";  
+      ~~~
 
-3. 当导入的数据文件中包含upsert和delete混合时，需要指定额外的op列来表明操作类型。例如想要导入如下内容：
+3. 当导入的数据文件中包含upsert和delete混合时，需要指定额外的`__op`来表明操作类型。例如想要导入如下内容：
 
     ~~~text
     1,bbbb,1
@@ -395,7 +412,7 @@ Stream load和broker load的操作方式类似，根据导入的数据文件的�
 
     其中，指定了`__op`为第三列。
 
-#### 使用Routine Load 导入
+#### 使用 Routine Load 导入
 
 可以在创建routine load的语句中，在columns最后增加一列，指定为在`__op`。在真实导入中，`__op`为0则表示`upsert`操作，为1则表示`delete`操作。例如导入如下内容：
 
@@ -425,193 +442,9 @@ PROPERTIES (
 );
 ~~~
 
-#### Json导入
-
-同其他类型表的导入方式，详情请见[Json数据导入](https://docs.starrocks.com/zh-cn/main/loading/Json_loading)。
-
-#### 使用Flink-connector 写入实现MySQL 数据同步
+#### 使用 Flink-connector 写入实现 MySQL 数据同步
 
 ##### 基本原理
 
-通过Flink-cdc和StarRocks-migrate-tools（简称smt）可以实现MySQL数据的秒级同步。
-
-![MySQL同步](../assets/3.2-3.png)
-
-如图所示：
-Smt可以根据MySQL和StarRocks的集群信息和表结构自动生成source table和sink table的建表语句。
-通过Flink-cdc-connector消费MySQL的binlog，然后通过Flink-connector-starrocks写入StarRocks。
-
-使用说明
-
-1. 下载 [Flink](https://flink.apache.org/downloads.html), 推荐使用1.13
-2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应Flink版本的Flink-MySQL-CDC
-3. 下载 [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks)，请注意1.13版本和1.11 版本使用不同的connector.
-4. 解压 `flink-sql-connector-mysql-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`
-5. 下载 [smt.tar.gz](http://starrocks-cn-release.oss-cn-zhangjiakou.aliyuncs.com/smt.tar.gz?Expires=1633755184&OSSAccessKeyId=LTAI4GFYjbX9e7QmFnAAvkt8&Signature=cfkG4%2Bm2qXDK1QWFNJAXjndWhGI%3D)
-6. 解压并修改配置文件
-  `Db` 需要修改成MySQL的连接信息
-  `be_num` 需要配置成StarRocks集群的节点数（这个能帮助更合理的设置 bucket数量）
-  `[table-rule.1]` 是匹配规则，可以根据正则表达式匹配数据库和表名生成建表的SQL，也可以配置多个规则。
-  `flink.starrocks.*` 是StarRocks的集群配置信息，参考Flink.
-
-    ~~~ bash
-    [db]
-    host = 192.168.1.1
-    port = 3306
-    user = root
-    password =  
-
-    [other]
-    # number of backends in StarRocks
-    be_num = 3
-    # `decimal_v3` is supported since StarRocks-1.18.1
-    use_decimal_v3 = false
-    # file to save the converted DDL SQL
-    output_dir = ./result
-
-
-    [table-rule.1]
-    # pattern to match databases for setting properties
-    database = ^console_19321.*$
-    # pattern to match tables for setting properties
-    table = ^.*$
-
-    ############################################
-    ### flink sink configurations
-    ### DO NOT set `connector`, `table-name`, `database-name`, they are auto-generated
-    ############################################
-    flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
-    flink.starrocks.load-url= 192.168.1.1:8030
-    flink.starrocks.username=root
-    flink.starrocks.password=
-    flink.starrocks.sink.properties.column_separator=\x01
-    flink.starrocks.sink.properties.row_delimiter=\x02
-    flink.starrocks.sink.buffer-flush.interval-ms=15000
-    ~~~
-
-7. 执行starrocks-migrate-tool，所有建表语句都生成在result目录下
-
-    ~~~bash
-    $./starrocks-migrate-tool
-    $ls result
-    flink-create.1.sql    smt.tar.gz              starrocks-create.all.sql
-    flink-create.all.sql  starrocks-create.1.sql
-    ~~~
-
-8. 生成StarRocks的表结构
-
-    ~~~bash
-    Mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.1.sql
-    ~~~
-
-9. 生成Flink table并开始同步
-
-    ~~~bash
-    bin/sql-client.sh -f flink-create.1.sql
-    ~~~
-
-    这个执行以后同步任务会持续执行
-    > 如果是Flink 1.13之前的版本可能无法直接执行脚本，需要逐行提交
-    注意 记得打开MySQL binlog
-
-10. 观察任务状况
-  
-    ~~~bash
-    bin/flink list 
-    ~~~
-
-  如果有任务请查看log日志，或者调整conf中的系统配置中内存和slot。
-
-注意事项
-
-1. 如果有多组规则，需要给每一组规则匹配database，table和 flink-connector的配置
-
-    ~~~bash
-    [table-rule.1]
-    # pattern to match databases for setting properties
-    database = ^console_19321.*$
-    # pattern to match tables for setting properties
-    table = ^.*$
-
-    ############################################
-    ### flink sink configurations
-    ### DO NOT set `connector`, `table-name`, `database-name`, they are auto-generated
-    ############################################
-    flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
-    flink.starrocks.load-url= 192.168.1.1:8030
-    flink.starrocks.username=root
-    flink.starrocks.password=
-    flink.starrocks.sink.properties.column_separator=\x01
-    flink.starrocks.sink.properties.row_delimiter=\x02
-    flink.starrocks.sink.buffer-flush.interval-ms=15000
-
-    [table-rule.2]
-    # pattern to match databases for setting properties
-    database = ^database2.*$
-    # pattern to match tables for setting properties
-    table = ^.*$
-
-    ############################################
-    ### flink sink configurations
-    ### DO NOT set `connector`, `table-name`, `database-name`, they are auto-generated
-    ############################################
-    flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
-    flink.starrocks.load-url= 192.168.1.1:8030
-    flink.starrocks.username=root
-    flink.starrocks.password=
-    # 如果导入数据不方便选出合适的分隔符可以考虑使用Json格式，但是会有一定的性能损失
-    flink.starrocks.sink.properties.format=json
-    flink.starrocks.sink.buffer-flush.interval-ms=5000
-    ~~~
-
-2. Flink.starrocks.sink 的参数可以[参考文档](https://docs.starrocks.com/zh-cn/main/loading/Flink-connector-starrocks)，比如可以给不同的规则配置不同的导入频率等参数。
-
-3. 针对分库分表的大表可以单独配置一个规则，比如：有两个数据库 edu_db_1，edu_db_2，每个数据库下面分别有course_1，course_2 两张表，并且所有表的数据结构都是相同的，通过如下配置把他们导入StarRocks的一张表中进行分析。
-
-    ~~~bash
-    [table-rule.3]
-    # pattern to match databases for setting properties
-    database = ^edu_db_[0-9]*$
-    # pattern to match tables for setting properties
-    table = ^course_[0-9]*$
-
-    ############################################
-    ### flink sink configurations
-    ### DO NOT set `connector`, `table-name`, `database-name`, they are auto-generated
-    ############################################
-    flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
-    flink.starrocks.load-url= 192.168.1.1:8030
-    flink.starrocks.username=root
-    flink.starrocks.password=
-    flink.starrocks.sink.properties.column_separator=\x01
-    flink.starrocks.sink.properties.row_delimiter=\x02
-    flink.starrocks.sink.buffer-flush.interval-ms=5000
-    ~~~
-
-    这样会自动生成一个多对一的导入关系，在StarRocks默认生成的表名是 course__auto_shard，也可以自行在生成的配置文件中修改。
-
-4. 如果在sql-client中命令行执行建表和同步任务，需要做对'\'字符进行转义
-
-    ~~~bash
-    'sink.properties.column_separator' = '\\x01'
-    'sink.properties.row_delimiter' = '\\x02'  
-    ~~~
-
-5. 如何开启MySQL binlog？
-  修改/etc/my.cnf
-  
-    ~~~bash
-    #开启binlog日志
-    log-bin=/var/lib/mysql/mysql-bin
-
-    #log_bin=ON
-    ##binlog日志的基本文件名
-    #log_bin_basename=/var/lib/mysql/mysql-bin
-    ##binlog文件的索引文件，管理所有binlog文件
-    #log_bin_index=/var/lib/mysql/mysql-bin.index
-    #配置serverid
-    server-id=1
-    binlog_format = row
-    ~~~
-  
-  重启mysqld，然后可以通过 SHOW VARIABLES LIKE 'log_bin'; 确认是否已经打开
+通过Flink-cdc和StarRocks-migrate-tools（简称smt）可以实现MySQL数据的秒级同步。具体使用方式请见
+[Flink-connector-starrocks](/loading/Flink-connector-starrocks.md)。
