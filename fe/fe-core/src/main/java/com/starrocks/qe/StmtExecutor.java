@@ -1388,8 +1388,8 @@ public class StmtExecutor {
             }
 
             if (loadedRows == 0 && filteredRows == 0) {
-                if (stmt.getTargetTable() instanceof ExternalOlapTable) {
-                    ExternalOlapTable externalTable = (ExternalOlapTable)(stmt.getTargetTable());
+                if (targetTable instanceof ExternalOlapTable) {
+                    ExternalOlapTable externalTable = (ExternalOlapTable)targetTable;
                     Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
                             externalTable.getSourceTableDbId(), transactionId,
                             externalTable.getSourceTableHost(),
@@ -1426,9 +1426,9 @@ public class StmtExecutor {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
                     // collect table-level metrics
-                    if (null != stmt.getTargetTable()) {
+                    if (null != targetTable) {
                         TableMetricsEntity entity =
-                                TableMetricsRegistry.getInstance().getMetricsEntity(stmt.getTargetTable().getId());
+                                TableMetricsRegistry.getInstance().getMetricsEntity(targetTable.getId());
                         entity.COUNTER_INSERT_LOAD_FINISHED_TOTAL.increase(1L);
                         entity.COUNTER_INSERT_LOAD_ROWS_TOTAL.increase(loadedRows);
                         entity.COUNTER_INSERT_LOAD_BYTES_TOTAL
@@ -1442,8 +1442,8 @@ public class StmtExecutor {
             // if any throwable being thrown during insert operation, first we should abort this txn
             LOG.warn("handle insert stmt fail: {}", label, t);
             try {
-                if (stmt.getTargetTable() instanceof ExternalOlapTable) {
-                    ExternalOlapTable externalTable = (ExternalOlapTable)(stmt.getTargetTable());
+                if (targetTable instanceof ExternalOlapTable) {
+                    ExternalOlapTable externalTable = (ExternalOlapTable)targetTable;
                     Catalog.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
                             externalTable.getSourceTableDbId(), stmt.getTransactionId(),
                             externalTable.getSourceTableHost(),
