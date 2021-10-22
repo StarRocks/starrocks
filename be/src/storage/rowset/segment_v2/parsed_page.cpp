@@ -276,6 +276,7 @@ Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     Slice data_slice(body.data, body.size - null_size);
     PageDecoder* decoder = nullptr;
     PageDecoderOptions opts;
+    opts.page_handle = &(page->_page_handle);
     RETURN_IF_ERROR(encoding->create_page_decoder(data_slice, opts, &decoder));
     page->_data_decoder.reset(decoder);
     RETURN_IF_ERROR(page->_data_decoder->init());
@@ -332,6 +333,7 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     Slice data_slice(body.data, body.size - null_size);
     PageDecoder* decoder = nullptr;
     PageDecoderOptions opts;
+    opts.page_handle = &(page->_page_handle);
     RETURN_IF_ERROR(encoding->create_page_decoder(data_slice, opts, &decoder));
     page->_data_decoder.reset(decoder);
     RETURN_IF_ERROR(page->_data_decoder->init());

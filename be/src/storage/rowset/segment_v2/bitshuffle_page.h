@@ -376,6 +376,10 @@ private:
         if (_num_elements > 0) {
             _decoded.resize(_num_element_after_padding * _size_of_element);
             RETURN_IF_ERROR(_decode_to(_decoded.data()));
+            // release original memory
+            if (_options.page_handle) {
+                _options.page_handle->release_memory();
+            }
         }
         _is_decoded = true;
         return Status::OK();

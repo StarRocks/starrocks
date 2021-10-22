@@ -23,6 +23,7 @@
 
 #include <cstddef>
 
+#include "storage/rowset/segment_v2/page_handle.h"
 namespace starrocks {
 namespace segment_v2 {
 
@@ -37,6 +38,7 @@ public:
 
 class PageDecoderOptions {
 public:
+    PageHandle* page_handle;
 };
 
 } // namespace segment_v2
