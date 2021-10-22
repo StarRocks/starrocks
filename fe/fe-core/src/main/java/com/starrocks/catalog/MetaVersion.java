@@ -56,11 +56,11 @@ public class MetaVersion implements Writable {
         JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
         int communityVersion = jsonObject.getAsJsonPrimitive(KEY_COMMUNITY_VERSION).getAsInt();
         int starrocksVersion;
-        // For compatibility, the json key before 1.19 version is KEY_DORISDB_VERSION
-        if (jsonObject.has(KEY_DORISDB_VERSION)) {
-            starrocksVersion = jsonObject.getAsJsonPrimitive(KEY_DORISDB_VERSION).getAsInt();
-        } else {
+        if (jsonObject.has(KEY_STARROCKS_VERSION)) {
             starrocksVersion = jsonObject.getAsJsonPrimitive(KEY_STARROCKS_VERSION).getAsInt();
+        } else {
+            // For compatibility, the json key before 1.19 version is KEY_DORISDB_VERSION
+            starrocksVersion = jsonObject.getAsJsonPrimitive(KEY_DORISDB_VERSION).getAsInt();
         }
         return new MetaVersion(communityVersion, starrocksVersion);
     }
