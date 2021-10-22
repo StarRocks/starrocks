@@ -4,6 +4,7 @@
 
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/sum.h"
 #include "exprs/vectorized/arithmetic_operation.h"
 #include "gutil/casts.h"
 
@@ -54,6 +55,7 @@ public:
     using InputColumnType = RunTimeColumnType<PT>;
     static constexpr auto ResultPT = AvgResultPT<PT>;
     using ResultType = RunTimeCppType<ResultPT>;
+    using SumResultType = RunTimeCppType<SumResultPT<PT>>;
     using ResultColumnType = RunTimeColumnType<ResultPT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
@@ -76,12 +78,67 @@ public:
         this->data(state).count++;
     }
 
+    void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        DCHECK(!columns[0]->is_nullable());
+        [[maybe_unused]] const InputColumnType* column = down_cast<const InputColumnType*>(columns[0]);
+        // For type of int/tinyint/bitint..., the result of avg is float/double
+        // But the floating point operations are much slower than integer operations
+        // So, we use integers to perform operations
+        SumResultType local_sum_for_arithmetic{};
+
+        for (size_t i = 0; i < batch_size; ++i) {
+            if constexpr (pt_is_datetime<PT>) {
+                this->data(state).sum += column->get_data()[i].to_unix_second();
+            } else if constexpr (pt_is_date<PT>) {
+                this->data(state).sum += column->get_data()[i].julian();
+            } else if constexpr (pt_is_decimalv2<PT>) {
+                this->data(state).sum += column->get_data()[i];
+            } else if constexpr (pt_is_arithmetic<PT>) {
+                local_sum_for_arithmetic += column->get_data()[i];
+            } else if constexpr (pt_is_decimal<PT>) {
+                this->data(state).sum += column->get_data()[i];
+            } else {
+                // static_assert(pt_is_fixedlength<PT>, "Invalid PrimitiveTypes for avg function");
+            }
+        }
+
+        if constexpr (pt_is_arithmetic<PT>) {
+            this->data(state).sum += local_sum_for_arithmetic;
+        }
+        this->data(state).count += batch_size;
+    }
+
     void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
+        DCHECK(!columns[0]->is_nullable());
+        [[maybe_unused]] const InputColumnType* column = down_cast<const InputColumnType*>(columns[0]);
+        // For type of int/tinyint/bitint..., the result of avg is float/double
+        // But the floating point operations are much slower than integer operations
+        // So, we use integers to perform operations
+        SumResultType local_sum_for_arithmetic{};
+
         for (size_t i = frame_start; i < frame_end; ++i) {
-            update(ctx, columns, state, i);
+            if constexpr (pt_is_datetime<PT>) {
+                this->data(state).sum += column->get_data()[i].to_unix_second();
+            } else if constexpr (pt_is_date<PT>) {
+                this->data(state).sum += column->get_data()[i].julian();
+            } else if constexpr (pt_is_decimalv2<PT>) {
+                this->data(state).sum += column->get_data()[i];
+            } else if constexpr (pt_is_arithmetic<PT>) {
+                local_sum_for_arithmetic += column->get_data()[i];
+            } else if constexpr (pt_is_decimal<PT>) {
+                this->data(state).sum += column->get_data()[i];
+            } else {
+                // static_assert(pt_is_fixedlength<PT>, "Invalid PrimitiveTypes for avg function");
+            }
         }
+
+        if constexpr (pt_is_arithmetic<PT>) {
+            this->data(state).sum += local_sum_for_arithmetic;
+        }
+        this->data(state).count += frame_end - frame_start;
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
