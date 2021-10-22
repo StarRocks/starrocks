@@ -584,12 +584,12 @@ CONF_Bool(bitmap_filter_enable_not_equal, "false");
 // storage format.
 CONF_mInt16(storage_format_version, "2");
 
-// IMPORTANT NOTE: changing 0 from 1 must require all BEs to be upgraded to new versions,
+// IMPORTANT NOTE: changing this config to 1 must require all BEs to be upgraded to new version,
 // which support this config.
 // DO NOT change this config unless you known how.
-// 0 for bitshuffle
-// 1 for lz4
-CONF_mInt16(null_flag_version, "0");
+// 0 for BITSHUFFLE_NULL
+// 1 for LZ4_NULL
+CONF_mInt16(null_format, "0");
 
 // do pre-aggregate if effect great than the factor, factor range:[1-100].
 CONF_Int16(pre_aggregate_factor, "80");

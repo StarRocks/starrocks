@@ -56,6 +56,11 @@ enum PageTypePB {
     SHORT_KEY_PAGE = 4;
 }
 
+enum NullFormatPB {
+    BITSHUFFLE_NULL = 0;
+    LZ4_NULL = 1;
+}
+
 message DataPageFooterPB {
     // required: ordinal of the first value
     optional uint64 first_ordinal = 1;
@@ -79,7 +84,7 @@ message DataPageFooterPB {
     optional uint32 format_version = 20;
     // 0 for bitshuffle
     // 1 for lz4
-    optional uint32 null_flag_version = 21;
+    optional NullFormatPB null_format = 21;
 }
 
 message IndexPageFooterPB {

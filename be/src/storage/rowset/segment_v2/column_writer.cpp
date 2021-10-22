@@ -123,9 +123,10 @@ private:
 
 class NullFlagsBuilder {
 public:
-    NullFlagsBuilder() : _null_map(32 * 1024), _null_flag_version(config::null_flag_version) {}
+    explicit NullFlagsBuilder(NullFormatPB null_format) : NullFlagsBuilder(32 * 1024, null_format) {}
 
-    explicit NullFlagsBuilder(size_t reserve_bits) : _has_null(false), _null_map(reserve_bits) {}
+    explicit NullFlagsBuilder(size_t reserve_bits, NullFormatPB null_format)
+            : _has_null(false), _null_map(reserve_bits), _null_format(null_format) {}
 
     void add_null_flags(const uint8_t* flags, size_t count) { _null_map.append(flags, count); }
 
@@ -134,7 +135,7 @@ public:
     ALWAYS_INLINE void set_has_null(bool has_null) { _has_null = has_null; }
 
     OwnedSlice finish() {
-        if (_null_flag_version == 0) {
+        if (_null_format == NullFormatPB::BITSHUFFLE_NULL) {
             size_t old_size = _null_map.size();
             _null_map.resize(ALIGN_UP(_null_map.size(), 8u));
             memset(_null_map.data() + old_size, 0, _null_map.size() - old_size);
@@ -145,7 +146,7 @@ public:
                 LOG(FATAL) << "bitshuffle compress failed: " << bitshuffle_error_msg(r);
             }
             return _encode_buf.build();
-        } else if (_null_flag_version == 1) {
+        } else if (_null_format == NullFormatPB::LZ4_NULL) {
             const BlockCompressionCodec* codec = nullptr;
             CompressionTypePB type = CompressionTypePB::LZ4;
             Status status = get_block_compression_codec(type, &codec);
@@ -162,7 +163,7 @@ public:
             _encode_buf.resize(compressed_slice.get_size());
             return _encode_buf.build();
         } else {
-            LOG(FATAL) << "invalid null flag version:" << _null_flag_version;
+            LOG(FATAL) << "invalid null format:" << _null_format;
             _encode_buf.resize(0);
             return _encode_buf.build();
         }
@@ -183,14 +184,13 @@ public:
         return SIMD::count_zero(_null_map.data(), _null_map.size());
     }
 
-    // add this api for config::null_flag_version can be modified online
-    int16_t null_flag_version() { return _null_flag_version; }
+    NullFormatPB null_format() { return _null_format; }
 
 private:
     bool _has_null{false};
     faststring _null_map;
     faststring _encode_buf;
-    int16_t _null_flag_version;
+    NullFormatPB _null_format;
 };
 
 class StringColumnWriter final : public ColumnWriter {
@@ -373,7 +373,11 @@ Status ScalarColumnWriter::init() {
     // create null bitmap builder
     if (is_nullable()) {
         _null_map_builder_v1 = std::make_unique<NullMapRLEBuilder>();
-        _null_map_builder_v2 = std::make_unique<NullFlagsBuilder>();
+        NullFormatPB default_null_format = NullFormatPB::BITSHUFFLE_NULL;
+        if (config::null_format == 1) {
+            default_null_format = NullFormatPB::LZ4_NULL;
+        }
+        _null_map_builder_v2 = std::make_unique<NullFlagsBuilder>(default_null_format);
     }
     if (_opts.need_zone_map) {
         _has_index_builder = true;
@@ -550,7 +554,7 @@ Status ScalarColumnWriter::finish_current_page() {
     data_page_footer->set_format_version(_curr_page_format);
     data_page_footer->set_corresponding_element_ordinal(_element_ordinal);
     if (is_nullable() && (_curr_page_format == 2)) {
-        data_page_footer->set_null_flag_version(_null_map_builder_v2->null_flag_version());
+        data_page_footer->set_null_format(_null_map_builder_v2->null_format());
     }
     // trying to compress page body
     faststring compressed_body;

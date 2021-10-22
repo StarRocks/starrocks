@@ -21,6 +21,8 @@
 
 #include "storage/rowset/segment_v2/parsed_page.h"
 
+#include <fmt/format.h>
+
 #include <memory>
 
 #include "column/nullable_column.h"
@@ -296,8 +298,10 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
 
     auto null_size = footer.nullmap_size();
     if (null_size > 0) {
-        uint32_t null_flag_version = footer.has_null_flag_version() ? footer.null_flag_version() : 0;
-        if (null_flag_version == 0) {
+        Slice null_flags(body.data + body.size - null_size, null_size);
+        NullFormatPB null_format = footer.has_null_format() ? footer.null_format() : NullFormatPB::BITSHUFFLE_NULL;
+        if (null_format == NullFormatPB::BITSHUFFLE_NULL) {
+            // bitshuffle format null flags
             size_t elements = footer.num_values();
             size_t elements_pad = ALIGN_UP(elements, 8u);
             page->_null_flags.resize(elements_pad * sizeof(uint8_t));
@@ -307,9 +311,8 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
                 return Status::Corruption("bitshuffle decompress failed: " + bitshuffle_error_msg(r));
             }
             page->_null_flags.resize(elements);
-        } else if (null_flag_version == 1) {
+        } else if (null_format == NullFormatPB::LZ4_NULL) {
             // decompress null flags by lz4
-            Slice null_flags(body.data + body.size - null_size, null_size);
             size_t elements = footer.num_values();
             page->_null_flags.resize(elements * sizeof(uint8_t));
             const BlockCompressionCodec* codec = nullptr;
@@ -318,7 +321,7 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
             Slice decompressed_slice(page->_null_flags.data(), elements);
             RETURN_IF_ERROR(codec->decompress(null_flags, &decompressed_slice));
         } else {
-            return Status::Corruption("invalid null flag version: " + null_flag_version);
+            return Status::Corruption(fmt::format("invalid null format: {}", null_format));
         }
     }
 

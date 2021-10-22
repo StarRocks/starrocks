@@ -65,8 +65,8 @@ protected:
     void TearDown() override { _tracker.release(_tracker.consumption()); }
 
     template <FieldType type, EncodingTypePB encoding, uint32_t version, bool adaptive = true>
-    void test_nullable_data(const vectorized::Column& src, const std::string null_flag_version = "0") {
-        config::set_config("null_flag_version", null_flag_version);
+    void test_nullable_data(const vectorized::Column& src, const std::string null_format = "0") {
+        config::set_config("null_format", null_format);
 
         using Type = typename TypeTraits<type>::CppType;
         TypeInfoPtr type_info = get_type_info(type);
@@ -267,9 +267,8 @@ protected:
     }
 
     template <uint32_t version>
-    void test_int_array(std::string null_flag_version = "0") {
-        config::set_config("null_flag_version", null_flag_version);
-
+    void test_int_array(std::string null_format = "0") {
+        config::set_config("null_format", null_format);
         auto env = std::make_unique<EnvMemory>();
         auto block_mgr = std::make_unique<fs::FileBlockManager>(env.get(), fs::BlockManagerOptions());
         ASSERT_TRUE(env->create_dir(TEST_DIR).ok());
