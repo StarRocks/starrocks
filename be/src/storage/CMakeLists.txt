@@ -129,6 +129,7 @@ add_library(Olap STATIC
     vectorized/column_not_in_predicate.cpp
     vectorized/column_null_predicate.cpp
     vectorized/column_or_predicate.cpp
+    vectorized/column_expr_predicate.cpp
     vectorized/conjunctive_predicates.cpp
     vectorized/convert_helper.cpp
     vectorized/delete_predicates.cpp
