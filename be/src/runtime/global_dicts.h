@@ -14,6 +14,9 @@ using GlobalDictMapEntity = std::pair<GlobalDictMap, RGlobalDictMap>;
 // column-id -> GlobalDictMap
 using GlobalDictMaps = std::unordered_map<uint32_t, GlobalDictMapEntity>;
 
+// column-name -> GlobalDictMap
+using GlobalDictByNameMaps = std::unordered_map<std::string, GlobalDictMapEntity>;
+
 static inline std::unordered_map<uint32_t, GlobalDictMap*> EMPTY_GLOBAL_DICTMAPS;
 } // namespace vectorized
 } // namespace starrocks

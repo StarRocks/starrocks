@@ -50,7 +50,7 @@ struct WriteRequest {
     // slots are in order of tablet's schema
     const std::vector<SlotDescriptor*>* slots;
 
-    vectorized::GlobalDictMaps* global_dicts = nullptr;
+    vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
 };
 
 // Writer for a particular (load, index, tablet).

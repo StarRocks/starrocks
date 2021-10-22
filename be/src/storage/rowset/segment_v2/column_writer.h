@@ -33,6 +33,7 @@
 #include "storage/tablet_schema.h"                  // for TabletColumn
 #include "util/bitmap.h"                            // for BitmapChange
 #include "util/slice.h"                             // for OwnedSlice
+#include "storage/rowset/segment_v2/binary_dict_page.h"
 
 namespace starrocks {
 
@@ -128,7 +129,7 @@ public:
     // only invalid in the case of global_dict is not nullptr
     // column is not encoding by dict or append new words that
     // not in global_dict, it will return false
-    virtual bool is_global_dict_efficacy() { return false; }
+    virtual bool is_global_dict_efficacy() { return true; }
 
     bool is_nullable() const { return _is_nullable; }
 
@@ -182,9 +183,14 @@ public:
 
     void check_global_dict_efficacy(const std::vector<Slice>& dict_body) {
         for (const auto& item : dict_body) {
-            if (auto iter = _opts.global_dict->find(item); iter == _opts.global_dict->end()) {
-                _is_global_dict_efficacy = false;
-                return;
+	    auto dict_decoder = std::make_unique<BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>>(item);
+	    dict_decoder->init();
+	    for (size_t i = 0; i < dict_decoder->count(); i++) {
+		Slice word = dict_decoder->string_at_index(i);
+            	if (auto iter = _opts.global_dict->find(word.to_string()); iter == _opts.global_dict->end()) {
+               	    _is_global_dict_efficacy = false;
+                    return;
+		}
             }
         }
     }

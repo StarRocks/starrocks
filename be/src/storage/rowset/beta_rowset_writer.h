@@ -76,7 +76,7 @@ public:
 
     RowsetId rowset_id() override { return _context.rowset_id; }
 
-	std::vector<std::pair<int, bool>> global_dict_efficacy_info() override { 
+	std::unordered_set<std::string> global_dict_efficacy_info() override { 
 		return _global_dict_efficacy_info;
 	} 
 	
@@ -115,7 +115,7 @@ private:
 
     bool _is_pending = false;
     bool _already_built = false;
-	std::vector<std::pair<int, bool>> _global_dict_efficacy_info;
+	std::unordered_set<std::string> _global_dict_efficacy_info;
 };
 
 } // namespace starrocks

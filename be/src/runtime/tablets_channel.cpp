@@ -450,7 +450,7 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
                             std::make_pair<int, Slice>(slot.global_dict_ids(i), slot.global_dict_words(i)));
                 }
                 auto pair = std::make_pair(global_dict, r_global_dict);
-                _global_dicts.insert(std::make_pair(slot.id(), pair));
+                _global_dicts.insert(std::make_pair(slot.col_name(), pair));
             }
         }
 

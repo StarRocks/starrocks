@@ -220,6 +220,8 @@ public:
 
     ordinal_t get_next_rowid() const override { return _scalar_column_writer->get_next_rowid(); };
 
+    bool is_global_dict_efficacy() override { return _scalar_column_writer->is_global_dict_efficacy(); }
+
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;

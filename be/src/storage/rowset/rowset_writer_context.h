@@ -81,7 +81,7 @@ public:
     // On-disk data format.
     DataFormatVersion storage_format_version;
 
-    vectorized::GlobalDictMaps* global_dicts = nullptr;
+    vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
 };
 
 } // namespace starrocks

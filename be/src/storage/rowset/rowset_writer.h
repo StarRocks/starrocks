@@ -117,8 +117,8 @@ public:
 
     virtual RowsetId rowset_id() = 0;
 	
-	virtual std::vector<std::pair<int, bool>> global_dict_efficacy_info() { 
-		std::vector<std::pair<int, bool>> fake;
+	virtual std::unordered_set<std::string> global_dict_efficacy_info() { 
+		 std::unordered_set<std::string> fake;
 		return fake;
 	} 
 

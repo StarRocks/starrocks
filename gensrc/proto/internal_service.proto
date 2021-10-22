@@ -117,8 +117,7 @@ message PTabletWithPartition {
 message PTabletInfo {
     required int64 tablet_id = 1;
     required int32 schema_hash = 2;
-    repeated int32 c_id = 3;
-    repeated bool global_dict_efficacy = 4; 
+    repeated string no_efficacy_dict_col_name = 3;
 }
 
 // open a tablet writer

@@ -147,7 +147,7 @@ private:
     // tablet_id -> TabletChannel
     std::unordered_map<int64_t, vectorized::DeltaWriter*> _vectorized_tablet_writers;
 
-    vectorized::GlobalDictMaps _global_dicts;
+    vectorized::GlobalDictByNameMaps _global_dicts;
 };
 
 } // namespace starrocks
