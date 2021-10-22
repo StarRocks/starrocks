@@ -140,6 +140,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.MasterDaemon;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.QueryableReentrantLock;
@@ -262,6 +263,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -795,7 +797,7 @@ public class Catalog {
         setMetaDir();
 
         // 0. get local node and helper node info
-        getSelfHostPort();
+        getCheckedSelfHostPort();
         getHelperNodes(args);
 
         // 1. check and create dirs and files
@@ -1043,7 +1045,6 @@ public class Catalog {
                     System.exit(-1);
                 }
             }
-
             getNewImage(rightHelperNode);
         }
 
@@ -1052,11 +1053,7 @@ public class Catalog {
             System.exit(-1);
         }
 
-        if (role.equals(FrontendNodeType.FOLLOWER)) {
-            isElectable = true;
-        } else {
-            isElectable = false;
-        }
+        isElectable = role.equals(FrontendNodeType.FOLLOWER);
 
         systemInfoMap.put(clusterId, systemInfo);
 
@@ -1131,8 +1128,21 @@ public class Catalog {
         return true;
     }
 
-    private void getSelfHostPort() {
-        selfNode = new Pair<String, Integer>(FrontendOptions.getLocalHostAddress(), Config.edit_log_port);
+    private void getCheckedSelfHostPort() {
+        selfNode = new Pair<>(FrontendOptions.getLocalHostAddress(), Config.edit_log_port);
+        /*
+         * For the first time, if the master start up failed, it will also fail to restart.
+         * Check port using before create meta files to avoid this problem.
+         */
+        try {
+            if (NetUtils.isPortUsing(selfNode.first, selfNode.second)) {
+                LOG.error("edit_log_port {} is already in use. will exit.", selfNode.second);
+                System.exit(-1);
+            }
+        } catch (UnknownHostException e) {
+            LOG.error(e);
+            System.exit(-1);
+        }
         LOG.debug("get self node: {}", selfNode);
     }
 
@@ -3546,7 +3556,7 @@ public class Catalog {
 
             // create tablets
             TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partitionId, indexId, indexMeta.getSchemaHash(),
-                                                   storageMedium);
+                    storageMedium);
             createTablets(db.getClusterName(), index, ReplicaState.NORMAL, distributionInfo, partition.getVisibleVersion(),
                     partition.getVisibleVersionHash(), replicationNum, tabletMeta, tabletIdSet);
             if (index.getId() != table.getBaseIndexId()) {
@@ -3835,10 +3845,10 @@ public class Catalog {
         OlapTable olapTable = null;
         if (stmt.isExternal()) {
             olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
-                                              distributionInfo, indexes, stmt.getProperties());
+                    distributionInfo, indexes, stmt.getProperties());
         } else {
             olapTable = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo,
-                                      distributionInfo, indexes);
+                    distributionInfo, indexes);
         }
         olapTable.setComment(stmt.getComment());
 
@@ -4032,7 +4042,7 @@ public class Catalog {
                     List<Partition> partitions = new ArrayList<>(partitionNameToId.size());
                     for (Map.Entry<String, Long> entry : partitionNameToId.entrySet()) {
                         Partition partition = createPartition(db, olapTable, entry.getValue(), entry.getKey(), versionInfo,
-                                                              tabletIdSet);
+                                tabletIdSet);
                         partitions.add(partition);
                     }
                     // It's ok if partitions is empty.
@@ -4360,7 +4370,7 @@ public class Catalog {
                 sb.append("\"port\" = \"").append(externalOlapTable.getSourceTablePort()).append("\",\n");
                 sb.append("\"user\" = \"").append(externalOlapTable.getSourceTableUser()).append("\",\n");
                 sb.append("\"password\" = \"").append(hidePassword ? "" : externalOlapTable.getSourceTablePassword())
-                                              .append("\",\n");
+                        .append("\",\n");
                 sb.append("\"database\" = \"").append(externalOlapTable.getSourceTableDbName()).append("\",\n");
                 sb.append("\"table\" = \"").append(externalOlapTable.getSourceTableName()).append("\"\n");
             }
@@ -6612,12 +6622,12 @@ public class Catalog {
             request.setPartitions(partitions);
             try {
                 TRefreshTableResponse response = FrontendServiceProxy.call(thriftAddress, timeout,
-                            new FrontendServiceProxy.MethodCallable<TRefreshTableResponse>() {
-                                @Override
-                                public TRefreshTableResponse invoke(FrontendService.Client client) throws TException {
-                                    return client.refreshTable(request);
-                                }
-                            });
+                        new FrontendServiceProxy.MethodCallable<TRefreshTableResponse>() {
+                            @Override
+                            public TRefreshTableResponse invoke(FrontendService.Client client) throws TException {
+                                return client.refreshTable(request);
+                            }
+                        });
                 return response.getStatus();
             } catch (Exception e) {
                 LOG.warn("call fe {} refreshTable rpc method failed", thriftAddress, e);
@@ -7070,7 +7080,7 @@ public class Catalog {
             try {
                 TSetConfigResponse response = FrontendServiceProxy
                         .call(new TNetworkAddress(fe.getHost(),
-                                fe.getRpcPort()),
+                                        fe.getRpcPort()),
                                 timeout,
                                 new FrontendServiceProxy.MethodCallable<TSetConfigResponse>() {
                                     @Override
@@ -7435,5 +7445,6 @@ public class Catalog {
     public void setImageJournalId(long imageJournalId) {
         this.imageJournalId = imageJournalId;
     }
+
 }
 
