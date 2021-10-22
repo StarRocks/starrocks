@@ -172,13 +172,13 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
 }
 
 Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParams* params, const butil::IOBuf& attachment) {
-    params->set_allocated_finst_id(&_finst_id);
+    params->mutable_finst_id()->CopyFrom(_finst_id);
     params->set_node_id(_dest_node_id);
     params->set_sender_id(_parent->_sender_id);
     params->set_be_number(_parent->_be_number);
 
     params->set_eos(false);
-    TransmitChunkInfo info = {std::move(*params), _brpc_stub};
+    TransmitChunkInfo info = {*params, _brpc_stub};
     _parent->_buffer->add_request(info);
 
     // The original design is bad, we must release_finst_id here!

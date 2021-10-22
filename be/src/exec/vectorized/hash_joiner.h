@@ -35,7 +35,7 @@ enum HashJoinPhase {
     BUILD = 0,
     PROBE = 1,
     POST_PROBE = 2,
-    EOS = 3,
+    EOS = 4,
 };
 class HashJoiner {
 public:
@@ -51,13 +51,13 @@ public:
     bool need_input() const;
     bool has_output() const;
     bool is_build_done() const { return _phase != HashJoinPhase::BUILD; }
-    bool is_done() const {
-        return _phase == HashJoinPhase::EOS && _buffered_probe_output_chunk == nullptr &&
-               _buffered_result_chunk == nullptr;
-    }
+    bool is_done() const { return _phase == HashJoinPhase::EOS; }
     void enter_post_probe_phase() {
-        if (_phase != HashJoinPhase::EOS) {
-            _phase = HashJoinPhase::POST_PROBE;
+        HashJoinPhase old_phase = HashJoinPhase::PROBE;
+        if (!_phase.compare_exchange_strong(old_phase, HashJoinPhase::POST_PROBE)) {
+            old_phase = HashJoinPhase::BUILD;
+            // HashJoinProbeOperator finishes prematurely on runtime error or fragment's cancellation.
+            _phase.compare_exchange_strong(old_phase, HashJoinPhase::EOS);
         }
     }
     // build phase
@@ -84,7 +84,13 @@ private:
         if (!buffered_chunk) {
             buffered_chunk = std::move(chunk);
         } else if (buffered_chunk->num_rows() + chunk->num_rows() <= config::vector_chunk_size) {
-            buffered_chunk->append(*chunk, 0, chunk->num_rows());
+            Columns& dst_columns = buffered_chunk->columns();
+            Columns& src_columns = chunk->columns();
+            size_t num_rows = chunk->num_rows();
+            // copy the new read chunk to the reserved
+            for (size_t i = 0; i < dst_columns.size(); i++) {
+                dst_columns[i]->append(*src_columns[i], 0, num_rows);
+            }
         } else if (chunk->num_rows() >= half_vector_chunk_size) {
             result_chunk = std::move(chunk);
         } else {
@@ -111,10 +117,6 @@ private:
         if (chunk && !chunk->is_empty()) {
             ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
         }
-    }
-
-    void _merge_result_chunk(RuntimeState* state, ChunkPtr&& chunk) {
-        merge_chunk(state, _buffered_result_chunk, _result_chunk, std::move(chunk));
     }
 
     void _prepare_key_columns() {
@@ -147,13 +149,13 @@ private:
             _ht.close();
             return Status::OK();
         }
-        auto chunk = std::make_shared<Chunk>();
-        bool eos = false;
         DCHECK(!_probe_output_chunk);
         while (true) {
-            RETURN_IF_ERROR(_ht.probe_remain(&chunk, &eos));
+            bool has_remain = true;
+            auto chunk = std::make_shared<Chunk>();
+            RETURN_IF_ERROR(_ht.probe_remain(&chunk, &has_remain));
             _merge_probe_output_chunk(state, std::move(chunk));
-            if (eos) {
+            if (!has_remain) {
                 _phase = HashJoinPhase::EOS;
                 _ht.close();
                 return Status::OK();
@@ -201,7 +203,7 @@ private:
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     const int64_t _limit; // -1: no limit
     int64_t _num_rows_returned;
-    HashJoinPhase _phase = HashJoinPhase::BUILD;
+    std::atomic<HashJoinPhase> _phase = HashJoinPhase::BUILD;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
     bool _is_closed = false;
 
@@ -210,9 +212,6 @@ private:
 
     ChunkPtr _buffered_probe_output_chunk;
     ChunkPtr _probe_output_chunk;
-
-    ChunkPtr _buffered_result_chunk;
-    ChunkPtr _result_chunk;
 
     std::vector<bool> _is_null_safes;
     std::unique_ptr<MemTracker> _expr_mem_tracker;

@@ -66,6 +66,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     } else {
         _query_ctx->set_expire_seconds(300);
     }
+    // initialize query's deadline
+    _query_ctx->extend_lifetime();
 
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_instance_id);
     _fragment_ctx->set_query_id(query_id);

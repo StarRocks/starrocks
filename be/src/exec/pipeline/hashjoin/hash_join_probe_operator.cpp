@@ -17,7 +17,7 @@ bool HashJoinProbeOperator::need_input() const {
 }
 
 bool HashJoinProbeOperator::is_finished() const {
-    return _is_finished && _hash_joiner->is_done();
+    return _hash_joiner->is_done();
 }
 
 Status HashJoinProbeOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
