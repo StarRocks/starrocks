@@ -40,8 +40,6 @@ LoadChannel::~LoadChannel() {
     LOG(INFO) << "load channel mem peak usage=" << _mem_tracker->peak_consumption()
               << ", info=" << _mem_tracker->debug_string() << ", load_id=" << _load_id;
     _tablets_channels.clear();
-    DCHECK_EQ(_mem_tracker->consumption(), 0);
-    _mem_tracker->release(_mem_tracker->consumption());
 }
 
 Status LoadChannel::open(const PTabletWriterOpenRequest& params) {

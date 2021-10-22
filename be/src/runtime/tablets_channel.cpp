@@ -289,8 +289,6 @@ Status TabletsChannel::close(int sender_id, bool* finished,
                     // tablet_vec will only contains success tablet, and then let FE judge it.
                     writer->close_wait(tablet_vec);
                 }
-                // TODO(gaodayue) clear and destruct all delta writers to make sure all memory are freed
-                // DCHECK_EQ(_mem_tracker->consumption(), 0);
             }
         }
     }
@@ -515,8 +513,6 @@ Status TabletsChannel::cancel() {
         std::lock_guard<std::mutex> l(_tablet_locks[it.first & k_shard_size]);
         it.second->cancel();
     }
-
-    DCHECK_EQ(_mem_tracker->consumption(), 0);
 
     std::lock_guard<std::mutex> l(_global_lock);
     _state = kFinished;

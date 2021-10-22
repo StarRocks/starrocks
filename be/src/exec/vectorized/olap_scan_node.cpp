@@ -184,7 +184,7 @@ Status OlapScanNode::close(RuntimeState* state) {
         delete chunk;
     }
 
-    // free chunks in _result_chunks and release memory tracker.
+    // free chunks in _result_chunks
     Chunk* chunk = nullptr;
     while (_result_chunks.blocking_get(&chunk)) {
         delete chunk;
