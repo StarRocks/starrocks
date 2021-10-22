@@ -21,10 +21,13 @@
 
 package com.starrocks.common.util;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
+import java.net.Socket;
 import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.util.Enumeration;
 import java.util.List;
 
@@ -60,5 +63,18 @@ public class NetUtils {
                 hosts.add(addr);
             }
         }
+    }
+
+    public static boolean isPortUsing(String host, int port) throws UnknownHostException {
+        boolean flag = false;
+        InetAddress theAddress = InetAddress.getByName(host);
+        try {
+            Socket socket = new Socket(theAddress, port);
+            flag = true;
+            socket.close();
+        } catch (IOException e) {
+            // do nothing
+        }
+        return flag;
     }
 }
