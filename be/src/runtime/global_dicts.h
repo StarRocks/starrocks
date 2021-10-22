@@ -5,6 +5,7 @@
 #include "column/column.h"
 #include "column/column_hash.h"
 #include "column/vectorized_fwd.h"
+#include "common/global_types.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -27,7 +28,7 @@ constexpr int DICT_DECODE_MAX_SIZE = 256;
 
 struct DictOptimizeContext {
     bool could_apply_dict_optimize = false;
-    ColumnRef* column_ref = nullptr;
+    SlotId slot_id;
     // if input was not nullable but output was nullable this flag will set true
     bool result_nullable = false;
     // size: DICT_DECODE_MAX_SIZE + 1

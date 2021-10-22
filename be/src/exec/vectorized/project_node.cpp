@@ -14,6 +14,7 @@
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/global_types.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/project_operator.h"
@@ -82,23 +83,19 @@ Status ProjectNode::prepare(RuntimeState* state) {
     GlobalDictMaps* mdict_maps = state->mutable_global_dict_map();
     _dict_optimize_parser.set_mutable_dict_maps(mdict_maps);
 
-    _common_sub_dict_optimize_ctxs.resize(_common_sub_expr_ctxs.size());
-    for (int i = 0; i < _common_sub_expr_ctxs.size(); ++i) {
-        _dict_optimize_parser.check_could_apply_dict_optimize(_common_sub_expr_ctxs[i],
-                                                              &_common_sub_dict_optimize_ctxs[i]);
-        if (_common_sub_dict_optimize_ctxs[i].could_apply_dict_optimize) {
-            _dict_optimize_parser.eval_expr(state, _common_sub_expr_ctxs[i], &_common_sub_dict_optimize_ctxs[i],
-                                            _common_sub_slot_ids[i]);
+    auto init_dict_optimize = [&](std::vector<ExprContext*>& expr_ctxs, std::vector<DictOptimizeContext>& dict_ctxs,
+                                  std::vector<SlotId>& target_slots) {
+        dict_ctxs.resize(expr_ctxs.size());
+        for (int i = 0; i < expr_ctxs.size(); ++i) {
+            _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctxs[i], &dict_ctxs[i]);
+            if (dict_ctxs[i].could_apply_dict_optimize) {
+                _dict_optimize_parser.eval_expr(state, expr_ctxs[i], &dict_ctxs[i], target_slots[i]);
+            }
         }
-    }
+    };
 
-    _dict_optimize_ctxs.resize(_expr_ctxs.size());
-    for (int i = 0; i < _expr_ctxs.size(); ++i) {
-        _dict_optimize_parser.check_could_apply_dict_optimize(_expr_ctxs[i], &_dict_optimize_ctxs[i]);
-        if (_dict_optimize_ctxs[i].could_apply_dict_optimize) {
-            _dict_optimize_parser.eval_expr(state, _expr_ctxs[i], &_dict_optimize_ctxs[i], _slot_ids[i]);
-        }
-    }
+    init_dict_optimize(_common_sub_expr_ctxs, _common_sub_dict_optimize_ctxs, _common_sub_slot_ids);
+    init_dict_optimize(_expr_ctxs, _dict_optimize_ctxs, _slot_ids);
 
     return Status::OK();
 }
@@ -137,7 +134,7 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         SCOPED_TIMER(_common_sub_expr_compute_timer);
         for (size_t i = 0; i < _common_sub_slot_ids.size(); ++i) {
             if (_common_sub_dict_optimize_ctxs[i].could_apply_dict_optimize) {
-                auto cid = _common_sub_dict_optimize_ctxs[i].column_ref->slot_id();
+                auto cid = _common_sub_dict_optimize_ctxs[i].slot_id;
                 auto& src_col = (*chunk)->get_column_by_slot_id(cid);
                 ColumnPtr result_column;
                 _dict_optimize_parser.eval_code_convert(_common_sub_dict_optimize_ctxs[i], src_col, &result_column);
@@ -154,7 +151,7 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         SCOPED_TIMER(_expr_compute_timer);
         for (size_t i = 0; i < _slot_ids.size(); ++i) {
             if (_dict_optimize_ctxs[i].could_apply_dict_optimize) {
-                auto cid = _dict_optimize_ctxs[i].column_ref->slot_id();
+                auto cid = _dict_optimize_ctxs[i].slot_id;
                 auto& src_col = (*chunk)->get_column_by_slot_id(cid);
                 _dict_optimize_parser.eval_code_convert(_dict_optimize_ctxs[i], src_col, &result_columns[i]);
             } else {

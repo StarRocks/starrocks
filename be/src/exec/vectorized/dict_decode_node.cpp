@@ -58,6 +58,7 @@ Status DictDecodeNode::prepare(RuntimeState* state) {
             return Status::InternalError("Not find dict");
         } else if (dict_not_contains_cid && input_has_string_function) {
             auto& [expr_ctx, dict_ctx] = _string_functions[need_encode_cid];
+            DCHECK(expr_ctx->root()->fn().could_apply_dict_optimize);
             _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
             DCHECK(dict_ctx.could_apply_dict_optimize);
             _dict_optimize_parser.eval_expr(state, expr_ctx, &dict_ctx, need_encode_cid);

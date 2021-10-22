@@ -10,6 +10,7 @@
 #include "common/global_types.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
+#include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/global_dicts.h"
 #include "runtime/runtime_state.h"
@@ -22,54 +23,22 @@ void DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, 
         dict_opt_ctx->could_apply_dict_optimize = false;
         return;
     }
-
-    std::vector<Expr*> exprs;
-    std::vector<Expr*> leaf_children;
-    exprs.push_back(expr_ctx->root());
-    while (!exprs.empty()) {
-        Expr* expr = exprs.back();
-        exprs.pop_back();
-        auto& children = expr->children();
-        if (!children.empty()) {
-            for (auto child : children) {
-                exprs.push_back(child);
-            }
-        } else {
-            leaf_children.push_back(expr);
-        }
-    }
-
-    // Count the number of SlotRef and Constant in leaf nodes
-    ColumnRef* column_ref = nullptr;
-    int col_ref_sz = 0;
-    int const_expr_sz = 0;
-    for (auto leaf_child : leaf_children) {
-        if (leaf_child->is_slotref()) {
-            col_ref_sz++;
-            column_ref = down_cast<ColumnRef*>(leaf_child);
-        } else if (leaf_child->is_constant()) {
-            const_expr_sz++;
-        }
-    }
-
-    // if leaf child has other expr or more than one col_ref_sz
-    // we couldn't use global dict optimize
-    if (col_ref_sz + const_expr_sz != leaf_children.size() || col_ref_sz != 1) {
+    if (!expr_ctx->root()->fn().could_apply_dict_optimize) {
+        dict_opt_ctx->could_apply_dict_optimize = false;
         return;
     }
-
-    DCHECK(column_ref != nullptr);
-    bool could_apply = _mutable_dict_maps->count(column_ref->slot_id());
+    std::vector<SlotId> slot_ids;
+    expr_ctx->root()->get_slot_ids(&slot_ids);
+    DCHECK_EQ(slot_ids.size(), 1);
+    bool could_apply = _mutable_dict_maps->count(slot_ids.back());
+    dict_opt_ctx->slot_id = slot_ids.back();
     dict_opt_ctx->could_apply_dict_optimize = could_apply;
-    if (could_apply) {
-        dict_opt_ctx->column_ref = column_ref;
-    }
 }
 
 void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx,
                                    int32_t targetSlotId) {
     DCHECK(dict_opt_ctx->could_apply_dict_optimize);
-    SlotId need_decode_slot_id = dict_opt_ctx->column_ref->slot_id();
+    SlotId need_decode_slot_id = dict_opt_ctx->slot_id;
     // Slice -> dict-code
     auto& column_dict_map = _mutable_dict_maps->at(need_decode_slot_id).first;
 
