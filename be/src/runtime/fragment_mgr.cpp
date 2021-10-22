@@ -377,6 +377,9 @@ void FragmentMgr::exec_actual(std::shared_ptr<FragmentExecState>* exec_state, co
 
     (*exec_state)->execute();
 
+    // Callback after remove from this id
+    cb((*exec_state)->executor());
+
     {
         std::lock_guard<std::mutex> lock(_lock);
         auto iter = _fragment_map.find((*exec_state)->fragment_instance_id());
@@ -388,8 +391,6 @@ void FragmentMgr::exec_actual(std::shared_ptr<FragmentExecState>* exec_state, co
                          << (*exec_state)->fragment_instance_id();
         }
     }
-    // Callback after remove from this id
-    cb((*exec_state)->executor());
     // NOTE: 'exec_state' is desconstructed here without lock
 }
 
