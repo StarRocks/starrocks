@@ -115,6 +115,8 @@ public class PredicateStatisticsCalculator {
                 selectivity = predicate.isNotNull() ? 1 - isNullColumnStatistic.getNullsFraction() :
                         isNullColumnStatistic.getNullsFraction();
             }
+            // avoid estimate selectivity too small because of the error of null fraction
+            selectivity = Math.max(selectivity, StatisticsEstimateCoefficient.IS_NULL_PREDICATE_DEFAULT_FILTER_COEFFICIENT);
             double rowCount = statistics.getOutputRowCount() * selectivity;
             return Statistics.buildFrom(statistics).setOutputRowCount(rowCount).
                     addColumnStatistics(
