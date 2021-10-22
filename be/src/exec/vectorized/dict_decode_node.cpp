@@ -2,6 +2,8 @@
 
 #include "exec/vectorized/dict_decode_node.h"
 
+#include <fmt/ranges.h>
+
 #include <utility>
 
 #include "column/chunk.h"
@@ -70,6 +72,12 @@ Status DictDecodeNode::prepare(RuntimeState* state) {
         // TODO : avoid copy dict
         decoder->dict = dict_iter->second.second;
         _decoders.emplace_back(std::move(decoder));
+    }
+    for (int i = 0; i < _decoders.size(); ++i) {
+        LOG(INFO) << "map --------";
+        for (auto& [key, value] : _decoders[i]->dict) {
+            LOG(INFO) << fmt::format("key:{}, value:{} ", key, std::string(value.data, value.size));
+        }
     }
 
     return Status::OK();

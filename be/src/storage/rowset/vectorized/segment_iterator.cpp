@@ -141,10 +141,13 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override { return _col_iter->next_dict_codes(n, dst); }
 
-    // TOOD(stdpain): we need return global dict code
-    // so we should implement function `fetch_dict_by_rowid` in ColumnIterator
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override {
-        RETURN_IF_ERROR(_col_iter->fetch_values_by_rowid(rowids, size, values));
+        if (_local_dict_code_col == nullptr) {
+            _local_dict_code_col = std::make_unique<vectorized::Int32Column>();
+        }
+        RETURN_IF_ERROR(_col_iter->fetch_dict_codes_by_rowid(rowids, size, _local_dict_code_col.get()));
+        const auto& container = _local_dict_code_col->get_data();
+        RETURN_IF_ERROR(decode_dict_codes(container.data(), container.size(), values));
         return Status::OK();
     }
 
@@ -216,6 +219,7 @@ private:
     phmap::flat_hash_map<int32_t, int32_t> _local_to_global;
     // global dict
     GlobalDictMap* _global_dict;
+    std::unique_ptr<vectorized::Int32Column> _local_dict_code_col;
 };
 
 Status GlobalDictCodeColumnIterator::_build_to_global_dict() {
@@ -1305,7 +1309,7 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
         col->reserve(ordinals->size());
         col->resize(0);
 
-        RETURN_IF_ERROR(_column_iterators[cid]->fetch_values_by_rowid(*ordinals, col.get()));
+        RETURN_IF_ERROR(_column_decoders[cid].decode_values_by_rowid(*ordinals, col.get()));
         DCHECK_EQ(ordinals->size(), col->size());
         may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
     }

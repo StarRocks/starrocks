@@ -1010,7 +1010,9 @@ Status FileColumnIterator::_do_decode_dict_codes(const int32_t* codes, size_t si
     return Status::OK();
 }
 
-Status FileColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
+template <typename PageParseFunc>
+Status FileColumnIterator::_fetch_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values,
+                                           PageParseFunc&& page_parse) {
     DCHECK(std::is_sorted(rowids, rowids + size));
     RETURN_IF(size == 0, Status::OK());
     size_t prev_bytes = values->byte_size();
@@ -1031,7 +1033,8 @@ Status FileColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t s
                 curr = *p++;
             }
             size_t nread = p - rowids;
-            RETURN_IF_ERROR(_page->read(values, &nread));
+            // RETURN_IF_ERROR(_page->read(values, &nread));
+            RETURN_IF_ERROR(page_parse(values, &nread));
             _current_ordinal += nread;
             rowids = p;
         }
@@ -1041,6 +1044,16 @@ Status FileColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t s
     _opts.stats->bytes_read += values->byte_size() - prev_bytes;
     DCHECK_EQ(_current_ordinal, _page->first_ordinal() + _page->offset());
     return Status::OK();
+}
+
+Status FileColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
+    auto page_parse = [&](vectorized::Column* column, size_t* count) { return _page->read(column, count); };
+    return _fetch_by_rowid(rowids, size, values, page_parse);
+}
+
+Status FileColumnIterator::fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
+    auto page_parse = [&](vectorized::Column* column, size_t* count) { return _page->read_dict_codes(column, count); };
+    return _fetch_by_rowid(rowids, size, values, page_parse);
 }
 
 int FileColumnIterator::dict_size() {
@@ -1184,6 +1197,13 @@ Status ColumnIterator::fetch_values_by_rowid(const vectorized::Column& rowids, v
     const auto& numeric_col = down_cast<const vectorized::FixedLengthColumn<rowid_t>&>(rowids);
     const auto* p = reinterpret_cast<const rowid_t*>(numeric_col.get_data().data());
     return fetch_values_by_rowid(p, rowids.size(), values);
+}
+
+Status ColumnIterator::fetch_dict_codes_by_rowid(const vectorized::Column& rowids, vectorized::Column* values) {
+    static_assert(std::is_same_v<uint32_t, rowid_t>);
+    const auto& numeric_col = down_cast<const vectorized::FixedLengthColumn<rowid_t>&>(rowids);
+    const auto* p = reinterpret_cast<const rowid_t*>(numeric_col.get_data().data());
+    return fetch_dict_codes_by_rowid(p, rowids.size(), values);
 }
 
 } // namespace starrocks::segment_v2
