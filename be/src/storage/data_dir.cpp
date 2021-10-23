@@ -62,10 +62,9 @@ namespace starrocks {
 static const char* const kMtabPath = "/etc/mtab";
 static const char* const kTestFilePath = "/.testfile";
 
-DataDir::DataDir(std::string path, int64_t capacity_bytes, TStorageMedium::type storage_medium,
-                 TabletManager* tablet_manager, TxnManager* txn_manager)
+DataDir::DataDir(std::string path, TStorageMedium::type storage_medium, TabletManager* tablet_manager,
+                 TxnManager* txn_manager)
         : _path(std::move(path)),
-          _capacity_bytes(capacity_bytes),
           _available_bytes(0),
           _disk_capacity_bytes(0),
           _storage_medium(storage_medium),
@@ -94,7 +93,7 @@ Status DataDir::init(bool read_only) {
 
     RETURN_IF_ERROR_WITH_WARN(update_capacity(), "update_capacity failed");
     RETURN_IF_ERROR_WITH_WARN(_init_cluster_id(), "_init_cluster_id failed");
-    RETURN_IF_ERROR_WITH_WARN(_init_capacity(), "_init_capacity failed");
+    RETURN_IF_ERROR_WITH_WARN(_init_data_dir(), "_init_data_dir failed");
     RETURN_IF_ERROR_WITH_WARN(_init_file_system(), "_init_file_system failed");
     RETURN_IF_ERROR_WITH_WARN(_init_meta(read_only), "_init_meta failed");
 
@@ -178,17 +177,7 @@ Status DataDir::_read_cluster_id(const std::string& path, int32_t* cluster_id) {
     return Status::OK();
 }
 
-Status DataDir::_init_capacity() {
-    int64_t disk_capacity = std::filesystem::space(_path).capacity;
-    if (_capacity_bytes == -1) {
-        _capacity_bytes = disk_capacity;
-    } else if (_capacity_bytes > disk_capacity) {
-        RETURN_IF_ERROR_WITH_WARN(Status::InvalidArgument(strings::Substitute(
-                                          "root path $0's capacity $1 should not larger than disk capacity $2", _path,
-                                          _capacity_bytes, disk_capacity)),
-                                  "init capacity failed");
-    }
-
+Status DataDir::_init_data_dir() {
     std::string data_path = _path + DATA_PREFIX;
     if (!FileUtils::check_exist(data_path) && !FileUtils::create_dir(data_path).ok()) {
         RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("failed to create data root path $0", data_path)),

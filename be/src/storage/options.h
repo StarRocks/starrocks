@@ -34,12 +34,8 @@ class MemTracker;
 
 struct StorePath {
     StorePath() {}
-    StorePath(std::string path_, int64_t capacity_bytes_)
-            : path(std::move(path_)), capacity_bytes(capacity_bytes_), storage_medium(TStorageMedium::HDD) {}
-    StorePath(std::string path_, int64_t capacity_bytes_, TStorageMedium::type storage_medium_)
-            : path(std::move(path_)), capacity_bytes(capacity_bytes_), storage_medium(storage_medium_) {}
+    StorePath(std::string path_) : path(std::move(path_)), storage_medium(TStorageMedium::HDD) {}
     std::string path;
-    int64_t capacity_bytes{-1};
     TStorageMedium::type storage_medium{TStorageMedium::HDD};
 };
 
