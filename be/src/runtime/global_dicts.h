@@ -22,6 +22,15 @@ using GlobalDictMapEntity = std::pair<GlobalDictMap, RGlobalDictMap>;
 // column-id -> GlobalDictMap
 using GlobalDictMaps = std::unordered_map<uint32_t, GlobalDictMapEntity>;
 
+inline std::ostream& operator<<(std::ostream& stream, const RGlobalDictMap& map) {
+    stream << "[";
+    for (const auto& [k, v] : map) {
+        stream << "(" << k << "," << v << "),";
+    }
+    stream << "]";
+    return stream;
+}
+
 static inline std::unordered_map<uint32_t, GlobalDictMap*> EMPTY_GLOBAL_DICTMAPS;
 
 constexpr int DICT_DECODE_MAX_SIZE = 256;

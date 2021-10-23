@@ -8,6 +8,8 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/logging.h"
+#include "fmt/format.h"
 #include "glog/logging.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
@@ -73,10 +75,9 @@ Status DictDecodeNode::prepare(RuntimeState* state) {
         decoder->dict = dict_iter->second.second;
         _decoders.emplace_back(std::move(decoder));
     }
-    for (int i = 0; i < _decoders.size(); ++i) {
-        LOG(INFO) << "map --------";
-        for (auto& [key, value] : _decoders[i]->dict) {
-            LOG(INFO) << fmt::format("key:{}, value:{} ", key, std::string(value.data, value.size));
+    if (VLOG_ROW_IS_ON) {
+        for (int i = 0; i < _decoders.size(); ++i) {
+            VLOG_ROW << "map " << _encode_column_cids[i] << ":" << _decoders[i]->dict;
         }
     }
 

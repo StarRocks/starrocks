@@ -521,6 +521,8 @@ public:
         for (const auto& v : this->data(state).set) {
             tglobal_dict.strings.emplace_back(v.data, v.size);
         }
+        Slice::Comparator comparator;
+        std::sort(tglobal_dict.strings.begin(), tglobal_dict.strings.end(), comparator);
 
         std::string result_value = apache::thrift::ThriftJSONString(tglobal_dict);
 
