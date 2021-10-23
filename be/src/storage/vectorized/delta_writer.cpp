@@ -137,6 +137,7 @@ Status DeltaWriter::init() {
     writer_context.txn_id = _req.txn_id;
     writer_context.load_id = _req.load_id;
     writer_context.segments_overlap = OVERLAPPING;
+    writer_context.global_dicts = _req.global_dicts;
     Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
     if (!st.ok()) {
         std::stringstream ss;
@@ -268,6 +269,10 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
     PTabletInfo* tablet_info = tablet_vec->Add();
     tablet_info->set_tablet_id(_tablet->tablet_id());
     tablet_info->set_schema_hash(_tablet->schema_hash());
+    auto& invalid_global_dict_columns = _rowset_writer->invalid_global_dict_columns();
+    for (auto& item : invalid_global_dict_columns) {
+        tablet_info->add_invalid_dict_cache_columns(item);
+    }
 #endif
 
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
