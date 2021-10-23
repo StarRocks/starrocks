@@ -50,7 +50,7 @@ void set_up() {
     FileUtils::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
     FileUtils::create_dir(config::storage_root_path);
     std::vector<StorePath> paths;
-    paths.emplace_back(config::storage_root_path, -1);
+    paths.emplace_back(config::storage_root_path);
     config::min_file_descriptor_number = 1000;
     config::tablet_map_shard_size = 1;
     config::txn_map_shard_size = 1;

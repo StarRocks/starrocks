@@ -243,7 +243,7 @@ Status init_data_dir(const std::string& dir, std::unique_ptr<DataDir>* ret, bool
         return Status::InternalError("parse root path failed");
     }
 
-    std::unique_ptr<DataDir> p(new (std::nothrow) DataDir(path.path, path.capacity_bytes, path.storage_medium));
+    std::unique_ptr<DataDir> p(new (std::nothrow) DataDir(path.path, path.storage_medium));
     if (p == nullptr) {
         std::cout << "new data dir failed" << std::endl;
         return Status::InternalError("new data dir failed");
