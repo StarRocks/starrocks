@@ -96,8 +96,8 @@ private:
 
 class SchemaChange {
 public:
-    SchemaChange(MemTracker* mem_tracker) : _filtered_rows(0), _merged_rows(0) {
-        _mem_tracker = std::make_unique<MemTracker>(-1, "", mem_tracker, true);
+    SchemaChange(MemTracker* mem_tracker, size_t mem_limit) : _filtered_rows(0), _merged_rows(0) {
+        _mem_tracker = std::make_unique<MemTracker>(mem_limit, "", mem_tracker, true);
     }
     virtual ~SchemaChange() = default;
 
@@ -126,8 +126,8 @@ private:
 
 class LinkedSchemaChange : public SchemaChange {
 public:
-    explicit LinkedSchemaChange(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer)
-            : SchemaChange(mem_tracker), _row_block_changer(row_block_changer) {}
+    explicit LinkedSchemaChange(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer, size_t mem_limit)
+            : SchemaChange(mem_tracker, mem_limit), _row_block_changer(row_block_changer) {}
     ~LinkedSchemaChange() override { _mem_tracker->release(_mem_tracker->consumption()); }
 
     bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
@@ -144,7 +144,7 @@ class SchemaChangeDirectly : public SchemaChange {
 public:
     // @params tablet           the instance of tablet which has new schema.
     // @params row_block_changer    changer to modifiy the data of RowBlock
-    explicit SchemaChangeDirectly(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer);
+    explicit SchemaChangeDirectly(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer, size_t mem_limit);
     ~SchemaChangeDirectly() override;
 
     bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
