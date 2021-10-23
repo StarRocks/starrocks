@@ -301,11 +301,6 @@ public:
 
     Type type() const { return _type; }
 
-    size_t child_trackers_count() {
-        std::lock_guard<std::mutex> l(_child_trackers_lock);
-        return _child_trackers.size();
-    }
-
 private:
     // Walks the MemTracker hierarchy and populates _all_trackers and _limit_trackers
     void Init();
