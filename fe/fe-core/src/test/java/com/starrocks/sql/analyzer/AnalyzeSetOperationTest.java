@@ -62,4 +62,10 @@ public class AnalyzeSetOperationTest {
         analyzeFail("select b1 from test_object intersect select b1 from test_object",
                 "not support set operation");
     }
+
+    @Test
+    public void testValues() {
+        analyzeFail("(SELECT 1 AS c1, 2 AS c2) UNION ALL SELECT * FROM (VALUES (10, 1006), (NULL)) tmp",
+                "Values have unequal number of columns");
+    }
 }
