@@ -35,7 +35,7 @@
 
 namespace starrocks {
 
-class TabletSchemaMap;
+class GlobalTabletSchemaMap;
 
 namespace segment_v2 {
 class SegmentReaderWriterTest;
@@ -208,12 +208,18 @@ bool operator!=(const TabletColumn& a, const TabletColumn& b);
 
 class TabletSchema {
 public:
+    using UniqueId = int64_t;
+
+    constexpr static UniqueId invalid_id() { return 0; }
+
     TabletSchema() = default;
     explicit TabletSchema(const TabletSchemaPB& schema_pb) { init_from_pb(schema_pb); }
+    TabletSchema(const TabletSchemaPB& schema_pb, bool shared) : _is_shared(shared) { init_from_pb(schema_pb); }
     ~TabletSchema();
 
-    void init_from_pb(const TabletSchemaPB& schema);
     void to_schema_pb(TabletSchemaPB* tablet_meta_pb) const;
+
+    UniqueId unique_id() const { return _unique_id; }
     size_t row_size() const;
     size_t field_index(const std::string& field_name) const;
     const TabletColumn& column(size_t ordinal) const;
@@ -225,8 +231,7 @@ public:
     KeysType keys_type() const { return _keys_type; }
     CompressKind compress_kind() const { return _compress_kind; }
     size_t next_column_unique_id() const { return _next_column_unique_id; }
-    bool is_in_memory() const { return _is_in_memory; }
-    void set_is_in_memory(bool is_in_memory) { _is_in_memory = is_in_memory; }
+    bool is_in_memory() const { return false; }
 
     bool contains_format_v1_column() const;
     bool contains_format_v2_column() const;
@@ -243,7 +248,7 @@ public:
         return mem_usage;
     }
 
-    void set_share_key(int32_t share_key) { _share_key = share_key; }
+    bool shared() const { return _is_shared; }
 
 private:
     friend class segment_v2::SegmentReaderWriterTest;
@@ -253,13 +258,14 @@ private:
     friend bool operator==(const TabletSchema& a, const TabletSchema& b);
     friend bool operator!=(const TabletSchema& a, const TabletSchema& b);
 
+    void init_from_pb(const TabletSchemaPB& schema);
+
+    UniqueId _unique_id = invalid_id();
     double _bf_fpp = 0;
 
     std::vector<TabletColumn> _cols;
     size_t _num_rows_per_row_block = 0;
     size_t _next_column_unique_id = 0;
-
-    int32_t _share_key = 0;
 
     CompressKind _compress_kind = COMPRESS_NONE;
     KeysType _keys_type = DUP_KEYS;
@@ -269,7 +275,7 @@ private:
     uint16_t _num_short_key_columns = 0;
 
     bool _has_bf_fpp = false;
-    bool _is_in_memory = false;
+    bool _is_shared = false;
 };
 
 bool operator==(const TabletSchema& a, const TabletSchema& b);

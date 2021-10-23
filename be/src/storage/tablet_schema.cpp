@@ -394,12 +394,13 @@ bool TabletColumn::is_format_v2_column() const {
  ******************************************************************/
 
 TabletSchema::~TabletSchema() {
-    if (_share_key != 0) {
-        TabletSchemaMap::Instance()->erase(_share_key);
+    if (_is_shared != 0) {
+        GlobalTabletSchemaMap::Instance()->erase(_unique_id);
     }
 }
 
 void TabletSchema::init_from_pb(const TabletSchemaPB& schema) {
+    _unique_id = schema.has_unique_id() ? schema.unique_id() : invalid_id();
     _keys_type = schema.keys_type();
     _num_key_columns = 0;
     _num_null_columns = 0;
@@ -426,23 +427,25 @@ void TabletSchema::init_from_pb(const TabletSchemaPB& schema) {
         _has_bf_fpp = false;
         _bf_fpp = BLOOM_FILTER_DEFAULT_FPP;
     }
-    _is_in_memory = schema.is_in_memory();
+    DCHECK(!schema.is_in_memory()) << "in-memory tablet not supported";
 }
 
-void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_meta_pb) const {
-    tablet_meta_pb->set_keys_type(_keys_type);
+void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
+    if (_unique_id != invalid_id()) {
+        tablet_schema_pb->set_unique_id(_unique_id);
+    }
+    tablet_schema_pb->set_keys_type(_keys_type);
     for (auto& col : _cols) {
-        ColumnPB* column = tablet_meta_pb->add_column();
+        ColumnPB* column = tablet_schema_pb->add_column();
         col.to_schema_pb(column);
     }
-    tablet_meta_pb->set_num_short_key_columns(_num_short_key_columns);
-    tablet_meta_pb->set_num_rows_per_row_block(_num_rows_per_row_block);
-    tablet_meta_pb->set_compress_kind(_compress_kind);
+    tablet_schema_pb->set_num_short_key_columns(_num_short_key_columns);
+    tablet_schema_pb->set_num_rows_per_row_block(_num_rows_per_row_block);
+    tablet_schema_pb->set_compress_kind(_compress_kind);
     if (_has_bf_fpp) {
-        tablet_meta_pb->set_bf_fpp(_bf_fpp);
+        tablet_schema_pb->set_bf_fpp(_bf_fpp);
     }
-    tablet_meta_pb->set_next_column_unique_id(_next_column_unique_id);
-    tablet_meta_pb->set_is_in_memory(_is_in_memory);
+    tablet_schema_pb->set_next_column_unique_id(_next_column_unique_id);
 }
 
 bool TabletSchema::contains_format_v1_column() const {
@@ -551,7 +554,6 @@ bool operator==(const TabletSchema& a, const TabletSchema& b) {
     if (a._has_bf_fpp) {
         if (std::abs(a._bf_fpp - b._bf_fpp) > 1e-6) return false;
     }
-    if (a._is_in_memory != b._is_in_memory) return false;
     return true;
 }
 
@@ -583,8 +585,7 @@ std::string TabletSchema::debug_string() const {
     ss << "],keys_type=" << _keys_type << ",num_columns=" << num_columns() << ",num_key_columns=" << _num_key_columns
        << ",num_null_columns=" << _num_null_columns << ",num_short_key_columns=" << _num_short_key_columns
        << ",num_rows_per_row_block=" << _num_rows_per_row_block << ",compress_kind=" << _compress_kind
-       << ",next_column_unique_id=" << _next_column_unique_id << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp
-       << ",is_in_memory=" << _is_in_memory;
+       << ",next_column_unique_id=" << _next_column_unique_id << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp;
     return ss.str();
 }
 

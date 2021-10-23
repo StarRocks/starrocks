@@ -10,28 +10,56 @@
 
 namespace starrocks {
 
-class TabletSchemaMap {
+class GlobalTabletSchemaMap {
 public:
-    static TabletSchemaMap* Instance() {
-        static TabletSchemaMap instance;
+    using UniqueId = TabletSchema::UniqueId;
+    using SchemaPtr = std::shared_ptr<const TabletSchema>;
+
+    struct Stats {
+        // The total number of items stored in the map.
+        size_t num_items = 0;
+        // How many bytes occupied by the items stored in this map.
+        size_t memory_usage = 0;
+        // How many bytes saved by using the GlobalTabletSchemaMap.
+        size_t saved_memory_usage = 0;
+    };
+
+    static GlobalTabletSchemaMap* Instance() {
+        static GlobalTabletSchemaMap instance;
         return &instance;
     }
 
-    std::shared_ptr<const TabletSchema> get_or_create(int32_t schema_hash, const TabletSchemaPB& schema_pb);
+    // Inserts a new TabletSchema into the container constructed with the given arg if there is no TabletSchema with
+    // the the id of arg in the container.
+    //
+    // REQUIRE: arg.unique_id() != TabletSchema::invalid_id()
+    //
+    // Returns a pair consisting of a pointer to the inserted element, or the already-existing element if no insertion
+    // happened, and a bool denoting whether the insertion took place (true if insertion happened, false if it did not).
+    // [thread-safe]
+    std::pair<SchemaPtr, bool> emplace(const TabletSchemaPB& arg);
 
-    void erase(SchemaHash schema_hash);
+    // Removes the TabletSchema (if one exists) with the id equivalent to id.
+    //
+    // Returns number of elements removed (0 or 1).
+    // [thread-safe]
+    size_t erase(UniqueId id);
+
+    // NOTE: time complexity of method is high, don't call this method too often.
+    // [thread-safe]
+    Stats stats() const;
 
 private:
-    TabletSchemaMap() = default;
+    GlobalTabletSchemaMap() = default;
 
     constexpr static int kShardSize = 16;
 
     struct MapShard {
-        std::mutex mtx;
-        phmap::flat_hash_map<int32_t, std::weak_ptr<const TabletSchema>> map;
+        mutable std::mutex mtx;
+        phmap::flat_hash_map<UniqueId, std::weak_ptr<const TabletSchema>> map;
     };
 
-    MapShard* get_shard(int32_t h) { return &_map_shards[h % kShardSize]; }
+    MapShard* get_shard(UniqueId id) { return &_map_shards[id % kShardSize]; }
 
     MapShard _map_shards[kShardSize];
 };

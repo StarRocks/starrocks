@@ -165,11 +165,11 @@ public:
     inline const TabletSchema& tablet_schema() const;
 
     inline void set_tablet_schema(const std::shared_ptr<const TabletSchema>& tablet_schema) {
-        if (_schema != nullptr) {
+        if (_schema != nullptr && !_schema->shared()) {
             _mem_tracker->release(_schema->mem_usage());
         }
         _schema = tablet_schema;
-        _mem_tracker->consume(_schema->mem_usage());
+        _mem_tracker->consume(_schema->shared() ? 0 : _schema->mem_usage());
     }
 
     inline std::shared_ptr<const TabletSchema>& tablet_schema_ptr() { return _schema; }
