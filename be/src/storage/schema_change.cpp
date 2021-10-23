@@ -29,6 +29,7 @@
 #include <utility>
 #include <vector>
 
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/mem_pool.h"
@@ -73,7 +74,7 @@ private:
 
 class RowBlockMerger {
 public:
-    explicit RowBlockMerger(MemTracker* mem_tracker, TabletSharedPtr tablet);
+    explicit RowBlockMerger(TabletSharedPtr tablet);
     virtual ~RowBlockMerger();
 
     bool merge(const std::vector<RowBlock*>& row_block_arr, RowsetWriter* rowset_writer, uint64_t* merged_rows);
@@ -90,7 +91,6 @@ private:
     bool _make_heap(const std::vector<RowBlock*>& row_block_arr);
     bool _pop_heap();
 
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     TabletSharedPtr _tablet;
     std::priority_queue<MergeElement> _heap;
 };
@@ -910,9 +910,7 @@ void RowBlockAllocator::release(RowBlock* row_block) {
     delete row_block;
 }
 
-RowBlockMerger::RowBlockMerger(MemTracker* mem_tracker, TabletSharedPtr tablet) : _tablet(std::move(tablet)) {
-    _mem_tracker = std::make_unique<MemTracker>(-1, "block_merger", mem_tracker);
-}
+RowBlockMerger::RowBlockMerger(TabletSharedPtr tablet) : _tablet(std::move(tablet)) {}
 
 RowBlockMerger::~RowBlockMerger() = default;
 
@@ -1031,6 +1029,9 @@ bool RowBlockMerger::_pop_heap() {
 
 bool LinkedSchemaChange::process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer,
                                  TabletSharedPtr new_tablet, TabletSharedPtr base_tablet) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     OLAPStatus status = new_rowset_writer->add_rowset_for_linked_schema_change(rowset_reader->rowset(),
                                                                                _row_block_changer.get_schema_mapping());
     if (status != OLAP_SUCCESS) {
@@ -1044,8 +1045,9 @@ bool LinkedSchemaChange::process(RowsetReaderSharedPtr rowset_reader, RowsetWrit
     return true;
 }
 
-SchemaChangeDirectly::SchemaChangeDirectly(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer)
-        : SchemaChange(mem_tracker),
+SchemaChangeDirectly::SchemaChangeDirectly(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer,
+                                           size_t mem_limit)
+        : SchemaChange(mem_tracker, mem_limit),
           _row_block_changer(row_block_changer),
           _row_block_allocator(nullptr),
           _cursor(nullptr) {}
@@ -1054,9 +1056,6 @@ SchemaChangeDirectly::~SchemaChangeDirectly() {
     VLOG(3) << "~SchemaChangeDirectly()";
     SAFE_DELETE(_row_block_allocator);
     SAFE_DELETE(_cursor);
-    DCHECK_EQ(0, _mem_tracker->consumption());
-    // release the memory statistics just for safe
-    _mem_tracker->release(_mem_tracker->consumption());
 }
 
 bool SchemaChangeDirectly::_write_row_block(RowsetWriter* rowset_writer, RowBlock* row_block) {
@@ -1073,6 +1072,9 @@ bool SchemaChangeDirectly::_write_row_block(RowsetWriter* rowset_writer, RowBloc
 
 bool SchemaChangeDirectly::process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* rowset_writer,
                                    TabletSharedPtr new_tablet, TabletSharedPtr base_tablet) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     if (_row_block_allocator == nullptr) {
         _row_block_allocator = new RowBlockAllocator(new_tablet->tablet_schema(), 0);
         if (_row_block_allocator == nullptr) {
@@ -1199,7 +1201,7 @@ DIRECTLY_PROCESS_ERR:
 
 SchemaChangeWithSorting::SchemaChangeWithSorting(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer,
                                                  size_t memory_limitation)
-        : SchemaChange(mem_tracker),
+        : SchemaChange(mem_tracker, memory_limitation),
           _row_block_changer(row_block_changer),
           _memory_limitation(memory_limitation),
           _row_block_allocator(nullptr) {
@@ -1214,13 +1216,13 @@ SchemaChangeWithSorting::SchemaChangeWithSorting(MemTracker* mem_tracker, const 
 SchemaChangeWithSorting::~SchemaChangeWithSorting() {
     VLOG(3) << "~SchemaChangeWithSorting()";
     SAFE_DELETE(_row_block_allocator);
-    DCHECK_EQ(0, _mem_tracker->consumption());
-    // release the memory statistics just for safe
-    _mem_tracker->release(_mem_tracker->consumption());
 }
 
 bool SchemaChangeWithSorting::process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer,
                                       TabletSharedPtr new_tablet, TabletSharedPtr base_tablet) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     if (_row_block_allocator == nullptr) {
         _row_block_allocator = new (nothrow) RowBlockAllocator(new_tablet->tablet_schema(), _memory_limitation);
         if (_row_block_allocator == nullptr) {
@@ -1435,7 +1437,7 @@ bool SchemaChangeWithSorting::_internal_sorting(const std::vector<RowBlock*>& ro
                                                 RowsetTypePB new_rowset_type, SegmentsOverlapPB segments_overlap,
                                                 RowsetSharedPtr* rowset) {
     uint64_t merged_rows = 0;
-    RowBlockMerger merger(_mem_tracker.get(), new_tablet);
+    RowBlockMerger merger(new_tablet);
 
     RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -1815,16 +1817,20 @@ OLAPStatus SchemaChangeHandler::_convert_historical_rowsets(const SchemaChangePa
 
     // b. create converter for history data
     if (sc_sorting) {
-        size_t memory_limitation = config::memory_limitation_per_thread_for_schema_change;
         LOG(INFO) << "doing schema change with sorting for base_tablet " << sc_params.base_tablet->full_name();
-        sc_procedure =
-                new (nothrow) SchemaChangeWithSorting(mem_tracker, rb_changer, memory_limitation * 1024 * 1024 * 1024);
+        size_t memory_limitation =
+                static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
+        sc_procedure = new (nothrow) SchemaChangeWithSorting(mem_tracker, rb_changer, memory_limitation);
     } else if (sc_directly) {
         LOG(INFO) << "doing schema change directly for base_tablet " << sc_params.base_tablet->full_name();
-        sc_procedure = new (nothrow) SchemaChangeDirectly(mem_tracker, rb_changer);
+        size_t memory_limitation =
+                static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
+        sc_procedure = new (nothrow) SchemaChangeDirectly(mem_tracker, rb_changer, memory_limitation);
     } else {
         LOG(INFO) << "doing linked schema change for base_tablet " << sc_params.base_tablet->full_name();
-        sc_procedure = new (nothrow) LinkedSchemaChange(mem_tracker, rb_changer);
+        size_t memory_limitation =
+                static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
+        sc_procedure = new (nothrow) LinkedSchemaChange(mem_tracker, rb_changer, memory_limitation);
     }
 
     if (sc_procedure == nullptr) {
