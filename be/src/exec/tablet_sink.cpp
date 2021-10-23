@@ -146,7 +146,6 @@ void NodeChannel::open() {
             auto dict = it->second.first;
             for (auto& item : dict) {
                 slot->add_global_dict_words(item.first.to_string());
-                slot->add_global_dict_ids(item.second);
             }
         }
     }
