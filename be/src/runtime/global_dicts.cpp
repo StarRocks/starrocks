@@ -1,3 +1,5 @@
+#include "runtime/global_dicts.h"
+
 #include <algorithm>
 #include <cstring>
 #include <memory>
@@ -12,7 +14,6 @@
 #include "exprs/vectorized/column_ref.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
-#include "runtime/global_dicts.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
@@ -39,6 +40,7 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
                                    int32_t targetSlotId) {
     DCHECK(dict_opt_ctx->could_apply_dict_optimize);
     SlotId need_decode_slot_id = dict_opt_ctx->slot_id;
+    DCHECK(_mutable_dict_maps->count(need_decode_slot_id) > 0);
     // Slice -> dict-code
     auto& column_dict_map = _mutable_dict_maps->at(need_decode_slot_id).first;
 
