@@ -80,7 +80,6 @@ public:
               _src_slots(src_slots) {}
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        DCHECK_NOTNULL(_dst_slots);
         return std::make_shared<UnionPassthroughOperator>(_id, _plan_node_id, _dst2src_slot_map, _dst_slots,
                                                           _src_slots);
     }

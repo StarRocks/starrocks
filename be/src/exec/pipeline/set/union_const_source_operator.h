@@ -63,6 +63,7 @@ public:
         size_t rows_total = _const_expr_lists.size();
         size_t rows_num_per_driver = (rows_total + degree_of_parallelism - 1) / degree_of_parallelism;
         size_t rows_offset = rows_num_per_driver * driver_sequence;
+        DCHECK(rows_total > rows_offset);
         size_t rows_count = std::min(rows_num_per_driver, rows_total - rows_offset);
 
         return std::make_shared<UnionConstSourceOperator>(_id, _plan_node_id, _dst_slots,

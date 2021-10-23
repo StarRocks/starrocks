@@ -363,10 +363,14 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         const auto& dst_tuple_desc =
                 context->fragment_context()->runtime_state()->desc_tbl().get_tuple_descriptor(_tuple_id);
         const auto& dst_slots = dst_tuple_desc->slots();
-
         auto union_const_source_op = std::make_shared<pipeline::UnionConstSourceOperatorFactory>(
                 context->next_operator_id(), id(), dst_slots, _const_expr_lists);
-        union_const_source_op->set_degree_of_parallelism(context->degree_of_parallelism());
+
+        size_t parallelism =
+                std::min(context->degree_of_parallelism(),
+                         (_const_expr_lists.size() + config::vector_chunk_size - 1) / config::vector_chunk_size);
+        union_const_source_op->set_degree_of_parallelism(parallelism);
+
         operators_list[i].emplace_back(std::move(union_const_source_op));
     }
 
