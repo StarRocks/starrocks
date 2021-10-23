@@ -152,14 +152,22 @@ public class PushDownJoinAggRule extends TransformationRule {
 
         ColumnRefSet newJoinPruneOutPutColumns = new ColumnRefSet(leftOutput);
         newJoinPruneOutPutColumns.union(rightAggExpression.inputAt(0).getOutputColumns());
-        LogicalJoinOperator newJoin = new LogicalJoinOperator.Builder().withOperator(inputJoinOperator)
+        LogicalJoinOperator.Builder newJoinBuilder = new LogicalJoinOperator.Builder().withOperator(inputJoinOperator)
                 .setOnPredicate(Utils.compoundAnd(newJoinOnPredicate))
-                .setPredicate(Utils.compoundAnd(newJoinFilterPredicate))
-                .setProjection(new Projection(newJoinPruneOutPutColumns.getStream().mapToObj(factory::getColumnRef)
-                        .collect(Collectors.toMap(Function.identity(), Function.identity())), new HashMap<>()))
-                .build();
+                .setPredicate(Utils.compoundAnd(newJoinFilterPredicate));
 
-        OptExpression newJoinExpression = new OptExpression(newJoin);
+        ColumnRefSet inputColumns = new ColumnRefSet();
+        inputColumns.union(input.inputAt(0).getOutputColumns());
+        inputColumns.union(rightAggExpression.inputAt(0).getOutputColumns());
+        if (newJoinPruneOutPutColumns.equals(inputColumns)) {
+            newJoinBuilder.setProjection(null);
+        } else {
+            newJoinBuilder.setProjection(
+                    new Projection(newJoinPruneOutPutColumns.getStream().mapToObj(factory::getColumnRef)
+                            .collect(Collectors.toMap(Function.identity(), Function.identity())), new HashMap<>()));
+        }
+
+        OptExpression newJoinExpression = new OptExpression(newJoinBuilder.build());
         newJoinExpression.getInputs().add(input.getInputs().get(0));
         newJoinExpression.getInputs().addAll(rightAggExpression.getInputs());
 

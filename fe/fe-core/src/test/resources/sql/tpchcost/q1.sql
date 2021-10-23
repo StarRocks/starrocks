@@ -66,13 +66,13 @@ HASH_PARTITIONED: 9: L_RETURNFLAG, 10: L_LINESTATUS
 |  use vectorized: true
 |
 1:Project
-|  <slot 18> : 29: multiply
-|  <slot 19> : 29: multiply * 1.0 + 8: L_TAX
 |  <slot 5> : 5: L_QUANTITY
 |  <slot 6> : 6: L_EXTENDEDPRICE
 |  <slot 7> : 7: L_DISCOUNT
 |  <slot 9> : 9: L_RETURNFLAG
 |  <slot 10> : 10: L_LINESTATUS
+|  <slot 18> : 29: multiply
+|  <slot 19> : 29: multiply * 1.0 + 8: L_TAX
 |  common expressions:
 |  <slot 28> : 1.0 - 7: L_DISCOUNT
 |  <slot 29> : 6: L_EXTENDEDPRICE * 28: subtract
@@ -176,13 +176,13 @@ OutPut Exchange Id: 03
 |
 1:Project
 |  output columns:
-|  18 <-> [29: multiply, DOUBLE, false]
-|  19 <-> [29: multiply, DOUBLE, false] * 1.0 + [8: L_TAX, DOUBLE, false]
 |  5 <-> [5: L_QUANTITY, DOUBLE, false]
 |  6 <-> [6: L_EXTENDEDPRICE, DOUBLE, false]
 |  7 <-> [7: L_DISCOUNT, DOUBLE, false]
 |  9 <-> [9: L_RETURNFLAG, CHAR, false]
 |  10 <-> [10: L_LINESTATUS, CHAR, false]
+|  18 <-> [29: multiply, DOUBLE, false]
+|  19 <-> [29: multiply, DOUBLE, false] * 1.0 + [8: L_TAX, DOUBLE, false]
 |  common expressions:
 |  28 <-> 1.0 - [7: L_DISCOUNT, DOUBLE, false]
 |  29 <-> [6: L_EXTENDEDPRICE, DOUBLE, false] * [28: subtract, DOUBLE, false]

@@ -509,7 +509,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 4: S_NATIONKEY = 9: N_NATIONKEY"));
-        Assert.assertTrue(plan.contains("17:HASH JOIN\n" +
+        Assert.assertTrue(plan.contains("18:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +

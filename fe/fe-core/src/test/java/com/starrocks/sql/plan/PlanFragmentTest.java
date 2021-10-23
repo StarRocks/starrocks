@@ -3773,9 +3773,9 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("8:Project\n" +
                 "  |  output columns:\n" +
+                "  |  11 <-> [11: O_CUSTKEY, INT, false]\n" +
                 "  |  25 <-> [25: L_EXTENDEDPRICE, DOUBLE, false]\n" +
                 "  |  26 <-> [26: L_DISCOUNT, DOUBLE, false]\n" +
-                "  |  11 <-> [11: O_CUSTKEY, INT, false]\n" +
                 "  |  cardinality: 0\n" +
                 "  |  column statistics: \n" +
                 "  |  * O_CUSTKEY-->[1.0, 149999.0, 0.0, 8.0, 99996.0]\n" +

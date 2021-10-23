@@ -106,10 +106,10 @@ HASH_PARTITIONED: 69: year
 |       use vectorized: true
 |
 26:Project
-|  <slot 40> : 40: O_ORDERDATE
+|  <slot 14> : 14: S_NATIONKEY
 |  <slot 24> : 24: L_EXTENDEDPRICE
 |  <slot 25> : 25: L_DISCOUNT
-|  <slot 14> : 14: S_NATIONKEY
+|  <slot 40> : 40: O_ORDERDATE
 |  use vectorized: true
 |
 25:HASH JOIN
@@ -164,9 +164,9 @@ BUCKET_SHFFULE_HASH_PARTITIONED: 21: L_SUPPKEY
 
 23:Project
 |  <slot 21> : 21: L_SUPPKEY
-|  <slot 40> : 40: O_ORDERDATE
 |  <slot 24> : 24: L_EXTENDEDPRICE
 |  <slot 25> : 25: L_DISCOUNT
+|  <slot 40> : 40: O_ORDERDATE
 |  use vectorized: true
 |
 22:HASH JOIN
@@ -214,11 +214,11 @@ EXCHANGE ID: 21
 BUCKET_SHFFULE_HASH_PARTITIONED: 37: O_CUSTKEY
 
 20:Project
-|  <slot 37> : 37: O_CUSTKEY
 |  <slot 21> : 21: L_SUPPKEY
-|  <slot 40> : 40: O_ORDERDATE
 |  <slot 24> : 24: L_EXTENDEDPRICE
 |  <slot 25> : 25: L_DISCOUNT
+|  <slot 37> : 37: O_CUSTKEY
+|  <slot 40> : 40: O_ORDERDATE
 |  use vectorized: true
 |
 19:HASH JOIN

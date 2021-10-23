@@ -104,8 +104,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "join test_all_type b on a.id_date = b.id_datetime ;";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n"
-                + "  |  <slot 22> : CAST(9: id_date AS DATETIME)\n"
-                + "  |  <slot 9> : 9: id_date\n"));
+                + "  |  <slot 9> : 9: id_date\n"
+                + "  |  <slot 22> : CAST(9: id_date AS DATETIME)\n"));
     }
 
     @Test
@@ -241,13 +241,13 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String planFragment = getCostExplain(sql);
         Assert.assertTrue(planFragment.contains("9:Project\n" +
                 "  |  output columns:\n" +
-                "  |  16 <-> [16: S_ACCTBAL, DOUBLE, false]\n" +
                 "  |  1 <-> [1: P_PARTKEY, INT, false]\n" +
-                "  |  17 <-> [17: S_COMMENT, VARCHAR, false]\n" +
                 "  |  3 <-> [3: P_MFGR, VARCHAR, false]\n" +
                 "  |  12 <-> [12: S_NAME, CHAR, false]\n" +
                 "  |  13 <-> [13: S_ADDRESS, VARCHAR, false]\n" +
                 "  |  15 <-> [15: S_PHONE, CHAR, false]\n" +
+                "  |  16 <-> [16: S_ACCTBAL, DOUBLE, false]\n" +
+                "  |  17 <-> [17: S_COMMENT, VARCHAR, false]\n" +
                 "  |  cardinality: 400000"));
     }
 

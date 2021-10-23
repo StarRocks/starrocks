@@ -205,9 +205,9 @@ OutPut Exchange Id: 11
 
 10:Project
 |  output columns:
-|  16 <-> [16: PS_AVAILQTY, INT, false]
 |  14 <-> [14: PS_PARTKEY, INT, false]
 |  15 <-> [15: PS_SUPPKEY, INT, false]
+|  16 <-> [16: PS_AVAILQTY, INT, false]
 |  cardinality: 20000000
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]

@@ -46,11 +46,6 @@ public class PruneProjectRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         ColumnRefSet output = ((LogicalProjectOperator) input.getOp()).getOutputColumns(null);
 
-        ColumnRefSet childOutput = input.getInputs().get(0).getOutputColumns();
-        //if (output.isSame(childOutput)) {
-        //    return input.getInputs();
-        // }
-
         if (output.isEmpty()) {
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
 

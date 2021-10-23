@@ -77,8 +77,8 @@ OutPut Exchange Id: 25
 |
 23:Project
 |  output columns:
-|  54 <-> [25: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [26: L_DISCOUNT, DOUBLE, false]
 |  46 <-> [46: N_NAME, VARCHAR, false]
+|  54 <-> [25: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [26: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 16390852
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]

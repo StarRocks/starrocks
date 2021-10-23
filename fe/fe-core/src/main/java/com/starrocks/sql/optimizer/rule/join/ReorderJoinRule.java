@@ -66,7 +66,7 @@ public class ReorderJoinRule extends Rule {
                 multiJoinNode.getPredicates());
 
         List<OptExpression> reorderTopKResult = reorderAlgorithm.getResult();
-        LogicalOperator oldRoot = (LogicalOperator) innerJoinRoot.getOp();
+        LogicalJoinOperator oldRoot = (LogicalJoinOperator) innerJoinRoot.getOp();
 
         // Set limit to top join if needed
         if (oldRoot.hasLimit()) {
@@ -76,19 +76,29 @@ public class ReorderJoinRule extends Rule {
         }
 
         OutputColumnsPrune prune = new OutputColumnsPrune(context);
-        if (oldRoot.getProjection() != null) {
-            for (OptExpression joinExpr : reorderTopKResult) {
-                joinExpr.getOp().setProjection(oldRoot.getProjection());
-                ColumnRefSet requireInputColumns = ((LogicalJoinOperator) joinExpr.getOp()).getRequiredChildInputColumns();
-
-                for (int i = 0; i < joinExpr.arity(); ++i) {
-                    OptExpression optExpression = prune.rewrite(joinExpr.inputAt(i), requireInputColumns);
-                    joinExpr.setChild(i, optExpression);
-                }
-            }
-        }
 
         for (OptExpression joinExpr : reorderTopKResult) {
+            joinExpr.getOp().setProjection(oldRoot.getProjection());
+            ColumnRefSet requireInputColumns = ((LogicalJoinOperator) joinExpr.getOp()).getRequiredChildInputColumns();
+
+            if (joinExpr.getOp().getProjection() == null) {
+                ColumnRefSet outputColumns = new ColumnRefSet();
+                innerJoinRoot.getInputs().forEach(opt -> outputColumns.union(opt.getOutputColumns()));
+                requireInputColumns.union(outputColumns);
+
+                Projection topProjection = new Projection(outputColumns.getStream()
+                        .mapToObj(context.getColumnRefFactory()::getColumnRef)
+                        .collect(Collectors.toMap(Function.identity(), Function.identity())), new HashMap<>());
+                joinExpr.getOp().setProjection(topProjection);
+            }
+
+            for (int i = 0; i < joinExpr.arity(); ++i) {
+                OptExpression optExpression = prune.rewrite(joinExpr.inputAt(i), requireInputColumns);
+                joinExpr.setChild(i, optExpression);
+            }
+
+            joinExpr = new RemoveDuplicateProject(context).rewrite(joinExpr);
+
             context.getMemo().copyIn(innerJoinRoot.getGroupExpression().getGroup(), joinExpr);
         }
     }
@@ -166,16 +176,20 @@ public class ReorderJoinRule extends Rule {
                 }
             }
             requireColumns = ((LogicalJoinOperator) optExpression.getOp()).getRequiredChildInputColumns();
+
+            ColumnRefSet childInputColumns = new ColumnRefSet();
+            optExpression.getInputs().forEach(opt -> childInputColumns.union(
+                    ((LogicalOperator) opt.getOp()).getOutputColumns(new ExpressionContext(opt))));
+
+            LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder()
+                    .withOperator((LogicalJoinOperator) optExpression.getOp())
+                    .setProjection(new Projection(newOutputColumns.getStream()
+                            .mapToObj(optimizerContext.getColumnRefFactory()::getColumnRef)
+                            .collect(Collectors.toMap(Function.identity(), Function.identity())),
+                            new HashMap<>()))
+                    .build();
+
             requireColumns.union(newOutputColumns);
-
-            LogicalJoinOperator joinOperator =
-                    new LogicalJoinOperator.Builder().withOperator((LogicalJoinOperator) optExpression.getOp())
-                            .setProjection(new Projection(newOutputColumns.getStream()
-                                    .mapToObj(optimizerContext.getColumnRefFactory()::getColumnRef)
-                                    .collect(Collectors.toMap(Function.identity(), Function.identity())),
-                                    new HashMap<>()))
-                            .build();
-
             OptExpression left = rewrite(optExpression.inputAt(0), (ColumnRefSet) requireColumns.clone());
             OptExpression right = rewrite(optExpression.inputAt(1), (ColumnRefSet) requireColumns.clone());
 
@@ -188,6 +202,68 @@ public class ReorderJoinRule extends Rule {
             statisticsCalculator.estimatorStats();
             joinOpt.setStatistics(expressionContext.getStatistics());
             return joinOpt;
+        }
+    }
+
+    public static class RemoveDuplicateProject extends OptExpressionVisitor<OptExpression, Void> {
+        private final OptimizerContext optimizerContext;
+
+        public RemoveDuplicateProject(OptimizerContext optimizerContext) {
+            this.optimizerContext = optimizerContext;
+        }
+
+        public OptExpression rewrite(OptExpression optExpression) {
+            Operator operator = optExpression.getOp();
+            if (operator.getProjection() != null) {
+                Projection projection = operator.getProjection();
+
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
+                    if (!entry.getValue().isColumnRef()) {
+                        return optExpression;
+                    }
+
+                    if (!entry.getKey().equals(entry.getValue())) {
+                        return optExpression;
+                    }
+                }
+            }
+
+            return optExpression.getOp().accept(this, optExpression, null);
+        }
+
+        @Override
+        public OptExpression visit(OptExpression optExpression, Void context) {
+            return optExpression;
+        }
+
+        @Override
+        public OptExpression visitLogicalJoin(OptExpression optExpression, Void context) {
+            ColumnRefSet outputColumns = new ColumnRefSet(optExpression.getOp().getProjection().getOutputColumns());
+            ColumnRefSet childInputColumns = new ColumnRefSet();
+            optExpression.getInputs().forEach(opt -> childInputColumns.union(
+                    ((LogicalOperator) opt.getOp()).getOutputColumns(new ExpressionContext(opt))));
+
+            OptExpression left = rewrite(optExpression.inputAt(0));
+            OptExpression right = rewrite(optExpression.inputAt(1));
+
+            if (childInputColumns.equals(outputColumns)) {
+                LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder().withOperator(
+                                (LogicalJoinOperator) optExpression.getOp())
+                        .setProjection(null).build();
+                OptExpression joinOpt = OptExpression.create(joinOperator, Lists.newArrayList(left, right));
+                joinOpt.deriveLogicalPropertyItself();
+
+                ExpressionContext expressionContext = new ExpressionContext(joinOpt);
+                StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
+                        expressionContext, optimizerContext.getColumnRefFactory(), optimizerContext.getDumpInfo());
+                statisticsCalculator.estimatorStats();
+                joinOpt.setStatistics(expressionContext.getStatistics());
+                return joinOpt;
+            } else {
+                optExpression.setChild(0, left);
+                optExpression.setChild(1, right);
+                return optExpression;
+            }
         }
     }
 }

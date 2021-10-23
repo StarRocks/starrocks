@@ -86,10 +86,10 @@ OutPut Exchange Id: 12
 |
 10:Project
 |  output columns:
+|  14 <-> [14: O_ORDERDATE, DATE, false]
 |  17 <-> [17: O_SHIPPRIORITY, INT, false]
 |  20 <-> [20: L_ORDERKEY, INT, false]
 |  37 <-> [25: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [26: L_DISCOUNT, DOUBLE, false]
-|  14 <-> [14: O_ORDERDATE, DATE, false]
 |  cardinality: 31332052
 |  column statistics:
 |  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0]
@@ -150,9 +150,9 @@ OutPut Exchange Id: 08
 
 7:Project
 |  output columns:
-|  17 <-> [17: O_SHIPPRIORITY, INT, false]
 |  10 <-> [10: O_ORDERKEY, INT, false]
 |  14 <-> [14: O_ORDERDATE, DATE, false]
+|  17 <-> [17: O_SHIPPRIORITY, INT, false]
 |  cardinality: 14532225
 |  column statistics:
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]

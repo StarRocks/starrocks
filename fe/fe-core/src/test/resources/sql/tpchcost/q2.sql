@@ -68,14 +68,14 @@ UNPARTITIONED
 |  use vectorized: true
 |
 36:Project
-|  <slot 16> : 16: S_ACCTBAL
-|  <slot 17> : 17: S_COMMENT
 |  <slot 1> : 1: P_PARTKEY
 |  <slot 3> : 3: P_MFGR
-|  <slot 26> : 26: N_NAME
 |  <slot 12> : 12: S_NAME
 |  <slot 13> : 13: S_ADDRESS
 |  <slot 15> : 15: S_PHONE
+|  <slot 16> : 16: S_ACCTBAL
+|  <slot 17> : 17: S_COMMENT
+|  <slot 26> : 26: N_NAME
 |  use vectorized: true
 |
 35:HASH JOIN
@@ -89,13 +89,13 @@ UNPARTITIONED
 |       use vectorized: true
 |
 9:Project
-|  <slot 16> : 16: S_ACCTBAL
-|  <slot 17> : 17: S_COMMENT
-|  <slot 26> : 26: N_NAME
 |  <slot 11> : 11: S_SUPPKEY
 |  <slot 12> : 12: S_NAME
 |  <slot 13> : 13: S_ADDRESS
 |  <slot 15> : 15: S_PHONE
+|  <slot 16> : 16: S_ACCTBAL
+|  <slot 17> : 17: S_COMMENT
+|  <slot 26> : 26: N_NAME
 |  use vectorized: true
 |
 8:HASH JOIN
@@ -437,14 +437,14 @@ OutPut Exchange Id: 38
 |
 36:Project
 |  output columns:
-|  16 <-> [16: S_ACCTBAL, DOUBLE, false]
-|  17 <-> [17: S_COMMENT, VARCHAR, false]
 |  1 <-> [1: P_PARTKEY, INT, false]
 |  3 <-> [3: P_MFGR, VARCHAR, false]
-|  26 <-> [26: N_NAME, VARCHAR, false]
 |  12 <-> [12: S_NAME, VARCHAR, false]
 |  13 <-> [13: S_ADDRESS, VARCHAR, false]
 |  15 <-> [15: S_PHONE, VARCHAR, false]
+|  16 <-> [16: S_ACCTBAL, DOUBLE, false]
+|  17 <-> [17: S_COMMENT, VARCHAR, false]
+|  26 <-> [26: N_NAME, VARCHAR, false]
 |  cardinality: 57600
 |  column statistics:
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
@@ -479,13 +479,13 @@ OutPut Exchange Id: 38
 |
 9:Project
 |  output columns:
-|  16 <-> [16: S_ACCTBAL, DOUBLE, false]
-|  17 <-> [17: S_COMMENT, VARCHAR, false]
-|  26 <-> [26: N_NAME, VARCHAR, false]
 |  11 <-> [11: S_SUPPKEY, INT, false]
 |  12 <-> [12: S_NAME, CHAR, false]
 |  13 <-> [13: S_ADDRESS, VARCHAR, false]
 |  15 <-> [15: S_PHONE, CHAR, false]
+|  16 <-> [16: S_ACCTBAL, DOUBLE, false]
+|  17 <-> [17: S_COMMENT, VARCHAR, false]
+|  26 <-> [26: N_NAME, VARCHAR, false]
 |  cardinality: 200000
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
