@@ -153,38 +153,37 @@ static EncodingTypePB convertEncodingType(TEncodingType::type encoding_type) {
     case TEncodingType::FOR_ENCODING:
         return EncodingTypePB::FOR_ENCODING;
     default:
-        return EncodingTypePB::DEFAULT_ENCODING; 
+        return EncodingTypePB::DEFAULT_ENCODING;
     }
 }
 
 // convert thrift encoding type to protobuf encoding type
 static CompressionTypePB convertCompressionType(TCompressionType::type compression_type) {
-    switch (compression_type)
-    {
+    switch (compression_type) {
     case TCompressionType::UNKNOWN_COMPRESSION:
-       return CompressionTypePB::UNKNOWN_COMPRESSION;
+        return CompressionTypePB::UNKNOWN_COMPRESSION;
     case TCompressionType::DEFAULT_COMPRESSION:
-       return CompressionTypePB::DEFAULT_COMPRESSION;
+        return CompressionTypePB::DEFAULT_COMPRESSION;
     case TCompressionType::NO_COMPRESSION:
-       return CompressionTypePB::NO_COMPRESSION;
+        return CompressionTypePB::NO_COMPRESSION;
     case TCompressionType::SNAPPY:
-       return CompressionTypePB::SNAPPY;
+        return CompressionTypePB::SNAPPY;
     case TCompressionType::LZ4:
-       return CompressionTypePB::LZ4;
+        return CompressionTypePB::LZ4;
     case TCompressionType::LZ4_FRAME:
-       return CompressionTypePB::LZ4_FRAME;
+        return CompressionTypePB::LZ4_FRAME;
     case TCompressionType::ZLIB:
-       return CompressionTypePB::ZLIB;
+        return CompressionTypePB::ZLIB;
     case TCompressionType::ZSTD:
-       return CompressionTypePB::ZSTD;
+        return CompressionTypePB::ZSTD;
     case TCompressionType::GZIP:
-       return CompressionTypePB::GZIP;
+        return CompressionTypePB::GZIP;
     case TCompressionType::DEFLATE:
-       return CompressionTypePB::DEFLATE;
+        return CompressionTypePB::DEFLATE;
     case TCompressionType::BZIP2:
-       return CompressionTypePB::BZIP2;
+        return CompressionTypePB::BZIP2;
     case TCompressionType::LZO:
-       return CompressionTypePB::LZO;
+        return CompressionTypePB::LZO;
     default:
         return CompressionTypePB::DEFAULT_COMPRESSION;
     }
@@ -216,7 +215,7 @@ static Status TColumn2ColumnPB(int32_t unique_id, const TColumn& t_column, Field
     if (t_column.__isset.compression) {
         column_pb->set_compression(convertCompressionType(t_column.compression));
     }
-    
+
     if (depth > 0 || is_key) {
         auto agg_method = OLAP_FIELD_AGGREGATION_NONE;
         column_pb->set_aggregation(TabletColumn::get_string_by_aggregation_type(agg_method));

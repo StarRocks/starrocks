@@ -32,13 +32,13 @@
 #include "storage/row.h"                             // ContiguousRow
 #include "storage/row_cursor.h"                      // RowCursor
 #include "storage/rowset/segment_v2/column_writer.h" // ColumnWriter
+#include "storage/rowset/segment_v2/encoding_info.h"
 #include "storage/rowset/segment_v2/page_io.h"
 #include "storage/schema.h"
 #include "storage/short_key_index.h"
 #include "storage/vectorized/seek_tuple.h"
 #include "util/crc32c.h"
 #include "util/faststring.h"
-#include "storage/rowset/segment_v2/encoding_info.h"
 
 namespace starrocks::segment_v2 {
 
