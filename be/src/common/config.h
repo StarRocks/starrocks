@@ -589,7 +589,7 @@ CONF_mInt16(storage_format_version, "2");
 // DO NOT change this config unless you known how.
 // 0 for BITSHUFFLE_NULL
 // 1 for LZ4_NULL
-CONF_mInt16(null_format, "0");
+CONF_mInt16(null_encoding, "0");
 
 // do pre-aggregate if effect great than the factor, factor range:[1-100].
 CONF_Int16(pre_aggregate_factor, "80");
