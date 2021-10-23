@@ -27,6 +27,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.TimeoutException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -138,11 +139,11 @@ public class Util {
         }
     }
 
-    public static CommandResult executeCommand(String cmd, String[] envp) {
+    public static CommandResult executeCommand(String cmd, String[] envp) throws TimeoutException {
         return executeCommand(cmd, envp, DEFAULT_EXEC_CMD_TIMEOUT_MS);
     }
 
-    public static CommandResult executeCommand(String cmd, String[] envp, long timeoutMs) {
+    public static CommandResult executeCommand(String cmd, String[] envp, long timeoutMs) throws TimeoutException {
         CommandResult result = new CommandResult();
         List<String> cmdList = shellSplit(cmd);
         String[] cmds = cmdList.toArray(new String[0]);
@@ -157,10 +158,10 @@ public class Util {
                 cmdWorker.join(timeoutMs);
                 exitValue = cmdWorker.getExitValue();
                 if (exitValue == null) {
-                    // if we get this far then we never got an exit value from the worker thread
-                    // as a result of a timeout 
-                    LOG.warn("exec command [{}] timed out.", cmd);
-                    exitValue = -1;
+                    // timeout if we get null exit value from work thread
+                    String msg = String.format("exec command [%s] timed out.", cmd);
+                    LOG.warn(msg);
+                    throw new TimeoutException(msg);
                 }
             } catch (InterruptedException ex) {
                 cmdWorker.interrupt();
