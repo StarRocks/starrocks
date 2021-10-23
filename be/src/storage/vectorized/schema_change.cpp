@@ -546,7 +546,7 @@ ChunkMerger::~ChunkMerger() {
     }
     // TODO zhangqiang
     // release the memory statistics just for safe
-    // re-counting memory usage after after new memory-count framework launched
+    // re-counting memory usage after new memory statistics framework is launched
     _mem_tracker->release(_mem_tracker->consumption());
 }
 
@@ -580,11 +580,11 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
     };
 
     _make_heap(chunk_arr);
-    size_t nread;
+    size_t nread = 0;
     vectorized::Schema new_schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ChunkPtr tmp_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
     // TODO zhangqiang
-    // predicted memory consumption, maybe change in near future
+    // predicted memory consumption, maybe change after new memory statistics is launched
     _mem_tracker->consume(_tablet->tablet_schema().row_size() * config::vector_chunk_size);
     if (_tablet->keys_type() == KeysType::AGG_KEYS) {
         _aggregator = std::make_unique<ChunkAggregator>(&new_schema, config::vector_chunk_size, 0);
