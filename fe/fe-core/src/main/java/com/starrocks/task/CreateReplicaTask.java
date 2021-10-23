@@ -170,7 +170,7 @@ public class CreateReplicaTask extends AgentTask {
         tSchema.setSchema_hash(schemaHash);
         tSchema.setKeys_type(keysType.toThrift());
         tSchema.setStorage_type(storageType);
-        tSchema.setUnique_id(schemaId);
+        tSchema.setSchema_id(schemaId);
 
         List<TColumn> tColumns = new ArrayList<TColumn>();
         for (Column column : columns) {
