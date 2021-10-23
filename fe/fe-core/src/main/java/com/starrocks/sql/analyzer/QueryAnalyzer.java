@@ -112,6 +112,9 @@ public class QueryAnalyzer {
                 List<ArrayList<Expr>> rows = selectStmt.getValueList().getRows();
                 Type[] outputTypes = firstRow.stream().map(Expr::getType).toArray(Type[]::new);
                 for (List<Expr> row : rows) {
+                    if (row.size() != firstRow.size()) {
+                        throw new SemanticException("Values have unequal number of columns");
+                    }
                     for (int fieldIdx = 0; fieldIdx < row.size(); ++fieldIdx) {
                         analyzeExpression(row.get(fieldIdx), analyzeState, scope);
                         Type commonType =
