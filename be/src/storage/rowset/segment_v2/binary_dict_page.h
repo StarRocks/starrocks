@@ -75,6 +75,8 @@ public:
 
     Status get_last_value(void* value) const override;
 
+    bool is_valid_global_dict(const vectorized::GlobalDictMap* global_dict) const override;
+
     // Return true iff all pages so far are encoded by dictionary encoding.
     // this method normally should be called after all data pages finish
     // write, i.e, after `finish` has been called.

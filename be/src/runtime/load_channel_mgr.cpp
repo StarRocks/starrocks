@@ -192,6 +192,7 @@ Status LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request,
         }
         VLOG(1) << "Removed load channel load id=" << load_id;
     }
+
     return Status::OK();
 }
 

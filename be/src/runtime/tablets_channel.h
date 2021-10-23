@@ -29,6 +29,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/descriptors.h"
+#include "runtime/global_dicts.h"
 #include "runtime/mem_tracker.h"
 #include "util/bitmap.h"
 #include "util/priority_thread_pool.hpp"
@@ -145,6 +146,8 @@ private:
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     // tablet_id -> TabletChannel
     std::unordered_map<int64_t, vectorized::DeltaWriter*> _vectorized_tablet_writers;
+
+    vectorized::GlobalDictByNameMaps _global_dicts;
 };
 
 } // namespace starrocks
