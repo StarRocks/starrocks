@@ -24,8 +24,10 @@
 #include <functional>
 #include <memory>
 
+#include "runtime/current_thread.h"
 #include "storage/memtable.h"
 #include "storage/vectorized/memtable.h"
+#include "util/defer_op.h"
 #include "util/scoped_cleanup.h"
 
 namespace starrocks {
@@ -53,7 +55,14 @@ Status FlushToken::submit(const std::shared_ptr<vectorized::MemTable>& memtable)
         ss << "tablet_id = " << memtable->tablet_id() << " flush_status error ";
         return Status::InternalError(ss.str());
     }
-    _flush_token->submit_func([this, memtable] { _flush_vectorized_memtable(memtable); });
+    _flush_token->submit_func([this, memtable] {
+        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(memtable->mem_tracker());
+        DeferOp op([&] {
+            const_cast<std::shared_ptr<vectorized::MemTable>&>(memtable).reset();
+            tls_thread_status.set_mem_tracker(prev_tracker);
+        });
+        _flush_vectorized_memtable(memtable);
+    });
     return Status::OK();
 }
 
@@ -87,7 +96,11 @@ void FlushToken::_flush_memtable(std::shared_ptr<MemTable> memtable) {
 }
 
 void FlushToken::_flush_vectorized_memtable(std::shared_ptr<vectorized::MemTable> memtable) {
-    SCOPED_CLEANUP({ memtable.reset(); });
+    _stats.cur_flush_count++;
+    SCOPED_CLEANUP({
+        memtable.reset();
+        _stats.cur_flush_count--;
+    });
 
     // If previous flush has failed, return directly
     if (_flush_status.load() != OLAP_SUCCESS) {
