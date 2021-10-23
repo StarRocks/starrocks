@@ -20,6 +20,12 @@ using ConstAggDataPtr = const uint8_t*;
 // Aggregate function instances don't contain aggregation state, the aggregation state is stored in
 // other objects
 // Aggregate function instances contain aggregate function description and state management methods
+// Keyword __restrict is added everywhere AggDataPtr appears, which used to solve the problem of
+// pointer aliasing and improve the performance of auto-vectorization. For better understanding,
+// some micro-benchmark results are listed as follows
+//      1. https://quick-bench.com/q/ZQoR7xloXdKcqLC-rPFLhSuHEf0
+//      2. https://quick-bench.com/q/E5SfW3gn2IjJl4q0YIVMBPW8Ja8
+//      3. https://quick-bench.com/q/yniGOh4CIz6YRGj85HFwu4WoHME
 class AggregateFunction {
 public:
     virtual ~AggregateFunction() = default;
