@@ -113,7 +113,7 @@ public class AgentTaskTest {
 
         // create
         createReplicaTask = new CreateReplicaTask(backendId1, dbId, tableId, partitionId,
-                indexId1, tabletId1, shortKeyNum, schemaHash1,
+                indexId1, tabletId1, shortKeyNum, indexId1, schemaHash1,
                 version, versionHash, KeysType.AGG_KEYS,
                 storageType, TStorageMedium.SSD,
                 columns, null, 0, latch, null,

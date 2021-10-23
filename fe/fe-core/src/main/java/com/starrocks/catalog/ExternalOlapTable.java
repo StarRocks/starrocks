@@ -421,7 +421,7 @@ public class ExternalOlapTable extends OlapTable {
                     }
                     columns.add(column);
                 }
-                MaterializedIndexMeta index = new MaterializedIndexMeta(indexMeta.getIndex_id(), columns,
+                MaterializedIndexMeta index = new MaterializedIndexMeta(indexMeta.getIndex_id(), indexMeta.getIndex_id(), columns,
                                                                         indexMeta.getSchema_meta().getSchema_version(),
                                                                         indexMeta.getSchema_meta().getSchema_hash(),
                                                                         indexMeta.getSchema_meta().getShort_key_col_count(),

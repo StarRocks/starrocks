@@ -80,11 +80,11 @@ public class TableTest {
         OlapTable table1 = new OlapTable(1000L, "group1", columns, KeysType.AGG_KEYS,
                 new SinglePartitionInfo(), new RandomDistributionInfo(10));
         short shortKeyColumnCount = 1;
-        table1.setIndexMeta(1000, "group1", columns, 1, 1, shortKeyColumnCount, TStorageType.COLUMN, KeysType.AGG_KEYS);
+        table1.setIndexMeta(1000, "group1", 1000, columns, 1, 1, shortKeyColumnCount, TStorageType.COLUMN, KeysType.AGG_KEYS);
         List<Column> column = Lists.newArrayList();
         column.add(column2);
 
-        table1.setIndexMeta(new Long(2), "test", column, 1, 1, shortKeyColumnCount, TStorageType.COLUMN,
+        table1.setIndexMeta(2, "test", 2, column, 1, 1, shortKeyColumnCount, TStorageType.COLUMN,
                 KeysType.AGG_KEYS);
         Deencapsulation.setField(table1, "baseIndexId", 1000);
         table1.write(dos);

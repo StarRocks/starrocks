@@ -117,6 +117,7 @@ set(EXEC_FILES
         ./storage/file_utils_test.cpp
         ./storage/fs/file_block_manager_test.cpp
         ./storage/generic_iterators_test.cpp
+        ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
         ./storage/in_list_predicate_test.cpp
         ./storage/key_coder_test.cpp
