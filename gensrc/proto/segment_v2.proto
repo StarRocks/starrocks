@@ -59,6 +59,7 @@ enum PageTypePB {
 enum NullEncodingPB {
     BITSHUFFLE_NULL = 0;
     LZ4_NULL = 1;
+    RLE_NULL = 2;
 }
 
 message DataPageFooterPB {
