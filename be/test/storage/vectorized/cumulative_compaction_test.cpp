@@ -123,7 +123,7 @@ public:
         FileUtils::remove_all(config::storage_root_path);
         ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
         std::vector<StorePath> paths;
-        paths.emplace_back(config::storage_root_path, -1);
+        paths.emplace_back(config::storage_root_path);
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
