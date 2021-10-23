@@ -86,9 +86,7 @@ public:
 
     uint32_t segment_id() const { return _segment_id; }
 
-	std::unordered_set<std::string> global_dict_efficacy_info() { 
-		return _global_dict_efficacy_info;
-	} 
+    std::unordered_set<std::string> global_dict_efficacy_info() { return _global_dict_efficacy_info; }
 
 private:
     Status _write_data();

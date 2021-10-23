@@ -76,10 +76,7 @@ public:
 
     RowsetId rowset_id() override { return _context.rowset_id; }
 
-	std::unordered_set<std::string> global_dict_efficacy_info() override { 
-		return _global_dict_efficacy_info;
-	} 
-	
+    std::unordered_set<std::string> global_dict_efficacy_info() override { return _global_dict_efficacy_info; }
 
 private:
     template <typename RowType>
@@ -115,7 +112,7 @@ private:
 
     bool _is_pending = false;
     bool _already_built = false;
-	std::unordered_set<std::string> _global_dict_efficacy_info;
+    std::unordered_set<std::string> _global_dict_efficacy_info;
 };
 
 } // namespace starrocks

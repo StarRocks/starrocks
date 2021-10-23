@@ -269,10 +269,10 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
     PTabletInfo* tablet_info = tablet_vec->Add();
     tablet_info->set_tablet_id(_tablet->tablet_id());
     tablet_info->set_schema_hash(_tablet->schema_hash());
-	auto global_dict_efficacy_info = _rowset_writer->global_dict_efficacy_info();  
-	for (auto& item : global_dict_efficacy_info) {
-		tablet_info->add_no_efficacy_dict_col_name(item);
-	}
+    auto global_dict_efficacy_info = _rowset_writer->global_dict_efficacy_info();
+    for (auto& item : global_dict_efficacy_info) {
+        tablet_info->add_no_efficacy_dict_col_name(item);
+    }
 #endif
 
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {

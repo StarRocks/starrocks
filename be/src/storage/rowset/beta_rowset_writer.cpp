@@ -473,11 +473,11 @@ OLAPStatus BetaRowsetWriter::_flush_segment_writer(std::unique_ptr<segment_v2::S
         }
     }
 
-	// check global_dict efficacy
-	auto global_dict_efficacy_info = (*segment_writer)->global_dict_efficacy_info();
-	for (auto& it : global_dict_efficacy_info) {
-		_global_dict_efficacy_info.insert(it);
-	}
+    // check global_dict efficacy
+    auto global_dict_efficacy_info = (*segment_writer)->global_dict_efficacy_info();
+    for (auto& it : global_dict_efficacy_info) {
+        _global_dict_efficacy_info.insert(it);
+    }
 
     (*segment_writer).reset();
     return OLAP_SUCCESS;

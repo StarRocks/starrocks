@@ -116,11 +116,11 @@ public:
     virtual int64_t total_data_size() = 0;
 
     virtual RowsetId rowset_id() = 0;
-	
-	virtual std::unordered_set<std::string> global_dict_efficacy_info() { 
-		 std::unordered_set<std::string> fake;
-		return fake;
-	} 
+
+    virtual std::unordered_set<std::string> global_dict_efficacy_info() {
+        std::unordered_set<std::string> fake;
+        return fake;
+    }
 
 private:
     RowsetWriter(const RowsetWriter&) = delete;

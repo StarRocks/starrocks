@@ -28,12 +28,12 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dicts.h"
 #include "storage/row_cursor_cell.h"
+#include "storage/rowset/segment_v2/binary_dict_page.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/page_pointer.h" // for PagePointer
 #include "storage/tablet_schema.h"                  // for TabletColumn
 #include "util/bitmap.h"                            // for BitmapChange
 #include "util/slice.h"                             // for OwnedSlice
-#include "storage/rowset/segment_v2/binary_dict_page.h"
 
 namespace starrocks {
 
@@ -183,14 +183,14 @@ public:
 
     void check_global_dict_efficacy(const std::vector<Slice>& dict_body) {
         for (const auto& item : dict_body) {
-	    auto dict_decoder = std::make_unique<BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>>(item);
-	    dict_decoder->init();
-	    for (size_t i = 0; i < dict_decoder->count(); i++) {
-		Slice word = dict_decoder->string_at_index(i);
-            	if (auto iter = _opts.global_dict->find(word.to_string()); iter == _opts.global_dict->end()) {
-               	    _is_global_dict_efficacy = false;
+            auto dict_decoder = std::make_unique<BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>>(item);
+            dict_decoder->init();
+            for (size_t i = 0; i < dict_decoder->count(); i++) {
+                Slice word = dict_decoder->string_at_index(i);
+                if (auto iter = _opts.global_dict->find(word.to_string()); iter == _opts.global_dict->end()) {
+                    _is_global_dict_efficacy = false;
                     return;
-		}
+                }
             }
         }
     }

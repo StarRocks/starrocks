@@ -108,7 +108,7 @@ Status SegmentWriter::init(uint32_t write_mbytes_per_sec __attribute__((unused))
             _opts.global_dicts != nullptr) {
             auto iter = _opts.global_dicts->find(column.name().data());
             if (iter != _opts.global_dicts->end()) {
-                opts.global_dict = &iter->second.first;
+                opts.global_dict = &iter->second;
             }
         }
 
@@ -179,10 +179,10 @@ Status SegmentWriter::_write_data() {
     size_t idx = 0;
     for (auto& column_writer : _column_writers) {
         RETURN_IF_ERROR(column_writer->write_data());
-	if (column_writer->is_global_dict_efficacy() == false) {
-	    _global_dict_efficacy_info.emplace(_tablet_schema->columns()[idx].name());
-	}
-	idx++;
+        if (column_writer->is_global_dict_efficacy() == false) {
+            _global_dict_efficacy_info.emplace(_tablet_schema->columns()[idx].name());
+        }
+        idx++;
     }
     return Status::OK();
 }
