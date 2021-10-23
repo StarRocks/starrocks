@@ -21,8 +21,10 @@
 
 #include "storage/page_cache.h"
 
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "util/defer_op.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
 
@@ -57,15 +59,12 @@ void StoragePageCache::release_global_cache() {
 void StoragePageCache::update_memory_usage_statistics() {
     int64_t mem_usage = memory_usage();
     g_cache_size.set_value(mem_usage);
-    _mem_tracker->consume(mem_usage - _mem_tracker->consumption());
 }
 
 StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity)
         : _mem_tracker(mem_tracker), _cache(new_lru_cache(capacity)) {}
 
-StoragePageCache::~StoragePageCache() {
-    _mem_tracker->release(_mem_tracker->consumption());
-}
+StoragePageCache::~StoragePageCache() {}
 
 bool StoragePageCache::lookup(const CacheKey& key, PageCacheHandle* handle) {
     auto* lru_handle = _cache->lookup(key.encode());
@@ -77,6 +76,14 @@ bool StoragePageCache::lookup(const CacheKey& key, PageCacheHandle* handle) {
 }
 
 void StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCacheHandle* handle, bool in_memory) {
+#ifndef BE_TEST
+    int64_t mem_size = malloc_usable_size(data.data);
+    tls_thread_status.mem_release(mem_size);
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    tls_thread_status.mem_consume(mem_size);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+#endif
+
     auto deleter = [](const starrocks::CacheKey& key, void* value) { delete[](uint8_t*) value; };
 
     CachePriority priority = CachePriority::NORMAL;
