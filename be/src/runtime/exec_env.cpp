@@ -23,6 +23,7 @@
 
 #include <thread>
 
+#include "column/column_pool.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "gen_cpp/BackendService.h"
@@ -148,6 +149,19 @@ const std::string& ExecEnv::token() const {
     return _master_info->token;
 }
 
+class SetMemTrackerForColumnPool {
+public:
+    SetMemTrackerForColumnPool(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {}
+
+    template <typename Pool>
+    void operator()() {
+        Pool::singleton()->set_mem_tracker(_mem_tracker);
+    }
+
+private:
+    MemTracker* _mem_tracker = nullptr;
+};
+
 Status ExecEnv::init_mem_tracker() {
     int64_t bytes_limit = 0;
     bool is_percent = false;
@@ -181,13 +195,14 @@ Status ExecEnv::init_mem_tracker() {
     _schema_change_mem_tracker = new MemTracker(-1, "schema_change", _mem_tracker);
     _snapshot_mem_tracker = new MemTracker(-1, "snapshot", _mem_tracker);
     _column_pool_mem_tracker = new MemTracker(-1, "column_pool", _mem_tracker);
-    _central_column_pool_mem_tracker = new MemTracker(-1, "central_column_pool", _column_pool_mem_tracker);
-    _local_column_pool_mem_tracker = new MemTracker(-1, "local_column_pool", _column_pool_mem_tracker);
     _page_cache_mem_tracker = new MemTracker(-1, "page_cache", _mem_tracker);
     _update_mem_tracker = new MemTracker(bytes_limit * 0.6, "update", _mem_tracker);
     _chunk_allocator_mem_tracker = new MemTracker(-1, "chunk_allocator", _mem_tracker);
 
     ChunkAllocator::init_instance(_chunk_allocator_mem_tracker, config::chunk_reserved_bytes_limit);
+
+    SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
+    vectorized::ForEach<vectorized::ColumnPoolList>(op);
 
     return Status::OK();
 }
@@ -306,14 +321,6 @@ void ExecEnv::_destory() {
     if (_page_cache_mem_tracker) {
         delete _page_cache_mem_tracker;
         _page_cache_mem_tracker = nullptr;
-    }
-    if (_local_column_pool_mem_tracker) {
-        delete _local_column_pool_mem_tracker;
-        _local_column_pool_mem_tracker = nullptr;
-    }
-    if (_central_column_pool_mem_tracker) {
-        delete _central_column_pool_mem_tracker;
-        _central_column_pool_mem_tracker = nullptr;
     }
     if (_column_pool_mem_tracker) {
         delete _column_pool_mem_tracker;

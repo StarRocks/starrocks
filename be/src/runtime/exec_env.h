@@ -115,8 +115,6 @@ public:
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker; }
     MemTracker* snapshot_mem_tracker() { return _snapshot_mem_tracker; }
     MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker; }
-    MemTracker* local_column_pool_mem_tracker() { return _local_column_pool_mem_tracker; }
-    MemTracker* central_column_pool_mem_tracker() { return _central_column_pool_mem_tracker; }
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker; }
     MemTracker* update_mem_tracker() { return _update_mem_tracker; }
     MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker; }
@@ -189,12 +187,6 @@ private:
 
     // The memory used for column pool
     MemTracker* _column_pool_mem_tracker = nullptr;
-
-    // The memory used for central column pool
-    MemTracker* _central_column_pool_mem_tracker = nullptr;
-
-    // The memory used for local column pool
-    MemTracker* _local_column_pool_mem_tracker = nullptr;
 
     // The memory used for page cache
     MemTracker* _page_cache_mem_tracker = nullptr;
