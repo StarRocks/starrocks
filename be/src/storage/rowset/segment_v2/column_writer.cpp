@@ -220,7 +220,7 @@ public:
 
     ordinal_t get_next_rowid() const override { return _scalar_column_writer->get_next_rowid(); };
 
-    bool is_global_dict_efficacy() override { return _scalar_column_writer->is_global_dict_efficacy(); }
+    bool is_global_dict_valid() override { return _scalar_column_writer->is_global_dict_valid(); }
 
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
@@ -420,11 +420,11 @@ Status ScalarColumnWriter::write_data() {
                                                         body, footer, &dict_pp));
         dict_pp.to_proto(_opts.meta->mutable_dict_page());
         if (_opts.global_dict != nullptr) {
-            check_global_dict_efficacy(body);
+            _is_global_dict_valid = _page_builder->is_valid_global_dict(_opts.global_dict);
         }
     } else {
         if (_opts.global_dict != nullptr) {
-            _is_global_dict_efficacy = false;
+            _is_global_dict_valid = false;
         }
     }
     _opts.meta->set_all_dict_encoded(_page_builder->all_dict_encoded());

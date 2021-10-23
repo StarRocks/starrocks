@@ -248,7 +248,7 @@ private:
     int64_t _queue_push_lock_ns = 0;
     int64_t _actual_consume_ns = 0;
 
-    vectorized::GlobalDictMaps _global_dict;
+    RuntimeState* _runtime_state = nullptr;
 };
 
 class IndexChannel {

@@ -446,7 +446,7 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
                 for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
                     global_dict.insert(std::make_pair<Slice, int>(slot.global_dict_words(i), slot.global_dict_ids(i)));
                 }
-                _global_dicts.insert(std::make_pair(slot.col_name(), global_dict));
+                _global_dicts.insert(std::make_pair(slot.col_name(), std::move(global_dict)));
             }
         }
 

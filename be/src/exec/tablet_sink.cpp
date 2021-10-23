@@ -109,8 +109,8 @@ Status NodeChannel::init(RuntimeState* state) {
 
     _rpc_timeout_ms = state->query_options().query_timeout * 1000;
 
-    // get global_dict
-    _global_dict = state->get_global_dict_map();
+    // for get global_dict
+    _runtime_state = state;
 
     _load_info = "load_id=" + print_id(_parent->_load_id) + ", txn_id=" + std::to_string(_parent->_txn_id);
     _name = "NodeChannel[" + std::to_string(_index_id) + "-" + std::to_string(_node_id) + "]";
@@ -138,10 +138,11 @@ void NodeChannel::open() {
     request.set_is_vectorized(_parent->_is_vectorized);
 
     // set global dict
+    const auto& global_dict = _runtime_state->get_global_dict_map();
     for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
         auto slot = request.mutable_schema()->mutable_slot_descs(i);
-        auto it = _global_dict.find(slot->id());
-        if (it != _global_dict.end()) {
+        auto it = global_dict.find(slot->id());
+        if (it != global_dict.end()) {
             auto dict = it->second.first;
             for (auto& item : dict) {
                 slot->add_global_dict_words(item.first.to_string());
@@ -199,7 +200,6 @@ Status NodeChannel::open_wait() {
                     std::vector<std::string> no_efficacy_dict_col_name;
                     for (auto& col_name : tablet.no_efficacy_dict_col_name()) {
                         no_efficacy_dict_col_name.emplace_back(col_name);
-                        //commit_info.invalid_dict_cache_columns.emplace_back(col_name);
                     }
                     if (!no_efficacy_dict_col_name.empty()) {
                         commit_info.__set_invalid_dict_cache_columns(no_efficacy_dict_col_name);

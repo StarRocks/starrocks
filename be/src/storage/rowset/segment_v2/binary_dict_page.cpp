@@ -154,6 +154,15 @@ Status BinaryDictPageBuilder::get_last_value(void* value) const {
     return Status::OK();
 }
 
+bool BinaryDictPageBuilder::is_valid_global_dict(const vectorized::GlobalDictMap* global_dict) const {
+    for (auto it = _dictionary.begin(); it != _dictionary.end(); ++it) {
+        if (auto iter = global_dict->find(it->first); iter == global_dict->end()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 template <FieldType Type>
 BinaryDictPageDecoder<Type>::BinaryDictPageDecoder(Slice data, const PageDecoderOptions& options)
         : _data(data),

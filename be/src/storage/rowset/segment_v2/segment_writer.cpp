@@ -76,7 +76,6 @@ Status SegmentWriter::init(uint32_t write_mbytes_per_sec __attribute__((unused))
         return Status::InvalidArgument(strings::Substitute("Invalid storage_format_version $0", v));
     }
     _column_writers.reserve(_tablet_schema->columns().size());
-    _global_dict_efficacy_info.reserve(_tablet_schema->columns().size());
     for (const auto& column : _tablet_schema->columns()) {
         ColumnWriterOptions opts;
         opts.page_format = (_opts.storage_format_version == 1) ? 1 : 2;
@@ -179,8 +178,8 @@ Status SegmentWriter::_write_data() {
     size_t idx = 0;
     for (auto& column_writer : _column_writers) {
         RETURN_IF_ERROR(column_writer->write_data());
-        if (column_writer->is_global_dict_efficacy() == false) {
-            _global_dict_efficacy_info.emplace(_tablet_schema->columns()[idx].name());
+        if (column_writer->is_global_dict_valid() == false) {
+            _invalid_global_dict_columns.emplace(_tablet_schema->columns()[idx].name());
         }
         idx++;
     }

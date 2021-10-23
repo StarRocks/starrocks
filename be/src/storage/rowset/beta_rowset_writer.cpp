@@ -474,9 +474,9 @@ OLAPStatus BetaRowsetWriter::_flush_segment_writer(std::unique_ptr<segment_v2::S
     }
 
     // check global_dict efficacy
-    auto global_dict_efficacy_info = (*segment_writer)->global_dict_efficacy_info();
-    for (auto& it : global_dict_efficacy_info) {
-        _global_dict_efficacy_info.insert(it);
+    auto& invalid_global_dict_columns = (*segment_writer)->invalid_global_dict_columns();
+    for (auto& it : invalid_global_dict_columns) {
+        _invalid_global_dict_columns.insert(it);
     }
 
     (*segment_writer).reset();

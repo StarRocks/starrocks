@@ -129,7 +129,7 @@ public:
     // only invalid in the case of global_dict is not nullptr
     // column is not encoding by dict or append new words that
     // not in global_dict, it will return false
-    virtual bool is_global_dict_efficacy() { return true; }
+    virtual bool is_global_dict_valid() { return true; }
 
     bool is_nullable() const { return _is_nullable; }
 
@@ -179,21 +179,7 @@ public:
     Status write_bloom_filter_index() override;
     ordinal_t get_next_rowid() const override { return _next_rowid; }
 
-    bool is_global_dict_efficacy() override { return _is_global_dict_efficacy; }
-
-    void check_global_dict_efficacy(const std::vector<Slice>& dict_body) {
-        for (const auto& item : dict_body) {
-            auto dict_decoder = std::make_unique<BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>>(item);
-            dict_decoder->init();
-            for (size_t i = 0; i < dict_decoder->count(); i++) {
-                Slice word = dict_decoder->string_at_index(i);
-                if (auto iter = _opts.global_dict->find(word.to_string()); iter == _opts.global_dict->end()) {
-                    _is_global_dict_efficacy = false;
-                    return;
-                }
-            }
-        }
-    }
+    bool is_global_dict_valid() override { return _is_global_dict_valid; }
 
 private:
     // All Pages will be organized into a linked list
@@ -262,7 +248,7 @@ private:
     int64_t _element_ordinal = 0;
     int64_t _previous_ordinal = 0;
 
-    bool _is_global_dict_efficacy = true;
+    bool _is_global_dict_valid = true;
 };
 
 class ArrayColumnWriter final : public ColumnWriter {
