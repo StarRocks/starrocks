@@ -24,6 +24,13 @@ public:
 
     OpFactories maybe_interpolate_local_exchange(OpFactories& pred_operators);
 
+    // Uses local exchange to gather the output chunks of multiple predecessor pipelines
+    // into a new pipeline, which the successor operator belongs to.
+    // Append a LocalExchangeSinkOperator to the tail of each pipeline.
+    // Create a new pipeline with a LocalExchangeSourceOperator.
+    // These local exchange sink operators and the source operator share an exchanger.
+    OpFactories gather_pipelines_to_one(std::vector<OpFactories>& pred_operators_list);
+
     uint32_t next_pipe_id() { return _next_pipeline_id++; }
 
     uint32_t next_operator_id() { return _next_operator_id++; }
