@@ -234,8 +234,9 @@ public class StatisticAutoCollector extends MasterDaemon {
 
         // 1. If job is schedule and the table has update, we need re-collect data
         // 2. If job is once and is happened after the table update, we need add it to avoid schedule-job cover data
-        if ((ScheduleType.SCHEDULE.equals(job.getScheduleType()) && job.getWorkTime().isBefore(updateTime))
-                || (ScheduleType.ONCE.equals(job.getScheduleType()) && job.getWorkTime().isAfter(updateTime))) {
+        if ((ScheduleType.SCHEDULE.equals(job.getScheduleType()) && !StatisticUtils.isEmptyTable(table) &&
+                job.getWorkTime().isBefore(updateTime)) ||
+                (ScheduleType.ONCE.equals(job.getScheduleType()) && job.getWorkTime().isAfter(updateTime))) {
             createJobs(tableJobs, job, db, table, columns);
         } else {
             LOG.debug("Skip collect on table: " + table.getName() + ", updateTime: " + updateTime +
