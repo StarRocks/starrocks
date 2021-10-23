@@ -145,6 +145,7 @@ public:
         if (_local_dict_code_col == nullptr) {
             _local_dict_code_col = std::make_unique<vectorized::Int32Column>();
         }
+        _local_dict_code_col->reset_column();
         RETURN_IF_ERROR(_col_iter->fetch_dict_codes_by_rowid(rowids, size, _local_dict_code_col.get()));
         const auto& container = _local_dict_code_col->get_data();
         RETURN_IF_ERROR(decode_dict_codes(container.data(), container.size(), values));
@@ -188,7 +189,7 @@ public:
         for (size_t i = 0; i < size; ++i) {
             if (codes[i] >= 0) {
                 DCHECK(_local_to_global.contains(codes[i]));
-                res_data[i] = _local_to_global.at(codes[i]);
+                res_data[i] = _local_to_global[codes[i]];
             } else {
                 res_data[i] = -1;
                 DCHECK(output_nullable);
@@ -216,6 +217,7 @@ private:
     Status _build_to_global_dict();
     ColumnId _cid;
     ColumnIterator* _col_iter;
+    // TODO: use array instead of map
     phmap::flat_hash_map<int32_t, int32_t> _local_to_global;
     // global dict
     GlobalDictMap* _global_dict;

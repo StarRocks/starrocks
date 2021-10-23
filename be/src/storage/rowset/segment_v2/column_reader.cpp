@@ -1033,7 +1033,6 @@ Status FileColumnIterator::_fetch_by_rowid(const rowid_t* rowids, size_t size, v
                 curr = *p++;
             }
             size_t nread = p - rowids;
-            // RETURN_IF_ERROR(_page->read(values, &nread));
             RETURN_IF_ERROR(page_parse(values, &nread));
             _current_ordinal += nread;
             rowids = p;
