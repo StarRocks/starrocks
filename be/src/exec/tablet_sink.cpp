@@ -109,6 +109,9 @@ Status NodeChannel::init(RuntimeState* state) {
 
     _rpc_timeout_ms = state->query_options().query_timeout * 1000;
 
+    // for get global_dict
+    _runtime_state = state;
+
     _load_info = "load_id=" + print_id(_parent->_load_id) + ", txn_id=" + std::to_string(_parent->_txn_id);
     _name = "NodeChannel[" + std::to_string(_index_id) + "-" + std::to_string(_node_id) + "]";
     return Status::OK();
@@ -133,6 +136,19 @@ void NodeChannel::open() {
     }
     request.set_load_channel_timeout_s(_parent->_load_channel_timeout_s);
     request.set_is_vectorized(_parent->_is_vectorized);
+
+    // set global dict
+    const auto& global_dict = _runtime_state->get_global_dict_map();
+    for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
+        auto slot = request.mutable_schema()->mutable_slot_descs(i);
+        auto it = global_dict.find(slot->id());
+        if (it != global_dict.end()) {
+            auto dict = it->second.first;
+            for (auto& item : dict) {
+                slot->add_global_dict_words(item.first.to_string());
+            }
+        }
+    }
 
     _open_closure = new RefCountClosure<PTabletWriterOpenResult>();
     _open_closure->ref();
@@ -180,6 +196,13 @@ Status NodeChannel::open_wait() {
                     TTabletCommitInfo commit_info;
                     commit_info.tabletId = tablet.tablet_id();
                     commit_info.backendId = _node_id;
+                    std::vector<std::string> invalid_dict_cache_columns;
+                    for (auto& col_name : tablet.invalid_dict_cache_columns()) {
+                        invalid_dict_cache_columns.emplace_back(col_name);
+                    }
+                    if (!invalid_dict_cache_columns.empty()) {
+                        commit_info.__set_invalid_dict_cache_columns(invalid_dict_cache_columns);
+                    }
                     _tablet_commit_infos.emplace_back(std::move(commit_info));
                 }
                 _add_batches_finished = true;

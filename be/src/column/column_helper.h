@@ -137,6 +137,11 @@ public:
     }
 
     template <PrimitiveType Type>
+    static inline RunTimeCppType<Type>* get_cpp_data(const ColumnPtr& value) {
+        return cast_to_raw<Type>(value)->get_data().data();
+    }
+
+    template <PrimitiveType Type>
     static inline RunTimeCppType<Type> get_const_value(const ColumnPtr& col) {
         const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
         return cast_to_raw<Type>(c)->get_data()[0];

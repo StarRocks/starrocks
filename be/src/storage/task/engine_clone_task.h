@@ -67,8 +67,7 @@ private:
 
     Status _release_snapshot(const std::string& ip, int port, const std::string& snapshot_path);
 
-    Status _finish_clone_updatable(Tablet* tablet, const std::string& clone_dir, int64_t committed_version,
-                                   bool incremental_clone);
+    Status _finish_clone_primary(Tablet* tablet, const std::string& clone_dir);
 
 private:
     MemTracker* _tablet_meta_mem_tracker = nullptr;

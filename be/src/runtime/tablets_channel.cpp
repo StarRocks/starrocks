@@ -439,6 +439,17 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
         return Status::InternalError(ss.str());
     }
     if (_is_vectorized) {
+        // init global dict info if need
+        for (auto& slot : params.schema().slot_descs()) {
+            vectorized::GlobalDictMap global_dict;
+            if (slot.global_dict_words_size()) {
+                for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
+                    global_dict.insert(std::make_pair<Slice, int>(slot.global_dict_words(i), i));
+                }
+                _global_dicts.insert(std::make_pair(slot.col_name(), std::move(global_dict)));
+            }
+        }
+
         std::vector<int64_t> tablet_ids;
         tablet_ids.reserve(params.tablets_size());
         for (auto& tablet : params.tablets()) {
@@ -451,6 +462,7 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
             request.load_id = params.id();
             request.tuple_desc = _tuple_desc;
             request.slots = index_slots;
+            request.global_dicts = &_global_dicts;
 
             vectorized::DeltaWriter* writer = nullptr;
             auto st = vectorized::DeltaWriter::open(&request, _mem_tracker.get(), &writer);

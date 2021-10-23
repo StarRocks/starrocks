@@ -6,6 +6,7 @@
 #include "column/column_hash.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
+#include "util/phmap/phmap.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -30,6 +31,12 @@ inline std::ostream& operator<<(std::ostream& stream, const RGlobalDictMap& map)
     stream << "]";
     return stream;
 }
+
+// column-name -> GlobalDictMap
+using GlobalDictByNameMaps = std::unordered_map<std::string, GlobalDictMap>;
+
+using InvalidDictColumnsSet = phmap::flat_hash_set<std::string, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
+
 
 static inline std::unordered_map<uint32_t, GlobalDictMap*> EMPTY_GLOBAL_DICTMAPS;
 

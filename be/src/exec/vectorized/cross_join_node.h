@@ -5,7 +5,8 @@
 #include "column/chunk.h"
 #include "exec/exec_node.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
+namespace vectorized {
 class CrossJoinNode : public ExecNode {
 public:
     CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -20,6 +21,9 @@ public:
                              ScopedTimer<MonotonicStopWatch>& probe_timer);
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* state) override;
+
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
 
 private:
     Status _build(RuntimeState* state);
@@ -85,4 +89,5 @@ private:
 
     std::vector<uint32_t> _buf_selective;
 };
-} // namespace starrocks::vectorized
+} // namespace vectorized
+} // namespace starrocks

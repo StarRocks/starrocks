@@ -25,7 +25,8 @@ public:
         this->data(state).clear();
     }
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
         uint64_t value = 0;
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
 
@@ -42,7 +43,7 @@ public:
         }
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr state, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
@@ -70,7 +71,7 @@ public:
         }
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
 
         const BinaryColumn* hll_column = down_cast<const BinaryColumn*>(column);
@@ -78,7 +79,8 @@ public:
         this->data(state).merge(hll);
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
         DCHECK_GT(end, start);
         Int64Column* column = down_cast<Int64Column*>(dst);
         int64_t result = this->data(state).estimate_cardinality();
@@ -88,7 +90,7 @@ public:
         }
     }
 
-    void serialize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr state,
+    void serialize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
                              Column* to) const override {
         DCHECK(to->is_binary());
 
@@ -132,7 +134,7 @@ public:
         }
     }
 
-    void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr state,
+    void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
                             Column* to) const override {
         DCHECK(to->is_numeric());
 
