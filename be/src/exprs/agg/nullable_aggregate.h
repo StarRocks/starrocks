@@ -50,12 +50,12 @@ public:
 
     std::string get_name() const override { return "nullable " + nested_function->get_name(); }
 
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).is_null = true;
         nested_function->reset(ctx, args, this->data(state).mutable_nest_state());
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         const Column* data_column = nullptr;
         // Scalar function compute will return non-nullable column
         // for nullable column when the real whole chunk data all not-null.
@@ -72,7 +72,7 @@ public:
         }
     }
 
-    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_nullable());
         auto* nullable_column = down_cast<NullableColumn*>(to);
         if (LIKELY(!this->data(state).is_null)) {
@@ -84,7 +84,7 @@ public:
         }
     }
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         if (LIKELY(!this->data(state).is_null)) {
             if (to->is_nullable()) {
                 auto* nullable_column = down_cast<NullableColumn*>(to);
@@ -146,7 +146,8 @@ public:
 
     using NestedState = typename State::NestedState;
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
         DCHECK(dst->is_nullable());
         auto* nullable_column = down_cast<NullableColumn*>(dst);
         // binary column couldn't call resize method like Numeric Column
@@ -190,7 +191,7 @@ public:
     }
 
     void merge_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column* column,
-                                  AggDataPtr state) const override {
+                                  AggDataPtr __restrict state) const override {
         for (size_t i = 0; i < batch_size; ++i) {
             merge(ctx, column, state, i);
         }
@@ -206,7 +207,8 @@ public:
     explicit NullableAggregateFunctionUnary(const AggregateFunctionPtr& nested_function)
             : NullableAggregateFunctionBase<State>(nested_function) {}
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {}
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {}
 
     // TODO(kks): abstract the AVX2 filter process later
     void update_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
@@ -325,7 +327,7 @@ public:
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
-                                   AggDataPtr state) const override {
+                                   AggDataPtr __restrict state) const override {
         // Scalar function compute will return non-nullable column
         // for nullable column when the real whole chunk data all not-null.
         if (columns[0]->is_nullable()) {
@@ -382,7 +384,7 @@ public:
         }
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr state, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
         // For cases like: rows between 2 preceding and 1 preceding
@@ -429,7 +431,8 @@ public:
     NullableAggregateFunctionVariadic(const AggregateFunctionPtr& nested_function)
             : NullableAggregateFunctionBase<State>(nested_function) {}
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
         auto column_size = ctx->get_num_args();
         // This container stores the columns we really pass to the nested function.
         std::vector<const Column*> data_columns;
@@ -522,7 +525,7 @@ public:
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
-                                   AggDataPtr state) const override {
+                                   AggDataPtr __restrict state) const override {
         for (size_t i = 0; i < batch_size; ++i) {
             update(ctx, columns, state, i);
         }
