@@ -43,7 +43,7 @@ public:
         data(state).is_null = false;
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         Slice src;
         if (column->is_nullable()) {
             if (column->is_null(row_num)) {
@@ -67,7 +67,7 @@ public:
         data(state).is_null = false;
     }
 
-    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         size_t size = data(state).percentile->serialize_size();
         uint8_t result[size + sizeof(double)];
         memcpy(result, &(data(state).targetQuantile), sizeof(double));
@@ -141,7 +141,7 @@ public:
         }
     }
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         if (to->is_nullable()) {
             auto* nullable_column = down_cast<NullableColumn*>(to);
             if (data(state).is_null) {

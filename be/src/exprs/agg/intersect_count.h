@@ -53,7 +53,8 @@ public:
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {}
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
         DCHECK(columns[0]->is_object());
 
         auto& intersect = this->data(state).intersect;
@@ -87,13 +88,13 @@ public:
         }
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         auto& intersect = this->data(state).intersect;
         Slice slice = column->get(row_num).get_slice();
         intersect.merge(BitmapIntersect<T>((char*)slice.data));
     }
 
-    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
         auto& intersect = this->data(state).intersect;
 
@@ -167,7 +168,7 @@ public:
         }
     }
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto& intersect = this->data(state).intersect;
         down_cast<ResultColumnType*>(to)->append(intersect.intersect_count());
     }
