@@ -269,7 +269,7 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
     PTabletInfo* tablet_info = tablet_vec->Add();
     tablet_info->set_tablet_id(_tablet->tablet_id());
     tablet_info->set_schema_hash(_tablet->schema_hash());
-    auto invalid_global_dict_columns = _rowset_writer->invalid_global_dict_columns();
+    auto& invalid_global_dict_columns = _rowset_writer->invalid_global_dict_columns();
     for (auto& item : invalid_global_dict_columns) {
         tablet_info->add_invalid_dict_cache_columns(item);
     }
