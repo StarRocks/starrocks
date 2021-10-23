@@ -32,6 +32,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.GenericPool;
 import com.starrocks.common.LoadException;
+import com.starrocks.common.TimeoutException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.CommandResult;
@@ -234,7 +235,7 @@ public class SparkEtlJobHandlerTest {
 
         new Expectations() {
             {
-                Util.executeCommand(anyString, (String[]) any);
+                Util.executeCommand(anyString, (String[]) any, anyLong);
                 minTimes = 0;
                 result = commandResult;
 
@@ -279,6 +280,41 @@ public class SparkEtlJobHandlerTest {
         Assert.assertEquals(0, status.getDppResult().abnormalRows);
     }
 
+    @Test(expected = TimeoutException.class)
+    public void testGetEtlJobStatusTimeout(@Mocked BrokerUtil brokerUtil, @Mocked Util util,
+                                           @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
+                                           @Mocked SparkLoadAppHandle handle)
+            throws IOException, UserException {
+
+        new Expectations() {
+            {
+                sparkYarnConfigFiles.prepare();
+                sparkYarnConfigFiles.getConfigDir();
+                result = "./yarn_config";
+
+                Util.executeCommand(anyString, (String[]) any, anyLong);
+                minTimes = 0;
+                result = new TimeoutException("get spark etl job status timeout");
+            }
+        };
+
+        SparkResource resource = new SparkResource(resourceName);
+        Map<String, String> sparkConfigs = resource.getSparkConfigs();
+        sparkConfigs.put("spark.master", "yarn");
+        sparkConfigs.put("spark.submit.deployMode", "cluster");
+        sparkConfigs.put("spark.hadoop.yarn.resourcemanager.address", "127.0.0.1:9999");
+        new Expectations(resource) {
+            {
+                resource.getYarnClientPath();
+                result = Config.yarn_client_path;
+            }
+        };
+
+        BrokerDesc brokerDesc = new BrokerDesc(broker, Maps.newHashMap());
+        SparkEtlJobHandler handler = new SparkEtlJobHandler();
+        handler.getEtlJobStatus(handle, appId, loadJobId, etlOutputPath, resource, brokerDesc);
+    }
+
     @Test
     public void testGetEtlJobStatusFailed(@Mocked Util util, @Mocked CommandResult commandResult,
                                           @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
@@ -298,7 +334,7 @@ public class SparkEtlJobHandlerTest {
 
         new Expectations() {
             {
-                Util.executeCommand(anyString, (String[]) any);
+                Util.executeCommand(anyString, (String[]) any, anyLong);
                 minTimes = 0;
                 result = commandResult;
             }
@@ -344,7 +380,7 @@ public class SparkEtlJobHandlerTest {
 
         new Expectations() {
             {
-                Util.executeCommand(anyString, (String[]) any);
+                Util.executeCommand(anyString, (String[]) any, anyLong);
                 minTimes = 0;
                 result = commandResult;
             }
