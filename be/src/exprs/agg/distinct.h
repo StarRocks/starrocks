@@ -522,6 +522,10 @@ public:
         for (const auto& v : this->data(state).set) {
             tglobal_dict.strings.emplace_back(v.data, v.size);
         }
+
+        // Since the id in global dictionary may be used for sorting,
+        // we also need to ensure that the dictionary is ordered when we build it
+
         Slice::Comparator comparator;
         std::sort(tglobal_dict.strings.begin(), tglobal_dict.strings.end(), comparator);
 
