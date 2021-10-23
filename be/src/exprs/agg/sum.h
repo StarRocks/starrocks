@@ -43,24 +43,23 @@ public:
         this->data(state).sum = {};
     }
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
         DCHECK(columns[0]->is_numeric() || columns[0]->is_decimal());
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
         this->data(state).sum += column.get_data()[row_num];
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
-                                   AggDataPtr state) const override {
+                                   AggDataPtr __restrict state) const override {
         const auto* column = down_cast<const InputColumnType*>(columns[0]);
         const auto* data = column->get_data().data();
-        ResultType local_sum{};
         for (size_t i = 0; i < batch_size; ++i) {
-            local_sum += data[i];
+            this->data(state).sum += data[i];
         }
-        this->data(state).sum += local_sum;
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr state, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
         const auto* column = down_cast<const InputColumnType*>(columns[0]);
@@ -70,13 +69,14 @@ public:
         }
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_numeric() || column->is_decimal());
         const auto* input_column = down_cast<const ResultColumnType*>(column);
         this->data(state).sum += input_column->get_data()[row_num];
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
         DCHECK_GT(end, start);
         ResultType result = this->data(state).sum;
         ResultColumnType* column = down_cast<ResultColumnType*>(dst);
@@ -85,7 +85,7 @@ public:
         }
     }
 
-    void serialize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr state,
+    void serialize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
                              Column* to) const override {
         DCHECK(to->is_numeric() || to->is_decimal());
         down_cast<ResultColumnType*>(to)->append(this->data(state).sum);
@@ -100,7 +100,7 @@ public:
         }
     }
 
-    void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr state,
+    void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
                             Column* to) const override {
         DCHECK(to->is_numeric() || to->is_decimal());
         down_cast<ResultColumnType*>(to)->append(this->data(state).sum);

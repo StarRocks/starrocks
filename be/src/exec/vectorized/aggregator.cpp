@@ -540,14 +540,16 @@ vectorized::Columns Aggregator::_create_group_by_columns() {
     return group_by_columns;
 }
 
-void Aggregator::_serialize_to_chunk(vectorized::ConstAggDataPtr state, const vectorized::Columns& agg_result_columns) {
+void Aggregator::_serialize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
+                                     const vectorized::Columns& agg_result_columns) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->serialize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
                                                agg_result_columns[i].get());
     }
 }
 
-void Aggregator::_finalize_to_chunk(vectorized::ConstAggDataPtr state, const vectorized::Columns& agg_result_columns) {
+void Aggregator::_finalize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
+                                    const vectorized::Columns& agg_result_columns) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->finalize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
                                               agg_result_columns[i].get());

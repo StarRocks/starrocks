@@ -20,28 +20,30 @@ public:
         this->data(state).count = 0;
     }
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
         ++this->data(state).count;
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
-                                   AggDataPtr state) const override {
+                                   AggDataPtr __restrict state) const override {
         this->data(state).count += batch_size;
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr state, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
         this->data(state).count += (frame_end - frame_start);
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_numeric());
         const auto* input_column = down_cast<const Int64Column*>(column);
         data(state).count += input_column->get_data()[row_num];
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
         DCHECK_GT(end, start);
         Int64Column* column = down_cast<Int64Column*>(dst);
         for (size_t i = start; i < end; ++i) {
@@ -49,7 +51,7 @@ public:
         }
     }
 
-    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric());
         down_cast<Int64Column*>(to)->append(this->data(state).count);
     }
@@ -63,7 +65,7 @@ public:
         }
     }
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric());
         down_cast<Int64Column*>(to)->append(this->data(state).count);
     }
@@ -85,16 +87,17 @@ public:
 class CountNullableAggregateFunction final
         : public AggregateFunctionBatchHelper<AggregateFunctionCountData, CountNullableAggregateFunction> {
 public:
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).count = 0;
     }
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
         this->data(state).count += !columns[0]->is_null(row_num);
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
-                                   AggDataPtr state) const override {
+                                   AggDataPtr __restrict state) const override {
         if (columns[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
             if (nullable_column->has_null()) {
@@ -110,7 +113,7 @@ public:
         }
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr state, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
         if (columns[0]->is_nullable()) {
@@ -128,13 +131,14 @@ public:
         }
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_numeric());
         const auto* input_column = down_cast<const Int64Column*>(column);
         data(state).count += input_column->get_data()[row_num];
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
         DCHECK_GT(end, start);
         Int64Column* column = down_cast<Int64Column*>(dst);
         for (size_t i = start; i < end; ++i) {
@@ -142,7 +146,7 @@ public:
         }
     }
 
-    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric());
         down_cast<Int64Column*>(to)->append(this->data(state).count);
     }
@@ -156,7 +160,7 @@ public:
         }
     }
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric());
         down_cast<Int64Column*>(to)->append(this->data(state).count);
     }

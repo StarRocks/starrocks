@@ -18,12 +18,12 @@ public:
         this->data(state) |= *(col->get_object(row_num));
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         const BitmapColumn* col = down_cast<const BitmapColumn*>(column);
         this->data(state) |= *(col->get_object(row_num));
     }
 
-    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         BitmapColumn* col = down_cast<BitmapColumn*>(to);
         auto& value = const_cast<BitmapValue&>(this->data(state));
         col->append(std::move(value));
@@ -33,7 +33,7 @@ public:
         *dst = src[0];
     }
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric());
         down_cast<Int64Column*>(to)->append(this->data(state).cardinality());
     }
