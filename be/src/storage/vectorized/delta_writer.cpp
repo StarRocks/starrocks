@@ -271,7 +271,7 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
     tablet_info->set_schema_hash(_tablet->schema_hash());
     auto invalid_global_dict_columns = _rowset_writer->invalid_global_dict_columns();
     for (auto& item : invalid_global_dict_columns) {
-        tablet_info->add_no_efficacy_dict_col_name(item);
+        tablet_info->add_invalid_dict_cache_columns(item);
     }
 #endif
 
