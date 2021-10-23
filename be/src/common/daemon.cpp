@@ -82,10 +82,8 @@ void* tcmalloc_gc_thread(void* dummy) {
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
         size_t used_size = 0;
         size_t free_size = 0;
-
         MallocExtension::instance()->GetNumericProperty("generic.current_allocated_bytes", &used_size);
         MallocExtension::instance()->GetNumericProperty("tcmalloc.pageheap_free_bytes", &free_size);
-
         size_t phy_size = used_size + free_size; // physical memory usage
         if (phy_size > config::tc_use_memory_min) {
             size_t max_free_size = phy_size * config::tc_free_memory_rate / 100;
