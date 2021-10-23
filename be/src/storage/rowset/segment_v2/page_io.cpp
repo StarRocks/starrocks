@@ -28,11 +28,13 @@
 #include "common/logging.h"
 #include "env/env.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "storage/fs/block_manager.h"
 #include "storage/page_cache.h"
 #include "util/block_compression.h"
 #include "util/coding.h"
 #include "util/crc32c.h"
+#include "util/defer_op.h"
 #include "util/faststring.h"
 #include "util/runtime_profile.h"
 

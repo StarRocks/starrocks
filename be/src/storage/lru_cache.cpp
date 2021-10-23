@@ -11,6 +11,7 @@
 #include <sstream>
 #include <string>
 
+#include "runtime/current_thread.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/row_block.h"
