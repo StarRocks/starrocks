@@ -24,10 +24,11 @@ StatusOr<vectorized::ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::R
         for (size_t row_i = 0; row_i < rows_count; row_i++) {
             // Each const_expr_list is projected to ONE dest row.
             DCHECK_EQ(_const_expr_lists[_row_index + row_i].size(), columns_count);
-            if (_const_expr_lists[_row_index + row_i][col_i]->is_nullable()) {
+            ColumnPtr src_column = _const_expr_lists[_row_index + row_i][col_i]->evaluate(nullptr);
+            if (src_column->is_nullable()) {
+                DCHECK(dst_column->is_nullable());
                 dst_column->append_nulls(1);
             } else {
-                ColumnPtr src_column = _const_expr_lists[_row_index + row_i][col_i]->evaluate(nullptr);
                 auto* src_const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(src_column);
                 dst_column->append(*src_const_column->data_column(), 0, 1);
             }
