@@ -57,6 +57,15 @@ public class ValuesTransformer {
             subqueriesIndex.set(i, !tmp.isEmpty());
             ColumnRefOperator output = columnRefFactory
                     .create(expr, node.getRelationFields().getFieldByIndex(i).getType(), expr.isNullable());
+            if (!output.isNullable()) {
+                // The output column should be nullable, if the expression of any row is nullable.
+                for (List<Expr> row : node.getRows()) {
+                    if (row.get(i).isNullable()) {
+                        output.setNullable(true);
+                        break;
+                    }
+                }
+            }
             outputColumns.add(output);
             if (tmp.isEmpty()) {
                 valuesOutputColumns.add(output);
