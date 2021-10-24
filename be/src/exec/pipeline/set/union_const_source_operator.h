@@ -58,7 +58,7 @@ public:
               _const_expr_lists(const_expr_lists) {}
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        // Divide _const_expr_lists *into degree_of_parallelism* parts,
+        // Divide _const_expr_lists into *degree_of_parallelism* parts,
         // each of which contains *rows_num_per_driver* continuous rows except the last part.
         size_t rows_total = _const_expr_lists.size();
         size_t rows_num_per_driver = (rows_total + degree_of_parallelism - 1) / degree_of_parallelism;
