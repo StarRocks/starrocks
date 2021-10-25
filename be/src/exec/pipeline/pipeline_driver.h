@@ -14,10 +14,8 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/source_operator.h"
-#include "runtime/mem_tracker.h"
 
 namespace starrocks {
-class MemTracker;
 namespace pipeline {
 
 class PipelineDriver;
@@ -183,7 +181,6 @@ private:
     MorselQueue* _morsel_queue = nullptr;
     DriverState _state;
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
-    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
     const size_t _yield_max_chunks_moved;
     const int64_t _yield_max_time_spent;
 };
