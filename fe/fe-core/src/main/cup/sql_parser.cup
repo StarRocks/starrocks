@@ -384,7 +384,7 @@ nonterminal JoinOperator join_operator;
 nonterminal Boolean opt_lateral;
 nonterminal ArrayList<String> opt_plan_hints;
 nonterminal ArrayList<String> opt_sort_hints;
-nonterminal Map<String, String> opt_select_hints, hint_map;
+nonterminal Map<String, String> opt_select_hints, select_hint, select_hint_list, hint_map;
 nonterminal Expr sign_chain_expr;
 nonterminal Qualifier opt_set_qualifier;
 nonterminal Operation set_op;
@@ -3437,7 +3437,7 @@ select_clause ::=
     ;
 
 opt_select_hints ::=
-    COMMENTED_PLAN_HINT_START KW_SET_VAR LPAREN hint_map:map RPAREN COMMENTED_PLAN_HINT_END
+    select_hint_list:map
     {:
         RESULT = map;
     :}
@@ -3447,6 +3447,24 @@ opt_select_hints ::=
     :}
     ;
 
+select_hint_list ::=
+    select_hint:hint
+    {:
+        RESULT = hint;
+    :}
+    | select_hint_list:list select_hint:hint
+    {:
+        list.putAll(hint);
+        RESULT = list;
+    :}
+    ;
+
+select_hint ::=
+    COMMENTED_PLAN_HINT_START KW_SET_VAR LPAREN hint_map:map RPAREN COMMENTED_PLAN_HINT_END
+    {:
+        RESULT = map;
+    :}
+    ;
 
 hint_map ::=
     ident_or_text:k EQUAL literal:v
