@@ -10,6 +10,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -21,7 +22,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,61 +64,45 @@ public class MVProjectAggProjectScanRewrite {
             for (MaterializedViewRule.RewriteContext context : rewriteContexts) {
                 ColumnRefOperator projectColumn =
                         rewriteProjectOperator(bellowProject, context.queryColumnRef, context.mvColumnRef);
-                rewriteAggOperator(input, context.aggCall, projectColumn, context.mvColumn);
-                rewriteTopProjectOperator((LogicalAggregationOperator) input.inputAt(0).getOp(), topProject,
-                        projectColumn, context.aggCall);
+                Pair<ColumnRefOperator, ColumnRefOperator> aggColumn =
+                        rewriteAggOperator(input, context.aggCall, projectColumn, context.mvColumn, factory);
+                rewriteTopProjectOperator((LogicalAggregationOperator) input.inputAt(0).getOp(), topProject, aggColumn,
+                        context.aggCall);
             }
         }
     }
 
     private void rewriteTopProjectOperator(LogicalAggregationOperator agg, LogicalProjectOperator project,
-                                           ColumnRefOperator aggUsedColumn, CallOperator queryAgg) {
-        ColumnRefOperator percentileColumn = null;
-        for (Map.Entry<ColumnRefOperator, CallOperator> kv : agg.getAggregations().entrySet()) {
-            if (kv.getValue().getFnName().equals(FunctionSet.PERCENTILE_UNION)
-                    && kv.getValue().getUsedColumns().getFirstId() == aggUsedColumn.getId()) {
-                percentileColumn = kv.getKey();
-                break;
-            }
-        }
-        Preconditions.checkState(percentileColumn != null);
+                                           Pair<ColumnRefOperator, ColumnRefOperator> aggUsedColumn, CallOperator queryAgg) {
         CallOperator percentileApproxRaw = new CallOperator(FunctionSet.PERCENTILE_APPROX_RAW,
-                Type.DOUBLE, Lists.newArrayList(percentileColumn, queryAgg.getChild(1)),
+                Type.DOUBLE, Lists.newArrayList(aggUsedColumn.second, queryAgg.getChild(1)),
                 Expr.getBuiltinFunction(
                         FunctionSet.PERCENTILE_APPROX_RAW,
                         new Type[] {Type.PERCENTILE, Type.DOUBLE},
                         Function.CompareMode.IS_IDENTICAL));
 
         Map<ColumnRefOperator, ScalarOperator> rewriteMap = new HashMap<>();
-        rewriteMap.put(percentileColumn, percentileApproxRaw);
+        rewriteMap.put(aggUsedColumn.first, percentileApproxRaw);
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
 
         for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : project.getColumnRefMap().entrySet()) {
-            if (kv.getValue().getUsedColumns().contains(percentileColumn)) {
-                kv.setValue(kv.getValue().accept(rewriter, null));
-                break;
-            }
+            kv.setValue(kv.getValue().accept(rewriter, null));
         }
     }
 
     // Use mv column instead of query column
     protected static void rewriteOlapScanOperator(OptExpression optExpression, LogicalOlapScanOperator olapScanOperator,
                                                   List<MaterializedViewRule.RewriteContext> rewriteContexts) {
-        List<ColumnRefOperator> outputColumns = new ArrayList<>(olapScanOperator.getOutputColumns());
         Map<ColumnRefOperator, Column> columnRefOperatorColumnMap =
                 new HashMap<>(olapScanOperator.getColRefToColumnMetaMap());
 
         for (MaterializedViewRule.RewriteContext rewriteContext : rewriteContexts) {
-            outputColumns.remove(rewriteContext.queryColumnRef);
-            outputColumns.add(rewriteContext.mvColumnRef);
-
             columnRefOperatorColumnMap.remove(rewriteContext.queryColumnRef);
             columnRefOperatorColumnMap.put(rewriteContext.mvColumnRef, rewriteContext.mvColumn);
         }
 
         LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
                 olapScanOperator.getTable(),
-                outputColumns,
                 columnRefOperatorColumnMap,
                 olapScanOperator.getColumnMetaToColRefMap(),
                 olapScanOperator.getDistributionSpec(),
@@ -149,10 +133,11 @@ public class MVProjectAggProjectScanRewrite {
 
     // TODO(kks): refactor this method later
     // query: percentile_approx(a) && mv: percentile_union(a) -> percentile_union(a)
-    protected void rewriteAggOperator(OptExpression optExpression,
-                                      CallOperator agg,
-                                      ColumnRefOperator aggUsedColumn,
-                                      Column mvColumn) {
+    protected Pair<ColumnRefOperator, ColumnRefOperator> rewriteAggOperator(OptExpression optExpression,
+                                                   CallOperator agg,
+                                                   ColumnRefOperator aggUsedColumn,
+                                                   Column mvColumn,
+                                                   ColumnRefFactory factory) {
         LogicalAggregationOperator aggOperator = (LogicalAggregationOperator) optExpression.getInputs().get(0).getOp();
         Map<ColumnRefOperator, CallOperator> newAggMap = new HashMap<>(aggOperator.getAggregations());
 
@@ -162,7 +147,13 @@ public class MVProjectAggProjectScanRewrite {
                     kv.getValue().getUsedColumns().getFirstId() == aggUsedColumn.getId()) {
                 if (functionName.equals(FunctionSet.PERCENTILE_APPROX) &&
                         mvColumn.getAggregationType() == AggregateType.PERCENTILE_UNION) {
+
                     kv.setValue(getPercentileFunction(kv.getValue()));
+
+                    newAggMap.remove(kv.getKey());
+                    ColumnRefOperator aggColumnRef =
+                            factory.create(kv.getKey(), kv.getKey().getType(), kv.getKey().isNullable());
+                    newAggMap.put(aggColumnRef, kv.getValue());
 
                     optExpression.setChild(0, OptExpression.create(new LogicalAggregationOperator(
                             aggOperator.getType(),
@@ -173,10 +164,11 @@ public class MVProjectAggProjectScanRewrite {
                             aggOperator.getSingleDistinctFunctionPos(),
                             aggOperator.getLimit(),
                             aggOperator.getPredicate()), optExpression.inputAt(0).getInputs()));
-                    break;
+                    return new Pair<>(kv.getKey(), aggColumnRef);
                 }
             }
         }
+        return null;
     }
 
     private CallOperator getPercentileFunction(CallOperator oldAgg) {

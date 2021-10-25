@@ -77,8 +77,8 @@ OutPut Exchange Id: 25
 |
 23:Project
 |  output columns:
-|  54 <-> [25: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [26: L_DISCOUNT, DOUBLE, false]
 |  46 <-> [46: N_NAME, VARCHAR, false]
+|  54 <-> [25: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [26: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 16390852
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
@@ -93,9 +93,14 @@ OutPut Exchange Id: 25
 |  - filter_id = 5, build_expr = (37: S_SUPPKEY), remote = false
 |  cardinality: 16390852
 |  column statistics:
+|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 |
 |----21:EXCHANGE
 |       cardinality: 200000
@@ -121,6 +126,8 @@ OutPut Exchange Id: 25
 |  cardinality: 91060291
 |  column statistics:
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
@@ -172,6 +179,7 @@ OutPut Exchange Id: 21
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |
 |----18:EXCHANGE
@@ -214,6 +222,8 @@ OutPut Exchange Id: 18
 |  column statistics:
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
 |
 |----15:EXCHANGE
 |       cardinality: 1
@@ -277,8 +287,10 @@ OutPut Exchange Id: 08
 |  equal join conjunct: [11: O_CUSTKEY, INT, false] = [1: C_CUSTKEY, INT, false]
 |  cardinality: 22765073
 |  column statistics:
+|  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7]
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
+|  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0]
 |
 |----5:EXCHANGE
 |       cardinality: 15000000

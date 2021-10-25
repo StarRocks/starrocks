@@ -24,7 +24,8 @@ public class FilterImplementationRule extends ImplementationRule {
 
         PhysicalFilterOperator filter = new PhysicalFilterOperator(
                 logical.getPredicate(),
-                logical.getLimit());
+                logical.getLimit(),
+                logical.getProjection());
         return Lists.newArrayList(OptExpression.create(filter, input.getInputs()));
     }
 }

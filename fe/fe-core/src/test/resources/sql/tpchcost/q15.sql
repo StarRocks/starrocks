@@ -176,8 +176,8 @@ HASH_PARTITIONED: 30: L_SUPPKEY
 |  use vectorized: true
 |
 7:Project
-|  <slot 45> : 33: L_EXTENDEDPRICE * 1.0 - 34: L_DISCOUNT
 |  <slot 30> : 30: L_SUPPKEY
+|  <slot 45> : 33: L_EXTENDEDPRICE * 1.0 - 34: L_DISCOUNT
 |  use vectorized: true
 |
 6:OlapScanNode
@@ -189,7 +189,7 @@ rollup: lineitem
 tabletRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=21861386
-avgRowSize=24.0
+avgRowSize=32.0
 numNodes=0
 use vectorized: true
 
@@ -208,8 +208,8 @@ HASH_PARTITIONED: 11: L_SUPPKEY
 |  use vectorized: true
 |
 2:Project
-|  <slot 26> : 14: L_EXTENDEDPRICE * 1.0 - 15: L_DISCOUNT
 |  <slot 11> : 11: L_SUPPKEY
+|  <slot 26> : 14: L_EXTENDEDPRICE * 1.0 - 15: L_DISCOUNT
 |  use vectorized: true
 |
 1:OlapScanNode
@@ -221,7 +221,7 @@ rollup: lineitem
 tabletRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=21861386
-avgRowSize=24.0
+avgRowSize=32.0
 numNodes=0
 use vectorized: true
 [fragment statistics]
@@ -237,6 +237,7 @@ column statistics:
 * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
 * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
 * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0]
+* L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 * sum(26: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 
 PLAN FRAGMENT 1(F00)
@@ -254,6 +255,7 @@ OutPut Exchange Id: 22
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0]
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * sum(26: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 |
 20:Project
@@ -282,6 +284,7 @@ OutPut Exchange Id: 22
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0]
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * sum(26: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 |
 |----18:EXCHANGE
@@ -326,6 +329,7 @@ OutPut Exchange Id: 18
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * sum(26: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
+|  * max(46: sum(45: expr))-->[104949.5, 104949.5, 0.0, 8.0, 1.0]
 |
 |----15:EXCHANGE
 |       cardinality: 1
@@ -405,8 +409,8 @@ OutPut Exchange Id: 09
 |
 7:Project
 |  output columns:
-|  45 <-> [33: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [34: L_DISCOUNT, DOUBLE, false]
 |  30 <-> [30: L_SUPPKEY, INT, false]
+|  45 <-> [33: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [34: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 21861386
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
@@ -418,13 +422,14 @@ preAggregation: on
 Predicates: [38: L_SHIPDATE, DATE, false] >= '1995-07-01', [38: L_SHIPDATE, DATE, false] < '1995-10-01'
 partitionsRatio=1/1, tabletsRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-actualRows=0, avgRowSize=24.0
+actualRows=0, avgRowSize=32.0
 cardinality: 21861386
 column statistics:
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
 * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
 * L_SHIPDATE-->[8.04528E8, 8.124768E8, 0.0, 4.0, 2526.0]
+* expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 
 PLAN FRAGMENT 6(F01)
 
@@ -443,8 +448,8 @@ OutPut Exchange Id: 04
 |
 2:Project
 |  output columns:
-|  26 <-> [14: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [15: L_DISCOUNT, DOUBLE, false]
 |  11 <-> [11: L_SUPPKEY, INT, false]
+|  26 <-> [14: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [15: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 21861386
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
@@ -456,11 +461,12 @@ preAggregation: on
 Predicates: [19: L_SHIPDATE, DATE, false] >= '1995-07-01', [19: L_SHIPDATE, DATE, false] < '1995-10-01'
 partitionsRatio=1/1, tabletsRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-actualRows=0, avgRowSize=24.0
+actualRows=0, avgRowSize=32.0
 cardinality: 21861386
 column statistics:
 * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
 * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
 * L_SHIPDATE-->[8.04528E8, 8.124768E8, 0.0, 4.0, 2526.0]
+* expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 [end]
