@@ -500,7 +500,7 @@ public class FileSystemManager {
                 conf.set(FS_KS3_IMPL, "com.ksyun.kmr.hadoop.fs.ks3.Ks3FileSystem");
                 conf.set(FS_KS3_IMPL_DISABLE_CACHE, disableCache);
                 FileSystem ks3FileSystem = FileSystem.get(pathUri.getUri(), conf);
-                fileSystem.setFileSystem(s3AFileSystem);
+                fileSystem.setFileSystem(ks3FileSystem);
             }
             return fileSystem;
         } catch (Exception e) {
