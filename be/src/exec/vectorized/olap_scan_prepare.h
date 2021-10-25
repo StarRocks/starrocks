@@ -363,7 +363,9 @@ static void normalize_join_runtime_filter(const SlotDescriptor& slot, const std:
         if (!desc->is_probe_slot_ref(&slot_id) || slot_id != slot.id()) continue;
 
         const RuntimeBloomFilter<SlotType>* filter = down_cast<const RuntimeBloomFilter<SlotType>*>(rf);
-
+        // For some cases such as in bucket shuffle, some hash join node may not have any input chunk from right table.
+        // Runtime filter does not have any min/max values in this case.
+        if (!filter->has_min_max()) continue;
         // If this column doesn't have other filter, we use join runtime filter
         // to fast comput row range in storage engine
         if (range->is_init_state()) {

@@ -4,7 +4,8 @@ select t0.v1 from t0 where exists (select t3.v2 from t3)
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v1] predicate[null]) Limit 1
+        EXCHANGE GATHER
+            SCAN (columns[4: v1] predicate[null]) Limit 1
 [end]
 
 [sql]
@@ -79,7 +80,8 @@ select t0.v1 from t0 where exists (select t3.v2 from t3 where t3.v1 = 123)
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v1] predicate[4: v1 = 123]) Limit 1
+        EXCHANGE GATHER
+            SCAN (columns[4: v1] predicate[4: v1 = 123]) Limit 1
 [end]
 
 [sql]
@@ -124,13 +126,13 @@ RIGHT SEMI JOIN (join-predicate [6: v5 = 2: v2 AND 2: v2 < 7: v6] post-join-pred
 select v3, min(v1) from t0 group by v3 having exists (select v4 from t1 where v5 = v6);
 [result]
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
-    EXCHANGE GATHER
-        SCAN (columns[6: v5, 7: v6] predicate[6: v5 = 7: v6]) Limit 1
+    AGGREGATE ([GLOBAL] aggregate [{4: min(1: v1)=min(4: min(1: v1))}] group by [[3: v3]] having [null]
+        EXCHANGE SHUFFLE[3]
+            AGGREGATE ([LOCAL] aggregate [{4: min(1: v1)=min(1: v1)}] group by [[3: v3]] having [null]
+                SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{4: min(1: v1)=min(4: min(1: v1))}] group by [[3: v3]] having [null]
-            EXCHANGE SHUFFLE[3]
-                AGGREGATE ([LOCAL] aggregate [{4: min(1: v1)=min(1: v1)}] group by [[3: v3]] having [null]
-                    SCAN (columns[1: v1, 3: v3] predicate[null])
+        EXCHANGE GATHER
+            SCAN (columns[6: v5, 7: v6] predicate[6: v5 = 7: v6]) Limit 1
 [end]
 
 [sql]
@@ -142,10 +144,11 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
             AGGREGATE ([LOCAL] aggregate [{4: min(1: v1)=min(1: v1)}] group by [[3: v3]] having [null]
                 SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{}] group by [[7: v6]] having [null]
-            EXCHANGE SHUFFLE[7]
-                AGGREGATE ([LOCAL] aggregate [{}] group by [[7: v6]] having [null]
-                    SCAN (columns[6: v5, 7: v6] predicate[6: v5 = 5])
+        EXCHANGE GATHER
+            AGGREGATE ([GLOBAL] aggregate [{}] group by [[7: v6]] having [null]
+                EXCHANGE SHUFFLE[7]
+                    AGGREGATE ([LOCAL] aggregate [{}] group by [[7: v6]] having [null]
+                        SCAN (columns[6: v5, 7: v6] predicate[6: v5 = 5])
 [end]
 
 [sql]
@@ -212,7 +215,8 @@ select v3, v1 from t0 where exists (select v6 from t1 limit 3);
 CROSS JOIN (join-predicate [null] post-join-predicate [null])
     SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4] predicate[null]) Limit 1
+        EXCHANGE GATHER
+            SCAN (columns[4: v4] predicate[null]) Limit 1
 [end]
 
 [sql]

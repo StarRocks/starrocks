@@ -402,7 +402,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("7:CROSS JOIN\n" +
                 "  |  cross join:\n" +
-                "  |  predicates is NULL.  |  use vectorized: true\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  use vectorized: true\n" +
                 "  |  \n" +
                 "  |----6:EXCHANGE\n" +
                 "  |       use vectorized: true\n" +
@@ -525,5 +526,38 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("1:AGGREGATE (update serialize)"));
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
+    }
+
+    // check outer join with isNull predicate on inner table
+    // The estimate cardinality of join should not be 0.
+    @Test
+    public void testOuterJoinWithIsNullPredicate() throws Exception {
+        // test left outer join
+        String sql = "select ps_partkey,ps_suppkey from partsupp left outer join part on " +
+                "ps_partkey = p_partkey where p_partkey is null";
+        String plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  equal join conjunct: [1: PS_PARTKEY, INT, false] = [7: P_PARTKEY, INT, true]\n" +
+                "  |  other predicates: 7: P_PARTKEY IS NULL\n" +
+                "  |  cardinality: 8000000"));
+        // test right outer join
+        sql = "select ps_partkey,ps_suppkey from partsupp right outer join part on " +
+                "ps_partkey = p_partkey where ps_partkey is null";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("3:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  equal join conjunct: [1: PS_PARTKEY, INT, true] = [7: P_PARTKEY, INT, false]\n" +
+                "  |  other predicates: 1: PS_PARTKEY IS NULL\n" +
+                "  |  cardinality: 8000000"));
+        // test full outer join
+        sql = "select ps_partkey,ps_suppkey from partsupp full outer join part on " +
+                "ps_partkey = p_partkey where ps_partkey is null";
+        plan = getCostExplain(sql);
+        Assert.assertTrue(plan.contains("3:HASH JOIN\n" +
+                "  |  join op: FULL OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  equal join conjunct: [1: PS_PARTKEY, INT, true] = [7: P_PARTKEY, INT, true]\n" +
+                "  |  other predicates: 1: PS_PARTKEY IS NULL\n" +
+                "  |  cardinality: 4000000"));
     }
 }

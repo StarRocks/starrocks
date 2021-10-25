@@ -412,7 +412,6 @@ set(STARROCKS_LINK_LIBS
     Exprs
     Formats
     Gutil
-    Memory
     Olap
     Rowset
     OlapFs

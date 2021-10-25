@@ -35,6 +35,7 @@
 #include "exec/tablet_info.h"
 #include "exec/vectorized/tablet_info.h"
 #include "gen_cpp/Types_types.h"
+#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "util/bitmap.h"
 #include "util/ref_count_closure.h"
@@ -239,7 +240,7 @@ private:
     std::atomic<int> _pending_batches_num{0};
     size_t _max_pending_batches_num = 16;
 
-    PBackendService_Stub* _stub = nullptr;
+    doris::PBackendService_Stub* _stub = nullptr;
     RefCountClosure<PTabletWriterOpenResult>* _open_closure = nullptr;
     ReusableClosure<PTabletWriterAddBatchResult>* _add_batch_closure = nullptr;
 

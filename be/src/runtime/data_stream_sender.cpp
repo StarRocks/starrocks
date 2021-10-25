@@ -221,7 +221,7 @@ private:
 
     size_t _current_request_bytes = 0;
 
-    PBackendService_Stub* _brpc_stub = nullptr;
+    doris::PBackendService_Stub* _brpc_stub = nullptr;
     RefCountClosure<PTransmitDataResult>* _closure = nullptr;
 
     int32_t _brpc_timeout_ms = 500;

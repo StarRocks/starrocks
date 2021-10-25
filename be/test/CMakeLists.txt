@@ -70,6 +70,7 @@ set(EXEC_FILES
         ./exprs/vectorized/hash_functions_test.cpp
         ./exprs/vectorized/hyperloglog_functions_test.cpp
         ./exprs/vectorized/if_expr_test.cpp
+        ./exprs/vectorized/function_helper_test.cpp
         ./exprs/vectorized/in_iterator_predicate_test.cpp
         ./exprs/vectorized/in_predicate_test.cpp
         ./exprs/vectorized/is_null_predicate_test.cpp
@@ -118,12 +119,6 @@ set(EXEC_FILES
         ./storage/in_list_predicate_test.cpp
         ./storage/key_coder_test.cpp
         ./storage/lru_cache_test.cpp
-        ./storage/memory/column_delta_test.cpp
-        ./storage/memory/column_test.cpp
-        ./storage/memory/hash_index_test.cpp
-        ./storage/memory/mem_tablet_test.cpp
-        ./storage/memory/partial_row_batch_test.cpp
-        ./storage/memory/schema_test.cpp
         ./storage/null_predicate_test.cpp
         ./storage/kv_store_test.cpp
         ./storage/protobuf_file_test.cpp

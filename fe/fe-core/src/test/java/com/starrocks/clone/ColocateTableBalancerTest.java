@@ -452,4 +452,70 @@ public class ColocateTableBalancerTest {
         List<Long> availableBeIds = Deencapsulation.invoke(balancer, "getAvailableBeIds", "cluster1", infoService);
         Assert.assertArrayEquals(new long[] {2L, 4L}, availableBeIds.stream().mapToLong(i -> i).sorted().toArray());
     }
+
+    @Test
+    public void testDropBackend(@Mocked SystemInfoService infoService, @Mocked ClusterLoadStatistic statistic) {
+        new Expectations() {
+            {
+                infoService.getBackend(1L);
+                result = backend1;
+                minTimes = 0;
+                infoService.getBackend(2L);
+                result = backend2;
+                minTimes = 0;
+                infoService.getBackend(3L);
+                result = backend3;
+                minTimes = 0;
+                infoService.getBackend(4L);
+                result = backend4;
+                minTimes = 0;
+                infoService.getBackend(5L);
+                result = backend5;
+                minTimes = 0;
+                infoService.getBackend(6L);
+                result = backend6;
+                minTimes = 0;
+                infoService.getBackend(7L);
+                result = backend7;
+                minTimes = 0;
+                infoService.getBackend(8L);
+                result = backend8;
+                minTimes = 0;
+                // backend is dropped
+                infoService.getBackend(9L);
+                result = null;
+                minTimes = 0;
+
+                statistic.getBackendLoadStatistic(anyLong);
+                result = new Delegate<BackendLoadStatistic>() {
+                    BackendLoadStatistic delegate(Long beId) {
+                        return new FakeBackendLoadStatistic(beId, null, null, null);
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+        GroupId groupId = new GroupId(10000, 10001);
+        List<Column> distributionCols = Lists.newArrayList();
+        distributionCols.add(new Column("k1", Type.INT));
+        ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId, distributionCols, 5, (short) 3);
+        Map<GroupId, ColocateGroupSchema> group2Schema = Maps.newHashMap();
+        group2Schema.put(groupId, groupSchema);
+
+        // group is balanced before backend 9 is dropped
+        ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,
+                Lists.newArrayList(9L, 8L, 7L, 8L, 6L, 5L, 9L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L));
+        Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
+        List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
+        Set<Long> unavailableBeIds = Sets.newHashSet(9L);
+        List<Long> allAvailBackendIds = Lists.newArrayList(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L);
+        boolean changed = (Boolean) Deencapsulation
+                .invoke(balancer, "relocateAndBalance", groupId, unavailableBeIds, allAvailBackendIds,
+                        colocateTableIndex, infoService, statistic, balancedBackendsPerBucketSeq);
+        System.out.println(balancedBackendsPerBucketSeq);
+        Assert.assertTrue(changed);
+        List<List<Long>> expected = Lists.partition(
+                Lists.newArrayList(5L, 8L, 7L, 8L, 6L, 5L, 6L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L), 3);
+        Assert.assertEquals(expected, balancedBackendsPerBucketSeq);
+    }
 }

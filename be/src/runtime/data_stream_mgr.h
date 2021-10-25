@@ -31,7 +31,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
-#include "gen_cpp/starrocks_internal_service.pb.h"
+#include "gen_cpp/doris_internal_service.pb.h"
 #include "runtime/descriptors.h" // for PlanNodeId
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"

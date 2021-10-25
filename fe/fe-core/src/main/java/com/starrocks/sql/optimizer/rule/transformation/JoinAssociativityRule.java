@@ -10,6 +10,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -37,7 +38,7 @@ public class JoinAssociativityRule extends TransformationRule {
 
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
-        if (!joinOperator.getJoinHint().isEmpty() ||
+        if (!joinOperator.getJoinHint().isEmpty() || ((LogicalOperator) input.inputAt(0).getOp()).hasLimit() ||
                 !((LogicalJoinOperator) input.inputAt(0).getOp()).getJoinHint().isEmpty()) {
             return false;
         }

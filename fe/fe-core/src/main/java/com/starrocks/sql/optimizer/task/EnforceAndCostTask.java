@@ -10,6 +10,8 @@ import com.starrocks.sql.optimizer.ChildPropertyDeriver;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
@@ -22,11 +24,14 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.List;
+
+import static com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils.getEqConj;
 
 /**
  * EnforceAndCostTask costs a physical expression.
@@ -132,7 +137,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                     break;
                 }
 
-                if (!doBroadcastHint(inputProperty, childBestExpr)) {
+                if (!checkBroadcastRowCountLimit(inputProperty, childBestExpr)) {
                     break;
                 }
 
@@ -185,7 +190,9 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         context.getOptimizerContext().addTaskContext(taskContext);
     }
 
-    private boolean doBroadcastHint(PhysicalPropertySet inputProperty, GroupExpression childBestExpr) {
+    // Check if the broadcast table row count exceeds the broadcastRowCountLimit.
+    // This check needs to meet several criteria, such as the join type and the size of the left and right tables。
+    private boolean checkBroadcastRowCountLimit(PhysicalPropertySet inputProperty, GroupExpression childBestExpr) {
         if (!inputProperty.getDistributionProperty().isBroadcast()) {
             return true;
         }
@@ -193,11 +200,23 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (!OperatorType.PHYSICAL_HASH_JOIN.equals(groupExpression.getOp().getOpType())) {
             return true;
         }
+        PhysicalHashJoinOperator node = (PhysicalHashJoinOperator) groupExpression.getOp();
+        // If broadcast child has hint, need to change the cost to zero
+        double childCost = childBestExpr.getCost(inputProperty);
+        if (node.getJoinHint().equalsIgnoreCase("BROADCAST")
+                && childCost == Double.POSITIVE_INFINITY) {
+            List<PhysicalPropertySet> childInputProperties =
+                    childBestExpr.getInputProperties(inputProperty);
+            childBestExpr.setPropertyWithCost(inputProperty, childInputProperties, 0);
+        }
 
-        Statistics leftChildStats = groupExpression.getInputs().get(curChildIndex - 1).getStatistics();
-        Statistics rightChildStats = groupExpression.getInputs().get(curChildIndex).getStatistics();
-        if (leftChildStats == null || rightChildStats == null) {
-            return false;
+        // if this groupExpression can only do Broadcast, don't need to check the broadcastRowCountLimit
+        ColumnRefSet leftChildColumns = groupExpression.getChildOutputColumns(0);
+        ColumnRefSet rightChildColumns = groupExpression.getChildOutputColumns(1);
+        List<BinaryPredicateOperator> equalOnPredicate =
+                getEqConj(leftChildColumns, rightChildColumns, Utils.extractConjuncts(node.getJoinPredicate()));
+        if (Utils.canOnlyDoBroadcast(node, equalOnPredicate, node.getJoinHint())) {
+            return true;
         }
         // Only when right table is not significantly smaller than left table, consider the
         // broadcastRowCountLimit, Otherwise, this limit is not considered, which can avoid
@@ -206,22 +225,16 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 Math.min(groupExpression.getGroup().getLogicalProperty().getLeftMostScanTabletsNum(),
                         ConnectContext.get().getSessionVariable().getParallelExecInstanceNum()));
         int beNum = Math.max(1, Catalog.getCurrentSystemInfo().getBackendIds(true).size());
-        PhysicalHashJoinOperator operator = (PhysicalHashJoinOperator) groupExpression.getOp();
-        if (leftChildStats.getOutputSize() < rightChildStats.getOutputSize() * parallelExecInstance * beNum * 10
-                && rightChildStats.getOutputRowCount() > ConnectContext.get().getSessionVariable()
-                .getBroadcastRowCountLimit() && !operator.getJoinHint().equalsIgnoreCase("BROADCAST")) {
+        Statistics leftChildStats = groupExpression.getInputs().get(curChildIndex - 1).getStatistics();
+        Statistics rightChildStats = groupExpression.getInputs().get(curChildIndex).getStatistics();
+        if (leftChildStats == null || rightChildStats == null) {
             return false;
         }
-
-        // If broadcast child has hint, need to change the cost to zero
-        double childCost = childBestExpr.getCost(inputProperty);
-        if (operator.getJoinHint().equalsIgnoreCase("BROADCAST")
-                && childCost == Double.POSITIVE_INFINITY) {
-            List<PhysicalPropertySet> childInputProperties =
-                    childBestExpr.getInputProperties(inputProperty);
-            childBestExpr.setPropertyWithCost(inputProperty, childInputProperties, 0);
+        if (leftChildStats.getOutputSize() < rightChildStats.getOutputSize() * parallelExecInstance * beNum * 10
+                && rightChildStats.getOutputRowCount() >
+                ConnectContext.get().getSessionVariable().getBroadcastRowCountLimit()) {
+            return false;
         }
-
         return true;
     }
 
