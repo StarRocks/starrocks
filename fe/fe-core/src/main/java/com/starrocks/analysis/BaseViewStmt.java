@@ -86,7 +86,6 @@ public class BaseViewStmt extends DdlStmt {
             if (cols.size() != viewDefStmt.getColLabels().size()) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_VIEW_WRONG_LIST);
             }
-            // TODO(zc): type
             for (int i = 0; i < cols.size(); ++i) {
                 Type type = viewDefStmt.getBaseTblResultExprs().get(i).getType().clone();
                 Column col = new Column(cols.get(i).getColName(), type);
@@ -94,7 +93,6 @@ public class BaseViewStmt extends DdlStmt {
                 finalCols.add(col);
             }
         } else {
-            // TODO(zc): type
             for (int i = 0; i < viewDefStmt.getBaseTblResultExprs().size(); ++i) {
                 Type type = viewDefStmt.getBaseTblResultExprs().get(i).getType().clone();
                 finalCols.add(new Column(viewDefStmt.getColLabels().get(i), type));
