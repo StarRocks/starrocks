@@ -1156,7 +1156,6 @@ public class SchemaChangeHandler extends AlterHandler {
             // generate schema hash for new index has to generate a new schema hash not equal to current schema hash
             int currentSchemaHash = currentIndexMeta.getSchemaHash();
             int newSchemaHash = Util.generateSchemaHash();
-            long newSchemaId = catalog.getNextId();
             while (currentSchemaHash == newSchemaHash) {
                 newSchemaHash = Util.generateSchemaHash();
             }
@@ -1231,7 +1230,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
                 schemaChangeJob.addPartitionShadowIndex(partitionId, shadowIndexId, shadowIndex);
             } // end for partition
-            schemaChangeJob.addIndexSchema(shadowIndexId, originIndexId, newIndexName, newSchemaId, newSchemaVersion,
+            schemaChangeJob.addIndexSchema(shadowIndexId, originIndexId, newIndexName, shadowIndexId, newSchemaVersion,
                     newSchemaHash, newShortKeyColumnCount, entry.getValue());
         } // end for index
 

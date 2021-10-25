@@ -37,7 +37,6 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -107,8 +106,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     // shadow index id -> shadow index short key count
     @SerializedName(value = "indexShortKeyMap")
     private Map<Long, Short> indexShortKeyMap = Maps.newHashMap();
-    @SerializedName(value = "indexSchemaIdMap")
-    private Map<Long, Long> indexSchemaIdMap = Maps.newHashMap();
 
     // bloom filter info
     @SerializedName(value = "hasBfChange")
@@ -159,7 +156,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                List<Column> shadowIdxSchema) {
         indexIdMap.put(shadowIdxId, originIdxId);
         indexIdToName.put(shadowIdxId, shadowIndexName);
-        indexSchemaIdMap.put(shadowIdxId, newSchemaId);
         indexSchemaVersionAndHashMap.put(shadowIdxId, new SchemaVersionAndHash(shadowSchemaVersion, shadowSchemaHash));
         indexShortKeyMap.put(shadowIdxId, shadowIdxShortKeyCount);
         indexSchemaMap.put(shadowIdxId, shadowIdxSchema);
@@ -244,7 +240,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     short shadowShortKeyColumnCount = indexShortKeyMap.get(shadowIdxId);
                     List<Column> shadowSchema = indexSchemaMap.get(shadowIdxId);
                     int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
-                    long shadowSchemaId = indexSchemaIdMap.getOrDefault(shadowIdxId, MaterializedIndexMeta.INVALID_SCHEMA_ID);
                     long originIndexId = indexIdMap.get(shadowIdxId);
                     int originSchemaHash = tbl.getSchemaHashByIndexId(originIndexId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
@@ -257,7 +252,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             countDownLatch.addMark(backendId, shadowTabletId);
                             CreateReplicaTask createReplicaTask = new CreateReplicaTask(
                                     backendId, dbId, tableId, partitionId, shadowIdxId, shadowTabletId,
-                                    shadowShortKeyColumnCount, shadowSchemaId, shadowSchemaHash,
+                                    shadowShortKeyColumnCount, shadowSchemaHash,
                                     Partition.PARTITION_INIT_VERSION, Partition.PARTITION_INIT_VERSION_HASH,
                                     originKeysType, TStorageType.COLUMN, storageMedium,
                                     shadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
@@ -350,7 +345,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
         for (long shadowIdxId : indexIdMap.keySet()) {
             tbl.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId),
-                    indexSchemaIdMap.getOrDefault(shadowIdxId, MaterializedIndexMeta.INVALID_SCHEMA_ID),
                     indexSchemaMap.get(shadowIdxId),
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion,
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash,
@@ -900,7 +894,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             indexSchemaMap.put(shadowIndexId, schema);
             indexSchemaVersionAndHashMap.put(shadowIndexId, schemaVersionAndHash);
             indexShortKeyMap.put(shadowIndexId, shortKeyCount);
-            indexSchemaIdMap.put(shadowIndexId, MaterializedIndexMeta.INVALID_SCHEMA_ID);
         }
 
         // bloom filter
@@ -954,7 +947,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             indexIdMap.put(shadowIndexId, originIndexId);
             indexIdToName.put(shadowIndexId, indexName);
             indexSchemaVersionAndHashMap.put(shadowIndexId, schemaVersionAndHash);
-            indexSchemaIdMap.put(shadowIndexId, MaterializedIndexMeta.INVALID_SCHEMA_ID);
         }
 
         // bloom filter

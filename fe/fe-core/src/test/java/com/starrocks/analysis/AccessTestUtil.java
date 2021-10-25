@@ -105,7 +105,7 @@ public class AccessTestUtil {
             baseSchema.add(column);
             OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
                     KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, catalog.getClusterId(), null);
-            table.setIndexMeta(baseIndex.getId(), "testTbl", baseIndex.getId(), baseSchema, 0, 1, (short) 1,
+            table.setIndexMeta(baseIndex.getId(), "testTbl", baseSchema, 0, 1, (short) 1,
                     TStorageType.COLUMN, KeysType.AGG_KEYS);
             table.addPartition(partition);
             table.setBaseIndexId(baseIndex.getId());

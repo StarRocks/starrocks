@@ -37,7 +37,6 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -848,8 +847,8 @@ public class SchemaChangeJob extends AlterJob {
                     int schemaVersion = changedIndexIdToSchemaVersion.get(indexId);
                     int schemaHash = changedIndexIdToSchemaHash.get(indexId);
                     short shortKeyColumnCount = changedIndexIdToShortKeyColumnCount.get(indexId);
-                    olapTable.setIndexMeta(indexId, null, MaterializedIndexMeta.INVALID_SCHEMA_ID, entry.getValue(),
-                            schemaVersion, schemaHash, shortKeyColumnCount, newStorageType, null);
+                    olapTable.setIndexMeta(indexId, null, entry.getValue(), schemaVersion, schemaHash,
+                            shortKeyColumnCount, newStorageType, null);
                 }
 
                 // 3. update base schema if changed
@@ -1013,8 +1012,8 @@ public class SchemaChangeJob extends AlterJob {
                 int schemaVersion = getSchemaVersionByIndexId(indexId);
                 int schemaHash = getSchemaHashByIndexId(indexId);
                 short shortKeyColumnCount = getShortKeyColumnCountByIndexId(indexId);
-                olapTable.setIndexMeta(indexId, null, MaterializedIndexMeta.INVALID_SCHEMA_ID, entry.getValue(),
-                        schemaVersion, schemaHash, shortKeyColumnCount, newStorageType, null);
+                olapTable.setIndexMeta(indexId, null, entry.getValue(), schemaVersion, schemaHash, shortKeyColumnCount,
+                        newStorageType, null);
 
                 if (indexId == olapTable.getBaseIndexId()) {
                     olapTable.setNewFullSchema(entry.getValue());
