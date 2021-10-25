@@ -314,6 +314,14 @@ build_rapidjson() {
     cp -r $TP_SOURCE_DIR/$RAPIDJSON_SOURCE/include/rapidjson $TP_INCLUDE_DIR/
 }
 
+# rapidjson
+build_simdjson() {
+    check_if_source_exist $SIMDJSON_SOURCE
+
+    rm -rf $TP_INSTALL_DIR/simdjson
+    cp -r $TP_SOURCE_DIR/$SIMDJSON_SOURCE/include/simdjson $TP_INCLUDE_DIR/
+}
+
 # snappy
 build_snappy() {
     check_if_source_exist $SNAPPY_SOURCE
@@ -471,7 +479,7 @@ build_librdkafka() {
     CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     LDFLAGS="-L${TP_LIB_DIR}" \
     CFLAGS="-fPIC" \
-    ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-sasl
+    STATIC_LIB_libzstd=$TP_INSTALL_DIR/lib64/libzstd.a ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-sasl
     make -j$PARALLEL && make install
 }
 
@@ -735,6 +743,7 @@ build_gflags
 build_gtest
 build_glog
 build_rapidjson
+build_simdjson
 build_snappy
 build_gperftools
 build_curl
