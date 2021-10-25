@@ -623,4 +623,37 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
     }
+
+    @Test
+    public void testIntersectReorder() throws Exception {
+        // check cross join generate plan without exception
+        Catalog catalog = connectContext.getCatalog();
+        OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
+        setTableStatistics(t0, 1000);
+        OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
+        setTableStatistics(t1, 100);
+        OlapTable t2 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t2");
+        setTableStatistics(t2, 1);
+
+        String sql = "select v1 from t0 intersect select v7 from t2 intersect select v4 from t1";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("  0:INTERSECT\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  2:EXCHANGE\n" +
+                "     use vectorized: true"));
+        Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    HASH_PARTITIONED: <slot 5>\n" +
+                "\n" +
+                "  1:OlapScanNode\n" +
+                "     TABLE: t2"));
+        setTableStatistics(t0, 10000);
+    }
 }

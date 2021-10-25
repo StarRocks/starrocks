@@ -88,6 +88,7 @@ public enum RuleType {
     TF_REWRITE_DUPLICATE_AGGREGATE_FN,
 
     TF_JOIN_FORCE_LIMIT,
+    TF_INTERSECT_REORDER,
 
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,

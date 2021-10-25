@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
+import com.starrocks.sql.optimizer.rule.transformation.IntersectReorder;
 import com.starrocks.sql.optimizer.rule.transformation.JoinForceLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
@@ -104,7 +105,7 @@ public class Optimizer {
         ruleRewriteIterative(memo, rootTaskContext, new PruneProjectRule());
         ruleRewriteIterative(memo, rootTaskContext, new ScalarOperatorsReuseRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new JoinForceLimitRule());
-
+        ruleRewriteOnlyOnce(memo, rootTaskContext, new IntersectReorder());
         // Rewrite maybe produce empty groups, we need to remove them.
         memo.removeAllEmptyGroup();
 
