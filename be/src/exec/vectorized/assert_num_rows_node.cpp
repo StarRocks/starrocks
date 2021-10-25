@@ -2,9 +2,7 @@
 
 #include "exec/vectorized/assert_num_rows_node.h"
 
-#include "exec/pipeline/assert_num_rows/assert_num_rows_context.h"
-#include "exec/pipeline/assert_num_rows/assert_num_rows_sink_operator.h"
-#include "exec/pipeline/assert_num_rows/assert_num_rows_source_operator.h"
+#include "exec/pipeline/assert_num_rows_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
@@ -135,30 +133,15 @@ Status AssertNumRowsNode::close(RuntimeState* state) {
 pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    std::shared_ptr<pipeline::AssertNumRowsContext> assert_num_rows_context =
-            std::make_shared<pipeline::AssertNumRowsContext>();
-
     OpFactories operator_before_assert_num_rows_source = _children[0]->decompose_to_pipeline(context);
     operator_before_assert_num_rows_source =
             context->maybe_interpolate_local_exchange(operator_before_assert_num_rows_source);
 
-    // communication with CrossJoinLeft through shared_datas.
-    auto sink_factory = std::make_shared<AssertNumRowsSinkOperatorFactory>(context->next_operator_id(), id(),
-                                                                           assert_num_rows_context);
-    operator_before_assert_num_rows_source.emplace_back(std::move(sink_factory));
-    // cross_join_right as sink operator
-    context->add_pipeline(operator_before_assert_num_rows_source);
+    auto source_factory = std::make_shared<AssertNumRowsOperatorFactory>(
+            context->next_operator_id(), id(), _desired_num_rows, _subquery_string, std::move(_assertion));
+    operator_before_assert_num_rows_source.emplace_back(std::move(source_factory));
 
-    OpFactories operator_assert_num_rows_source;
-
-    // communication with CrossJoioRight through shared_datas.
-    auto source_factory = std::make_shared<AssertNumRowsSourceOperatorFactory>(
-            context->next_operator_id(), id(), _desired_num_rows, _subquery_string, std::move(_assertion),
-            std::move(assert_num_rows_context));
-    operator_assert_num_rows_source.emplace_back(std::move(source_factory));
-
-    // return as the following pipeline
-    return operator_assert_num_rows_source;
+    return operator_before_assert_num_rows_source;
 }
 
 } // namespace starrocks::vectorized

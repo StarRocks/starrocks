@@ -160,8 +160,7 @@ set(EXEC_FILES
     pipeline/aggregate/aggregate_distinct_streaming_source_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
-    pipeline/assert_num_rows/assert_num_rows_sink_operator.cpp
-    pipeline/assert_num_rows/assert_num_rows_source_operator.cpp
+    pipeline/assert_num_rows_operator.cpp
 )
 
 set(EXEC_FILES
