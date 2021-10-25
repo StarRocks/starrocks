@@ -559,11 +559,9 @@ Status ScalarColumnWriter::finish_current_page() {
     data_page_footer->set_nullmap_size(nullmap.slice().size);
     data_page_footer->set_format_version(_curr_page_format);
     data_page_footer->set_corresponding_element_ordinal(_element_ordinal);
-    if (is_nullable()) {
-        // page format v1, set null encoding to RLE_NULL
-        // for other page format, use the encoding type of config::null_encoding
-        _curr_page_format == 1 ? data_page_footer->set_null_encoding(NullEncodingPB::RLE_NULL)
-                               : data_page_footer->set_null_encoding(_null_map_builder_v2->null_encoding());
+    if (is_nullable() && _curr_page_format >= 2) {
+        // for page format v2 or above, use the encoding type of config::null_encoding
+        data_page_footer->set_null_encoding(_null_map_builder_v2->null_encoding());
     }
     // trying to compress page body
     faststring compressed_body;
