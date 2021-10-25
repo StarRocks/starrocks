@@ -12,6 +12,9 @@
 #include "storage/vectorized/column_predicate.h"
 namespace starrocks::vectorized {
 
+// This class is a bridge to connect ColumnPredicatew which is used in scan/storage layer, and ExprContext which is
+// used in computation layer. By bridging that, we can push more predicates from computation layer onto storage layer,
+// hopefully to scan less data and boost performance.
 class ColumnExprPredicate : public ColumnPredicate {
 public:
     ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state, ExprContext* expr_ctx,
@@ -116,9 +119,6 @@ public:
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                       ObjectPool* obj_pool) const override {
-        // todo(yan): do we really need convert to.
-        // return Status::NotSupported("ColumnExprPredicate does not support `convert_to`");
-
         TypeDescriptor input_type = TypeDescriptor::from_storage_type_info(target_type_info.get());
         TypeDescriptor to_type = TypeDescriptor::from_storage_type_info(_type_info.get());
         Expr* column_ref = obj_pool->add(new ColumnRef(_slot_desc));

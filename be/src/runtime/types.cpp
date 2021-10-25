@@ -239,7 +239,7 @@ std::string TypeDescriptor::debug_string() const {
 
 TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
     FieldType ftype = type_info->type();
-    PrimitiveType ptype = field_type_to_primitive_type(ftype);
+    PrimitiveType ptype = scalar_field_type_to_primitive_type(ftype);
     DCHECK(ptype != INVALID_TYPE);
     int len = TypeDescriptor::MAX_VARCHAR_LENGTH;
     int precision = type_info->precision();

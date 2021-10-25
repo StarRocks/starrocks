@@ -68,6 +68,9 @@ private:
 
     void normalize_is_null_predicate(const SlotDescriptor& slot);
 
+    // To build `ColumnExprPredicate`s from conjuncts passed from olap scan node.
+    // `ColumnExprPredicate` would be used in late materialization, zone map filtering,
+    // dict encoded column filtering and bitmap value column filtering etc.
     void build_column_expr_predicates();
 };
 

@@ -716,7 +716,7 @@ void OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser, st
     }
 
     const auto& slots = tuple_desc->slots();
-    for (auto iter : slot_index_to_expr_ctxs) {
+    for (auto& iter : slot_index_to_expr_ctxs) {
         int slot_index = iter.first;
         auto& expr_ctxs = iter.second;
         const SlotDescriptor* slot_desc = slots[slot_index];
@@ -746,12 +746,11 @@ void OlapScanConjunctsManager::eval_const_conjuncts(const std::vector<ExprContex
 }
 
 Status OlapScanConjunctsManager::get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges) {
-    Status st = scan_keys.get_key_range(key_ranges);
-    if (!st.ok()) return st;
+    RETURN_IF_ERROR(scan_keys.get_key_range(key_ranges));
     if (key_ranges->empty()) {
         key_ranges->emplace_back(new OlapScanRange());
     }
-    return st;
+    return Status::OK();
 }
 
 void OlapScanConjunctsManager::get_not_push_down_conjuncts(std::vector<ExprContext*>* predicates) {
