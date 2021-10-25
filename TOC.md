@@ -337,4 +337,4 @@
 + 性能测试
   + [SSB性能测试](/benchmarking/SSB_Benchmarking.md)
 + Release Notes
-  + [v1.19](release_notes/release-1.19.md)
+  + [v1.19](/release_notes/release-1.19.md)
