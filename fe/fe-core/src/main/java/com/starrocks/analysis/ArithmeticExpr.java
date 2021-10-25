@@ -498,28 +498,30 @@ public class ArithmeticExpr extends Expr {
     }
 
     public enum Operator {
-        MULTIPLY("*", "multiply", OperatorPosition.BINARY_INFIX, TExprOpcode.MULTIPLY),
-        DIVIDE("/", "divide", OperatorPosition.BINARY_INFIX, TExprOpcode.DIVIDE),
-        MOD("%", "mod", OperatorPosition.BINARY_INFIX, TExprOpcode.MOD),
-        INT_DIVIDE("DIV", "int_divide", OperatorPosition.BINARY_INFIX, TExprOpcode.INT_DIVIDE),
-        ADD("+", "add", OperatorPosition.BINARY_INFIX, TExprOpcode.ADD),
-        SUBTRACT("-", "subtract", OperatorPosition.BINARY_INFIX, TExprOpcode.SUBTRACT),
-        BITAND("&", "bitand", OperatorPosition.BINARY_INFIX, TExprOpcode.BITAND),
-        BITOR("|", "bitor", OperatorPosition.BINARY_INFIX, TExprOpcode.BITOR),
-        BITXOR("^", "bitxor", OperatorPosition.BINARY_INFIX, TExprOpcode.BITXOR),
-        BITNOT("~", "bitnot", OperatorPosition.UNARY_PREFIX, TExprOpcode.BITNOT),
-        FACTORIAL("!", "factorial", OperatorPosition.UNARY_POSTFIX, TExprOpcode.FACTORIAL);
+        MULTIPLY("*", "multiply", OperatorPosition.BINARY_INFIX, TExprOpcode.MULTIPLY, true),
+        DIVIDE("/", "divide", OperatorPosition.BINARY_INFIX, TExprOpcode.DIVIDE, true),
+        MOD("%", "mod", OperatorPosition.BINARY_INFIX, TExprOpcode.MOD, false),
+        INT_DIVIDE("DIV", "int_divide", OperatorPosition.BINARY_INFIX, TExprOpcode.INT_DIVIDE, true),
+        ADD("+", "add", OperatorPosition.BINARY_INFIX, TExprOpcode.ADD, true),
+        SUBTRACT("-", "subtract", OperatorPosition.BINARY_INFIX, TExprOpcode.SUBTRACT, true),
+        BITAND("&", "bitand", OperatorPosition.BINARY_INFIX, TExprOpcode.BITAND, false),
+        BITOR("|", "bitor", OperatorPosition.BINARY_INFIX, TExprOpcode.BITOR, false),
+        BITXOR("^", "bitxor", OperatorPosition.BINARY_INFIX, TExprOpcode.BITXOR, false),
+        BITNOT("~", "bitnot", OperatorPosition.UNARY_PREFIX, TExprOpcode.BITNOT, false),
+        FACTORIAL("!", "factorial", OperatorPosition.UNARY_POSTFIX, TExprOpcode.FACTORIAL, true);
 
         private final String description;
         private final String name;
         private final OperatorPosition pos;
         private final TExprOpcode opcode;
+        private final boolean monotonic;
 
-        Operator(String description, String name, OperatorPosition pos, TExprOpcode opcode) {
+        Operator(String description, String name, OperatorPosition pos, TExprOpcode opcode, boolean monotonic) {
             this.description = description;
             this.name = name;
             this.pos = pos;
             this.opcode = opcode;
+            this.monotonic = monotonic;
         }
 
         @Override
@@ -547,11 +549,20 @@ public class ArithmeticExpr extends Expr {
         public boolean isBinary() {
             return pos == OperatorPosition.BINARY_INFIX;
         }
+
+        public boolean isMonotonic() {
+            return monotonic;
+        }
     }
 
     public static class TypeTriple {
         ScalarType returnType;
         ScalarType lhsTargetType;
         ScalarType rhsTargetType;
+    }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        return op.isMonotonic();
     }
 }

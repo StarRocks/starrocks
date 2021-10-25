@@ -86,6 +86,10 @@ public class FunctionCallExpr extends Expr {
                     .add("stddev").add("stddev_val").add("stddev_samp")
                     .add("variance").add("variance_pop").add("variance_pop").add("var_samp").add("var_pop").build();
 
+    // TODO(yan): add more known functions which are monotonic.
+    private static final ImmutableSet<String> MONOTONIC_FUNCTION_SET =
+            new ImmutableSortedSet.Builder(String.CASE_INSENSITIVE_ORDER).add("year").build();
+
     public boolean isAnalyticFnCall() {
         return isAnalyticFnCall;
     }
@@ -631,7 +635,7 @@ public class FunctionCallExpr extends Expr {
             if (this.children.isEmpty()) {
                 throw new AnalysisException("The " + fnName + " function must has one input param");
             }
-            fn = getBuiltinFunction(analyzer, fnName.getFunction(), new Type[] {getChild(0).type},
+            fn = getBuiltinFunction(analyzer, fnName.getFunction(), new Type[]{getChild(0).type},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         } else if (fnName.getFunction().equalsIgnoreCase("count_distinct")) {
             Type compatibleType = this.children.get(0).getType();
@@ -644,7 +648,7 @@ public class FunctionCallExpr extends Expr {
                 }
             }
 
-            fn = getBuiltinFunction(analyzer, fnName.getFunction(), new Type[] {compatibleType},
+            fn = getBuiltinFunction(analyzer, fnName.getFunction(), new Type[]{compatibleType},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         } else {
             // now first find function in built-in functions
@@ -938,5 +942,14 @@ public class FunctionCallExpr extends Expr {
 
     public void setMergeAggFn() {
         isMergeAggFn = true;
+    }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        FunctionName name = getFnName();
+        if (name.getDb() == null && MONOTONIC_FUNCTION_SET.contains(name.getFunction())) {
+            return true;
+        }
+        return false;
     }
 }

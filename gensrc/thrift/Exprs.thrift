@@ -47,7 +47,7 @@ enum TExprNodeType {
   TUPLE_IS_NULL_PRED,
   INFO_FUNC,
   FUNCTION_CALL,
-  
+
   // TODO: old style compute functions. this will be deprecated
   COMPUTE_FUNCTION_CALL,
   LARGE_INT_LITERAL,
@@ -194,6 +194,7 @@ struct TExprNode {
   51: optional bool has_nullable_child
   52: optional bool is_nullable
   53: optional Types.TTypeDesc child_type_desc
+  54: optional bool is_monotonic
 }
 
 // A flattened representation of a tree of Expr nodes, obtained by depth-first

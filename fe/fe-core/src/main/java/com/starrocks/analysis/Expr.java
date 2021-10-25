@@ -982,12 +982,14 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             }
         }
         msg.output_scale = getOutputScale();
+        msg.setIs_monotonic(isMonotonic());
         toThrift(msg);
         container.addToNodes(msg);
         for (Expr child : children) {
             child.setUseVectorized(useVectorized);
             child.treeToThriftHelper(container);
         }
+
     }
 
     // Convert this expr into msg (excluding children), which requires setting
@@ -1926,4 +1928,24 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             }
         }
     }
+
+    public boolean isSelfMonotonic() {
+        return false;
+    }
+
+    private byte monotonicCache = 2; // uninitialized state.
+
+    public final boolean isMonotonic() {
+        if (!isSelfMonotonic()) return false;
+        if (monotonicCache != 0x2) return monotonicCache == 1;
+        for (Expr child : this.children) {
+            if (!child.isMonotonic()) {
+                monotonicCache = 0;
+                return false;
+            }
+        }
+        monotonicCache = 1;
+        return true;
+    }
+
 }
