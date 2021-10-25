@@ -45,8 +45,10 @@ RESULT SINK
 25:MERGING-EXCHANGE
 cardinality: 1561188
 column statistics:
+* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
 * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
+* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
 
 PLAN FRAGMENT 1(F13)
 
@@ -59,8 +61,10 @@ OutPut Exchange Id: 25
 |  offset: 0
 |  cardinality: 1561188
 |  column statistics:
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
+|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
 |
 23:Project
 |  output columns:
@@ -76,8 +80,10 @@ OutPut Exchange Id: 25
 |  equal join conjunct: [15: PS_SUPPKEY, INT, false] = [1: S_SUPPKEY, INT, false]
 |  cardinality: 1561188
 |  column statistics:
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
+|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
 |
 |----21:EXCHANGE
 |       cardinality: 40000
@@ -112,6 +118,8 @@ OutPut Exchange Id: 21
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |
 |----18:EXCHANGE
 |       cardinality: 1
@@ -176,7 +184,12 @@ OutPut Exchange Id: 14
 |  other join predicates: cast([16: PS_AVAILQTY, INT, false] as DOUBLE) > 0.5 * [48: sum(35: L_QUANTITY), DOUBLE, true]
 |  cardinality: 39029703
 |  column statistics:
+|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
+|  * PS_AVAILQTY-->[1.0, 9999.0, 0.0, 4.0, 9999.0]
+|  * L_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
+|  * sum(35: L_QUANTITY)-->[1.0, 50.0, 0.0, 8.0, 50.0]
 |
 |----11:EXCHANGE
 |       cardinality: 20000000
@@ -192,9 +205,9 @@ OutPut Exchange Id: 11
 
 10:Project
 |  output columns:
-|  16 <-> [16: PS_AVAILQTY, INT, false]
 |  14 <-> [14: PS_PARTKEY, INT, false]
 |  15 <-> [15: PS_SUPPKEY, INT, false]
+|  16 <-> [16: PS_AVAILQTY, INT, false]
 |  cardinality: 20000000
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
@@ -211,6 +224,7 @@ OutPut Exchange Id: 11
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
 |  * PS_AVAILQTY-->[1.0, 9999.0, 0.0, 4.0, 9999.0]
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
 |
 |----8:EXCHANGE
 |       cardinality: 5000000

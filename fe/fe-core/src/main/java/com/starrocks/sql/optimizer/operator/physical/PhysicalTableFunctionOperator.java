@@ -8,6 +8,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 public class PhysicalTableFunctionOperator extends PhysicalOperator {
@@ -22,7 +23,8 @@ public class PhysicalTableFunctionOperator extends PhysicalOperator {
     public PhysicalTableFunctionOperator(ColumnRefSet fnResultColumnRefSet, TableFunction fn,
                                          ColumnRefSet fnParamColumnRefSet, ColumnRefSet outerColumnRefSet,
                                          long limit,
-                                         ScalarOperator predicate) {
+                                         ScalarOperator predicate,
+                                         Projection projection) {
         super(OperatorType.PHYSICAL_TABLE_FUNCTION);
         this.fnResultColumnRefSet = fnResultColumnRefSet;
         this.fn = fn;
@@ -30,6 +32,7 @@ public class PhysicalTableFunctionOperator extends PhysicalOperator {
         this.outerColumnRefSet = outerColumnRefSet;
         this.limit = limit;
         this.predicate = predicate;
+        this.projection = projection;
     }
 
     public ColumnRefSet getOutputColumns() {

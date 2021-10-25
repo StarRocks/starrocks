@@ -79,7 +79,6 @@ public class PruneHiveScanColumnRule extends TransformationRule {
             LogicalHiveScanOperator hiveScanOperator = new LogicalHiveScanOperator(
                     scanOperator.getTable(),
                     scanOperator.getTableType(),
-                    new ArrayList<>(scanColumns),
                     newColumnRefMap,
                     scanOperator.getColumnMetaToColRefMap(),
                     scanOperator.getLimit(),

@@ -271,7 +271,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testMergeTwoFilters() throws Exception {
         String sql = "select v1 from t0 where v2 < null group by v1 HAVING NULL IS NULL;";
         String planFragment = getFragmentPlan(sql);
-        System.out.println(planFragment);
         Assert.assertTrue(planFragment.contains("  1:AGGREGATE (update finalize)\n"
                 + "  |  group by: 1: v1\n"
                 + "  |  having: TRUE\n"
@@ -624,7 +623,6 @@ public class PlanFragmentTest extends PlanTestBase {
                         +
                         "t1.k1 = t2.k1 and t1.k2 = t2.k2 and t1.k3 = t2.k3";
         explainString = getFragmentPlan(queryStr);
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("colocate: true"));
 
         queryStr =
@@ -724,7 +722,6 @@ public class PlanFragmentTest extends PlanTestBase {
                         +
                         "t1.k2 = t2.k1 and t1.k1 = t2.k2";
         explainString = getFragmentPlan(queryStr);
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("colocate: false"));
 
         queryStr =
@@ -743,7 +740,6 @@ public class PlanFragmentTest extends PlanTestBase {
                         + "k1, k2, count(k3) from test.colocate2 group by k1, k2) t2 on  "
                         + "t1.k2 = t2.k2";
         String explainString = getFragmentPlan(queryStr);
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("colocate: false"));
     }
 
@@ -754,7 +750,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String explainString;
         queryStr = "select k2, count(k3) from nocolocate3 group by k2";
         explainString = getFragmentPlan(queryStr);
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("  3:AGGREGATE (merge finalize)\n"
                 + "  |  output: count(4: count(3: k3))\n"
                 + "  |  group by: 2: k2\n"
@@ -822,7 +817,6 @@ public class PlanFragmentTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(3);
         String queryStr = "select avg(v1), count(distinct v1) from t0 group by v1";
         String explainString = getFragmentPlan(queryStr);
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("  3:AGGREGATE (update finalize)\n"
                 + "  |  output: avg(4: avg(1: v1)), count(1: v1)\n"
                 + "  |  group by: 1: v1\n"
@@ -838,7 +832,6 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testGroupBy2() throws Exception {
         String queryStr = "select avg(v2) from t0 group by v2";
         String explainString = getFragmentPlan(queryStr);
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("  2:Project\n"
                 + "  |  <slot 4> : 4: avg(2: v2)\n"
                 + "  |  use vectorized: true\n"
@@ -1050,7 +1043,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testJoinCastFloat() throws Exception {
         String sql = "select * from t1, t3 right semi join test_all_type as a on t3.v1 = a.t1a and 1 > 2;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  |  equal join conjunct: CAST(7: t1a AS DOUBLE) = CAST(4: v1 AS DOUBLE)"));
+        Assert.assertTrue(plan.contains("equal join conjunct: 18: cast = 17: cast"));
     }
 
     @Test
@@ -1105,7 +1098,6 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select b from (select t1a as a, t1b as b, t1c as c, t1d as d from test_all_type " +
                 "union all select 1 as a, 2 as b, 3 as c, 4 as d) t1;";
         String plan = getThriftPlan(sql);
-        System.out.println("FIXME : " + plan);
         Assert.assertTrue(plan.contains(
                 "const_expr_lists:[[TExpr(nodes:[TExprNode(node_type:INT_LITERAL, type:TTypeDesc(types:[TTypeNode"
                         + "(type:SCALAR, scalar_type:TScalarType(type:SMALLINT))]), num_children:0, "
@@ -1209,7 +1201,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 + "     PREAGGREGATION: ON\n"
                 + "     PREDICATES: 2: v2 > 1"));
 
-        Assert.assertTrue(plan.contains("  1:OlapScanNode\n"
+        Assert.assertTrue(plan.contains("  2:OlapScanNode\n"
                 + "     TABLE: test_all_type\n"
                 + "     PREAGGREGATION: ON\n"
                 + "     partitions=0/1\n"
@@ -1413,8 +1405,10 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testSubqueryBroadJoin() throws Exception {
         String sql = "select t1.v5 from t0 inner join[broadcast] t1 on cast(t0.v1 as int) = cast(t1.v4 as int)";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  |  equal join conjunct: CAST(1: v1 AS INT) = CAST(4: v4 AS INT)\n"
+        Assert.assertTrue(plan.contains("  |  equal join conjunct: 7: cast = 8: cast\n"
                 + "  |  use vectorized: true\n"));
+        Assert.assertTrue(plan.contains("<slot 7> : CAST(1: v1 AS INT)"));
+        Assert.assertTrue(plan.contains("<slot 8> : CAST(4: v4 AS INT)"));
     }
 
     @Test
@@ -2579,8 +2573,10 @@ public class PlanFragmentTest extends PlanTestBase {
                 "and join2.value in ('abc');";
         explainString = getFragmentPlan(sql);
         Assert.assertTrue(
-                explainString.contains("  |  equal join conjunct: CAST(2: id AS DOUBLE) = CAST(6: value AS DOUBLE)"));
-        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+                explainString.contains("equal join conjunct: 7: cast = 8: cast"));
+        Assert.assertTrue(explainString.contains("<slot 7> : CAST(2: id AS DOUBLE)"));
+        Assert.assertTrue(explainString.contains("<slot 8> : CAST(6: value AS DOUBLE)"));
+        Assert.assertTrue(explainString.contains("  2:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 6: value = 'abc'"));
@@ -2664,7 +2660,6 @@ public class PlanFragmentTest extends PlanTestBase {
                 "left semi join join2 on join1.id = join2.id\n" +
                 "where join1.id > 1;";
         explainString = getFragmentPlan(sql);
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("  3:HASH JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
@@ -2949,7 +2944,7 @@ public class PlanFragmentTest extends PlanTestBase {
         sql =
                 "select t1.k2, sum(t1.k9) from baseall t1 join join2 t2 on t1.k1 = t2.id join baseall t3 on t1.k1 = t3.k1 group by t1.k2";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("5:OlapScanNode\n" +
+        Assert.assertTrue(plan.contains("6:OlapScanNode\n" +
                 "  |       TABLE: baseall\n" +
                 "  |       PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
         Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
@@ -2959,12 +2954,12 @@ public class PlanFragmentTest extends PlanTestBase {
         sql =
                 "select t3.k2, sum(t3.k9) from baseall t1 join [broadcast] join2 t2 on t1.k1 = t2.id join [broadcast] baseall t3 on t1.k1 = t3.k1 group by t3.k2";
         plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("6:OlapScanNode\n" +
+                "     TABLE: baseall\n" +
+                "     PREAGGREGATION: ON"));
         Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: baseall\n" +
                 "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join"));
-        Assert.assertTrue(plan.contains("5:OlapScanNode\n" +
-                "     TABLE: baseall\n" +
-                "     PREAGGREGATION: ON"));
 
         // check join predicate with non key columns
         sql = "select t1.k2, sum(t1.k9) from baseall t1 join baseall t2 on t1.k9 = t2.k9 group by t1.k2";
@@ -3201,6 +3196,7 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select * from join1 left join join2 as b on join1.id = b.id\n" +
                 "left join join2 as c on join1.id = c.id \n" +
                 "where b.id > 1;";
+
         starRocksAssert.query(sql).explainContains("7:HASH JOIN\n" +
                         "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
                         "  |  hash predicates:\n" +
@@ -3223,7 +3219,7 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select * from join1 left join join2 as b on join1.id = b.id\n" +
                 "left join join2 as c on join1.id = c.id \n" +
                 "where b.dt > 1 and c.dt > 1;";
-        starRocksAssert.query(sql).explainContains("  6:HASH JOIN\n" +
+        starRocksAssert.query(sql).explainContains("6:HASH JOIN\n" +
                         "  |  join op: INNER JOIN (BROADCAST)\n" +
                         "  |  hash predicates:\n" +
                         "  |  colocate: false, reason: \n" +
@@ -3777,9 +3773,9 @@ public class PlanFragmentTest extends PlanTestBase {
         String plan = getCostExplain(sql);
         Assert.assertTrue(plan.contains("8:Project\n" +
                 "  |  output columns:\n" +
+                "  |  11 <-> [11: O_CUSTKEY, INT, false]\n" +
                 "  |  25 <-> [25: L_EXTENDEDPRICE, DOUBLE, false]\n" +
                 "  |  26 <-> [26: L_DISCOUNT, DOUBLE, false]\n" +
-                "  |  11 <-> [11: O_CUSTKEY, INT, false]\n" +
                 "  |  cardinality: 0\n" +
                 "  |  column statistics: \n" +
                 "  |  * O_CUSTKEY-->[1.0, 149999.0, 0.0, 8.0, 99996.0]\n" +
@@ -3793,7 +3789,9 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  - filter_id = 0, build_expr = (10: O_ORDERKEY), remote = false\n" +
                 "  |  cardinality: 0\n" +
                 "  |  column statistics: \n" +
+                "  |  * O_ORDERKEY-->[1.0, 6000000.0, 0.0, 8.0, 1500000.0]\n" +
                 "  |  * O_CUSTKEY-->[1.0, 149999.0, 0.0, 8.0, 99996.0]\n" +
+                "  |  * L_ORDERKEY-->[1.0, 6000000.0, 0.0, 8.0, 1500000.0]\n" +
                 "  |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]\n" +
                 "  |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]"));
     }

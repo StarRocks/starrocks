@@ -11,6 +11,7 @@ import com.starrocks.external.elasticsearch.EsShardPartitions;
 import com.starrocks.external.elasticsearch.EsTablePartitions;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -22,17 +23,16 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
     private final List<EsShardPartitions> selectedIndex = Lists.newArrayList();
 
     public LogicalEsScanOperator(Table table,
-                                 List<ColumnRefOperator> outputColumns,
                                  Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                  Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                  long limit,
-                                 ScalarOperator predicate) {
+                                 ScalarOperator predicate,
+                                 Projection projection) {
         super(OperatorType.LOGICAL_ES_SCAN,
                 table,
-                outputColumns,
                 colRefToColumnMetaMap,
                 columnMetaToColRefMap,
-                limit, predicate);
+                limit, predicate, projection);
         Preconditions.checkState(table instanceof EsTable);
         this.esTablePartitions = ((EsTable) table).getEsTablePartitions();
     }
@@ -40,10 +40,9 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
     private LogicalEsScanOperator(Builder builder) {
         super(OperatorType.LOGICAL_ES_SCAN,
                 builder.table,
-                builder.outputColumns,
                 builder.colRefToColumnMetaMap,
                 builder.columnMetaToColRefMap,
-                builder.getLimit(), builder.getPredicate());
+                builder.getLimit(), builder.getPredicate(), builder.getProjection());
         Preconditions.checkState(builder.table instanceof EsTable);
         this.esTablePartitions = builder.esTablePartitions;
         this.selectedIndex.addAll(builder.selectedIndex);

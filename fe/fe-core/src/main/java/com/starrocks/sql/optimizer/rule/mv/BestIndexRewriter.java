@@ -33,7 +33,6 @@ public class BestIndexRewriter extends OptExpressionVisitor<OptExpression, Long>
         if (olapScanOperator.equals(scanOperator)) {
             LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
                     olapScanOperator.getTable(),
-                    olapScanOperator.getOutputColumns(),
                     olapScanOperator.getColRefToColumnMetaMap(),
                     olapScanOperator.getColumnMetaToColRefMap(),
                     olapScanOperator.getDistributionSpec(),

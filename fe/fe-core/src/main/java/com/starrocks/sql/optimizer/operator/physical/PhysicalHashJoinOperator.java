@@ -8,31 +8,29 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.List;
 import java.util.Objects;
 
 public class PhysicalHashJoinOperator extends PhysicalOperator {
     private final JoinOperator joinType;
     private final ScalarOperator joinPredicate;
     private final String joinHint;
-    private final List<ColumnRefOperator> pruneOutputColumns;
 
     public PhysicalHashJoinOperator(JoinOperator joinType,
                                     ScalarOperator joinPredicate,
                                     String joinHint,
                                     long limit,
                                     ScalarOperator predicate,
-                                    List<ColumnRefOperator> pruneOutputColumns) {
+                                    Projection projection) {
         super(OperatorType.PHYSICAL_HASH_JOIN);
         this.joinType = joinType;
         this.joinPredicate = joinPredicate;
         this.joinHint = joinHint;
         this.limit = limit;
         this.predicate = predicate;
-        this.pruneOutputColumns = pruneOutputColumns;
+        this.projection = projection;
     }
 
     public JoinOperator getJoinType() {
@@ -45,10 +43,6 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
 
     public String getJoinHint() {
         return joinHint;
-    }
-
-    public List<ColumnRefOperator> getPruneOutputColumns() {
-        return pruneOutputColumns;
     }
 
     @Override
@@ -89,12 +83,11 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
             return false;
         }
         PhysicalHashJoinOperator that = (PhysicalHashJoinOperator) o;
-        return joinType == that.joinType && Objects.equals(joinPredicate, that.joinPredicate)
-                && Objects.equals(pruneOutputColumns, that.pruneOutputColumns);
+        return joinType == that.joinType && Objects.equals(joinPredicate, that.joinPredicate);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), joinType, joinPredicate, pruneOutputColumns);
+        return Objects.hash(super.hashCode(), joinType, joinPredicate);
     }
 }

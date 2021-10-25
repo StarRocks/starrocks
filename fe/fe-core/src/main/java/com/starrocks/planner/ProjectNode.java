@@ -8,6 +8,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.thrift.TExplainLevel;
@@ -15,6 +16,9 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TProjectNode;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 
 public class ProjectNode extends PlanNode {
@@ -54,12 +58,19 @@ public class ProjectNode extends PlanNode {
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
+
+        List<Pair<SlotId, Expr>> outputColumns = new ArrayList<>();
         for (Map.Entry<SlotId, Expr> kv : slotMap.entrySet()) {
+            outputColumns.add(new Pair<>(kv.getKey(), kv.getValue()));
+        }
+        outputColumns.sort(Comparator.comparingInt(o -> o.first.asInt()));
+
+        for (Pair<SlotId, Expr> kv : outputColumns) {
             output.append(prefix);
             output.append("<slot ").
-                    append(kv.getKey()).
+                    append(kv.first).
                     append("> : ").
-                    append(kv.getValue().toSql()).
+                    append(kv.second.toSql()).
                     append("\n");
         }
         if (!commonSlotMap.isEmpty()) {
@@ -82,10 +93,17 @@ public class ProjectNode extends PlanNode {
         StringBuilder output = new StringBuilder();
         output.append(prefix);
         output.append("output columns:\n");
+
+        List<Pair<SlotId, Expr>> outputColumns = new ArrayList<>();
         for (Map.Entry<SlotId, Expr> kv : slotMap.entrySet()) {
+            outputColumns.add(new Pair<>(kv.getKey(), kv.getValue()));
+        }
+        outputColumns.sort(Comparator.comparingInt(o -> o.first.asInt()));
+
+        for (Pair<SlotId, Expr> kv : outputColumns) {
             output.append(prefix);
-            output.append(kv.getKey()).append(" <-> ")
-                    .append(kv.getValue().explain()).append("\n");
+            output.append(kv.first).append(" <-> ")
+                    .append(kv.second.explain()).append("\n");
         }
         if (!commonSlotMap.isEmpty()) {
             output.append(prefix);

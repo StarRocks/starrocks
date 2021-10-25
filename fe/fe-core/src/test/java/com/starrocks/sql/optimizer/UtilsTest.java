@@ -33,7 +33,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -307,14 +306,14 @@ public class UtilsTest {
         columnRefMap.put(new ColumnRefOperator(3, Type.BIGINT, "v3", true),
                 t0.getBaseColumn("v3"));
 
-        OptExpression opt = new OptExpression(new LogicalOlapScanOperator(t0, new ArrayList<>(), columnRefMap, Maps.newHashMap(), null, -1, null));
+        OptExpression opt = new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
         Assert.assertTrue(Utils.hasUnknownColumnsStats(opt));
 
         Catalog.getCurrentStatisticStorage().addColumnStatistic(t0, "v2",
                 new ColumnStatistic(1, 1, 0, 1, 1));
         Catalog.getCurrentStatisticStorage().addColumnStatistic(t0, "v3",
                 new ColumnStatistic(1, 1, 0, 1, 1));
-        opt = new OptExpression(new LogicalOlapScanOperator(t0, new ArrayList<>(), columnRefMap, Maps.newHashMap(), null, -1, null));
+        opt = new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
         Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
     }
 }

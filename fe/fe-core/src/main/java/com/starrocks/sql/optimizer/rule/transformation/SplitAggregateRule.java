@@ -244,6 +244,7 @@ public class SplitAggregateRule extends TransformationRule {
                 .setAggregations(createNormalAgg(AggType.LOCAL, newAggMap))
                 .setPredicate(null)
                 .setLimit(-1)
+                .setProjection(null)
                 .build();
         OptExpression localOptExpression = OptExpression.create(local, input.getInputs());
 
@@ -317,6 +318,8 @@ public class SplitAggregateRule extends TransformationRule {
                 .setPartitionByColumns(partitionColumns)
                 .setSingleDistinctFunctionPos(singleDistinctFunctionPos)
                 .setPredicate(null)
+                .setLimit(-1)
+                .setProjection(null)
                 .build();
         OptExpression distinctLocalExpression = OptExpression.create(distinctLocal, distinctGlobalExpression);
 
@@ -383,8 +386,7 @@ public class SplitAggregateRule extends TransformationRule {
 
     // The phase concept please refer to AggregateInfo::AggPhase
     private Map<ColumnRefOperator, CallOperator> createDistinctAggForSecondPhase(
-            AggType aggType,
-            Map<ColumnRefOperator, CallOperator> aggregationMap) {
+            AggType aggType, Map<ColumnRefOperator, CallOperator> aggregationMap) {
         Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationMap.entrySet()) {
             ColumnRefOperator column = entry.getKey();

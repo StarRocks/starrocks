@@ -109,8 +109,8 @@ EXCHANGE ID: 03
 BUCKET_SHFFULE_HASH_PARTITIONED: 11: L_ORDERKEY
 
 2:Project
-|  <slot 25> : 25: L_SHIPMODE
 |  <slot 11> : 11: L_ORDERKEY
+|  <slot 25> : 25: L_SHIPMODE
 |  use vectorized: true
 |
 1:OlapScanNode
