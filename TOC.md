@@ -44,6 +44,7 @@
   + [CBO优化器](/using_starrocks/Cost_based_optimizer.md)
   + [Lateral Join](/using_starrocks/Lateral_join.md)
   + [时区](/using_starrocks/timezone.md)
+  + [文件管理器](/using_starrocks/filemanager.md)
 + 参考手册
   + SQL参考
     + 用户账户管理
@@ -174,7 +175,6 @@
       + 其他类型
         + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
         + [BITMAP](/sql-reference/sql-statements/data-types/BITMAP.md)
-
     + 辅助命令
       + [DESCRIBE](/sql-reference/sql-statements/Utility/DESCRIBE.md)
   + 函数参考
