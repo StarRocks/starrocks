@@ -179,13 +179,13 @@ public class DatabaseTest {
         OlapTable table = new OlapTable(1000, "table", columns, KeysType.AGG_KEYS,
                 new SinglePartitionInfo(), new RandomDistributionInfo(10));
         short shortKeyColumnCount = 1;
-        table.setIndexMeta(1000, "group1", columns, 1, 1, shortKeyColumnCount, TStorageType.COLUMN, KeysType.AGG_KEYS);
+        table.setIndexMeta(1000, "group1", 1000, columns, 1, 1, shortKeyColumnCount, TStorageType.COLUMN, KeysType.AGG_KEYS);
 
         List<Column> column = Lists.newArrayList();
         column.add(column2);
-        table.setIndexMeta(new Long(1), "test", column, 1, 1, shortKeyColumnCount,
+        table.setIndexMeta(1, "test", 1, column, 1, 1, shortKeyColumnCount,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
-        table.setIndexMeta(new Long(1), "test", column, 1, 1, shortKeyColumnCount, TStorageType.COLUMN,
+        table.setIndexMeta(1, "test", 1, column, 1, 1, shortKeyColumnCount, TStorageType.COLUMN,
                 KeysType.AGG_KEYS);
         Deencapsulation.setField(table, "baseIndexId", 1);
         table.addPartition(partition);

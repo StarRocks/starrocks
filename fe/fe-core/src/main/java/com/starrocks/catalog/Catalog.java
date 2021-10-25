@@ -3710,6 +3710,7 @@ public class Catalog {
                         index.getId(),
                         tablet.getId(),
                         indexMeta.getShortKeyColumnCount(),
+                        indexMeta.getSchemaId(),
                         indexMeta.getSchemaHash(),
                         partition.getVisibleVersion(),
                         partition.getVisibleVersionHash(),
@@ -3964,7 +3965,7 @@ public class Catalog {
             throw new DdlException(e.getMessage());
         }
         int schemaHash = Util.schemaHash(schemaVersion, baseSchema, bfColumns, bfFpp);
-        olapTable.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
+        olapTable.setIndexMeta(baseIndexId, tableName, baseIndexId, baseSchema, schemaVersion, schemaHash,
                 shortKeyColumnCount, baseIndexStorageType, keysType);
 
         for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
@@ -3987,7 +3988,7 @@ public class Catalog {
                     Catalog.calcShortKeyColumnCount(rollupColumns, alterClause.getProperties());
             int rollupSchemaHash = Util.schemaHash(schemaVersion, rollupColumns, bfColumns, bfFpp);
             long rollupIndexId = getCurrentCatalog().getNextId();
-            olapTable.setIndexMeta(rollupIndexId, addRollupClause.getRollupName(), rollupColumns, schemaVersion,
+            olapTable.setIndexMeta(rollupIndexId, addRollupClause.getRollupName(), rollupIndexId, rollupColumns, schemaVersion,
                     rollupSchemaHash, rollupShortKeyColumnCount, rollupIndexStorageType, keysType);
         }
 

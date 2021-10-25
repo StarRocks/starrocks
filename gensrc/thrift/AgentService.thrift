@@ -38,6 +38,7 @@ struct TTabletSchema {
     6: optional double bloom_filter_fpp
     7: optional list<Descriptors.TOlapTableIndex> indexes
     8: optional bool is_in_memory
+    9: optional i64 id;
 }
 
 // this enum stands for different storage format in src_backends
