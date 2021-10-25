@@ -67,24 +67,27 @@ public class BinaryPredicate extends Predicate implements Writable {
     private boolean isInferred_ = false;
 
     public enum Operator {
-        EQ("=", "eq", TExprOpcode.EQ),
-        NE("!=", "ne", TExprOpcode.NE),
-        LE("<=", "le", TExprOpcode.LE),
-        GE(">=", "ge", TExprOpcode.GE),
-        LT("<", "lt", TExprOpcode.LT),
-        GT(">", "gt", TExprOpcode.GT),
-        EQ_FOR_NULL("<=>", "eq_for_null", TExprOpcode.EQ_FOR_NULL);
+        EQ("=", "eq", TExprOpcode.EQ, true),
+        NE("!=", "ne", TExprOpcode.NE, true),
+        LE("<=", "le", TExprOpcode.LE, true),
+        GE(">=", "ge", TExprOpcode.GE, true),
+        LT("<", "lt", TExprOpcode.LT, true),
+        GT(">", "gt", TExprOpcode.GT, true),
+        EQ_FOR_NULL("<=>", "eq_for_null", TExprOpcode.EQ_FOR_NULL, true);
 
         private final String description;
         private final String name;
         private final TExprOpcode opcode;
+        private final boolean monotonic;
 
         Operator(String description,
                  String name,
-                 TExprOpcode opcode) {
+                 TExprOpcode opcode,
+                 boolean monotonic) {
             this.description = description;
             this.name = name;
             this.opcode = opcode;
+            this.monotonic = monotonic;
         }
 
         @Override
@@ -149,7 +152,9 @@ public class BinaryPredicate extends Predicate implements Writable {
             return this == EQ || this == EQ_FOR_NULL;
         }
 
-        ;
+        public boolean isMonotonic() {
+            return monotonic;
+        }
 
         public boolean isUnequivalence() {
             return this == NE;
@@ -649,5 +654,10 @@ public class BinaryPredicate extends Predicate implements Writable {
     @Override
     public <R, C> R accept(ExprVisitor<R, C> visitor, C context) {
         return visitor.visitBinaryPredicate(this, context);
+    }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        return op.isMonotonic();
     }
 }
