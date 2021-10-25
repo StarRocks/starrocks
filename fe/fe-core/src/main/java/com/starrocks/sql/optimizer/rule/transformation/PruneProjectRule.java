@@ -7,7 +7,6 @@ import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -44,9 +43,7 @@ public class PruneProjectRule extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        ColumnRefSet output = ((LogicalProjectOperator) input.getOp()).getOutputColumns(null);
-
-        if (output.isEmpty()) {
+        if (((LogicalProjectOperator) input.getOp()).getColumnRefMap().isEmpty()) {
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
 
             LogicalOperator logicalOperator = (LogicalOperator) input.inputAt(0).getOp();
