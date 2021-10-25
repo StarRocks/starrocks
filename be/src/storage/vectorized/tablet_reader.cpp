@@ -192,7 +192,7 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
     }
 
     if (_collect_iter != nullptr) {
-        RETURN_IF_ERROR(_collect_iter->init_res_schema(*params.global_dictmaps));
+        RETURN_IF_ERROR(_collect_iter->init_encoded_schema(*params.global_dictmaps));
     }
 
     return Status::OK();

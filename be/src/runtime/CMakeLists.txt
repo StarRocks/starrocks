@@ -96,6 +96,7 @@ set(RUNTIME_FILES
     vectorized/statistic_result_writer.cpp
     hdfs/hdfs_fs_cache.cpp
     runtime_filter_worker.cpp
+    global_dicts.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

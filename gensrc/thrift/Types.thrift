@@ -319,6 +319,7 @@ struct TFunction {
   // UDF function.
   30: optional i64 fid
   31: optional TTableFunction table_fn
+  32: optional bool could_apply_dict_optimize
 }
 
 enum TLoadJobState {
