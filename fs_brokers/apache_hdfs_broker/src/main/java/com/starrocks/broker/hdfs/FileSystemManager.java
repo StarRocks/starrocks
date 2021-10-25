@@ -474,7 +474,7 @@ public class FileSystemManager {
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will cache both.
         String host = KS3_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
-        String s3aUgi = accessKey + "," + secretKey;
+        String ks3Ugi = accessKey + "," + secretKey;
         FileSystemIdentity fileSystemIdentity = new FileSystemIdentity(host, s3aUgi);
         BrokerFileSystem fileSystem = null;
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new BrokerFileSystem(fileSystemIdentity));
