@@ -299,6 +299,14 @@ private:
             return Status::OK();
         }
 
+        Status seek_column(uint32_t col_id, ordinal_t pos) {
+            _stats->block_seek_num += 1;
+            SCOPED_RAW_TIMER(&_stats->block_seek_ns);
+            _stats->column_seek_num++;
+            RETURN_IF_ERROR(_column_iterators[col_id]->seek_to_ordinal(pos));
+            return Status::OK();
+        }
+
         Status read_columns(Chunk* chunk, size_t n) {
             bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
             for (size_t i = 0; i < _column_iterators.size(); i++) {
@@ -310,6 +318,13 @@ private:
             return Status::OK();
         }
 
+        Status read_column(uint32_t col_id, Chunk* chunk, size_t n, bool* may_has_del_row) {
+            const ColumnPtr& col = chunk->get_column_by_index(col_id);
+            RETURN_IF_ERROR(_column_iterators[col_id]->next_batch(&n, col.get()));
+            *may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
+            return Status::OK();
+        }
+
         int64_t memory_usage() const {
             int64_t usage = 0;
             usage += (_read_chunk != nullptr) ? _read_chunk->memory_usage() : 0;
@@ -317,6 +332,8 @@ private:
             usage += (_final_chunk.get() != _dict_chunk.get()) ? _final_chunk->memory_usage() : 0;
             return usage;
         }
+
+        size_t column_size() { return _column_iterators.size(); }
 
         Schema _read_schema;
         Schema _dict_decode_schema;
@@ -382,7 +399,14 @@ private:
 
     Status _apply_bitmap_index();
 
+    Status _apply_del_vector();
+
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
+
+    Status _read_by_column(size_t n, Chunk* result, vector<rowid_t>* rowids);
+
+    Status _read_column(size_t n, rowid_t cur_rowid, uint32_t col_id, SparseRangeIterator range_iter, Chunk* result,
+                        vector<rowid_t>* rowids, bool* may_has_del_row);
 
 private:
     std::shared_ptr<Segment> _segment;
@@ -479,6 +503,7 @@ Status SegmentIterator::_init() {
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_init_bitmap_index_iterators());
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
+    RETURN_IF_ERROR(_apply_del_vector());
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
@@ -788,6 +813,57 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
     return st;
 }
 
+Status SegmentIterator::_read_column(size_t n, rowid_t cur_rowid, uint32_t col_id, SparseRangeIterator range_iter,
+                                     Chunk* result, vector<rowid_t>* rowids, bool* may_has_del_row) {
+    int num = 0;
+    while ((num < n) & range_iter.has_more()) {
+        Range r = range_iter.next(n - num);
+        size_t nread = r.span_size();
+        if (cur_rowid != r.begin() || cur_rowid == 0) {
+            cur_rowid = r.begin();
+            _opts.stats->column_seek_num++;
+            RETURN_IF_ERROR(_context->seek_column(col_id, cur_rowid));
+        }
+        {
+            _opts.stats->blocks_load += 1;
+            SCOPED_RAW_TIMER(&_opts.stats->block_fetch_ns);
+            RETURN_IF_ERROR(_context->read_column(col_id, result, nread, may_has_del_row));
+        }
+        num += nread;
+        if (col_id == 0) {
+            if (rowids != nullptr) {
+                for (uint32_t i = cur_rowid; i < cur_rowid + nread; i++) {
+                    rowids->push_back(i);
+                }
+            }
+            // _chunk_rowid_start = cur_rowid;
+            _cur_rowid = cur_rowid + nread;
+            _range_iter = range_iter;
+        }
+        cur_rowid += nread;
+    }
+    return Status::OK();
+}
+
+Status SegmentIterator::_read_by_column(size_t n, Chunk* result, vector<rowid_t>* rowids) {
+    // update _cur_rowid, done
+    // check chunk status, done
+    // filter chunk
+    // update rowids, done
+    Chunk* chunk = _context->_read_chunk.get();
+    size_t column_size = _context->column_size();
+    bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
+    SparseRangeIterator range_iter = _range_iter;
+    rowid_t cur_rowid = _cur_rowid;
+    for (int i = 0; i < column_size; ++i) {
+        RETURN_IF_ERROR(_read_column(n, cur_rowid, i, range_iter, chunk, rowids, &may_has_del_row));
+    }
+    chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
+    _opts.stats->raw_rows_read += chunk->num_rows();
+    chunk->check_or_die();
+    return Status::OK();
+}
+
 Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     MonotonicStopWatch sw;
     sw.start();
@@ -804,6 +880,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
 
     Chunk* chunk = _context->_read_chunk.get();
 
+    /*
     while ((chunk_start < chunk_capacity) & _range_iter.has_more()) {
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start));
         chunk->check_or_die();
@@ -815,6 +892,17 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
         chunk_start = next_start;
         DCHECK_EQ(chunk_start, chunk->num_rows());
+    }
+    */
+    while (chunk_start < chunk_capacity && _range_iter.has_more()) {
+        _read_by_column(chunk_capacity - chunk_start, chunk, rowid);
+        if (has_predicate) {
+            size_t next_start = chunk->num_rows();
+            next_start = _filter(chunk, rowid, chunk_start, next_start);
+            chunk->check_or_die();
+            chunk_start = next_start;
+        }
+        chunk_start = chunk->num_rows();
     }
 
     _opts.stats->block_load_ns += sw.elapsed_time();
@@ -965,6 +1053,7 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
         }
     }
 
+    /*
     int64_t del_vec_filtered = 0;
     if (_del_vec) {
         if (_vectorized_preds.empty() && _branchless_preds.empty()) {
@@ -983,6 +1072,7 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
             roaring_advance_uint32_iterator(&_roaring_iter);
         }
     }
+    */
 
     auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
 
@@ -1001,8 +1091,9 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
             rowid->resize(size);
         }
     }
-    _opts.stats->rows_del_vec_filtered += del_vec_filtered;
-    _opts.stats->rows_vec_cond_filtered += (to - chunk_size) - del_vec_filtered;
+    // _opts.stats->rows_del_vec_filtered += del_vec_filtered;
+    // _opts.stats->rows_vec_cond_filtered += (to - chunk_size) - del_vec_filtered;
+    _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
     return chunk_size;
 }
 
@@ -1328,6 +1419,18 @@ Status SegmentIterator::_apply_bitmap_index() {
     }
 
     _opts.stats->rows_bitmap_index_filtered += (input_rows - _scan_range.span_size());
+    return Status::OK();
+}
+
+Status SegmentIterator::_apply_del_vector() {
+    if (_opts.is_primary_keys && _opts.version > 0 && !_del_vec->empty()) {
+        Roaring row_bitmap = range2roaring(_scan_range);
+        size_t input_rows = row_bitmap.cardinality();
+        row_bitmap -= *(_del_vec->roaring());
+        _scan_range = roaring2range(row_bitmap);
+        size_t filtered_rows = row_bitmap.cardinality();
+        _opts.stats->rows_del_vec_filtered += input_rows - filtered_rows;
+    }
     return Status::OK();
 }
 

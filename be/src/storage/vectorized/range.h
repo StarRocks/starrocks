@@ -90,6 +90,16 @@ public:
     SparseRangeIterator() {}
     explicit SparseRangeIterator(const SparseRange* r);
 
+    SparseRangeIterator(const SparseRangeIterator& iter) :
+        _range(iter._range), _index(iter._index), _next_rowid(iter._next_rowid) { }
+
+    SparseRangeIterator& operator=(const SparseRangeIterator& rhs) {
+        _range = rhs._range;
+        _index = rhs._index;
+        _next_rowid = rhs._next_rowid;
+        return *this;
+    }
+
     rowid_t begin() const { return _next_rowid; }
 
     // Return true iff there are untraversed range, i.e, `next` will return a non-empty range.
