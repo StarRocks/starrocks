@@ -77,7 +77,7 @@ struct ColumnWriterOptions {
 class BitmapIndexWriter;
 class EncodingInfo;
 class NullMapRLEBuilder;
-class NullMapBitshuffleBuilder;
+class NullFlagsBuilder;
 class OrdinalIndexWriter;
 class PageBuilder;
 class BloomFilterIndexWriter;
@@ -237,7 +237,8 @@ private:
     std::unique_ptr<NullMapRLEBuilder> _null_map_builder_v1;
 
     // Used when _opts.page_format == 2, using bitshuffle encoding to build the null map.
-    std::unique_ptr<NullMapBitshuffleBuilder> _null_map_builder_v2;
+    // Used when _opts.page_format == 3, using lz4 encoding to build the null map.
+    std::unique_ptr<NullFlagsBuilder> _null_map_builder_v2;
 
     std::unique_ptr<OrdinalIndexWriter> _ordinal_index_builder;
     std::unique_ptr<ZoneMapIndexWriter> _zone_map_index_builder;

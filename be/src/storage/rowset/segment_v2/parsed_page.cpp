@@ -21,6 +21,8 @@
 
 #include "storage/rowset/segment_v2/parsed_page.h"
 
+#include <fmt/format.h>
+
 #include <memory>
 
 #include "column/nullable_column.h"
@@ -32,6 +34,7 @@
 #include "storage/rowset/segment_v2/encoding_info.h"
 #include "storage/rowset/segment_v2/options.h"
 #include "storage/rowset/segment_v2/page_handle.h"
+#include "util/block_compression.h"
 #include "util/rle_encoding.h"
 
 namespace starrocks::segment_v2 {
@@ -296,15 +299,34 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     auto null_size = footer.nullmap_size();
     if (null_size > 0) {
         Slice null_flags(body.data + body.size - null_size, null_size);
-        size_t elements = footer.num_values();
-        size_t elements_pad = ALIGN_UP(elements, 8u);
-        page->_null_flags.resize(elements_pad * sizeof(uint8_t));
-        int64_t r =
-                bitshuffle::decompress_lz4(null_flags.data, page->_null_flags.data(), elements_pad, sizeof(uint8_t), 0);
-        if (r < 0) {
-            return Status::Corruption("bitshuffle decompress failed: " + bitshuffle_error_msg(r));
+        // The historical segment file do not null_encoding field in page footer, it use BITSHUFFLE to encode null flags.
+        // For compatibility, if has_null_encoding returns false, set null_encoding to BITSHUFFLE_NULL
+        // for new segments, footer.null_encoding() will be set by config::null_encoding
+        NullEncodingPB null_encoding =
+                footer.has_null_encoding() ? footer.null_encoding() : NullEncodingPB::BITSHUFFLE_NULL;
+        if (null_encoding == NullEncodingPB::BITSHUFFLE_NULL) {
+            // bitshuffle format null flags
+            size_t elements = footer.num_values();
+            size_t elements_pad = ALIGN_UP(elements, 8u);
+            page->_null_flags.resize(elements_pad * sizeof(uint8_t));
+            int64_t r = bitshuffle::decompress_lz4(null_flags.data, page->_null_flags.data(), elements_pad,
+                                                   sizeof(uint8_t), 0);
+            if (r < 0) {
+                return Status::Corruption("bitshuffle decompress failed: " + bitshuffle_error_msg(r));
+            }
+            page->_null_flags.resize(elements);
+        } else if (null_encoding == NullEncodingPB::LZ4_NULL) {
+            // decompress null flags by lz4
+            size_t elements = footer.num_values();
+            page->_null_flags.resize(elements * sizeof(uint8_t));
+            const BlockCompressionCodec* codec = nullptr;
+            CompressionTypePB type = CompressionTypePB::LZ4;
+            RETURN_IF_ERROR(get_block_compression_codec(type, &codec));
+            Slice decompressed_slice(page->_null_flags.data(), elements);
+            RETURN_IF_ERROR(codec->decompress(null_flags, &decompressed_slice));
+        } else {
+            return Status::Corruption(fmt::format("invalid null encoding: {}", null_encoding));
         }
-        page->_null_flags.resize(elements);
     }
 
     Slice data_slice(body.data, body.size - null_size);
