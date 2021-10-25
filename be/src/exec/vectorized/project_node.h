@@ -4,6 +4,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
+#include "exprs/expr_context.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
@@ -33,13 +34,17 @@ public:
 private:
     std::vector<SlotId> _slot_ids;
     std::vector<ExprContext*> _expr_ctxs;
+    std::vector<DictOptimizeContext> _dict_optimize_ctxs;
     std::vector<bool> _type_is_nullable;
 
     std::vector<SlotId> _common_sub_slot_ids;
     std::vector<ExprContext*> _common_sub_expr_ctxs;
+    std::vector<DictOptimizeContext> _common_sub_dict_optimize_ctxs;
 
     RuntimeProfile::Counter* _expr_compute_timer = nullptr;
     RuntimeProfile::Counter* _common_sub_expr_compute_timer = nullptr;
+
+    DictOptimizeParser _dict_optimize_parser;
 };
 
 } // namespace starrocks::vectorized
