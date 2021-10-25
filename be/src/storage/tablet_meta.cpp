@@ -259,8 +259,8 @@ TabletMeta::TabletMeta(MemTracker* mem_tracker, int64_t table_id, int64_t partit
     tablet_meta_pb.set_tablet_type(tabletType == TTabletType::TABLET_TYPE_MEMORY ? TabletTypePB::TABLET_TYPE_MEMORY
                                                                                  : TabletTypePB::TABLET_TYPE_DISK);
     TabletSchemaPB* schema = tablet_meta_pb.mutable_schema();
-    if (tablet_schema.__isset.schema_id) {
-        schema->set_id(tablet_schema.schema_id);
+    if (tablet_schema.__isset.id) {
+        schema->set_id(tablet_schema.id);
     }
     schema->set_num_short_key_columns(tablet_schema.short_key_column_count);
     schema->set_num_rows_per_row_block(config::default_num_rows_per_column_file_block);
