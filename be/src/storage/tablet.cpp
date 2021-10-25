@@ -141,7 +141,7 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
         generate_tablet_meta_copy_unlocked(new_tablet_meta);
         // Segment store the pointer of TabletSchema, so don't release the TabletSchema of old TabletMeta
         // Shared the pointer of TabletSchema to the new TabletMeta
-        new_tablet_meta->set_tablet_schema(_tablet_meta->mutable_tablet_schema());
+        new_tablet_meta->set_tablet_schema(_tablet_meta->tablet_schema_ptr());
 
         // delete versions from new local tablet_meta
         for (const Version& version : versions_to_delete) {

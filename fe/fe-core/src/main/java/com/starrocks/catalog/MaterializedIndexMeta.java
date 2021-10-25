@@ -47,6 +47,8 @@ import java.util.Map;
 public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "indexId")
     private long indexId;
+    @SerializedName(value = "schemaId")
+    private long schemaId = INVALID_SCHEMA_ID;
     @SerializedName(value = "schema")
     private List<Column> schema = Lists.newArrayList();
     @SerializedName(value = "schemaVersion")
@@ -62,10 +64,13 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "defineStmt")
     private OriginStatement defineStmt;
 
-    public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
+    public static final long INVALID_SCHEMA_ID = 0;
+
+    public MaterializedIndexMeta(long indexId, long schemaId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                                  OriginStatement defineStmt) {
         this.indexId = indexId;
+        this.schemaId = schemaId;
         Preconditions.checkState(schema != null);
         Preconditions.checkState(schema.size() != 0);
         this.schema = schema;
@@ -97,6 +102,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     public List<Column> getSchema() {
         return schema;
+    }
+
+    public long getSchemaId() {
+        return schemaId;
     }
 
     public int getSchemaHash() {
@@ -146,6 +155,9 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         }
         MaterializedIndexMeta indexMeta = (MaterializedIndexMeta) obj;
         if (indexMeta.indexId != this.indexId) {
+            return false;
+        }
+        if (indexMeta.schemaId != this.schemaId) {
             return false;
         }
         if (indexMeta.schema.size() != this.schema.size() || !indexMeta.schema.containsAll(this.schema)) {

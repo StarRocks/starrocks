@@ -753,7 +753,7 @@ public class RollupJob extends AlterJob {
                 } // end for partitions
 
                 // set index's info
-                olapTable.setIndexMeta(rollupIndexId, rollupIndexName, rollupSchema, 0, rollupSchemaHash,
+                olapTable.setIndexMeta(rollupIndexId, rollupIndexName, rollupIndexId, rollupSchema, 0, rollupSchemaHash,
                         rollupShortKeyColumnCount, rollupStorageType, KeysType.fromThrift(rollupKeysType));
                 Preconditions.checkState(olapTable.getState() == OlapTableState.ROLLUP);
 
@@ -888,7 +888,7 @@ public class RollupJob extends AlterJob {
                 }
             }
 
-            olapTable.setIndexMeta(rollupIndexId, rollupIndexName, rollupSchema, 0, rollupSchemaHash,
+            olapTable.setIndexMeta(rollupIndexId, rollupIndexName, rollupIndexId, rollupSchema, 0, rollupSchemaHash,
                     rollupShortKeyColumnCount, rollupStorageType, KeysType.fromThrift(rollupKeysType));
         } finally {
             db.writeUnlock();
