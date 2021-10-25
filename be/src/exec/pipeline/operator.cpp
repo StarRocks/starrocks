@@ -15,7 +15,6 @@ Operator::Operator(int32_t id, const std::string& name, int32_t plan_node_id)
 }
 
 Status Operator::prepare(RuntimeState* state) {
-    _mem_tracker = std::make_shared<MemTracker>(_runtime_profile.get(), -1, _runtime_profile->name(), nullptr);
     return Status::OK();
 }
 

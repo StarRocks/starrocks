@@ -43,10 +43,6 @@ void PipelineTestBase::_prepare() {
     _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
 
-    int64_t bytes_limit = _request.query_options.mem_limit;
-    _fragment_ctx->set_mem_tracker(std::make_unique<MemTracker>(bytes_limit, "pipeline test mem-limit",
-                                                                _exec_env->query_pool_mem_tracker(), true));
-
     _runtime_state->set_batch_size(config::vector_chunk_size);
     _runtime_state->init_mem_trackers(query_id);
     _runtime_state->set_be_number(_request.backend_num);
