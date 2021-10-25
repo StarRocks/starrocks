@@ -10,6 +10,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -46,7 +47,7 @@ public class LogicalTopNOperator extends LogicalOperator {
     }
 
     private LogicalTopNOperator(Builder builder) {
-        super(OperatorType.LOGICAL_TOPN, builder.getLimit(), builder.getPredicate());
+        super(OperatorType.LOGICAL_TOPN, builder.getLimit(), builder.getPredicate(), builder.getProjection());
         this.orderByElements = builder.orderByElements;
         this.offset = builder.offset;
         this.sortPhase = builder.sortPhase;
@@ -83,35 +84,17 @@ public class LogicalTopNOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        ColumnRefSet columns = new ColumnRefSet();
+        if (projection != null) {
+            return new ColumnRefSet(new ArrayList<>(projection.getColumnRefMap().keySet()));
+        } else {
+            ColumnRefSet columns = new ColumnRefSet();
 
-        columns.union(expressionContext.getChildLogicalProperty(0).getOutputColumns());
-        for (Ordering ordering : orderByElements) {
-            columns.union(ordering.getColumnRef());
+            columns.union(expressionContext.getChildLogicalProperty(0).getOutputColumns());
+            for (Ordering ordering : orderByElements) {
+                columns.union(ordering.getColumnRef());
+            }
+            return columns;
         }
-        return columns;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(sortPhase, orderByElements, limit, offset);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof LogicalTopNOperator)) {
-            return false;
-        }
-
-        LogicalTopNOperator rhs = (LogicalTopNOperator) obj;
-        if (this == rhs) {
-            return true;
-        }
-
-        return limit == rhs.limit &&
-                offset == rhs.offset &&
-                sortPhase.equals(rhs.sortPhase) &&
-                orderByElements.equals(rhs.orderByElements);
     }
 
     @Override
@@ -122,6 +105,27 @@ public class LogicalTopNOperator extends LogicalOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalTopN(optExpression, context);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        LogicalTopNOperator that = (LogicalTopNOperator) o;
+        return offset == that.offset && Objects.equals(orderByElements, that.orderByElements) &&
+                sortPhase == that.sortPhase;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), sortPhase, orderByElements, offset);
     }
 
     public static class Builder

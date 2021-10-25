@@ -14,12 +14,14 @@ public class LogicalUnionOperator extends LogicalSetOperator {
 
     public LogicalUnionOperator(List<ColumnRefOperator> result, List<List<ColumnRefOperator>> childOutputColumns,
                                 boolean isUnionAll) {
-        super(OperatorType.LOGICAL_UNION, result, childOutputColumns);
+        super(OperatorType.LOGICAL_UNION, result, childOutputColumns, -1, null);
         this.isUnionAll = isUnionAll;
     }
 
     private LogicalUnionOperator(LogicalUnionOperator.Builder builder) {
-        super(OperatorType.LOGICAL_UNION, builder.outputColumnRefOp, builder.childOutputColumns);
+        super(OperatorType.LOGICAL_UNION, builder.outputColumnRefOp, builder.childOutputColumns,
+                builder.getLimit(),
+                builder.getProjection());
         this.isUnionAll = builder.isUnionAll;
     }
 

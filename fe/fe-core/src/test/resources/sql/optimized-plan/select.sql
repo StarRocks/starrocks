@@ -212,7 +212,7 @@ INTERSECT
 [sql]
 select v1,v2,b from t0 inner join (select 1 as a,2 as b) t on v1 = a
 [result]
-INNER JOIN (join-predicate [1: v1 = cast(4: expr as bigint(20))] post-join-predicate [null])
+INNER JOIN (join-predicate [1: v1 = 6: cast] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     VALUES (1,2)
 [fragment]
@@ -222,31 +222,36 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-  4:EXCHANGE
-     use vectorized: true
+5:EXCHANGE
+use vectorized: true
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 04
+EXCHANGE ID: 05
 UNPARTITIONED
 
-3:Project
+4:Project
 |  <slot 1> : 1: v1
 |  <slot 2> : 2: v2
 |  <slot 5> : 5: expr
 |  use vectorized: true
 |
-2:HASH JOIN
+3:HASH JOIN
 |  join op: INNER JOIN (COLOCATE)
 |  hash predicates:
 |  colocate: true
-|  equal join conjunct: 1: v1 = CAST(4: expr AS BIGINT)
+|  equal join conjunct: 1: v1 = 6: cast
 |  use vectorized: true
 |
-|----1:UNION
+|----2:Project
+|    |  <slot 5> : 5: expr
+|    |  <slot 6> : CAST(4: expr AS BIGINT)
+|    |  use vectorized: true
+|    |
+|    1:UNION
 |       constant exprs:
 |           1 | 2
 |       use vectorized: true

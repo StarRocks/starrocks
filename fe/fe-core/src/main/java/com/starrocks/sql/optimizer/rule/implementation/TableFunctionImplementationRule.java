@@ -29,7 +29,8 @@ public class TableFunctionImplementationRule extends ImplementationRule {
                 new ColumnRefSet(new ArrayList(logicalTableFunctionOperator.getFnParamColumnProjectMap().keySet())),
                 logicalTableFunctionOperator.getOuterColumnRefSet(),
                 logicalTableFunctionOperator.getLimit(),
-                logicalTableFunctionOperator.getPredicate());
+                logicalTableFunctionOperator.getPredicate(),
+                logicalTableFunctionOperator.getProjection());
         return Lists.newArrayList(OptExpression.create(physicalLateral, input.getInputs()));
     }
 }

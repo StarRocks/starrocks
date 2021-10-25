@@ -86,10 +86,10 @@ OutPut Exchange Id: 12
 |
 10:Project
 |  output columns:
+|  14 <-> [14: O_ORDERDATE, DATE, false]
 |  17 <-> [17: O_SHIPPRIORITY, INT, false]
 |  20 <-> [20: L_ORDERKEY, INT, false]
 |  37 <-> [25: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [26: L_DISCOUNT, DOUBLE, false]
-|  14 <-> [14: O_ORDERDATE, DATE, false]
 |  cardinality: 31332052
 |  column statistics:
 |  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0]
@@ -104,11 +104,13 @@ OutPut Exchange Id: 12
 |  - filter_id = 1, build_expr = (10: O_ORDERKEY), remote = false
 |  cardinality: 31332052
 |  column statistics:
+|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
 |  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0]
 |  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0]
 |  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
+|  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 |
 |----8:EXCHANGE
 |       cardinality: 14532225
@@ -148,9 +150,9 @@ OutPut Exchange Id: 08
 
 7:Project
 |  output columns:
-|  17 <-> [17: O_SHIPPRIORITY, INT, false]
 |  10 <-> [10: O_ORDERKEY, INT, false]
 |  14 <-> [14: O_ORDERDATE, DATE, false]
+|  17 <-> [17: O_SHIPPRIORITY, INT, false]
 |  cardinality: 14532225
 |  column statistics:
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
@@ -164,7 +166,9 @@ OutPut Exchange Id: 08
 |  - filter_id = 0, build_expr = (1: C_CUSTKEY), remote = false
 |  cardinality: 14532225
 |  column statistics:
+|  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7]
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
+|  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0]
 |  * O_ORDERDATE-->[6.941952E8, 7.948512E8, 0.0, 4.0, 2406.0]
 |  * O_SHIPPRIORITY-->[0.0, 0.0, 0.0, 4.0, 1.0]
 |

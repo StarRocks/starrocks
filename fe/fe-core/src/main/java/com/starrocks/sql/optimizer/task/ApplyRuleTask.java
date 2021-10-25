@@ -82,8 +82,7 @@ public class ApplyRuleTask extends OptimizerTask {
             if (newGroupExpression.getOp().isLogical()) {
                 // For logic newGroupExpression, optimize it
                 pushTask(new OptimizeExpressionTask(context, newGroupExpression, exploreOnly));
-                pushTask(new DeriveStatsTask(context, newGroupExpression,
-                        newGroupExpression.getGroup().getLogicalProperty().getOutputColumns()));
+                pushTask(new DeriveStatsTask(context, newGroupExpression));
             } else {
                 // For physical newGroupExpression, enforce and cost it,
                 // Optimize its inputs if needed

@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
@@ -36,7 +37,17 @@ public class Statistics {
         return outputRowCount;
     }
 
-    public double getOutputSize() {
+    public double getOutputSize(ColumnRefSet outputColumns) {
+        double totalSize = 0;
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
+            if (outputColumns.contains(entry.getKey().getId())) {
+                totalSize += entry.getValue().getAverageRowSize();
+            }
+        }
+        return totalSize * outputRowCount;
+    }
+
+    public double getComputeSize() {
         return this.columnStatistics.values().stream().map(ColumnStatistic::getAverageRowSize).
                 reduce(0.0, Double::sum) * outputRowCount;
     }
@@ -49,6 +60,16 @@ public class Statistics {
 
     public Map<ColumnRefOperator, ColumnStatistic> getColumnStatistics() {
         return columnStatistics;
+    }
+
+    public Map<ColumnRefOperator, ColumnStatistic> getOutputColumnsStatistics(ColumnRefSet outputColumns) {
+        Map<ColumnRefOperator, ColumnStatistic> outputColumnsStatistics = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
+            if (outputColumns.contains(entry.getKey().getId())) {
+                outputColumnsStatistics.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return outputColumnsStatistics;
     }
 
     public boolean isTableRowCountMayInaccurate() {

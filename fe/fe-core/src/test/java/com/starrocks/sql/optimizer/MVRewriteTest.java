@@ -829,11 +829,9 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createUserTagMVSql);
         String query =
                 "select empid, percentile_approx(salary, 1), percentile_approx(commission, 1) from emps group by empid";
-        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV, "  2:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: percentile_union(5: salary), percentile_union(6: commission)\n" +
-                "  |  group by: 2: empid\n" +
-                "  |  use vectorized: true");
+        System.out.println(starRocksAssert.query(query).explainQuery());
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV, "  2:AGGREGATE (update serialize)\n",
+                "output: percentile_union");
     }
 
     @Test
@@ -1072,7 +1070,6 @@ public class MVRewriteTest {
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
 
         query = "select count(distinct emps.deptno) from emps, depts where emps.time = depts.time";
-        System.out.println("FIXME : " + starRocksAssert.query(query).explainQuery());
         starRocksAssert.query(query).explainContains(EMPS_MV_NAME);
 
         query = "select count(distinct emps.deptno) from emps left outer join depts on emps.time = depts.time";

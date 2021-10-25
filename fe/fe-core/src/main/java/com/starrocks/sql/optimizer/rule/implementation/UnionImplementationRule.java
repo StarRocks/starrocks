@@ -27,7 +27,8 @@ public class UnionImplementationRule extends ImplementationRule {
                 union.getChildOutputColumns(),
                 union.isUnionAll(),
                 union.getLimit(),
-                union.getPredicate());
+                union.getPredicate(),
+                union.getProjection());
         return Lists.newArrayList(OptExpression.create(physicalUnion, input.getInputs()));
     }
 }

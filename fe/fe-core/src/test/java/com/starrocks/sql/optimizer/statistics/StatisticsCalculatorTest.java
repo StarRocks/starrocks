@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -99,7 +100,7 @@ public class StatisticsCalculatorTest {
         GroupExpression groupExpression = new GroupExpression(aggNode, Lists.newArrayList(childGroup));
         groupExpression.setGroup(new Group(1));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
         Assert.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
@@ -109,7 +110,7 @@ public class StatisticsCalculatorTest {
         groupExpression = new GroupExpression(aggNode, Lists.newArrayList(childGroup));
         groupExpression.setGroup(new Group(1));
         expressionContext = new ExpressionContext(groupExpression);
-        statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
         Assert.assertEquals(
@@ -149,7 +150,7 @@ public class StatisticsCalculatorTest {
                 new GroupExpression(unionOperator, Lists.newArrayList(childGroup1, childGroup2));
         groupExpression.setGroup(new Group(2));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
 
@@ -193,7 +194,6 @@ public class StatisticsCalculatorTest {
         }
 
         LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
-                Lists.newArrayList(),
                 Maps.newHashMap(), Maps.newHashMap(),
                 null, -1, null,
                 ((OlapTable) table).getBaseIndexId(),
@@ -205,7 +205,7 @@ public class StatisticsCalculatorTest {
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
         Assert.assertEquals(1000 * partitions.size(), expressionContext.getStatistics().getOutputRowCount(), 0.001);
@@ -269,7 +269,6 @@ public class StatisticsCalculatorTest {
 
         LogicalOlapScanOperator olapScanOperator =
                 new LogicalOlapScanOperator(table,
-                        Lists.newArrayList(),
                         ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
                         ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date),
                         null, -1,
@@ -284,7 +283,7 @@ public class StatisticsCalculatorTest {
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
         // partition column count distinct values is 30 in table level, after partition prune,
@@ -300,7 +299,6 @@ public class StatisticsCalculatorTest {
                 mapToLong(Partition::getId).boxed().collect(Collectors.toList());
         olapScanOperator =
                 new LogicalOlapScanOperator(table,
-                        Lists.newArrayList(),
                         ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
                         ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date),
                         null, -1, null, ((OlapTable) table).getBaseIndexId(),
@@ -314,7 +312,7 @@ public class StatisticsCalculatorTest {
         groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
         expressionContext = new ExpressionContext(groupExpression);
-        statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
         columnStatistic = expressionContext.getStatistics().getColumnStatistic(id_date);
@@ -384,7 +382,7 @@ public class StatisticsCalculatorTest {
         }
 
         LogicalOlapScanOperator olapScanOperator =
-                new LogicalOlapScanOperator(table, Lists.newArrayList(id_date),
+                new LogicalOlapScanOperator(table,
                         ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
                         ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date), null, -1, null,
                         ((OlapTable) table).getBaseIndexId(),
@@ -396,7 +394,7 @@ public class StatisticsCalculatorTest {
         GroupExpression groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
 
@@ -413,7 +411,7 @@ public class StatisticsCalculatorTest {
         partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                 mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
         olapScanOperator =
-                new LogicalOlapScanOperator(table, Lists.newArrayList(id_date),
+                new LogicalOlapScanOperator(table,
                         ImmutableMap.of(id_date, new Column("id_date", Type.DATE, true)),
                         ImmutableMap.of(new Column("id_date", Type.DATE, true), id_date), null, -1, null,
                         ((OlapTable) table).getBaseIndexId(),
@@ -427,8 +425,7 @@ public class StatisticsCalculatorTest {
         groupExpression = new GroupExpression(olapScanOperator, Lists.newArrayList());
         groupExpression.setGroup(new Group(0));
         expressionContext = new ExpressionContext(groupExpression);
-        statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
-                columnRefFactory, new MockDumpInfo());
+        statisticsCalculator = new StatisticsCalculator(expressionContext, columnRefFactory, new MockDumpInfo());
         statisticsCalculator.estimatorStats();
         columnStatistic = expressionContext.getStatistics().getColumnStatistic(id_date);
         // has two partitions
@@ -459,6 +456,7 @@ public class StatisticsCalculatorTest {
         childBuilder1.addColumnStatistics(ImmutableMap.of(v5, new ColumnStatistic(0, 50, 0, 10, 50)));
         Group childGroup1 = new Group(0);
         childGroup1.setStatistics(childBuilder1.build());
+        childGroup1.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(v1, v2, v5))));
         // child 2 statistics
         Statistics.Builder childBuilder2 = Statistics.builder();
         childBuilder2.setOutputRowCount(20000);
@@ -467,6 +465,8 @@ public class StatisticsCalculatorTest {
         childBuilder2.addColumnStatistics(ImmutableMap.of(v6, new ColumnStatistic(0, 100, 0, 10, 100)));
         Group childGroup2 = new Group(1);
         childGroup2.setStatistics(childBuilder2.build());
+        childGroup2.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(v3, v4, v6))));
+
         // record column id to relation id
         columnRefFactory.updateColumnToRelationIds(v1.getId(), 0);
         columnRefFactory.updateColumnToRelationIds(v2.getId(), 0);
@@ -489,7 +489,7 @@ public class StatisticsCalculatorTest {
                 new GroupExpression(joinOperator, Lists.newArrayList(childGroup1, childGroup2));
         groupExpression.setGroup(new Group(2));
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         // use middle ground method to estimate
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
@@ -516,7 +516,7 @@ public class StatisticsCalculatorTest {
         groupExpression = new GroupExpression(joinOperator, Lists.newArrayList(childGroup1, childGroup2));
         groupExpression.setGroup(new Group(2));
         expressionContext = new ExpressionContext(groupExpression);
-        statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         // use middle ground method to estimate
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);
@@ -535,7 +535,7 @@ public class StatisticsCalculatorTest {
         groupExpression = new GroupExpression(joinOperator, Lists.newArrayList(childGroup1, childGroup2));
         groupExpression.setGroup(new Group(2));
         expressionContext = new ExpressionContext(groupExpression);
-        statisticsCalculator = new StatisticsCalculator(expressionContext, new ColumnRefSet(),
+        statisticsCalculator = new StatisticsCalculator(expressionContext,
                 columnRefFactory, new MockDumpInfo());
         // use middle ground method to estimate
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(false);

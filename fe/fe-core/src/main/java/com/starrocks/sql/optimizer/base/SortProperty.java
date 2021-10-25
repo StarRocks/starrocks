@@ -56,6 +56,6 @@ public class SortProperty implements PhysicalProperty {
     @Override
     public GroupExpression appendEnforcers(Group child) {
         return new GroupExpression(new PhysicalTopNOperator(spec,
-                -1, 0, SortPhase.FINAL, false, true, null), Lists.newArrayList(child));
+                -1, 0, SortPhase.FINAL, false, true, null, null), Lists.newArrayList(child));
     }
 }
