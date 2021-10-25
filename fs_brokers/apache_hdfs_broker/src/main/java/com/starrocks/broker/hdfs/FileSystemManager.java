@@ -499,7 +499,7 @@ public class FileSystemManager {
                 conf.set(FS_KS3_ENDPOINT, endpoint);
                 conf.set(FS_KS3_IMPL, "com.ksyun.kmr.hadoop.fs.ks3.Ks3FileSystem");
                 conf.set(FS_KS3_IMPL_DISABLE_CACHE, disableCache);
-                FileSystem s3AFileSystem = FileSystem.get(pathUri.getUri(), conf);
+                FileSystem ks3FileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(s3AFileSystem);
             }
             return fileSystem;
