@@ -92,7 +92,6 @@ pipeline::OpFactories SelectNode::decompose_to_pipeline(pipeline::PipelineBuilde
     using namespace pipeline;
 
     OpFactories operators = _children[0]->decompose_to_pipeline(context);
-    operators = context->maybe_interpolate_local_exchange(operators);
 
     operators.emplace_back(
             std::make_shared<SelectOperatorFactory>(context->next_operator_id(), id(), std::move(_conjunct_ctxs)));

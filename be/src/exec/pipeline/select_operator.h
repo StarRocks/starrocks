@@ -18,9 +18,9 @@ public:
     ~SelectOperator() override = default;
     Status prepare(RuntimeState* state) override;
     Status close(RuntimeState* state) override;
-    bool has_output() const override { return _curr_chunk != nullptr; }
+    bool has_output() const override { return _curr_chunk != nullptr || _pre_output_chunk != nullptr; }
     bool need_input() const override;
-    bool is_finished() const override { return _is_finished && !_curr_chunk; }
+    bool is_finished() const override { return _is_finished && !_curr_chunk && !_pre_output_chunk; }
 
     void finish(RuntimeState* state) override { _is_finished = true; }
 
@@ -29,7 +29,11 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
+    // _curr_chunk used to receive input chunks, and apply predicate filtering.
     vectorized::ChunkPtr _curr_chunk = nullptr;
+    // _pre_output_chunk used to merge small _curr_chunk until it's big enough, then return as output.
+    vectorized::ChunkPtr _pre_output_chunk = nullptr;
+
     const std::vector<ExprContext*>& _conjunct_ctxs;
 
     bool _is_finished = false;
