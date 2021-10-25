@@ -1230,8 +1230,8 @@ public class SchemaChangeHandler extends AlterHandler {
 
                 schemaChangeJob.addPartitionShadowIndex(partitionId, shadowIndexId, shadowIndex);
             } // end for partition
-            schemaChangeJob.addIndexSchema(shadowIndexId, originIndexId, newIndexName, shadowIndexId, newSchemaVersion,
-                    newSchemaHash, newShortKeyColumnCount, entry.getValue());
+            schemaChangeJob.addIndexSchema(shadowIndexId, originIndexId, newIndexName, newSchemaVersion, newSchemaHash,
+                    newShortKeyColumnCount, entry.getValue());
         } // end for index
 
         // set table state
