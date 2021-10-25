@@ -14,21 +14,21 @@ static void get_stats(std::ostream& os, void*) {
 // NOLINTNEXTLINE
 bvar::PassiveStatus<std::string> g_schema_map_stats("tablet_schema_map", get_stats, NULL);
 
-std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPB& arg) {
-    SchemaId id = arg.id();
+std::pair<TabletSchemaMap::TabletSchemaPtr, bool> TabletSchemaMap::emplace(const TabletSchemaPB& schema_pb) {
+    SchemaId id = schema_pb.id();
     DCHECK_NE(TabletSchema::invalid_id(), id);
     MapShard* shard = get_shard(id);
     std::unique_lock l(shard->mtx);
 
     auto it = shard->map.find(id);
     if (it == shard->map.end()) {
-        auto ptr = std::make_shared<const TabletSchema>(arg, this);
+        auto ptr = std::make_shared<const TabletSchema>(schema_pb, this);
         shard->map.emplace(id, ptr);
         return std::make_pair(ptr, true);
     } else {
         std::shared_ptr<const TabletSchema> ptr = it->second.lock();
         if (UNLIKELY(!ptr)) {
-            ptr = std::make_shared<const TabletSchema>(arg, this);
+            ptr = std::make_shared<const TabletSchema>(schema_pb, this);
             it->second = std::weak_ptr<const TabletSchema>(ptr);
             return std::make_pair(ptr, true);
         } else {

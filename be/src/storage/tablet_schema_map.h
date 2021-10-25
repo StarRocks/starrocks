@@ -31,17 +31,17 @@ public:
     TabletSchemaMap() = default;
 
     // Inserts a new TabletSchema into the container constructed with the given arg if there is no TabletSchema with
-    // the the id of arg in the container.
+    // the id of schema_pb in the container.
     //
-    // Only `unique_id()` of the arg will be compared to determine whether the schema already exist, it's the caller's
-    // duty to ensure that no two different TabletSchemaPB`s have the same `unique_id()`.
+    // Only `id()` of the schema_pb will be compared to determine whether the schema already exist, it's the caller's
+    // duty to ensure that no two different TabletSchemaPB`s have the same `id()`.
     //
-    // REQUIRE: arg.unique_id() != TabletSchema::invalid_id()
+    // REQUIRE: schema_pb.id() != TabletSchema::invalid_id()
     //
     // Returns a pair consisting of a pointer to the inserted element, or the already-existing element if no insertion
     // happened, and a bool denoting whether the insertion took place (true if insertion happened, false if it did not).
     // [thread-safe]
-    std::pair<TabletSchemaPtr, bool> emplace(const TabletSchemaPB& arg);
+    std::pair<TabletSchemaPtr, bool> emplace(const TabletSchemaPB& schema_pb);
 
     // Removes the TabletSchema (if one exists) with the id equivalent to id.
     //
