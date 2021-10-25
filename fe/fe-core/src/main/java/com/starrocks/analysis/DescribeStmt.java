@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MysqlTable;
@@ -142,7 +143,7 @@ public class DescribeStmt extends ShowStmt {
 
                                     // Extra string (aggregation and bloom filter)
                                     List<String> extras = Lists.newArrayList();
-                                    if (column.getAggregationType() != null) {
+                                    if (column.getAggregationType() != null && olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
                                         extras.add(column.getAggregationType().name());
                                     }
                                     String extraStr = StringUtils.join(extras, ",");
@@ -206,7 +207,7 @@ public class DescribeStmt extends ShowStmt {
 
                             // Extra string (aggregation and bloom filter)
                             List<String> extras = Lists.newArrayList();
-                            if (column.getAggregationType() != null) {
+                            if (column.getAggregationType() != null && olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
                                 extras.add(column.getAggregationType().name());
                             }
                             if (bfColumns != null && bfColumns.contains(column.getName())) {
