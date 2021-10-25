@@ -216,7 +216,7 @@ public:
         _iter.reset();
     }
 
-    virtual Status init_encoded_schema(std::unordered_map<uint32_t, vectorized::GlobalDictMap*>& dict_maps) override {
+    virtual Status init_encoded_schema(vectorized::ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(vectorized::ChunkIterator::init_encoded_schema(dict_maps));
         return _iter->init_encoded_schema(dict_maps);
     }

@@ -14,14 +14,19 @@ class ExprContext;
 class RuntimeState;
 namespace vectorized {
 class ColumnRef;
+
+// TODO: we need to change the dict type to int16 later
+using DictId = int32_t;
+
+using LowCardDictColumn = vectorized::Int32Column;
 // slice -> global dict code
-using GlobalDictMap = std::unordered_map<Slice, int, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
+using GlobalDictMap = phmap::flat_hash_map<Slice, DictId, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
 // global dict code -> slice
-using RGlobalDictMap = std::unordered_map<int, Slice>;
+using RGlobalDictMap = phmap::flat_hash_map<DictId, Slice>;
 
 using GlobalDictMapEntity = std::pair<GlobalDictMap, RGlobalDictMap>;
 // column-id -> GlobalDictMap
-using GlobalDictMaps = std::unordered_map<uint32_t, GlobalDictMapEntity>;
+using GlobalDictMaps = phmap::flat_hash_map<uint32_t, GlobalDictMapEntity>;
 
 inline std::ostream& operator<<(std::ostream& stream, const RGlobalDictMap& map) {
     stream << "[";
@@ -33,11 +38,12 @@ inline std::ostream& operator<<(std::ostream& stream, const RGlobalDictMap& map)
 }
 
 // column-name -> GlobalDictMap
-using GlobalDictByNameMaps = std::unordered_map<std::string, GlobalDictMap>;
+using GlobalDictByNameMaps = phmap::flat_hash_map<std::string, GlobalDictMap>;
 
 using InvalidDictColumnsSet = phmap::flat_hash_set<std::string, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
 
-static inline std::unordered_map<uint32_t, GlobalDictMap*> EMPTY_GLOBAL_DICTMAPS;
+using ColumnIdToGlobalDictMap = phmap::flat_hash_map<uint32_t, GlobalDictMap*>;
+static inline ColumnIdToGlobalDictMap EMPTY_GLOBAL_DICTMAPS;
 
 constexpr int DICT_DECODE_MAX_SIZE = 256;
 
@@ -46,11 +52,8 @@ struct DictOptimizeContext {
     SlotId slot_id;
     // if input was not nullable but output was nullable this flag will set true
     bool result_nullable = false;
-    // size: DICT_DECODE_MAX_SIZE + 1
-    std::vector<int> code_convert_map_holder;
-    // code_convert_map_holder.data() + 1
-    // code_convert_map[-1] is accessable
-    int* code_convert_map;
+    // size: DICT_DECODE_MAX_SIZE
+    std::vector<DictId> code_convert_map;
 };
 
 class DictOptimizeParser {

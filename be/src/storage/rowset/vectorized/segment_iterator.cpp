@@ -128,8 +128,6 @@ private:
 
 class GlobalDictCodeColumnIterator final : public ColumnIterator {
 public:
-    using GlobalDictMap = std::unordered_map<Slice, int, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
-
     GlobalDictCodeColumnIterator(ColumnId cid, ColumnIterator* iter, GlobalDictMap* gdict)
             : _cid(cid), _col_iter(iter), _global_dict(gdict) {}
 
@@ -174,14 +172,14 @@ public:
 
     Status decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) override {
         RETURN_IF_ERROR(_build_to_global_dict());
-        vectorized::Int32Column::Container* container;
+        LowCardDictColumn::Container* container = nullptr;
         bool output_nullable = words->is_nullable();
 
         if (output_nullable) {
             vectorized::ColumnPtr& data_column = down_cast<vectorized::NullableColumn*>(words)->data_column();
-            container = &down_cast<vectorized::Int32Column*>(data_column.get())->get_data();
+            container = &down_cast<LowCardDictColumn*>(data_column.get())->get_data();
         } else {
-            container = &down_cast<vectorized::Int32Column*>(words)->get_data();
+            container = &down_cast<LowCardDictColumn*>(words)->get_data();
         }
 
         auto& res_data = *container;
@@ -191,7 +189,7 @@ public:
                 DCHECK(_local_to_global.contains(codes[i]));
                 res_data[i] = _local_to_global[codes[i]];
             } else {
-                res_data[i] = -1;
+                res_data[i] = 0;
                 DCHECK(output_nullable);
             }
         }
@@ -200,7 +198,7 @@ public:
             auto& null_data = down_cast<vectorized::NullableColumn*>(words)->null_column_data();
             null_data.resize(size);
             for (int i = 0; i < size; ++i) {
-                null_data[i] = (res_data[i] == -1);
+                null_data[i] = (res_data[i] == 0);
             }
         }
 
