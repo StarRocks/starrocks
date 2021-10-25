@@ -45,10 +45,16 @@ public class IndexSchemaProcNode implements ProcNodeInterface {
 
     private final List<Column> schema;
     private final Set<String> bfColumns;
+    private boolean isHideAggregateTypeName;
 
     public IndexSchemaProcNode(List<Column> schema, Set<String> bfColumns) {
         this.schema = schema;
         this.bfColumns = bfColumns;
+        this.isHideAggregateTypeName = false;
+    }
+
+    public void setHideAggregationType(boolean isHideAggregateTypeName) {
+        this.isHideAggregateTypeName = isHideAggregateTypeName;
     }
 
     @Override
@@ -61,7 +67,7 @@ public class IndexSchemaProcNode implements ProcNodeInterface {
         for (Column column : schema) {
             // Extra string (aggregation and bloom filter)
             List<String> extras = Lists.newArrayList();
-            if (column.getAggregationType() != null) {
+            if (column.getAggregationType() != null && !isHideAggregateTypeName) {
                 extras.add(column.getAggregationType().name());
             }
             if (bfColumns != null && bfColumns.contains(column.getName())) {
