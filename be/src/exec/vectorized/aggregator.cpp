@@ -271,7 +271,7 @@ void Aggregator::offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk) {
 
 bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size_t input_chunk_size, int64_t ht_mem,
                                                   int64_t ht_rows) const {
-    LOG(INFO) << "TMP_STREMIN_LOG: " << prev_row_returned << ":" << input_chunk_size << ":" << ht_mem << ":" << ht_rows
+    LOG(INFO) << "TMP_STREMIN_LOG_2: " << prev_row_returned << ":" << input_chunk_size << ":" << ht_mem << ":" << ht_rows
               << std::endl;
     // Need some rows in tables to have valid statistics.
     if (ht_rows == 0) {

@@ -89,6 +89,10 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                         _aggregator->hash_set_variant().capacity() - _aggregator->hash_set_variant().capacity() / 8;
                 size_t remain_size = real_capacity - _aggregator->hash_set_variant().size();
                 bool ht_needs_expansion = remain_size < input_chunk_size;
+
+                LOG(INFO) << "TMP_STREMIN_LOG_1: " << _aggregator->hash_set_variant().capacity() << ":"
+                          << _aggregator->hash_set_variant().size() << ":" << input_chunk_size << std::endl;
+
                 if (!ht_needs_expansion ||
                     _aggregator->should_expand_preagg_hash_tables(_children[0]->rows_returned(), input_chunk_size,
                                                                   _aggregator->mem_pool()->total_allocated_bytes(),
