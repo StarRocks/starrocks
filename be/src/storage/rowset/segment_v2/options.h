@@ -38,7 +38,7 @@ public:
 
 class PageDecoderOptions {
 public:
-    PageHandle* page_handle;
+    PageHandle* page_handle = nullptr;
 };
 
 } // namespace segment_v2
