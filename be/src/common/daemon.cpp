@@ -34,6 +34,8 @@
 #include "runtime/user_function_cache.h"
 #include "runtime/vectorized/time_types.h"
 #include "storage/options.h"
+#include "storage/page_cache.h"
+#include "storage/storage_engine.h"
 #include "util/cpu_info.h"
 #include "util/debug_util.h"
 #include "util/disk_info.h"
@@ -76,20 +78,6 @@ void* tcmalloc_gc_thread(void* dummy) {
         ReleaseColumnPool releaser(kFreeRatio);
         ForEach<ColumnPoolList>(releaser);
         LOG_IF(INFO, releaser.freed_bytes() > 0) << "Released " << releaser.freed_bytes() << " bytes from column pool";
-        auto* local_column_pool_mem_tracker = ExecEnv::GetInstance()->local_column_pool_mem_tracker();
-        if (local_column_pool_mem_tracker != nullptr) {
-            // Frequent update MemTracker where allocate or release column may affect performance,
-            // so here update MemTracker regularly
-            local_column_pool_mem_tracker->consume(g_column_pool_total_local_bytes.get_value() -
-                                                   local_column_pool_mem_tracker->consumption());
-        }
-        auto* central_column_pool_mem_tracker = ExecEnv::GetInstance()->central_column_pool_mem_tracker();
-        if (central_column_pool_mem_tracker != nullptr) {
-            // Frequent update MemTracker where allocate or release column may affect performance,
-            // so here update MemTracker regularly
-            central_column_pool_mem_tracker->consume(g_column_pool_total_central_bytes.get_value() -
-                                                     central_column_pool_mem_tracker->consumption());
-        }
 
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
         size_t used_size = 0;
