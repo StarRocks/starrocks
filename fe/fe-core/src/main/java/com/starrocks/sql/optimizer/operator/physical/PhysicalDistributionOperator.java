@@ -23,14 +23,15 @@ public class PhysicalDistributionOperator extends PhysicalOperator {
         this.distributionSpec = spec;
     }
 
-    private final List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+    private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
 
     public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
         return globalDicts;
     }
 
-    public void addGlobalDictColumns(Pair<Integer, ColumnDict> dict) {
-        globalDicts.add(dict);
+    public void setGlobalDicts(
+            List<Pair<Integer, ColumnDict>> globalDicts) {
+        this.globalDicts = globalDicts;
     }
 
     @Override

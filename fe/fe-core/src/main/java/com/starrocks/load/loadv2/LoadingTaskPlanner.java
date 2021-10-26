@@ -38,6 +38,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.BrokerFileGroup;
@@ -50,6 +51,8 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -98,12 +101,6 @@ public class LoadingTaskPlanner {
         this.timeoutS = timeoutS;
         this.parallelInstanceNum = Config.load_parallel_instance_num;
 
-        /*
-         * TODO(cmy): UDF currently belongs to a database. Therefore, before using UDF,
-         * we need to check whether the user has corresponding permissions on this database.
-         * But here we have lost user information and therefore cannot check permissions.
-         * So here we first prohibit users from using UDF in load. If necessary, improve it later.
-         */
         this.analyzer.setUDFAllowed(false);
     }
 
@@ -111,12 +108,19 @@ public class LoadingTaskPlanner {
             throws UserException {
         // Generate tuple descriptor
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
         // use full schema to fill the descriptor table
         for (Column col : table.getFullSchema()) {
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
             slotDesc.setColumn(col);
             slotDesc.setIsNullable(col.isAllowNull());
+
+            if (col.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(table.getId(),
+                    col.getName())) {
+                ColumnDict dict = IDictManager.getInstance().getGlobalDict(table.getId(), col.getName());
+                globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict));
+            }
         }
         if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
             // add op type column
@@ -148,6 +152,9 @@ public class LoadingTaskPlanner {
         PlanFragment sinkFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
         sinkFragment.setSink(olapTableSink);
         sinkFragment.setParallelExecNum(parallelInstanceNum);
+        // After data loading, we need to check the global dict for low cardinality string column
+        // whether update.
+        sinkFragment.setGlobalDicts(globalDicts);
 
         fragments.add(sinkFragment);
 

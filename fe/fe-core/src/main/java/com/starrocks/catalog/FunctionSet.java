@@ -143,9 +143,14 @@ public class FunctionSet {
      * to row function when init.
      */
     private final Map<String, List<Function>> vectorizedFunctions;
-    // cmy: This does not contain any user defined functions. All UDFs handle null values by themselves.
+    // This does not contain any user defined functions. All UDFs handle null values by themselves.
     private final ImmutableSet<String> nonNullResultWithNullParamFunctions = ImmutableSet.of("if", "hll_hash",
             "concat_ws", "ifnull", "nullif", "null_or_empty", "coalesce");
+
+    // If low cardinality string column with global dict, for some string functions,
+    // we could evaluate the function only with the dict content, not all string column data.
+    public final ImmutableSet<String> couldApplyDictOptimizationFunctions = ImmutableSet.of(
+            "like", "substr", "substring", "upper", "lower");
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
@@ -290,6 +295,7 @@ public class FunctionSet {
         if (findVectorizedFunction(fn) != null) {
             return;
         }
+        fn.setCouldApplyDictOptimize(couldApplyDictOptimizationFunctions.contains(fn.functionName()));
 
         List<Function> fns = vectorizedFunctions.computeIfAbsent(fn.functionName(), k -> Lists.newArrayList());
         fns.add(fn);

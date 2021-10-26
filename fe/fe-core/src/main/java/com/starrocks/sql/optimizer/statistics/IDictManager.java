@@ -5,7 +5,13 @@ package com.starrocks.sql.optimizer.statistics;
 import com.starrocks.common.FeConstants;
 
 public interface IDictManager {
-    boolean hasGlobalDict(long tableId, String columnName, long version);
+    boolean hasGlobalDict(long tableId, String columnName, long versionTime);
+
+    void updateGlobalDict(long tableId, String columnName, long versionTime);
+
+    boolean hasGlobalDict(long tableId, String columnName);
+
+    void removeGlobalDict(long tableId, String columnName);
 
     // You should call `hasGlobalDict` firstly to ensure the global dict exist
     ColumnDict getGlobalDict(long tableId, String columnName);
