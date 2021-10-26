@@ -50,7 +50,6 @@ public class CreateReplicaTask extends AgentTask {
 
     private short shortKeyColumnCount;
     private int schemaHash;
-    private long schemaId;
 
     private long version;
     private long versionHash;
