@@ -101,19 +101,15 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
             dictSet.union(id);
         }
 
-        if (predicate != null) {
-            if (predicate.getUsedColumns().isIntersect(dictSet)) {
-                return true;
-            }
+        if (predicate != null && predicate.getUsedColumns().isIntersect(dictSet)) {
+            return false;
         }
 
-        if (joinPredicate != null) {
-            if (joinPredicate.getUsedColumns().isIntersect(dictSet)) {
-                return true;
-            }
+        if (joinPredicate != null && joinPredicate.getUsedColumns().isIntersect(dictSet)) {
+            return false;
         }
 
-        return false;
+        return true;
     }
 
     public void fillDisableDictOptimizeColumns(ColumnRefSet columnRefSet) {

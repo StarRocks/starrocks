@@ -79,13 +79,4 @@ public class CompoundPredicateOperator extends PredicateOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), type);
     }
-
-    @Override
-    public boolean isStrictPredicate() {
-        if (type == CompoundType.NOT) {
-            return false; // Always return false for NOT
-        }
-
-        return getChild(0).isStrictPredicate() && getChild(1).isStrictPredicate();
-    }
 }
