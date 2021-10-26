@@ -39,6 +39,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -56,6 +57,12 @@ public class HiveMetaClient {
     public static final String PARTITION_NULL_VALUE = "__HIVE_DEFAULT_PARTITION__";
     // Maximum number of idle metastore connections in the connection pool at any point.
     private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
+
+    private static final String SCHEME_S3A = "s3a://";
+    private static final String SCHEME_S3 = "s3://";
+    private static final String SCHEME_S3N = "s3n://";
+    private static final String SCHEME_S3_PREFIX = "s3";
+
     private final LinkedList<AutoCloseClient> clientPool = new LinkedList<>();
     private final Object clientPoolLock = new Object();
 
@@ -87,7 +94,6 @@ public class HiveMetaClient {
         private final IMetaStoreClient hiveClient;
 
         private AutoCloseClient(HiveConf conf) throws MetaException {
-            System.out.println("new AutoCloseClient called");
             hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
                     HiveMetaStoreThriftClient.class.getName());
         }
@@ -131,6 +137,7 @@ public class HiveMetaClient {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.getTable(dbName, tableName);
         } catch (Exception e) {
+            LOG.warn("get hive table failed", e);
             throw new DdlException("get hive table from meta store failed: " + e.getMessage());
         }
     }
@@ -155,6 +162,7 @@ public class HiveMetaClient {
                 return partitionKeys;
             }
         } catch (Exception e) {
+            LOG.warn("get partition keys failed", e);
             throw new DdlException("get hive partition keys from meta store failed: " + e.getMessage());
         }
     }
@@ -163,6 +171,7 @@ public class HiveMetaClient {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.partitionNameToVals(partName);
         } catch (Exception e) {
+            LOG.warn("convert partitionName to vals failed", e);
             throw new DdlException("convert partition name to vals failed: " + e.getMessage());
         }
     }
@@ -182,8 +191,9 @@ public class HiveMetaClient {
                 throw new DdlException("unsupported file format [" + sd.getInputFormat() + "]");
             }
 
-            List<HdfsFileDesc> fileDescs = getHdfsFileDescs(sd.getLocation());
-            return new HivePartition(format, ImmutableList.copyOf(fileDescs), sd.getLocation());
+            String path = formatObjectStoragePath(sd.getLocation());
+            List<HdfsFileDesc> fileDescs = getHdfsFileDescs(path);
+            return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
         } catch (NoSuchObjectException e) {
             throw new DdlException("get hive partition meta data failed: "
                     + "partition not exists, partValues: "
@@ -194,12 +204,24 @@ public class HiveMetaClient {
         }
     }
 
+    private String formatObjectStoragePath(String path) {
+        if (path.startsWith(SCHEME_S3)) {
+            return SCHEME_S3A + path.substring(5);
+        }
+        if (path.startsWith(SCHEME_S3N)) {
+            return SCHEME_S3A + path.substring(6);
+        }
+
+        return path;
+    }
+
     public HiveTableStats getTableStats(String dbName, String tableName) throws DdlException {
         try (AutoCloseClient client = getClient()) {
             Table table = client.hiveClient.getTable(dbName, tableName);
             Map<String, String> parameters = table.getParameters();
             return new HiveTableStats(Utils.getRowCount(parameters), Utils.getTotalSize(parameters));
         } catch (Exception e) {
+            LOG.warn("get table stats failed", e);
             throw new DdlException("get hive table stats from meta store failed: " + e.getMessage());
         }
     }
@@ -217,6 +239,7 @@ public class HiveMetaClient {
             }
             return new HivePartitionStats(Utils.getRowCount(parameters));
         } catch (Exception e) {
+            LOG.warn("get partition stats failed", e);
             throw new DdlException("get hive partition stats from hive metastore failed: " + e.getMessage());
         }
     }
@@ -244,6 +267,7 @@ public class HiveMetaClient {
             }
             return statsMap;
         } catch (Exception e) {
+            LOG.warn("get table level column stats for unpartition table failed", e);
             throw new DdlException("get table column statistics from hive metastore failed: " + e.getMessage());
         }
     }
@@ -269,6 +293,7 @@ public class HiveMetaClient {
         try (AutoCloseClient client = getClient()) {
             partitions = client.hiveClient.getPartitionsByNames(dbName, tableName, partNames);
         } catch (Exception e) {
+            LOG.warn("get table level column stats for partition table failed", e);
             throw new DdlException("get partitions from hive metastore failed: " + e.getMessage());
         }
         for (Partition partition : partitions) {
@@ -458,7 +483,7 @@ public class HiveMetaClient {
                 }
                 String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
-                List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations);
+                List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations, isObjectStorage(dirPath));
                 fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
                         ImmutableList.copyOf(fileBlockDescs)));
             }
@@ -466,6 +491,10 @@ public class HiveMetaClient {
             // hive empty partition may not create directory
         }
         return fileDescs;
+    }
+
+    private boolean isObjectStorage(String path) {
+        return path.startsWith(SCHEME_S3_PREFIX);
     }
 
     private boolean isValidDataFile(FileStatus fileStatus) {
@@ -478,24 +507,83 @@ public class HiveMetaClient {
                 lcFileName.endsWith(".copying") || lcFileName.endsWith(".tmp"));
     }
 
-    private List<HdfsFileBlockDesc> getHdfsFileBlockDescs(BlockLocation[] blockLocations) throws IOException {
+    private List<HdfsFileBlockDesc> getHdfsFileBlockDescs(BlockLocation[] blockLocations,
+                                                          boolean isObjectStorage) throws IOException {
         List<HdfsFileBlockDesc> fileBlockDescs = Lists.newArrayList();
         for (BlockLocation blockLocation : blockLocations) {
-            String[] hostNames = blockLocation.getNames();
-            long[] replicaHostIds = new long[hostNames.length];
-            for (int j = 0; j < hostNames.length; j++) {
-                String name = hostNames[j];
-                replicaHostIds[j] = getHostId(name);
+            if (isObjectStorage) {
+                // For object storage, the blockLocation size is always the full file size
+                // We should split into smaller blocks to increase the degree of parallelism
+                fileBlockDescs.addAll(splitObjectStorageBlock(blockLocation));
+            } else {
+                fileBlockDescs.add(buildHdfsFileBlockDesc(
+                        blockLocation.getOffset(),
+                        blockLocation.getLength(),
+                        getReplicaHostIds(blockLocation.getNames()))
+                );
             }
-            fileBlockDescs.add(new HdfsFileBlockDesc(blockLocation.getOffset(),
-                    blockLocation.getLength(),
-                    replicaHostIds,
-                    // TODO get storageId through blockStorageLocation.getVolumeIds()
-                    // because this function is a rpc call, we give a fake value now.
-                    // Set it to real value, when planner needs this param.
-                    new long[] {UNKNOWN_STORAGE_ID},
-                    this));
         }
+        return fileBlockDescs;
+    }
+
+    private long[] getReplicaHostIds(String[] hostNames) {
+        long[] replicaHostIds = new long[hostNames.length];
+        for (int j = 0; j < hostNames.length; j++) {
+            String name = hostNames[j];
+            replicaHostIds[j] = getHostId(name);
+        }
+        return replicaHostIds;
+    }
+
+    private HdfsFileBlockDesc buildHdfsFileBlockDesc(long offset, long length, long[] replicaHostIds) {
+        return new HdfsFileBlockDesc(offset,
+                length,
+                replicaHostIds,
+                // TODO get storageId through blockStorageLocation.getVolumeIds()
+                // because this function is a rpc call, we give a fake value now.
+                // Set it to real value, when planner needs this param.
+                new long[] {UNKNOWN_STORAGE_ID},
+                this
+        );
+    }
+
+    private List<HdfsFileBlockDesc> splitObjectStorageBlock(BlockLocation blockLocation) throws IOException {
+        List<HdfsFileBlockDesc> fileBlockDescs = new ArrayList<>();
+        long remainingBytes = blockLocation.getLength();
+        // NOTE: Config.object_storage_block_size should be extracted to a local variable,
+        // because it may be changed in the loop
+        long blockSize = Config.object_storage_block_size;
+        do {
+            if (remainingBytes <= blockSize) {
+                fileBlockDescs.add(buildHdfsFileBlockDesc(
+                        blockLocation.getOffset() + blockLocation.getLength() - remainingBytes,
+                        remainingBytes,
+                        getReplicaHostIds(blockLocation.getNames())
+                ));
+                remainingBytes = 0;
+            } else if (remainingBytes <= 2 * blockSize) {
+                long mid = (remainingBytes + 1) / 2;
+                fileBlockDescs.add(buildHdfsFileBlockDesc(
+                        blockLocation.getOffset() + blockLocation.getLength() - remainingBytes,
+                        mid,
+                        getReplicaHostIds(blockLocation.getNames())
+                ));
+                fileBlockDescs.add(buildHdfsFileBlockDesc(
+                        blockLocation.getOffset() + blockLocation.getLength() - remainingBytes + mid,
+                        remainingBytes - mid,
+                        getReplicaHostIds(blockLocation.getNames())
+                ));
+                remainingBytes = 0;
+            } else {
+                fileBlockDescs.add(buildHdfsFileBlockDesc(
+                        blockLocation.getOffset() + blockLocation.getLength() - remainingBytes,
+                        blockSize,
+                        getReplicaHostIds(blockLocation.getNames())
+                ));
+                remainingBytes -= blockSize;
+            }
+        } while (remainingBytes > 0);
+
         return fileBlockDescs;
     }
 

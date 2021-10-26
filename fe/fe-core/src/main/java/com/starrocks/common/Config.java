@@ -1278,6 +1278,12 @@ public class Config extends ConfigBase {
     public static long hive_meta_store_timeout_s = 10L;
 
     /**
+     * Used to split object storage files into smaller blocks for hive external table
+     */
+    @ConfField(mutable = true)
+    public static long object_storage_block_size = 64L * 1024L * 1024L;
+
+    /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
      */
     @ConfField

@@ -566,6 +566,10 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         _hdfs_files.emplace_back(hdfs_file_desc);
     }
 
+    if (namenode.rfind("s3a://", 0) == 0) {
+        _is_hdfs_fs = false;
+    }
+
     return Status::OK();
 }
 
