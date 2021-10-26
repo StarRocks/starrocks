@@ -2,6 +2,9 @@
 
 #include "exec/vectorized/repeat_node.h"
 
+#include "exec/pipeline/aggregate/repeat/repeat_operator.h"
+#include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
@@ -72,23 +75,36 @@ Status RepeatNode::get_next(RuntimeState* state, RowBatch* row_batch, bool* eos)
     return Status::NotSupported("get_next for row_batch is not supported");
 }
 
-// for new chunk A.
-// step 1:
-// Extend columns of A, with virtual columns
-// for gourping_id and grouping()/grouping_id() columns.
-//
-// step 2:
-// save current chunk of A.
-//
-// step 3:
-// set null columns of A for unneed columns
-// and return reulst chunk to parent.
-//
-// step 4:
-// for every rest of the group by
-// obtain original chunk from step 2, and
-// do step 1 with update columns instead of append columns.
-// do step 3.
+/*
+ * for new chunk A.
+ * It used as first time and non-first time:
+ * 
+ * first time(_repeat_times_last == 0):
+ * step 1:
+ * save A as _curr_chunk.
+ *
+ * step 2:
+ * Extend multiple virtual columns for A,
+ * virtual columns is consist of gourping_id and grouping()/grouping_id() columns.
+ * save _curr_chunk->columns() as _curr_columns(it used for subsequent calls).
+ * 
+ * step 3:
+ * update columns for unneed columns,
+ * and return reulst chunk to parent.
+ *
+ * 
+ * non-first time, it measn _repeat_times_last in [1, _repeat_times_required):
+ * step 1:
+ * use _curr_columns to construct _curr_chunk.
+ * 
+ * step 2:
+ * update virtual columns for gourping_id and grouping()/grouping_id() columns.
+ * 
+ * step 3:
+ * update columns for unneed columns,
+ * and return reulst chunk to parent.
+ * 
+ */
 Status RepeatNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     DCHECK_EQ(_children.size(), 1);
@@ -208,6 +224,21 @@ Status RepeatNode::close(RuntimeState* state) {
         return Status::OK();
     }
     return ExecNode::close(state);
+}
+
+std::vector<std::shared_ptr<pipeline::OperatorFactory> > RepeatNode::decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+
+    OpFactories operators = _children[0]->decompose_to_pipeline(context);
+
+    operators.emplace_back(std::make_shared<RepeatOperatorFactory>(
+            context->next_operator_id(), id(), std::move(_slot_id_set_list), std::move(_all_slot_ids),
+            std::move(_null_slot_ids), std::move(_repeat_id_list), _repeat_times_required, _repeat_times_last,
+            std::move(_column_null), std::move(_grouping_columns), std::move(_grouping_list),
+            std::move(_output_tuple_id), _tuple_desc));
+
+    return operators;
 }
 
 } // namespace starrocks::vectorized
