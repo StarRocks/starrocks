@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "column/datum.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "util/logging.h"
 
@@ -354,5 +355,12 @@ inline bool SparseRange::operator!=(const SparseRange& rhs) const {
 inline std::ostream& operator<<(std::ostream& os, const SparseRange& range) {
     return (os << range.to_string());
 }
+
+struct ZoneMapDetail {
+    bool has_null;
+    bool has_not_null;
+    Datum min_value;
+    Datum max_value;
+};
 
 } // namespace starrocks::vectorized

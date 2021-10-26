@@ -71,7 +71,7 @@ public:
         }
     }
 
-    bool zone_map_filter(const Datum& min, const Datum& max) const override {
+    bool zone_map_filter(const Datum& min, const Datum& max, ZoneMapDetail* detail) const override {
         // todo(yan): once expr supports is_monotonic.
         return true;
     }

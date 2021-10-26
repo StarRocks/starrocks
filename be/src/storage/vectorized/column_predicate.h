@@ -12,7 +12,7 @@
 #include "column/column.h" // Column
 #include "column/datum.h"
 #include "common/object_pool.h"
-#include "in_predicate_utils.h"
+// #include "in_predicate_utils.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/vectorized/range.h"
 #include "util/string_parser.hpp"
@@ -100,7 +100,9 @@ public:
     virtual bool filter(const BloomFilter& bf) const { return true; }
 
     // Return false to filter out a data page.
-    virtual bool zone_map_filter(const Datum& min, const Datum& max) const { return true; }
+    virtual bool zone_map_filter(const Datum& min, const Datum& max, ZoneMapDetail* detail = nullptr) const {
+        return true;
+    }
 
     virtual bool support_bloom_filter() const { return false; }
 

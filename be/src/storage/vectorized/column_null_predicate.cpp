@@ -49,7 +49,9 @@ public:
         }
     }
 
-    bool zone_map_filter(const Datum& min, const Datum& max) const override { return min.is_null(); }
+    bool zone_map_filter(const Datum& min, const Datum& max, ZoneMapDetail* detail) const override {
+        return min.is_null();
+    }
 
     Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
         range->clear();
@@ -114,7 +116,9 @@ public:
         }
     }
 
-    bool zone_map_filter(const Datum& min, const Datum& max) const override { return !max.is_null(); }
+    bool zone_map_filter(const Datum& min, const Datum& max, ZoneMapDetail* detail) const override {
+        return !max.is_null();
+    }
 
     Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
         return Status::Cancelled("not null predicate not support bitmap index");
