@@ -113,7 +113,7 @@ public class UnitTestUtil {
                 KeysType.AGG_KEYS, partitionInfo, distributionInfo);
         Deencapsulation.setField(table, "baseIndexId", indexId);
         table.addPartition(partition);
-        table.setIndexMeta(indexId, TABLE_NAME,indexId, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
+        table.setIndexMeta(indexId, TABLE_NAME, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
                 KeysType.AGG_KEYS);
 
         // db

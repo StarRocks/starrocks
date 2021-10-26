@@ -599,7 +599,7 @@ public class ReportHandler extends Daemon {
                                     double bfFpp = olapTable.getBfFpp();
                                     CreateReplicaTask createReplicaTask = new CreateReplicaTask(backendId, dbId,
                                             tableId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
-                                            indexMeta.getSchemaHash(), indexMeta.getSchemaHash(), partition.getVisibleVersion(),
+                                            indexMeta.getSchemaHash(), partition.getVisibleVersion(),
                                             partition.getVisibleVersionHash(), indexMeta.getKeysType(),
                                             TStorageType.COLUMN,
                                             TStorageMedium.HDD, indexMeta.getSchema(), bfColumns, bfFpp, null,

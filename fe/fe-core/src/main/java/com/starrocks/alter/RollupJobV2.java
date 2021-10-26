@@ -235,7 +235,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         // version will be updated by following load process, or when rollup task finished.
                         CreateReplicaTask createReplicaTask = new CreateReplicaTask(
                                 backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
-                                rollupShortKeyColumnCount, rollupIndexId, rollupSchemaHash,
+                                rollupShortKeyColumnCount, rollupSchemaHash,
                                 Partition.PARTITION_INIT_VERSION, Partition.PARTITION_INIT_VERSION_HASH,
                                 rollupKeysType, TStorageType.COLUMN, storageMedium,
                                 rollupSchema, tbl.getCopiedBfColumns(), tbl.getBfFpp(), countDownLatch,
@@ -318,7 +318,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             partition.createRollupIndex(rollupIndex);
         }
 
-        tbl.setIndexMeta(rollupIndexId, rollupIndexName, rollupIndexId, rollupSchema, 0 /* initial schema version */,
+        tbl.setIndexMeta(rollupIndexId, rollupIndexName, rollupSchema, 0 /* initial schema version */,
                 rollupSchemaHash, rollupShortKeyColumnCount, TStorageType.COLUMN, rollupKeysType, origStmt);
         tbl.rebuildFullSchema();
     }
