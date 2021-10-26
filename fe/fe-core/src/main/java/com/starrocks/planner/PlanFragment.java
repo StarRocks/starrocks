@@ -505,10 +505,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return probeRuntimeFilters;
     }
 
-    public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
-        return globalDicts;
-    }
-
     public void setGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
         this.globalDicts = dicts;
     }

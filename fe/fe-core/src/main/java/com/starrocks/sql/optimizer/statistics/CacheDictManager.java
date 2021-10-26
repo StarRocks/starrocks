@@ -29,7 +29,6 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
 
@@ -37,7 +36,7 @@ public class CacheDictManager implements IDictManager {
     private static final Logger LOG = LogManager.getLogger(CacheDictManager.class);
     private static final Set<ColumnIdentifier> NoDictStringColumns = Sets.newHashSet();
 
-    public static final Integer LOW_CARDINALITY_THRESHOLD = 256;
+    public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
 
     private CacheDictManager() {
     }
@@ -119,7 +118,6 @@ public class CacheDictManager implements IDictManager {
             };
 
     private final AsyncLoadingCache<ColumnIdentifier, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
-            .expireAfterWrite(Config.statistic_collect_interval_sec * 10, TimeUnit.SECONDS)
             .maximumSize(Config.statistic_cache_columns)
             .buildAsync(dictLoader);
 
@@ -136,7 +134,7 @@ public class CacheDictManager implements IDictManager {
     }
 
     @Override
-    public boolean hasGlobalDict(long tableId, String columnName, long version) {
+    public boolean hasGlobalDict(long tableId, String columnName, long versionTime) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (NoDictStringColumns.contains(columnIdentifier)) {
             LOG.debug("{} isn't low cardinality string column", columnName);
@@ -170,10 +168,34 @@ public class CacheDictManager implements IDictManager {
                 LOG.debug("invalidate {}", columnName);
                 dictStatistics.synchronous().invalidate(columnIdentifier);
             }
-            return realResult.filter(columnDict -> columnDict.getVersion() >= version).isPresent();
+            return realResult.filter(columnDict -> columnDict.getVersionTime() >= versionTime).isPresent();
         }
         LOG.debug("{} first get column dict", columnName);
         return false;
+    }
+
+    @Override
+    public boolean hasGlobalDict(long tableId, String columnName) {
+        ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+        return dictStatistics.asMap().containsKey(columnIdentifier);
+    }
+
+    @Override
+    public void removeGlobalDict(long tableId, String columnName) {
+        LOG.debug("remove dict for column {}", columnName);
+        ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+        dictStatistics.synchronous().invalidate(columnIdentifier);
+    }
+
+    @Override
+    public void updateGlobalDict(long tableId, String columnName, long versionTime) {
+        ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+        Optional<ColumnDict> columnDictOptional = dictStatistics.synchronous().get(columnIdentifier);
+        Preconditions.checkState(columnDictOptional != null && columnDictOptional.isPresent());
+        ColumnDict columnDict = columnDictOptional.get();
+        ColumnDict newColumnDict = new ColumnDict(columnDict.getDict(), versionTime);
+        dictStatistics.synchronous().put(columnIdentifier, Optional.of(newColumnDict));
+        LOG.debug("update dict for column {}, version {}", columnName, versionTime);
     }
 
     @Override
