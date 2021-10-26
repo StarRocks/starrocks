@@ -61,9 +61,7 @@ class ExceptNode : public ExecNode {
 
         Iterator end() { return hash_set->end(); }
 
-        int64_t mem_usage() const {
-            return hash_set->dump_bound();
-        }
+        int64_t mem_usage() const { return hash_set->dump_bound(); }
 
         void serialize_columns(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs, size_t chunk_size,
                                const std::function<void(const ColumnPtr&, int)>& get_type) {
