@@ -320,9 +320,10 @@ TabletMeta::TabletMeta(MemTracker* mem_tracker, int64_t table_id, int64_t partit
         schema->set_bf_fpp(tablet_schema.bloom_filter_fpp);
     }
 
-    if (tablet_schema.__isset.is_in_memory) {
-        schema->set_is_in_memory(tablet_schema.is_in_memory);
-    }
+    // NOTE: The in-memory property is no longer supported
+    // if (tablet_schema.__isset.is_in_memory) {
+    //     schema->set_is_in_memory(tablet_schema.is_in_memory);
+    // }
 
     init_from_pb(&tablet_meta_pb);
 }
