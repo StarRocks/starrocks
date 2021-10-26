@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.PartitionNames;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
@@ -181,6 +182,9 @@ public class UtilsTest {
             minTimes = 0;
             result = col1;
 
+            so1.setPartitionNames((PartitionNames) any);
+            minTimes = 0;
+
             so2.getOpType();
             minTimes = 0;
             result = OperatorType.LOGICAL_OLAP_SCAN;
@@ -188,6 +192,9 @@ public class UtilsTest {
             so2.getColumnRefMap();
             minTimes = 0;
             result = col2;
+
+            so2.setPartitionNames((PartitionNames) any);
+            minTimes = 0;
         }};
 
         GroupExpression scan1 = new GroupExpression(so1, Lists.newArrayList());

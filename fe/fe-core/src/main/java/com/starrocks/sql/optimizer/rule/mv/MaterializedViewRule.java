@@ -58,6 +58,7 @@ public class MaterializedViewRule extends Rule {
     private final Map<Integer, Set<Integer>> columnIdsInPredicates = Maps.newHashMap();
     private final Map<Integer, Set<Integer>> columnIdsInGrouping = Maps.newHashMap();
     private final Map<Integer, Set<CallOperator>> aggFunctions = Maps.newHashMap();
+    private final ColumnRefSet columnIdsInAggregate = new ColumnRefSet();
     private final Map<Integer, Set<Integer>> columnIdsInQueryOutput = Maps.newHashMap();
     private final Map<Integer, Map<String, Integer>> columnNameToIds = Maps.newHashMap();
     private final List<LogicalOlapScanOperator> scanOperators = Lists.newArrayList();
@@ -314,6 +315,12 @@ public class MaterializedViewRule extends Rule {
 
     private void collectGroupByAndAggFunction(List<ScalarOperator> groupBys,
                                               List<CallOperator> aggs) {
+        if (groupBys.stream().map(ScalarOperator::getUsedColumns).anyMatch(columnIdsInAggregate::isIntersect) ||
+                aggs.stream().map(ScalarOperator::getUsedColumns).anyMatch(columnIdsInAggregate::isIntersect)) {
+            // Has been collect from other aggregate, only check aggregate node which is closest to scan node
+            return;
+        }
+
         for (ScalarOperator groupBy : groupBys) {
             ColumnRefSet columns = groupBy.getUsedColumns();
             for (int columnId : columns.getColumnIds()) {
@@ -345,6 +352,9 @@ public class MaterializedViewRule extends Rule {
                 disableSPJQueries(table);
             }
         }
+
+        groupBys.stream().map(ScalarOperator::getUsedColumns).forEach(columnIdsInAggregate::union);
+        aggs.stream().map(ScalarOperator::getUsedColumns).forEach(columnIdsInAggregate::union);
     }
 
     public void collectColumns(LogicalOlapScanOperator scanOperator,
