@@ -57,8 +57,8 @@ void UnionPassthroughOperator::_clone_column(ChunkPtr& dst_chunk, const ColumnPt
     }
 }
 
-void UnionPassthroughOperator::_move_column(ChunkPtr& dst_chunk, ColumnPtr& src_column,
-                                            const SlotDescriptor* dst_slot, size_t row_count) {
+void UnionPassthroughOperator::_move_column(ChunkPtr& dst_chunk, ColumnPtr& src_column, const SlotDescriptor* dst_slot,
+                                            size_t row_count) {
     if (src_column->is_nullable() || !dst_slot->is_nullable()) {
         dst_chunk->append_column(std::move(src_column), dst_slot->id());
     } else {
