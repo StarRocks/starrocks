@@ -52,8 +52,8 @@ struct DictOptimizeContext {
     SlotId slot_id;
     // if input was not nullable but output was nullable this flag will set true
     bool result_nullable = false;
-    // size: DICT_DECODE_MAX_SIZE
-    std::vector<DictId> code_convert_map;
+    // size: DICT_DECODE_MAX_SIZE + 1
+    std::vector<int16_t> code_convert_map;
 };
 
 class DictOptimizeParser {

@@ -66,8 +66,8 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
     ColumnViewer<TYPE_VARCHAR> viewer(result_column);
     int row_sz = viewer.size();
 
-    dict_opt_ctx->code_convert_map.resize(DICT_DECODE_MAX_SIZE);
-    std::fill(dict_opt_ctx->code_convert_map.begin(), dict_opt_ctx->code_convert_map.end(), -1);
+    dict_opt_ctx->code_convert_map.resize(DICT_DECODE_MAX_SIZE + 1);
+    std::fill(dict_opt_ctx->code_convert_map.begin(), dict_opt_ctx->code_convert_map.end(), 0);
     auto& code_convert_map = dict_opt_ctx->code_convert_map;
 
     GlobalDictMap result_map;

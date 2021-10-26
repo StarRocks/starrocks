@@ -2,6 +2,7 @@
 
 #include "storage/rowset/vectorized/segment_iterator.h"
 
+#include <algorithm>
 #include <memory>
 #include <unordered_map>
 
@@ -185,13 +186,13 @@ public:
         auto& res_data = *container;
         res_data.resize(size);
         for (size_t i = 0; i < size; ++i) {
-            if (codes[i] >= 0) {
-                DCHECK(_local_to_global.contains(codes[i]));
-                res_data[i] = _local_to_global[codes[i]];
-            } else {
-                res_data[i] = 0;
+#ifndef NDEBUG
+            DCHECK(codes[i] <= DICT_DECODE_MAX_SIZE);
+            if (codes[i] < 0) {
                 DCHECK(output_nullable);
             }
+#endif
+            res_data[i] = _local_to_global[codes[i]];
         }
 
         if (output_nullable) {
@@ -215,8 +216,12 @@ private:
     Status _build_to_global_dict();
     ColumnId _cid;
     ColumnIterator* _col_iter;
-    // TODO: use array instead of map
-    phmap::flat_hash_map<int32_t, int32_t> _local_to_global;
+
+    std::vector<int16_t> _local_to_global_holder;
+
+    // _local_to_global[-1] is accessable
+    int16_t* _local_to_global;
+
     // global dict
     GlobalDictMap* _global_dict;
     std::unique_ptr<vectorized::Int32Column> _local_dict_code_col;
@@ -226,7 +231,7 @@ Status GlobalDictCodeColumnIterator::_build_to_global_dict() {
     DCHECK(_col_iter->all_page_dict_encoded());
 
     // we only have to build code mapping once
-    if (_local_to_global.size() > 0) {
+    if (_local_to_global_holder.size() > 0) {
         return Status::OK();
     }
     auto file_column_iter = down_cast<FileColumnIterator*>(_col_iter);
@@ -240,6 +245,10 @@ Status GlobalDictCodeColumnIterator::_build_to_global_dict() {
     }
 
     file_column_iter->decode_dict_codes(dict_codes, dict_size, column.get());
+
+    _local_to_global_holder.resize(dict_size + 2);
+    std::fill(_local_to_global_holder.begin(), _local_to_global_holder.end(), 0);
+    _local_to_global = _local_to_global_holder.data() + 1;
 
     for (int i = 0; i < dict_size; ++i) {
         auto slice = column->get_slice(i);
