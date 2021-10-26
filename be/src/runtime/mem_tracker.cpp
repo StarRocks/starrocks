@@ -22,13 +22,11 @@
 #include "runtime/mem_tracker.h"
 
 #include <boost/algorithm/string/join.hpp>
-#include <cstdint>
 #include <memory>
 #include <utility>
 
 #include "exec/exec_node.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/debug_util.h"

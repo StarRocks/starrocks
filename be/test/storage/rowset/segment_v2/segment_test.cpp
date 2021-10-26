@@ -82,7 +82,6 @@ protected:
         _env = new EnvMemory();
         _block_mgr = new fs::FileBlockManager(_env, fs::BlockManagerOptions());
         ASSERT_TRUE(_env->create_dir(kSegmentDir).ok());
-        _mem_tracker = std::make_unique<MemTracker>();
         _page_cache_mem_tracker = std::make_unique<MemTracker>();
         StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
     }
@@ -91,7 +90,6 @@ protected:
         delete _block_mgr;
         delete _env;
         StoragePageCache::release_global_cache();
-        _mem_tracker->release(_mem_tracker->consumption());
     }
 
     TabletSchema create_schema(const std::vector<TabletColumn>& columns, int num_short_key_columns = -1) {
@@ -144,7 +142,6 @@ protected:
 
     EnvMemory* _env = nullptr;
     fs::FileBlockManager* _block_mgr = nullptr;
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
 };
 
