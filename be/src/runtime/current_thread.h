@@ -53,8 +53,12 @@ public:
         MemTracker* cur_tracker = mem_tracker();
         _cache_size += size;
         if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
-            cur_tracker->consume(_cache_size);
-            _cache_size = 0;
+            if (LIKELY(cur_tracker->try_consume(_cache_size))) {
+                _cache_size = 0;
+            } else {
+                _cache_size -= size;
+                throw std::bad_alloc();
+            }
         }
     }
 
