@@ -4,6 +4,10 @@
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/project_operator.h"
+#include "exec/pipeline/set/union_const_source_operator.h"
+#include "exec/pipeline/set/union_passthrough_operator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 
@@ -49,7 +53,7 @@ void UnionNode::_convert_pass_through_slot_map(const std::map<SlotId, SlotId>& s
         }
     }
 
-    std::map<SlotId, SlotItem> tuple_slot_map;
+    pipeline::UnionPassthroughOperator::SlotMap tuple_slot_map;
     for (const auto& [key, value] : slot_map) {
         tuple_slot_map[key] = {value, tmp_map[value]};
     }
@@ -300,6 +304,80 @@ void UnionNode::_move_column(ChunkPtr& dest_chunk, ColumnPtr& src_column, const 
             }
         }
     }
+}
+
+pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    std::vector<pipeline::OpFactories> operators_list;
+    operators_list.reserve(_children.size() + 1);
+
+    size_t i = 0;
+    // UnionPassthroughOperator is used for the passthrough sub-node.
+    for (; i < _first_materialized_child_idx; i++) {
+        operators_list.emplace_back(child(i)->decompose_to_pipeline(context));
+
+        pipeline::UnionPassthroughOperator::SlotMap* dst2src_slot_map = nullptr;
+        if (!_pass_through_slot_maps.empty()) {
+            dst2src_slot_map = &_pass_through_slot_maps[i];
+        }
+
+        const auto& dst_tuple_desc =
+                context->fragment_context()->runtime_state()->desc_tbl().get_tuple_descriptor(_tuple_id);
+        const auto& dst_slots = dst_tuple_desc->slots();
+
+        // When pass through, the child tuple size must be 1;
+        const auto& tuple_descs = child(i)->row_desc().tuple_descriptors();
+        const auto& src_slots = tuple_descs[0]->slots();
+
+        auto union_passthrough_op = std::make_shared<pipeline::UnionPassthroughOperatorFactory>(
+                context->next_operator_id(), id(), dst2src_slot_map, dst_slots, src_slots);
+        operators_list[i].emplace_back(std::move(union_passthrough_op));
+    }
+
+    // ProjectOperatorFactory is used for the materialized sub-node.
+    for (; i < _children.size(); i++) {
+        operators_list.emplace_back(child(i)->decompose_to_pipeline(context));
+
+        const auto& dst_tuple_desc =
+                context->fragment_context()->runtime_state()->desc_tbl().get_tuple_descriptor(_tuple_id);
+        size_t columns_count = dst_tuple_desc->slots().size();
+
+        std::vector<int32_t> dst_column_ids;
+        std::vector<bool> dst_column_is_nullables;
+        dst_column_ids.reserve(columns_count);
+        dst_column_is_nullables.reserve(columns_count);
+        for (auto* dst_slot : dst_tuple_desc->slots()) {
+            dst_column_ids.emplace_back(dst_slot->id());
+            dst_column_is_nullables.emplace_back(dst_slot->is_nullable());
+        }
+
+        auto project_op = std::make_shared<pipeline::ProjectOperatorFactory>(
+                context->next_operator_id(), id(), std::move(dst_column_ids), std::move(_child_expr_lists[i]),
+                std::move(dst_column_is_nullables), std::vector<int32_t>(), std::vector<ExprContext*>());
+        operators_list[i].emplace_back(std::move(project_op));
+    }
+
+    // UnionConstSourceOperatorFactory is used for the const sub exprs.
+    if (!_const_expr_lists.empty()) {
+        operators_list.emplace_back(pipeline::OpFactories());
+
+        const auto& dst_tuple_desc =
+                context->fragment_context()->runtime_state()->desc_tbl().get_tuple_descriptor(_tuple_id);
+        const auto& dst_slots = dst_tuple_desc->slots();
+        auto union_const_source_op = std::make_shared<pipeline::UnionConstSourceOperatorFactory>(
+                context->next_operator_id(), id(), dst_slots, _const_expr_lists);
+
+        // Each _const_expr_list is project to one row.
+        // Divide _const_expr_lists into several drivers, each of which is going to evaluate
+        // at least *config::vector_chunk_size* _const_expr_list.
+        size_t parallelism =
+                std::min(context->degree_of_parallelism(),
+                         (_const_expr_lists.size() + config::vector_chunk_size - 1) / config::vector_chunk_size);
+        union_const_source_op->set_degree_of_parallelism(parallelism);
+
+        operators_list[i].emplace_back(std::move(union_const_source_op));
+    }
+
+    return context->gather_pipelines_to_one(operators_list);
 }
 
 } // namespace starrocks::vectorized

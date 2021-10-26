@@ -3,6 +3,7 @@
 #pragma once
 
 #include "exec/exec_node.h"
+#include "exec/pipeline/set/union_passthrough_operator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
@@ -19,12 +20,9 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* state) override;
 
-private:
-    struct SlotItem {
-        SlotId slot_id;
-        size_t ref_count;
-    };
+    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
+private:
     void _convert_pass_through_slot_map(const std::map<SlotId, SlotId>& slot_map);
 
     Status _get_next_passthrough(RuntimeState* state, ChunkPtr* chunk);
@@ -57,7 +55,7 @@ private:
     // the map from slot id of output chunk to slot id of child chunk
     // There may be multiple DestSlotId mapped to the same SrcSlotId,
     // so here we have to decide whether you can MoveColumn according to this situation
-    std::vector<std::map<SlotId, SlotItem>> _pass_through_slot_maps;
+    std::vector<pipeline::UnionPassthroughOperator::SlotMap> _pass_through_slot_maps;
 
     size_t _child_idx = 0;
     const int _first_materialized_child_idx = 0;

@@ -34,6 +34,25 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_exchange(OpFactories
     }
 }
 
+OpFactories PipelineBuilderContext::gather_pipelines_to_one(std::vector<OpFactories>& pred_operators_list) {
+    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size);
+    auto local_exchange_source = std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), mem_mgr);
+    auto exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
+
+    // Append a LocalExchangeSinkOperator to the tail of each pipeline.
+    for (auto& pred_operators : pred_operators_list) {
+        auto local_exchange_sink = std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(), exchanger);
+        pred_operators.emplace_back(std::move(local_exchange_sink));
+        add_pipeline(pred_operators);
+    }
+
+    // Create a new pipeline with a LocalExchangeSourceOperator.
+    OpFactories operators_source_with_local_exchange;
+    local_exchange_source->set_degree_of_parallelism(1);
+    operators_source_with_local_exchange.emplace_back(std::move(local_exchange_source));
+    return operators_source_with_local_exchange;
+}
+
 Pipelines PipelineBuilder::build(const FragmentContext& fragment, ExecNode* exec_node) {
     pipeline::OpFactories operators = exec_node->decompose_to_pipeline(&_context);
     _context.add_pipeline(operators);
