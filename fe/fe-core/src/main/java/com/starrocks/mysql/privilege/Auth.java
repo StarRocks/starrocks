@@ -508,7 +508,7 @@ public class Auth implements Writable {
     // alter user
     public void alterUser(AlterUserStmt stmt) throws DdlException {
         AuthPlugin authPlugin = null;
-        if (Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
+        if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
             authPlugin = AuthPlugin.valueOf(stmt.getAuthPlugin());
         }
         // alter user only support change password till now

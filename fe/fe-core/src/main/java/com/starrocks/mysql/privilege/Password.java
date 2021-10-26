@@ -97,7 +97,7 @@ public class Password implements Writable {
             if (remotePassword[remotePassword.length - 1] == 0) {
                 clearPassword = Arrays.copyOf(remotePassword, remotePassword.length - 1);
             }
-            if (Strings.isNullOrEmpty(userForAuthPlugin)) {
+            if (!Strings.isNullOrEmpty(userForAuthPlugin)) {
                 return LdapSecurity.checkPassword(userForAuthPlugin, new String(clearPassword, StandardCharsets.UTF_8));
             } else {
                 return LdapSecurity.checkPasswordByRoot(remoteUser, new String(clearPassword, StandardCharsets.UTF_8));
@@ -117,7 +117,7 @@ public class Password implements Writable {
         if (authPlugin == null || authPlugin == AuthPlugin.MYSQL_NATIVE_PASSWORD) {
             return MysqlPassword.checkPlainPass(password, remotePassword);
         } else if (authPlugin == AuthPlugin.AUTHENTICATION_LDAP_SIMPLE) {
-            if (Strings.isNullOrEmpty(userForAuthPlugin)) {
+            if (!Strings.isNullOrEmpty(userForAuthPlugin)) {
                 return LdapSecurity.checkPassword(userForAuthPlugin, remotePassword);
             } else {
                 return LdapSecurity.checkPasswordByRoot(remoteUser, remotePassword);
