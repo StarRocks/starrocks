@@ -136,10 +136,10 @@ LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4 AND 1: v1 = 1] post-join-predicat
 [sql]
 select * from t0 left semi join t1 on v1=v4 and v4=1 and v3 = 5 where v2 = 3;
 [result]
-LEFT SEMI JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[3: v3 = 5 AND 2: v2 = 3])
-    EXCHANGE SHUFFLE[4]
-        SCAN (columns[4: v4] predicate[4: v4 = 1])
+RIGHT SEMI JOIN (join-predicate [4: v4 = 1: v1] post-join-predicate [null])
+    SCAN (columns[4: v4] predicate[4: v4 = 1])
+    EXCHANGE SHUFFLE[1]
+        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[3: v3 = 5 AND 1: v1 = 1 AND 2: v2 = 3])
 [end]
 
 [sql]
