@@ -22,9 +22,7 @@ struct DataSegment {
 
     DataSegment(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) { init(sort_exprs, cnk); }
 
-    int64_t mem_usage() const {
-        return chunk->memory_usage();
-    }
+    int64_t mem_usage() const { return chunk->memory_usage(); }
 
     void init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) {
         chunk = cnk;
