@@ -73,9 +73,7 @@ public:
 
     void remove_column_by_index(size_t idx);
 
-    // Sometimes we want to assmeble columns into a chunk, and do some operations on that chunk
-    // without modifying underlying columns.
-    void append_raw_column(const Column* c, SlotId slot_id);
+    void append_or_update_column(ColumnPtr c, SlotId slot_id);
 
     // Remove multiple columns by their indexes.
     // For simplicity and better performance, we are assuming |indexes| all all valid

@@ -42,7 +42,9 @@ public:
 
     void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
         Chunk chunk;
-        ColumnPtr bits = nullptr;
+        // `column` is owned by storage layer
+        // we don't have ownership
+        ColumnPtr bits(const_cast<Column*>(column), [](auto p) {});
 
         // theoretically there will be a chain of expr contexts.
         // The first one is expr context from planner
@@ -50,9 +52,8 @@ public:
         // eg. [x as int >= 10]  [string->int] <- column(x as string)
         for (int i = _expr_ctxs.size() - 1; i >= 0; i--) {
             ExprContext* ctx = _expr_ctxs[i];
-            chunk.append_raw_column(column, _slot_desc->id());
+            chunk.append_or_update_column(bits, _slot_desc->id());
             bits = ctx->evaluate(&chunk);
-            column = bits.get();
         }
 
         // deal with constant.

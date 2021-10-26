@@ -86,12 +86,11 @@ void Chunk::update_column(ColumnPtr column, SlotId slot_id) {
     check_or_die();
 }
 
-void Chunk::append_raw_column(const Column* c, SlotId slot_id) {
+void Chunk::append_or_update_column(ColumnPtr p, SlotId slot_id) {
     size_t* index = _slot_id_to_index.seek(slot_id);
-    ColumnPtr p(const_cast<Column*>(c), [](auto x) {});
     if (index == nullptr) {
         _slot_id_to_index[slot_id] = _columns.size();
-        _columns.emplace_back(p);
+        _columns.emplace_back(std::move(p));
     } else {
         _columns[*index] = p;
     }
