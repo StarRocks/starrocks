@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.catalog.Catalog;
@@ -13,9 +12,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -27,13 +23,10 @@ import com.starrocks.statistic.Constants;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -165,57 +158,6 @@ public class UtilsTest {
     }
 
     @Test
-    public void extractScanColumn(@Mocked LogicalOlapScanOperator so1,
-                                  @Mocked LogicalOlapScanOperator so2) {
-        Map<ColumnRefOperator, Column> col1 = Maps.newHashMap();
-        col1.put(new ColumnRefOperator(1, Type.INT, "name", true), null);
-        col1.put(new ColumnRefOperator(2, Type.INT, "age", true), null);
-        Map<ColumnRefOperator, Column> col2 = Maps.newHashMap();
-        col2.put(new ColumnRefOperator(3, Type.INT, "id", true), null);
-
-        new Expectations(so1, so2) {{
-            so1.getOpType();
-            minTimes = 0;
-            result = OperatorType.LOGICAL_OLAP_SCAN;
-
-            so1.getColRefToColumnMetaMap();
-            minTimes = 0;
-            result = col1;
-
-            so2.getOpType();
-            minTimes = 0;
-            result = OperatorType.LOGICAL_OLAP_SCAN;
-
-            so2.getColRefToColumnMetaMap();
-            minTimes = 0;
-            result = col2;
-        }};
-
-        GroupExpression scan1 = new GroupExpression(so1, Lists.newArrayList());
-        Group gs1 = new Group(1);
-        gs1.addExpression(scan1);
-        GroupExpression scan2 = new GroupExpression(so2, Lists.newArrayList());
-        Group gs2 = new Group(2);
-        gs2.addExpression(scan2);
-
-        GroupExpression join =
-                new GroupExpression(new LogicalJoinOperator(), Lists.newArrayList(gs1, gs2));
-        Group gj = new Group(3);
-        gj.addExpression(join);
-
-        GroupExpression filter = new GroupExpression(new LogicalFilterOperator(ConstantOperator.createBoolean(false)),
-                Lists.newArrayList(gj));
-
-        List<ColumnRefOperator> list = Utils.extractScanColumn(filter);
-
-        System.out.println(list);
-        assertEquals(3, list.size());
-        assertEquals(1, list.get(0).getId());
-        assertEquals(2, list.get(1).getId());
-        assertEquals(3, list.get(2).getId());
-    }
-
-    @Test
     public void compoundAnd1() {
         ScalarOperator tree1 = Utils.compoundAnd(ConstantOperator.createInt(1),
                 ConstantOperator.createInt(2),
@@ -307,14 +249,14 @@ public class UtilsTest {
         columnRefMap.put(new ColumnRefOperator(3, Type.BIGINT, "v3", true),
                 t0.getBaseColumn("v3"));
 
-        OptExpression opt = new OptExpression(new LogicalOlapScanOperator(t0, new ArrayList<>(), columnRefMap, Maps.newHashMap(), null, -1, null));
+        OptExpression opt = new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
         Assert.assertTrue(Utils.hasUnknownColumnsStats(opt));
 
         Catalog.getCurrentStatisticStorage().addColumnStatistic(t0, "v2",
                 new ColumnStatistic(1, 1, 0, 1, 1));
         Catalog.getCurrentStatisticStorage().addColumnStatistic(t0, "v3",
                 new ColumnStatistic(1, 1, 0, 1, 1));
-        opt = new OptExpression(new LogicalOlapScanOperator(t0, new ArrayList<>(), columnRefMap, Maps.newHashMap(), null, -1, null));
+        opt = new OptExpression(new LogicalOlapScanOperator(t0, columnRefMap, Maps.newHashMap(), null, -1, null));
         Assert.assertFalse(Utils.hasUnknownColumnsStats(opt));
     }
 }

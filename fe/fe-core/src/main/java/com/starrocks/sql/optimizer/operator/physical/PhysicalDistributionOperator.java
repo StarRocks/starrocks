@@ -33,7 +33,6 @@ public class PhysicalDistributionOperator extends PhysicalOperator {
         globalDicts.add(dict);
     }
 
-
     @Override
     public boolean equals(Object obj) {
         return this == obj;

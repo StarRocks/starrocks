@@ -210,7 +210,7 @@ INNER JOIN (join-predicate [3: v3 = 6: v3 AND 1: v1 = 4: v1 AND 2: v2 < 7: sum(5
 [sql]
 select t0.v1 from t0 where t0.v2 < (select SUM(t3.v2) from t3 where t0.v3 = t3.v3 and abs(t0.v1) = abs(t3.v1))
 [result]
-INNER JOIN (join-predicate [3: v3 = 6: v3 AND abs(1: v1) = 9: abs AND 2: v2 < 7: sum(5: v2)] post-join-predicate [null])
+INNER JOIN (join-predicate [3: v3 = 6: v3 AND 10: abs = 9: abs AND 2: v2 < 7: sum(5: v2)] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{7: sum(5: v2)=sum(7: sum(5: v2))}] group by [[6: v3, 9: abs]] having [null]
@@ -222,7 +222,7 @@ INNER JOIN (join-predicate [3: v3 = 6: v3 AND abs(1: v1) = 9: abs AND 2: v2 < 7:
 [sql]
 select t0.v1 from t0 where t0.v2 < (select SUM(abs(t3.v2)) from t3 where t0.v3 = t3.v3 and abs(t0.v1) = abs(t3.v1))
 [result]
-INNER JOIN (join-predicate [3: v3 = 6: v3 AND abs(1: v1) = 10: abs AND cast(2: v2 as largeint(40)) < 8: sum(7: abs)] post-join-predicate [null])
+INNER JOIN (join-predicate [3: v3 = 6: v3 AND 11: abs = 10: abs AND cast(2: v2 as largeint(40)) < 8: sum(7: abs)] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{8: sum(7: abs)=sum(8: sum(7: abs))}] group by [[6: v3, 10: abs]] having [null]
@@ -236,7 +236,7 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-9:EXCHANGE
+10:EXCHANGE
 use vectorized: true
 
 PLAN FRAGMENT 1
@@ -244,24 +244,31 @@ OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 09
+EXCHANGE ID: 10
 UNPARTITIONED
 
-8:Project
+9:Project
 |  <slot 1> : 1: v1
 |  use vectorized: true
 |
-7:HASH JOIN
+8:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 3: v3 = 6: v3
-|  equal join conjunct: abs(1: v1) = 10: abs
+|  equal join conjunct: 11: abs = 10: abs
 |  other join predicates: CAST(2: v2 AS LARGEINT) < 8: sum(7: abs)
 |  use vectorized: true
 |
-|----6:EXCHANGE
+|----7:EXCHANGE
 |       use vectorized: true
+|
+1:Project
+|  <slot 1> : 1: v1
+|  <slot 2> : 2: v2
+|  <slot 3> : 3: v3
+|  <slot 11> : abs(1: v1)
+|  use vectorized: true
 |
 0:OlapScanNode
 TABLE: t0
@@ -271,7 +278,7 @@ rollup: t0
 tabletRatio=3/3
 tabletList=10006,10008,10010
 cardinality=1
-avgRowSize=3.0
+avgRowSize=4.0
 numNodes=0
 use vectorized: true
 
@@ -280,15 +287,15 @@ OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 6: v3, 10: abs
 
 STREAM DATA SINK
-EXCHANGE ID: 06
+EXCHANGE ID: 07
 UNPARTITIONED
 
-5:AGGREGATE (merge finalize)
+6:AGGREGATE (merge finalize)
 |  output: sum(8: sum(7: abs))
 |  group by: 6: v3, 10: abs
 |  use vectorized: true
 |
-4:EXCHANGE
+5:EXCHANGE
 use vectorized: true
 
 PLAN FRAGMENT 3
@@ -296,22 +303,22 @@ OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 04
+EXCHANGE ID: 05
 HASH_PARTITIONED: 6: v3, 10: abs
 
-3:AGGREGATE (update serialize)
+4:AGGREGATE (update serialize)
 |  STREAMING
 |  output: sum(7: abs)
 |  group by: 6: v3, 10: abs
 |  use vectorized: true
 |
-2:Project
+3:Project
 |  <slot 6> : 6: v3
 |  <slot 7> : abs(5: v2)
 |  <slot 10> : abs(4: v1)
 |  use vectorized: true
 |
-1:OlapScanNode
+2:OlapScanNode
 TABLE: t3
 PREAGGREGATION: ON
 partitions=1/1
@@ -319,7 +326,7 @@ rollup: t3
 tabletRatio=3/3
 tabletList=10033,10035,10037
 cardinality=1
-avgRowSize=3.0
+avgRowSize=5.0
 numNodes=0
 use vectorized: true
 [end]
@@ -360,7 +367,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [1: v1 <= 11: v4])
 [sql]
 select * from t0 where v3 = (select 6)
 [result]
-INNER JOIN (join-predicate [3: v3 = cast(4: expr as bigint(20))] post-join-predicate [null])
+INNER JOIN (join-predicate [3: v3 = 6: cast] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         ASSERT LE 1
@@ -370,17 +377,7 @@ INNER JOIN (join-predicate [3: v3 = cast(4: expr as bigint(20))] post-join-predi
 [sql]
 select * from t0 where v3 = (select * from (values(2)) t);
 [result]
-INNER JOIN (join-predicate [3: v3 = cast(4: expr as bigint(20))] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    EXCHANGE BROADCAST
-        ASSERT LE 1
-            VALUES (2)
-[end]
-
-[sql]
-select * from t0 where v3 = (select * from (values(2)) t);
-[result]
-INNER JOIN (join-predicate [3: v3 = cast(4: expr as bigint(20))] post-join-predicate [null])
+INNER JOIN (join-predicate [3: v3 = 6: cast] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         ASSERT LE 1
@@ -519,7 +516,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
 [sql]
 select t0.v1 from t0 where t0.v2 = (select SUM(v4) from t1) / 2;
 [result]
-INNER JOIN (join-predicate [cast(2: v2 as double) = divide(cast(7: sum(4: v4) as double), 2.0)] post-join-predicate [null])
+INNER JOIN (join-predicate [9: cast = 10: divide] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{7: sum(4: v4)=sum(7: sum(4: v4))}] group by [[]] having [null]

@@ -37,6 +37,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/global_dicts.h"
 #include "util/bitmap.h"
 #include "util/ref_count_closure.h"
 #include "util/thrift_util.h"
@@ -246,6 +247,8 @@ private:
     int64_t _mem_exceeded_block_ns = 0;
     int64_t _queue_push_lock_ns = 0;
     int64_t _actual_consume_ns = 0;
+
+    RuntimeState* _runtime_state = nullptr;
 };
 
 class IndexChannel {

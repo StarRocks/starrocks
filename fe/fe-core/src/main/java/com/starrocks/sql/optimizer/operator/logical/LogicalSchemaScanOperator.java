@@ -8,37 +8,37 @@ import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.List;
 import java.util.Map;
 
 public class LogicalSchemaScanOperator extends LogicalScanOperator {
     public LogicalSchemaScanOperator(Table table,
-                                     List<ColumnRefOperator> outputColumns,
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                      Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                      long limit,
-                                     ScalarOperator predicate) {
+                                     ScalarOperator predicate,
+                                     Projection projection) {
         super(OperatorType.LOGICAL_SCHEMA_SCAN,
                 table,
-                outputColumns,
                 colRefToColumnMetaMap,
                 columnMetaToColRefMap,
                 limit,
-                predicate);
+                predicate,
+                projection);
         Preconditions.checkState(table instanceof SchemaTable);
     }
 
     private LogicalSchemaScanOperator(Builder builder) {
         super(OperatorType.LOGICAL_SCHEMA_SCAN,
                 builder.table,
-                builder.outputColumns,
                 builder.colRefToColumnMetaMap,
                 builder.columnMetaToColRefMap,
                 builder.getLimit(),
-                builder.getPredicate());
+                builder.getPredicate(),
+                builder.getProjection());
     }
 
     @Override

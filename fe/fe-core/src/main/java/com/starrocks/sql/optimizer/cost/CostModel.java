@@ -10,6 +10,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -67,7 +68,7 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 
-            return CostEstimate.of(statistics.getOutputSize(), 0, 0);
+            return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
 
         @Override
@@ -75,7 +76,8 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 
-            return CostEstimate.of(statistics.getOutputSize(), statistics.getOutputSize(), statistics.getOutputSize());
+            return CostEstimate.of(statistics.getComputeSize(), statistics.getComputeSize(),
+                    statistics.getComputeSize());
         }
 
         @Override
@@ -83,7 +85,7 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 
-            return CostEstimate.ofCpu(statistics.getOutputSize());
+            return CostEstimate.ofCpu(statistics.getComputeSize());
         }
 
         @Override
@@ -98,8 +100,8 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Statistics inputStatistics = context.getChildStatistics(0);
 
-            return CostEstimate.of(inputStatistics.getOutputSize(), statistics.getOutputSize(),
-                    inputStatistics.getOutputSize());
+            return CostEstimate.of(inputStatistics.getComputeSize(), statistics.getComputeSize(),
+                    inputStatistics.getComputeSize());
         }
 
         // Note: This method logic must consistent with SplitAggregateRule::canGenerateTwoStageAggregate
@@ -212,13 +214,15 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Statistics inputStatistics = context.getChildStatistics(0);
             CostEstimate otherExtraCost = computeAggFunExtraCost(node, statistics, inputStatistics);
-            return CostEstimate.addCost(CostEstimate.of(inputStatistics.getOutputSize(),
-                    CostEstimate.isZero(otherExtraCost) ? statistics.getOutputSize() : 0, 0),
+            return CostEstimate.addCost(CostEstimate.of(inputStatistics.getComputeSize(),
+                            CostEstimate.isZero(otherExtraCost) ? statistics.getComputeSize() : 0, 0),
                     otherExtraCost);
         }
 
         @Override
         public CostEstimate visitPhysicalDistribution(PhysicalDistributionOperator node, ExpressionContext context) {
+            ColumnRefSet outputColumns = context.getChildOutputColumns(0);
+
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 
@@ -226,23 +230,26 @@ public class CostModel {
             DistributionSpec distributionSpec = node.getDistributionSpec();
             switch (distributionSpec.getType()) {
                 case ANY:
-                    result = CostEstimate.ofCpu(statistics.getOutputSize());
+                    result = CostEstimate.ofCpu(statistics.getOutputSize(outputColumns));
                     break;
                 case BROADCAST:
-                    if (statistics.getOutputSize() > ConnectContext.get().getSessionVariable().getMaxExecMemByte()) {
+                    if (statistics.getOutputSize(outputColumns) >
+                            ConnectContext.get().getSessionVariable().getMaxExecMemByte()) {
                         return CostEstimate.infinite();
                     }
                     int parallelExecInstanceNum = Math.max(1, getParallelExecInstanceNum(context));
                     // beNum is the number of right table should broadcast, now use alive backends
                     int beNum = Math.max(1, Catalog.getCurrentSystemInfo().getBackendIds(true).size());
                     result = CostEstimate
-                            .of(statistics.getOutputSize() * Catalog.getCurrentSystemInfo().getBackendIds(true).size(),
-                                    statistics.getOutputSize() * beNum * parallelExecInstanceNum,
-                                    statistics.getOutputSize() * beNum * parallelExecInstanceNum);
+                            .of(statistics.getOutputSize(outputColumns) *
+                                            Catalog.getCurrentSystemInfo().getBackendIds(true).size(),
+                                    statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum,
+                                    statistics.getOutputSize(outputColumns) * beNum * parallelExecInstanceNum);
                     break;
                 case SHUFFLE:
                 case GATHER:
-                    result = CostEstimate.of(statistics.getOutputSize(), 0, statistics.getOutputSize());
+                    result = CostEstimate.of(statistics.getOutputSize(outputColumns), 0,
+                            statistics.getOutputSize(outputColumns));
                     break;
                 default:
                     throw new StarRocksPlannerException(
@@ -275,14 +282,14 @@ public class CostModel {
                     Utils.extractConjuncts(join.getJoinPredicate()));
 
             if (join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
-                return CostEstimate.of((leftStatistics.getOutputSize() *
-                                rightStatistics.getOutputSize() +
-                                statistics.getOutputSize()),
-                        rightStatistics.getOutputSize() * Constants.CrossJoinCostPenalty, 0);
+                return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
+                                + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
+                        rightStatistics.getOutputSize(context.getChildOutputColumns(1))
+                                * Constants.CrossJoinCostPenalty, 0);
             } else {
-                return CostEstimate.of(leftStatistics.getOutputSize() + rightStatistics.getOutputSize() +
-                                statistics.getOutputSize(),
-                        rightStatistics.getOutputSize(), 0);
+                return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
+                                + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
+                        rightStatistics.getOutputSize(context.getChildOutputColumns(1)), 0);
             }
         }
 
@@ -297,7 +304,7 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 
-            return CostEstimate.ofCpu(statistics.getOutputSize());
+            return CostEstimate.ofCpu(statistics.getComputeSize());
         }
     }
 }

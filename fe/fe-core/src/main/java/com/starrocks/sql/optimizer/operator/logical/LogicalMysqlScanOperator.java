@@ -8,32 +8,32 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.List;
 import java.util.Map;
 
 public class LogicalMysqlScanOperator extends LogicalScanOperator {
     public LogicalMysqlScanOperator(Table table,
-                                    List<ColumnRefOperator> outputColumns,
                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                     Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                     long limit,
-                                    ScalarOperator predicate) {
-        super(OperatorType.LOGICAL_MYSQL_SCAN, table, outputColumns,
-                colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate);
+                                    ScalarOperator predicate,
+                                    Projection projection) {
+        super(OperatorType.LOGICAL_MYSQL_SCAN, table,
+                colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, projection);
         Preconditions.checkState(table instanceof MysqlTable);
     }
 
     private LogicalMysqlScanOperator(LogicalMysqlScanOperator.Builder builder) {
         super(OperatorType.LOGICAL_MYSQL_SCAN,
                 builder.table,
-                builder.outputColumns,
                 builder.colRefToColumnMetaMap,
                 builder.columnMetaToColRefMap,
                 builder.getLimit(),
-                builder.getPredicate());
+                builder.getPredicate(),
+                builder.getProjection());
     }
 
     @Override

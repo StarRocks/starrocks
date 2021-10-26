@@ -358,6 +358,12 @@ public:
 
     Status fetch_values_by_rowid(const vectorized::Column& rowids, vectorized::Column* values);
 
+    virtual Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
+        return Status::NotSupported("");
+    }
+
+    Status fetch_dict_codes_by_rowid(const vectorized::Column& rowids, vectorized::Column* values);
+
 protected:
     ColumnIteratorOptions _opts;
 };
@@ -413,6 +419,8 @@ public:
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override;
 
+    Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override;
+
     ParsedPage* get_current_page() { return _page.get(); }
 
     bool is_nullable() { return _reader->is_nullable(); }
@@ -442,6 +450,9 @@ private:
 
     template <FieldType Type>
     Status _fetch_all_dict_words(std::vector<Slice>* words) const;
+
+    template <typename ParseFunc>
+    Status _fetch_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values, ParseFunc&& page_parse);
 
     Status _load_dict_page();
 
@@ -625,6 +636,11 @@ public:
     Status decode_dict_codes(const vectorized::Column& codes, vectorized::Column* words) {
         DCHECK(_iter != nullptr);
         return _iter->decode_dict_codes(codes, words);
+    }
+    Status decode_values_by_rowid(const vectorized::Column& rowids, vectorized::Column* values) {
+        DCHECK(_iter != nullptr);
+        RETURN_IF_ERROR(_iter->fetch_values_by_rowid(rowids, values));
+        return Status::OK();
     }
 
 private:

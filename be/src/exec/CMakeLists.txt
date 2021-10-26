@@ -139,6 +139,7 @@ set(EXEC_FILES
     pipeline/project_operator.cpp
     pipeline/result_sink_operator.cpp
     pipeline/scan_operator.cpp
+    pipeline/select_operator.cpp
     pipeline/crossjoin/cross_join_right_sink_operator.cpp
     pipeline/crossjoin/cross_join_left_operator.cpp
     pipeline/sort/sort_sink_operator.cpp
@@ -160,6 +161,7 @@ set(EXEC_FILES
     pipeline/aggregate/aggregate_distinct_streaming_source_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
+    pipeline/assert_num_rows_operator.cpp
 )
 
 set(EXEC_FILES

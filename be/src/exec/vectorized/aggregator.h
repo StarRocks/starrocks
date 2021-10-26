@@ -457,8 +457,10 @@ private:
     vectorized::Columns _create_agg_result_columns();
     vectorized::Columns _create_group_by_columns();
 
-    void _serialize_to_chunk(vectorized::ConstAggDataPtr state, const vectorized::Columns& agg_result_columns);
-    void _finalize_to_chunk(vectorized::ConstAggDataPtr state, const vectorized::Columns& agg_result_columns);
+    void _serialize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
+                             const vectorized::Columns& agg_result_columns);
+    void _finalize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
+                            const vectorized::Columns& agg_result_columns);
 
     void _evaluate_group_by_exprs(vectorized::Chunk* chunk);
     void _evaluate_agg_fn_exprs(vectorized::Chunk* chunk);

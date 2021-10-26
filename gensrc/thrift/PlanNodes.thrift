@@ -746,6 +746,7 @@ struct TMetaScanNode {
 struct TDecodeNode {
     // dict int column id to string column id
     1: optional map<i32, i32> dict_id_to_string_ids
+    2: optional map<Types.TSlotId, Exprs.TExpr> string_functions
 }
 
 enum TRuntimeFilterBuildJoinMode {

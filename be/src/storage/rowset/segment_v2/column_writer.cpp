@@ -121,11 +121,12 @@ private:
     RleEncoder<bool> _rle_encoder;
 };
 
-class NullMapBitshuffleBuilder {
+class NullFlagsBuilder {
 public:
-    NullMapBitshuffleBuilder() : _null_map(32 * 1024) {}
+    explicit NullFlagsBuilder(NullEncodingPB null_encoding) : NullFlagsBuilder(32 * 1024, null_encoding) {}
 
-    explicit NullMapBitshuffleBuilder(size_t reserve_bits) : _has_null(false), _null_map(reserve_bits) {}
+    explicit NullFlagsBuilder(size_t reserve_bits, NullEncodingPB null_encoding)
+            : _has_null(false), _null_map(reserve_bits), _null_encoding(null_encoding) {}
 
     void add_null_flags(const uint8_t* flags, size_t count) { _null_map.append(flags, count); }
 
@@ -134,16 +135,41 @@ public:
     ALWAYS_INLINE void set_has_null(bool has_null) { _has_null = has_null; }
 
     OwnedSlice finish() {
-        size_t old_size = _null_map.size();
-        _null_map.resize(ALIGN_UP(_null_map.size(), 8u));
-        memset(_null_map.data() + old_size, 0, _null_map.size() - old_size);
-        _encode_buf.resize(bitshuffle::compress_lz4_bound(_null_map.size(), sizeof(uint8_t), 0));
-        int64_t r =
-                bitshuffle::compress_lz4(_null_map.data(), _encode_buf.data(), _null_map.size(), sizeof(uint8_t), 0);
-        if (r < 0) {
-            LOG(FATAL) << "bitshuffle compress failed: " << bitshuffle_error_msg(r);
+        if (_null_encoding == NullEncodingPB::BITSHUFFLE_NULL) {
+            size_t old_size = _null_map.size();
+            _null_map.resize(ALIGN_UP(_null_map.size(), 8u));
+            memset(_null_map.data() + old_size, 0, _null_map.size() - old_size);
+            _encode_buf.resize(bitshuffle::compress_lz4_bound(_null_map.size(), sizeof(uint8_t), 0));
+            int64_t r = bitshuffle::compress_lz4(_null_map.data(), _encode_buf.data(), _null_map.size(),
+                                                 sizeof(uint8_t), 0);
+            if (r < 0) {
+                LOG(ERROR) << "bitshuffle compress failed: " << bitshuffle_error_msg(r);
+                return OwnedSlice();
+            }
+            return _encode_buf.build();
+        } else if (_null_encoding == NullEncodingPB::LZ4_NULL) {
+            const BlockCompressionCodec* codec = nullptr;
+            CompressionTypePB type = CompressionTypePB::LZ4;
+            Status status = get_block_compression_codec(type, &codec);
+            if (!status.ok()) {
+                LOG(ERROR) << "get codec failed, fail to encode null flags";
+                return OwnedSlice();
+            }
+            _encode_buf.resize(codec->max_compressed_len(_null_map.size()));
+            Slice origin_slice(_null_map);
+            Slice compressed_slice(_encode_buf);
+            status = codec->compress(origin_slice, &compressed_slice);
+            if (!status.ok()) {
+                LOG(ERROR) << "compress null map failed";
+                return OwnedSlice();
+            }
+            // _encode_buf must be resize to compressed slice's size
+            _encode_buf.resize(compressed_slice.get_size());
+            return _encode_buf.build();
+        } else {
+            LOG(ERROR) << "invalid null encoding:" << _null_encoding;
+            return OwnedSlice();
         }
-        return _encode_buf.build();
     }
 
     void reset() {
@@ -161,10 +187,13 @@ public:
         return SIMD::count_zero(_null_map.data(), _null_map.size());
     }
 
+    NullEncodingPB null_encoding() { return _null_encoding; }
+
 private:
     bool _has_null{false};
     faststring _null_map;
     faststring _encode_buf;
+    NullEncodingPB _null_encoding;
 };
 
 class StringColumnWriter final : public ColumnWriter {
@@ -219,6 +248,8 @@ public:
     Status write_bloom_filter_index() override { return _scalar_column_writer->write_bloom_filter_index(); };
 
     ordinal_t get_next_rowid() const override { return _scalar_column_writer->get_next_rowid(); };
+
+    bool is_global_dict_valid() override { return _scalar_column_writer->is_global_dict_valid(); }
 
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
@@ -347,7 +378,11 @@ Status ScalarColumnWriter::init() {
     // create null bitmap builder
     if (is_nullable()) {
         _null_map_builder_v1 = std::make_unique<NullMapRLEBuilder>();
-        _null_map_builder_v2 = std::make_unique<NullMapBitshuffleBuilder>();
+        NullEncodingPB default_null_encoding = NullEncodingPB::BITSHUFFLE_NULL;
+        if (config::null_encoding == 1) {
+            default_null_encoding = NullEncodingPB::LZ4_NULL;
+        }
+        _null_map_builder_v2 = std::make_unique<NullFlagsBuilder>(default_null_encoding);
     }
     if (_opts.need_zone_map) {
         _has_index_builder = true;
@@ -417,6 +452,13 @@ Status ScalarColumnWriter::write_data() {
         RETURN_IF_ERROR(PageIO::compress_and_write_page(_compress_codec, _opts.compression_min_space_saving, _wblock,
                                                         body, footer, &dict_pp));
         dict_pp.to_proto(_opts.meta->mutable_dict_page());
+        if (_opts.global_dict != nullptr) {
+            _is_global_dict_valid = _page_builder->is_valid_global_dict(_opts.global_dict);
+        }
+    } else {
+        if (_opts.global_dict != nullptr) {
+            _is_global_dict_valid = false;
+        }
     }
     _opts.meta->set_all_dict_encoded(_page_builder->all_dict_encoded());
     return Status::OK();
@@ -504,11 +546,14 @@ Status ScalarColumnWriter::finish_current_page() {
             nullmap = _null_map_builder_v1->finish();
             body.push_back(nullmap.slice());
         }
-    } else if (is_nullable() && _curr_page_format == 2) {
+    } else if (is_nullable() && (_curr_page_format == 2)) {
         DCHECK_EQ(_page_builder->count(), _null_map_builder_v2->size());
         DCHECK_EQ(_null_map_builder_v2->size(), _next_rowid - _first_rowid);
         if (_null_map_builder_v2->has_null()) {
             nullmap = _null_map_builder_v2->finish();
+            if (!nullmap.is_loaded()) {
+                return Status::Corruption("encode null flags failed");
+            }
             body.push_back(nullmap.slice());
         }
     }
@@ -523,6 +568,10 @@ Status ScalarColumnWriter::finish_current_page() {
     data_page_footer->set_nullmap_size(nullmap.slice().size);
     data_page_footer->set_format_version(_curr_page_format);
     data_page_footer->set_corresponding_element_ordinal(_element_ordinal);
+    if (is_nullable() && _curr_page_format >= 2) {
+        // for page format v2 or above, use the encoding type of config::null_encoding
+        data_page_footer->set_null_encoding(_null_map_builder_v2->null_encoding());
+    }
     // trying to compress page body
     faststring compressed_body;
     RETURN_IF_ERROR(

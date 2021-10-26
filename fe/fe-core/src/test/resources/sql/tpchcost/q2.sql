@@ -68,14 +68,14 @@ UNPARTITIONED
 |  use vectorized: true
 |
 36:Project
-|  <slot 16> : 16: S_ACCTBAL
 |  <slot 1> : 1: P_PARTKEY
-|  <slot 17> : 17: S_COMMENT
 |  <slot 3> : 3: P_MFGR
-|  <slot 26> : 26: N_NAME
 |  <slot 12> : 12: S_NAME
 |  <slot 13> : 13: S_ADDRESS
 |  <slot 15> : 15: S_PHONE
+|  <slot 16> : 16: S_ACCTBAL
+|  <slot 17> : 17: S_COMMENT
+|  <slot 26> : 26: N_NAME
 |  use vectorized: true
 |
 35:HASH JOIN
@@ -89,13 +89,13 @@ UNPARTITIONED
 |       use vectorized: true
 |
 9:Project
-|  <slot 16> : 16: S_ACCTBAL
-|  <slot 17> : 17: S_COMMENT
-|  <slot 26> : 26: N_NAME
 |  <slot 11> : 11: S_SUPPKEY
 |  <slot 12> : 12: S_NAME
 |  <slot 13> : 13: S_ADDRESS
 |  <slot 15> : 15: S_PHONE
+|  <slot 16> : 16: S_ACCTBAL
+|  <slot 17> : 17: S_COMMENT
+|  <slot 26> : 26: N_NAME
 |  use vectorized: true
 |
 8:HASH JOIN
@@ -403,11 +403,13 @@ cardinality: 100
 column statistics:
 * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
 * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
+* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
 * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
 * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0]
 * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0]
 * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0]
+* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 
 PLAN FRAGMENT 1(F00)
@@ -424,23 +426,25 @@ OutPut Exchange Id: 38
 |  column statistics:
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0]
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0]
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0]
+|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |
 36:Project
 |  output columns:
-|  16 <-> [16: S_ACCTBAL, DOUBLE, false]
 |  1 <-> [1: P_PARTKEY, INT, false]
-|  17 <-> [17: S_COMMENT, VARCHAR, false]
 |  3 <-> [3: P_MFGR, VARCHAR, false]
-|  26 <-> [26: N_NAME, VARCHAR, false]
 |  12 <-> [12: S_NAME, VARCHAR, false]
 |  13 <-> [13: S_ADDRESS, VARCHAR, false]
 |  15 <-> [15: S_PHONE, VARCHAR, false]
+|  16 <-> [16: S_ACCTBAL, DOUBLE, false]
+|  17 <-> [17: S_COMMENT, VARCHAR, false]
+|  26 <-> [26: N_NAME, VARCHAR, false]
 |  cardinality: 57600
 |  column statistics:
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
@@ -461,11 +465,13 @@ OutPut Exchange Id: 38
 |  column statistics:
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0]
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0]
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0]
+|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |
 |----34:EXCHANGE
@@ -473,13 +479,13 @@ OutPut Exchange Id: 38
 |
 9:Project
 |  output columns:
-|  16 <-> [16: S_ACCTBAL, DOUBLE, false]
-|  17 <-> [17: S_COMMENT, VARCHAR, false]
-|  26 <-> [26: N_NAME, VARCHAR, false]
 |  11 <-> [11: S_SUPPKEY, INT, false]
 |  12 <-> [12: S_NAME, CHAR, false]
 |  13 <-> [13: S_ADDRESS, VARCHAR, false]
 |  15 <-> [15: S_PHONE, CHAR, false]
+|  16 <-> [16: S_ACCTBAL, DOUBLE, false]
+|  17 <-> [17: S_COMMENT, VARCHAR, false]
+|  26 <-> [26: N_NAME, VARCHAR, false]
 |  cardinality: 200000
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
@@ -500,9 +506,11 @@ OutPut Exchange Id: 38
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0]
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0]
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0]
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0]
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0]
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |
 |----7:EXCHANGE
@@ -555,7 +563,10 @@ OutPut Exchange Id: 34
 |  column statistics:
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
+|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
+|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0]
+|  * min(37: PS_SUPPLYCOST)-->[1.0, 1.0, 0.0, 8.0, 1.0]
 |
 |----31:EXCHANGE
 |       cardinality: 80000
@@ -601,6 +612,7 @@ OutPut Exchange Id: 31
 |  column statistics:
 |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0]
+|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
 |  * min(37: PS_SUPPLYCOST)-->[1.0, 1.0, 0.0, 8.0, 1.0]
 |
 |----28:EXCHANGE
@@ -631,7 +643,9 @@ OutPut Exchange Id: 31
 |  cardinality: 16000000
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7]
+|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0]
 |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0]
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |
 |----22:EXCHANGE
 |       cardinality: 200000
@@ -701,6 +715,8 @@ OutPut Exchange Id: 22
 |  cardinality: 200000
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |
 |----19:EXCHANGE
 |       cardinality: 5
@@ -739,6 +755,8 @@ OutPut Exchange Id: 19
 |  cardinality: 5
 |  column statistics:
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
 |
 |----16:EXCHANGE
 |       cardinality: 1
@@ -805,6 +823,8 @@ OutPut Exchange Id: 07
 |  column statistics:
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0]
 |
 |----4:EXCHANGE
 |       cardinality: 1

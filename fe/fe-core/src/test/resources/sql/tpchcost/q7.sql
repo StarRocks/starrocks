@@ -89,10 +89,10 @@ OutPut Exchange Id: 21
 
 20:Project
 |  output columns:
+|  46 <-> [46: N_NAME, VARCHAR, false]
 |  51 <-> [51: N_NAME, CHAR, false]
 |  55 <-> year[(cast([19: L_SHIPDATE, DATE, false] as DATETIME)); args: DATETIME; result: INT; args nullable: true; result nullable: true]
 |  56 <-> [14: L_EXTENDEDPRICE, DOUBLE, false] * 1.0 - [15: L_DISCOUNT, DOUBLE, false]
-|  46 <-> [46: N_NAME, VARCHAR, false]
 |  cardinality: 554645
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
@@ -111,19 +111,23 @@ OutPut Exchange Id: 21
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
 |  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
+|  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
+|  * year-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
+|  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 |
 |----18:EXCHANGE
 |       cardinality: 25
 |
 16:Project
 |  output columns:
+|  14 <-> [14: L_EXTENDEDPRICE, DOUBLE, false]
+|  15 <-> [15: L_DISCOUNT, DOUBLE, false]
 |  19 <-> [19: L_SHIPDATE, DATE, false]
 |  39 <-> [39: C_NATIONKEY, INT, false]
-|  14 <-> [14: L_EXTENDEDPRICE, DOUBLE, false]
 |  46 <-> [46: N_NAME, VARCHAR, false]
-|  15 <-> [15: L_DISCOUNT, DOUBLE, false]
 |  cardinality: 173465347
 |  column statistics:
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
@@ -139,6 +143,8 @@ OutPut Exchange Id: 21
 |  - filter_id = 2, build_expr = (1: S_SUPPKEY), remote = false
 |  cardinality: 173465347
 |  column statistics:
+|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
+|  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
 |  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
@@ -150,11 +156,11 @@ OutPut Exchange Id: 21
 |
 8:Project
 |  output columns:
-|  19 <-> [19: L_SHIPDATE, DATE, false]
-|  39 <-> [39: C_NATIONKEY, INT, false]
 |  11 <-> [11: L_SUPPKEY, INT, false]
 |  14 <-> [14: L_EXTENDEDPRICE, DOUBLE, false]
 |  15 <-> [15: L_DISCOUNT, DOUBLE, false]
+|  19 <-> [19: L_SHIPDATE, DATE, false]
+|  39 <-> [39: C_NATIONKEY, INT, false]
 |  cardinality: 173465347
 |  column statistics:
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
@@ -168,10 +174,12 @@ OutPut Exchange Id: 21
 |  equal join conjunct: [9: L_ORDERKEY, INT, false] = [26: O_ORDERKEY, INT, false]
 |  cardinality: 173465347
 |  column statistics:
+|  * L_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
 |  * L_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
 |  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 932377.0]
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0]
 |  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0]
+|  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |
 |----6:EXCHANGE
@@ -237,6 +245,8 @@ OutPut Exchange Id: 14
 |  cardinality: 1000000
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0]
+|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
+|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |
 |----11:EXCHANGE
@@ -281,8 +291,8 @@ OutPut Exchange Id: 06
 
 5:Project
 |  output columns:
-|  39 <-> [39: C_NATIONKEY, INT, false]
 |  26 <-> [26: O_ORDERKEY, INT, false]
+|  39 <-> [39: C_NATIONKEY, INT, false]
 |  cardinality: 150000000
 |  column statistics:
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
@@ -296,6 +306,8 @@ OutPut Exchange Id: 06
 |  cardinality: 150000000
 |  column statistics:
 |  * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8]
+|  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0]
+|  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7]
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |
 |----3:EXCHANGE

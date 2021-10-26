@@ -29,7 +29,7 @@ public class HashJoinImplementationRule extends ImplementationRule {
                 joinOperator.getJoinHint(),
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),
-                joinOperator.getPruneOutputColumns());
+                joinOperator.getProjection());
         OptExpression result = OptExpression.create(physicalHashJoin, input.getInputs());
         return Lists.newArrayList(result);
     }

@@ -134,9 +134,7 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         } else if (join.getJoinType().isRightOuterJoin()) {
             if (canEliminateNull(leftColumns, filter.getPredicate().clone())) {
                 input.setChild(0, OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
-                                .setJoinType(JoinOperator.INNER_JOIN)
-                                .build(),
-                        input.inputAt(0).getInputs()));
+                        .setJoinType(JoinOperator.INNER_JOIN).build(), input.inputAt(0).getInputs()));
             }
         } else if (join.getJoinType().isFullOuterJoin()) {
             boolean canConvertLeft = false;

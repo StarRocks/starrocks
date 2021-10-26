@@ -27,7 +27,8 @@ public class EsScanImplementationRule extends ImplementationRule {
                 logical.getColRefToColumnMetaMap(),
                 logical.getSelectedIndex(),
                 logical.getLimit(),
-                logical.getPredicate());
+                logical.getPredicate(),
+                logical.getProjection());
 
         OptExpression result = new OptExpression(physical);
         return Lists.newArrayList(result);

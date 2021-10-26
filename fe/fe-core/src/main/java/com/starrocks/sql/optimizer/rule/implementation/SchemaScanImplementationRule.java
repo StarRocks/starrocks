@@ -26,7 +26,8 @@ public class SchemaScanImplementationRule extends ImplementationRule {
                         logical.getOutputColumns(),
                         logical.getColRefToColumnMetaMap(),
                         logical.getLimit(),
-                        logical.getPredicate());
+                        logical.getPredicate(),
+                        logical.getProjection());
 
         OptExpression result = new OptExpression(physical);
         return Lists.newArrayList(result);

@@ -46,7 +46,8 @@ public:
         this->data(state).count = 0;
     }
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
         DCHECK(columns[0]->is_numeric() || columns[0]->is_decimal());
 
         const InputColumnType* column = down_cast<const InputColumnType*>(columns[0]);
@@ -77,7 +78,7 @@ public:
         this->data(state).count = temp;
     }
 
-    void update_batch_single_state(FunctionContext* ctx, AggDataPtr state, const Column** columns,
+    void update_batch_single_state(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                    int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                    int64_t frame_end) const override {
         for (size_t i = frame_start; i < frame_end; ++i) {
@@ -85,7 +86,7 @@ public:
         }
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
         Slice slice = column->get(row_num).get_slice();
 
@@ -125,7 +126,7 @@ public:
         }
     }
 
-    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
         auto* column = down_cast<BinaryColumn*>(to);
         Bytes& bytes = column->get_bytes();
@@ -182,7 +183,7 @@ public:
     using ResultColumnType =
             typename DevFromAveAggregateFunction<PT, is_sample, T, ResultPT, TResult>::ResultColumnType;
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric() || to->is_decimal());
 
         int64_t count = this->data(state).count;
@@ -233,7 +234,8 @@ public:
         }
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
         DCHECK_GT(end, start);
 
         TResult result;
@@ -298,7 +300,7 @@ public:
     using ResultColumnType =
             typename DevFromAveAggregateFunction<PT, is_sample, T, ResultPT, TResult>::ResultColumnType;
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_numeric() || to->is_decimal());
 
         int64_t count = this->data(state).count;
@@ -359,7 +361,8 @@ public:
         }
     }
 
-    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override {
+    void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
+                    size_t end) const override {
         DCHECK_GT(end, start);
 
         TResult result;
