@@ -247,7 +247,7 @@ Status FileScanNode::scanner_scan(const TBrokerScanRange& scan_range, const std:
                    // 2. at least one batch in queue and memory exceed limit.
                    // TODO: lxh use instance mem tracker
                    (_chunk_queue.size() >= _max_queue_size ||
-                    (mem_tracker()->any_limit_exceeded() && !_chunk_queue.empty()))) {
+                    (_runtime_state->instance_mem_tracker()->any_limit_exceeded() && !_chunk_queue.empty()))) {
                 _queue_writer_cond.wait_for(l, std::chrono::seconds(1));
             }
             // Process already set failed, so we just return OK
