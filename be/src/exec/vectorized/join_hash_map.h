@@ -503,6 +503,26 @@ public:
 
     void remove_duplicate_index(Column::Filter* filter);
 
+    int64_t mem_usage() {
+        int64_t usage = 0;
+        if (_table_items.build_chunk != nullptr) {
+            usage += _table_items.build_chunk->memory_usage();
+        }
+        usage += _table_items.first.capacity() * sizeof(uint32_t);
+        usage += _table_items.next.capacity() * sizeof(uint32_t);
+        if (_table_items.build_pool != nullptr) {
+            usage += _table_items.build_pool->total_reserved_bytes();
+        }
+        if (_table_items.probe_pool != nullptr) {
+            usage += _table_items.probe_pool->total_reserved_bytes();
+        }
+        if (_table_items.build_key_column != nullptr) {
+            usage += _table_items.build_key_column->memory_usage();
+        }
+        usage += _table_items.build_slice.size() * sizeof(Slice);
+        return usage;
+    }
+
 private:
     JoinHashMapType _choose_join_hash_map();
     static size_t _get_size_of_fixed_and_contiguous_type(PrimitiveType data_type);

@@ -229,6 +229,8 @@ Status HashJoinNode::open(RuntimeState* state) {
         }
     }
 
+    _mem_tracker->set(_ht.mem_usage());
+
     return Status::OK();
 }
 
