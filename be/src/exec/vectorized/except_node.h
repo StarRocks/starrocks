@@ -61,6 +61,8 @@ class ExceptNode : public ExecNode {
 
         Iterator end() { return hash_set->end(); }
 
+        int64_t mem_usage() const { return hash_set->dump_bound(); }
+
         void serialize_columns(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs, size_t chunk_size,
                                const std::function<void(const ColumnPtr&, int)>& get_type) {
             const bool null = false;
@@ -174,6 +176,17 @@ public:
     Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     Status get_next(RuntimeState* state, ChunkPtr* row_batch, bool* eos) override;
     Status close(RuntimeState* state) override;
+
+    int64_t mem_usage() const {
+        int64_t usage = 0;
+        if (_hash_set != nullptr) {
+            usage += _hash_set->mem_usage();
+        }
+        if (_build_pool != nullptr) {
+            usage += _build_pool->total_reserved_bytes();
+        }
+        return usage;
+    }
 
 private:
     /// Tuple id resolved in Prepare() to set tuple_desc_;
