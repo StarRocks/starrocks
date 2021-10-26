@@ -36,6 +36,10 @@ Status CrossJoinNode::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(child(0)->open(state));
 
+    if (_build_chunk != nullptr) {
+        _mem_tracker->set_limit(_build_chunk->memory_usage());
+    }
+
     return Status::OK();
 }
 
