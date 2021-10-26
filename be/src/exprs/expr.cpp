@@ -102,71 +102,7 @@ Expr::Expr(const Expr& expr)
           _constant_val(expr._constant_val),
           _vector_compute_fn(expr._vector_compute_fn) {}
 
-Expr::Expr(TypeDescriptor type)
-        : _opcode(TExprOpcode::INVALID_OPCODE),
-          // _vector_opcode(TExprOpcode::INVALID_OPCODE),
-          _is_slotref(false),
-          _type(std::move(type)),
-          _output_scale(-1),
-          _output_column(-1),
-          _fn_context_index(-1),
-          _vector_compute_fn() {
-    switch (_type.type) {
-    case TYPE_BOOLEAN:
-        _node_type = (TExprNodeType::BOOL_LITERAL);
-        break;
-
-    case TYPE_TINYINT:
-    case TYPE_SMALLINT:
-    case TYPE_INT:
-    case TYPE_BIGINT:
-        _node_type = (TExprNodeType::INT_LITERAL);
-        break;
-
-    case TYPE_LARGEINT:
-        _node_type = (TExprNodeType::LARGE_INT_LITERAL);
-        break;
-
-    case TYPE_NULL:
-        _node_type = (TExprNodeType::NULL_LITERAL);
-        break;
-
-    case TYPE_FLOAT:
-    case TYPE_DOUBLE:
-    case TYPE_TIME:
-        _node_type = (TExprNodeType::FLOAT_LITERAL);
-        break;
-
-    case TYPE_DECIMAL:
-    case TYPE_DECIMALV2:
-        _node_type = (TExprNodeType::DECIMAL_LITERAL);
-        break;
-
-    case TYPE_DATE:
-    case TYPE_DATETIME:
-        _node_type = (TExprNodeType::DATE_LITERAL);
-        break;
-
-    case TYPE_CHAR:
-    case TYPE_VARCHAR:
-    case TYPE_HLL:
-    case TYPE_OBJECT:
-    case TYPE_PERCENTILE:
-        _node_type = (TExprNodeType::STRING_LITERAL);
-        break;
-    case TYPE_ARRAY:
-        _node_type = (TExprNodeType::ARRAY_EXPR);
-        break;
-    case INVALID_TYPE:
-    case TYPE_BINARY:
-    case TYPE_STRUCT:
-    case TYPE_MAP:
-    case TYPE_DECIMAL32:
-    case TYPE_DECIMAL64:
-    case TYPE_DECIMAL128:
-        break;
-    }
-}
+Expr::Expr(TypeDescriptor type) : Expr(type, false) {}
 
 Expr::Expr(TypeDescriptor type, bool is_slotref)
         : _opcode(TExprOpcode::INVALID_OPCODE),
@@ -228,21 +164,7 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
     }
 }
 
-Expr::Expr(const TExprNode& node)
-        : _node_type(node.node_type),
-          _opcode(node.__isset.opcode ? node.opcode : TExprOpcode::INVALID_OPCODE),
-          // _vector_opcode(
-          // node.__isset.vector_opcode ? node.vector_opcode : TExprOpcode::INVALID_OPCODE),
-          _is_slotref(false),
-          _is_nullable(node.is_nullable),
-          _type(TypeDescriptor::from_thrift(node.type)),
-          _output_scale(node.output_scale),
-          _output_column(node.__isset.output_column ? node.output_column : -1),
-          _fn_context_index(-1) {
-    if (node.__isset.fn) {
-        _fn = node.fn;
-    }
-}
+Expr::Expr(const TExprNode& node) : Expr(node, false) {}
 
 Expr::Expr(const TExprNode& node, bool is_slotref)
         : _node_type(node.node_type),
@@ -257,6 +179,9 @@ Expr::Expr(const TExprNode& node, bool is_slotref)
           _fn_context_index(-1) {
     if (node.__isset.fn) {
         _fn = node.fn;
+    }
+    if (node.__isset.is_monotonic) {
+        _is_monotonic = node.is_monotonic;
     }
 }
 

@@ -361,6 +361,7 @@ struct ZoneMapDetail {
     bool has_not_null;
     Datum min_value;
     Datum max_value;
+    size_t num_rows;
 };
 
 } // namespace starrocks::vectorized

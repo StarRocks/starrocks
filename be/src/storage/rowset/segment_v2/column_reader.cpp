@@ -222,6 +222,7 @@ Status ColumnReader::_parse_zone_map(const ZoneMapPB& zm, vectorized::Datum* min
             *min = detail->min_value;
         }
     }
+    detail->num_rows = num_rows();
     return Status::OK();
 }
 
@@ -457,7 +458,7 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const vectorized::C
     vectorized::Datum max;
     vectorized::ZoneMapDetail detail;
     _parse_zone_map(zm, &min, &max, &detail);
-    auto filter = [&](const vectorized::ColumnPredicate* pred) { return pred->zone_map_filter(min, max); };
+    auto filter = [&](const vectorized::ColumnPredicate* pred) { return pred->zone_map_filter(min, max, &detail); };
     return std::all_of(predicates.begin(), predicates.end(), filter);
 }
 

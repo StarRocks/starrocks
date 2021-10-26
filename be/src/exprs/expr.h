@@ -153,6 +153,12 @@ public:
 
     bool is_nullable() const { return _is_nullable; }
 
+    bool is_monotonic() const { return _is_monotonic; }
+
+    // In most time, this field is passed from FE
+    // Sometimes we want to construct expr on BE implicitly and we have knowledge about `monotonicity`
+    void set_monotonic(bool v) { _is_monotonic = v; }
+
     /// Returns true if this expr uses a FunctionContext to track its runtime state.
     /// Overridden by exprs which use FunctionContext.
     virtual bool has_fn_ctx() const { return false; }
@@ -391,6 +397,9 @@ protected:
 
     // The result for this expr is whether nullable, This info is passed from FE
     bool _is_nullable = true;
+
+    // Is this expr monotnoic or not. This info is passed from FE
+    bool _is_monotonic = false;
 
     // analysis is done, types are fixed at this point
     TypeDescriptor _type;
