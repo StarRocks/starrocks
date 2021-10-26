@@ -198,6 +198,7 @@ Status ExecEnv::init_mem_tracker() {
     _page_cache_mem_tracker = new MemTracker(-1, "page_cache", _mem_tracker);
     _update_mem_tracker = new MemTracker(bytes_limit * 0.6, "update", _mem_tracker);
     _chunk_allocator_mem_tracker = new MemTracker(-1, "chunk_allocator", _mem_tracker);
+    _clone_mem_tracker = new MemTracker(-1, "clone", _mem_tracker);
 
     ChunkAllocator::init_instance(_chunk_allocator_mem_tracker, config::chunk_reserved_bytes_limit);
 
@@ -309,6 +310,10 @@ void ExecEnv::_destory() {
     if (_thread_mgr) {
         delete _thread_mgr;
         _thread_mgr = nullptr;
+    }
+    if (_clone_mem_tracker) {
+        delete _clone_mem_tracker;
+        _clone_mem_tracker = nullptr;
     }
     if (_chunk_allocator_mem_tracker) {
         delete _chunk_allocator_mem_tracker;

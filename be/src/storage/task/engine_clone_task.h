@@ -35,7 +35,7 @@ namespace starrocks {
 // add "Engine" as task prefix to prevent duplicate name with agent task
 class EngineCloneTask : public EngineTask {
 public:
-    EngineCloneTask(MemTracker* tablet_meta_mem_tracker, const TCloneReq& _clone_req, const TMasterInfo& _master_info,
+    EngineCloneTask(MemTracker* mem_tracker, const TCloneReq& _clone_req, const TMasterInfo& _master_info,
                     int64_t _signature, vector<string>* error_msgs, vector<TTabletInfo>* tablet_infos,
                     AgentStatus* _res_status);
 
@@ -71,7 +71,7 @@ private:
                                    bool incremental_clone);
 
 private:
-    MemTracker* _tablet_meta_mem_tracker = nullptr;
+    std::unique_ptr<MemTracker> _mem_tracker;
     const TCloneReq& _clone_req;
     vector<string>* _error_msgs;
     vector<TTabletInfo>* _tablet_infos;

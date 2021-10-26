@@ -39,6 +39,8 @@
 #include "storage/tablet_updates.h"
 #include "util/defer_op.h"
 #include "util/thrift_rpc_helper.h"
+#include "runtime/current_thread.h"
+#include "util/defer_op.h"
 
 using std::set;
 using std::stringstream;
@@ -53,18 +55,24 @@ const uint32_t DOWNLOAD_FILE_MAX_RETRY = 3;
 const uint32_t LIST_REMOTE_FILE_TIMEOUT = 15;
 const uint32_t GET_LENGTH_TIMEOUT = 10;
 
-EngineCloneTask::EngineCloneTask(MemTracker* tablet_meta_mem_tracker, const TCloneReq& clone_req,
+EngineCloneTask::EngineCloneTask(MemTracker* mem_tracker, const TCloneReq& clone_req,
                                  const TMasterInfo& master_info, int64_t signature, std::vector<string>* error_msgs,
                                  std::vector<TTabletInfo>* tablet_infos, AgentStatus* res_status)
-        : _tablet_meta_mem_tracker(tablet_meta_mem_tracker),
-          _clone_req(clone_req),
+        : _clone_req(clone_req),
           _error_msgs(error_msgs),
           _tablet_infos(tablet_infos),
           _res_status(res_status),
           _signature(signature),
-          _master_info(master_info) {}
+          _master_info(master_info) {
+    _mem_tracker = std::make_unique<MemTracker>(-1, "clone task", mem_tracker);
+}
 
 OLAPStatus EngineCloneTask::execute() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] {
+        tls_thread_status.set_mem_tracker(prev_tracker);
+    });
+
     auto tablet_manager = StorageEngine::instance()->tablet_manager();
     // Prevent the snapshot directory from been removed by the path GC worker.
     tablet_manager->register_clone_tablet(_clone_req.tablet_id);
