@@ -22,6 +22,10 @@ struct DataSegment {
 
     DataSegment(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) { init(sort_exprs, cnk); }
 
+    int64_t mem_usage() const {
+        return chunk->memory_usage();
+    }
+
     void init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) {
         chunk = cnk;
         order_by_columns.reserve(sort_exprs->size());
@@ -289,6 +293,8 @@ public:
     // pull_chunk for pipeline.
     virtual bool pull_chunk(ChunkPtr* chunk) = 0;
 
+    virtual int64_t mem_usage() const = 0;
+
 protected:
     inline size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
 
@@ -300,7 +306,6 @@ protected:
     size_t _next_output_row = 0;
 
     const size_t _size_of_chunk_batch;
-    int64_t _last_memory_usage;
 
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _sort_timer = nullptr;

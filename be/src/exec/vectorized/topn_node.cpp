@@ -80,6 +80,8 @@ Status TopNNode::open(RuntimeState* state) {
     Status status = _consume_chunks(state, data_source);
     data_source->close(state);
 
+    _mem_tracker->set(_chunks_sorter->mem_usage());
+
     return status;
 }
 
