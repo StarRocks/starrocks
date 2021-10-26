@@ -29,7 +29,6 @@
 #include <thread>
 
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/schema.h"
 #include "util/hash_util.hpp"
 #include "util/priority_thread_pool.hpp"
@@ -256,7 +255,6 @@ private:
     // Current state of the test
     State _current;
 
-    std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
 
     // SkipList is not protected by _mu.  We just use a single writer
@@ -264,10 +262,7 @@ private:
     SkipList<Key, TestComparator> _list;
 
 public:
-    ConcurrentTest()
-            : _mem_tracker(new MemTracker(-1)),
-              _mem_pool(new MemPool()),
-              _list(TestComparator(), _mem_pool.get(), false) {}
+    ConcurrentTest() : _mem_pool(new MemPool()), _list(TestComparator(), _mem_pool.get(), false) {}
 
     // REQUIRES: External synchronization
     void write_step(Random* rnd) {

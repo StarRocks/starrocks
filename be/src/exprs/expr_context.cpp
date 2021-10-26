@@ -26,13 +26,9 @@
 #include <memory>
 #include <sstream>
 
-#include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/slot_ref.h"
-#include "exprs/vectorized/column_ref.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
-#include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf_internal.h"
 #include "util/debug_util.h"
@@ -54,7 +50,6 @@ ExprContext::~ExprContext() {
     }
 }
 
-// TODO(zc): memory tracker
 Status ExprContext::prepare(RuntimeState* state, const RowDescriptor& row_desc) {
     if (_prepared) {
         return Status::OK();
