@@ -11,7 +11,8 @@ StatusOr<vectorized::ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::R
 
     auto chunk = std::make_shared<vectorized::Chunk>();
 
-    size_t rows_count = std::min(static_cast<size_t>(config::vector_chunk_size), _rows_total - _next_processed_row_index);
+    size_t rows_count =
+            std::min(static_cast<size_t>(config::vector_chunk_size), _rows_total - _next_processed_row_index);
     size_t columns_count = _dst_slots.size();
 
     for (size_t col_i = 0; col_i < columns_count; col_i++) {
