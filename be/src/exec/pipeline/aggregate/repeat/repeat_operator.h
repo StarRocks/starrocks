@@ -2,8 +2,6 @@
 
 #pragma once
 
-#include <utility>
-
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
@@ -51,16 +49,10 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
-    static ColumnPtr generate_null_column(int64_t num_rows) {
-        auto nullable_column = NullableColumn::create(Int8Column::create(), NullColumn::create());
-        nullable_column->append_nulls(1);
-        return ConstColumn::create(nullable_column, num_rows);
-    }
-
     static ColumnPtr generate_repeat_column(int64_t value, int64_t num_rows) {
-        auto ptr = RunTimeColumnType<TYPE_BIGINT>::create();
-        ptr->append_datum(Datum(value));
-        return ConstColumn::create(ptr, num_rows);
+        auto column = RunTimeColumnType<TYPE_BIGINT>::create();
+        column->append_datum(Datum(value));
+        return ConstColumn::create(column, num_rows);
     }
 
     /*
@@ -97,7 +89,7 @@ private:
     // An integer bitmap list, it indicates the bit position of the exprs not null.
     const std::vector<int64_t>& _repeat_id_list;
     // needed repeat times
-    uint64_t _repeat_times_required;
+    const uint64_t _repeat_times_required;
     // repeat timer for chunk. 0 <=  _repeat_times_last < _repeat_times_required.
     uint64_t _repeat_times_last;
     // only null columns for reusing, It has config::vector_chunk_size rows.
@@ -105,7 +97,7 @@ private:
     // column for grouping_id and virtual columns for grouping()/grouping_id() for reusing.
     // It has config::vector_chunk_size rows.
     const std::vector<std::vector<ColumnPtr>>& _grouping_columns;
-    // _grouping_list for gourping_id'value and grouping()/grouping_id()'s value.
+    // _grouping_list for grouping_id'value and grouping()/grouping_id()'s value.
     // It's a two dimensional array.
     // first is grouping index and second is repeat index.
     const std::vector<std::vector<int64_t>>& _grouping_list;
@@ -154,7 +146,7 @@ private:
     std::set<SlotId> _all_slot_ids;
     std::vector<std::vector<SlotId>> _null_slot_ids;
     std::vector<int64_t> _repeat_id_list;
-    uint64_t _repeat_times_required;
+    const uint64_t _repeat_times_required;
     uint64_t _repeat_times_last;
     ColumnPtr _column_null;
     std::vector<std::vector<ColumnPtr>> _grouping_columns;

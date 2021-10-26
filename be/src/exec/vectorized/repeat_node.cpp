@@ -231,7 +231,6 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > RepeatNode::decompose_t
     using namespace pipeline;
 
     OpFactories operators = _children[0]->decompose_to_pipeline(context);
-    operators = context->maybe_interpolate_local_exchange(operators);
 
     operators.emplace_back(std::make_shared<RepeatOperatorFactory>(
             context->next_operator_id(), id(), std::move(_slot_id_set_list), std::move(_all_slot_ids),
