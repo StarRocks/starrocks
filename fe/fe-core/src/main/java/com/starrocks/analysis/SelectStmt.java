@@ -1753,7 +1753,10 @@ public class SelectStmt extends QueryStmt {
             originalExpr = Expr.cloneList(resultExprs);
         }
 
-        if (!resultExprs.isEmpty()) {
+        if (needToSql && selectList.getItems().stream().allMatch(SelectListItem::isStar)) {
+            strBuilder.append(selectList.getItems().stream().map(SelectListItem::toSql)
+                    .collect(Collectors.joining(", ")));
+        } else if (!resultExprs.isEmpty()) {
             for (int i = 0; i < resultExprs.size(); ++i) {
                 // strBuilder.append(selectList.getItems().get(i).toSql());
                 // strBuilder.append((i + 1 != selectList.getItems().size()) ? ", " : "");
