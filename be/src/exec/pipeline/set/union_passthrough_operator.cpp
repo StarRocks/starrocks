@@ -53,14 +53,14 @@ void UnionPassthroughOperator::_clone_column(ChunkPtr& dst_chunk, const ColumnPt
         // If the dst slot is nullable and the src slot isn't nullable, we need insert null mask to column.
         ColumnPtr nullable_column = vectorized::NullableColumn::create(src_column->clone_shared(),
                                                                        vectorized::NullColumn::create(row_count, 0));
-        dst_chunk->append_column(nullable_column, dst_slot->id());
+        dst_chunk->append_column(std::move(nullable_column), dst_slot->id());
     }
 }
 
-void UnionPassthroughOperator::_move_column(ChunkPtr& dst_chunk, const ColumnPtr& src_column,
+void UnionPassthroughOperator::_move_column(ChunkPtr& dst_chunk, ColumnPtr& src_column,
                                             const SlotDescriptor* dst_slot, size_t row_count) {
     if (src_column->is_nullable() || !dst_slot->is_nullable()) {
-        dst_chunk->append_column(src_column, dst_slot->id());
+        dst_chunk->append_column(std::move(src_column), dst_slot->id());
     } else {
         // If the dst slot is nullable and the src slot isn't nullable, we need insert null mask to column.
         ColumnPtr nullable_column =

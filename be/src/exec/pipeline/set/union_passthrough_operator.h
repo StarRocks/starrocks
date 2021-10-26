@@ -54,7 +54,7 @@ private:
     void _clone_column(ChunkPtr& dst_chunk, const ColumnPtr& src_column, const SlotDescriptor* dst_slot,
                        size_t row_count);
     // Moves the src column to the dst chunk, which used when the src column is mapped to the only one dest column.
-    void _move_column(ChunkPtr& dst_chunk, const ColumnPtr& src_column, const SlotDescriptor* dst_slot,
+    void _move_column(ChunkPtr& dst_chunk, ColumnPtr& src_column, const SlotDescriptor* dst_slot,
                       size_t row_count);
 
     // Maps the dst slot id of the dest chunk to that of the src chunk.
