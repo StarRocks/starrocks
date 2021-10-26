@@ -109,6 +109,8 @@ public:
         _child_tracker_it = _parent->_child_trackers.end();
     }
 
+    void set(int64_t bytes) { _consumption->set(bytes); }
+
     void consume(int64_t bytes) {
         if (bytes <= 0) {
             if (bytes < 0) release(-bytes);

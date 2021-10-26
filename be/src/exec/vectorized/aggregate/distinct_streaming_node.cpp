@@ -81,6 +81,10 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                 }
 
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
+
+                _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
+                                  _aggregator->mem_pool()->total_reserved_bytes());
+
                 continue;
             } else {
                 // TODO: calc the real capacity of hashtable, will add one interface in the class of habletable
@@ -112,6 +116,9 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     } else {
                         _aggregator->compute_batch_agg_states(input_chunk_size);
                     }
+
+                    _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
+                                      _aggregator->mem_pool()->total_reserved_bytes());
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
                     continue;
