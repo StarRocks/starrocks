@@ -170,6 +170,8 @@ void HdfsScanner::update_counter() {
 #ifndef BE_TEST
     HdfsReadStats hdfs_stats;
     auto hdfs_file = down_cast<HdfsRandomAccessFile*>(_scanner_params.fs.get())->hdfs_file();
+    // Hdfslib only supports obtaining statistics of hdfs file system. 
+    // For other systems such as s3, calling this function will cause be crash.
     if (_scanner_params.parent->_is_hdfs_fs) {
         get_hdfs_statistics(hdfs_file, &hdfs_stats);
     }
