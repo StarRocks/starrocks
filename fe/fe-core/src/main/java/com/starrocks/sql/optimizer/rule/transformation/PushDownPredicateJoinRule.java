@@ -244,12 +244,18 @@ public class PushDownPredicateJoinRule extends TransformationRule {
             for (ScalarOperator p : derivedPredicates) {
                 if (rightOutputColumns.contains(derivedPredicate.getUsedColumns())) {
                     rightPushDown.add(p);
+                } else if (leftOutputColumns.contains(derivedPredicate.getUsedColumns()) &&
+                        join.getJoinType().isSemiJoin()) {
+                    leftPushDown.add(p);
                 }
             }
         } else if (join.getJoinType().isRightOuterJoin() || join.getJoinType().isRightSemiJoin()) {
             for (ScalarOperator p : derivedPredicates) {
                 if (leftOutputColumns.contains(derivedPredicate.getUsedColumns())) {
                     leftPushDown.add(p);
+                } else if (rightOutputColumns.contains(derivedPredicate.getUsedColumns()) &&
+                        join.getJoinType().isSemiJoin()) {
+                    rightPushDown.add(p);
                 }
             }
         }
