@@ -144,6 +144,7 @@ private:
     mutable SpinLock _status_mutex;
     Status _status;
     RuntimeState* _runtime_state = nullptr;
+    bool _is_hdfs_fs = true;
 
     std::atomic<int32_t> _scanner_submit_count = 0;
     std::atomic<int32_t> _running_threads = 0;
