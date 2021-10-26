@@ -1,5 +1,4 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
-
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
@@ -11,8 +10,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rewrite.AddDecodeNodeForDictStringRule;
-import com.starrocks.sql.optimizer.rewrite.AddProjectForJoinOnBinaryPredicatesRule;
-import com.starrocks.sql.optimizer.rewrite.AddProjectForJoinPruneRule;
 import com.starrocks.sql.optimizer.rewrite.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
@@ -20,11 +17,13 @@ import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinForceLimitRule;
+import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
@@ -82,8 +81,10 @@ public class Optimizer {
         // because of the Filter node needs to be merged first to avoid the Limit node
         // cannot merge
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownAggToMetaScanRule());
 
+        ruleRewriteOnlyOnce(memo, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         ruleRewriteIterative(memo, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
@@ -93,8 +94,8 @@ public class Optimizer {
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoAggRule());
         //After the MERGE_LIMIT, ProjectNode that can be merged may appear.
         //So we do another MergeTwoProjectRule
-        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
+        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
 
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
         tree = new MaterializedViewRule().transform(tree, context).get(0);
@@ -102,11 +103,13 @@ public class Optimizer {
 
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteIterative(memo, rootTaskContext, new PruneProjectRule());
-        ruleRewriteIterative(memo, rootTaskContext, new ScalarOperatorsReuseRule());
+        ruleRewriteOnlyOnce(memo, rootTaskContext, new ScalarOperatorsReuseRule());
+        ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new JoinForceLimitRule());
 
         // Rewrite maybe produce empty groups, we need to remove them.
         memo.removeAllEmptyGroup();
+        memo.removeUnreachableGroup();
 
         // collect all olap scan operator
         collectAllScanOperators(memo, rootTaskContext);
@@ -146,21 +149,14 @@ public class Optimizer {
                 rootTaskContext, memo.getRootGroup()));
 
         context.getTaskScheduler().pushTask(new DeriveStatsTask(
-                rootTaskContext, memo.getRootGroup().getFirstLogicalExpression(),
-                memo.getRootGroup().getLogicalProperty().getOutputColumns()));
+                rootTaskContext, memo.getRootGroup().getFirstLogicalExpression()));
 
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
 
         OptExpression result = extractBestPlan(requiredProperty, memo.getRootGroup());
         tryOpenPreAggregate(result);
-        result = new AddProjectForJoinOnBinaryPredicatesRule().rewrite(result, rootTaskContext);
-        result = new AddProjectForJoinPruneRule((ColumnRefSet) requiredColumns.clone())
-                .rewrite(result, rootTaskContext);
         // Rewrite Exchange on top of Sort to Final Sort
         result = new ExchangeSortToMergeRule().rewrite(result);
-
-        // Add project will case output change, re-derive output columns in property
-        result = new DeriveOutputColumnsRule((ColumnRefSet) requiredColumns.clone()).rewrite(result, rootTaskContext);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         return result;
     }

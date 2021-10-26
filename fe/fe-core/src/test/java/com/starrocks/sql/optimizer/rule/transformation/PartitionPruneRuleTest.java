@@ -32,7 +32,6 @@ import mockit.Mocked;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -91,8 +90,8 @@ public class PartitionPruneRuleTest {
                 new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.LE, column1,
                         ConstantOperator.createDate(LocalDateTime.of(2020, 12, 1, 0, 0, 0)));
         ScalarOperator predicate = Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2);
-        LogicalOlapScanOperator operator = new LogicalOlapScanOperator(olapTable,
-                new ArrayList<>(scanColumnMap.keySet()), scanColumnMap, Maps.newHashMap(), null, -1, predicate);
+        LogicalOlapScanOperator operator =
+                new LogicalOlapScanOperator(olapTable, scanColumnMap, Maps.newHashMap(), null, -1, predicate);
         operator.setPredicate(null);
 
         new Expectations() {
@@ -208,8 +207,8 @@ public class PartitionPruneRuleTest {
         ScalarOperator predicate =
                 Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2, binaryPredicateOperator3,
                         binaryPredicateOperator4);
-        LogicalOlapScanOperator operator = new LogicalOlapScanOperator(olapTable,
-                new ArrayList<>(scanColumnMap.keySet()), scanColumnMap, Maps.newHashMap(), null, -1, predicate);
+        LogicalOlapScanOperator operator =
+                new LogicalOlapScanOperator(olapTable, scanColumnMap, Maps.newHashMap(), null, -1, predicate);
 
         new Expectations() {
             {

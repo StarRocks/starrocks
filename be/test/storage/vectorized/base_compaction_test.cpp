@@ -125,7 +125,7 @@ public:
         FileUtils::remove_all(config::storage_root_path);
         ASSERT_TRUE(FileUtils::create_dir(config::storage_root_path).ok());
         std::vector<StorePath> paths;
-        paths.emplace_back(config::storage_root_path, -1);
+        paths.emplace_back(config::storage_root_path);
 
         starrocks::EngineOptions options;
         options.store_paths = paths;
@@ -177,8 +177,7 @@ TEST_F(BaseCompactionTest, test_init_succeeded) {
 TEST_F(BaseCompactionTest, test_input_rowsets_LE_1) {
     TabletSchemaPB schema_pb;
     schema_pb.set_keys_type(KeysType::DUP_KEYS);
-    auto schema = std::make_shared<TabletSchema>();
-    schema->init_from_pb(schema_pb);
+    auto schema = std::make_shared<const TabletSchema>(schema_pb);
     TabletMetaSharedPtr tablet_meta(new TabletMeta(_tablet_meta_mem_tracker.get()));
     tablet_meta->set_tablet_schema(schema);
 

@@ -46,7 +46,7 @@ class TxnManager;
 // Now, After DataDir was created, it will never be deleted for easy implementation.
 class DataDir {
 public:
-    DataDir(std::string path, int64_t capacity_bytes = -1, TStorageMedium::type storage_medium = TStorageMedium::HDD,
+    DataDir(std::string path, TStorageMedium::type storage_medium = TStorageMedium::HDD,
             TabletManager* tablet_manager = nullptr, TxnManager* txn_manager = nullptr);
     ~DataDir();
 
@@ -119,7 +119,7 @@ public:
 private:
     std::string _cluster_id_path() const { return _path + CLUSTER_ID_PREFIX; }
     Status _init_cluster_id();
-    Status _init_capacity();
+    Status _init_data_dir();
     Status _init_file_system();
     Status _init_meta(bool read_only = false);
 
@@ -134,11 +134,7 @@ private:
 
     std::string _path;
     int64_t _path_hash;
-    // user specified capacity
-    int64_t _capacity_bytes;
     // the actual available capacity of the disk of this data dir
-    // NOTICE that _available_bytes may be larger than _capacity_bytes, if capacity is set
-    // by user, not the disk's actual capacity
     int64_t _available_bytes;
     // the actual capacity of the disk of this data dir
     int64_t _disk_capacity_bytes;

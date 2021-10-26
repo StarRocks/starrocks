@@ -10,12 +10,18 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class QuantifiedApply2JoinRule extends TransformationRule {
     public QuantifiedApply2JoinRule() {
@@ -52,6 +58,11 @@ public class QuantifiedApply2JoinRule extends TransformationRule {
         }
 
         joinExpression.getInputs().addAll(input.getInputs());
-        return Lists.newArrayList(joinExpression);
+
+        Map<ColumnRefOperator, ScalarOperator> outputColumns = input.getOutputColumns().getStream().mapToObj(
+                id -> context.getColumnRefFactory().getColumnRef(id)
+        ).collect(Collectors.toMap(Function.identity(), Function.identity()));
+        return Lists.newArrayList(
+                OptExpression.create(new LogicalProjectOperator(outputColumns), Lists.newArrayList(joinExpression)));
     }
 }

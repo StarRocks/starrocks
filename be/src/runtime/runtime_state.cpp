@@ -22,6 +22,7 @@
 #include "runtime/runtime_state.h"
 
 #include <boost/algorithm/string/join.hpp>
+#include <cstring>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -120,6 +121,8 @@ RuntimeState::~RuntimeState() {
         _exec_env->thread_mgr()->unregister_pool(_resource_pool);
     }
 
+    _instance_mem_pool.reset();
+
 #ifndef BE_TEST
     // LogUsage() walks the MemTracker tree top-down when the memory limit is exceeded.
     // Break the link between the instance_mem_tracker and its parent (_query_mem_tracker)
@@ -194,11 +197,13 @@ Status RuntimeState::init_mem_trackers(const TUniqueId& query_id) {
     _instance_mem_tracker =
             std::make_unique<MemTracker>(&_profile, -1, runtime_profile()->name(), _query_mem_tracker.get());
 
+    _instance_mem_pool = std::make_unique<MemPool>(_instance_mem_tracker.get());
     return Status::OK();
 }
 
 Status RuntimeState::init_instance_mem_tracker() {
     _instance_mem_tracker = std::make_unique<MemTracker>(-1);
+    _instance_mem_pool = std::make_unique<MemPool>(_instance_mem_tracker.get());
     return Status::OK();
 }
 
@@ -358,6 +363,10 @@ const vectorized::GlobalDictMaps& RuntimeState::get_global_dict_map() const {
     return _global_dicts;
 }
 
+vectorized::GlobalDictMaps* RuntimeState::mutable_global_dict_map() {
+    return &_global_dicts;
+}
+
 Status RuntimeState::init_global_dict(const GlobalDictLists& global_dict_list) {
     for (const auto& global_dict : global_dict_list) {
         DCHECK_EQ(global_dict.ids.size(), global_dict.strings.size());
@@ -365,8 +374,10 @@ Status RuntimeState::init_global_dict(const GlobalDictLists& global_dict_list) {
         vectorized::RGlobalDictMap rdict_map;
         int dict_sz = global_dict.ids.size();
         for (int i = 0; i < dict_sz; ++i) {
-            auto str = _obj_pool->add(new std::string(global_dict.strings[i]));
-            Slice slice(str->data(), str->size());
+            const std::string& dict_key = global_dict.strings[i];
+            auto* data = _instance_mem_pool->allocate(dict_key.size());
+            memcpy(data, dict_key.data(), dict_key.size());
+            Slice slice(data, dict_key.size());
             dict_map.emplace(slice, global_dict.ids[i]);
             rdict_map.emplace(global_dict.ids[i], slice);
         }

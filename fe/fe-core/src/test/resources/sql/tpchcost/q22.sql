@@ -76,8 +76,8 @@ EXCHANGE ID: 14
 HASH_PARTITIONED: 32: substring
 
 13:Project
-|  <slot 32> : substring(5: C_PHONE, 1, 2)
 |  <slot 6> : 6: C_ACCTBAL
+|  <slot 32> : substring(5: C_PHONE, 1, 2)
 |  use vectorized: true
 |
 12:HASH JOIN

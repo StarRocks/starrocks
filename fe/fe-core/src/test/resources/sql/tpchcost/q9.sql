@@ -95,9 +95,9 @@ HASH_PARTITIONED: 53: N_NAME, 57: year
 14:Project
 |  <slot 21> : 21: L_SUPPKEY
 |  <slot 23> : 23: L_QUANTITY
-|  <slot 39> : 39: PS_SUPPLYCOST
 |  <slot 24> : 24: L_EXTENDEDPRICE
 |  <slot 25> : 25: L_DISCOUNT
+|  <slot 39> : 39: PS_SUPPLYCOST
 |  <slot 46> : 46: O_ORDERDATE
 |  use vectorized: true
 |
@@ -124,8 +124,8 @@ EXCHANGE ID: 20
 UNPARTITIONED
 
 19:Project
-|  <slot 53> : 53: N_NAME
 |  <slot 11> : 11: S_SUPPKEY
+|  <slot 53> : 53: N_NAME
 |  use vectorized: true
 |
 18:HASH JOIN
@@ -293,4 +293,3 @@ avgRowSize=63.0
 numNodes=0
 use vectorized: true
 [end]
-

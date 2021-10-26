@@ -10,7 +10,9 @@ public class LogicalIntersectOperator extends LogicalSetOperator {
     private LogicalIntersectOperator(LogicalIntersectOperator.Builder builder) {
         super(OperatorType.LOGICAL_INTERSECT,
                 builder.outputColumnRefOp,
-                builder.childOutputColumns);
+                builder.childOutputColumns,
+                builder.getLimit(),
+                builder.getProjection());
     }
 
     @Override

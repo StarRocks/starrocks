@@ -75,10 +75,10 @@ HASH_PARTITIONED: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: 
 14:Project
 |  <slot 1> : 1: C_CUSTKEY
 |  <slot 2> : 2: C_NAME
-|  <slot 24> : 24: L_QUANTITY
 |  <slot 10> : 10: O_ORDERKEY
 |  <slot 13> : 13: O_TOTALPRICE
 |  <slot 14> : 14: O_ORDERDATE
+|  <slot 24> : 24: L_QUANTITY
 |  use vectorized: true
 |
 13:HASH JOIN
@@ -94,10 +94,10 @@ HASH_PARTITIONED: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: 
 8:Project
 |  <slot 1> : 1: C_CUSTKEY
 |  <slot 2> : 2: C_NAME
-|  <slot 24> : 24: L_QUANTITY
 |  <slot 10> : 10: O_ORDERKEY
 |  <slot 13> : 13: O_TOTALPRICE
 |  <slot 14> : 14: O_ORDERDATE
+|  <slot 24> : 24: L_QUANTITY
 |  use vectorized: true
 |
 7:HASH JOIN
@@ -111,11 +111,11 @@ HASH_PARTITIONED: 2: C_NAME, 1: C_CUSTKEY, 10: O_ORDERKEY, 14: O_ORDERDATE, 13: 
 |       use vectorized: true
 |
 4:Project
-|  <slot 24> : 24: L_QUANTITY
 |  <slot 10> : 10: O_ORDERKEY
 |  <slot 11> : 11: O_CUSTKEY
 |  <slot 13> : 13: O_TOTALPRICE
 |  <slot 14> : 14: O_ORDERDATE
+|  <slot 24> : 24: L_QUANTITY
 |  use vectorized: true
 |
 3:HASH JOIN

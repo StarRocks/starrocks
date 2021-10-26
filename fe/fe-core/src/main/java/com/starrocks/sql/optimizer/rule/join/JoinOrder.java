@@ -192,8 +192,7 @@ public abstract class JoinOrder {
 
         ExpressionContext expressionContext = new ExpressionContext(expr);
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
-                expressionContext, expr.getOutputColumns(),
-                context.getColumnRefFactory(), context.getDumpInfo());
+                expressionContext, context.getColumnRefFactory(), context.getDumpInfo());
         statisticsCalculator.estimatorStats();
         expr.setStatistics(expressionContext.getStatistics());
     }

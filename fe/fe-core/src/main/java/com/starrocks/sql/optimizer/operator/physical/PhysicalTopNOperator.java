@@ -7,6 +7,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -24,7 +25,8 @@ public class PhysicalTopNOperator extends PhysicalOperator {
                                 SortPhase sortPhase,
                                 boolean isSplit,
                                 boolean isEnforced,
-                                ScalarOperator predicate) {
+                                ScalarOperator predicate,
+                                Projection projection) {
         super(OperatorType.PHYSICAL_TOPN, spec);
         this.limit = limit;
         this.offset = offset;
@@ -32,6 +34,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         this.isSplit = isSplit;
         this.isEnforced = isEnforced;
         this.predicate = predicate;
+        this.projection = projection;
     }
 
     public SortPhase getSortPhase() {

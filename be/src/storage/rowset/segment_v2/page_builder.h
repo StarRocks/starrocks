@@ -26,6 +26,7 @@
 
 #include "common/status.h"
 #include "gutil/macros.h"
+#include "runtime/global_dicts.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "util/faststring.h"
 
@@ -69,6 +70,9 @@ public:
 
     // Get the dictionary page for dictionary encoding mode column.
     virtual faststring* get_dictionary_page() { return nullptr; }
+
+    // check global dict valid for dictionary encoding mode column.
+    virtual bool is_valid_global_dict(const vectorized::GlobalDictMap* global_dict) const { return true; }
 
     // Reset the internal state of the page builder.
     //

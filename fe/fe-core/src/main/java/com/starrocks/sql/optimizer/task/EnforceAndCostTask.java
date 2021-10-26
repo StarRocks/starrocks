@@ -230,7 +230,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         if (leftChildStats == null || rightChildStats == null) {
             return false;
         }
-        if (leftChildStats.getOutputSize() < rightChildStats.getOutputSize() * parallelExecInstance * beNum * 10
+        double leftOutputSize = leftChildStats.getOutputSize(groupExpression.getChildOutputColumns(curChildIndex - 1));
+        double rightOutputSize = rightChildStats.getOutputSize(groupExpression.getChildOutputColumns(curChildIndex));
+
+        if (leftOutputSize < rightOutputSize * parallelExecInstance * beNum * 10
                 && rightChildStats.getOutputRowCount() >
                 ConnectContext.get().getSessionVariable().getBroadcastRowCountLimit()) {
             return false;
@@ -311,7 +314,6 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         }
 
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
-                groupExpression.getGroup().getLogicalProperty().getOutputColumns(),
                 context.getOptimizerContext().getColumnRefFactory(), context.getOptimizerContext().getDumpInfo());
         statisticsCalculator.estimatorStats();
         groupExpression.getGroup().setStatistics(expressionContext.getStatistics());

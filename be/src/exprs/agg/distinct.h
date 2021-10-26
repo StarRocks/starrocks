@@ -278,7 +278,7 @@ public:
     // We have found out that by precomputing and prefetching hash values, we can boost peformance of hash table by a lot.
     // And this is a quite useful pattern for phmap::flat_hash_table.
     void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
-                                   AggDataPtr state) const override {
+                                   AggDataPtr __restrict state) const override {
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
         size_t mem_usage = 0;
         auto& agg_state = this->data(state);
@@ -342,7 +342,7 @@ public:
         ctx->impl()->add_mem_usage(mem_usage);
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
         const auto* input_column = down_cast<const BinaryColumn*>(column);
         Slice slice = input_column->get_slice(row_num);
@@ -365,7 +365,7 @@ public:
         ctx->impl()->add_mem_usage(mem_usage);
     }
 
-    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* column = down_cast<BinaryColumn*>(to);
         size_t old_size = column->get_bytes().size();
         size_t new_size = old_size + this->data(state).serialize_size();
@@ -413,7 +413,7 @@ public:
         }
     }
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(!to->is_nullable());
         if constexpr (DistinctType == AggDistinctType::COUNT) {
             down_cast<Int64Column*>(to)->append(this->data(state).disctint_count());
@@ -445,12 +445,13 @@ struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR> {
 class DictMergeAggregateFunction final
         : public AggregateFunctionBatchHelper<DictMergeState, DictMergeAggregateFunction> {
 public:
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
         DCHECK(false) << "this method shouldn't be called";
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column** columns,
-                                   AggDataPtr state) const override {
+                                   AggDataPtr __restrict state) const override {
         size_t mem_usage = 0;
         auto& agg_state = this->data(state);
         const auto* column = down_cast<const ArrayColumn*>(columns[0]);
@@ -475,7 +476,7 @@ public:
         }
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr state, size_t row_num) const override {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         const auto* input_column = down_cast<const BinaryColumn*>(column);
         Slice slice = input_column->get_slice(row_num);
         size_t mem_usage = 0;
@@ -484,7 +485,7 @@ public:
         ctx->impl()->add_mem_usage(mem_usage);
     }
 
-    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* column = down_cast<BinaryColumn*>(to);
         size_t old_size = column->get_bytes().size();
         size_t new_size = old_size + this->data(state).serialize_size();
@@ -497,7 +498,7 @@ public:
         DCHECK(false) << "this method shouldn't be called";
     }
 
-    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr state, Column* to) const override {
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         if (this->data(state).set.size() == 0) {
             to->append_default();
             return;
@@ -521,6 +522,12 @@ public:
         for (const auto& v : this->data(state).set) {
             tglobal_dict.strings.emplace_back(v.data, v.size);
         }
+
+        // Since the id in global dictionary may be used for sorting,
+        // we also need to ensure that the dictionary is ordered when we build it
+
+        Slice::Comparator comparator;
+        std::sort(tglobal_dict.strings.begin(), tglobal_dict.strings.end(), comparator);
 
         std::string result_value = apache::thrift::ThriftJSONString(tglobal_dict);
 

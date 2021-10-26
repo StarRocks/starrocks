@@ -25,8 +25,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -87,20 +86,16 @@ public class BaseViewStmt extends DdlStmt {
             if (cols.size() != viewDefStmt.getColLabels().size()) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_VIEW_WRONG_LIST);
             }
-            // TODO(zc): type
             for (int i = 0; i < cols.size(); ++i) {
-                PrimitiveType type = viewDefStmt.getBaseTblResultExprs().get(i).getType().getPrimitiveType();
-                Column col = new Column(cols.get(i).getColName(), ScalarType.createType(type));
+                Type type = viewDefStmt.getBaseTblResultExprs().get(i).getType().clone();
+                Column col = new Column(cols.get(i).getColName(), type);
                 col.setComment(cols.get(i).getComment());
                 finalCols.add(col);
             }
         } else {
-            // TODO(zc): type
             for (int i = 0; i < viewDefStmt.getBaseTblResultExprs().size(); ++i) {
-                PrimitiveType type = viewDefStmt.getBaseTblResultExprs().get(i).getType().getPrimitiveType();
-                finalCols.add(new Column(
-                        viewDefStmt.getColLabels().get(i),
-                        ScalarType.createType(type)));
+                Type type = viewDefStmt.getBaseTblResultExprs().get(i).getType().clone();
+                finalCols.add(new Column(viewDefStmt.getColLabels().get(i), type));
             }
         }
         // Set for duplicate columns

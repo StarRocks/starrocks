@@ -185,8 +185,7 @@ Status StorageEngine::_init_store_map() {
     SpinLock error_msg_lock;
     std::string error_msg;
     for (auto& path : _options.store_paths) {
-        DataDir* store = new DataDir(path.path, path.capacity_bytes, path.storage_medium, _tablet_manager.get(),
-                                     _txn_manager.get());
+        DataDir* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
         tmp_stores.emplace_back(store);
         threads.emplace_back([store, &error_msg_lock, &error_msg]() {
             auto st = store->init();

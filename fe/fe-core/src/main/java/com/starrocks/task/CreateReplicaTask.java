@@ -168,6 +168,7 @@ public class CreateReplicaTask extends AgentTask {
         tSchema.setSchema_hash(schemaHash);
         tSchema.setKeys_type(keysType.toThrift());
         tSchema.setStorage_type(storageType);
+        tSchema.setId(indexId); // use index id as the schema id. assume schema change will assign a new index id.
 
         List<TColumn> tColumns = new ArrayList<TColumn>();
         for (Column column : columns) {
