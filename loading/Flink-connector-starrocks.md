@@ -161,7 +161,7 @@ tEnv.executeSql(
 2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应Flink版本的Flink-MySQL-CDC。
 3. 下载 [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks)，请注意1.13版本和1.11/1.12版本使用不同的connector.
 4. 解压 `flink-sql-connector-mysql-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`
-5. 下载 [smt.tar.gz](http://starrocks-cn-release.oss-cn-zhangjiakou.aliyuncs.com/smt.tar.gz?Expires=1633755184&OSSAccessKeyId=LTAI4GFYjbX9e7QmFnAAvkt8&Signature=cfkG4%2Bm2qXDK1QWFNJAXjndWhGI%3D)
+5. 下载 [smt.tar.gz](http://cdn-release.starrocks.com/smt.tar.gz?Expires=1721615371&OSSAccessKeyId=LTAI4GFYjbX9e7QmFnAAvkt8&Signature=HMdkUAUs%2FN3LPbLL01D4KTf9OoU%3D)
 6. 解压并修改配置文件
   `Db` 需要修改成MySQL的连接信息。  
   `be_num` 需要配置成StarRocks集群的节点数（这个能帮助更合理的设置bucket数量）。  
