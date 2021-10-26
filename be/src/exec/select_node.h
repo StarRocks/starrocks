@@ -41,6 +41,8 @@ public:
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* state) override;
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
 
 private:
     // true if last get_next() call on child signalled eos
