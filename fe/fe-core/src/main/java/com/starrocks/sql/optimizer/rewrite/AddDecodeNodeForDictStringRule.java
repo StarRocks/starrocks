@@ -63,7 +63,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
     private static final Type ID_TYPE = Type.INT;
 
     static class DecodeContext {
-        boolean hasChanged = false;
+        boolean hasEncoded = false;
         final ColumnRefFactory columnRefFactory;
         final Map<Long, List<Integer>> tableIdToStringColumnIds;
         // For the low cardinality string columns that have applied global dict optimization
@@ -88,7 +88,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         public void clear() {
             stringColumnIdToDictColumnIds.clear();
             stringFunctions.clear();
-            hasChanged = false;
+            hasEncoded = false;
         }
     }
 
@@ -101,17 +101,17 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             }
         }
 
-        public OptExpression visitProjectionAfter(OptExpression childExpr, DecodeContext context) {
-            if (context.hasChanged && childExpr.getOp().getProjection() != null) {
-                Projection projection = childExpr.getOp().getProjection();
+        public OptExpression visitProjectionAfter(OptExpression optExpression, DecodeContext context) {
+            if (context.hasEncoded && optExpression.getOp().getProjection() != null) {
+                Projection projection = optExpression.getOp().getProjection();
                 if (projection.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet())) {
                     Projection newProjection = rewriteProjectOperator(projection, context);
-                    childExpr.getOp().setProjection(newProjection);
-                    return childExpr;
+                    optExpression.getOp().setProjection(newProjection);
+                    return optExpression;
                 }
                 context.clear();
             }
-            return childExpr;
+            return optExpression;
         }
 
         @Override
@@ -119,12 +119,12 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             visitProjectionBefore(optExpression, context);
 
             for (int i = 0; i < optExpression.arity(); ++i) {
-                context.hasChanged = false;
+                context.hasEncoded = false;
                 OptExpression childExpr = optExpression.inputAt(i);
                 visitProjectionBefore(childExpr, context);
 
                 OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
-                if (context.hasChanged) {
+                if (context.hasEncoded) {
                     insertDecodeExpr(optExpression, Collections.singletonList(newChildExpr), i, context);
                 }
             }
@@ -133,7 +133,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         @Override
         public OptExpression visitPhysicalDecode(OptExpression optExpression, DecodeContext context) {
-            context.hasChanged = false;
+            context.hasEncoded = false;
             return optExpression;
         }
 
@@ -184,10 +184,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     globalDicts.add(new Pair<>(newDictColumn.getId(), dict));
 
                     context.stringColumnIdToDictColumnIds.put(columnId, newDictColumn.getId());
-                    context.hasChanged = true;
+                    context.hasEncoded = true;
                 }
 
-                if (context.hasChanged) {
+                if (context.hasEncoded) {
                     PhysicalOlapScanOperator newOlapScan = new PhysicalOlapScanOperator(
                             scanOperator.getTable(),
                             newOutputColumns,
@@ -251,7 +251,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             context.stringColumnIdToDictColumnIds = newStringToDicts;
             if (newStringToDicts.isEmpty()) {
-                context.hasChanged = false;
+                context.hasEncoded = false;
             }
             return new Projection(newProjectMap, newCommonProjectMap);
         }
@@ -373,7 +373,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             context.stringColumnIdToDictColumnIds = newStringToDicts;
             if (newStringToDicts.isEmpty()) {
-                context.hasChanged = false;
+                context.hasEncoded = false;
             }
             return new PhysicalHashAggregateOperator(aggOperator.getType(),
                     newGroupBys,
@@ -396,7 +396,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 context.clear();
                 OptExpression childExpr = optExpression.inputAt(i);
                 OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
-                if (context.hasChanged &&
+                if (context.hasEncoded &&
                         !joinOperator.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet())) {
                     insertDecodeExpr(optExpression, Collections.singletonList(newChildExpr), i, context);
                 } else {
@@ -411,10 +411,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             visitProjectionBefore(aggExpr, context);
 
             OptExpression childExpr = aggExpr.inputAt(0);
-            context.hasChanged = false;
+            context.hasEncoded = false;
 
             OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
-            if (context.hasChanged) {
+            if (context.hasEncoded) {
                 PhysicalHashAggregateOperator aggOperator = (PhysicalHashAggregateOperator) aggExpr.getOp();
                 if (aggOperator.couldApplyStringDict(context.stringColumnIdToDictColumnIds.keySet())) {
                     PhysicalHashAggregateOperator newAggOper = rewriteAggOperator(aggOperator,
@@ -437,10 +437,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             visitProjectionBefore(exchangeExpr, context);
 
             OptExpression childExpr = exchangeExpr.inputAt(0);
-            context.hasChanged = false;
+            context.hasEncoded = false;
 
             OptExpression newChildExpr = childExpr.getOp().accept(this, childExpr, context);
-            if (context.hasChanged) {
+            if (context.hasEncoded) {
                 PhysicalDistributionOperator exchangeOperator = (PhysicalDistributionOperator) exchangeExpr.getOp();
                 if (!(exchangeOperator.getDistributionSpec() instanceof HashDistributionSpec)) {
                     exchangeOperator.setGlobalDicts(context.globalDicts);
@@ -513,7 +513,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 getColumnRefFactory());
 
         OptExpression rewriteExpr = root.getOp().accept(new DecodeVisitor(), root, context);
-        if (context.hasChanged) {
+        if (context.hasEncoded) {
             return generateDecodeOExpr(context, Collections.singletonList(rewriteExpr));
         }
         return rewriteExpr;
@@ -525,7 +525,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         OptExpression decodeExp = generateDecodeOExpr(context, childExpr);
         parentExpr.setChild(index, decodeExp);
 
-        context.hasChanged = false;
+        context.hasEncoded = false;
         context.stringColumnIdToDictColumnIds.clear();
     }
 
