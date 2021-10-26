@@ -35,7 +35,7 @@ inline std::ostream& operator<<(std::ostream& stream, const RGlobalDictMap& map)
 // column-name -> GlobalDictMap
 using GlobalDictByNameMaps = std::unordered_map<std::string, GlobalDictMap>;
 
-using InvalidDictColumnsSet = phmap::flat_hash_set<std::string, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
+using DictColumnsValidMap = phmap::flat_hash_map<std::string, bool, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
 
 static inline std::unordered_map<uint32_t, GlobalDictMap*> EMPTY_GLOBAL_DICTMAPS;
 
