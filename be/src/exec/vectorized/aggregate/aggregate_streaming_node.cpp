@@ -79,6 +79,9 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                 _aggregator->try_convert_to_two_level_map();
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
 
+                _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
+                                  _aggregator->mem_pool()->total_reserved_bytes());
+
                 continue;
             } else {
                 // TODO: calc the real capacity of hashtable, will add one interface in the class of habletable
@@ -112,6 +115,9 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
 
                     _aggregator->try_convert_to_two_level_map();
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
+
+                    _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
+                                      _aggregator->mem_pool()->total_reserved_bytes());
 
                     continue;
                 } else {
