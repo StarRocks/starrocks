@@ -46,7 +46,6 @@ TEST_F(TabletMetaManagerTest, test_save_load_tablet_meta) {
     meta_pb.set_tablet_type(TabletTypePB::TABLET_TYPE_DISK);
     meta_pb.set_tablet_state(PB_RUNNING);
     meta_pb.mutable_schema()->set_keys_type(DUP_KEYS);
-    meta_pb.mutable_schema()->set_is_in_memory(false);
     auto c0 = meta_pb.mutable_schema()->add_column();
     c0->set_name("c0");
     c0->set_is_key(true);
