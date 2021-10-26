@@ -132,7 +132,7 @@ protected:
             reader_opts.storage_format_version = version;
             reader_opts.block_mgr = block_mgr.get();
             std::unique_ptr<ColumnReader> reader;
-            auto st = ColumnReader::create(&_tracker, reader_opts, meta, num_rows, fname, &reader);
+            auto st = ColumnReader::create(&_tracker, reader_opts, &meta, fname, &reader);
             ASSERT_TRUE(st.ok());
 
             ColumnIterator* iter = nullptr;
@@ -292,8 +292,6 @@ protected:
         src_elements->append(6);
         src_offsets->append(6);
 
-        int num_rows = src_column->size();
-
         TypeInfoPtr type_info = get_type_info(array_column);
         ColumnMetaPB meta;
 
@@ -349,7 +347,7 @@ protected:
             reader_opts.block_mgr = block_mgr.get();
             reader_opts.storage_format_version = 2;
             std::unique_ptr<ColumnReader> reader;
-            auto st = ColumnReader::create(&_tracker, reader_opts, meta, num_rows, fname, &reader);
+            auto st = ColumnReader::create(&_tracker, reader_opts, &meta, fname, &reader);
             ASSERT_TRUE(st.ok());
 
             ColumnIterator* iter = nullptr;
