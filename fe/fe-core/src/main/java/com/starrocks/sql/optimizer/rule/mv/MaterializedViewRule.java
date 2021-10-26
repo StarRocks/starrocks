@@ -326,7 +326,7 @@ public class MaterializedViewRule extends Rule {
                                               List<CallOperator> aggs) {
         if (groupBys.stream().map(ScalarOperator::getUsedColumns).anyMatch(columnIdsInAggregate::isIntersect) ||
                 aggs.stream().map(ScalarOperator::getUsedColumns).anyMatch(columnIdsInAggregate::isIntersect)) {
-            // Has been collect from other aggregate
+            // Has been collect from other aggregate, only check aggregate node which is closest to scan node
             return;
         }
 
