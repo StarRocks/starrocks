@@ -58,7 +58,7 @@ namespace starrocks::stream_load {
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t index_id, int64_t node_id, int32_t schema_hash)
         : _parent(parent), _index_id(index_id), _node_id(node_id), _schema_hash(schema_hash) {
     // restrict the chunk memory usage of send queue
-    _mem_tracker = std::make_unique<MemTracker>(64 * 1024 * 1024, "", parent->_mem_tracker.get());
+    _mem_tracker = std::make_unique<MemTracker>(64 * 1024 * 1024, "", nullptr);
 }
 
 NodeChannel::~NodeChannel() {
@@ -488,12 +488,6 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 
     // profile must add to state's object pool
     _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
-    int64_t load_mem_limit = state->get_load_mem_limit();
-    if (load_mem_limit == 0) {
-        _mem_tracker = std::make_unique<MemTracker>(-1, "OlapTableSink", state->instance_mem_tracker());
-    } else {
-        _mem_tracker = std::make_unique<MemTracker>(load_mem_limit, "OlapTableSink", state->instance_mem_tracker());
-    }
 
     SCOPED_TIMER(_profile->total_time_counter());
 
