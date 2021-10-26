@@ -39,9 +39,12 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
 import com.starrocks.load.LoadErrorHub;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -103,6 +106,7 @@ public class StreamLoadPlanner {
         // construct tuple descriptor, used for scanNode and dataSink
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DstTableTuple");
         boolean negative = streamLoadTask.getNegative();
+        List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
         // here we should be full schema to fill the descriptor table
         for (Column col : destTable.getFullSchema()) {
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
@@ -111,6 +115,12 @@ public class StreamLoadPlanner {
             slotDesc.setIsNullable(col.isAllowNull());
             if (negative && !col.isKey() && col.getAggregationType() != AggregateType.SUM) {
                 throw new DdlException("Column is not SUM AggreateType. column:" + col.getName());
+            }
+
+            if (col.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(destTable.getId(),
+                    col.getName())) {
+                ColumnDict dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
+                globalDicts.add(new Pair<>(slotDesc.getId().asInt(), dict));
             }
         }
         if (destTable.getKeysType() == KeysType.PRIMARY_KEYS) {
@@ -141,6 +151,9 @@ public class StreamLoadPlanner {
         // OlapTableSink can dispatch data to corresponding node.
         PlanFragment fragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.UNPARTITIONED);
         fragment.setSink(olapTableSink);
+        // After data loading, we need to check the global dict for low cardinality string column
+        // whether update.
+        fragment.setGlobalDicts(globalDicts);
 
         fragment.finalize(null, false);
 

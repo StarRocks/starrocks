@@ -353,9 +353,7 @@ public class PlanFragmentBuilder {
             PhysicalDecodeOperator node = (PhysicalDecodeOperator) optExpression.getOp();
             PlanFragment inputFragment = visit(optExpression.inputAt(0), context);
 
-            TupleDescriptor tupleDescriptor = context.getDescTbl().getTupleDesc(
-                    inputFragment.getPlanRoot().getTupleIds().get(0));
-
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             for (Map.Entry<Integer, Integer> entry : node.getDictToStrings().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getValue()));
@@ -367,10 +365,20 @@ public class PlanFragmentBuilder {
                         new SlotRef(entry.getValue().toString(), slotDescriptor));
             }
 
+            Map<SlotId, Expr> projectMap = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : node.getStringFunctions().entrySet()) {
+                Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(), node.getStringFunctions()));
+
+                projectMap.put(new SlotId(entry.getKey().getId()), expr);
+                Preconditions.checkState(context.getColRefToExpr().containsKey(entry.getKey()));
+            }
+
             DecodeNode decodeNode = new DecodeNode(context.getPlanCtx().getNextNodeId(),
-                    inputFragment.getPlanRoot().getTupleIds(),
+                    tupleDescriptor,
                     inputFragment.getPlanRoot(),
-                    node.getDictToStrings());
+                    node.getDictToStrings(), projectMap);
+            decodeNode.computeStatistics(optExpression.getStatistics());
 
             inputFragment.setPlanRoot(decodeNode);
             return inputFragment;

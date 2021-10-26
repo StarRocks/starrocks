@@ -151,7 +151,7 @@ public class StatisticExecutor {
         Table table = db.getTable(tableId);
 
         OlapTable olapTable = (OlapTable) table;
-        long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersion)
+        long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
                 .max(Long::compareTo).orElse(0L);
         String dbName = ClusterNamespace.getNameFromFullName(db.getFullName());
         String tableName = db.getTable(tableId).getName();
@@ -159,7 +159,8 @@ public class StatisticExecutor {
         StringBuilder sqlBuilder = new StringBuilder("select cast(").append(STATISTIC_DICT_VERSION).append(" as Int), ").
                 append("cast(").append(version).append(" as bigint), ");
         for (int i = 0; i < columnNames.size(); ++i) {
-            sqlBuilder.append("dict_merge(").append(columnNames.get(i)).append(") as _dict_merge_")
+            sqlBuilder.append("dict_merge(").append("`").append(columnNames.get(i))
+                    .append("`) as _dict_merge_")
                     .append(columnNames.get(i));
             if (i != columnNames.size() - 1) {
                 sqlBuilder.append(", ");
