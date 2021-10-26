@@ -5166,6 +5166,10 @@ keyword ::=
     {: RESULT = id; :}
     | KW_CHAR:id
     {: RESULT = id; :}
+    | KW_ENCODING:id
+    {: RESULT = id; :}
+    | KW_COMPRESSION:id
+    {: RESULT = id; :}
     ;
 
 // Identifier that contain keyword
