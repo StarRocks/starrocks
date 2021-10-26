@@ -7,11 +7,11 @@
 namespace starrocks::pipeline {
 
 StatusOr<vectorized::ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::RuntimeState* state) {
-    DCHECK(0 <= _row_index && _row_index < _rows_total);
+    DCHECK(0 <= _next_processed_row_index && _next_processed_row_index < _rows_total);
 
     auto chunk = std::make_shared<vectorized::Chunk>();
 
-    size_t rows_count = std::min(static_cast<size_t>(config::vector_chunk_size), _rows_total - _row_index);
+    size_t rows_count = std::min(static_cast<size_t>(config::vector_chunk_size), _rows_total - _next_processed_row_index);
     size_t columns_count = _dst_slots.size();
 
     for (size_t col_i = 0; col_i < columns_count; col_i++) {
@@ -23,8 +23,8 @@ StatusOr<vectorized::ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::R
 
         for (size_t row_i = 0; row_i < rows_count; row_i++) {
             // Each const_expr_list is projected to ONE dest row.
-            DCHECK_EQ(_const_expr_lists[_row_index + row_i].size(), columns_count);
-            ColumnPtr src_column = _const_expr_lists[_row_index + row_i][col_i]->evaluate(nullptr);
+            DCHECK_EQ(_const_expr_lists[_next_processed_row_index + row_i].size(), columns_count);
+            ColumnPtr src_column = _const_expr_lists[_next_processed_row_index + row_i][col_i]->evaluate(nullptr);
             if (src_column->is_nullable()) {
                 DCHECK(dst_column->is_nullable());
                 dst_column->append_nulls(1);
@@ -37,13 +37,15 @@ StatusOr<vectorized::ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::R
         chunk->append_column(std::move(dst_column), dst_slot->id());
     }
 
-    _row_index += rows_count;
+    _next_processed_row_index += rows_count;
 
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }
 
 Status UnionConstSourceOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state, mem_tracker));
+
     RowDescriptor row_desc;
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
         RETURN_IF_ERROR(Expr::prepare(exprs, state, row_desc, mem_tracker));
@@ -53,15 +55,15 @@ Status UnionConstSourceOperatorFactory::prepare(RuntimeState* state, MemTracker*
         RETURN_IF_ERROR(Expr::open(exprs, state));
     }
 
-    return OperatorFactory::prepare(state, mem_tracker);
+    return Status::OK();
 }
 
 void UnionConstSourceOperatorFactory::close(RuntimeState* state) {
+    OperatorFactory::close(state);
+
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
         Expr::close(exprs, state);
     }
-
-    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

@@ -7,19 +7,20 @@
 
 namespace starrocks {
 namespace pipeline {
-
 // UNION ALL operator has three kinds of sub-node as follows:
 // 1. Passthrough.
-//    The src column from sub-node is projected to the dest column without evaluation of expression.
+//    The src column from sub-node is projected to the dest column without expressions.
 //    A src column may be projected to the multiple dest columns.
-//    UnionPassthroughOperator is used for this case.
+//    *UnionPassthroughOperator* is used for this case.
 // 2. Materialize.
-//    The src column is projected to the dest column with the evaluation of expressions.
-//    ProjectOperator is used for this case.
+//    The src column is projected to the dest column with expressions.
+//    *ProjectOperator* is used for this case.
 // 3. Const.
 //    Use the evaluation result of const expressions WITHOUT sub-node as the dest column.
 //    Each expression is projected to the one dest row.
-//    UnionConstSourceOperator is used for this case.
+//    *UnionConstSourceOperator* is used for this case.
+
+// UnionPassthroughOperator is for the Passthrough kind of sub-node.
 class UnionPassthroughOperator final : public Operator {
 public:
     struct SlotItem {

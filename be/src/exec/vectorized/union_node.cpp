@@ -310,7 +310,7 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
     std::vector<pipeline::OpFactories> operators_list;
     operators_list.reserve(_children.size() + 1);
 
-    int i = 0;
+    size_t i = 0;
     // UnionPassthroughOperator is used for the passthrough sub-node.
     for (; i < _first_materialized_child_idx; i++) {
         operators_list.emplace_back(child(i)->decompose_to_pipeline(context));
@@ -366,6 +366,9 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         auto union_const_source_op = std::make_shared<pipeline::UnionConstSourceOperatorFactory>(
                 context->next_operator_id(), id(), dst_slots, _const_expr_lists);
 
+        // Each _const_expr_list is project to one row.
+        // Divide _const_expr_lists into several drivers, each of which is going to evaluate
+        // at least *config::vector_chunk_size* _const_expr_list.
         size_t parallelism =
                 std::min(context->degree_of_parallelism(),
                          (_const_expr_lists.size() + config::vector_chunk_size - 1) / config::vector_chunk_size);

@@ -8,16 +8,18 @@ namespace starrocks {
 namespace pipeline {
 // UNION ALL operator has three kinds of sub-node as follows:
 // 1. Passthrough.
-//    The src column from sub-node is projected to the dest column without evaluation of expression.
+//    The src column from sub-node is projected to the dest column without expressions.
 //    A src column may be projected to the multiple dest columns.
-//    UnionPassthroughOperator is used for this case.
+//    *UnionPassthroughOperator* is used for this case.
 // 2. Materialize.
-//    The src column is projected to the dest column with the evaluation of expressions.
-//    ProjectOperator is used for this case.
+//    The src column is projected to the dest column with expressions.
+//    *ProjectOperator* is used for this case.
 // 3. Const.
 //    Use the evaluation result of const expressions WITHOUT sub-node as the dest column.
 //    Each expression is projected to the one dest row.
-//    UnionConstSourceOperator is used for this case.
+//    *UnionConstSourceOperator* is used for this case.
+
+// UnionConstSourceOperator is for the Const kind of sub-node.
 class UnionConstSourceOperator final : public SourceOperator {
 public:
     UnionConstSourceOperator(int32_t id, int32_t plan_node_id, const std::vector<SlotDescriptor*>& dst_slots,
@@ -30,9 +32,9 @@ public:
         DCHECK_EQ(_const_expr_lists->size(), _rows_total);
     }
 
-    bool has_output() const override { return !is_finished(); }
+    bool has_output() const override { return _next_processed_row_index < _rows_total; }
 
-    bool is_finished() const override { return _row_index >= _rows_total; };
+    bool is_finished() const override { return !has_output(); };
 
     // finish is noop.
     void finish(RuntimeState* state) override{};
@@ -46,7 +48,7 @@ private:
     // It references to the part of the UnionConstSourceOperatorFactory::_const_expr_lists.
     const std::vector<ExprContext*>* const _const_expr_lists;
     const size_t _rows_total;
-    size_t _row_index = 0;
+    size_t _next_processed_row_index = 0;
 };
 
 class UnionConstSourceOperatorFactory final : public SourceOperatorFactory {
