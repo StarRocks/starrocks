@@ -296,6 +296,7 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment"
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_SYSTEM_NO_DEPRECATED -DBOOST_UUID_RANDOM_PROVIDER_FORCE_POSIX")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=return-type -Werror=switch")
+set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -fsized-deallocation")
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
