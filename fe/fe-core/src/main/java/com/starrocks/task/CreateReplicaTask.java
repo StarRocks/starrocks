@@ -50,7 +50,6 @@ public class CreateReplicaTask extends AgentTask {
 
     private short shortKeyColumnCount;
     private int schemaHash;
-    private long schemaId;
 
     private long version;
     private long versionHash;
@@ -87,7 +86,7 @@ public class CreateReplicaTask extends AgentTask {
     private boolean isRecoverTask = false;
 
     public CreateReplicaTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
-                             short shortKeyColumnCount, long schemaId, int schemaHash, long version, long versionHash,
+                             short shortKeyColumnCount, int schemaHash, long version, long versionHash,
                              KeysType keysType, TStorageType storageType,
                              TStorageMedium storageMedium, List<Column> columns,
                              Set<String> bfColumns, double bfFpp, MarkedCountDownLatch<Long, Long> latch,
@@ -98,7 +97,6 @@ public class CreateReplicaTask extends AgentTask {
 
         this.shortKeyColumnCount = shortKeyColumnCount;
         this.schemaHash = schemaHash;
-        this.schemaId = schemaId;
 
         this.version = version;
         this.versionHash = versionHash;
@@ -170,7 +168,7 @@ public class CreateReplicaTask extends AgentTask {
         tSchema.setSchema_hash(schemaHash);
         tSchema.setKeys_type(keysType.toThrift());
         tSchema.setStorage_type(storageType);
-        tSchema.setId(schemaId);
+        tSchema.setId(indexId); // use index id as the schema id. assume schema change will assign a new index id.
 
         List<TColumn> tColumns = new ArrayList<TColumn>();
         for (Column column : columns) {

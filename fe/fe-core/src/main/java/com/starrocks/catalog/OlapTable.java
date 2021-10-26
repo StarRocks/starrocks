@@ -271,13 +271,13 @@ public class OlapTable extends Table {
         return indexNameToId.containsKey(indexName);
     }
 
-    public void setIndexMeta(long indexId, String indexName, long schemaId, List<Column> schema, int schemaVersion,
+    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType) {
-        setIndexMeta(indexId, indexName, schemaId, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
+        setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
                 null);
     }
 
-    public void setIndexMeta(long indexId, String indexName, long schemaId, List<Column> schema, int schemaVersion,
+    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                              OriginStatement origStmt) {
         // Nullable when meta comes from schema change log replay.
@@ -301,7 +301,7 @@ public class OlapTable extends Table {
             Preconditions.checkState(storageType == TStorageType.COLUMN);
         }
 
-        MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schemaId, schema, schemaVersion,
+        MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion,
                 schemaHash, shortKeyColumnCount, storageType, keysType, origStmt);
         indexIdToMeta.put(indexId, indexMeta);
         indexNameToId.put(indexName, indexId);
@@ -1086,7 +1086,7 @@ public class OlapTable extends Table {
                 short shortKeyColumnCount = in.readShort();
 
                 // The keys type in here is incorrect
-                MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, indexId, schema, schemaVersion, schemaHash,
+                MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion, schemaHash,
                         shortKeyColumnCount, storageType, KeysType.AGG_KEYS, null);
                 tmpIndexMetaList.add(indexMeta);
             } else {
