@@ -81,8 +81,7 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
 
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
-    _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
-                      _aggregator->mem_pool()->total_reserved_bytes());
+    _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() + _aggregator->mem_pool()->total_reserved_bytes());
 
     return Status::OK();
 }
