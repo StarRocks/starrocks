@@ -163,6 +163,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
+    public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = false;
@@ -394,6 +395,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     //the alias will be used as the groupby column if set to true.
     @VariableMgr.VarAttr(name = ENABLE_GROUPBY_USE_OUTPUT_ALIAS)
     private boolean enableGroupbyUseOutputAlias = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
+    private boolean enableColumnExprPredicate = false;
 
     // The following variables are deprecated and invisible //
     // ----------------------------------------------------------------------------//
@@ -697,6 +701,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableLowCardinalityOptimize(boolean enableLowCardinalityOptimize) {
         this.enableLowCardinalityOptimize = enableLowCardinalityOptimize;
+    }
+
+    public boolean getEnableColumnExprPredicate() {
+        return enableColumnExprPredicate;
     }
 
     // Serialize to thrift object

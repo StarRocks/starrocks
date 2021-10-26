@@ -394,7 +394,7 @@ private:
     const size_t _item_size;
 };
 
-bool is_scalar_type(FieldType field_type);
+bool is_scalar_field_type(FieldType field_type);
 
 bool is_complex_metric_type(FieldType field_type);
 

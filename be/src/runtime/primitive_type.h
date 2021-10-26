@@ -32,8 +32,8 @@
 #include "runtime/decimalv2_value.h"
 #include "runtime/large_int_value.h"
 #include "runtime/string_value.h"
+#include "storage/olap_common.h"
 #include "util/guard.h"
-
 namespace starrocks {
 
 enum PrimitiveType {
@@ -83,107 +83,6 @@ inline bool is_enumeration_type(PrimitiveType type) {
     }
 }
 
-// inline bool is_date_type(PrimitiveType type) {
-//     return type == TYPE_DATETIME || type == TYPE_DATE;
-// }
-//
-// inline bool is_string_type(PrimitiveType type) {
-//     return type == TYPE_CHAR || type == TYPE_VARCHAR;
-// }
-
-// Returns the byte size of 'type'  Returns 0 for variable length types.
-inline int get_byte_size(PrimitiveType type) {
-    switch (type) {
-    case TYPE_OBJECT:
-    case TYPE_HLL:
-    case TYPE_PERCENTILE:
-    case TYPE_VARCHAR:
-        return 0;
-
-    case TYPE_NULL:
-    case TYPE_BOOLEAN:
-    case TYPE_TINYINT:
-        return 1;
-
-    case TYPE_SMALLINT:
-        return 2;
-
-    case TYPE_DECIMAL32:
-    case TYPE_INT:
-    case TYPE_FLOAT:
-        return 4;
-
-    case TYPE_DECIMAL64:
-    case TYPE_BIGINT:
-    case TYPE_TIME:
-    case TYPE_DOUBLE:
-        return 8;
-
-    case TYPE_DECIMAL128:
-    case TYPE_LARGEINT:
-    case TYPE_DATETIME:
-    case TYPE_DATE:
-    case TYPE_DECIMALV2:
-        return 16;
-
-    case TYPE_DECIMAL:
-        return 40;
-
-    case INVALID_TYPE:
-    default:
-        DCHECK(false);
-    }
-
-    return 0;
-}
-
-inline int get_real_byte_size(PrimitiveType type) {
-    switch (type) {
-    case TYPE_OBJECT:
-    case TYPE_HLL:
-    case TYPE_VARCHAR:
-    case TYPE_PERCENTILE:
-        return 0;
-
-    case TYPE_NULL:
-    case TYPE_BOOLEAN:
-    case TYPE_TINYINT:
-        return 1;
-
-    case TYPE_SMALLINT:
-        return 2;
-
-    case TYPE_DECIMAL32:
-    case TYPE_INT:
-    case TYPE_FLOAT:
-        return 4;
-
-    case TYPE_DECIMAL64:
-    case TYPE_BIGINT:
-    case TYPE_TIME:
-    case TYPE_DOUBLE:
-        return 8;
-
-    case TYPE_DECIMAL128:
-    case TYPE_DATETIME:
-    case TYPE_DATE:
-    case TYPE_DECIMALV2:
-        return 16;
-
-    case TYPE_DECIMAL:
-        return 40;
-
-    case TYPE_LARGEINT:
-        return 16;
-
-    case INVALID_TYPE:
-    default:
-        DCHECK(false);
-    }
-
-    return 0;
-}
-
 inline bool is_type_compatible(PrimitiveType lhs, PrimitiveType rhs) {
     if (lhs == TYPE_VARCHAR) {
         return rhs == TYPE_CHAR || rhs == TYPE_VARCHAR || rhs == TYPE_HLL || rhs == TYPE_OBJECT;
@@ -198,6 +97,34 @@ inline bool is_type_compatible(PrimitiveType lhs, PrimitiveType rhs) {
     }
 
     return lhs == rhs;
+}
+
+inline bool is_scalar_primitive_type(PrimitiveType ptype) {
+    switch (ptype) {
+    case TYPE_BOOLEAN:  /* 2 */
+    case TYPE_TINYINT:  /* 3 */
+    case TYPE_SMALLINT: /* 4 */
+    case TYPE_INT:      /* 5 */
+    case TYPE_BIGINT:   /* 6 */
+    case TYPE_LARGEINT: /* 7 */
+    case TYPE_FLOAT:    /* 8 */
+    case TYPE_DOUBLE:   /* 9 */
+    case TYPE_VARCHAR:  /* 10 */
+    case TYPE_DATE:     /* 11 */
+    case TYPE_DATETIME: /* 12 */
+    case TYPE_BINARY:
+    /* 13 */              // Not implemented
+    case TYPE_DECIMAL:    /* 14 */
+    case TYPE_CHAR:       /* 15 */
+    case TYPE_DECIMALV2:  /* 20 */
+    case TYPE_TIME:       /* 21 */
+    case TYPE_DECIMAL32:  /* 24 */
+    case TYPE_DECIMAL64:  /* 25 */
+    case TYPE_DECIMAL128: /* 26 */
+        return true;
+    default:
+        return false;
+    }
 }
 
 VALUE_GUARD(PrimitiveType, BigIntPTGuard, pt_is_bigint, TYPE_BIGINT)
@@ -250,6 +177,8 @@ std::string type_to_string(PrimitiveType t);
 std::string type_to_odbc_string(PrimitiveType t);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name);
+
+PrimitiveType scalar_field_type_to_primitive_type(FieldType field_type);
 
 } // namespace starrocks
 

@@ -56,7 +56,7 @@ using strings::Substitute;
 Status ColumnReader::create(MemTracker* mem_tracker, const ColumnReaderOptions& opts, const ColumnMetaPB& meta,
                             uint64_t num_rows, const std::string& file_name, std::unique_ptr<ColumnReader>* reader) {
     auto type = static_cast<FieldType>(meta.type());
-    if (is_scalar_type(delegate_type(type))) {
+    if (is_scalar_field_type(delegate_type(type))) {
         std::unique_ptr<ColumnReader> reader_local(new ColumnReader(mem_tracker, opts, meta, num_rows, file_name));
         RETURN_IF_ERROR(reader_local->init(meta));
         *reader = std::move(reader_local);
@@ -462,7 +462,7 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const vectorized::C
 }
 
 Status ColumnReader::new_iterator(ColumnIterator** iterator) {
-    if (is_scalar_type(delegate_type(_column_type))) {
+    if (is_scalar_field_type(delegate_type(_column_type))) {
         *iterator = new FileColumnIterator(this);
         return Status::OK();
     } else {
