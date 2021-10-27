@@ -1933,18 +1933,14 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return false;
     }
 
-    private byte monotonicCache = 2; // uninitialized state.
 
     public final boolean isMonotonic() {
         if (!isSelfMonotonic()) return false;
-        if (monotonicCache != 0x2) return monotonicCache == 1;
         for (Expr child : this.children) {
             if (!child.isMonotonic()) {
-                monotonicCache = 0;
                 return false;
             }
         }
-        monotonicCache = 1;
         return true;
     }
 
