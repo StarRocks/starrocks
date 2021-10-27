@@ -217,7 +217,7 @@ public class DecodeRewriteTest extends PlanTestBase{
 
         sql = "select count(distinct S_NATIONKEY) from supplier group by S_ADDRESS";
         plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("is_nullable:false)])]), " +
+        Assert.assertTrue(plan.contains("is_nullable:false, is_monotonic:true)])]), " +
                 "global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
         Assert.assertTrue(plan.contains("partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
                 "global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));

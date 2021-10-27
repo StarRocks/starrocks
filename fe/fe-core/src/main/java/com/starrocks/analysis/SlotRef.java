@@ -408,4 +408,9 @@ public class SlotRef extends Expr {
     public TableName getTblNameWithoutAnalyzed() {
         return tblName;
     }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        return true;
+    }
 }

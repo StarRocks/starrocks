@@ -217,4 +217,9 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
     public <R, C> R accept(ExprVisitor<R, C> visitor, C context) {
         return visitor.visitLiteral(this, context);
     }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        return true;
+    }
 }
