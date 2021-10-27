@@ -278,7 +278,7 @@ public class Database extends MetaObject implements Writable {
         checkReplicaQuota();
     }
 
-    // return false if table already exits
+    // return false if table already exists
     public boolean createTableWithLock(Table table, boolean isReplay) {
         writeLock();
         try {
