@@ -100,6 +100,11 @@ public:
         _null_column->resize(n);
     }
 
+    void resize_uninitialized(size_t n) {
+        _data_column->resize_uninitialized(n);
+        _null_column->resize_uninitialized(n);
+    }
+
     void assign(size_t n, size_t idx) override {
         _data_column->assign(n, idx);
         _null_column->assign(n, idx);
