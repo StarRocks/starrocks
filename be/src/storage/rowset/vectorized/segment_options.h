@@ -57,7 +57,7 @@ public:
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
 
-    const std::unordered_map<ColumnId, GlobalDictMap*>* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+    const ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 };
 
 } // namespace starrocks::vectorized
