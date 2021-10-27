@@ -50,7 +50,6 @@ public:
     // Return number of values in column.
     size_t size() const override;
 
-    // Return number of values in column.
     size_t capacity() const override;
 
     size_t type_size() const override { return sizeof(DatumArray); }
