@@ -156,13 +156,15 @@ protected:
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
                 vectorized::ColumnPtr dst = vectorized::ChunkHelper::column_from_field_type(type, true);
+                // will do direct copy to column
                 size_t rows_read = src.size();
+                dst->reserve(rows_read);
                 st = iter->next_batch(&rows_read, dst.get());
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src.size(), rows_read);
 
                 for (size_t i = 0; i < rows_read; i++) {
-                    ASSERT_EQ(0, type_info->cmp(src.get(i), dst->get(i)))
+                    ASSERT_EQ(0, type_info->cmp(src.get(i), dst->get(i))) << " rows_read:" << rows_read
                             << " row " << i << ": " << datum_to_string(type_info.get(), src.get(i)) << " vs "
                             << datum_to_string(type_info.get(), dst->get(i));
                 }
