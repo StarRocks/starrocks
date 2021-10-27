@@ -54,8 +54,7 @@ class SchemaChangeTest : public testing::Test {
         AddColumn(&create_tablet_req, "v2", TPrimitiveType::INT, false);
         Status res = engine->create_tablet(create_tablet_req);
         ASSERT_TRUE(res.ok());
-        TabletSharedPtr tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id,
-                                                                      create_tablet_req.tablet_schema.schema_hash);
+        TabletSharedPtr tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
         vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
         for (size_t i = 0; i < 4; ++i) {
@@ -434,9 +433,8 @@ TEST_F(SchemaChangeTest, schema_change_directly) {
     AddColumn(&create_tablet_req, "v2", TPrimitiveType::VARCHAR, false);
     Status res = engine->create_tablet(create_tablet_req);
     ASSERT_TRUE(res.ok()) << res.to_string();
-    TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id,
-                                                                      create_tablet_req.tablet_schema.schema_hash);
-    TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1001, 270068375);
+    TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
+    TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1001);
 
     ChunkChanger chunk_changer(new_tablet->tablet_schema());
     for (size_t i = 0; i < 4; ++i) {
@@ -474,8 +472,8 @@ TEST_F(SchemaChangeTest, schema_change_directly) {
 
     ASSERT_TRUE(_sc_procedure->process(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset));
     delete tablet_rowset_reader;
-    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1001, 270068375);
-    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1002, 270068375);
+    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1001);
+    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1002);
 }
 
 TEST_F(SchemaChangeTest, schema_change_with_sorting) {
@@ -489,9 +487,8 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     AddColumn(&create_tablet_req, "v2", TPrimitiveType::VARCHAR, false);
     Status res = engine->create_tablet(create_tablet_req);
     ASSERT_TRUE(res.ok()) << res.to_string();
-    TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id,
-                                                                      create_tablet_req.tablet_schema.schema_hash);
-    TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1001, 270068375);
+    TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
+    TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1001);
 
     ChunkChanger chunk_changer(new_tablet->tablet_schema());
     ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(0);
@@ -534,8 +531,8 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
 
     ASSERT_TRUE(_sc_procedure->process(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset));
     delete tablet_rowset_reader;
-    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1001, 270068375);
-    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1002, 270068375);
+    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1001);
+    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1002);
 }
 
 } // namespace starrocks::vectorized

@@ -83,7 +83,7 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
         LOG(WARNING) << "Invalid snapshot format. version=" << request.preferred_snapshot_format;
         return Status::InvalidArgument("invalid snapshot_format");
     }
-    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id, request.schema_hash);
+    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to get tablet. tablet=" << request.tablet_id << " schema_hash=" << request.schema_hash;
         return Status::RuntimeError("tablet not found");

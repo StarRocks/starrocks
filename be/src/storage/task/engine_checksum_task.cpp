@@ -51,7 +51,7 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
         return OLAP_ERR_CE_CMD_PARAMS_ERROR;
     }
 
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, _schema_hash);
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
     if (nullptr == tablet.get()) {
         LOG(WARNING) << "can't find tablet. tablet_id=" << _tablet_id << " schema_hash=" << _schema_hash;
         return OLAP_ERR_TABLE_NOT_FOUND;
