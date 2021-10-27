@@ -320,7 +320,7 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Colu
         return Status::InternalError("column type mismatch");
     }
     const ZoneMapPB* segment_zone_map_pb = col_reader->segment_zone_map();
-    TypeInfoPtr type_info = get_type_info(col_reader->column_type());
+    TypeInfoPtr type_info = get_type_info(delegate_type(type));
     if constexpr (!is_max) {
         vectorized::Datum min;
         if (!segment_zone_map_pb->has_null()) {
