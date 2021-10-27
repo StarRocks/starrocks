@@ -1111,8 +1111,8 @@ public class PlanFragmentTest extends PlanTestBase {
                         + "(type:SCALAR, scalar_type:TScalarType(type:SMALLINT))]), num_children:0, "
                         + "int_literal:TIntLiteral"
                         + "(value:2), "
-                        +
-                        "output_scale:-1, use_vectorized:true, has_nullable_child:false, is_nullable:false)])]]"));
+                        + "output_scale:-1, use_vectorized:true, has_nullable_child:false, is_nullable:false, "
+                        + "is_monotonic:true)])]]"));
     }
 
     @Test
@@ -1449,7 +1449,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "sort_tuple_slot_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode"
                         + "(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), num_children:0, slot_ref:TSlotRef"
                         + "(slot_id:1, tuple_id:2), output_scale:-1, output_column:-1, use_vectorized:true, "
-                        + "has_nullable_child:false, is_nullable:true)])]"));
+                        + "has_nullable_child:false, is_nullable:true, is_monotonic:true)])]"));
     }
 
     @Test
