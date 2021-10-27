@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "column/datum.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "util/logging.h"
 
