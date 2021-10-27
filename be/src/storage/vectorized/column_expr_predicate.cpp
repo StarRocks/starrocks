@@ -45,6 +45,7 @@ public:
         // `column` is owned by storage layer
         // we don't have ownership
         ColumnPtr bits(const_cast<Column*>(column), [](auto p) {});
+        chunk.append_column(bits, _slot_desc->id());
 
         // theoretically there will be a chain of expr contexts.
         // The first one is expr context from planner
@@ -52,7 +53,7 @@ public:
         // eg. [x as int >= 10]  [string->int] <- column(x as string)
         for (int i = _expr_ctxs.size() - 1; i >= 0; i--) {
             ExprContext* ctx = _expr_ctxs[i];
-            chunk.append_or_update_column(bits, _slot_desc->id());
+            chunk.update_column(bits, _slot_desc->id());
             bits = ctx->evaluate(&chunk);
         }
 
