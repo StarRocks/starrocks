@@ -75,7 +75,9 @@ public:
         }
     }
 
-    bool zone_map_filter(const Datum& min, const Datum& max) const override {
+    bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        const auto& min = detail.min_or_null_value();
+        const auto& max = detail.max_value();
         const auto type_info = this->type_info();
         return type_info->cmp(Datum(_value), min) >= 0 && type_info->cmp(Datum(_value), max) <= 0;
     }
@@ -216,7 +218,9 @@ public:
         }
     }
 
-    bool zone_map_filter(const Datum& min, const Datum& max) const override {
+    bool zone_map_filter(const ZoneMapDetail& detail) const override {
+        const auto& min = detail.min_or_null_value();
+        const auto& max = detail.max_value();
         const auto type_info = this->type_info();
         return type_info->cmp(Datum(_value), min) >= 0 && type_info->cmp(Datum(_value), max) <= 0;
     }

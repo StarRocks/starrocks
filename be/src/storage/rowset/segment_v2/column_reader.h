@@ -62,6 +62,7 @@ class ReadableBlock;
 namespace vectorized {
 class ColumnPredicate;
 class Column;
+class ZoneMapDetail;
 } // namespace vectorized
 
 namespace segment_v2 {
@@ -207,7 +208,7 @@ private:
     static void _parse_zone_map(const ZoneMapPB& zone_map, WrapperField* min_value_container,
                                 WrapperField* max_value_container);
 
-    Status _parse_zone_map(const ZoneMapPB& zm, vectorized::Datum* min, vectorized::Datum* max) const;
+    Status _parse_zone_map(const ZoneMapPB& zm, vectorized::ZoneMapDetail* detail) const;
 
     Status _get_filtered_pages(CondColumn* cond_column, CondColumn* delete_conditions,
                                std::unordered_set<uint32_t>* delete_partial_filtered_pages,
