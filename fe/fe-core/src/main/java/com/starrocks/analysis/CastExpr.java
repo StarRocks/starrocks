@@ -371,4 +371,9 @@ public class CastExpr extends Expr {
     public int hashCode() {
         return Objects.hash(super.hashCode(), targetTypeDef == null ? null : targetTypeDef.getType(), opcode);
     }
+
+    @Override
+    public boolean isSelfMonotonic() {
+        return true;
+    }
 }
