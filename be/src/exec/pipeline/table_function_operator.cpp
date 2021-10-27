@@ -21,6 +21,7 @@ void TableFunctionOperator::finish(RuntimeState* state) {
 }
 
 Status TableFunctionOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare(state));
     if (_tnode.table_function_node.__isset.param_columns) {
         _param_slots.insert(_param_slots.end(), _tnode.table_function_node.param_columns.begin(),
                             _tnode.table_function_node.param_columns.end());
@@ -67,7 +68,6 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     _table_function_result_eos = false;
     _remain_repeat_times = 0;
 
-    RETURN_IF_ERROR(Operator::prepare(state));
     _table_function_exec_timer = ADD_TIMER(_runtime_profile, "TableFunctionTime");
     return _table_function->prepare(_table_function_state);
 }
@@ -109,7 +109,7 @@ StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* s
             vectorized::ColumnPtr& input_column_ptr = _input_chunk->get_column_by_slot_id(_outer_slots[i]);
             vectorized::Datum value = input_column_ptr->get(_input_chunk_index);
             if (value.is_null()) {
-                //The output_columns[i] is must Nullable, if value has null
+                DCHECK(output_columns[i]->is_nullable());
                 down_cast<vectorized::NullableColumn*>(output_columns[i].get())->append_nulls(repeat_times);
             } else {
                 output_columns[i]->append_value_multiple_times(&value, repeat_times);
