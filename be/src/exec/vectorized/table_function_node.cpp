@@ -5,7 +5,7 @@
 #include "column/chunk.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "exec/pipeline/table_function/table_function_operator.h"
+#include "exec/pipeline/table_function_operator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
