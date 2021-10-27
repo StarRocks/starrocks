@@ -19,7 +19,7 @@ class ColumnExprPredicate : public ColumnPredicate {
 public:
     ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state, ExprContext* expr_ctx,
                         const SlotDescriptor* slot_desc)
-            : ColumnPredicate(type_info, column_id), _state(state), _slot_desc(slot_desc) {
+            : ColumnPredicate(type_info, column_id), _state(state), _slot_desc(slot_desc), _monotonic(true) {
         // note: conjuncts would be shared by multiple scanners
         // so here we have to clone one to keep thread safe.
         add_expr_ctx(expr_ctx);
@@ -37,6 +37,7 @@ public:
             ExprContext* ctx = nullptr;
             expr_ctx->clone(_state, &ctx);
             _expr_ctxs.emplace_back(ctx);
+            _monotonic &= ctx->root()->is_monotonic();
         }
     }
 
@@ -106,8 +107,32 @@ public:
     }
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
-        // todo(yan): once expr supports is_monotonic.
-        return true;
+        // if expr does not satisfy monotonicity, we can not apply zone map.
+        if (!_monotonic) return true;
+        // construct column and chunk by zone map
+        TypeDescriptor type_desc = TypeDescriptor::from_storage_type_info(_type_info.get());
+        ColumnPtr col = ColumnHelper::create_column(type_desc, detail.has_null());
+        // null, min, max
+        uint16_t size = 0;
+        uint8_t selection[3];
+        if (detail.has_null()) {
+            col->append_default();
+            size += 1;
+        }
+        if (detail.has_not_null()) {
+            col->append_datum(detail.min_value());
+            col->append_datum(detail.max_value());
+            size += 2;
+        }
+        // if all of them are evaluated to false, we don't need this zone.
+        evaluate(col.get(), selection, 0, size);
+        for (uint16_t i = 0; i < size; i++) {
+            if (selection[i] != 0) {
+                return true;
+            }
+        }
+        VLOG_FILE << "ColumnExprPredicate: zone_map_filter succeeded. # of skipped rows = " << detail.num_rows;
+        return false;
     }
 
     Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
@@ -125,6 +150,8 @@ public:
         TypeDescriptor to_type = TypeDescriptor::from_storage_type_info(_type_info.get());
         Expr* column_ref = obj_pool->add(new ColumnRef(_slot_desc));
         Expr* cast_expr = VectorizedCastExprFactory::from_type(input_type, to_type, column_ref, obj_pool);
+        column_ref->set_monotonic(true);
+        cast_expr->set_monotonic(true);
         ExprContext* cast_expr_ctx = obj_pool->add(new ExprContext(cast_expr));
 
         RowDescriptor row_desc; // I think we don't need to use it at all.
@@ -155,6 +182,7 @@ private:
     RuntimeState* _state;
     std::vector<ExprContext*> _expr_ctxs;
     const SlotDescriptor* _slot_desc;
+    bool _monotonic;
 };
 
 ColumnPredicate* new_column_expr_predicate(const TypeInfoPtr& type, ColumnId column_id, RuntimeState* state,
