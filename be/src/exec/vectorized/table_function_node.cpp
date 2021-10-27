@@ -3,42 +3,45 @@
 #include "exec/vectorized/table_function_node.h"
 
 #include "column/chunk.h"
+#include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/table_function_operator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
-TableFunctionNode::TableFunctionNode(ObjectPool* pool, const TPlanNode& node, const DescriptorTbl& desc)
-        : ExecNode(pool, node, desc) {
+TableFunctionNode::TableFunctionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& desc)
+        : ExecNode(pool, tnode, desc), _tnode(tnode) {
     _input_chunk_ptr = nullptr;
 }
 
 TableFunctionNode::~TableFunctionNode() = default;
 
-Status TableFunctionNode::init(const TPlanNode& node, RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::init(node, state));
+Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
+    RETURN_IF_ERROR(ExecNode::init(tnode, state));
 
-    if (node.table_function_node.__isset.param_columns) {
-        _param_slots.insert(_param_slots.end(), node.table_function_node.param_columns.begin(),
-                            node.table_function_node.param_columns.end());
+    if (tnode.table_function_node.__isset.param_columns) {
+        _param_slots.insert(_param_slots.end(), tnode.table_function_node.param_columns.begin(),
+                            tnode.table_function_node.param_columns.end());
     } else {
         return Status::InternalError("param slots not set in table function node");
     }
 
-    if (node.table_function_node.__isset.outer_columns) {
-        _outer_slots.insert(_outer_slots.end(), node.table_function_node.outer_columns.begin(),
-                            node.table_function_node.outer_columns.end());
+    if (tnode.table_function_node.__isset.outer_columns) {
+        _outer_slots.insert(_outer_slots.end(), tnode.table_function_node.outer_columns.begin(),
+                            tnode.table_function_node.outer_columns.end());
     } else {
         return Status::InternalError("outer slots not set in table function node");
     }
 
-    if (node.table_function_node.__isset.fn_result_columns) {
-        _fn_result_slots.insert(_fn_result_slots.end(), node.table_function_node.fn_result_columns.begin(),
-                                node.table_function_node.fn_result_columns.end());
+    if (tnode.table_function_node.__isset.fn_result_columns) {
+        _fn_result_slots.insert(_fn_result_slots.end(), tnode.table_function_node.fn_result_columns.begin(),
+                                tnode.table_function_node.fn_result_columns.end());
     } else {
         return Status::InternalError("fn result slots not set in table function node");
     }
 
     //Get table function from TableFunctionResolver
-    TFunction table_fn = node.table_function_node.table_function.nodes[0].fn;
+    TFunction table_fn = tnode.table_function_node.table_function.nodes[0].fn;
     std::string table_function_name = table_fn.name.function_name;
     std::vector<PrimitiveType> arg_types;
     for (const TTypeDesc& ttype_desc : table_fn.arg_types) {
@@ -262,6 +265,16 @@ Status TableFunctionNode::get_next_input_chunk(RuntimeState* state, bool* eos) {
         _table_function_result = _table_function->process(_table_function_state, &_table_function_result_eos);
     }
     return Status::OK();
+}
+
+std::vector<std::shared_ptr<pipeline::OperatorFactory>> TableFunctionNode::decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+    OpFactories operators = _children[0]->decompose_to_pipeline(context);
+
+    operators.emplace_back(std::make_shared<TableFunctionOperatorFactory>(context->next_operator_id(), id(), _tnode));
+
+    return operators;
 }
 
 } // namespace starrocks::vectorized
