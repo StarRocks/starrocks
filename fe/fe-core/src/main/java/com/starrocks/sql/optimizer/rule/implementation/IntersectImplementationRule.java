@@ -23,7 +23,8 @@ public class IntersectImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalSetOperator setOperator = (LogicalSetOperator) input.getOp();
         PhysicalIntersectOperator physicalIntersect = new PhysicalIntersectOperator(setOperator.getOutputColumnRefOp(),
-                setOperator.getChildOutputColumns(), setOperator.getLimit(), setOperator.getPredicate());
+                setOperator.getChildOutputColumns(), setOperator.getLimit(), setOperator.getPredicate(),
+                setOperator.getProjection());
         return Lists.newArrayList(OptExpression.create(physicalIntersect, input.getInputs()));
     }
 }

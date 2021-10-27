@@ -28,7 +28,8 @@ public class WindowImplementationRule extends ImplementationRule {
                 logical.getOrderByElements(),
                 logical.getAnalyticWindow(),
                 logical.getLimit(),
-                logical.getPredicate());
+                logical.getPredicate(),
+                logical.getProjection());
 
         return Lists.newArrayList(OptExpression.create(physical, input.getInputs()));
     }

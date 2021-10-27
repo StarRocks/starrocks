@@ -1,7 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 #pragma once
 
+#include <unordered_map>
+
 #include "column/chunk.h"
+#include "common/global_types.h"
 #include "exec/exec_node.h"
 #include "exec/olap_common.h"
 #include "runtime/global_dicts.h"
@@ -77,12 +80,17 @@ protected:
 private:
     void _init_counter();
 
-    using DefaultDecoder = std::unique_ptr<DictDecoder<TYPE_INT, RGlobalDictMap, TYPE_VARCHAR>>;
+    using DefaultDecoder = DictDecoder<TYPE_INT, RGlobalDictMap, TYPE_VARCHAR>;
+    using DefaultDecoderPtr = std::unique_ptr<DefaultDecoder>;
+
     std::shared_ptr<vectorized::Chunk> _input_chunk;
     std::vector<int32_t> _encode_column_cids;
     std::vector<int32_t> _decode_column_cids;
-    std::vector<DefaultDecoder> _decoders;
-    TDecodeNode _decode_node;
+    std::vector<DefaultDecoderPtr> _decoders;
+
+    std::vector<ExprContext*> _expr_ctxs;
+    std::unordered_map<SlotId, std::pair<ExprContext*, DictOptimizeContext>> _string_functions;
+    DictOptimizeParser _dict_optimize_parser;
 
     // profile
     RuntimeProfile::Counter* _decode_timer = nullptr;

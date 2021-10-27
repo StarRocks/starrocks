@@ -289,10 +289,10 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
 
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
         int ref_column = _schema_mapping[i].ref_column;
-        FieldType ref_type = base_tablet->tablet_meta()->tablet_schema().column(ref_column).type();
-        FieldType new_type = new_tablet->tablet_meta()->tablet_schema().column(i).type();
 
         if (_schema_mapping[i].ref_column >= 0) {
+            FieldType ref_type = base_tablet->tablet_meta()->tablet_schema().column(ref_column).type();
+            FieldType new_type = new_tablet->tablet_meta()->tablet_schema().column(i).type();
             if (!_schema_mapping[i].materialized_function.empty()) {
                 const MaterializeTypeConverter* converter = nullptr;
                 if (_schema_mapping[i].materialized_function == "to_bitmap") {
@@ -544,30 +544,28 @@ ChunkMerger::~ChunkMerger() {
     if (_aggregator != nullptr) {
         _aggregator->close();
     }
+    // TODO zhangqiang
+    // release the memory statistics just for safe
+    // re-counting memory usage after new memory statistics framework is launched
+    _mem_tracker->release(_mem_tracker->consumption());
 }
 
 void ChunkMerger::aggregate_chunk(ChunkAggregator& aggregator, ChunkPtr& chunk, RowsetWriter* rowset_writer) {
     aggregator.aggregate();
     while (aggregator.is_finish()) {
-        _mem_tracker->release(aggregator.memory_usage());
         rowset_writer->add_chunk(*aggregator.aggregate_result());
         aggregator.aggregate_reset();
         aggregator.aggregate();
-        _mem_tracker->consume(aggregator.memory_usage());
     }
 
-    _mem_tracker->release(aggregator.memory_usage());
     DCHECK(aggregator.source_exhausted());
     aggregator.update_source(chunk);
     aggregator.aggregate();
-    _mem_tracker->consume(aggregator.memory_usage());
 
     while (aggregator.is_finish()) {
-        _mem_tracker->release(aggregator.memory_usage());
         rowset_writer->add_chunk(*aggregator.aggregate_result());
         aggregator.aggregate_reset();
         aggregator.aggregate();
-        _mem_tracker->consume(aggregator.memory_usage());
     }
 
     return;
@@ -582,26 +580,29 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
     };
 
     _make_heap(chunk_arr);
-    size_t total_size;
+    size_t nread = 0;
     vectorized::Schema new_schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ChunkPtr tmp_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
-    _mem_tracker->consume(tmp_chunk->memory_usage());
+    // TODO zhangqiang
+    // predicted memory consumption, maybe change after new memory statistics is launched
+    _mem_tracker->consume(_tablet->tablet_schema().row_size() * config::vector_chunk_size);
     if (_tablet->keys_type() == KeysType::AGG_KEYS) {
         _aggregator = std::make_unique<ChunkAggregator>(&new_schema, config::vector_chunk_size, 0);
     }
 
     while (!_heap.empty()) {
-        if (tmp_chunk->reach_capacity_limit()) {
+        if (tmp_chunk->reach_capacity_limit() || nread >= config::vector_chunk_size) {
             if (_tablet->keys_type() == KeysType::AGG_KEYS) {
                 aggregate_chunk(*_aggregator, tmp_chunk, rowset_writer);
             } else {
                 rowset_writer->add_chunk(*tmp_chunk);
             }
             tmp_chunk->reset();
+            nread = 0;
         }
 
         tmp_chunk->append(*(_heap.top().chunk), _heap.top().row_index, 1);
-        total_size += 1;
+        nread += 1;
         if (!_pop_heap()) {
             process_err();
             return false;
@@ -624,8 +625,7 @@ bool ChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* rowset_w
         return false;
     }
 
-    _mem_tracker->release(tmp_chunk->memory_usage());
-
+    _mem_tracker->release(_tablet->tablet_schema().row_size() * config::vector_chunk_size);
     return true;
 }
 

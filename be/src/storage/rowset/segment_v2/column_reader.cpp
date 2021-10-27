@@ -56,7 +56,7 @@ using strings::Substitute;
 Status ColumnReader::create(MemTracker* mem_tracker, const ColumnReaderOptions& opts, const ColumnMetaPB& meta,
                             uint64_t num_rows, const std::string& file_name, std::unique_ptr<ColumnReader>* reader) {
     auto type = static_cast<FieldType>(meta.type());
-    if (is_scalar_type(delegate_type(type))) {
+    if (is_scalar_field_type(delegate_type(type))) {
         std::unique_ptr<ColumnReader> reader_local(new ColumnReader(mem_tracker, opts, meta, num_rows, file_name));
         RETURN_IF_ERROR(reader_local->init(meta));
         *reader = std::move(reader_local);
@@ -205,15 +205,15 @@ void ColumnReader::_parse_zone_map(const ZoneMapPB& zone_map, WrapperField* min_
     }
 }
 
-Status ColumnReader::_parse_zone_map(const ZoneMapPB& zm, vectorized::Datum* min, vectorized::Datum* max) const {
+Status ColumnReader::_parse_zone_map(const ZoneMapPB& zm, vectorized::ZoneMapDetail* detail) const {
     // DECIMAL32/DECIMAL64/DECIMAL128 stored as INT32/INT64/INT128
     // The DECIMAL type will be delegated to INT type.
     TypeInfoPtr type_info = get_type_info(delegate_type(_column_type));
-    if (!zm.has_null()) {
-        RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), min, zm.min(), nullptr));
-    }
+    detail->set_has_null(zm.has_null());
+
     if (zm.has_not_null()) {
-        RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), max, zm.max(), nullptr));
+        RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &(detail->min_value()), zm.min(), nullptr));
+        RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &(detail->max_value()), zm.max(), nullptr));
     }
     return Status::OK();
 }
@@ -417,13 +417,12 @@ Status ColumnReader::_zone_map_filter(const std::vector<const vectorized::Column
     const std::vector<ZoneMapPB>& zone_maps = _zone_map_index->page_zone_maps();
     int32_t page_size = _zone_map_index->num_pages();
     for (int32_t i = 0; i < page_size; ++i) {
-        vectorized::Datum min;
-        vectorized::Datum max;
         const ZoneMapPB& zm = zone_maps[i];
-        _parse_zone_map(zm, &min, &max);
+        vectorized::ZoneMapDetail detail;
+        _parse_zone_map(zm, &detail);
         bool matched = true;
         for (const auto* predicate : predicates) {
-            if (!predicate->zone_map_filter(min, max)) {
+            if (!predicate->zone_map_filter(detail)) {
                 matched = false;
                 break;
             }
@@ -433,7 +432,7 @@ Status ColumnReader::_zone_map_filter(const std::vector<const vectorized::Column
         }
         pages->emplace_back(i);
 
-        if (del_predicate && del_predicate->zone_map_filter(min, max)) {
+        if (del_predicate && del_predicate->zone_map_filter(detail)) {
             del_partial_filtered_pages->emplace(i);
         }
     }
@@ -445,15 +444,14 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const vectorized::C
         return true;
     }
     const ZoneMapPB& zm = _zone_map_index_meta->segment_zone_map();
-    vectorized::Datum min;
-    vectorized::Datum max;
-    _parse_zone_map(zm, &min, &max);
-    auto filter = [&](const vectorized::ColumnPredicate* pred) { return pred->zone_map_filter(min, max); };
+    vectorized::ZoneMapDetail detail;
+    _parse_zone_map(zm, &detail);
+    auto filter = [&](const vectorized::ColumnPredicate* pred) { return pred->zone_map_filter(detail); };
     return std::all_of(predicates.begin(), predicates.end(), filter);
 }
 
 Status ColumnReader::new_iterator(ColumnIterator** iterator) {
-    if (is_scalar_type(delegate_type(_column_type))) {
+    if (is_scalar_field_type(delegate_type(_column_type))) {
         *iterator = new FileColumnIterator(this);
         return Status::OK();
     } else {
@@ -1010,7 +1008,9 @@ Status FileColumnIterator::_do_decode_dict_codes(const int32_t* codes, size_t si
     return Status::OK();
 }
 
-Status FileColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
+template <typename PageParseFunc>
+Status FileColumnIterator::_fetch_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values,
+                                           PageParseFunc&& page_parse) {
     DCHECK(std::is_sorted(rowids, rowids + size));
     RETURN_IF(size == 0, Status::OK());
     size_t prev_bytes = values->byte_size();
@@ -1031,7 +1031,7 @@ Status FileColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t s
                 curr = *p++;
             }
             size_t nread = p - rowids;
-            RETURN_IF_ERROR(_page->read(values, &nread));
+            RETURN_IF_ERROR(page_parse(values, &nread));
             _current_ordinal += nread;
             rowids = p;
         }
@@ -1041,6 +1041,16 @@ Status FileColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t s
     _opts.stats->bytes_read += values->byte_size() - prev_bytes;
     DCHECK_EQ(_current_ordinal, _page->first_ordinal() + _page->offset());
     return Status::OK();
+}
+
+Status FileColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
+    auto page_parse = [&](vectorized::Column* column, size_t* count) { return _page->read(column, count); };
+    return _fetch_by_rowid(rowids, size, values, page_parse);
+}
+
+Status FileColumnIterator::fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
+    auto page_parse = [&](vectorized::Column* column, size_t* count) { return _page->read_dict_codes(column, count); };
+    return _fetch_by_rowid(rowids, size, values, page_parse);
 }
 
 int FileColumnIterator::dict_size() {
@@ -1184,6 +1194,13 @@ Status ColumnIterator::fetch_values_by_rowid(const vectorized::Column& rowids, v
     const auto& numeric_col = down_cast<const vectorized::FixedLengthColumn<rowid_t>&>(rowids);
     const auto* p = reinterpret_cast<const rowid_t*>(numeric_col.get_data().data());
     return fetch_values_by_rowid(p, rowids.size(), values);
+}
+
+Status ColumnIterator::fetch_dict_codes_by_rowid(const vectorized::Column& rowids, vectorized::Column* values) {
+    static_assert(std::is_same_v<uint32_t, rowid_t>);
+    const auto& numeric_col = down_cast<const vectorized::FixedLengthColumn<rowid_t>&>(rowids);
+    const auto* p = reinterpret_cast<const rowid_t*>(numeric_col.get_data().data());
+    return fetch_dict_codes_by_rowid(p, rowids.size(), values);
 }
 
 } // namespace starrocks::segment_v2

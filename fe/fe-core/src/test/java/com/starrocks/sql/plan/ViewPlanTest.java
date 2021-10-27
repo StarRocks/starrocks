@@ -1502,4 +1502,28 @@ public class ViewPlanTest extends PlanTestBase {
                 "t1.l_orderkey = t4.o_orderkey and t4.O_ORDERDATE = t1.L_SHIPDATE;";
         testView(sql);
     }
+
+    @Test
+    public void testArray() throws Exception {
+        String sql = "select split('1,2,3', ',') from t1;";
+        testView(sql);
+
+        sql = "select v3 from tarray";
+        testView(sql);
+
+        sql = "select array_sum(v3) from tarray";
+        testView(sql);
+    }
+
+    @Test
+    public void testWithSelectStar() throws Exception {
+        String sql = "with xx1 as (select v1 + 1, v2 + 2 from t0) select * from xx1";
+        testView(sql);
+
+        sql = "with xx1 as (select * from t0) select * from xx1";
+        testView(sql);
+
+        sql = "with xx1 as (select v1, v2 from t0) select * from xx1";
+        testView(sql);
+    }
 }

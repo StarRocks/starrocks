@@ -586,6 +586,13 @@ CONF_Bool(bitmap_filter_enable_not_equal, "false");
 // storage format.
 CONF_mInt16(storage_format_version, "2");
 
+// IMPORTANT NOTE: changing this config to 1 must require all BEs to be upgraded to new version,
+// which support this config.
+// DO NOT change this config unless you known how.
+// 0 for BITSHUFFLE_NULL
+// 1 for LZ4_NULL
+CONF_mInt16(null_encoding, "0");
+
 // do pre-aggregate if effect great than the factor, factor range:[1-100].
 CONF_Int16(pre_aggregate_factor, "80");
 
@@ -629,7 +636,7 @@ CONF_Int64(pipeline_exec_thread_pool_thread_num, "3");
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");
 // schema change vectorized
-CONF_Bool(enable_schema_change_vectorized, "false");
+CONF_Bool(enable_schema_change_vectorized, "true");
 
 } // namespace config
 

@@ -103,6 +103,15 @@ Status SegmentWriter::init(uint32_t write_mbytes_per_sec __attribute__((unused))
             }
         }
 
+        if (column.type() == FieldType::OLAP_FIELD_TYPE_CHAR && column.type() != FieldType::OLAP_FIELD_TYPE_VARCHAR,
+            _opts.global_dicts != nullptr) {
+            auto iter = _opts.global_dicts->find(column.name().data());
+            if (iter != _opts.global_dicts->end()) {
+                opts.global_dict = &iter->second;
+                _global_dict_columns_valid_info[iter->first] = true;
+            }
+        }
+
         std::unique_ptr<ColumnWriter> writer;
         RETURN_IF_ERROR(ColumnWriter::create(opts, &column, _wblock.get(), &writer));
         RETURN_IF_ERROR(writer->init());
@@ -167,8 +176,15 @@ Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size
 
 // write column data to file one by one
 Status SegmentWriter::_write_data() {
+    size_t idx = 0;
     for (auto& column_writer : _column_writers) {
         RETURN_IF_ERROR(column_writer->write_data());
+        if (column_writer->is_global_dict_valid() == false) {
+            std::string col_name(_tablet_schema->columns()[idx].name().data(),
+                                 _tablet_schema->columns()[idx].name().size());
+            _global_dict_columns_valid_info[col_name] = false;
+        }
+        idx++;
     }
     return Status::OK();
 }

@@ -74,6 +74,7 @@ add_library(Olap STATIC
     tablet_meta.cpp
     tablet_meta_manager.cpp
     tablet_schema.cpp
+    tablet_schema_map.cpp
     tablet_updates.cpp
     txn_manager.cpp
     types.cpp
@@ -129,6 +130,7 @@ add_library(Olap STATIC
     vectorized/column_not_in_predicate.cpp
     vectorized/column_null_predicate.cpp
     vectorized/column_or_predicate.cpp
+    vectorized/column_expr_predicate.cpp
     vectorized/conjunctive_predicates.cpp
     vectorized/convert_helper.cpp
     vectorized/delete_predicates.cpp

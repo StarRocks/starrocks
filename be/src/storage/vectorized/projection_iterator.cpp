@@ -22,9 +22,9 @@ public:
 
     size_t merged_rows() const override { return _child->merged_rows(); }
 
-    virtual Status init_res_schema(std::unordered_map<uint32_t, GlobalDictMap*>& dict_maps) override {
-        ChunkIterator::init_res_schema(dict_maps);
-        return _child->init_res_schema(dict_maps);
+    virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+        ChunkIterator::init_encoded_schema(dict_maps);
+        return _child->init_encoded_schema(dict_maps);
     }
 
 protected:
@@ -57,8 +57,8 @@ void ProjectionIterator::build_index_map(const Schema& output, const Schema& inp
 
 Status ProjectionIterator::do_get_next(Chunk* chunk) {
     if (_chunk == nullptr) {
-        DCHECK_GT(_child->res_schema().num_fields(), 0);
-        _chunk = ChunkHelper::new_chunk(_child->res_schema(), _chunk_size);
+        DCHECK_GT(_child->encoded_schema().num_fields(), 0);
+        _chunk = ChunkHelper::new_chunk(_child->encoded_schema(), _chunk_size);
         CurrentMemTracker::consume(_chunk->memory_usage());
     }
     _chunk->reset();

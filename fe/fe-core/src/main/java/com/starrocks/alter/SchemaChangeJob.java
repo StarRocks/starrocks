@@ -1012,8 +1012,8 @@ public class SchemaChangeJob extends AlterJob {
                 int schemaVersion = getSchemaVersionByIndexId(indexId);
                 int schemaHash = getSchemaHashByIndexId(indexId);
                 short shortKeyColumnCount = getShortKeyColumnCountByIndexId(indexId);
-                olapTable.setIndexMeta(indexId, null, entry.getValue(), schemaVersion, schemaHash,
-                        shortKeyColumnCount, newStorageType, null);
+                olapTable.setIndexMeta(indexId, null, entry.getValue(), schemaVersion, schemaHash, shortKeyColumnCount,
+                        newStorageType, null);
 
                 if (indexId == olapTable.getBaseIndexId()) {
                     olapTable.setNewFullSchema(entry.getValue());

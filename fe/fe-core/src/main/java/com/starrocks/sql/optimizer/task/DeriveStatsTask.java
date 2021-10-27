@@ -2,14 +2,9 @@
 
 package com.starrocks.sql.optimizer.task;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.GroupExpression;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * DeriveStatsTask derives any stats needed for costing a GroupExpression. This will
@@ -19,12 +14,10 @@ import java.util.List;
  */
 public class DeriveStatsTask extends OptimizerTask implements Cloneable {
     private final GroupExpression groupExpression;
-    private final ColumnRefSet requiredColumns;
 
-    public DeriveStatsTask(TaskContext context, GroupExpression expression, ColumnRefSet requiredColumns) {
+    public DeriveStatsTask(TaskContext context, GroupExpression expression) {
         super(context);
         this.groupExpression = expression;
-        this.requiredColumns = requiredColumns;
     }
 
     // Shallow Clone here
@@ -41,8 +34,7 @@ public class DeriveStatsTask extends OptimizerTask implements Cloneable {
 
     @Override
     public String toString() {
-        return "DeriveStatsTask for groupExpression " + groupExpression +
-                "\n requiredColumns " + requiredColumns;
+        return "DeriveStatsTask for groupExpression " + groupExpression;
     }
 
     @Override
@@ -51,16 +43,10 @@ public class DeriveStatsTask extends OptimizerTask implements Cloneable {
             return;
         }
 
-        List<ColumnRefSet> childRequiredColumns = getChildRequiredColumns();
-
         boolean needDerivedChildren = false;
-        Preconditions.checkState(childRequiredColumns.size() ==
-                groupExpression.arity());
-
         // If we haven't got enough stats to compute the current stats, derive them
         // from the child first
-        for (int i = 0; i < childRequiredColumns.size(); ++i) {
-            ColumnRefSet childRequiredColumn = childRequiredColumns.get(i);
+        for (int i = 0; i < groupExpression.arity(); ++i) {
             // TODO(kks): Currently we use the first child expression in the child
             // group to derive stats, in the future we may want to pick the one with
             // the highest confidence refer to ORCA paper
@@ -75,7 +61,7 @@ public class DeriveStatsTask extends OptimizerTask implements Cloneable {
                     // Derive stats for root later
                     pushTask((DeriveStatsTask) clone());
                 }
-                pushTask(new DeriveStatsTask(context, childExpression, childRequiredColumn));
+                pushTask(new DeriveStatsTask(context, childExpression));
             }
         }
 
@@ -85,19 +71,11 @@ public class DeriveStatsTask extends OptimizerTask implements Cloneable {
         }
 
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
-        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext, requiredColumns,
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
                 context.getOptimizerContext().getColumnRefFactory(), context.getOptimizerContext().getDumpInfo());
         statisticsCalculator.estimatorStats();
         groupExpression.getGroup().setStatistics(expressionContext.getStatistics());
 
         groupExpression.setStatsDerived();
-    }
-
-    public List<ColumnRefSet> getChildRequiredColumns() {
-        List<ColumnRefSet> result = new ArrayList<>();
-        for (int i = 0; i < groupExpression.arity(); ++i) {
-            result.add(groupExpression.getChildOutputColumns(i));
-        }
-        return result;
     }
 }

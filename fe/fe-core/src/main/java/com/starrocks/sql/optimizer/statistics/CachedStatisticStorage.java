@@ -112,8 +112,8 @@ public class CachedStatisticStorage implements StatisticStorage {
             };
 
     AsyncLoadingCache<CacheKey, Optional<ColumnStatistic>> cachedStatistics = Caffeine.newBuilder()
-            .expireAfterWrite(Config.statistic_collect_interval_sec * 2, TimeUnit.SECONDS)
-            .refreshAfterWrite(Config.statistic_collect_interval_sec, TimeUnit.SECONDS)
+            .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
+            .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
             .maximumSize(Config.statistic_cache_columns)
             .buildAsync(loader);
 

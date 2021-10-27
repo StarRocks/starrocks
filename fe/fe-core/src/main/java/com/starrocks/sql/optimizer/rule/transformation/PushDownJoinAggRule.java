@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -25,9 +26,11 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 // Push down Join
@@ -103,13 +106,6 @@ public class PushDownJoinAggRule extends TransformationRule {
         List<ColumnRefOperator> leftOutput =
                 Arrays.stream(leftExpression.getOutputColumns().getColumnIds()).mapToObj(factory::getColumnRef).collect(
                         Collectors.toList());
-        // For LogicalJoinOperator, use pruneOutputColumns instead of output columns
-        if (leftExpression.getOp() instanceof LogicalJoinOperator) {
-            LogicalJoinOperator leftJoinOperator = (LogicalJoinOperator) leftExpression.getOp();
-            if (leftJoinOperator.getPruneOutputColumns() != null) {
-                leftOutput = Lists.newArrayList(leftJoinOperator.getPruneOutputColumns());
-            }
-        }
 
         if (!checkIsUnique(leftOutput, leftExpression)) {
             return Collections.emptyList();
@@ -135,15 +131,6 @@ public class PushDownJoinAggRule extends TransformationRule {
             }
         }
 
-        LogicalJoinOperator newJoin = new LogicalJoinOperator.Builder().withOperator(inputJoinOperator)
-                .setOnPredicate(Utils.compoundAnd(newJoinOnPredicate))
-                .setPredicate(Utils.compoundAnd(newJoinFilterPredicate))
-                .build();
-
-        OptExpression newJoinExpression = new OptExpression(newJoin);
-        newJoinExpression.getInputs().add(input.getInputs().get(0));
-        newJoinExpression.getInputs().addAll(rightAggExpression.getInputs());
-
         List<ScalarOperator> requiredOutput =
                 Arrays.stream(context.getTaskContext().get(0).getRequiredColumns().getColumnIds())
                         .mapToObj(factory::getColumnRef).collect(Collectors.toList());
@@ -163,11 +150,26 @@ public class PushDownJoinAggRule extends TransformationRule {
             }
         }
 
-        // calculate the prune output columns for newJoin
         ColumnRefSet newJoinPruneOutPutColumns = new ColumnRefSet(leftOutput);
         newJoinPruneOutPutColumns.union(rightAggExpression.inputAt(0).getOutputColumns());
-        newJoin.setPruneOutputColumns(
-                newJoinPruneOutPutColumns.getStream().mapToObj(factory::getColumnRef).collect(Collectors.toList()));
+        LogicalJoinOperator.Builder newJoinBuilder = new LogicalJoinOperator.Builder().withOperator(inputJoinOperator)
+                .setOnPredicate(Utils.compoundAnd(newJoinOnPredicate))
+                .setPredicate(Utils.compoundAnd(newJoinFilterPredicate));
+
+        ColumnRefSet inputColumns = new ColumnRefSet();
+        inputColumns.union(input.inputAt(0).getOutputColumns());
+        inputColumns.union(rightAggExpression.inputAt(0).getOutputColumns());
+        if (newJoinPruneOutPutColumns.equals(inputColumns)) {
+            newJoinBuilder.setProjection(null);
+        } else {
+            newJoinBuilder.setProjection(
+                    new Projection(newJoinPruneOutPutColumns.getStream().mapToObj(factory::getColumnRef)
+                            .collect(Collectors.toMap(Function.identity(), Function.identity())), new HashMap<>()));
+        }
+
+        OptExpression newJoinExpression = new OptExpression(newJoinBuilder.build());
+        newJoinExpression.getInputs().add(input.getInputs().get(0));
+        newJoinExpression.getInputs().addAll(rightAggExpression.getInputs());
 
         LogicalAggregationOperator newAgg = new LogicalAggregationOperator(rightAggOperator.getType(), leftOutput,
                 rightAggOperator.getAggregations());

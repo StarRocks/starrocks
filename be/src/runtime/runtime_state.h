@@ -105,6 +105,7 @@ public:
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
     ExecEnv* exec_env() { return _exec_env; }
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
+    MemPool* instance_mem_pool() { return _instance_mem_pool.get(); }
     ThreadResourceMgr::ResourcePool* resource_pool() { return _resource_pool; }
     RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
 
@@ -263,6 +264,8 @@ public:
     int64_t get_load_mem_limit() const;
 
     const vectorized::GlobalDictMaps& get_global_dict_map() const;
+    vectorized::GlobalDictMaps* mutable_global_dict_map();
+
     using GlobalDictLists = std::vector<TGlobalDict>;
     Status init_global_dict(const GlobalDictLists& global_dict_list);
 
@@ -327,7 +330,7 @@ private:
     // will not necessarily be set in all error cases.
     std::mutex _process_status_lock;
     Status _process_status;
-    //std::unique_ptr<MemPool> _udf_pool;
+    std::unique_ptr<MemPool> _instance_mem_pool;
 
     // This is the node id of the root node for this plan fragment. This is used as the
     // hash seed and has two useful properties:

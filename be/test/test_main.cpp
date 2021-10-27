@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
     starrocks::ChunkAllocator::init_instance(starrocks::config::chunk_reserved_bytes_limit);
 
     std::vector<starrocks::StorePath> paths;
-    paths.emplace_back(starrocks::config::storage_root_path, -1);
+    paths.emplace_back(starrocks::config::storage_root_path);
 
     std::unique_ptr<starrocks::MemTracker> table_meta_mem_tracker = std::make_unique<starrocks::MemTracker>();
     std::unique_ptr<starrocks::MemTracker> schema_change_mem_tracker = std::make_unique<starrocks::MemTracker>();

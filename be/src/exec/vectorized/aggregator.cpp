@@ -540,14 +540,16 @@ vectorized::Columns Aggregator::_create_group_by_columns() {
     return group_by_columns;
 }
 
-void Aggregator::_serialize_to_chunk(vectorized::ConstAggDataPtr state, const vectorized::Columns& agg_result_columns) {
+void Aggregator::_serialize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
+                                     const vectorized::Columns& agg_result_columns) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->serialize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
                                                agg_result_columns[i].get());
     }
 }
 
-void Aggregator::_finalize_to_chunk(vectorized::ConstAggDataPtr state, const vectorized::Columns& agg_result_columns) {
+void Aggregator::_finalize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
+                                    const vectorized::Columns& agg_result_columns) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->finalize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
                                               agg_result_columns[i].get());
@@ -620,7 +622,7 @@ void Aggregator::_evaluate_agg_fn_exprs(vectorized::Chunk* chunk) {
         static_assert(sizeof(vectorized::RunTimeTypeTraits<TYPE>::CppType) == SIZE); \
         return SIZE;
 
-inline int get_byte_size_of_primitive_type(PrimitiveType type) {
+inline static int get_byte_size_of_primitive_type(PrimitiveType type) {
     switch (type) {
         RETURN_PTYPE_BYTE_SIZE(TYPE_NULL, 1);
         RETURN_PTYPE_BYTE_SIZE(TYPE_BOOLEAN, 1);

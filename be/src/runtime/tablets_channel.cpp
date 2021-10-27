@@ -39,6 +39,7 @@ std::atomic<uint64_t> TabletsChannel::_s_tablet_writer_count;
 TabletsChannel::TabletsChannel(const TabletsChannelKey& key, MemTracker* mem_tracker)
         : _key(key), _state(kInitialized), _closed_senders(64) {
     _mem_tracker = std::make_unique<MemTracker>(-1, "tablets channel", mem_tracker, true);
+    _mem_pool = std::make_unique<MemPool>(_mem_tracker.get());
     static std::once_flag once_flag;
     std::call_once(once_flag, [] {
         REGISTER_GAUGE_STARROCKS_METRIC(tablet_writer_count, [&]() { return _s_tablet_writer_count.load(); });
@@ -52,6 +53,7 @@ TabletsChannel::~TabletsChannel() {
     STLDeleteValues(&_vectorized_tablet_writers);
     delete _row_desc;
     delete _schema;
+    _mem_pool.reset();
 }
 
 Status TabletsChannel::open(const PTabletWriterOpenRequest& params) {
@@ -439,6 +441,21 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
         return Status::InternalError(ss.str());
     }
     if (_is_vectorized) {
+        // init global dict info if need
+        for (auto& slot : params.schema().slot_descs()) {
+            vectorized::GlobalDictMap global_dict;
+            if (slot.global_dict_words_size()) {
+                for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
+                    const std::string& dict_word = slot.global_dict_words(i);
+                    auto* data = _mem_pool->allocate(dict_word.size());
+                    memcpy(data, dict_word.data(), dict_word.size());
+                    Slice slice(data, dict_word.size());
+                    global_dict.emplace(slice, i);
+                }
+                _global_dicts.insert(std::make_pair(slot.col_name(), std::move(global_dict)));
+            }
+        }
+
         std::vector<int64_t> tablet_ids;
         tablet_ids.reserve(params.tablets_size());
         for (auto& tablet : params.tablets()) {
@@ -451,6 +468,7 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
             request.load_id = params.id();
             request.tuple_desc = _tuple_desc;
             request.slots = index_slots;
+            request.global_dicts = &_global_dicts;
 
             vectorized::DeltaWriter* writer = nullptr;
             auto st = vectorized::DeltaWriter::open(&request, _mem_tracker.get(), &writer);

@@ -319,6 +319,7 @@ struct TFunction {
   // UDF function.
   30: optional i64 fid
   31: optional TTableFunction table_fn
+  32: optional bool could_apply_dict_optimize
 }
 
 enum TLoadJobState {
@@ -386,6 +387,8 @@ enum TFileType {
 struct TTabletCommitInfo {
     1: required i64 tabletId
     2: required i64 backendId
+    3: optional list<string> invalid_dict_cache_columns
+    4: optional list<string> valid_dict_cache_columns
 }
 
 enum TLoadType {

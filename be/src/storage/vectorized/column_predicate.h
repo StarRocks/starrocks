@@ -12,9 +12,9 @@
 #include "column/column.h" // Column
 #include "column/datum.h"
 #include "common/object_pool.h"
-#include "in_predicate_utils.h"
 #include "storage/olap_common.h" // ColumnId
 #include "storage/vectorized/range.h"
+#include "storage/vectorized/zone_map_detail.h"
 #include "util/string_parser.hpp"
 
 class Roaring;
@@ -23,6 +23,9 @@ namespace starrocks {
 class BloomFilter;
 class Slice;
 class ObjectPool;
+class ExprContext;
+class RuntimeState;
+class SlotDescriptor;
 } // namespace starrocks
 
 namespace starrocks::segment_v2 {
@@ -46,6 +49,7 @@ enum class PredicateType {
     kNotNull = 9,
     kAnd = 10,
     kOr = 11,
+    kExpr = 12,
 };
 
 template <typename T>
@@ -98,7 +102,7 @@ public:
     virtual bool filter(const BloomFilter& bf) const { return true; }
 
     // Return false to filter out a data page.
-    virtual bool zone_map_filter(const Datum& min, const Datum& max) const { return true; }
+    virtual bool zone_map_filter(const ZoneMapDetail& detail) const { return true; }
 
     virtual bool support_bloom_filter() const { return false; }
 
@@ -270,6 +274,8 @@ ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type, ColumnId id,
 ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type, ColumnId id,
                                              const std::vector<std::string>& operands);
 ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type, ColumnId, bool is_null);
+ColumnPredicate* new_column_expr_predicate(const TypeInfoPtr& type, ColumnId, RuntimeState*, ExprContext* expr_ctx,
+                                           const SlotDescriptor* slot_desc);
 
 template <FieldType field_type, template <FieldType> typename Predicate, typename NewColumnPredicateFunc>
 Status predicate_convert_to(Predicate<field_type> const& input_predicate,

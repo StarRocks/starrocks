@@ -9,7 +9,9 @@ import com.starrocks.common.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -246,6 +248,32 @@ public class Memo {
                     iterator.remove();
                     break;
                 }
+            }
+        }
+    }
+
+    private void deepSearchGroup(Group root, LinkedList<Integer> touch) {
+        for (Group group : root.getFirstLogicalExpression().getInputs()) {
+            touch.add(group.getId());
+            deepSearchGroup(group, touch);
+        }
+    }
+
+    /**
+     * When performing replaceRewriteExpression, some groups may not be reachable by rootGroup.
+     * These groups should be replaced.
+     * In order to reduce the number of groups entering Memo,
+     * we will delete inaccessible groups in this function.
+     */
+    public void removeUnreachableGroup() {
+        LinkedList<Integer> touch = new LinkedList<>();
+        touch.add(rootGroup.getId());
+        deepSearchGroup(rootGroup, touch);
+
+        List<Group> groupsCopy = new ArrayList<>(groups);
+        for (Group group : groupsCopy) {
+            if (!touch.contains(group.getId())) {
+                removeOneGroup(group);
             }
         }
     }

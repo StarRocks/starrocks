@@ -61,7 +61,7 @@ void set_up() {
     FileUtils::remove_all(config::storage_root_path);
     FileUtils::create_dir(config::storage_root_path);
     std::vector<StorePath> paths;
-    paths.emplace_back(config::storage_root_path, -1);
+    paths.emplace_back(config::storage_root_path);
 
     starrocks::EngineOptions options;
     options.store_paths = paths;

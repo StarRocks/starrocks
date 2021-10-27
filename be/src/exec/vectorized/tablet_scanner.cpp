@@ -48,7 +48,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     }
 
     DCHECK(_params.global_dictmaps != nullptr);
-    RETURN_IF_ERROR(_prj_iter->init_res_schema(*_params.global_dictmaps));
+    RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
 
     Status st = _reader->prepare();
     if (!st.ok()) {
@@ -84,6 +84,7 @@ Status TabletScanner::close(RuntimeState* state) {
     _prj_iter->close();
     update_counter();
     _reader.reset();
+    _predicate_free_pool.clear();
     Expr::close(_conjunct_ctxs, state);
     // Reduce the memory usage if the the average string size is greater than 512.
     release_large_columns<BinaryColumn>(config::vector_chunk_size * 512);
@@ -121,20 +122,9 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     _params.chunk_size = config::vector_chunk_size;
 
     PredicateParser parser(_tablet->tablet_schema());
-
-    // Condition
-    for (auto& filter : _parent->_olap_filter) {
-        ColumnPredicate* p = parser.parse(filter);
-        p->set_index_filter_only(filter.is_index_filter_only);
-        _predicate_free_pool.emplace_back(p);
-        if (parser.can_pushdown(p)) {
-            _params.predicates.push_back(p);
-        } else {
-            _predicates.add(p);
-        }
-    }
-    for (auto& is_null_str : _parent->_is_null_vector) {
-        ColumnPredicate* p = parser.parse(is_null_str);
+    std::vector<vectorized::ColumnPredicate*> preds;
+    _parent->_conjuncts_manager.get_column_predicates(&parser, &preds);
+    for (auto* p : preds) {
         _predicate_free_pool.emplace_back(p);
         if (parser.can_pushdown(p)) {
             _params.predicates.push_back(p);
@@ -203,7 +193,7 @@ Status TabletScanner::_init_return_columns() {
 // mapping a slot-column-id to schema-columnid
 Status TabletScanner::_init_global_dicts() {
     const auto& global_dict_map = _runtime_state->get_global_dict_map();
-    auto global_dict = _parent->_obj_pool.add(new std::unordered_map<uint32_t, GlobalDictMap*>());
+    auto global_dict = _parent->_obj_pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     for (auto slot : _parent->_tuple_desc->slots()) {
         if (!slot->is_materialized()) {

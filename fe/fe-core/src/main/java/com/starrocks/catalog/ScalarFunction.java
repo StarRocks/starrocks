@@ -31,8 +31,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.thrift.TFunction;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TScalarFunction;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -47,7 +46,6 @@ import static com.starrocks.common.io.IOUtils.writeOptionString;
  * Internal representation of a scalar function.
  */
 public class ScalarFunction extends Function {
-    private static final Logger LOG = LogManager.getLogger(ScalarFunction.class);
     // The name inside the binary at location_ that contains this particular
     // function. e.g. org.example.MyUdf.class.
     private String symbolName;
@@ -267,7 +265,7 @@ public class ScalarFunction extends Function {
         TFunction fn = super.toThrift();
         if (symbolName == null) {
             // For vector engine, the symbol field is required
-            symbolName = "";
+            symbolName = Strings.EMPTY;
         }
         fn.setScalar_fn(new TScalarFunction());
         fn.getScalar_fn().setSymbol(symbolName);

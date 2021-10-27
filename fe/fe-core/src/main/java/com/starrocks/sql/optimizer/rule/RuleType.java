@@ -89,6 +89,10 @@ public enum RuleType {
 
     TF_JOIN_FORCE_LIMIT,
 
+    TF_MERGE_PROJECT_WITH_CHILD,
+
+    TF_PUSH_DOWN_JOIN_ON_EXPRESSION_TO_CHILD_PROJECT,
+
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,

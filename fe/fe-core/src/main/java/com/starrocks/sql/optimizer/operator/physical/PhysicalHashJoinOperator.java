@@ -2,37 +2,37 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 public class PhysicalHashJoinOperator extends PhysicalOperator {
     private final JoinOperator joinType;
     private final ScalarOperator joinPredicate;
     private final String joinHint;
-    private final List<ColumnRefOperator> pruneOutputColumns;
 
     public PhysicalHashJoinOperator(JoinOperator joinType,
                                     ScalarOperator joinPredicate,
                                     String joinHint,
                                     long limit,
                                     ScalarOperator predicate,
-                                    List<ColumnRefOperator> pruneOutputColumns) {
+                                    Projection projection) {
         super(OperatorType.PHYSICAL_HASH_JOIN);
         this.joinType = joinType;
         this.joinPredicate = joinPredicate;
         this.joinHint = joinHint;
         this.limit = limit;
         this.predicate = predicate;
-        this.pruneOutputColumns = pruneOutputColumns;
+        this.projection = projection;
     }
 
     public JoinOperator getJoinType() {
@@ -45,10 +45,6 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
 
     public String getJoinHint() {
         return joinHint;
-    }
-
-    public List<ColumnRefOperator> getPruneOutputColumns() {
-        return pruneOutputColumns;
     }
 
     @Override
@@ -89,12 +85,45 @@ public class PhysicalHashJoinOperator extends PhysicalOperator {
             return false;
         }
         PhysicalHashJoinOperator that = (PhysicalHashJoinOperator) o;
-        return joinType == that.joinType && Objects.equals(joinPredicate, that.joinPredicate)
-                && Objects.equals(pruneOutputColumns, that.pruneOutputColumns);
+        return joinType == that.joinType && Objects.equals(joinPredicate, that.joinPredicate);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), joinType, joinPredicate, pruneOutputColumns);
+        return Objects.hash(super.hashCode(), joinType, joinPredicate);
     }
+
+    @Override
+    public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
+        Preconditions.checkState(!childDictColumns.isEmpty());
+        ColumnRefSet dictSet = new ColumnRefSet();
+        for (Integer id : childDictColumns) {
+            dictSet.union(id);
+        }
+
+        if (predicate != null) {
+            if (predicate.getUsedColumns().isIntersect(dictSet)) {
+                return true;
+            }
+        }
+
+        if (joinPredicate != null) {
+            if (joinPredicate.getUsedColumns().isIntersect(dictSet)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public void fillDisableDictOptimizeColumns(ColumnRefSet columnRefSet) {
+        if (predicate != null) {
+            columnRefSet.union(predicate.getUsedColumns());
+        }
+
+        if (joinPredicate != null) {
+            columnRefSet.union(joinPredicate.getUsedColumns());
+        }
+    }
+
 }

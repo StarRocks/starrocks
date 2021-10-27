@@ -56,6 +56,12 @@ enum PageTypePB {
     SHORT_KEY_PAGE = 4;
 }
 
+enum NullEncodingPB {
+    BITSHUFFLE_NULL = 0;
+    LZ4_NULL = 1;
+    RLE_NULL = 2;
+}
+
 message DataPageFooterPB {
     // required: ordinal of the first value
     optional uint64 first_ordinal = 1;
@@ -77,6 +83,7 @@ message DataPageFooterPB {
     // another difference is that the format 1 use Run-Length encoding to encode the null map,
     // while format 2 use the bitshuffle.
     optional uint32 format_version = 20;
+    optional NullEncodingPB null_encoding = 21;
 }
 
 message IndexPageFooterPB {

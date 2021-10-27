@@ -24,6 +24,7 @@
 #include <ostream>
 
 #include "gutil/strings/substitute.h"
+#include "storage/types.h"
 
 namespace starrocks {
 
@@ -234,6 +235,33 @@ std::string TypeDescriptor::debug_string() const {
     default:
         return type_to_string(type);
     }
+}
+
+TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
+    FieldType ftype = type_info->type();
+
+    bool is_array = false;
+    if (ftype == OLAP_FIELD_TYPE_ARRAY) {
+        is_array = true;
+        ArrayTypeInfo* array_type_info = down_cast<ArrayTypeInfo*>(type_info);
+        type_info = array_type_info->item_type_info().get();
+        ftype = type_info->type();
+    }
+
+    PrimitiveType ptype = scalar_field_type_to_primitive_type(ftype);
+    DCHECK(ptype != INVALID_TYPE);
+    int len = TypeDescriptor::MAX_VARCHAR_LENGTH;
+    int precision = type_info->precision();
+    int scale = type_info->scale();
+    TypeDescriptor ret = TypeDescriptor::from_primtive_type(ptype, len, precision, scale);
+
+    if (is_array) {
+        TypeDescriptor arr;
+        arr.type = TYPE_ARRAY;
+        arr.children.emplace_back(ret);
+        return arr;
+    }
+    return ret;
 }
 
 } // namespace starrocks

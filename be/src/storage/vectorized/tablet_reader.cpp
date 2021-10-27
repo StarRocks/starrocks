@@ -192,7 +192,7 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
     }
 
     if (_collect_iter != nullptr) {
-        RETURN_IF_ERROR(_collect_iter->init_res_schema(*params.global_dictmaps));
+        RETURN_IF_ERROR(_collect_iter->init_encoded_schema(*params.global_dictmaps));
     }
 
     return Status::OK();
@@ -228,7 +228,7 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
                 LOG(WARNING) << "ignore delete condition of non-key column: " << pred_pb.sub_predicates(i);
                 continue;
             }
-            ColumnPredicate* pred = pred_parser.parse(cond);
+            ColumnPredicate* pred = pred_parser.parse_thrift_cond(cond);
             if (pred == nullptr) {
                 LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
                              << "], condition_op[" << cond.condition_op << "], condition_values["
@@ -252,7 +252,7 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
             for (const auto& value : in_predicate.values()) {
                 cond.condition_values.push_back(value);
             }
-            ColumnPredicate* pred = pred_parser.parse(cond);
+            ColumnPredicate* pred = pred_parser.parse_thrift_cond(cond);
             if (pred == nullptr) {
                 LOG(WARNING) << "failed to parse delete condition.column_name[" << cond.column_name
                              << "], condition_op[" << cond.condition_op << "], condition_values["

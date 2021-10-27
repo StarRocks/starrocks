@@ -50,7 +50,7 @@ struct TabletReaderParams {
     std::string to_string() const;
     int chunk_size = 1024;
 
-    std::unordered_map<uint32_t, GlobalDictMap*>* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
+    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 };
 
 } // namespace vectorized

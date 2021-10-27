@@ -829,11 +829,9 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createUserTagMVSql);
         String query =
                 "select empid, percentile_approx(salary, 1), percentile_approx(commission, 1) from emps group by empid";
-        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV, "  2:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: percentile_union(5: salary), percentile_union(6: commission)\n" +
-                "  |  group by: 2: empid\n" +
-                "  |  use vectorized: true");
+        System.out.println(starRocksAssert.query(query).explainQuery());
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV, "  2:AGGREGATE (update serialize)\n",
+                "output: percentile_union");
     }
 
     @Test
@@ -1072,7 +1070,6 @@ public class MVRewriteTest {
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
 
         query = "select count(distinct emps.deptno) from emps, depts where emps.time = depts.time";
-        System.out.println("FIXME : " + starRocksAssert.query(query).explainQuery());
         starRocksAssert.query(query).explainContains(EMPS_MV_NAME);
 
         query = "select count(distinct emps.deptno) from emps left outer join depts on emps.time = depts.time";
@@ -1089,5 +1086,15 @@ public class MVRewriteTest {
 
         query = "select approx_count_distinct(salary) from emps left outer join depts on emps.time = depts.time";
         starRocksAssert.query(query).explainContains("emps_mv");
+    }
+
+    @Test
+    public void testMultipleAggregate() throws Exception {
+        String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select empid, deptno, sum(salary) "
+                + "from " + EMPS_TABLE_NAME + " group by empid, deptno;";
+        String query = "select deptno, sum(salary) as ssalary from " + EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS_MV);
+        query = "select count(distinct deptno), MAX(ssalary) from (" + query + ") as zxcv123 group by deptno";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
     }
 }

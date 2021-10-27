@@ -34,14 +34,6 @@ OlapScanNode::OlapScanNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
 Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
     DCHECK(!tnode.olap_scan_node.__isset.sort_column) << "sorted result not supported any more";
-
-    const TQueryOptions& query_options = state->query_options();
-    if (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0) {
-        _max_scan_key_num = query_options.max_scan_key_num;
-    } else {
-        _max_scan_key_num = config::doris_max_scan_key_num;
-    }
-
     return Status::OK();
 }
 
@@ -71,18 +63,9 @@ Status OlapScanNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
     CurrentThread::set_mem_tracker(mem_tracker());
 
-    for (const auto& ctx_iter : _conjunct_ctxs) {
-        // if conjunct is constant, compute direct and set eos = true
-        if (ctx_iter->root()->is_constant()) {
-            ColumnPtr value = ctx_iter->root()->evaluate_const(ctx_iter);
-
-            if (value == nullptr || value->only_null() || value->is_null(0)) {
-                _update_status(Status::EndOfFile("conjuncts evaluated to null"));
-            } else if (value->is_constant() && !ColumnHelper::get_const_value<TYPE_BOOLEAN>(value)) {
-                _update_status(Status::EndOfFile("conjuncts evaluated to false"));
-            }
-        }
-    }
+    Status status;
+    OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status);
+    _update_status(status);
     return Status::OK();
 }
 
@@ -339,22 +322,27 @@ Status OlapScanNode::collect_query_statistics(QueryStatistics* statistics) {
 Status OlapScanNode::_start_scan(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
 
-    // 1. Convert conjuncts to ColumnValueRange in each column
-    Status status;
-    RETURN_IF_ERROR(details::normalize_conjuncts(_tuple_desc->slots(), _obj_pool, _conjunct_ctxs, _normalized_conjuncts,
-                                                 _runtime_filter_collector, _is_null_vector, _column_value_ranges,
-                                                 &status));
-    if (!status.ok()) {
-        _update_status(status);
+    OlapScanConjunctsManager& cm = _conjuncts_manager;
+    cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
+    cm.tuple_desc = _tuple_desc;
+    cm.obj_pool = &_obj_pool;
+    cm.key_column_names = &_olap_scan_node.key_column_name;
+    cm.runtime_filters = &_runtime_filter_collector;
+    cm.runtime_state = state;
+
+    const TQueryOptions& query_options = state->query_options();
+    int32_t max_scan_key_num;
+    if (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0) {
+        max_scan_key_num = query_options.max_scan_key_num;
+    } else {
+        max_scan_key_num = config::doris_max_scan_key_num;
     }
-
-    // 2. Using ColumnValueRange to Build StorageEngine filters
-    RETURN_IF_ERROR(details::build_olap_filters(_column_value_ranges, _olap_filter));
-
-    // 4. Using `Key Column`'s ColumnValueRange to split ScanRange to sererval `Sub ScanRange`
-    RETURN_IF_ERROR(details::build_scan_key(_olap_scan_node.key_column_name, _column_value_ranges, _scan_keys,
-                                            limit() == -1, _max_scan_key_num));
-
+    bool scan_keys_unlimited = (limit() == -1);
+    bool enable_column_expr_predicate = false;
+    if (_olap_scan_node.__isset.enable_column_expr_predicate) {
+        enable_column_expr_predicate = _olap_scan_node.enable_column_expr_predicate;
+    }
+    cm.parse_conjuncts(scan_keys_unlimited, max_scan_key_num, enable_column_expr_predicate);
     RETURN_IF_ERROR(_start_scan_thread(state));
 
     return Status::OK();
@@ -458,39 +446,29 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
         return Status::OK();
     }
 
-    std::vector<std::unique_ptr<OlapScanRange>> cond_ranges;
-    RETURN_IF_ERROR(_scan_keys.get_key_range(&cond_ranges));
-    if (cond_ranges.empty()) {
-        cond_ranges.emplace_back(new OlapScanRange());
-    }
-
-    // vector of ExprContext that has not been normalized.
-    std::vector<ExprContext*> predicates;
-    DCHECK_EQ(_conjunct_ctxs.size(), _normalized_conjuncts.size());
-    for (size_t i = 0; i < _normalized_conjuncts.size(); i++) {
-        if (!_normalized_conjuncts[i]) {
-            predicates.push_back(_conjunct_ctxs[i]);
-        }
-    }
+    std::vector<std::unique_ptr<OlapScanRange>> key_ranges;
+    RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&key_ranges));
+    std::vector<ExprContext*> conjunct_ctxs;
+    _conjuncts_manager.get_not_push_down_conjuncts(&conjunct_ctxs);
 
     int scanners_per_tablet = std::max(1, 64 / (int)_scan_ranges.size());
     for (auto& scan_range : _scan_ranges) {
-        int num_ranges = cond_ranges.size();
+        int num_ranges = key_ranges.size();
         int ranges_per_scanner = std::max(1, num_ranges / scanners_per_tablet);
         for (int i = 0; i < num_ranges;) {
-            std::vector<OlapScanRange*> scanner_ranges;
-            scanner_ranges.push_back(cond_ranges[i].get());
+            std::vector<OlapScanRange*> agg_key_ranges;
+            agg_key_ranges.push_back(key_ranges[i].get());
             i++;
             for (int j = 1; i < num_ranges && j < ranges_per_scanner &&
-                            cond_ranges[i]->end_include == cond_ranges[i - 1]->end_include;
+                            key_ranges[i]->end_include == key_ranges[i - 1]->end_include;
                  ++j, ++i) {
-                scanner_ranges.push_back(cond_ranges[i].get());
+                agg_key_ranges.push_back(key_ranges[i].get());
             }
 
             TabletScannerParams scanner_params;
             scanner_params.scan_range = scan_range.get();
-            scanner_params.key_ranges = &scanner_ranges;
-            scanner_params.conjunct_ctxs = &predicates;
+            scanner_params.key_ranges = &agg_key_ranges;
+            scanner_params.conjunct_ctxs = &conjunct_ctxs;
             scanner_params.skip_aggregation = _olap_scan_node.is_preaggregation;
             scanner_params.need_agg_finalize = true;
             auto* scanner = _obj_pool.add(new TabletScanner(this));

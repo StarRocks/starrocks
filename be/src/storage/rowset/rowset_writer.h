@@ -24,6 +24,7 @@
 
 #include "gen_cpp/types.pb.h"
 #include "gutil/macros.h"
+#include "runtime/global_dicts.h"
 #include "storage/column_mapping.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -116,6 +117,13 @@ public:
     virtual int64_t total_data_size() = 0;
 
     virtual RowsetId rowset_id() = 0;
+
+    virtual const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() {
+        return _global_dict_columns_valid_info;
+    }
+
+protected:
+    vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
 
 private:
     RowsetWriter(const RowsetWriter&) = delete;

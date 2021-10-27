@@ -190,7 +190,7 @@ public class SparkEtlJobHandler {
     }
 
     public EtlStatus getEtlJobStatus(SparkLoadAppHandle handle, String appId, long loadJobId, String etlOutputPath,
-                                     SparkResource resource, BrokerDesc brokerDesc) throws LoadException {
+                                     SparkResource resource, BrokerDesc brokerDesc) throws UserException {
         EtlStatus status = new EtlStatus();
 
         Preconditions.checkState(appId != null && !appId.isEmpty());
@@ -272,7 +272,7 @@ public class SparkEtlJobHandler {
     }
 
     public void killEtlJob(SparkLoadAppHandle handle, String appId, long loadJobId, SparkResource resource)
-            throws LoadException {
+            throws UserException {
         if (resource.isYarnMaster()) {
             // The appId may be empty when the load job is in PENDING phase. This is because the appId is
             // parsed from the spark launcher process's output (spark launcher process submit job and then

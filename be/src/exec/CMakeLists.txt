@@ -64,6 +64,7 @@ set(EXEC_FILES
     vectorized/csv_scanner.cpp
     vectorized/tablet_scanner.cpp
     vectorized/olap_scan_node.cpp
+    vectorized/olap_scan_prepare.cpp
     vectorized/olap_meta_scanner.cpp
     vectorized/olap_meta_scan_node.cpp
     vectorized/hash_join_node.cpp
@@ -138,6 +139,9 @@ set(EXEC_FILES
     pipeline/project_operator.cpp
     pipeline/result_sink_operator.cpp
     pipeline/scan_operator.cpp
+    pipeline/select_operator.cpp
+    pipeline/crossjoin/cross_join_right_sink_operator.cpp
+    pipeline/crossjoin/cross_join_left_operator.cpp
     pipeline/sort/sort_sink_operator.cpp
     pipeline/sort/sort_source_operator.cpp
     pipeline/pipeline_driver_dispatcher.cpp
@@ -155,8 +159,13 @@ set(EXEC_FILES
     pipeline/aggregate/aggregate_distinct_blocking_source_operator.cpp
     pipeline/aggregate/aggregate_distinct_streaming_sink_operator.cpp
     pipeline/aggregate/aggregate_distinct_streaming_source_operator.cpp
+    pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
+    pipeline/table_function_operator.cpp
+    pipeline/assert_num_rows_operator.cpp
+    pipeline/set/union_passthrough_operator.cpp
+    pipeline/set/union_const_source_operator.cpp
 )
 
 set(EXEC_FILES

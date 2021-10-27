@@ -164,8 +164,8 @@ abstract public class StarRocksHttpTestCase {
         OlapTable table = new OlapTable(testTableId, name, columns, KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition);
-        table.setIndexMeta(testIndexId, "testIndex", columns, 0, testSchemaHash, (short) 1, TStorageType.COLUMN,
-                KeysType.AGG_KEYS);
+        table.setIndexMeta(testIndexId, "testIndex", columns, 0, testSchemaHash, (short) 1,
+                TStorageType.COLUMN, KeysType.AGG_KEYS);
         table.setBaseIndexId(testIndexId);
         return table;
     }

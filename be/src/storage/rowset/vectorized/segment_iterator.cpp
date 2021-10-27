@@ -2,6 +2,7 @@
 
 #include "storage/rowset/vectorized/segment_iterator.h"
 
+#include <algorithm>
 #include <memory>
 #include <unordered_map>
 
@@ -128,8 +129,6 @@ private:
 
 class GlobalDictCodeColumnIterator final : public ColumnIterator {
 public:
-    using GlobalDictMap = std::unordered_map<Slice, int, SliceHashWithSeed<PhmapSeed1>, SliceEqual>;
-
     GlobalDictCodeColumnIterator(ColumnId cid, ColumnIterator* iter, GlobalDictMap* gdict)
             : _cid(cid), _col_iter(iter), _global_dict(gdict) {}
 
@@ -141,10 +140,14 @@ public:
 
     Status next_batch(size_t* n, Column* dst) override { return _col_iter->next_dict_codes(n, dst); }
 
-    // TOOD(stdpain): we need return global dict code
-    // so we should implement function `fetch_dict_by_rowid` in ColumnIterator
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override {
-        RETURN_IF_ERROR(_col_iter->fetch_values_by_rowid(rowids, size, values));
+        if (_local_dict_code_col == nullptr) {
+            _local_dict_code_col = std::make_unique<vectorized::Int32Column>();
+        }
+        _local_dict_code_col->reset_column();
+        RETURN_IF_ERROR(_col_iter->fetch_dict_codes_by_rowid(rowids, size, _local_dict_code_col.get()));
+        const auto& container = _local_dict_code_col->get_data();
+        RETURN_IF_ERROR(decode_dict_codes(container.data(), container.size(), values));
         return Status::OK();
     }
 
@@ -170,20 +173,36 @@ public:
 
     Status decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) override {
         RETURN_IF_ERROR(_build_to_global_dict());
-        vectorized::Int32Column::Container* container;
-        if (words->is_nullable()) {
+        LowCardDictColumn::Container* container = nullptr;
+        bool output_nullable = words->is_nullable();
+
+        if (output_nullable) {
             vectorized::ColumnPtr& data_column = down_cast<vectorized::NullableColumn*>(words)->data_column();
-            container = &down_cast<vectorized::Int32Column*>(data_column.get())->get_data();
+            container = &down_cast<LowCardDictColumn*>(data_column.get())->get_data();
         } else {
-            container = &down_cast<vectorized::Int32Column*>(words)->get_data();
+            container = &down_cast<LowCardDictColumn*>(words)->get_data();
         }
 
         auto& res_data = *container;
         res_data.resize(size);
         for (size_t i = 0; i < size; ++i) {
-            DCHECK(_local_to_global.contains(codes[i]));
-            res_data[i] = _local_to_global.at(codes[i]);
+#ifndef NDEBUG
+            DCHECK(codes[i] <= DICT_DECODE_MAX_SIZE);
+            if (codes[i] < 0) {
+                DCHECK(output_nullable);
+            }
+#endif
+            res_data[i] = _local_to_global[codes[i]];
         }
+
+        if (output_nullable) {
+            auto& null_data = down_cast<vectorized::NullableColumn*>(words)->null_column_data();
+            null_data.resize(size);
+            for (int i = 0; i < size; ++i) {
+                null_data[i] = (res_data[i] == 0);
+            }
+        }
+
         return Status::OK();
     }
 
@@ -197,16 +216,22 @@ private:
     Status _build_to_global_dict();
     ColumnId _cid;
     ColumnIterator* _col_iter;
-    phmap::flat_hash_map<int32_t, int32_t> _local_to_global;
+
+    std::vector<int16_t> _local_to_global_holder;
+
+    // _local_to_global[-1] is accessable
+    int16_t* _local_to_global;
+
     // global dict
     GlobalDictMap* _global_dict;
+    std::unique_ptr<vectorized::Int32Column> _local_dict_code_col;
 };
 
 Status GlobalDictCodeColumnIterator::_build_to_global_dict() {
     DCHECK(_col_iter->all_page_dict_encoded());
 
     // we only have to build code mapping once
-    if (_local_to_global.size() > 0) {
+    if (_local_to_global_holder.size() > 0) {
         return Status::OK();
     }
     auto file_column_iter = down_cast<FileColumnIterator*>(_col_iter);
@@ -220,6 +245,10 @@ Status GlobalDictCodeColumnIterator::_build_to_global_dict() {
     }
 
     file_column_iter->decode_dict_codes(dict_codes, dict_size, column.get());
+
+    _local_to_global_holder.resize(dict_size + 2);
+    std::fill(_local_to_global_holder.begin(), _local_to_global_holder.end(), 0);
+    _local_to_global = _local_to_global_holder.data() + 1;
 
     for (int i = 0; i < dict_size; ++i) {
         auto slice = column->get_slice(i);
@@ -886,8 +915,8 @@ void SegmentIterator::_switch_context(ScanContext* to) {
 
     if (to->_late_materialize) {
         if (to->_final_chunk == nullptr) {
-            DCHECK_GT(this->res_schema().num_fields(), 0);
-            to->_final_chunk = ChunkHelper::new_chunk(this->res_schema(), _opts.chunk_size);
+            DCHECK_GT(this->encoded_schema().num_fields(), 0);
+            to->_final_chunk = ChunkHelper::new_chunk(this->encoded_schema(), _opts.chunk_size);
             CurrentMemTracker::consume(to->_final_chunk->memory_usage());
         }
     } else {
@@ -1289,7 +1318,7 @@ Status SegmentIterator::_finish_late_materialization(ScanContext* ctx) {
         col->reserve(ordinals->size());
         col->resize(0);
 
-        RETURN_IF_ERROR(_column_iterators[cid]->fetch_values_by_rowid(*ordinals, col.get()));
+        RETURN_IF_ERROR(_column_decoders[cid].decode_values_by_rowid(*ordinals, col.get()));
         DCHECK_EQ(ordinals->size(), col->size());
         may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
     }

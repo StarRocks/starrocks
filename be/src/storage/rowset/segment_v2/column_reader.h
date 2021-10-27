@@ -62,6 +62,7 @@ class ReadableBlock;
 namespace vectorized {
 class ColumnPredicate;
 class Column;
+class ZoneMapDetail;
 } // namespace vectorized
 
 namespace segment_v2 {
@@ -207,7 +208,7 @@ private:
     static void _parse_zone_map(const ZoneMapPB& zone_map, WrapperField* min_value_container,
                                 WrapperField* max_value_container);
 
-    Status _parse_zone_map(const ZoneMapPB& zm, vectorized::Datum* min, vectorized::Datum* max) const;
+    Status _parse_zone_map(const ZoneMapPB& zm, vectorized::ZoneMapDetail* detail) const;
 
     Status _get_filtered_pages(CondColumn* cond_column, CondColumn* delete_conditions,
                                std::unordered_set<uint32_t>* delete_partial_filtered_pages,
@@ -358,6 +359,12 @@ public:
 
     Status fetch_values_by_rowid(const vectorized::Column& rowids, vectorized::Column* values);
 
+    virtual Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
+        return Status::NotSupported("");
+    }
+
+    Status fetch_dict_codes_by_rowid(const vectorized::Column& rowids, vectorized::Column* values);
+
 protected:
     ColumnIteratorOptions _opts;
 };
@@ -413,6 +420,8 @@ public:
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override;
 
+    Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) override;
+
     ParsedPage* get_current_page() { return _page.get(); }
 
     bool is_nullable() { return _reader->is_nullable(); }
@@ -442,6 +451,9 @@ private:
 
     template <FieldType Type>
     Status _fetch_all_dict_words(std::vector<Slice>* words) const;
+
+    template <typename ParseFunc>
+    Status _fetch_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values, ParseFunc&& page_parse);
 
     Status _load_dict_page();
 
@@ -625,6 +637,11 @@ public:
     Status decode_dict_codes(const vectorized::Column& codes, vectorized::Column* words) {
         DCHECK(_iter != nullptr);
         return _iter->decode_dict_codes(codes, words);
+    }
+    Status decode_values_by_rowid(const vectorized::Column& rowids, vectorized::Column* values) {
+        DCHECK(_iter != nullptr);
+        RETURN_IF_ERROR(_iter->fetch_values_by_rowid(rowids, values));
+        return Status::OK();
     }
 
 private:

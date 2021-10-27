@@ -59,7 +59,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
             int singleDistinctFunctionPos,
             long limit,
             ScalarOperator predicate) {
-        super(OperatorType.LOGICAL_AGGR, limit, predicate);
+        super(OperatorType.LOGICAL_AGGR, limit, predicate, null);
         this.type = type;
         this.groupingKeys = ImmutableList.copyOf(groupingKeys);
         this.partitionByColumns = partitionByColumns;
@@ -69,7 +69,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
     }
 
     private LogicalAggregationOperator(Builder builder) {
-        super(OperatorType.LOGICAL_AGGR, builder.getLimit(), builder.getPredicate());
+        super(OperatorType.LOGICAL_AGGR, builder.getLimit(), builder.getPredicate(), builder.getProjection());
         this.type = builder.type;
         this.groupingKeys = builder.groupingKeys;
         this.partitionByColumns = builder.partitionByColumns;
@@ -112,10 +112,14 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        ColumnRefSet columns = new ColumnRefSet();
-        columns.union(groupingKeys);
-        columns.union(new ArrayList<>(aggregations.keySet()));
-        return columns;
+        if (projection != null) {
+            return new ColumnRefSet(new ArrayList<>(projection.getColumnRefMap().keySet()));
+        } else {
+            ColumnRefSet columns = new ColumnRefSet();
+            columns.union(groupingKeys);
+            columns.union(new ArrayList<>(aggregations.keySet()));
+            return columns;
+        }
     }
 
     @Override

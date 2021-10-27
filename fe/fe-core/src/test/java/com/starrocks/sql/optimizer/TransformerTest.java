@@ -17,7 +17,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ErrorCollector;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -34,6 +36,9 @@ public class TransformerTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
     private static String DB_NAME = "test";
+
+    @Rule
+    public ErrorCollector collector = new ErrorCollector();
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -135,7 +140,8 @@ public class TransformerTest {
         runUnitTest("subquery");
     }
 
-    public static void analyzeAndBuildOperator(String originStmt, String operatorString, String except) {
+    public static void analyzeAndBuildOperator(String originStmt, String operatorString, String except,
+                                               ErrorCollector collector) {
         try {
             SqlScanner input =
                     new SqlScanner(new StringReader(originStmt), connectContext.getSessionVariable().getSqlMode());
@@ -147,8 +153,12 @@ public class TransformerTest {
             LogicalPlan logicalPlan = new RelationTransformer(new ColumnRefFactory()).transform(relation);
 
             OperatorStrings operatorPrinter = new OperatorStrings();
-            Assert.assertEquals(operatorString.substring(0, operatorString.length() - 1),
-                    operatorPrinter.printOperator(logicalPlan.getRoot()));
+            try {
+                Assert.assertEquals(operatorString.substring(0, operatorString.length() - 1),
+                        operatorPrinter.printOperator(logicalPlan.getRoot()));
+            } catch (Error error) {
+                collector.addError(new Throwable("\n" + originStmt, error));
+            }
         } catch (Exception ex) {
             if (!except.isEmpty()) {
                 Assert.assertEquals(ex.getMessage(), except);
@@ -197,7 +207,7 @@ public class TransformerTest {
                     mode = "except";
                     continue;
                 } else if (tempStr.equals("[end]")) {
-                    analyzeAndBuildOperator(sql, result, except);
+                    analyzeAndBuildOperator(sql, result, except, collector);
                     continue;
                 }
 

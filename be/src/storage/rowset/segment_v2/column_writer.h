@@ -26,7 +26,9 @@
 #include "common/status.h"         // for Status
 #include "gen_cpp/segment_v2.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
+#include "runtime/global_dicts.h"
 #include "storage/row_cursor_cell.h"
+#include "storage/rowset/segment_v2/binary_dict_page.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/page_pointer.h" // for PagePointer
 #include "storage/tablet_schema.h"                  // for TabletColumn
@@ -66,12 +68,16 @@ struct ColumnWriterOptions {
     // for char/varchar will speculate encoding in append
     // for others will decide encoding in init method
     bool need_speculate_encoding = false;
+
+    // when column data is encoding by dict
+    // if global_dict is not nullptr, will checkout whether global_dict can cover all data
+    vectorized::GlobalDictMap* global_dict = nullptr;
 };
 
 class BitmapIndexWriter;
 class EncodingInfo;
 class NullMapRLEBuilder;
-class NullMapBitshuffleBuilder;
+class NullFlagsBuilder;
 class OrdinalIndexWriter;
 class PageBuilder;
 class BloomFilterIndexWriter;
@@ -120,6 +126,11 @@ public:
 
     virtual ordinal_t get_next_rowid() const = 0;
 
+    // only invalid in the case of global_dict is not nullptr
+    // column is not encoding by dict or append new words that
+    // not in global_dict, it will return false
+    virtual bool is_global_dict_valid() { return true; }
+
     bool is_nullable() const { return _is_nullable; }
 
     Field* get_field() const { return _field.get(); }
@@ -167,6 +178,8 @@ public:
     Status write_bitmap_index() override;
     Status write_bloom_filter_index() override;
     ordinal_t get_next_rowid() const override { return _next_rowid; }
+
+    bool is_global_dict_valid() override { return _is_global_dict_valid; }
 
 private:
     // All Pages will be organized into a linked list
@@ -224,7 +237,8 @@ private:
     std::unique_ptr<NullMapRLEBuilder> _null_map_builder_v1;
 
     // Used when _opts.page_format == 2, using bitshuffle encoding to build the null map.
-    std::unique_ptr<NullMapBitshuffleBuilder> _null_map_builder_v2;
+    // Used when _opts.page_format == 3, using lz4 encoding to build the null map.
+    std::unique_ptr<NullFlagsBuilder> _null_map_builder_v2;
 
     std::unique_ptr<OrdinalIndexWriter> _ordinal_index_builder;
     std::unique_ptr<ZoneMapIndexWriter> _zone_map_index_builder;
@@ -234,6 +248,8 @@ private:
     bool _has_index_builder = false;
     int64_t _element_ordinal = 0;
     int64_t _previous_ordinal = 0;
+
+    bool _is_global_dict_valid = true;
 };
 
 class ArrayColumnWriter final : public ColumnWriter {

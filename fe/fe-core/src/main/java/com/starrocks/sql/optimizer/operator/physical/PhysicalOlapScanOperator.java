@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
@@ -31,7 +32,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private boolean isPreAggregation;
     private String turnOffReason;
 
-    private final List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+    private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
 
     public PhysicalOlapScanOperator(Table table,
                                     List<ColumnRefOperator> outputColumns,
@@ -41,8 +42,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                                     ScalarOperator predicate,
                                     long selectedIndexId,
                                     List<Long> selectedPartitionId,
-                                    List<Long> selectedTabletId) {
-        super(OperatorType.PHYSICAL_OLAP_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate);
+                                    List<Long> selectedTabletId,
+                                    Projection projection) {
+        super(OperatorType.PHYSICAL_OLAP_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate,
+                projection);
         this.hashDistributionSpec = hashDistributionDesc;
         this.selectedIndexId = selectedIndexId;
         this.selectedPartitionId = selectedPartitionId;
@@ -81,12 +84,9 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         return globalDicts;
     }
 
-    public void addGlobalDictColumns(Pair<Integer, ColumnDict> dict) {
-        globalDicts.add(dict);
-    }
-
-    public boolean couldApplyStringDict(List<Integer> childDictColumns) {
-        return true;
+    public void setGlobalDicts(
+            List<Pair<Integer, ColumnDict>> globalDicts) {
+        this.globalDicts = globalDicts;
     }
 
     @Override

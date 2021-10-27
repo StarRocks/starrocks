@@ -5,6 +5,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -13,8 +14,9 @@ import java.util.List;
 public class PhysicalExceptOperator extends PhysicalSetOperation {
     public PhysicalExceptOperator(List<ColumnRefOperator> columnRef, List<List<ColumnRefOperator>> childOutputColumns,
                                   long limit,
-                                  ScalarOperator predicate) {
-        super(OperatorType.PHYSICAL_EXCEPT, columnRef, childOutputColumns, limit, predicate);
+                                  ScalarOperator predicate,
+                                  Projection projection) {
+        super(OperatorType.PHYSICAL_EXCEPT, columnRef, childOutputColumns, limit, predicate, projection);
     }
 
     @Override

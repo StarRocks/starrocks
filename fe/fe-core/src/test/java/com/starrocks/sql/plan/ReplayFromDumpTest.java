@@ -151,11 +151,10 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds02"));
         SessionVariable replaySessionVariable = replayPair.first.getSessionVariable();
         Assert.assertEquals(replaySessionVariable.getParallelExecInstanceNum(), 4);
-        System.out.println(replayPair.second);
-        Assert.assertTrue(replayPair.second.contains("|----25:EXCHANGE\n" +
+        Assert.assertTrue(replayPair.second.contains("|----24:EXCHANGE\n" +
                 "  |       cardinality: 73049\n" +
                 "  |    \n" +
-                "  19:UNION\n" +
+                "  18:UNION\n" +
                 "  |  child exprs: \n" +
                 "  |      [143, INT, true] | [164, DECIMAL64(7,2), true]\n" +
                 "  |      [179, INT, true] | [200, DECIMAL64(7,2), true]\n"));
@@ -173,12 +172,12 @@ public class ReplayFromDumpTest {
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
         // Check the size of the left and right tables
-        Assert.assertTrue(replayPair.second.contains("|  \n" +
+        Assert.assertTrue(replayPair.second.contains("  |  \n" +
                 "  |----21:EXCHANGE\n" +
                 "  |       cardinality: 102\n" +
                 "  |    \n" +
                 "  5:OlapScanNode\n" +
-                "     table: customer, rollup: customer\n"));
+                "     table: customer, rollup: customer"));
     }
 
     @Test
@@ -195,5 +194,31 @@ public class ReplayFromDumpTest {
         // This test has column statistics and accurate table row count
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/groupby_limit"));
         Assert.assertTrue(replayPair.second.contains("2:AGGREGATE (update finalize)"));
+    }
+
+    @Test
+    public void testTPCDS77() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds77"));
+        // check can generate plan without exception
+        System.out.println(replayPair.second);
+    }
+
+    @Test
+    public void testTPCDS78() throws Exception {
+        // check outer join with isNull predicate on inner table
+        // The estimate cardinality of join should not be 0.
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds78"));
+        Assert.assertTrue(replayPair.second.contains("3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  equal join conjunct: [2: ss_ticket_number, INT, false] = [25: sr_ticket_number, INT, true]\n" +
+                "  |  equal join conjunct: [1: ss_item_sk, INT, false] = [24: sr_item_sk, INT, true]\n" +
+                "  |  other predicates: 25: sr_ticket_number IS NULL\n" +
+                "  |  cardinality: 39142590"));
+        Assert.assertTrue(replayPair.second.contains("15:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  equal join conjunct: [76: ws_order_number, INT, false] = [110: wr_order_number, INT, true]\n" +
+                "  |  equal join conjunct: [75: ws_item_sk, INT, false] = [109: wr_item_sk, INT, true]\n" +
+                "  |  other predicates: 110: wr_order_number IS NULL\n" +
+                "  |  cardinality: 7916106"));
     }
 }

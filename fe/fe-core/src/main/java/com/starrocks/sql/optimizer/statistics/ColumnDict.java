@@ -7,19 +7,19 @@ import com.google.common.collect.ImmutableMap;
 
 public final class ColumnDict {
     private final ImmutableMap<String, Integer> dict;
-    private final long version;
+    private final long versionTime;
 
-    public ColumnDict(ImmutableMap<String, Integer> dict, long version) {
+    public ColumnDict(ImmutableMap<String, Integer> dict, long versionTime) {
         Preconditions.checkState(dict.size() > 0 && dict.size() <= 256);
         this.dict = dict;
-        this.version = version;
+        this.versionTime = versionTime;
     }
 
     public ImmutableMap<String, Integer> getDict() {
         return dict;
     }
 
-    public long getVersion() {
-        return version;
+    public long getVersionTime() {
+        return versionTime;
     }
 }

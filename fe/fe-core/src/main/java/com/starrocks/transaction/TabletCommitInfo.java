@@ -36,10 +36,22 @@ public class TabletCommitInfo implements Writable {
     private long tabletId;
     private long backendId;
 
+    // For low cardinality string column with global dict
+    private List<String> invalidDictCacheColumns = Lists.newArrayList();
+    private List<String> validDictCacheColumns = Lists.newArrayList();
+
     public TabletCommitInfo(long tabletId, long backendId) {
         super();
         this.tabletId = tabletId;
         this.backendId = backendId;
+    }
+
+    public TabletCommitInfo(long tabletId, long backendId, List<String> invalidDictCacheColumns,
+                            List<String> validDictCacheColumns) {
+        this.tabletId = tabletId;
+        this.backendId = backendId;
+        this.invalidDictCacheColumns = invalidDictCacheColumns;
+        this.validDictCacheColumns = validDictCacheColumns;
     }
 
     public long getTabletId() {
@@ -50,10 +62,27 @@ public class TabletCommitInfo implements Writable {
         return backendId;
     }
 
+    public List<String> getInvalidDictCacheColumns() {
+        return invalidDictCacheColumns;
+    }
+
+    public List<String> getValidDictCacheColumns() {
+        return validDictCacheColumns;
+    }
+
     public static List<TabletCommitInfo> fromThrift(List<TTabletCommitInfo> tTabletCommitInfos) {
         List<TabletCommitInfo> commitInfos = Lists.newArrayList();
         for (TTabletCommitInfo tTabletCommitInfo : tTabletCommitInfos) {
-            commitInfos.add(new TabletCommitInfo(tTabletCommitInfo.getTabletId(), tTabletCommitInfo.getBackendId()));
+            if (tTabletCommitInfo.isSetInvalid_dict_cache_columns()) {
+                commitInfos.add(new TabletCommitInfo(tTabletCommitInfo.getTabletId(),
+                        tTabletCommitInfo.getBackendId(),
+                        tTabletCommitInfo.getInvalid_dict_cache_columns(),
+                        tTabletCommitInfo.getValid_dict_cache_columns()));
+            } else {
+                commitInfos.add(new TabletCommitInfo(tTabletCommitInfo.getTabletId(),
+                        tTabletCommitInfo.getBackendId()));
+            }
+
         }
         return commitInfos;
     }

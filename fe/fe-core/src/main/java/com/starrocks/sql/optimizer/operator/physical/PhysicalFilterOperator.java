@@ -5,14 +5,17 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 public class PhysicalFilterOperator extends PhysicalOperator {
     public PhysicalFilterOperator(ScalarOperator predicate,
-                                  long limit) {
+                                  long limit,
+                                  Projection projection) {
         super(OperatorType.PHYSICAL_FILTER);
         this.predicate = predicate;
         this.limit = limit;
+        this.projection = projection;
     }
 
     public ScalarOperator getPredicate() {

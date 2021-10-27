@@ -117,6 +117,7 @@ set(EXEC_FILES
         ./storage/file_utils_test.cpp
         ./storage/fs/file_block_manager_test.cpp
         ./storage/generic_iterators_test.cpp
+        ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
         ./storage/in_list_predicate_test.cpp
         ./storage/key_coder_test.cpp
@@ -174,6 +175,7 @@ set(EXEC_FILES
         ./storage/vectorized/cumulative_compaction_test.cpp
         ./storage/vectorized/base_compaction_test.cpp
         ./storage/vectorized/rowset_merger_test.cpp
+        ./storage/vectorized/schema_change_test.cpp
         ./plugin/plugin_mgr_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp

@@ -220,8 +220,7 @@ public class CatalogTestUtil {
         OlapTable table = new OlapTable(tableId, testTable1, columns, KeysType.AGG_KEYS, partitionInfo,
                 distributionInfo);
         table.addPartition(partition);
-        table.setIndexMeta(indexId, testIndex1, columns, 0, testSchemaHash1, (short) 1,
-                TStorageType.COLUMN, KeysType.AGG_KEYS);
+        table.setIndexMeta(indexId, testIndex1, columns, 0, testSchemaHash1, (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
         table.setBaseIndexId(indexId);
         // db
         Database db = new Database(dbId, testDb1);

@@ -438,6 +438,7 @@ std::unique_ptr<SegmentWriter> BetaRowsetWriter::_create_segment_writer() {
     writer_options.storage_format_version = _context.storage_format_version;
     writer_options.mem_tracker = _context.mem_tracker;
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
+    writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
     std::unique_ptr<SegmentWriter> segment_writer =
             std::make_unique<segment_v2::SegmentWriter>(std::move(wblock), _num_segment, schema, writer_options);
     // TODO set write_mbytes_per_sec based on writer type (load/base compaction/cumulative compaction)
@@ -471,6 +472,20 @@ OLAPStatus BetaRowsetWriter::_flush_segment_writer(std::unique_ptr<segment_v2::S
             return OLAP_ERR_IO_ERROR;
         }
     }
+
+    // check global_dict efficacy
+    const auto& seg_global_dict_columns_valid_info = (*segment_writer)->global_dict_columns_valid_info();
+    for (const auto& it : seg_global_dict_columns_valid_info) {
+        if (it.second == false) {
+            _global_dict_columns_valid_info[it.first] = false;
+        } else {
+            if (const auto& iter = _global_dict_columns_valid_info.find(it.first);
+                iter == _global_dict_columns_valid_info.end()) {
+                _global_dict_columns_valid_info[it.first] = true;
+            }
+        }
+    }
+
     (*segment_writer).reset();
     return OLAP_SUCCESS;
 }

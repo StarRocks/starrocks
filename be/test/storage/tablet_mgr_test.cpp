@@ -60,7 +60,7 @@ public:
             k_engine = new StorageEngine(options);
         }
 
-        _data_dir = new DataDir(_engine_data_path, 1000000000);
+        _data_dir = new DataDir(_engine_data_path);
         _data_dir->init();
         string tmp_data_path = _engine_data_path + "/data";
         if (std::filesystem::exists(tmp_data_path)) {

@@ -3,8 +3,8 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
@@ -19,6 +19,8 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -36,9 +38,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class Utils {
-    public static int combineHash(int hash, int value) {
-        return hash * 37 + value;
-    }
 
     public static List<ScalarOperator> extractConjuncts(ScalarOperator root) {
         if (null == root) {
@@ -120,24 +119,6 @@ public class Utils {
         }
 
         return count;
-    }
-
-    public static List<ColumnRefOperator> extractScanColumn(GroupExpression groupExpression) {
-        if (OperatorType.LOGICAL_OLAP_SCAN.equals(groupExpression.getOp().getOpType())) {
-            LogicalOlapScanOperator loso = (LogicalOlapScanOperator) groupExpression.getOp();
-
-            return ImmutableList.<ColumnRefOperator>builder().addAll(loso.getColRefToColumnMetaMap().keySet()).build();
-        }
-
-        List<Group> groups = groupExpression.getInputs();
-
-        ImmutableList.Builder<ColumnRefOperator> builder = ImmutableList.builder();
-        for (Group group : groups) {
-            GroupExpression expression = group.getFirstLogicalExpression();
-            builder.addAll(extractScanColumn(expression));
-        }
-
-        return builder.build();
     }
 
     public static void extractOlapScanOperator(GroupExpression groupExpression, List<LogicalOlapScanOperator> list) {
@@ -328,8 +309,9 @@ public class Utils {
         Operator operator = root.getOp();
         if (operator instanceof LogicalScanOperator) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) operator;
-            List<String> colNames = scanOperator.getColRefToColumnMetaMap().values().stream().map(Column::getName).collect(
-                    Collectors.toList());
+            List<String> colNames =
+                    scanOperator.getColRefToColumnMetaMap().values().stream().map(Column::getName).collect(
+                            Collectors.toList());
 
             List<ColumnStatistic> columnStatisticList =
                     Catalog.getCurrentStatisticStorage().getColumnStatistics(scanOperator.getTable(), colNames);
@@ -392,5 +374,16 @@ public class Utils {
             }
         }
         return true;
+    }
+
+    public static boolean canOnlyDoBroadcast(PhysicalHashJoinOperator node,
+                                             List<BinaryPredicateOperator> equalOnPredicate, String hint) {
+        // Cross join only support broadcast join
+        if (node.getJoinType().isCrossJoin() || JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN.equals(node.getJoinType())
+                || (node.getJoinType().isInnerJoin() && equalOnPredicate.isEmpty())
+                || "BROADCAST".equalsIgnoreCase(hint)) {
+            return true;
+        }
+        return false;
     }
 }

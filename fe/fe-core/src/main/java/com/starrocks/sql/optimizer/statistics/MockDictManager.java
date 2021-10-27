@@ -19,8 +19,21 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public boolean hasGlobalDict(long tableId, String columnName, long version) {
+    public boolean hasGlobalDict(long tableId, String columnName, long versionTime) {
         return true;
+    }
+
+    @Override
+    public void updateGlobalDict(long tableId, String columnName, long versionTime) {
+    }
+
+    @Override
+    public boolean hasGlobalDict(long tableId, String columnName) {
+        return true;
+    }
+
+    @Override
+    public void removeGlobalDict(long tableId, String columnName) {
     }
 
     @Override
