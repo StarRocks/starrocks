@@ -105,7 +105,7 @@ public:
         }
     }
 
-    bool zone_map_filter(const Datum& min, const Datum& max, ZoneMapDetail* detail) const override {
+    bool zone_map_filter(const ZoneMapDetail& detail) const override {
         // if expr does not satisfy monotonicity, we can not apply zone map.
         if (!_monotonic) return true;
         // construct column and chunk by zone map

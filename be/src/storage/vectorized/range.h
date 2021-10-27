@@ -356,12 +356,4 @@ inline std::ostream& operator<<(std::ostream& os, const SparseRange& range) {
     return (os << range.to_string());
 }
 
-struct ZoneMapDetail {
-    bool has_null;
-    bool has_not_null;
-    Datum min_value;
-    Datum max_value;
-    size_t num_rows;
-};
-
 } // namespace starrocks::vectorized
