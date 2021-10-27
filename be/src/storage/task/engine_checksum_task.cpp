@@ -23,21 +23,27 @@
 
 #include <memory>
 
+#include "runtime/current_thread.h"
 #include "storage/reader.h"
 #include "storage/row.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
 
-EngineChecksumTask::EngineChecksumTask(TTabletId tablet_id, TSchemaHash schema_hash, TVersion version,
-                                       TVersionHash version_hash, uint32_t* checksum)
+EngineChecksumTask::EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet_id, TSchemaHash schema_hash,
+                                       TVersion version, TVersionHash version_hash, uint32_t* checksum)
         : _tablet_id(tablet_id),
           _schema_hash(schema_hash),
           _version(version),
           _version_hash(version_hash),
-          _checksum(checksum) {}
+          _checksum(checksum) {
+    _mem_tracker = std::make_unique<MemTracker>(-1, "checksum instance", mem_tracker);
+}
 
 OLAPStatus EngineChecksumTask::execute() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     OLAPStatus res = _compute_checksum();
     return res;
 } // execute
