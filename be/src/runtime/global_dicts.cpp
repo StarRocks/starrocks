@@ -66,36 +66,30 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
     ColumnViewer<TYPE_VARCHAR> viewer(result_column);
     int row_sz = viewer.size();
 
-    dict_opt_ctx->code_convert_map_holder.resize(DICT_DECODE_MAX_SIZE + 1);
-    std::fill(dict_opt_ctx->code_convert_map_holder.begin(), dict_opt_ctx->code_convert_map_holder.end(), -1);
-    dict_opt_ctx->code_convert_map = dict_opt_ctx->code_convert_map_holder.data() + 1;
+    dict_opt_ctx->code_convert_map.resize(DICT_DECODE_MAX_SIZE + 1);
+    std::fill(dict_opt_ctx->code_convert_map.begin(), dict_opt_ctx->code_convert_map.end(), 0);
     auto& code_convert_map = dict_opt_ctx->code_convert_map;
 
     GlobalDictMap result_map;
     RGlobalDictMap rresult_map;
-    int id_allocator = 0;
+    int id_allocator = 1;
     for (int i = 0; i < row_sz; ++i) {
         if (viewer.is_null(i)) {
-            code_convert_map[codes[i]] = -1;
+            code_convert_map[codes[i]] = 0;
             dict_opt_ctx->result_nullable = true;
         } else {
             auto value = viewer.value(i);
             Slice slice(value.data, value.size);
-            auto res = result_map.emplace(slice, id_allocator);
-            if (res.second) {
+            auto res = result_map.lazy_emplace(slice, [&](const auto& ctor) {
                 id_allocator++;
-                auto node = result_map.extract(res.first);
                 auto data = state->instance_mem_pool()->allocate(value.size);
                 memcpy(data, value.data, value.size);
-                slice = Slice(data, value.size);
-                node.key() = slice;
-                result_map.insert(res.first, std::move(node));
-            } else {
-                slice = res.first->first;
-            }
+                slice = Slice(data, slice.size);
+                ctor(slice, id_allocator);
+            });
 
-            code_convert_map[codes[i]] = res.first->second;
-            rresult_map.emplace(res.first->second, slice);
+            code_convert_map[codes[i]] = res->second;
+            rresult_map.emplace(res->second, slice);
         }
     }
 
@@ -107,14 +101,14 @@ void DictOptimizeParser::eval_code_convert(const DictOptimizeContext& opt_ctx, c
                                            ColumnPtr* output) {
     int row_size = input->size();
 
-    auto res = Int32Column::create_mutable();
+    auto res = LowCardDictColumn::create_mutable();
     auto& res_data = res->get_data();
     res_data.resize(row_size);
 
     if (input->is_nullable()) {
         const auto* nullable_column = down_cast<const NullableColumn*>(input.get());
         const auto* null_column = down_cast<const NullColumn*>(nullable_column->null_column().get());
-        const auto* data_column = down_cast<const Int32Column*>(nullable_column->data_column().get());
+        const auto* data_column = down_cast<const LowCardDictColumn*>(nullable_column->data_column().get());
         const auto& input_data = data_column->get_data();
 
         for (int i = 0; i < row_size; ++i) {
@@ -127,7 +121,7 @@ void DictOptimizeParser::eval_code_convert(const DictOptimizeContext& opt_ctx, c
             auto& res_null_data = down_cast<NullColumn*>(res_null_column.get())->get_data();
 
             for (int i = 0; i < row_size; ++i) {
-                res_null_data[i] |= (res_data[i] == -1);
+                res_null_data[i] |= (res_data[i] == 0);
             }
 
             *output = NullableColumn::create(std::move(res), std::move(res_null_column));
@@ -135,7 +129,7 @@ void DictOptimizeParser::eval_code_convert(const DictOptimizeContext& opt_ctx, c
             *output = NullableColumn::create(std::move(res), null_column->clone());
         }
     } else {
-        const auto* data_column = down_cast<const Int32Column*>(input.get());
+        const auto* data_column = down_cast<const LowCardDictColumn*>(input.get());
         const auto& input_data = data_column->get_data();
 
         for (int i = 0; i < row_size; ++i) {
@@ -148,11 +142,10 @@ void DictOptimizeParser::eval_code_convert(const DictOptimizeContext& opt_ctx, c
             res_null_data.resize(row_size);
 
             for (int i = 0; i < row_size; ++i) {
-                res_null_data[i] = (res_data[i] == -1);
+                res_null_data[i] = (res_data[i] == 0);
             }
 
             *output = NullableColumn::create(std::move(res), std::unique_ptr<Column>(res_null.release()));
-
         } else {
             *output = std::move(res);
         }
