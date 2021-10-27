@@ -254,8 +254,6 @@ Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn*
             element_options.need_zone_map = false;
             element_options.need_bloom_filter = element_column.is_bf_column();
             element_options.need_bitmap_index = element_column.has_bitmap_index();
-            element_options.page_format = opts.page_format;
-            element_options.adaptive_page_format = opts.adaptive_page_format;
             if (element_column.type() == FieldType::OLAP_FIELD_TYPE_ARRAY) {
                 if (element_options.need_bloom_filter) {
                     return Status::NotSupported("Do not support bloom filter for array type");
@@ -279,8 +277,6 @@ Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn*
                 null_options.meta->set_encoding(DEFAULT_ENCODING);
                 null_options.meta->set_compression(LZ4);
                 null_options.meta->set_is_nullable(false);
-                null_options.page_format = opts.page_format;
-                null_options.adaptive_page_format = opts.adaptive_page_format;
                 std::unique_ptr<Field> bool_field(FieldFactory::create_by_type(FieldType::OLAP_FIELD_TYPE_BOOL));
                 null_writer = new ScalarColumnWriter(null_options, std::move(bool_field), _wblock);
             }
@@ -297,8 +293,6 @@ Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn*
             array_size_options.need_zone_map = false;
             array_size_options.need_bloom_filter = false;
             array_size_options.need_bitmap_index = false;
-            array_size_options.page_format = opts.page_format;
-            array_size_options.adaptive_page_format = opts.adaptive_page_format;
             std::unique_ptr<Field> bigint_field(FieldFactory::create_by_type(FieldType::OLAP_FIELD_TYPE_INT));
             ScalarColumnWriter* offset_writer =
                     new ScalarColumnWriter(array_size_options, std::move(bigint_field), _wblock);
