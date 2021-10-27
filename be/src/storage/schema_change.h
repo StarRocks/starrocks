@@ -27,7 +27,6 @@
 #include <vector>
 
 #include "gen_cpp/AgentService_types.h"
-#include "runtime/mem_tracker.h"
 #include "storage/column_mapping.h"
 #include "storage/delete_handler.h"
 #include "storage/rowset/rowset.h"
@@ -96,9 +95,7 @@ private:
 
 class SchemaChange {
 public:
-    SchemaChange(MemTracker* mem_tracker, size_t mem_limit) : _filtered_rows(0), _merged_rows(0) {
-        _mem_tracker = std::make_unique<MemTracker>(mem_limit, "", mem_tracker, true);
-    }
+    SchemaChange() : _filtered_rows(0), _merged_rows(0) {}
     virtual ~SchemaChange() = default;
 
     virtual bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_builder, TabletSharedPtr tablet,
@@ -116,9 +113,6 @@ public:
 
     void reset_merged_rows() { _merged_rows = 0; }
 
-protected:
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
-
 private:
     uint64_t _filtered_rows;
     uint64_t _merged_rows;
@@ -126,9 +120,9 @@ private:
 
 class LinkedSchemaChange : public SchemaChange {
 public:
-    explicit LinkedSchemaChange(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer, size_t mem_limit)
-            : SchemaChange(mem_tracker, mem_limit), _row_block_changer(row_block_changer) {}
-    ~LinkedSchemaChange() override { _mem_tracker->release(_mem_tracker->consumption()); }
+    explicit LinkedSchemaChange(const RowBlockChanger& row_block_changer)
+            : SchemaChange(), _row_block_changer(row_block_changer) {}
+    ~LinkedSchemaChange() override {}
 
     bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                  TabletSharedPtr base_tablet) override;
@@ -144,7 +138,7 @@ class SchemaChangeDirectly : public SchemaChange {
 public:
     // @params tablet           the instance of tablet which has new schema.
     // @params row_block_changer    changer to modifiy the data of RowBlock
-    explicit SchemaChangeDirectly(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer, size_t mem_limit);
+    explicit SchemaChangeDirectly(const RowBlockChanger& row_block_changer);
     ~SchemaChangeDirectly() override;
 
     bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
@@ -164,8 +158,7 @@ private:
 // @breif schema change with sorting
 class SchemaChangeWithSorting : public SchemaChange {
 public:
-    explicit SchemaChangeWithSorting(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer,
-                                     size_t memory_limitation);
+    explicit SchemaChangeWithSorting(const RowBlockChanger& row_block_changer, size_t memory_limitation);
     ~SchemaChangeWithSorting() override;
 
     bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_builder, TabletSharedPtr new_tablet,
