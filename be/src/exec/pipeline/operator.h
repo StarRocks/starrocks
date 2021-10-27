@@ -58,7 +58,11 @@ public:
 
     RuntimeProfile* get_runtime_profile() const { return _runtime_profile.get(); }
 
-    std::string get_name() const { return _name + "_" + std::to_string(_id); }
+    std::string get_name() const {
+        std::stringstream ss;
+        ss << _name + "_" << this;
+        return ss.str();
+    }
 
 protected:
     int32_t _id = 0;

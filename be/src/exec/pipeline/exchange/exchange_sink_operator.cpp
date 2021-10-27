@@ -41,11 +41,12 @@ public:
     // how much tuple data is getting accumulated before being sent; it only applies
     // when data is added via add_row() and not sent directly via send_batch().
     Channel(ExchangeSinkOperator* parent, const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
-            PlanNodeId dest_node_id)
+            PlanNodeId dest_node_id, size_t channel_id)
             : _parent(parent),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
-              _brpc_dest_addr(brpc_dest) {}
+              _brpc_dest_addr(brpc_dest),
+              _channel_id(channel_id) {}
 
     // Initialize channel.
     // Returns OK if successful, error indication otherwise.
@@ -98,6 +99,7 @@ private:
     size_t _current_request_bytes = 0;
 
     bool _is_inited = false;
+    size_t _channel_id;
 };
 
 Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
@@ -161,7 +163,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
     // last packet
     if (_current_request_bytes > _parent->_request_bytes_threshold || eos) {
         request.set_eos(eos);
-        TransmitChunkInfo info = {std::move(request), _brpc_stub};
+        TransmitChunkInfo info = {this->_channel_id, std::move(request), _brpc_stub};
         _parent->_buffer->add_request(info);
         _current_request_bytes = 0;
         // The original design is bad, we must release_finst_id here!
@@ -178,7 +180,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParams* p
     params->set_be_number(_parent->_be_number);
 
     params->set_eos(false);
-    TransmitChunkInfo info = {*params, _brpc_stub};
+    TransmitChunkInfo info = {this->_channel_id, *params, _brpc_stub};
     _parent->_buffer->add_request(info);
 
     // The original design is bad, we must release_finst_id here!
@@ -188,6 +190,10 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParams* p
 }
 
 Status ExchangeSinkOperator::Channel::_close_internal() {
+    // no need to send EOS packet to pseudo destinations in scenarios of bucket shuffle join.
+    if (this->_finst_id.lo() == -1) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(send_one_chunk(_chunk != nullptr ? _chunk.get() : nullptr, true));
     return Status::OK();
 }
@@ -209,13 +215,19 @@ ExchangeSinkOperator::ExchangeSinkOperator(int32_t id, int32_t plan_node_id, con
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(partition_expr_ctxs) {
     std::map<int64_t, int64_t> fragment_id_to_channel_index;
+    // fragment_instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
+    std::optional<std::shared_ptr<Channel>> pseudo_channel;
     for (const auto& destination : destinations) {
         const auto& fragment_instance_id = destination.fragment_instance_id;
-        if (fragment_id_to_channel_index.find(fragment_instance_id.lo) == fragment_id_to_channel_index.end()) {
-            _channels.emplace_back(new Channel(this, destination.brpc_server, fragment_instance_id, dest_node_id));
-            fragment_id_to_channel_index.insert({fragment_instance_id.lo, _channels.size() - 1});
+        if (fragment_instance_id.lo == -1 && pseudo_channel.has_value()) {
+            _channels.emplace_back(pseudo_channel.value());
         } else {
-            _channels.emplace_back(_channels[fragment_id_to_channel_index[fragment_instance_id.lo]]);
+            const auto channel_id = _channels.size();
+            _channels.emplace_back(
+                    new Channel(this, destination.brpc_server, fragment_instance_id, dest_node_id, channel_id));
+            if (fragment_instance_id.lo == -1) {
+                pseudo_channel = _channels.back();
+            }
         }
     }
 }
@@ -401,7 +413,7 @@ Status ExchangeSinkOperator::close(RuntimeState* state) {
 
 Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst, bool* is_first_chunk,
                                              int num_receivers) {
-    VLOG_ROW << "serializing " << src->num_rows() << " rows";
+    VLOG_ROW << "[ExchangeSinkOperator] serializing " << src->num_rows() << " rows";
     size_t uncompressed_size = 0;
     {
         SCOPED_TIMER(_serialize_batch_timer);
@@ -466,8 +478,21 @@ void ExchangeSinkOperator::construct_brpc_attachment(PTransmitChunkParams* param
     }
 }
 
+ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id,
+                                                         std::shared_ptr<SinkBuffer> buffer,
+                                                         TPartitionType::type part_type,
+                                                         const std::vector<TPlanFragmentDestination>& destinations,
+                                                         int sender_id, PlanNodeId dest_node_id,
+                                                         std::vector<ExprContext*> partition_expr_ctxs)
+        : OperatorFactory(id, "exchange_sink", plan_node_id),
+          _buffer(std::move(buffer)),
+          _part_type(part_type),
+          _destinations(destinations),
+          _sender_id(sender_id),
+          _dest_node_id(dest_node_id),
+          _partition_expr_ctxs(std::move(partition_expr_ctxs)) {}
+
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    _buffer->set_sinker_number(degree_of_parallelism);
     if (_part_type == TPartitionType::UNPARTITIONED || _destinations.size() == 1) {
         return std::make_shared<ExchangeSinkOperator>(_id, _plan_node_id, _buffer, _part_type, _destinations,
                                                       _sender_id, _dest_node_id, _partition_expr_ctxs);
