@@ -57,7 +57,7 @@ struct ColumnWriterOptions {
     // - output: encoding/indexes/dict_page members
     ColumnMetaPB* meta;
     size_t data_page_size = 64 * 1024;
-    uint32_t page_format = 1;
+    uint32_t page_format = 2;
     // store compressed page only when space saving is above the threshold.
     // space saving = 1 - compressed_size / uncompressed_size
     double compression_min_space_saving = 0.1;
