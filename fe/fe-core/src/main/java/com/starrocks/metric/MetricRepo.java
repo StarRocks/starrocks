@@ -23,6 +23,7 @@ package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJob.JobType;
@@ -31,27 +32,36 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.UserException;
+import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadManager;
+import com.starrocks.load.routineload.KafkaProgress;
+import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadManager;
 import com.starrocks.metric.Metric.MetricType;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.monitor.jvm.JvmService;
 import com.starrocks.monitor.jvm.JvmStats;
+import com.starrocks.proto.PKafkaOffsetProxyRequest;
+import com.starrocks.proto.PKafkaOffsetProxyResult;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public final class MetricRepo {
     private static final Logger LOG = LogManager.getLogger(MetricRepo.class);
@@ -117,6 +127,10 @@ public final class MetricRepo {
         // load jobs
         LoadManager loadManger = Catalog.getCurrentCatalog().getLoadManager();
         for (EtlJobType jobType : EtlJobType.values()) {
+            if (jobType == EtlJobType.MINI || jobType == EtlJobType.UNKNOWN) {
+                continue;
+            }
+
             for (JobState state : JobState.values()) {
                 GaugeMetric<Long> gauge = (GaugeMetric<Long>) new GaugeMetric<Long>("job",
                         MetricUnit.NOUNIT, "job statistics") {
@@ -485,6 +499,11 @@ public final class MetricRepo {
             visitor.visitHistogram(entry.getKey(), entry.getValue());
         }
 
+        // collect routine load process metrics
+        if (Config.enable_routine_load_lag_metrics) {
+            collectRoutineLoadProcessMetrics(visitor);
+        }
+
         // node info
         visitor.getNodeInfo();
         return visitor.build();
@@ -522,6 +541,77 @@ public final class MetricRepo {
                 }
             } finally {
                 db.readUnlock();
+            }
+        }
+    }
+
+    private static void collectRoutineLoadProcessMetrics(MetricVisitor visitor) {
+        List<RoutineLoadJob> jobs = Catalog.getCurrentCatalog().getRoutineLoadManager().getRoutineLoadJobByState(
+                Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE, RoutineLoadJob.JobState.RUNNING));
+
+        List<RoutineLoadJob> kafkaJobs = jobs.stream()
+                .filter(job -> (job instanceof KafkaRoutineLoadJob)
+                        && ((KafkaProgress) job.getProgress()).hasPartition())
+                .collect(Collectors.toList());
+
+        if (kafkaJobs.size() <= 0) {
+            return;
+        }
+
+        // get all partitions offset in a batch api
+        List<PKafkaOffsetProxyRequest> requests = new ArrayList<>();
+        for (RoutineLoadJob job : kafkaJobs) {
+            KafkaRoutineLoadJob kJob = (KafkaRoutineLoadJob) job;
+            try {
+                kJob.convertCustomProperties(false);
+            } catch (DdlException e) {
+                LOG.warn("convert custom properties failed", e);
+                return;
+            }
+            PKafkaOffsetProxyRequest offsetProxyRequest = new PKafkaOffsetProxyRequest();
+            offsetProxyRequest.kafkaInfo = KafkaUtil.genPKafkaLoadInfo(kJob.getBrokerList(), kJob.getTopic(),
+                    ImmutableMap.copyOf(kJob.getConvertedCustomProperties()));
+            offsetProxyRequest.partitionIds = new ArrayList<>(
+                    ((KafkaProgress) kJob.getProgress()).getPartitionIdToOffset().keySet());
+            requests.add(offsetProxyRequest);
+        }
+        List<PKafkaOffsetProxyResult> offsetProxyResults;
+        try {
+            offsetProxyResults = KafkaUtil.getBatchOffsets(requests);
+        } catch (UserException e) {
+            LOG.warn("get batch offsets failed", e);
+            return;
+        }
+
+        for (int i = 0; i < kafkaJobs.size(); i++) {
+            KafkaRoutineLoadJob kJob = (KafkaRoutineLoadJob) kafkaJobs.get(i);
+            ImmutableMap<Integer, Long> partitionIdToProgress =
+                    ((KafkaProgress) kJob.getProgress()).getPartitionIdToOffset();
+
+            // offset of partitionIds[i] is beginningOffsets[i] and latestOffsets[i]
+            List<Integer> partitionIds = offsetProxyResults.get(i).partitionIds;
+            List<Long> beginningOffsets = offsetProxyResults.get(i).beginningOffsets;
+            List<Long> latestOffsets = offsetProxyResults.get(i).latestOffsets;
+
+            long maxLag = Long.MIN_VALUE;
+            for (int j = 0; j < partitionIds.size(); j++) {
+                int partitionId = partitionIds.get(j);
+                if (!partitionIdToProgress.containsKey(partitionId)) {
+                    continue;
+                }
+                long progress = partitionIdToProgress.get(partitionId);
+                if (progress == KafkaProgress.OFFSET_BEGINNING_VAL) {
+                    progress = beginningOffsets.get(j);
+                }
+
+                maxLag = Math.max(latestOffsets.get(j) - progress, maxLag);
+            }
+            if (maxLag >= Config.min_routine_load_lag_for_metrics) {
+                GaugeMetricImpl<Long> metric =
+                        new GaugeMetricImpl<>("routine_load_max_lag_of_partition", MetricUnit.NOUNIT, "routine load kafka lag");
+                metric.addLabel(new MetricLabel("job_name", kJob.getName()));
+                metric.setValue(maxLag);
+                visitor.visit(metric);
             }
         }
     }
