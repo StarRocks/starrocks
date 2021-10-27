@@ -421,14 +421,14 @@ inline Status BitShufflePageDecoder<Type>::next_batch(size_t* count, vectorized:
         *count = 0;
         return Status::OK();
     }
-    if (!_is_decoded && *count >= _num_elements && _cur_index <= 0) {
+    if (_options.enable_direct_copy && !_is_decoded && *count >= _num_elements && _cur_index <= 0 && dst->capacity() - dst->size() >= _num_elements) {
         // if the page is not decoded and to read the whole page data
         // decode the page directly to dst to save mem copy from _decoded to dst
         // Now this can be used to optimize compaction
         size_t old_size = dst->size();
-        uint8_t* dst_buffer = dst->mutable_raw_data() + dst->type_size() * old_size;
-        RETURN_IF_ERROR(_decode_to(dst_buffer));
         dst->resize_uninitialized(old_size + _num_elements);
+        uint8_t* dst_buffer = dst->mutable_raw_data() + SIZE_OF_TYPE * old_size;
+        RETURN_IF_ERROR(_decode_to(dst_buffer));
         *count = _num_elements;
         return Status::OK();
     }
