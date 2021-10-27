@@ -41,15 +41,12 @@ public:
     ~AggregateStreamingSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        size_t expected_idx = _aggregator_idx.load(std::memory_order_acquire);
-        while (!_aggregator_idx.compare_exchange_weak(expected_idx, expected_idx + 1))
-            ;
-        return std::make_shared<AggregateStreamingSourceOperator>(_id, _plan_node_id,
-                                                                  _aggregator_factory->get_or_create(expected_idx + 1));
+        return std::make_shared<AggregateStreamingSourceOperator>(
+                _id, _plan_node_id, _aggregator_factory->get_or_create(_aggregator_idx++));
     }
 
 private:
     AggregatorFactoryPtr _aggregator_factory = nullptr;
-    std::atomic_size_t _aggregator_idx = 0;
+    size_t _aggregator_idx = 0;
 };
 } // namespace starrocks::pipeline

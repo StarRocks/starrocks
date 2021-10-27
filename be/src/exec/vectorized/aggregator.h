@@ -491,7 +491,6 @@ public:
             : _tnode(tnode), _child_row_desc(child_row_desc) {}
 
     AggregatorPtr get_or_create(size_t id) {
-        std::lock_guard<std::mutex> l(_lock);
         auto it = _aggregators.find(id);
         if (it != _aggregators.end()) {
             return it->second;
@@ -505,7 +504,6 @@ private:
     const TPlanNode& _tnode;
     const RowDescriptor& _child_row_desc;
 
-    std::mutex _lock;
     std::unordered_map<size_t, AggregatorPtr> _aggregators;
 };
 
