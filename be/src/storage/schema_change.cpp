@@ -1818,19 +1818,13 @@ OLAPStatus SchemaChangeHandler::_convert_historical_rowsets(const SchemaChangePa
     // b. create converter for history data
     if (sc_sorting) {
         LOG(INFO) << "doing schema change with sorting for base_tablet " << sc_params.base_tablet->full_name();
-        size_t memory_limitation =
-                static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
-        sc_procedure = new (nothrow) SchemaChangeWithSorting(mem_tracker, rb_changer, memory_limitation);
+        sc_procedure = new (nothrow) SchemaChangeWithSorting(rb_changer);
     } else if (sc_directly) {
         LOG(INFO) << "doing schema change directly for base_tablet " << sc_params.base_tablet->full_name();
-        size_t memory_limitation =
-                static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
-        sc_procedure = new (nothrow) SchemaChangeDirectly(mem_tracker, rb_changer, memory_limitation);
+        sc_procedure = new (nothrow) SchemaChangeDirectly(rb_changer);
     } else {
         LOG(INFO) << "doing linked schema change for base_tablet " << sc_params.base_tablet->full_name();
-        size_t memory_limitation =
-                static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
-        sc_procedure = new (nothrow) LinkedSchemaChange(mem_tracker, rb_changer, memory_limitation);
+        sc_procedure = new (nothrow) LinkedSchemaChange(rb_changer);
     }
 
     if (sc_procedure == nullptr) {
