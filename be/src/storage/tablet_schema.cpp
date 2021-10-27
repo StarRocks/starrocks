@@ -423,7 +423,6 @@ void TabletSchema::init_from_pb(const TabletSchemaPB& schema) {
         _has_bf_fpp = false;
         _bf_fpp = BLOOM_FILTER_DEFAULT_FPP;
     }
-    DCHECK(!schema.is_in_memory()) << "in-memory tablet not supported";
 }
 
 void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {

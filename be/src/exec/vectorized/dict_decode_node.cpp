@@ -59,7 +59,7 @@ Status DictDecodeNode::prepare(RuntimeState* state) {
         auto input_has_string_function = _string_functions.find(need_encode_cid) != _string_functions.end();
 
         if (dict_not_contains_cid && !input_has_string_function) {
-            return Status::InternalError("Not find dict");
+            return Status::InternalError(fmt::format("Not found dict for cid:{}", need_encode_cid));
         } else if (dict_not_contains_cid && input_has_string_function) {
             auto& [expr_ctx, dict_ctx] = _string_functions[need_encode_cid];
             DCHECK(expr_ctx->root()->fn().could_apply_dict_optimize);
@@ -68,9 +68,10 @@ Status DictDecodeNode::prepare(RuntimeState* state) {
             _dict_optimize_parser.eval_expr(state, expr_ctx, &dict_ctx, need_encode_cid);
             dict_iter = global_dict.find(need_encode_cid);
             DCHECK(dict_iter != global_dict.end());
+            return Status::InternalError(fmt::format("Not found dict for function-called cid:{}", need_encode_cid));
         }
 
-        DefaultDecoder decoder = std::make_unique<DictDecoder<TYPE_INT, RGlobalDictMap, TYPE_VARCHAR>>();
+        DefaultDecoderPtr decoder = std::make_unique<DefaultDecoder>();
         // TODO : avoid copy dict
         decoder->dict = dict_iter->second.second;
         _decoders.emplace_back(std::move(decoder));

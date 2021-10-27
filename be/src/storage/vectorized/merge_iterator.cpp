@@ -95,7 +95,7 @@ public:
 
     size_t merged_rows() const override { return _merged_rows; }
 
-    virtual Status init_encoded_schema(std::unordered_map<uint32_t, GlobalDictMap*>& dict_maps) override {
+    virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         ChunkIterator::init_encoded_schema(dict_maps);
         for (int i = 0; i < _children.size(); ++i) {
             RETURN_IF_ERROR(_children[i]->init_encoded_schema(dict_maps));

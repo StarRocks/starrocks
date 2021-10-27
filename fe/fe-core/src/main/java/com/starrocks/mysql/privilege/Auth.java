@@ -23,6 +23,7 @@ package com.starrocks.mysql.privilege;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AlterUserStmt;
@@ -53,7 +54,6 @@ import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TFetchResourceResult;
-import org.apache.directory.api.util.Strings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -498,7 +498,7 @@ public class Auth implements Writable {
     // create user
     public void createUser(CreateUserStmt stmt) throws DdlException {
         AuthPlugin authPlugin = null;
-        if (!Strings.isEmpty(stmt.getAuthPlugin())) {
+        if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
             authPlugin = AuthPlugin.valueOf(stmt.getAuthPlugin());
         }
         createUserInternal(stmt.getUserIdent(), stmt.getQualifiedRole(),
@@ -508,7 +508,7 @@ public class Auth implements Writable {
     // alter user
     public void alterUser(AlterUserStmt stmt) throws DdlException {
         AuthPlugin authPlugin = null;
-        if (!Strings.isEmpty(stmt.getAuthPlugin())) {
+        if (!Strings.isNullOrEmpty(stmt.getAuthPlugin())) {
             authPlugin = AuthPlugin.valueOf(stmt.getAuthPlugin());
         }
         // alter user only support change password till now
@@ -1199,7 +1199,7 @@ public class Auth implements Writable {
                     userAuthInfo.add(password.getAuthPlugin().name());
                 }
 
-                if (Strings.isEmpty(password.getUserForAuthPlugin())) {
+                if (Strings.isNullOrEmpty(password.getUserForAuthPlugin())) {
                     userAuthInfo.add(FeConstants.null_string);
                 } else {
                     userAuthInfo.add(password.getUserForAuthPlugin());

@@ -86,7 +86,7 @@ public:
 
     uint32_t segment_id() const { return _segment_id; }
 
-    const vectorized::InvalidDictColumnsSet& invalid_global_dict_columns() { return _invalid_global_dict_columns; }
+    const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() { return _global_dict_columns_valid_info; }
 
 private:
     Status _write_data();
@@ -111,7 +111,7 @@ private:
     std::vector<std::unique_ptr<ColumnWriter>> _column_writers;
     uint32_t _row_count = 0;
 
-    vectorized::InvalidDictColumnsSet _invalid_global_dict_columns;
+    vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
 };
 
 } // namespace segment_v2

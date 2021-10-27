@@ -38,9 +38,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class Utils {
-    public static int combineHash(int hash, int value) {
-        return hash * 37 + value;
-    }
 
     public static List<ScalarOperator> extractConjuncts(ScalarOperator root) {
         if (null == root) {

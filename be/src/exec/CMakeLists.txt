@@ -159,9 +159,12 @@ set(EXEC_FILES
     pipeline/aggregate/aggregate_distinct_blocking_source_operator.cpp
     pipeline/aggregate/aggregate_distinct_streaming_sink_operator.cpp
     pipeline/aggregate/aggregate_distinct_streaming_source_operator.cpp
+    pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
     pipeline/assert_num_rows_operator.cpp
+    pipeline/set/union_passthrough_operator.cpp
+    pipeline/set/union_const_source_operator.cpp
 )
 
 set(EXEC_FILES

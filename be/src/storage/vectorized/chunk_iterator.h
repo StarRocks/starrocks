@@ -66,7 +66,7 @@ public:
     // If a Field uses the global dictionary strategy, the field will be rewritten as INT
     const Schema& encoded_schema() const { return _encoded_schema; }
 
-    virtual Status init_encoded_schema(std::unordered_map<uint32_t, GlobalDictMap*>& dict_maps) {
+    virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) {
         for (const auto& field : schema().fields()) {
             const auto cid = field->id();
             const auto& name = field->name();
@@ -111,7 +111,7 @@ public:
 
     size_t merged_rows() const override { return _iter->merged_rows(); }
 
-    virtual Status init_encoded_schema(std::unordered_map<uint32_t, GlobalDictMap*>& dict_maps) override {
+    virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         ChunkIterator::init_encoded_schema(dict_maps);
         _iter->init_encoded_schema(dict_maps);
         return Status::OK();

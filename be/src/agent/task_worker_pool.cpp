@@ -806,7 +806,7 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
                     tablet->set_partition_id(tablet_meta_info.partition_id);
                     break;
                 case TTabletMetaType::INMEMORY:
-                    CHECK(false) << "in-memory tablet not supported";
+                    // This property is no longer supported.
                     break;
                 }
             }
