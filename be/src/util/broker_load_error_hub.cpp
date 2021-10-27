@@ -31,6 +31,7 @@ BrokerLoadErrorHub::BrokerLoadErrorHub(ExecEnv* env, const TBrokerErrorHubInfo& 
         : _env(env), _info(info, error_log_file_name), _broker_writer(nullptr) {}
 
 BrokerLoadErrorHub::~BrokerLoadErrorHub() {
+    close();
     delete _broker_writer;
     _broker_writer = nullptr;
 }
