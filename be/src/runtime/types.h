@@ -34,6 +34,8 @@
 
 namespace starrocks {
 
+class TypeInfo;
+
 // Describes a type. Includes the enum, children types, and any type-specific metadata
 // (e.g. precision and scale for decimals).
 struct TypeDescriptor {
@@ -159,6 +161,8 @@ struct TypeDescriptor {
         DCHECK_EQ(idx, t.types.size());
         return result;
     }
+
+    static TypeDescriptor from_storage_type_info(TypeInfo* type_info);
 
     static TypeDescriptor from_protobuf(const PTypeDesc& ptype) {
         int idx = 0;

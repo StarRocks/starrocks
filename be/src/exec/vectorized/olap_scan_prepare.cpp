@@ -682,9 +682,9 @@ private:
     int32_t _max_scan_key_num;
 };
 
-Status OlapScanConjunctsManager::build_scan_keys(bool no_limit, int32_t max_scan_key_num) {
+Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_scan_key_num) {
     int conditional_key_columns = 0;
-    scan_keys.set_is_convertible(no_limit);
+    scan_keys.set_is_convertible(unlimited);
     const std::vector<std::string>& ref_key_column_names = *key_column_names;
 
     for (const auto& key_column_name : ref_key_column_names) {
@@ -704,16 +704,26 @@ Status OlapScanConjunctsManager::build_scan_keys(bool no_limit, int32_t max_scan
     return Status::OK();
 }
 
-void OlapScanConjunctsManager::parse_to_column_predicates(PredicateParser* parser,
-                                                          std::vector<ColumnPredicate*>* preds) {
+void OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser, std::vector<ColumnPredicate*>* preds) {
     for (auto& f : olap_filters) {
-        vectorized::ColumnPredicate* p = parser->parse(f);
+        ColumnPredicate* p = parser->parse_thrift_cond(f);
         p->set_index_filter_only(f.is_index_filter_only);
         preds->push_back(p);
     }
     for (auto& f : is_null_vector) {
-        vectorized::ColumnPredicate* p = parser->parse(f);
+        ColumnPredicate* p = parser->parse_thrift_cond(f);
         preds->push_back(p);
+    }
+
+    const auto& slots = tuple_desc->slots();
+    for (auto& iter : slot_index_to_expr_ctxs) {
+        int slot_index = iter.first;
+        auto& expr_ctxs = iter.second;
+        const SlotDescriptor* slot_desc = slots[slot_index];
+        for (ExprContext* ctx : expr_ctxs) {
+            ColumnPredicate* p = parser->parse_expr_ctx(*slot_desc, runtime_state, ctx);
+            preds->push_back(p);
+        }
     }
 }
 
@@ -732,6 +742,74 @@ void OlapScanConjunctsManager::eval_const_conjuncts(const std::vector<ExprContex
                 break;
             }
         }
+    }
+}
+
+Status OlapScanConjunctsManager::get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges) {
+    RETURN_IF_ERROR(scan_keys.get_key_range(key_ranges));
+    if (key_ranges->empty()) {
+        key_ranges->emplace_back(new OlapScanRange());
+    }
+    return Status::OK();
+}
+
+void OlapScanConjunctsManager::get_not_push_down_conjuncts(std::vector<ExprContext*>* predicates) {
+    DCHECK_EQ(conjunct_ctxs_ptr->size(), normalized_conjuncts.size());
+    for (size_t i = 0; i < normalized_conjuncts.size(); i++) {
+        if (!normalized_conjuncts[i]) {
+            predicates->push_back(conjunct_ctxs_ptr->at(i));
+        }
+    }
+}
+
+void OlapScanConjunctsManager::build_column_expr_predicates() {
+    std::map<SlotId, int> slot_id_to_index;
+    const auto& slots = tuple_desc->slots();
+    for (int i = 0; i < slots.size(); i++) {
+        const SlotDescriptor* slot_desc = slots[i];
+        SlotId slot_id = slot_desc->id();
+        slot_id_to_index.insert(std::make_pair(slot_id, i));
+    }
+
+    const auto& conjunct_ctxs = (*conjunct_ctxs_ptr);
+    for (size_t i = 0; i < conjunct_ctxs.size(); i++) {
+        if (normalized_conjuncts[i]) continue;
+
+        ExprContext* ctx = conjunct_ctxs[i];
+        std::vector<SlotId> slot_ids;
+        ctx->root()->get_slot_ids(&slot_ids);
+        if (slot_ids.size() != 1) continue;
+        int index = -1;
+        {
+            auto iter = slot_id_to_index.find(slot_ids[0]);
+            if (iter == slot_id_to_index.end()) continue;
+            index = iter->second;
+        }
+        // note(yan): we only handles scalar type now to avoid complex type mismatch.
+        // otherwise we don't need this limitation.
+        const SlotDescriptor* slot_desc = slots[index];
+        PrimitiveType ptype = slot_desc->type().type;
+        if (!is_scalar_primitive_type(ptype)) continue;
+        {
+            auto iter = slot_index_to_expr_ctxs.find(index);
+            if (iter == slot_index_to_expr_ctxs.end()) {
+                slot_index_to_expr_ctxs.insert(make_pair(index, std::vector<ExprContext*>{}));
+                iter = slot_index_to_expr_ctxs.find(index);
+            }
+            iter->second.emplace_back(ctx);
+        }
+        normalized_conjuncts[i] = true;
+    }
+}
+
+void OlapScanConjunctsManager::parse_conjuncts(bool scan_keys_unlimited, int32_t max_scan_key_num,
+                                               bool enable_column_expr_predicate) {
+    normalize_conjuncts();
+    build_olap_filters();
+    build_scan_keys(scan_keys_unlimited, max_scan_key_num);
+    if (enable_column_expr_predicate) {
+        VLOG_FILE << "OlapScanConjunctsManager: enable_column_expr_predicate = true. push down column expr predicates";
+        build_column_expr_predicates();
     }
 }
 

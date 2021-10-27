@@ -445,6 +445,52 @@ struct MemLayoutData {
     }
 };
 
+// Returns the byte size of 'type'  Returns 0 for variable length types.
+inline static int get_byte_size_of_primitive_type(PrimitiveType type) {
+    switch (type) {
+    case TYPE_OBJECT:
+    case TYPE_HLL:
+    case TYPE_PERCENTILE:
+    case TYPE_VARCHAR:
+        return 0;
+
+    case TYPE_NULL:
+    case TYPE_BOOLEAN:
+    case TYPE_TINYINT:
+        return 1;
+
+    case TYPE_SMALLINT:
+        return 2;
+
+    case TYPE_DECIMAL32:
+    case TYPE_INT:
+    case TYPE_FLOAT:
+        return 4;
+
+    case TYPE_DECIMAL64:
+    case TYPE_BIGINT:
+    case TYPE_TIME:
+    case TYPE_DOUBLE:
+        return 8;
+
+    case TYPE_DECIMAL128:
+    case TYPE_LARGEINT:
+    case TYPE_DATETIME:
+    case TYPE_DATE:
+    case TYPE_DECIMALV2:
+        return 16;
+
+    case TYPE_DECIMAL:
+        return 40;
+
+    case INVALID_TYPE:
+    default:
+        DCHECK(false);
+    }
+
+    return 0;
+}
+
 int Expr::compute_results_layout(const std::vector<Expr*>& exprs, std::vector<int>* offsets, int* var_result_begin) {
     if (exprs.empty()) {
         *var_result_begin = -1;
@@ -462,7 +508,7 @@ int Expr::compute_results_layout(const std::vector<Expr*>& exprs, std::vector<in
             data[i].byte_size = 16;
             data[i].variable_length = true;
         } else if (exprs[i]->type().type == TYPE_DECIMAL) {
-            data[i].byte_size = get_byte_size(exprs[i]->type().type);
+            data[i].byte_size = get_byte_size_of_primitive_type(exprs[i]->type().type);
 
             // Although the current decimal has a fix-length, for the
             // same value, it will work out different hash value due to the
@@ -470,7 +516,7 @@ int Expr::compute_results_layout(const std::vector<Expr*>& exprs, std::vector<in
             // to false, so we have to keep it.
             data[i].variable_length = true;
         } else {
-            data[i].byte_size = get_byte_size(exprs[i]->type().type);
+            data[i].byte_size = get_byte_size_of_primitive_type(exprs[i]->type().type);
             data[i].variable_length = false;
         }
 
