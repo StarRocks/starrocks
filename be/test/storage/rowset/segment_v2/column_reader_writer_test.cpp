@@ -164,7 +164,7 @@ protected:
                 ASSERT_EQ(src.size(), rows_read);
 
                 for (size_t i = 0; i < rows_read; i++) {
-                    ASSERT_EQ(0, type_info->cmp(src.get(i), dst->get(i))) << " rows_read:" << rows_read
+                    ASSERT_EQ(0, type_info->cmp(src.get(i), dst->get(i)))
                             << " row " << i << ": " << datum_to_string(type_info.get(), src.get(i)) << " vs "
                             << datum_to_string(type_info.get(), dst->get(i));
                 }

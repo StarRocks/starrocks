@@ -79,9 +79,7 @@ public:
         return _data_column->size();
     }
 
-    size_t capacity() const override {
-        return _data_column->capacity();
-    }
+    size_t capacity() const override { return _data_column->capacity(); }
 
     size_t type_size() const override { return _data_column->type_size() + _null_column->type_size(); }
 
