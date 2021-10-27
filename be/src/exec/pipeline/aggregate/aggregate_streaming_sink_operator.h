@@ -45,16 +45,22 @@ private:
 
 class AggregateStreamingSinkOperatorFactory final : public OperatorFactory {
 public:
-    AggregateStreamingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : OperatorFactory(id, "aggregate_streaming_sink", plan_node_id), _aggregator(std::move(aggregator)) {}
+    AggregateStreamingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorFactoryPtr aggregator_factory)
+            : OperatorFactory(id, "aggregate_streaming_sink", plan_node_id),
+              _aggregator_factory(std::move(aggregator_factory)) {}
 
     ~AggregateStreamingSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<AggregateStreamingSinkOperator>(_id, _plan_node_id, _aggregator);
+        size_t expected_idx = _aggregator_idx.load(std::memory_order_acquire);
+        while (!_aggregator_idx.compare_exchange_weak(expected_idx, expected_idx + 1))
+            ;
+        return std::make_shared<AggregateStreamingSinkOperator>(_id, _plan_node_id,
+                                                                _aggregator_factory->get_or_create(expected_idx + 1));
     }
 
 private:
-    AggregatorPtr _aggregator = nullptr;
+    AggregatorFactoryPtr _aggregator_factory = nullptr;
+    std::atomic_size_t _aggregator_idx = 0;
 };
 } // namespace starrocks::pipeline

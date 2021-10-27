@@ -481,4 +481,32 @@ private:
         }
     }
 };
+
+class AggregatorFactory;
+using AggregatorFactoryPtr = std::shared_ptr<AggregatorFactory>;
+
+class AggregatorFactory {
+public:
+    AggregatorFactory(const TPlanNode& tnode, const RowDescriptor& child_row_desc)
+            : _tnode(tnode), _child_row_desc(child_row_desc) {}
+
+    AggregatorPtr get_or_create(size_t id) {
+        std::lock_guard<std::mutex> l(_lock);
+        auto it = _aggregators.find(id);
+        if (it != _aggregators.end()) {
+            return it->second;
+        }
+        auto aggregator = std::make_shared<Aggregator>(_tnode, _child_row_desc);
+        _aggregators[id] = aggregator;
+        return aggregator;
+    }
+
+private:
+    const TPlanNode& _tnode;
+    const RowDescriptor& _child_row_desc;
+
+    std::mutex _lock;
+    std::unordered_map<size_t, AggregatorPtr> _aggregators;
+};
+
 } // namespace starrocks
