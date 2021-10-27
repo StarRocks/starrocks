@@ -309,39 +309,32 @@ Status SegmentMetaCollecter::_collect_min(ColumnId cid, vectorized::Column* colu
 
 template <bool is_max>
 Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Column* column, FieldType type) {
-    auto footer_pb = _segment->footer();
-    for (size_t i = 0; i < footer_pb.columns_size(); i++) {
-        if (footer_pb.columns(i).column_id() == cid) {
-            for (size_t j = 0; j < footer_pb.columns(i).indexes_size(); j++) {
-                if (footer_pb.columns(i).indexes(j).type() != ZONE_MAP_INDEX) {
-                    continue;
-                }
-                const ColumnIndexMetaPB& c_meta_pb = footer_pb.columns(i).indexes(j);
-                const ZoneMapIndexPB& zone_map_index_pb = c_meta_pb.zone_map_index();
-                const ZoneMapPB& segment_zone_map_pb = zone_map_index_pb.segment_zone_map();
-
-                TypeInfoPtr type_info = get_type_info(delegate_type(type));
-                if constexpr (!is_max) {
-                    vectorized::Datum min;
-                    if (!segment_zone_map_pb.has_null()) {
-                        RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &min, segment_zone_map_pb.min(),
-                                                                      nullptr));
-                        column->append_datum(min);
-                    }
-                } else if constexpr (is_max) {
-                    vectorized::Datum max;
-                    if (segment_zone_map_pb.has_not_null()) {
-                        RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &max, segment_zone_map_pb.max(),
-                                                                      nullptr));
-                        column->append_datum(max);
-                    }
-                }
-                return Status::OK();
-            }
-            break;
+    if (cid >= _segment->num_columns()) {
+        return Status::NotFound("");
+    }
+    const ColumnReader* col_reader = _segment->column(cid);
+    if (col_reader == nullptr || col_reader->segment_zone_map() == nullptr) {
+        return Status::NotFound("");
+    }
+    if (col_reader->column_type() != type) {
+        return Status::InternalError("column type mismatch");
+    }
+    const ZoneMapPB* segment_zone_map_pb = col_reader->segment_zone_map();
+    TypeInfoPtr type_info = get_type_info(delegate_type(type));
+    if constexpr (!is_max) {
+        vectorized::Datum min;
+        if (!segment_zone_map_pb->has_null()) {
+            RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &min, segment_zone_map_pb->min(), nullptr));
+            column->append_datum(min);
+        }
+    } else if constexpr (is_max) {
+        vectorized::Datum max;
+        if (segment_zone_map_pb->has_not_null()) {
+            RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &max, segment_zone_map_pb->max(), nullptr));
+            column->append_datum(max);
         }
     }
-    return Status::NotFound("");
+    return Status::OK();
 }
 
 } // namespace starrocks::vectorized
