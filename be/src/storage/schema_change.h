@@ -158,8 +158,7 @@ private:
 // @breif schema change with sorting
 class SchemaChangeWithSorting : public SchemaChange {
 public:
-    explicit SchemaChangeWithSorting(const RowBlockChanger& row_block_changer,
-                                     size_t memory_limitation);
+    explicit SchemaChangeWithSorting(const RowBlockChanger& row_block_changer, size_t memory_limitation);
     ~SchemaChangeWithSorting() override;
 
     bool process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_builder, TabletSharedPtr new_tablet,
