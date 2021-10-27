@@ -1103,8 +1103,8 @@ public class PlanFragmentTest extends PlanTestBase {
                         + "(type:SCALAR, scalar_type:TScalarType(type:SMALLINT))]), num_children:0, "
                         + "int_literal:TIntLiteral"
                         + "(value:2), "
-                        +
-                        "output_scale:-1, use_vectorized:true, has_nullable_child:false, is_nullable:false)])]]"));
+                        + "output_scale:-1, use_vectorized:true, has_nullable_child:false, is_nullable:false, "
+                        + "is_monotonic:true)])]]"));
     }
 
     @Test
@@ -1443,7 +1443,7 @@ public class PlanFragmentTest extends PlanTestBase {
                 "sort_tuple_slot_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode"
                         + "(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), num_children:0, slot_ref:TSlotRef"
                         + "(slot_id:1, tuple_id:2), output_scale:-1, output_column:-1, use_vectorized:true, "
-                        + "has_nullable_child:false, is_nullable:true)])]"));
+                        + "has_nullable_child:false, is_nullable:true, is_monotonic:true)])]"));
     }
 
     @Test
@@ -4237,99 +4237,6 @@ public class PlanFragmentTest extends PlanTestBase {
         Assert.assertTrue(thrift.contains("TFunctionName(function_name:dict_merge), " +
                 "binary_type:BUILTIN, arg_types:[TTypeDesc(types:[TTypeNode(type:ARRAY), " +
                 "TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))])]"));
-    }
-
-    @Test
-    public void testDecodeNodeRewrite() throws Exception {
-        FeConstants.USE_MOCK_DICT_MANAGER = true;
-        String sql = "select\n" +
-                "            100.00 * sum(case\n" +
-                "                             when p_type like 'PROMO%'\n" +
-                "                                 then l_extendedprice * (1 - l_discount)\n" +
-                "                             else 0\n" +
-                "            end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue\n" +
-                "from\n" +
-                "    lineitem,\n" +
-                "    part\n" +
-                "where\n" +
-                "        l_partkey = p_partkey\n" +
-                "  and l_shipdate >= date '1997-02-01'\n" +
-                "  and l_shipdate < date '1997-03-01';";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  1:Decode\n" +
-                "  |  <dict id 35> : <string id 22>\n" +
-                "  |  use vectorized: true\n" +
-                "  |  \n" +
-                "  0:OlapScanNode"));
-        FeConstants.USE_MOCK_DICT_MANAGER = false;
-    }
-
-    @Test
-    public void testDecodeNodeRewrite2() throws Exception {
-        FeConstants.USE_MOCK_DICT_MANAGER = true;
-        String sql = "select\n" +
-                "    p_brand,\n" +
-                "    p_type,\n" +
-                "    p_size,\n" +
-                "    count(distinct ps_suppkey) as supplier_cnt\n" +
-                "from\n" +
-                "    partsupp,\n" +
-                "    part\n" +
-                "where\n" +
-                "        p_partkey = ps_partkey\n" +
-                "  and p_brand <> 'Brand#43'\n" +
-                "  and p_type not like 'PROMO BURNISHED%'\n" +
-                "  and p_size in (31, 43, 9, 6, 18, 11, 25, 1)\n" +
-                "  and ps_suppkey not in (\n" +
-                "    select\n" +
-                "        s_suppkey\n" +
-                "    from\n" +
-                "        supplier\n" +
-                "    where\n" +
-                "            s_comment like '%Customer%Complaints%'\n" +
-                ")\n" +
-                "group by\n" +
-                "    p_brand,\n" +
-                "    p_type,\n" +
-                "    p_size\n;";
-        String plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan.contains("Decode"));
-        FeConstants.USE_MOCK_DICT_MANAGER = false;
-    }
-
-    @Test
-    public void testDecodeNodeRewrite3() throws Exception {
-        FeConstants.USE_MOCK_DICT_MANAGER = true;
-        String sql = "select L_COMMENT from lineitem group by L_COMMENT";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:Decode\n" +
-                "  |  <dict id 18> : <string id 16>\n" +
-                "  |  use vectorized: true"));
-        FeConstants.USE_MOCK_DICT_MANAGER = false;
-    }
-
-    @Test
-    public void testDecodeNodeRewrite4() throws Exception {
-        FeConstants.USE_MOCK_DICT_MANAGER = true;
-        String sql = "select dept_name from dept group by dept_name,state";
-        String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:Decode\n" +
-                "  |  <dict id 4> : <string id 2>\n" +
-                "  |  use vectorized: true\n" +
-                "  |  \n" +
-                "  2:Project\n" +
-                "  |  <slot 4> : 4: dept_name"));
-        FeConstants.USE_MOCK_DICT_MANAGER = false;
-    }
-
-    @Test
-    public void testDecodeNodeRewrite5() throws Exception {
-        FeConstants.USE_MOCK_DICT_MANAGER = true;
-        String sql = "select S_ADDRESS from supplier where S_ADDRESS " +
-                "like '%Customer%Complaints%' group by S_ADDRESS ";
-        String plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan.contains("Decode"));
-        FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
 
     @Test

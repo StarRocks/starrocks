@@ -56,6 +56,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -393,13 +394,16 @@ public class DatabaseTransactionMgr {
         TabletInvertedIndex tabletInvertedIndex = catalog.getTabletInvertedIndex();
         Map<Long, Set<Long>> tabletToBackends = new HashMap<>();
         Map<Long, Set<Long>> tableToPartition = new HashMap<>();
+        Map<Long, Set<String>> tableToInvalidDictCacheColumns = new HashMap<>();
+        Map<Long, Set<String>> tableToValidDictCacheColumns = new HashMap<>();
+
         // 2. validate potential exists problem: db->table->partition
         // guarantee exist exception during a transaction
         // if index is dropped, it does not matter.
         // if table or partition is dropped during load, just ignore that tablet,
         // because we should allow dropping rollup or partition during load
         List<Long> tabletIds = tabletCommitInfos.stream().map(
-                tabletCommitInfo -> tabletCommitInfo.getTabletId()).collect(Collectors.toList());
+                TabletCommitInfo::getTabletId).collect(Collectors.toList());
         List<TabletMeta> tabletMetaList = tabletInvertedIndex.getTabletMetaList(tabletIds);
         for (int i = 0; i < tabletMetaList.size(); i++) {
             TabletMeta tabletMeta = tabletMetaList.get(i);
@@ -435,6 +439,24 @@ public class DatabaseTransactionMgr {
                 tabletToBackends.put(tabletId, new HashSet<>());
             }
             tabletToBackends.get(tabletId).add(tabletCommitInfos.get(i).getBackendId());
+
+            if (!tableToInvalidDictCacheColumns.containsKey(tableId)) {
+                tableToInvalidDictCacheColumns.put(tableId, new HashSet<>());
+            }
+            // Invalid column set should union
+            tableToInvalidDictCacheColumns.get(tableId).addAll(tabletCommitInfos.get(i).getInvalidDictCacheColumns());
+
+            if (!tableToValidDictCacheColumns.containsKey(tableId)) {
+                tableToValidDictCacheColumns.put(tableId, new HashSet<>());
+            }
+            // Valid column set should intersect and remove all invalid columns
+            if (i == 0) {
+                tableToValidDictCacheColumns.get(tableId).addAll(tabletCommitInfos.get(i).getValidDictCacheColumns());
+            }
+
+            if (i == tabletMetaList.size() - 1) {
+                tableToValidDictCacheColumns.get(tableId).removeAll(tableToInvalidDictCacheColumns.get(tableId));
+            }
         }
 
         if (tableToPartition.isEmpty()) {
@@ -510,8 +532,9 @@ public class DatabaseTransactionMgr {
         boolean txnOperated = false;
         writeLock();
         try {
-            unprotectedCommitTransaction(transactionState, errorReplicaIds, tableToPartition, totalInvolvedBackends,
-                    db);
+            unprotectedCommitTransaction(transactionState, errorReplicaIds, tableToPartition,
+                    tableToInvalidDictCacheColumns, tableToValidDictCacheColumns,
+                    totalInvolvedBackends, db);
             txnOperated = true;
         } finally {
             writeUnlock();
@@ -836,7 +859,10 @@ public class DatabaseTransactionMgr {
     }
 
     protected void unprotectedCommitTransaction(TransactionState transactionState, Set<Long> errorReplicaIds,
-                                                Map<Long, Set<Long>> tableToPartition, Set<Long> totalInvolvedBackends,
+                                                Map<Long, Set<Long>> tableToPartition,
+                                                Map<Long, Set<String>> tableToInvalidDictColumns,
+                                                Map<Long, Set<String>> tableToValidDictColumns,
+                                                Set<Long> totalInvolvedBackends,
                                                 Database db) {
         // transaction state is modified during check if the transaction could committed
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARE) {
@@ -848,13 +874,24 @@ public class DatabaseTransactionMgr {
         transactionState.setErrorReplicas(errorReplicaIds);
         for (long tableId : tableToPartition.keySet()) {
             TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+            boolean isFirstPartition = true;
             for (long partitionId : tableToPartition.get(tableId)) {
                 OlapTable table = (OlapTable) db.getTable(tableId);
                 Partition partition = table.getPartition(partitionId);
-                PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(partitionId,
-                        partition.getNextVersion(), partition.getNextVersionHash(),
-                        System.currentTimeMillis() /* use as partition visible time */);
+                PartitionCommitInfo partitionCommitInfo;
+                if (isFirstPartition) {
+                    partitionCommitInfo = new PartitionCommitInfo(partitionId,
+                            partition.getNextVersion(), partition.getNextVersionHash(),
+                            System.currentTimeMillis(),
+                            Lists.newArrayList(tableToInvalidDictColumns.get(tableId)),
+                            Lists.newArrayList(tableToValidDictColumns.get(tableId)));
+                } else {
+                    partitionCommitInfo = new PartitionCommitInfo(partitionId,
+                            partition.getNextVersion(), partition.getNextVersionHash(),
+                            System.currentTimeMillis() /* use as partition visible time */);
+                }
                 tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+                isFirstPartition = false;
             }
             transactionState.putIdToTableCommitInfo(tableId, tableCommitInfo);
         }
@@ -1272,6 +1309,8 @@ public class DatabaseTransactionMgr {
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
             long tableId = tableCommitInfo.getTableId();
             OlapTable table = (OlapTable) db.getTable(tableId);
+            List<String> validDictCacheColumns = Lists.newArrayList();
+            long maxPartitionVersionTime = -1;
             for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
                 long partitionId = partitionCommitInfo.getPartitionId();
                 long newCommitVersion = partitionCommitInfo.getVersion();
@@ -1335,6 +1374,18 @@ public class DatabaseTransactionMgr {
                     LOG.debug("transaction state {} set partition {}'s version to [{}] and version hash to [{}]",
                             transactionState, partition.getId(), version, versionHash);
                 }
+                if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
+                    for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
+                        IDictManager.getInstance().removeGlobalDict(tableId, column);
+                    }
+                }
+                if (!partitionCommitInfo.getValidDictCacheColumns().isEmpty()) {
+                    validDictCacheColumns = partitionCommitInfo.getValidDictCacheColumns();
+                }
+                maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
+            }
+            for (String column : validDictCacheColumns) {
+                IDictManager.getInstance().updateGlobalDict(tableId, column, maxPartitionVersionTime);
             }
         }
         return true;

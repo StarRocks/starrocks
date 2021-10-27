@@ -85,7 +85,7 @@ public:
         // For type of int/tinyint/bitint..., the result of avg is float/double
         // But the floating point operations are much slower than integer operations
         // So, we use integers to perform operations
-        SumResultType local_sum_for_arithmetic{};
+        [[maybe_unused]] SumResultType local_sum_for_arithmetic{};
 
         for (size_t i = 0; i < batch_size; ++i) {
             if constexpr (pt_is_datetime<PT>) {

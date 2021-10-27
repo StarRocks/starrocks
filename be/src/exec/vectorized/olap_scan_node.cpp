@@ -328,6 +328,7 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     cm.obj_pool = &_obj_pool;
     cm.key_column_names = &_olap_scan_node.key_column_name;
     cm.runtime_filters = &_runtime_filter_collector;
+    cm.runtime_state = state;
 
     const TQueryOptions& query_options = state->query_options();
     int32_t max_scan_key_num;
@@ -336,12 +337,12 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     } else {
         max_scan_key_num = config::doris_max_scan_key_num;
     }
-    bool no_limit = (limit() == -1);
-
-    cm.normalize_conjuncts();
-    cm.build_olap_filters();
-    cm.build_scan_keys(no_limit, max_scan_key_num);
-
+    bool scan_keys_unlimited = (limit() == -1);
+    bool enable_column_expr_predicate = false;
+    if (_olap_scan_node.__isset.enable_column_expr_predicate) {
+        enable_column_expr_predicate = _olap_scan_node.enable_column_expr_predicate;
+    }
+    cm.parse_conjuncts(scan_keys_unlimited, max_scan_key_num, enable_column_expr_predicate);
     RETURN_IF_ERROR(_start_scan_thread(state));
 
     return Status::OK();

@@ -53,7 +53,7 @@ const TypeInfoPtr ScalarTypeInfoResolver::get_type_info(FieldType t) {
 }
 
 const ScalarTypeInfo* ScalarTypeInfoResolver::get_scalar_type_info(FieldType t) {
-    DCHECK(is_scalar_type(t));
+    DCHECK(is_scalar_field_type(t));
     return this->_mapping[t].get();
 }
 
@@ -91,7 +91,7 @@ ScalarTypeInfoResolver::ScalarTypeInfoResolver() {
 
 ScalarTypeInfoResolver::~ScalarTypeInfoResolver() = default;
 
-bool is_scalar_type(FieldType field_type) {
+bool is_scalar_field_type(FieldType field_type) {
     switch (field_type) {
     case OLAP_FIELD_TYPE_STRUCT:
     case OLAP_FIELD_TYPE_ARRAY:
@@ -146,7 +146,7 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
 }
 
 TypeInfoPtr get_type_info(FieldType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale) {
-    if (is_scalar_type(field_type)) {
+    if (is_scalar_field_type(field_type)) {
         return get_type_info(field_type);
     } else if (field_type == OLAP_FIELD_TYPE_DECIMAL32) {
         return std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL32>>(precision, scale);
@@ -164,7 +164,7 @@ TypeInfoPtr get_type_info(const TypeInfo* type_info) {
 }
 
 const ScalarTypeInfo* get_scalar_type_info(FieldType type) {
-    DCHECK(is_scalar_type(type));
+    DCHECK(is_scalar_field_type(type));
     return ScalarTypeInfoResolver::instance()->get_scalar_type_info(type);
 }
 

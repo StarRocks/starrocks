@@ -215,7 +215,7 @@ public class PlanTestBase {
 
         starRocksAssert.withTable("CREATE TABLE supplier ( S_SUPPKEY     INTEGER NOT NULL,\n" +
                 "                             S_NAME        CHAR(25) NOT NULL,\n" +
-                "                             S_ADDRESS     VARCHAR(40) NOT NULL,\n" +
+                "                             S_ADDRESS     VARCHAR(40) NOT NULL, \n" +
                 "                             S_NATIONKEY   INTEGER NOT NULL,\n" +
                 "                             S_PHONE       CHAR(15) NOT NULL,\n" +
                 "                             S_ACCTBAL     double NOT NULL,\n" +

@@ -200,9 +200,14 @@ Status NodeChannel::open_wait() {
                     for (auto& col_name : tablet.invalid_dict_cache_columns()) {
                         invalid_dict_cache_columns.emplace_back(col_name);
                     }
-                    if (!invalid_dict_cache_columns.empty()) {
-                        commit_info.__set_invalid_dict_cache_columns(invalid_dict_cache_columns);
+                    commit_info.__set_invalid_dict_cache_columns(invalid_dict_cache_columns);
+
+                    std::vector<std::string> valid_dict_cache_columns;
+                    for (auto& col_name : tablet.valid_dict_cache_columns()) {
+                        valid_dict_cache_columns.emplace_back(col_name);
                     }
+                    commit_info.__set_valid_dict_cache_columns(valid_dict_cache_columns);
+
                     _tablet_commit_infos.emplace_back(std::move(commit_info));
                 }
                 _add_batches_finished = true;
