@@ -63,7 +63,7 @@ public class ReorderJoinRule extends Rule {
     void enumerate(JoinOrder reorderAlgorithm, OptimizerContext context, OptExpression innerJoinRoot,
                    MultiJoinNode multiJoinNode) {
         reorderAlgorithm.reorder(Lists.newArrayList(multiJoinNode.getAtoms()),
-                multiJoinNode.getPredicates());
+                multiJoinNode.getPredicates(), multiJoinNode.getExpressionMap());
 
         List<OptExpression> reorderTopKResult = reorderAlgorithm.getResult();
         LogicalJoinOperator oldRoot = (LogicalJoinOperator) innerJoinRoot.getOp();
