@@ -185,7 +185,7 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
 
     for (auto i = 0; i < test_cases.size(); i++) {
         auto& tc = test_cases[i];
-        auto& lhs_datum = std::get<0>(tc);
+        // auto& lhs_datum = std::get<0>(tc);
         auto& rhs_datum = std::get<1>(tc);
         auto& expect = std::get<2>(tc);
         auto row_idx = i + off;

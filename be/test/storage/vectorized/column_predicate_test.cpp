@@ -1947,6 +1947,8 @@ TEST(ColumnPredicateTest, test_or) {
     }
 }
 
+#define ZMF(min, max) zone_map_filter(ZoneMapDetail(min, max))
+
 // NOLINTNEXTLINE
 TEST(ColumnPredicateTest, zone_map_filter) {
     std::unique_ptr<ColumnPredicate> eq_100(new_column_eq_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 0, "100"));
@@ -1962,58 +1964,58 @@ TEST(ColumnPredicateTest, zone_map_filter) {
     std::unique_ptr<ColumnPredicate> not_in_90_100(
             new_column_not_in_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 0, {"90", "100"}));
 
-    EXPECT_TRUE(eq_100->zone_map_filter(Datum(90), Datum(100)));
-    EXPECT_TRUE(eq_100->zone_map_filter(Datum(100), Datum(100)));
-    EXPECT_FALSE(eq_100->zone_map_filter(Datum(101), Datum(200)));
-    EXPECT_TRUE(eq_100->zone_map_filter(Datum(), Datum(200)));
-    EXPECT_FALSE(eq_100->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(eq_100->ZMF(Datum(90), Datum(100)));
+    EXPECT_TRUE(eq_100->ZMF(Datum(100), Datum(100)));
+    EXPECT_FALSE(eq_100->ZMF(Datum(101), Datum(200)));
+    EXPECT_TRUE(eq_100->ZMF(Datum(), Datum(200)));
+    EXPECT_FALSE(eq_100->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(ne_100->zone_map_filter(Datum(90), Datum(99)));
-    EXPECT_TRUE(ne_100->zone_map_filter(Datum(90), Datum(200)));
-    EXPECT_TRUE(ne_100->zone_map_filter(Datum(), Datum()));
-    EXPECT_TRUE(ne_100->zone_map_filter(Datum(), Datum(99)));
+    EXPECT_TRUE(ne_100->ZMF(Datum(90), Datum(99)));
+    EXPECT_TRUE(ne_100->ZMF(Datum(90), Datum(200)));
+    EXPECT_TRUE(ne_100->ZMF(Datum(), Datum()));
+    EXPECT_TRUE(ne_100->ZMF(Datum(), Datum(99)));
 
-    EXPECT_TRUE(gt_100->zone_map_filter(Datum(90), Datum(101)));
-    EXPECT_TRUE(gt_100->zone_map_filter(Datum(), Datum(101)));
-    EXPECT_FALSE(gt_100->zone_map_filter(Datum(90), Datum(100)));
-    EXPECT_FALSE(gt_100->zone_map_filter(Datum(90), Datum(99)));
-    EXPECT_FALSE(gt_100->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(gt_100->ZMF(Datum(90), Datum(101)));
+    EXPECT_TRUE(gt_100->ZMF(Datum(), Datum(101)));
+    EXPECT_FALSE(gt_100->ZMF(Datum(90), Datum(100)));
+    EXPECT_FALSE(gt_100->ZMF(Datum(90), Datum(99)));
+    EXPECT_FALSE(gt_100->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(ge_100->zone_map_filter(Datum(90), Datum(101)));
-    EXPECT_TRUE(ge_100->zone_map_filter(Datum(), Datum(101)));
-    EXPECT_TRUE(ge_100->zone_map_filter(Datum(90), Datum(100)));
-    EXPECT_FALSE(ge_100->zone_map_filter(Datum(90), Datum(99)));
-    EXPECT_FALSE(ge_100->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(ge_100->ZMF(Datum(90), Datum(101)));
+    EXPECT_TRUE(ge_100->ZMF(Datum(), Datum(101)));
+    EXPECT_TRUE(ge_100->ZMF(Datum(90), Datum(100)));
+    EXPECT_FALSE(ge_100->ZMF(Datum(90), Datum(99)));
+    EXPECT_FALSE(ge_100->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(lt_100->zone_map_filter(Datum(), Datum(101)));
-    EXPECT_TRUE(lt_100->zone_map_filter(Datum(99), Datum(200)));
-    EXPECT_FALSE(lt_100->zone_map_filter(Datum(100), Datum(200)));
-    EXPECT_FALSE(lt_100->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(lt_100->ZMF(Datum(), Datum(101)));
+    EXPECT_TRUE(lt_100->ZMF(Datum(99), Datum(200)));
+    EXPECT_FALSE(lt_100->ZMF(Datum(100), Datum(200)));
+    EXPECT_FALSE(lt_100->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(le_100->zone_map_filter(Datum(), Datum(101)));
-    EXPECT_TRUE(le_100->zone_map_filter(Datum(100), Datum(200)));
-    EXPECT_FALSE(le_100->zone_map_filter(Datum(101), Datum(200)));
-    EXPECT_FALSE(le_100->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(le_100->ZMF(Datum(), Datum(101)));
+    EXPECT_TRUE(le_100->ZMF(Datum(100), Datum(200)));
+    EXPECT_FALSE(le_100->ZMF(Datum(101), Datum(200)));
+    EXPECT_FALSE(le_100->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(is_null->zone_map_filter(Datum(), Datum()));
-    EXPECT_TRUE(is_null->zone_map_filter(Datum(), Datum(100)));
-    EXPECT_FALSE(is_null->zone_map_filter(Datum(100), Datum(200)));
+    EXPECT_TRUE(is_null->ZMF(Datum(), Datum()));
+    EXPECT_TRUE(is_null->ZMF(Datum(), Datum(100)));
+    EXPECT_FALSE(is_null->ZMF(Datum(100), Datum(200)));
 
-    EXPECT_TRUE(not_null->zone_map_filter(Datum(), Datum(100)));
-    EXPECT_TRUE(not_null->zone_map_filter(Datum(100), Datum(200)));
-    EXPECT_FALSE(not_null->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(not_null->ZMF(Datum(), Datum(100)));
+    EXPECT_TRUE(not_null->ZMF(Datum(100), Datum(200)));
+    EXPECT_FALSE(not_null->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(in_90_100->zone_map_filter(Datum(), Datum(100)));
-    EXPECT_TRUE(in_90_100->zone_map_filter(Datum(100), Datum(110)));
-    EXPECT_TRUE(in_90_100->zone_map_filter(Datum(90), Datum(99)));
-    EXPECT_FALSE(in_90_100->zone_map_filter(Datum(80), Datum(89)));
-    EXPECT_FALSE(in_90_100->zone_map_filter(Datum(101), Datum(110)));
+    EXPECT_TRUE(in_90_100->ZMF(Datum(), Datum(100)));
+    EXPECT_TRUE(in_90_100->ZMF(Datum(100), Datum(110)));
+    EXPECT_TRUE(in_90_100->ZMF(Datum(90), Datum(99)));
+    EXPECT_FALSE(in_90_100->ZMF(Datum(80), Datum(89)));
+    EXPECT_FALSE(in_90_100->ZMF(Datum(101), Datum(110)));
 
-    EXPECT_TRUE(not_in_90_100->zone_map_filter(Datum(), Datum(100)));
-    EXPECT_TRUE(not_in_90_100->zone_map_filter(Datum(100), Datum(110)));
-    EXPECT_TRUE(not_in_90_100->zone_map_filter(Datum(90), Datum(99)));
-    EXPECT_TRUE(not_in_90_100->zone_map_filter(Datum(80), Datum(89)));
-    EXPECT_TRUE(not_in_90_100->zone_map_filter(Datum(101), Datum(110)));
+    EXPECT_TRUE(not_in_90_100->ZMF(Datum(), Datum(100)));
+    EXPECT_TRUE(not_in_90_100->ZMF(Datum(100), Datum(110)));
+    EXPECT_TRUE(not_in_90_100->ZMF(Datum(90), Datum(99)));
+    EXPECT_TRUE(not_in_90_100->ZMF(Datum(80), Datum(89)));
+    EXPECT_TRUE(not_in_90_100->ZMF(Datum(101), Datum(110)));
 }
 
 // NOLINTNEXTLINE
@@ -2031,58 +2033,58 @@ TEST(ColumnPredicateTest, zone_map_filter_char) {
     std::unique_ptr<ColumnPredicate> not_in_xx_yy(
             new_column_not_in_predicate(get_type_info(OLAP_FIELD_TYPE_CHAR), 0, {"xx\0\0", "yy\0\0"}));
 
-    EXPECT_TRUE(eq_xx->zone_map_filter(Datum("tt"), Datum("xx")));
-    EXPECT_TRUE(eq_xx->zone_map_filter(Datum("xx"), Datum("xx")));
-    EXPECT_FALSE(eq_xx->zone_map_filter(Datum("xy"), Datum("yy")));
-    EXPECT_TRUE(eq_xx->zone_map_filter(Datum(), Datum("yy")));
-    EXPECT_FALSE(eq_xx->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(eq_xx->ZMF(Datum("tt"), Datum("xx")));
+    EXPECT_TRUE(eq_xx->ZMF(Datum("xx"), Datum("xx")));
+    EXPECT_FALSE(eq_xx->ZMF(Datum("xy"), Datum("yy")));
+    EXPECT_TRUE(eq_xx->ZMF(Datum(), Datum("yy")));
+    EXPECT_FALSE(eq_xx->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(ne_xx->zone_map_filter(Datum("tt"), Datum("xa")));
-    EXPECT_TRUE(ne_xx->zone_map_filter(Datum("tt"), Datum("yy")));
-    EXPECT_TRUE(ne_xx->zone_map_filter(Datum(), Datum()));
-    EXPECT_TRUE(ne_xx->zone_map_filter(Datum(), Datum("xa")));
+    EXPECT_TRUE(ne_xx->ZMF(Datum("tt"), Datum("xa")));
+    EXPECT_TRUE(ne_xx->ZMF(Datum("tt"), Datum("yy")));
+    EXPECT_TRUE(ne_xx->ZMF(Datum(), Datum()));
+    EXPECT_TRUE(ne_xx->ZMF(Datum(), Datum("xa")));
 
-    EXPECT_TRUE(gt_xx->zone_map_filter(Datum("tt"), Datum("xy")));
-    EXPECT_TRUE(gt_xx->zone_map_filter(Datum(), Datum("xy")));
-    EXPECT_FALSE(gt_xx->zone_map_filter(Datum("tt"), Datum("xx")));
-    EXPECT_FALSE(gt_xx->zone_map_filter(Datum("tt"), Datum("xw")));
-    EXPECT_FALSE(gt_xx->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(gt_xx->ZMF(Datum("tt"), Datum("xy")));
+    EXPECT_TRUE(gt_xx->ZMF(Datum(), Datum("xy")));
+    EXPECT_FALSE(gt_xx->ZMF(Datum("tt"), Datum("xx")));
+    EXPECT_FALSE(gt_xx->ZMF(Datum("tt"), Datum("xw")));
+    EXPECT_FALSE(gt_xx->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(ge_xx->zone_map_filter(Datum("tt"), Datum("xy")));
-    EXPECT_TRUE(ge_xx->zone_map_filter(Datum(), Datum("xy")));
-    EXPECT_TRUE(ge_xx->zone_map_filter(Datum("tt"), Datum("xx")));
-    EXPECT_FALSE(ge_xx->zone_map_filter(Datum("tt"), Datum("xw")));
-    EXPECT_FALSE(ge_xx->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(ge_xx->ZMF(Datum("tt"), Datum("xy")));
+    EXPECT_TRUE(ge_xx->ZMF(Datum(), Datum("xy")));
+    EXPECT_TRUE(ge_xx->ZMF(Datum("tt"), Datum("xx")));
+    EXPECT_FALSE(ge_xx->ZMF(Datum("tt"), Datum("xw")));
+    EXPECT_FALSE(ge_xx->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(lt_xx->zone_map_filter(Datum(), Datum("xy")));
-    EXPECT_TRUE(lt_xx->zone_map_filter(Datum("xw"), Datum("yy")));
-    EXPECT_FALSE(lt_xx->zone_map_filter(Datum("xx"), Datum("yy")));
-    EXPECT_FALSE(lt_xx->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(lt_xx->ZMF(Datum(), Datum("xy")));
+    EXPECT_TRUE(lt_xx->ZMF(Datum("xw"), Datum("yy")));
+    EXPECT_FALSE(lt_xx->ZMF(Datum("xx"), Datum("yy")));
+    EXPECT_FALSE(lt_xx->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(le_xx->zone_map_filter(Datum(), Datum("xy")));
-    EXPECT_TRUE(le_xx->zone_map_filter(Datum("xx"), Datum("yy")));
-    EXPECT_FALSE(le_xx->zone_map_filter(Datum("xy"), Datum("yy")));
-    EXPECT_FALSE(le_xx->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(le_xx->ZMF(Datum(), Datum("xy")));
+    EXPECT_TRUE(le_xx->ZMF(Datum("xx"), Datum("yy")));
+    EXPECT_FALSE(le_xx->ZMF(Datum("xy"), Datum("yy")));
+    EXPECT_FALSE(le_xx->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(is_null->zone_map_filter(Datum(), Datum()));
-    EXPECT_TRUE(is_null->zone_map_filter(Datum(), Datum("xx")));
-    EXPECT_FALSE(is_null->zone_map_filter(Datum("xx"), Datum("yy")));
+    EXPECT_TRUE(is_null->ZMF(Datum(), Datum()));
+    EXPECT_TRUE(is_null->ZMF(Datum(), Datum("xx")));
+    EXPECT_FALSE(is_null->ZMF(Datum("xx"), Datum("yy")));
 
-    EXPECT_TRUE(not_null->zone_map_filter(Datum(), Datum("xx")));
-    EXPECT_TRUE(not_null->zone_map_filter(Datum("xx"), Datum("yy")));
-    EXPECT_FALSE(not_null->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(not_null->ZMF(Datum(), Datum("xx")));
+    EXPECT_TRUE(not_null->ZMF(Datum("xx"), Datum("yy")));
+    EXPECT_FALSE(not_null->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(in_xx_yy->zone_map_filter(Datum(), Datum("xx")));
-    EXPECT_TRUE(in_xx_yy->zone_map_filter(Datum("yy"), Datum("yy\0")));
-    EXPECT_TRUE(in_xx_yy->zone_map_filter(Datum("tt"), Datum("xx")));
-    EXPECT_FALSE(in_xx_yy->zone_map_filter(Datum("ab"), Datum("tt")));
-    EXPECT_FALSE(in_xx_yy->zone_map_filter(Datum("yz"), Datum("zz")));
+    EXPECT_TRUE(in_xx_yy->ZMF(Datum(), Datum("xx")));
+    EXPECT_TRUE(in_xx_yy->ZMF(Datum("yy"), Datum("yy\0")));
+    EXPECT_TRUE(in_xx_yy->ZMF(Datum("tt"), Datum("xx")));
+    EXPECT_FALSE(in_xx_yy->ZMF(Datum("ab"), Datum("tt")));
+    EXPECT_FALSE(in_xx_yy->ZMF(Datum("yz"), Datum("zz")));
 
-    EXPECT_TRUE(not_in_xx_yy->zone_map_filter(Datum(), Datum("xx")));
-    EXPECT_TRUE(not_in_xx_yy->zone_map_filter(Datum("xx"), Datum("yy")));
-    EXPECT_TRUE(not_in_xx_yy->zone_map_filter(Datum("tt"), Datum("x")));
-    EXPECT_TRUE(not_in_xx_yy->zone_map_filter(Datum("ab"), Datum("cd")));
-    EXPECT_TRUE(not_in_xx_yy->zone_map_filter(Datum("xy"), Datum("zz")));
+    EXPECT_TRUE(not_in_xx_yy->ZMF(Datum(), Datum("xx")));
+    EXPECT_TRUE(not_in_xx_yy->ZMF(Datum("xx"), Datum("yy")));
+    EXPECT_TRUE(not_in_xx_yy->ZMF(Datum("tt"), Datum("x")));
+    EXPECT_TRUE(not_in_xx_yy->ZMF(Datum("ab"), Datum("cd")));
+    EXPECT_TRUE(not_in_xx_yy->ZMF(Datum("xy"), Datum("zz")));
 }
 
 // NOLINTNEXTLINE
@@ -2102,58 +2104,58 @@ TEST(ColumnPredicateTest, zone_map_filter_varchar) {
     std::unique_ptr<ColumnPredicate> not_in_xx_yy(
             new_column_not_in_predicate(get_type_info(OLAP_FIELD_TYPE_VARCHAR), 0, {"xx", "yy"}));
 
-    EXPECT_TRUE(eq_xx->zone_map_filter(Datum("tt"), Datum("xx")));
-    EXPECT_TRUE(eq_xx->zone_map_filter(Datum("xx"), Datum("xx")));
-    EXPECT_FALSE(eq_xx->zone_map_filter(Datum("xy"), Datum("yy")));
-    EXPECT_TRUE(eq_xx->zone_map_filter(Datum(), Datum("yy")));
-    EXPECT_FALSE(eq_xx->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(eq_xx->ZMF(Datum("tt"), Datum("xx")));
+    EXPECT_TRUE(eq_xx->ZMF(Datum("xx"), Datum("xx")));
+    EXPECT_FALSE(eq_xx->ZMF(Datum("xy"), Datum("yy")));
+    EXPECT_TRUE(eq_xx->ZMF(Datum(), Datum("yy")));
+    EXPECT_FALSE(eq_xx->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(ne_xx->zone_map_filter(Datum("tt"), Datum("xa")));
-    EXPECT_TRUE(ne_xx->zone_map_filter(Datum("tt"), Datum("yy")));
-    EXPECT_TRUE(ne_xx->zone_map_filter(Datum(), Datum()));
-    EXPECT_TRUE(ne_xx->zone_map_filter(Datum(), Datum("xa")));
+    EXPECT_TRUE(ne_xx->ZMF(Datum("tt"), Datum("xa")));
+    EXPECT_TRUE(ne_xx->ZMF(Datum("tt"), Datum("yy")));
+    EXPECT_TRUE(ne_xx->ZMF(Datum(), Datum()));
+    EXPECT_TRUE(ne_xx->ZMF(Datum(), Datum("xa")));
 
-    EXPECT_TRUE(gt_xx->zone_map_filter(Datum("tt"), Datum("xy")));
-    EXPECT_TRUE(gt_xx->zone_map_filter(Datum(), Datum("xy")));
-    EXPECT_FALSE(gt_xx->zone_map_filter(Datum("tt"), Datum("xx")));
-    EXPECT_FALSE(gt_xx->zone_map_filter(Datum("tt"), Datum("xw")));
-    EXPECT_FALSE(gt_xx->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(gt_xx->ZMF(Datum("tt"), Datum("xy")));
+    EXPECT_TRUE(gt_xx->ZMF(Datum(), Datum("xy")));
+    EXPECT_FALSE(gt_xx->ZMF(Datum("tt"), Datum("xx")));
+    EXPECT_FALSE(gt_xx->ZMF(Datum("tt"), Datum("xw")));
+    EXPECT_FALSE(gt_xx->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(ge_xx->zone_map_filter(Datum("tt"), Datum("xy")));
-    EXPECT_TRUE(ge_xx->zone_map_filter(Datum(), Datum("xy")));
-    EXPECT_TRUE(ge_xx->zone_map_filter(Datum("tt"), Datum("xx")));
-    EXPECT_FALSE(ge_xx->zone_map_filter(Datum("tt"), Datum("xw")));
-    EXPECT_FALSE(ge_xx->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(ge_xx->ZMF(Datum("tt"), Datum("xy")));
+    EXPECT_TRUE(ge_xx->ZMF(Datum(), Datum("xy")));
+    EXPECT_TRUE(ge_xx->ZMF(Datum("tt"), Datum("xx")));
+    EXPECT_FALSE(ge_xx->ZMF(Datum("tt"), Datum("xw")));
+    EXPECT_FALSE(ge_xx->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(lt_xx->zone_map_filter(Datum(), Datum("xy")));
-    EXPECT_TRUE(lt_xx->zone_map_filter(Datum("xw"), Datum("yy")));
-    EXPECT_FALSE(lt_xx->zone_map_filter(Datum("xx"), Datum("yy")));
-    EXPECT_FALSE(lt_xx->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(lt_xx->ZMF(Datum(), Datum("xy")));
+    EXPECT_TRUE(lt_xx->ZMF(Datum("xw"), Datum("yy")));
+    EXPECT_FALSE(lt_xx->ZMF(Datum("xx"), Datum("yy")));
+    EXPECT_FALSE(lt_xx->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(le_xx->zone_map_filter(Datum(), Datum("xy")));
-    EXPECT_TRUE(le_xx->zone_map_filter(Datum("xx"), Datum("yy")));
-    EXPECT_FALSE(le_xx->zone_map_filter(Datum("xy"), Datum("yy")));
-    EXPECT_FALSE(le_xx->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(le_xx->ZMF(Datum(), Datum("xy")));
+    EXPECT_TRUE(le_xx->ZMF(Datum("xx"), Datum("yy")));
+    EXPECT_FALSE(le_xx->ZMF(Datum("xy"), Datum("yy")));
+    EXPECT_FALSE(le_xx->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(is_null->zone_map_filter(Datum(), Datum()));
-    EXPECT_TRUE(is_null->zone_map_filter(Datum(), Datum("xx")));
-    EXPECT_FALSE(is_null->zone_map_filter(Datum("xx"), Datum("yy")));
+    EXPECT_TRUE(is_null->ZMF(Datum(), Datum()));
+    EXPECT_TRUE(is_null->ZMF(Datum(), Datum("xx")));
+    EXPECT_FALSE(is_null->ZMF(Datum("xx"), Datum("yy")));
 
-    EXPECT_TRUE(not_null->zone_map_filter(Datum(), Datum("xx")));
-    EXPECT_TRUE(not_null->zone_map_filter(Datum("xx"), Datum("yy")));
-    EXPECT_FALSE(not_null->zone_map_filter(Datum(), Datum()));
+    EXPECT_TRUE(not_null->ZMF(Datum(), Datum("xx")));
+    EXPECT_TRUE(not_null->ZMF(Datum("xx"), Datum("yy")));
+    EXPECT_FALSE(not_null->ZMF(Datum(), Datum()));
 
-    EXPECT_TRUE(in_xx_yy->zone_map_filter(Datum(), Datum("xx")));
-    EXPECT_TRUE(in_xx_yy->zone_map_filter(Datum("yy"), Datum("yy\0")));
-    EXPECT_TRUE(in_xx_yy->zone_map_filter(Datum("tt"), Datum("xx")));
-    EXPECT_FALSE(in_xx_yy->zone_map_filter(Datum("ab"), Datum("tt")));
-    EXPECT_FALSE(in_xx_yy->zone_map_filter(Datum("yz"), Datum("zz")));
+    EXPECT_TRUE(in_xx_yy->ZMF(Datum(), Datum("xx")));
+    EXPECT_TRUE(in_xx_yy->ZMF(Datum("yy"), Datum("yy\0")));
+    EXPECT_TRUE(in_xx_yy->ZMF(Datum("tt"), Datum("xx")));
+    EXPECT_FALSE(in_xx_yy->ZMF(Datum("ab"), Datum("tt")));
+    EXPECT_FALSE(in_xx_yy->ZMF(Datum("yz"), Datum("zz")));
 
-    EXPECT_TRUE(not_in_xx_yy->zone_map_filter(Datum(), Datum("xx")));
-    EXPECT_TRUE(not_in_xx_yy->zone_map_filter(Datum("xx"), Datum("yy")));
-    EXPECT_TRUE(not_in_xx_yy->zone_map_filter(Datum("tt"), Datum("x")));
-    EXPECT_TRUE(not_in_xx_yy->zone_map_filter(Datum("ab"), Datum("cd")));
-    EXPECT_TRUE(not_in_xx_yy->zone_map_filter(Datum("xy"), Datum("zz")));
+    EXPECT_TRUE(not_in_xx_yy->ZMF(Datum(), Datum("xx")));
+    EXPECT_TRUE(not_in_xx_yy->ZMF(Datum("xx"), Datum("yy")));
+    EXPECT_TRUE(not_in_xx_yy->ZMF(Datum("tt"), Datum("x")));
+    EXPECT_TRUE(not_in_xx_yy->ZMF(Datum("ab"), Datum("cd")));
+    EXPECT_TRUE(not_in_xx_yy->ZMF(Datum("xy"), Datum("zz")));
 }
 
 } // namespace starrocks::vectorized
