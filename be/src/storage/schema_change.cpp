@@ -33,7 +33,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/merger.h"
 #include "storage/row.h"
 #include "storage/row_block.h"
@@ -1029,9 +1028,6 @@ bool RowBlockMerger::_pop_heap() {
 
 bool LinkedSchemaChange::process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer,
                                  TabletSharedPtr new_tablet, TabletSharedPtr base_tablet) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     OLAPStatus status = new_rowset_writer->add_rowset_for_linked_schema_change(rowset_reader->rowset(),
                                                                                _row_block_changer.get_schema_mapping());
     if (status != OLAP_SUCCESS) {
@@ -1045,12 +1041,8 @@ bool LinkedSchemaChange::process(RowsetReaderSharedPtr rowset_reader, RowsetWrit
     return true;
 }
 
-SchemaChangeDirectly::SchemaChangeDirectly(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer,
-                                           size_t mem_limit)
-        : SchemaChange(mem_tracker, mem_limit),
-          _row_block_changer(row_block_changer),
-          _row_block_allocator(nullptr),
-          _cursor(nullptr) {}
+SchemaChangeDirectly::SchemaChangeDirectly(const RowBlockChanger& row_block_changer)
+        : SchemaChange(), _row_block_changer(row_block_changer), _row_block_allocator(nullptr), _cursor(nullptr) {}
 
 SchemaChangeDirectly::~SchemaChangeDirectly() {
     VLOG(3) << "~SchemaChangeDirectly()";
@@ -1072,9 +1064,6 @@ bool SchemaChangeDirectly::_write_row_block(RowsetWriter* rowset_writer, RowBloc
 
 bool SchemaChangeDirectly::process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* rowset_writer,
                                    TabletSharedPtr new_tablet, TabletSharedPtr base_tablet) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     if (_row_block_allocator == nullptr) {
         _row_block_allocator = new RowBlockAllocator(new_tablet->tablet_schema(), 0);
         if (_row_block_allocator == nullptr) {
@@ -1199,9 +1188,8 @@ DIRECTLY_PROCESS_ERR:
     return result;
 }
 
-SchemaChangeWithSorting::SchemaChangeWithSorting(MemTracker* mem_tracker, const RowBlockChanger& row_block_changer,
-                                                 size_t memory_limitation)
-        : SchemaChange(mem_tracker, memory_limitation),
+SchemaChangeWithSorting::SchemaChangeWithSorting(const RowBlockChanger& row_block_changer, size_t memory_limitation)
+        : SchemaChange(),
           _row_block_changer(row_block_changer),
           _memory_limitation(memory_limitation),
           _row_block_allocator(nullptr) {
@@ -1220,9 +1208,6 @@ SchemaChangeWithSorting::~SchemaChangeWithSorting() {
 
 bool SchemaChangeWithSorting::process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer,
                                       TabletSharedPtr new_tablet, TabletSharedPtr base_tablet) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     if (_row_block_allocator == nullptr) {
         _row_block_allocator = new (nothrow) RowBlockAllocator(new_tablet->tablet_schema(), _memory_limitation);
         if (_row_block_allocator == nullptr) {
@@ -1483,7 +1468,7 @@ bool SchemaChangeWithSorting::_external_sorting(vector<RowsetSharedPtr>& src_row
     }
 
     Merger::Statistics stats;
-    auto res = Merger::merge_rowsets(_mem_tracker->limit(), new_tablet, READER_ALTER_TABLE, rs_readers, rowset_writer,
+    auto res = Merger::merge_rowsets(_memory_limitation, new_tablet, READER_ALTER_TABLE, rs_readers, rowset_writer,
                                      &stats);
     if (res != OLAP_SUCCESS) {
         LOG(WARNING) << "failed to merge rowsets. tablet=" << new_tablet->full_name()
@@ -1818,7 +1803,9 @@ OLAPStatus SchemaChangeHandler::_convert_historical_rowsets(const SchemaChangePa
     // b. create converter for history data
     if (sc_sorting) {
         LOG(INFO) << "doing schema change with sorting for base_tablet " << sc_params.base_tablet->full_name();
-        sc_procedure = new (nothrow) SchemaChangeWithSorting(rb_changer);
+        size_t memory_limitation =
+                static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
+        sc_procedure = new (nothrow) SchemaChangeWithSorting(rb_changer, memory_limitation);
     } else if (sc_directly) {
         LOG(INFO) << "doing schema change directly for base_tablet " << sc_params.base_tablet->full_name();
         sc_procedure = new (nothrow) SchemaChangeDirectly(rb_changer);
