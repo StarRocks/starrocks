@@ -39,7 +39,7 @@ LDAP认证需要客户端传递明文密码给StarRocks。三种典型客户端�
 执行时添加 --default-auth mysql\_clear\_password --enable-cleartext-plugin 选项，例如：
 
 ~~~sql
-mysql -uzhangsan -P8030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
+mysql -uzhangsan -P9030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
 ~~~
 
 * **JDBC**
