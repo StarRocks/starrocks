@@ -58,7 +58,7 @@ using AggregatorPtr = std::shared_ptr<Aggregator>;
 // TODO(hcf) all the data should be protected by lightweight lock
 class Aggregator {
 public:
-    Aggregator(const TPlanNode& tnode, const RowDescriptor& child_row_desc);
+    Aggregator(const TPlanNode& tnode);
 
     ~Aggregator() = default;
 
@@ -150,7 +150,6 @@ public:
 
 private:
     const TPlanNode& _tnode;
-    const RowDescriptor& _child_row_desc;
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
@@ -481,4 +480,28 @@ private:
         }
     }
 };
+
+class AggregatorFactory;
+using AggregatorFactoryPtr = std::shared_ptr<AggregatorFactory>;
+
+class AggregatorFactory {
+public:
+    AggregatorFactory(const TPlanNode& tnode) : _tnode(tnode) {}
+
+    AggregatorPtr get_or_create(size_t id) {
+        auto it = _aggregators.find(id);
+        if (it != _aggregators.end()) {
+            return it->second;
+        }
+        auto aggregator = std::make_shared<Aggregator>(_tnode);
+        _aggregators[id] = aggregator;
+        return aggregator;
+    }
+
+private:
+    const TPlanNode& _tnode;
+
+    std::unordered_map<size_t, AggregatorPtr> _aggregators;
+};
+
 } // namespace starrocks
