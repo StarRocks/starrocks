@@ -232,7 +232,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
         RETURN_IF_ERROR(_get_tablet_id_and_schema_hash_from_file_path(local_path, &local_tablet_id, &schema_hash));
         downloaded_tablet_ids->push_back(local_tablet_id);
 
-        int64_t remote_tablet_id;
+        int64_t remote_tablet_id = 0;
         RETURN_IF_ERROR(_get_tablet_id_from_remote_path(remote_path, &remote_tablet_id));
         VLOG(2) << "get local tablet id: " << local_tablet_id << ", schema hash: " << schema_hash
                 << ", remote tablet id: " << remote_tablet_id;
