@@ -165,7 +165,7 @@ bool HashJoiner::has_output() const {
     } else if (_phase == HashJoinPhase::PROBE) {
         return _probe_input_chunk != nullptr;
     } else if (_phase == HashJoinPhase::POST_PROBE) {
-        // Only RIGHT ANTI-JOIN, RIGHT SEMI-JOIN, FULL OUTER-JOIN has HashJoinPhase::POST_PROBE,
+        // Only RIGHT ANTI-JOIN, RIGHT OUTER-JOIN, FULL OUTER-JOIN has HashJoinPhase::POST_PROBE,
         // in this phase, has_output() returns true until HashJoiner enters into HashJoinPhase::DONE.
         return true;
     } else {
@@ -179,7 +179,7 @@ void HashJoiner::push_chunk(RuntimeState* state, ChunkPtr&& chunk) {
     _merge_probe_input_chunk(state, std::move(chunk));
     if (_probe_input_chunk) {
         _ht_has_remain = true;
-        _prepare_key_columns();
+        _prepare_probe_key_columns();
     }
 }
 
@@ -230,7 +230,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
         if (_buffered_probe_input_chunk && !_probe_input_chunk) {
             _probe_input_chunk = std::move(_buffered_probe_input_chunk);
             _ht_has_remain = true;
-            _prepare_key_columns();
+            _prepare_probe_key_columns();
         }
         // _probe_chunk has remain rows to be processed, so go on probing ht.
         if (_probe_input_chunk) {
@@ -294,22 +294,7 @@ Status HashJoiner::_build(RuntimeState* state) {
         if (_ht.get_build_chunk()->reach_capacity_limit()) {
             return Status::InternalError("Total size of single column exceed the limit of hash join");
         }
-
-        for (auto& _build_expr_ctx : _build_expr_ctxs) {
-            const TypeDescriptor& data_type = _build_expr_ctx->root()->type();
-            ColumnPtr column_ptr = _build_expr_ctx->evaluate(_ht.get_build_chunk().get());
-            if (column_ptr->is_nullable() && column_ptr->is_constant()) {
-                ColumnPtr column = ColumnHelper::create_column(data_type, true);
-                column->append_nulls(_ht.get_build_chunk()->num_rows());
-                _ht.get_key_columns().emplace_back(std::move(column));
-            } else if (column_ptr->is_constant()) {
-                auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(column_ptr);
-                const_column->data_column()->assign(_ht.get_build_chunk()->num_rows(), 0);
-                _ht.get_key_columns().emplace_back(std::move(const_column->data_column()));
-            } else {
-                _ht.get_key_columns().emplace_back(std::move(column_ptr));
-            }
-        }
+        _prepare_build_key_columns();
     }
 
     {
@@ -397,7 +382,7 @@ void HashJoiner::_process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t
     (*chunk)->filter(filter);
 }
 
-void HashJoiner::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
+void HashJoiner::_process_other_conjunct_and_remove_duplicate_index(ChunkPtr* chunk) {
     bool filter_all = false;
     bool hit_all = false;
     Column::Filter filter;
@@ -405,17 +390,10 @@ void HashJoiner::_process_semi_join_with_other_conjunct(ChunkPtr* chunk) {
     _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
 
     _ht.remove_duplicate_index(&filter);
-    (*chunk)->filter(filter);
 }
 
 void HashJoiner::_process_right_anti_join_with_other_conjunct(ChunkPtr* chunk) {
-    bool filter_all = false;
-    bool hit_all = false;
-    Column::Filter filter;
-
-    _calc_filter_for_other_conjunct(chunk, filter, filter_all, hit_all);
-
-    _ht.remove_duplicate_index(&filter);
+    _process_other_conjunct_and_remove_duplicate_index(chunk);
     (*chunk)->set_num_rows(0);
 }
 
@@ -430,7 +408,7 @@ void HashJoiner::_process_other_conjunct(ChunkPtr* chunk) {
     case TJoinOp::LEFT_ANTI_JOIN:
     case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
     case TJoinOp::RIGHT_SEMI_JOIN:
-        _process_semi_join_with_other_conjunct(chunk);
+        _process_other_conjunct_and_remove_duplicate_index(chunk);
         break;
     case TJoinOp::RIGHT_ANTI_JOIN:
         _process_right_anti_join_with_other_conjunct(chunk);

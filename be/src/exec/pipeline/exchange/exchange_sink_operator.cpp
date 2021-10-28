@@ -180,6 +180,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParams* p
     params->set_be_number(_parent->_be_number);
 
     params->set_eos(false);
+    // TODO (by satanson): eliminate redundant copy in broadcast scenarios
     TransmitChunkInfo info = {this->_channel_id, *params, _brpc_stub};
     _parent->_buffer->add_request(info);
 

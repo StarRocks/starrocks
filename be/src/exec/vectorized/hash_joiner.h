@@ -119,23 +119,29 @@ private:
         }
     }
 
-    void _prepare_key_columns() {
-        _key_columns.resize(0);
-        for (auto& probe_expr_ctx : _probe_expr_ctxs) {
-            ColumnPtr column_ptr = probe_expr_ctx->evaluate(_probe_input_chunk.get());
-            if (column_ptr->is_nullable() && column_ptr->is_constant()) {
-                ColumnPtr column = ColumnHelper::create_column(probe_expr_ctx->root()->type(), true);
-                column->append_nulls(_probe_input_chunk->num_rows());
-                _key_columns.emplace_back(column);
+    void _prepare_key_columns(Columns& key_columns, const ChunkPtr& chunk, const vector<ExprContext*>& expr_ctxs) {
+        key_columns.resize(0);
+        for (auto& expr_ctx : expr_ctxs) {
+            ColumnPtr column_ptr = expr_ctx->evaluate(chunk.get());
+            if (column_ptr->only_null()) {
+                ColumnPtr column = ColumnHelper::create_column(expr_ctx->root()->type(), true);
+                column->append_nulls(chunk->num_rows());
+                key_columns.emplace_back(column);
             } else if (column_ptr->is_constant()) {
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(column_ptr);
-                const_column->data_column()->assign(_probe_input_chunk->num_rows(), 0);
-                _key_columns.emplace_back(const_column->data_column());
+                const_column->data_column()->assign(chunk->num_rows(), 0);
+                key_columns.emplace_back(const_column->data_column());
             } else {
-                _key_columns.emplace_back(column_ptr);
+                key_columns.emplace_back(column_ptr);
             }
         }
     }
+
+    void _prepare_build_key_columns() {
+        _prepare_key_columns(_ht.get_key_columns(), _ht.get_build_chunk(), _build_expr_ctxs);
+    }
+
+    void _prepare_probe_key_columns() { _prepare_key_columns(_key_columns, _probe_input_chunk, _probe_expr_ctxs); }
 
     bool _need_post_probe() const {
         return _join_type == TJoinOp::RIGHT_OUTER_JOIN || _join_type == TJoinOp::RIGHT_ANTI_JOIN ||
@@ -194,7 +200,7 @@ private:
                                                 bool filter_all, bool hit_all, const Column::Filter& filter);
 
     void _process_outer_join_with_other_conjunct(ChunkPtr* chunk, size_t start_column, size_t column_count);
-    void _process_semi_join_with_other_conjunct(ChunkPtr* chunk);
+    void _process_other_conjunct_and_remove_duplicate_index(ChunkPtr* chunk);
     void _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk);
     void _process_other_conjunct(ChunkPtr* chunk);
 
