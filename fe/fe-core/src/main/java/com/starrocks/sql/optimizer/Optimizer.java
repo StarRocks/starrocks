@@ -16,7 +16,6 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
-import com.starrocks.sql.optimizer.rule.transformation.IntersectReorder;
 import com.starrocks.sql.optimizer.rule.transformation.JoinForceLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
@@ -25,6 +24,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
+import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
@@ -107,7 +107,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ScalarOperatorsReuseRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new JoinForceLimitRule());
-        ruleRewriteOnlyOnce(memo, rootTaskContext, new IntersectReorder());
+        ruleRewriteOnlyOnce(memo, rootTaskContext, new ReorderIntersectRule());
         // Rewrite maybe produce empty groups, we need to remove them.
         memo.removeAllEmptyGroup();
         memo.removeUnreachableGroup();

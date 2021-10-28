@@ -16,8 +16,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-public class IntersectReorder extends TransformationRule {
-    public IntersectReorder() {
+public class ReorderIntersectRule extends TransformationRule {
+    public ReorderIntersectRule() {
         super(RuleType.TF_INTERSECT_REORDER, Pattern.create(OperatorType.LOGICAL_INTERSECT).
                 addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF)));
     }
@@ -49,7 +49,7 @@ public class IntersectReorder extends TransformationRule {
                         .setChildOutputColumns(childOutputColumns).build(), newChildList));
     }
 
-    protected void calculateStatistics(OptExpression expr, OptimizerContext context) {
+    private void calculateStatistics(OptExpression expr, OptimizerContext context) {
         // Avoid repeated calculate
         if (expr.getStatistics() != null) {
             return;
