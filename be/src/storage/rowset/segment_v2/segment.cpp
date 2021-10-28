@@ -21,6 +21,11 @@
 
 #include "storage/rowset/segment_v2/segment.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#include <bvar/bvar.h>
+#pragma GCC diagnostic pop
+
 #include <fmt/core.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 
@@ -43,6 +48,16 @@
 #include "storage/vectorized/type_utils.h"
 #include "util/crc32c.h"
 #include "util/slice.h"
+
+bvar::Adder<int> g_open_segments;    // NOLINT
+bvar::Adder<int> g_open_segments_io; // NOLINT
+// How many segments been opened in the last 60 seconds
+// NOLINTNEXTLINE
+bvar::Window<bvar::Adder<int>> g_open_segments_minute("starrocks", "open_segments_minute", &g_open_segments, 60);
+// How many I/O issued to open segment in the last 60 seconds
+// NOLINTNEXTLINE
+bvar::Window<bvar::Adder<int>> g_open_segments_io_minute("starrocks", "open_segments_io_minute", &g_open_segments_io,
+                                                         60);
 
 namespace starrocks::segment_v2 {
 
@@ -205,12 +220,18 @@ Status Segment::_parse_footer(size_t* footer_length_hint, SegmentFooterPB* foote
 
     uint32_t actual_checksum = 0;
     if (footer_length <= buff.size()) {
+        g_open_segments << 1;
+        g_open_segments_io << 1;
+
         std::string_view buf_footer(buff.data() + buff.size() - footer_length, footer_length);
         actual_checksum = crc32c::Value(buf_footer.data(), buf_footer.size());
         if (!footer->ParseFromArray(buf_footer.data(), buf_footer.size())) {
             return Status::Corruption(strings::Substitute("Bad segment file $0: failed to parse footer", _fname));
         }
     } else { // Need read file again.
+        g_open_segments << 1;
+        g_open_segments_io << 2;
+
         int left_size = (int)footer_length - buff.size();
         std::string buff_2;
         raw::stl_string_resize_uninitialized(&buff_2, left_size);
