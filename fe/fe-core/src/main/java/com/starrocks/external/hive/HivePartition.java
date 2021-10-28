@@ -30,4 +30,5 @@ public class HivePartition {
     public String getFullPath() {
         return fullPath;
     }
+
 }
