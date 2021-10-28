@@ -83,9 +83,12 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     if (!_start && _status.ok()) {
         Status status = _start_scan(state);
         _update_status(status);
-        LOG_IF(ERROR, !status.ok()) << "Failed to start scan node: " << status.to_string();
+        LOG_IF(ERROR, !(status.ok() || status.is_end_of_file())) << "Failed to start scan node: " << status.to_string();
         _start = true;
-        RETURN_IF_ERROR(status);
+        if (!status.ok()) {
+            *eos = true;
+            return status.is_end_of_file() ? Status::OK() : status;
+        }
     } else if (!_start) {
         _result_chunks.shutdown();
         _start = true;
@@ -342,7 +345,7 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     if (_olap_scan_node.__isset.enable_column_expr_predicate) {
         enable_column_expr_predicate = _olap_scan_node.enable_column_expr_predicate;
     }
-    cm.parse_conjuncts(scan_keys_unlimited, max_scan_key_num, enable_column_expr_predicate);
+    RETURN_IF_ERROR(cm.parse_conjuncts(scan_keys_unlimited, max_scan_key_num, enable_column_expr_predicate));
     RETURN_IF_ERROR(_start_scan_thread(state));
 
     return Status::OK();

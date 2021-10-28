@@ -385,29 +385,52 @@ void OlapScanConjunctsManager::normalize_not_in_or_not_equal_predicate(const Slo
     DCHECK((SlotType == slot.type().type) || (SlotType == TYPE_VARCHAR && slot.type().type == TYPE_CHAR));
     const auto& conjunct_ctxs = (*conjunct_ctxs_ptr);
 
+    using ValueType = typename vectorized::RunTimeTypeTraits<SlotType>::CppType;
     // handle not equal.
     for (size_t i = 0; i < conjunct_ctxs.size(); i++) {
         if (normalized_conjuncts[i]) {
             continue;
         }
         Expr* root_expr = conjunct_ctxs[i]->root();
-        if (root_expr->node_type() != TExprNodeType::BINARY_PRED) {
-            continue;
-        }
-        if (root_expr->op() != TExprOpcode::NE) {
-            continue;
+        // handle not equal
+        if (root_expr->node_type() == TExprNodeType::BINARY_PRED && root_expr->op() == TExprOpcode::NE) {
+            SQLFilterOp op;
+            ValueType value;
+            bool ok = get_predicate_value(obj_pool, slot, root_expr, conjunct_ctxs[i], &value, &op, &status);
+            if (ok && range->add_fixed_values(FILTER_NOT_IN, std::set<RangeValueType>{value}).ok()) {
+                normalized_conjuncts[i] = true;
+            }
         }
 
-        using ValueType = typename vectorized::RunTimeTypeTraits<SlotType>::CppType;
+        // handle not in
+        if (root_expr->node_type() == TExprNodeType::IN_PRED && root_expr->op() == TExprOpcode::FILTER_NOT_IN) {
+            const Expr* l = root_expr->get_child(0);
+            if ((l->node_type() != TExprNodeType::SLOT_REF) ||
+                (l->type().type != slot.type().type && !ignore_cast(slot, *l))) {
+                continue;
+            }
+            std::vector<SlotId> slot_ids;
 
-        SQLFilterOp op;
-        ValueType value;
-        bool ok = get_predicate_value(obj_pool, slot, root_expr, conjunct_ctxs[i], &value, &op, &status);
-        if (ok && range->add_fixed_values(FILTER_NOT_IN, std::set<RangeValueType>{value}).ok()) {
-            normalized_conjuncts[i] = true;
+            if (1 == l->get_slot_ids(&slot_ids) && slot_ids[0] == slot.id()) {
+                const auto* pred = down_cast<const VectorizedInConstPredicate<SlotType>*>(root_expr);
+                // RTF won't generate not in predicate
+                DCHECK(!pred->is_join_runtime_filter());
+
+                if (!pred->is_not_in() || pred->null_in_set() ||
+                    pred->hash_set().size() > config::max_pushdown_conditions_per_column) {
+                    continue;
+                }
+
+                std::set<RangeValueType> values;
+                for (const auto& value : pred->hash_set()) {
+                    values.insert(value);
+                }
+                if (range->add_fixed_values(FILTER_NOT_IN, values).ok()) {
+                    normalized_conjuncts[i] = true;
+                }
+            }
         }
     }
-    // TODO(zhuming): handle not-in predicate.
 }
 
 void OlapScanConjunctsManager::normalize_is_null_predicate(const SlotDescriptor& slot) {
@@ -621,31 +644,19 @@ Status OlapScanConjunctsManager::normalize_conjuncts() {
     return Status::OK();
 }
 
-// ======================================================================================
-
-class ToOlapFilterVisitor : public boost::static_visitor<std::string> {
-public:
-    template <class T, class P>
-    std::string operator()(T& v, P& v2) const {
-        return v.to_olap_filter(v2);
-    }
-};
-
 Status OlapScanConjunctsManager::build_olap_filters() {
     olap_filters.clear();
 
     for (auto iter : column_value_ranges) {
-        ToOlapFilterVisitor visitor;
-        boost::variant<std::list<TCondition>> filters;
-        boost::apply_visitor(visitor, iter.second, filters);
-
-        std::list<TCondition> new_filters = boost::get<std::list<TCondition>>(filters);
-        if (new_filters.empty()) {
-            continue;
+        std::vector<TCondition> filters;
+        boost::apply_visitor([&](auto&& range) { range.to_olap_filter(filters); }, iter.second);
+        bool empty_range = boost::apply_visitor([](auto&& range) { return range.empty_range(); }, iter.second);
+        if (empty_range) {
+            return Status::EndOfFile("EOF, Filter by always false condition");
         }
 
-        for (const auto& filter : new_filters) {
-            olap_filters.push_back(filter);
+        for (auto& filter : filters) {
+            olap_filters.emplace_back(std::move(filter));
         }
     }
 
@@ -802,15 +813,16 @@ void OlapScanConjunctsManager::build_column_expr_predicates() {
     }
 }
 
-void OlapScanConjunctsManager::parse_conjuncts(bool scan_keys_unlimited, int32_t max_scan_key_num,
-                                               bool enable_column_expr_predicate) {
+Status OlapScanConjunctsManager::parse_conjuncts(bool scan_keys_unlimited, int32_t max_scan_key_num,
+                                                 bool enable_column_expr_predicate) {
     normalize_conjuncts();
-    build_olap_filters();
+    RETURN_IF_ERROR(build_olap_filters());
     build_scan_keys(scan_keys_unlimited, max_scan_key_num);
     if (enable_column_expr_predicate) {
         VLOG_FILE << "OlapScanConjunctsManager: enable_column_expr_predicate = true. push down column expr predicates";
         build_column_expr_predicates();
     }
+    return Status::OK();
 }
 
 } // namespace vectorized
