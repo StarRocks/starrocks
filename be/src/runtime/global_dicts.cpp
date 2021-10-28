@@ -30,7 +30,10 @@ void DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, 
     }
     std::vector<SlotId> slot_ids;
     expr_ctx->root()->get_slot_ids(&slot_ids);
-    DCHECK_EQ(slot_ids.size(), 1);
+    // For substr(null, 1), slot_ids is empty.
+    if (slot_ids.size() != 1) {
+        return;
+    }
     bool could_apply = _mutable_dict_maps->count(slot_ids.back());
     dict_opt_ctx->slot_id = slot_ids.back();
     dict_opt_ctx->could_apply_dict_optimize = could_apply;
