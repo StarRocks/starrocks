@@ -31,6 +31,7 @@
 #include "gutil/macros.h"
 #include "storage/iterators.h"
 #include "storage/rowset/segment_v2/page_handle.h"
+#include "storage/rowset/segment_v2/page_pointer.h"
 #include "storage/short_key_index.h"
 #include "storage/tablet_schema.h"
 #include "util/faststring.h"
@@ -96,7 +97,7 @@ public:
 
     uint64_t id() const { return _segment_id; }
 
-    uint32_t num_rows() const { return _footer.num_rows(); }
+    uint32_t num_rows() const { return _num_rows; }
 
     Status new_column_iterator(uint32_t cid, ColumnIterator** iter);
 
@@ -128,10 +129,11 @@ public:
         return _sk_index_decoder->num_items() - 1;
     }
 
-    // only used by UT
-    const SegmentFooterPB& footer() const { return _footer; }
-
     const std::string& file_name() const { return _fname; }
+
+    size_t num_columns() const { return _column_readers.size(); }
+
+    const ColumnReader* column(size_t i) const { return _column_readers[i].get(); }
 
 private:
     Segment(const Segment&) = delete;
@@ -143,8 +145,8 @@ private:
 
     // open segment file and read the minimum amount of necessary information (footer)
     Status _open(size_t* footer_length_hint);
-    Status _parse_footer(size_t* footer_length_hint);
-    Status _create_column_readers();
+    Status _parse_footer(size_t* footer_length_hint, SegmentFooterPB* footer);
+    Status _create_column_readers(SegmentFooterPB* footer);
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
     Status _load_index();
@@ -161,13 +163,12 @@ private:
     friend class vectorized::SegmentIterator;
 
     MemTracker* _mem_tracker = nullptr;
-
     fs::BlockManager* _block_mgr;
     std::string _fname;
-    uint32_t _segment_id;
     const TabletSchema* _tablet_schema;
-
-    SegmentFooterPB _footer;
+    uint32_t _segment_id = 0;
+    uint32_t _num_rows = 0;
+    PagePointer _short_key_index_page;
 
     // ColumnReader for each column in TabletSchema. If ColumnReader is nullptr,
     // This means that this segment has no data for that column, which may be added
@@ -182,7 +183,7 @@ private:
     std::unique_ptr<ShortKeyIndexDecoder> _sk_index_decoder;
 
     // Actual storage type for each column, used to rewrite the input readoptions
-    std::vector<FieldType> _column_storage_types;
+    std::unique_ptr<std::vector<FieldType>> _column_storage_types;
     // When reading old type format data this will be set to true.
     bool _needs_chunk_adapter = false;
     // When the storage types is different with TabletSchema

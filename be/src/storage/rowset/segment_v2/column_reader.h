@@ -115,13 +115,21 @@ struct ColumnIteratorOptions {
 // same information, such as OrdinalPageIndex and Page data.
 // This will cache data shared by all reader
 class ColumnReader {
-public:
-    // Create an initialized ColumnReader in *reader.
-    // This should be a lightweight operation without I/O.
-    static Status create(MemTracker* mem_tracker, const ColumnReaderOptions& opts, const ColumnMetaPB& meta,
-                         uint64_t num_rows, const std::string& file_name, std::unique_ptr<ColumnReader>* reader);
+    struct private_type;
 
-    ~ColumnReader() = default;
+public:
+    // Create and initialize a ColumnReader.
+    // This method will not take the ownership of |meta|.
+    // Note that |meta| is mutable, this method may change its internal state.
+    //
+    // To developers: keep this method lightweight, should not incur any I/O.
+    static Status create(MemTracker* mem_tracker, const ColumnReaderOptions& opts, ColumnMetaPB* meta,
+                         const std::string& file_name, std::unique_ptr<ColumnReader>* reader);
+
+    ColumnReader(const private_type&, MemTracker* mem_tracker, const ColumnReaderOptions& opts,
+                 const std::string& file_name);
+
+    ~ColumnReader();
 
     // create a new column iterator. Client should delete returned iterator
     Status new_iterator(ColumnIterator** iterator);
@@ -136,13 +144,17 @@ public:
     Status read_page(const ColumnIteratorOptions& iter_opts, const PagePointer& pp, PageHandle* handle,
                      Slice* page_body, PageFooterPB* footer);
 
-    bool is_nullable() const { return _is_nullable; }
+    bool is_nullable() const { return _flags[kIsNullablePos]; }
 
     const EncodingInfo* encoding_info() const { return _encoding_info; }
 
-    bool has_zone_map() const { return _zone_map_index_meta != nullptr; }
-    bool has_bitmap_index() const { return _bitmap_index_meta != nullptr; }
-    bool has_bloom_filter_index() const { return _bf_index_meta != nullptr; }
+    bool has_zone_map() const { return _flags[kHasZoneMapIndexMetaPos] || _flags[kHasZoneMapIndexReaderPos]; }
+    bool has_bitmap_index() const { return _flags[kHasBitmapIndexMetaPos] || _flags[kHasBitmapIndexReaderPos]; }
+    bool has_bloom_filter_index() const {
+        return _flags[kHasBloomFilterIndexMetaPos] || _flags[kHasBloomFilterIndexReaderPos];
+    }
+
+    ZoneMapPB* segment_zone_map() const { return _segment_zone_map.get(); }
 
     // Check if this column could match `cond' using segment zone map.
     // Since segment zone map is stored in metadata, this function is fast without I/O.
@@ -161,8 +173,8 @@ public:
 
     PagePointer get_dict_page_pointer() const { return _dict_page_pointer; }
     FieldType column_type() const { return _column_type; }
-    bool has_all_dict_encoded() const { return _has_all_dict_encoded; }
-    bool all_dict_encoded() const { return _all_dict_encoded; }
+    bool has_all_dict_encoded() const { return _flags[kHasAllDictEncodedPos]; }
+    bool all_dict_encoded() const { return _flags[kAllDictEncodedPos]; }
 
     size_t num_rows() const { return _num_rows; }
 
@@ -192,10 +204,36 @@ public:
     Status ensure_index_loaded(ReaderType reader_type);
 
 private:
-    ColumnReader(MemTracker* mem_tracker, const ColumnReaderOptions& opts, const ColumnMetaPB& meta, uint64_t num_rows,
-                 const std::string& file_name);
+    struct private_type {
+        private_type(int) {}
+    };
 
-    Status init(const ColumnMetaPB& meta);
+    template <typename Meta, typename Reader>
+    union ColumnIndex {
+        Meta* meta;
+        Reader* reader;
+    };
+
+    constexpr static size_t kHasZoneMapIndexMetaPos = 0;
+    constexpr static size_t kHasZoneMapIndexReaderPos = 1;
+    constexpr static size_t kHasOrdinalIndexMetaPos = 2;
+    constexpr static size_t kHasOrdinalIndexReaderPos = 3;
+    constexpr static size_t kHasBitmapIndexMetaPos = 4;
+    constexpr static size_t kHasBitmapIndexReaderPos = 5;
+    constexpr static size_t kHasBloomFilterIndexMetaPos = 6;
+    constexpr static size_t kHasBloomFilterIndexReaderPos = 7;
+    constexpr static size_t kIsNullablePos = 8;
+    constexpr static size_t kHasAllDictEncodedPos = 9;
+    constexpr static size_t kAllDictEncodedPos = 10;
+
+    // Disable copy and assignment
+    ColumnReader(const ColumnReader&) = delete;
+    void operator=(const ColumnReader&) = delete;
+    // Disable move copy and move assignment
+    ColumnReader(ColumnReader&&) = delete;
+    void operator=(ColumnReader&&) = delete;
+
+    Status init(ColumnMetaPB* meta);
 
     Status _load_zone_map_index(bool use_page_cache, bool kept_in_memory);
     Status _load_ordinal_index(bool use_page_cache, bool kept_in_memory);
@@ -229,10 +267,7 @@ private:
     // and now the content that is not needed in Meta is not saved to ColumnReader
     int32_t _column_length = 0;
     FieldType _column_type = OLAP_FIELD_TYPE_UNKNOWN;
-    bool _is_nullable = false;
     PagePointer _dict_page_pointer;
-    bool _has_all_dict_encoded = false;
-    bool _all_dict_encoded = false;
     ColumnReaderOptions _opts;
     uint64_t _num_rows;
     const std::string& _file_name;
@@ -241,11 +276,15 @@ private:
     const EncodingInfo* _encoding_info = nullptr;
     const BlockCompressionCodec* _compress_codec = nullptr; // initialized in init()
 
-    // meta for various column indexes (null if the index is absent)
-    const ZoneMapIndexPB* _zone_map_index_meta = nullptr;
-    const OrdinalIndexPB* _ordinal_index_meta = nullptr;
-    const BitmapIndexPB* _bitmap_index_meta = nullptr;
-    const BloomFilterIndexPB* _bf_index_meta = nullptr;
+    ColumnIndex<ZoneMapIndexPB, ZoneMapIndexReader> _zone_map_index;
+    ColumnIndex<OrdinalIndexPB, OrdinalIndexReader> _ordinal_index;
+    ColumnIndex<BitmapIndexPB, BitmapIndexReader> _bitmap_index;
+    ColumnIndex<BloomFilterIndexPB, BloomFilterIndexReader> _bloom_filter_index;
+
+    std::unique_ptr<ZoneMapPB> _segment_zone_map;
+
+    using SubReaderList = std::vector<std::unique_ptr<ColumnReader>>;
+    std::unique_ptr<SubReaderList> _sub_readers;
 
     // The read operation comprise of compaction, query, checksum and so on.
     // The ordinal index must be loaded before read operation.
@@ -254,12 +293,7 @@ private:
     StarRocksCallOnce<Status> _load_ordinal_index_once;
     StarRocksCallOnce<Status> _load_indices_once;
 
-    std::unique_ptr<ZoneMapIndexReader> _zone_map_index;
-    std::unique_ptr<OrdinalIndexReader> _ordinal_index;
-    std::unique_ptr<BitmapIndexReader> _bitmap_index;
-    std::unique_ptr<BloomFilterIndexReader> _bloom_filter_index;
-
-    std::vector<std::unique_ptr<ColumnReader>> _sub_readers;
+    std::bitset<16> _flags;
 };
 
 // Base iterator to read one column data

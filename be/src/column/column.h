@@ -362,22 +362,22 @@ public:
 
     template <typename... Args>
     static Ptr create(Args&&... args) {
-        return Ptr(new Derived(std::forward<Args>(args)...));
+        return std::make_shared<Derived>(std::forward<Args>(args)...);
     }
 
     template <typename... Args>
     static MutablePtr create_mutable(Args&&... args) {
-        return MutablePtr(new Derived(std::forward<Args>(args)...));
+        return std::make_unique<Derived>(std::forward<Args>(args)...);
     }
 
     template <typename T>
     static Ptr create(std::initializer_list<T>&& arg) {
-        return Ptr(new Derived(std::forward<std::initializer_list<T>>(arg)));
+        return std::make_shared<Derived>(std::forward<std::initializer_list<T>>(arg));
     }
 
     template <typename T>
     static MutablePtr create_mutable(std::initializer_list<T>&& arg) {
-        return MutablePtr(new Derived(std::forward<std::initializer_list<T>>(arg)));
+        return std::make_unique<Derived>(std::forward<std::initializer_list<T>>(arg));
     }
 
     typename AncestorBaseType::MutablePtr clone() const override {
