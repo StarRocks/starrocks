@@ -285,10 +285,11 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
         opts.block_mgr = _block_mgr;
         opts.storage_format_version = footer->version();
         opts.kept_in_memory = _tablet_schema->is_in_memory();
-        std::unique_ptr<ColumnReader> reader;
-        RETURN_IF_ERROR(
-                ColumnReader::create(_mem_tracker, opts, footer->mutable_columns(iter->second), _fname, &reader));
-        _column_readers[ordinal] = std::move(reader);
+        auto res = ColumnReader::create(_mem_tracker, opts, footer->mutable_columns(iter->second), _fname);
+        if (!res.ok()) {
+            return res.status();
+        }
+        _column_readers[ordinal] = std::move(res).value();
     }
     return Status::OK();
 }

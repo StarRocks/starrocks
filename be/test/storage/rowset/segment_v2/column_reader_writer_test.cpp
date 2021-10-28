@@ -131,12 +131,12 @@ protected:
             ColumnReaderOptions reader_opts;
             reader_opts.storage_format_version = version;
             reader_opts.block_mgr = block_mgr.get();
-            std::unique_ptr<ColumnReader> reader;
-            auto st = ColumnReader::create(&_tracker, reader_opts, &meta, fname, &reader);
-            ASSERT_TRUE(st.ok());
+            auto res = ColumnReader::create(&_tracker, reader_opts, &meta, fname);
+            ASSERT_TRUE(res.ok());
+            auto reader = std::move(res).value();
 
             ColumnIterator* iter = nullptr;
-            st = reader->new_iterator(&iter);
+            auto st = reader->new_iterator(&iter);
             ASSERT_TRUE(st.ok());
             std::unique_ptr<ColumnIterator> guard(iter);
             std::unique_ptr<fs::ReadableBlock> rblock;
@@ -346,9 +346,9 @@ protected:
             ColumnReaderOptions reader_opts;
             reader_opts.block_mgr = block_mgr.get();
             reader_opts.storage_format_version = 2;
-            std::unique_ptr<ColumnReader> reader;
-            auto st = ColumnReader::create(&_tracker, reader_opts, &meta, fname, &reader);
-            ASSERT_TRUE(st.ok());
+            auto res = ColumnReader::create(&_tracker, reader_opts, &meta, fname);
+            ASSERT_TRUE(res.ok());
+            auto reader = std::move(res).value();
 
             ColumnIterator* iter = nullptr;
             ASSERT_TRUE(reader->new_iterator(&iter).ok());
@@ -364,7 +364,7 @@ protected:
 
             // sequence read
             {
-                st = iter->seek_to_first();
+                auto st = iter->seek_to_first();
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
                 auto dst_offsets = vectorized::UInt32Column::create();
