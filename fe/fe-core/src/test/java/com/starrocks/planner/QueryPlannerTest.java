@@ -22,6 +22,7 @@
 package com.starrocks.planner;
 
 import com.starrocks.analysis.CreateDbStmt;
+import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DropDbStmt;
 import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.StatementBase;
@@ -164,5 +165,17 @@ public class QueryPlannerTest {
         StmtExecutor stmtExecutor0 = new StmtExecutor(connectContext, sql);
         stmtExecutor0.execute();
         Assert.assertNotSame(connectContext.getState().getStateType(), MysqlStateType.ERR);
+    }
+
+    @Test
+    public void testCreateGroupByView() throws Exception {
+        String createViewSql = "create view hive_test.test_view_111 (col_1,col_2) as " +
+                "select * from (select a.A, count(*) from " +
+                "(SELECT 1 AS `A` UNION ALL SELECT 2 UNION ALL SELECT 2 " +
+                "UNION ALL SELECT 5 UNION ALL SELECT 3 UNION ALL SELECT 0 AS `A`) a group by a.A order by a.A ) b;";
+        CreateViewStmt viewStmt = (CreateViewStmt)UtFrameUtils.parseAndAnalyzeStmt(createViewSql, connectContext);
+        String inlineViewDef = viewStmt.getInlineViewDef();
+        // if contains slot will cause create view fail.
+        Assert.assertFalse(inlineViewDef.contains("slot"));
     }
 }
