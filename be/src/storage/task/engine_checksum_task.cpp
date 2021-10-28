@@ -117,7 +117,7 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
 #ifndef BE_TEST
         Status st = _mem_tracker->check_mem_limit("ConsistencyCheck");
         if (!st.ok()) {
-            LOG(WARNING) << "failed to finish compute checksum. " << st.message() <<std::endl;
+            LOG(WARNING) << "failed to finish compute checksum. " << st.message() << std::endl;
             return OLAP_ERR_OTHER_ERROR;
         }
 #endif
