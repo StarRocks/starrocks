@@ -69,8 +69,6 @@ public:
 
     StoragePageCache(MemTracker* mem_tracker, size_t capacity);
 
-    void update_memory_usage_statistics();
-
     // Lookup the given page in the cache.
     //
     // If the page is found, the cache entry will be written into handle.

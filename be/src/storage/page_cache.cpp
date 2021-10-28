@@ -30,22 +30,11 @@
 
 namespace starrocks {
 
-UIntGauge g_cache_size(MetricUnit::BYTES); // NOLINT
-
-[[maybe_unused]] static void update_cache_size() {
-    StoragePageCache::instance()->update_memory_usage_statistics();
-}
-
 StoragePageCache* StoragePageCache::_s_instance = nullptr;
 
 void StoragePageCache::create_global_cache(MemTracker* mem_tracker, size_t capacity) {
     if (_s_instance == nullptr) {
         _s_instance = new StoragePageCache(mem_tracker, capacity);
-#ifndef BE_TEST
-        MetricRegistry* reg = StarRocksMetrics::instance()->metrics();
-        reg->register_hook("page_cache_size_hook", update_cache_size);
-        reg->register_metric("storage_page_cache_bytes", &g_cache_size);
-#endif
     }
 }
 
@@ -54,11 +43,6 @@ void StoragePageCache::release_global_cache() {
         delete _s_instance;
         _s_instance = nullptr;
     }
-}
-
-void StoragePageCache::update_memory_usage_statistics() {
-    int64_t mem_usage = memory_usage();
-    g_cache_size.set_value(mem_usage);
 }
 
 StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity)
