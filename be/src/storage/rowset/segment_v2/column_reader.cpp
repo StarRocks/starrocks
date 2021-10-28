@@ -72,7 +72,7 @@ Status ColumnReader::create(MemTracker* mem_tracker, const ColumnReaderOptions& 
         col++;
         array_reader->_sub_readers->emplace_back(std::move(element_reader));
 
-        if (array_reader->is_nullable()) {
+        if (meta->is_nullable()) {
             std::unique_ptr<ColumnReader> null_reader;
             RETURN_IF_ERROR(ColumnReader::create(mem_tracker, opts, meta->mutable_children_columns(col), file_name,
                                                  &null_reader));
