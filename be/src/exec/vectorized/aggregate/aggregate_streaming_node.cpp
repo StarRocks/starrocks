@@ -222,11 +222,13 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode:
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
+    // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value
+    // and we may set other parallelism for source operator in many special cases
     size_t degree_of_parallelism =
             down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
 
     // shared by sink operator factory and source operator factory
-    AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode, child(0)->row_desc());
+    AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
 
     auto sink_operator = std::make_shared<AggregateStreamingSinkOperatorFactory>(context->next_operator_id(), id(),
                                                                                  aggregator_factory);

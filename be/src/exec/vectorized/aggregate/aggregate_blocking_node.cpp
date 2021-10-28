@@ -160,7 +160,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     operators_with_sink = context->maybe_interpolate_local_exchange(operators_with_sink);
 
     // shared by sink operator and source operator
-    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode, child(0)->row_desc());
+    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode);
 
     operators_with_sink.emplace_back(
             std::make_shared<AggregateBlockingSinkOperatorFactory>(context->next_operator_id(), id(), aggregator));
