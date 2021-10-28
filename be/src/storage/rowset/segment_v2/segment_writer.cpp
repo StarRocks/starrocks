@@ -67,6 +67,7 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t* column_id, c
     EncodingTypePB real_encoding_type = meta->encoding();
     if (real_encoding_type == DEFAULT_ENCODING) {
         real_encoding_type = EncodingInfo::get_default_encoding(column.type(), false);
+        meta->set_encoding(real_encoding_type);
     }
     // for BIT_SHUFFLE, use NO_COMPRESSION
     if (real_encoding_type == BIT_SHUFFLE) {

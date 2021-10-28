@@ -130,14 +130,14 @@ struct TColumn {
     6: optional string default_value               
     7: optional bool is_bloom_filter_column     
     8: optional Exprs.TExpr define_expr                                                               
-    9: optional Types.TEncodingType encoding
-    10: optional Types.TCompressionType compression
-                                                                                                      
+
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
     20: optional i32 index_len                 
     // column type. If this field is set, the |column_type| will be ignored.
-    21: optional Types.TTypeDesc type_desc         
+    21: optional Types.TTypeDesc type_desc
+    22: optional Types.TEncodingType encoding
+    23: optional Types.TCompressionType compression
 }
 
 struct TOlapTableIndexTablets {

@@ -157,6 +157,9 @@ public:
         return mem_usage;
     }
 
+    // put encoding field in _extra_fields if exists for memory saving.
+    // For most case, the column will has no encoding field, which will
+    // use DEFAULT_ENCODING
     EncodingTypePB encoding() const {
         if (!_extra_fields) {
             return EncodingTypePB::DEFAULT_ENCODING;
@@ -169,6 +172,9 @@ public:
         ext->encoding = encoding;
     }
 
+    // put compression field in _extra_fields if exists for memory saving.
+    // For most case, the column will has no compression field, which will
+    // use DEFAULT_COMPRESSION
     CompressionTypePB compression() const {
         if (!_extra_fields) {
             return CompressionTypePB::DEFAULT_COMPRESSION;
