@@ -178,12 +178,12 @@ void* my_pvalloc(size_t size) __THROW {
 
 // posix_memalign
 int my_posix_memalign(void** r, size_t a, size_t s) __THROW {
-    void* ptr = tc_posix_memalign(r, a, s);
+    int ret = tc_posix_memalign(r, a, s);
 
     size_t actual_size = tc_nallocx(s, 0);
     starrocks::tls_thread_status.mem_consume(actual_size);
 
-    return ptr;
+    return ret;
 }
 
 void* malloc(size_t size) __THROW ALIAS(my_alloc);
