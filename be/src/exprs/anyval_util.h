@@ -424,15 +424,5 @@ inline bool AnyValUtil::equals_intenal(const DecimalV2Val& x, const DecimalV2Val
     return x == y;
 }
 
-// Creates the corresponding AnyVal subclass for type. The object is added to the pool.
-starrocks_udf::AnyVal* create_any_val(ObjectPool* pool, const TypeDescriptor& type);
-
-/// Allocates an AnyVal subclass of 'type' from 'pool'. The AnyVal's memory is
-/// initialized to all 0's. Returns a MemLimitExceeded() error with message
-/// 'mem_limit_exceeded_msg' if the allocation cannot be made because of a memory
-/// limit.
-Status allocate_any_val(RuntimeState* state, MemPool* pool, const TypeDescriptor& type,
-                        const std::string& mem_limit_exceeded_msg, AnyVal** result);
-
 } // namespace starrocks
 #endif
