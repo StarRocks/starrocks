@@ -35,7 +35,8 @@ public class HiveScanImplementationRule extends ImplementationRule {
                     scan.getMinMaxConjuncts(),
                     scan.getMinMaxColumnRefMap(),
                     scan.getLimit(),
-                    scan.getPredicate());
+                    scan.getPredicate(),
+                    scan.getProjection());
 
             result = new OptExpression(physicalHiveScan);
         }

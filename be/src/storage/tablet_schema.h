@@ -35,6 +35,8 @@
 
 namespace starrocks {
 
+class TabletSchemaMap;
+
 namespace segment_v2 {
 class SegmentReaderWriterTest;
 class SegmentReaderWriterTest_estimate_segment_size_Test;
@@ -206,9 +208,26 @@ bool operator!=(const TabletColumn& a, const TabletColumn& b);
 
 class TabletSchema {
 public:
+    using SchemaId = int64_t;
+
+    // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
+    // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
+    constexpr static SchemaId invalid_id() { return 0; }
+
     TabletSchema() = default;
+    explicit TabletSchema(const TabletSchemaPB& schema_pb) { init_from_pb(schema_pb); }
+    // Does NOT take ownership of |schema_map| and |schema_map| must outlive TabletSchema.
+    TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) : _schema_map(schema_map) {
+        init_from_pb(schema_pb);
+    }
+
+    ~TabletSchema();
+
     void init_from_pb(const TabletSchemaPB& schema);
     void to_schema_pb(TabletSchemaPB* tablet_meta_pb) const;
+
+    // Caller should always check the returned value with `invalid_id()`.
+    SchemaId id() const { return _id; }
     size_t row_size() const;
     size_t field_index(const std::string& field_name) const;
     const TabletColumn& column(size_t ordinal) const;
@@ -217,11 +236,13 @@ public:
     size_t num_key_columns() const { return _num_key_columns; }
     size_t num_short_key_columns() const { return _num_short_key_columns; }
     size_t num_rows_per_row_block() const { return _num_rows_per_row_block; }
-    KeysType keys_type() const { return _keys_type; }
-    CompressKind compress_kind() const { return _compress_kind; }
+    KeysType keys_type() const { return static_cast<KeysType>(_keys_type); }
+    CompressKind compress_kind() const { return static_cast<CompressKind>(_compress_kind); }
     size_t next_column_unique_id() const { return _next_column_unique_id; }
-    bool is_in_memory() const { return _is_in_memory; }
-    void set_is_in_memory(bool is_in_memory) { _is_in_memory = is_in_memory; }
+
+    // The in-memory property is no longer supported, but leave this API for compatibility.
+    // Newly-added code should not rely on this method, it may be removed at any time.
+    bool is_in_memory() const { return false; }
 
     bool contains_format_v1_column() const;
     bool contains_format_v2_column() const;
@@ -238,6 +259,8 @@ public:
         return mem_usage;
     }
 
+    bool shared() const { return _schema_map != nullptr; }
+
 private:
     friend class segment_v2::SegmentReaderWriterTest;
     FRIEND_TEST(segment_v2::SegmentReaderWriterTest, estimate_segment_size);
@@ -246,21 +269,23 @@ private:
     friend bool operator==(const TabletSchema& a, const TabletSchema& b);
     friend bool operator!=(const TabletSchema& a, const TabletSchema& b);
 
+    SchemaId _id = invalid_id();
+    TabletSchemaMap* _schema_map = nullptr;
+
     double _bf_fpp = 0;
 
     std::vector<TabletColumn> _cols;
     size_t _num_rows_per_row_block = 0;
     size_t _next_column_unique_id = 0;
 
-    CompressKind _compress_kind = COMPRESS_NONE;
-    KeysType _keys_type = DUP_KEYS;
-
     uint16_t _num_key_columns = 0;
-    uint16_t _num_null_columns = 0;
     uint16_t _num_short_key_columns = 0;
 
+    // Using `uint8_t` instead of `CompressKind` and `KeysType` for less memory usage.
+    uint8_t _compress_kind = static_cast<uint8_t>(COMPRESS_NONE);
+    uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
+
     bool _has_bf_fpp = false;
-    bool _is_in_memory = false;
 };
 
 bool operator==(const TabletSchema& a, const TabletSchema& b);

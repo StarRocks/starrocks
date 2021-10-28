@@ -24,24 +24,24 @@ public class IntersectReorder extends TransformationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        OptExpression optExpression = input.getGroupExpression().getGroup().extractLogicalTree();
         LogicalIntersectOperator intersectOperator = (LogicalIntersectOperator) input.getOp();
-
-        calculateStatistics(optExpression, context);
-        OptExpression o = optExpression.getInputs().stream().min(
+        OptExpression intersectOpt = input.getGroupExpression().getGroup().extractLogicalTree();
+        calculateStatistics(intersectOpt, context);
+        OptExpression o = intersectOpt.getInputs().stream().min(
                 Comparator.comparingDouble(c -> c.getStatistics().getOutputRowCount())).get();
 
-        int index = optExpression.getInputs().indexOf(o);
+        int index = intersectOpt.getInputs().indexOf(o);
 
         List<OptExpression> newChildList = new ArrayList<>();
         List<List<ColumnRefOperator>> childOutputColumns = new ArrayList<>();
-        newChildList.add(optExpression.getInputs().get(index));
+        newChildList.add(intersectOpt.getInputs().get(index));
         childOutputColumns.add(intersectOperator.getChildOutputColumns().get(index));
 
-        for (OptExpression child : optExpression.getInputs()) {
+        for (int idx = 0; idx < intersectOpt.arity(); ++idx) {
+            OptExpression child = intersectOpt.inputAt(idx);
             if (!child.equals(o)) {
                 newChildList.add(child);
-                childOutputColumns.add(intersectOperator.getChildOutputColumns().get(index));
+                childOutputColumns.add(intersectOperator.getChildOutputColumns().get(idx));
             }
         }
         return Lists.newArrayList(OptExpression.create(
@@ -61,8 +61,7 @@ public class IntersectReorder extends TransformationRule {
 
         ExpressionContext expressionContext = new ExpressionContext(expr);
         StatisticsCalculator statisticsCalculator = new StatisticsCalculator(
-                expressionContext, expr.getOutputColumns(),
-                context.getColumnRefFactory(), context.getDumpInfo());
+                expressionContext, context.getColumnRefFactory(), context.getDumpInfo());
         statisticsCalculator.estimatorStats();
         expr.setStatistics(expressionContext.getStatistics());
     }

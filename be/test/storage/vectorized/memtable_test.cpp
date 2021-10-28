@@ -51,7 +51,6 @@ static shared_ptr<TabletSchema> create_tablet_schema(const string& desc, int nke
     tspb.set_keys_type(key_type);
     tspb.set_next_column_unique_id(cid);
     tspb.set_num_short_key_columns(nkey);
-    tspb.set_is_in_memory(false);
     shared_ptr<TabletSchema> ts(new TabletSchema());
     ts->init_from_pb(tspb);
     return ts;

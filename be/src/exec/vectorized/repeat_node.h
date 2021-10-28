@@ -22,6 +22,9 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* row_batch, bool* eos) override;
     Status close(RuntimeState* state) override;
 
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
+
 private:
     static ColumnPtr generate_null_column(int64_t num_rows) {
         auto nullable_column = NullableColumn::create(Int8Column::create(), NullColumn::create());

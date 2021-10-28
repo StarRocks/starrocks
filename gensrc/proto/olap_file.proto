@@ -114,6 +114,8 @@ enum DataFileType {
     COLUMN_ORIENTED_FILE = 1;
 }
 
+// Please keep the defined value less than 256, bacause this enum will be casted to uint8_t
+// in some cases.
 enum KeysType {
     DUP_KEYS = 0;
     UNIQUE_KEYS = 1;
@@ -180,7 +182,8 @@ message TabletSchemaPB {
     optional CompressKind compress_kind = 5; // OLAPHeaderMessage.compress_kind
     optional double bf_fpp = 6; // OLAPHeaderMessage.bf_fpp
     optional uint32 next_column_unique_id = 7; // OLAPHeaderMessage.next_column_unique_id
-    optional bool is_in_memory = 8 [default=false];
+    optional bool DEPRECATED_is_in_memory = 8 [default=false];
+    optional int64 id = 9;
 }
 
 enum TabletStatePB {

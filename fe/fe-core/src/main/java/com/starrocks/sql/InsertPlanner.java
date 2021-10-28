@@ -14,6 +14,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Pair;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlannerContext;
 import com.starrocks.qe.ConnectContext;
@@ -37,6 +38,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
@@ -97,12 +100,18 @@ public class InsertPlanner {
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
+        List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+        long tableId = insertRelation.getTargetTable().getId();
         for (Column column : insertRelation.getTargetTable().getFullSchema()) {
             SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
             slotDescriptor.setIsMaterialized(true);
             slotDescriptor.setType(column.getType());
             slotDescriptor.setColumn(column);
             slotDescriptor.setIsNullable(column.isAllowNull());
+            if (column.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
+                ColumnDict dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
+                globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), dict));
+            }
         }
         olapTuple.computeMemLayout();
 
@@ -111,6 +120,9 @@ public class InsertPlanner {
         OlapTableSink dataSink = new OlapTableSink((OlapTable) insertRelation.getTargetTable(), olapTuple,
                 insertRelation.getTargetPartitionIds());
         execPlan.getFragments().get(0).setSink(dataSink);
+        // After data loading, we need to check the global dict for low cardinality string column
+        // whether update.
+        execPlan.getFragments().get(0).setGlobalDicts(globalDicts);
         return execPlan;
     }
 

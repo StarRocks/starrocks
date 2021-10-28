@@ -10,7 +10,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
-import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -18,20 +18,29 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
     private final ImmutableMap<Integer, String> aggColumnIdToNames;
 
     public LogicalMetaScanOperator(Table table,
-                                   List<ColumnRefOperator> outputColumns,
                                    Map<ColumnRefOperator, Column> columnRefMap) {
-        super(OperatorType.LOGICAL_META_SCAN, table, outputColumns, columnRefMap, Maps.newHashMap(),
-                -1, null);
+        super(OperatorType.LOGICAL_META_SCAN, table, columnRefMap, Maps.newHashMap(),
+                -1, null, null);
         aggColumnIdToNames = ImmutableMap.of();
     }
 
     public LogicalMetaScanOperator(Table table,
-                                   List<ColumnRefOperator> outputColumns,
                                    Map<ColumnRefOperator, Column> columnRefMap,
                                    Map<Integer, String> aggColumnIdToNames) {
-        super(OperatorType.LOGICAL_META_SCAN, table, outputColumns, columnRefMap, Maps.newHashMap(),
-                -1, null);
+        super(OperatorType.LOGICAL_META_SCAN, table, columnRefMap, Maps.newHashMap(),
+                -1, null, null);
         this.aggColumnIdToNames = ImmutableMap.copyOf(aggColumnIdToNames);
+    }
+
+    private LogicalMetaScanOperator(LogicalMetaScanOperator.Builder builder) {
+        super(OperatorType.LOGICAL_META_SCAN,
+                builder.table,
+                builder.colRefToColumnMetaMap,
+                builder.columnMetaToColRefMap,
+                builder.getLimit(),
+                builder.getPredicate(),
+                builder.getProjection());
+        this.aggColumnIdToNames = ImmutableMap.copyOf(builder.aggColumnIdToNames);
     }
 
     public Map<Integer, String> getAggColumnIdToNames() {
@@ -55,13 +64,28 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
             return false;
         }
         LogicalMetaScanOperator that = (LogicalMetaScanOperator) o;
-        return table.getId() == that.getTable().getId() &&
-                outputColumns.equals(that.outputColumns) &&
-                aggColumnIdToNames.equals(that.aggColumnIdToNames);
+        return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(table.getId(), outputColumns, aggColumnIdToNames);
+        return Objects.hash(super.hashCode(), aggColumnIdToNames);
+    }
+
+    public static class Builder
+            extends LogicalScanOperator.Builder<LogicalMetaScanOperator, LogicalMetaScanOperator.Builder> {
+        private Map<Integer, String> aggColumnIdToNames;
+
+        @Override
+        public LogicalMetaScanOperator build() {
+            return new LogicalMetaScanOperator(this);
+        }
+
+        @Override
+        public LogicalMetaScanOperator.Builder withOperator(LogicalMetaScanOperator operator) {
+            super.withOperator(operator);
+            this.aggColumnIdToNames = new HashMap<>(operator.aggColumnIdToNames);
+            return this;
+        }
     }
 }

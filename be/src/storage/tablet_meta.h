@@ -164,15 +164,15 @@ public:
 
     inline const TabletSchema& tablet_schema() const;
 
-    inline void set_tablet_schema(const std::shared_ptr<TabletSchema>& tablet_schema) {
-        if (_schema != nullptr) {
+    inline void set_tablet_schema(const std::shared_ptr<const TabletSchema>& tablet_schema) {
+        if (_schema != nullptr && !_schema->shared()) {
             _mem_tracker->release(_schema->mem_usage());
         }
         _schema = tablet_schema;
-        _mem_tracker->consume(_schema->mem_usage());
+        _mem_tracker->consume(_schema->shared() ? 0 : _schema->mem_usage());
     }
 
-    inline std::shared_ptr<TabletSchema>& mutable_tablet_schema() { return _schema; }
+    inline std::shared_ptr<const TabletSchema>& tablet_schema_ptr() { return _schema; }
 
     inline const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
     Status add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
@@ -247,7 +247,7 @@ private:
     TabletState _tablet_state = TABLET_NOTREADY;
     // Note: Segment store the pointer of TabletSchema,
     // so this point should never change
-    std::shared_ptr<TabletSchema> _schema = nullptr;
+    std::shared_ptr<const TabletSchema> _schema = nullptr;
 
     std::vector<RowsetMetaSharedPtr> _rs_metas;
     std::vector<RowsetMetaSharedPtr> _inc_rs_metas;

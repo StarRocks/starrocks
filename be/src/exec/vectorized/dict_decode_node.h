@@ -80,11 +80,13 @@ protected:
 private:
     void _init_counter();
 
-    using DefaultDecoder = std::unique_ptr<DictDecoder<TYPE_INT, RGlobalDictMap, TYPE_VARCHAR>>;
+    using DefaultDecoder = DictDecoder<TYPE_INT, RGlobalDictMap, TYPE_VARCHAR>;
+    using DefaultDecoderPtr = std::unique_ptr<DefaultDecoder>;
+
     std::shared_ptr<vectorized::Chunk> _input_chunk;
     std::vector<int32_t> _encode_column_cids;
     std::vector<int32_t> _decode_column_cids;
-    std::vector<DefaultDecoder> _decoders;
+    std::vector<DefaultDecoderPtr> _decoders;
 
     std::vector<ExprContext*> _expr_ctxs;
     std::unordered_map<SlotId, std::pair<ExprContext*, DictOptimizeContext>> _string_functions;

@@ -2,6 +2,8 @@
 
 #include "exec/vectorized/assert_num_rows_node.h"
 
+#include "exec/pipeline/assert_num_rows_operator.h"
+#include "exec/pipeline/pipeline_builder.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/row_batch.h"
@@ -126,6 +128,20 @@ Status AssertNumRowsNode::close(RuntimeState* state) {
         return Status::OK();
     }
     return ExecNode::close(state);
+}
+
+pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+
+    OpFactories operator_before_assert_num_rows_source = _children[0]->decompose_to_pipeline(context);
+    operator_before_assert_num_rows_source =
+            context->maybe_interpolate_local_exchange(operator_before_assert_num_rows_source);
+
+    auto source_factory = std::make_shared<AssertNumRowsOperatorFactory>(
+            context->next_operator_id(), id(), _desired_num_rows, _subquery_string, std::move(_assertion));
+    operator_before_assert_num_rows_source.emplace_back(std::move(source_factory));
+
+    return operator_before_assert_num_rows_source;
 }
 
 } // namespace starrocks::vectorized

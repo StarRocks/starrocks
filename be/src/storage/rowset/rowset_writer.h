@@ -118,12 +118,12 @@ public:
 
     virtual RowsetId rowset_id() = 0;
 
-    virtual const vectorized::InvalidDictColumnsSet& invalid_global_dict_columns() {
-        return _invalid_global_dict_columns;
-    };
+    virtual const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() {
+        return _global_dict_columns_valid_info;
+    }
 
 protected:
-    vectorized::InvalidDictColumnsSet _invalid_global_dict_columns;
+    vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
 
 private:
     RowsetWriter(const RowsetWriter&) = delete;

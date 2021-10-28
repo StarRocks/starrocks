@@ -329,6 +329,7 @@ struct TOlapScanNode {
   // For profile attributes' printing: `Rollup` `Predicates`
   20: optional string rollup_name
   21: optional string sql_predicates
+  22: optional bool enable_column_expr_predicate
 }
 struct TEqJoinCondition {
   // left-hand side of "<a> = <b>"

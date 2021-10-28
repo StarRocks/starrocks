@@ -314,6 +314,8 @@ public:
         swap(_slice, rhs._slice);
     }
 
+    bool is_loaded() { return _slice.get_data() && (_slice.get_size() > 0); }
+
 private:
     friend void swap(OwnedSlice& s1, OwnedSlice& s2);
 

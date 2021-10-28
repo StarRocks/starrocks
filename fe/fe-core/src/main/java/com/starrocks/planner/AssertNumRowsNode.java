@@ -84,4 +84,9 @@ public class AssertNumRowsNode extends PlanNode {
 
         return true;
     }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
 }

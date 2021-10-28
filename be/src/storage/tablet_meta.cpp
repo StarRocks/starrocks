@@ -27,9 +27,9 @@
 
 #include "gutil/strings/substitute.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
 #include "storage/protobuf_file.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/tablet_schema_map.h"
 #include "storage/tablet_updates.h"
 #include "util/uid_util.h"
 #include "util/url_coding.h"
@@ -251,7 +251,7 @@ TabletMeta::TabletMeta(MemTracker* mem_tracker, int64_t table_id, int64_t partit
     tablet_meta_pb.set_partition_id(partition_id);
     tablet_meta_pb.set_tablet_id(tablet_id);
     tablet_meta_pb.set_schema_hash(schema_hash);
-    tablet_meta_pb.set_shard_id(shard_id);
+    tablet_meta_pb.set_shard_id((int32_t)shard_id);
     tablet_meta_pb.set_creation_time(time(nullptr));
     tablet_meta_pb.set_cumulative_layer_point(-1);
     tablet_meta_pb.set_tablet_state(PB_RUNNING);
@@ -259,6 +259,9 @@ TabletMeta::TabletMeta(MemTracker* mem_tracker, int64_t table_id, int64_t partit
     tablet_meta_pb.set_tablet_type(tabletType == TTabletType::TABLET_TYPE_MEMORY ? TabletTypePB::TABLET_TYPE_MEMORY
                                                                                  : TabletTypePB::TABLET_TYPE_DISK);
     TabletSchemaPB* schema = tablet_meta_pb.mutable_schema();
+    if (tablet_schema.__isset.id) {
+        schema->set_id(tablet_schema.id);
+    }
     schema->set_num_short_key_columns(tablet_schema.short_key_column_count);
     schema->set_num_rows_per_row_block(config::default_num_rows_per_column_file_block);
     switch (tablet_schema.keys_type) {
@@ -291,10 +294,10 @@ TabletMeta::TabletMeta(MemTracker* mem_tracker, int64_t table_id, int64_t partit
     bool has_bf_columns = false;
     for (TColumn tcolumn : tablet_schema.columns) {
         convert_to_new_version(&tcolumn);
-        uint32_t unique_id = col_ordinal_to_unique_id.at(col_ordinal++);
+        uint32_t col_unique_id = col_ordinal_to_unique_id.at(col_ordinal++);
         ColumnPB* column = schema->add_column();
 
-        TColumn2ColumnPB(unique_id, tcolumn, field_version, column);
+        TColumn2ColumnPB(col_unique_id, tcolumn, field_version, column);
 
         key_count += column->is_key();
         has_bf_columns |= column->is_bf_column();
@@ -317,9 +320,10 @@ TabletMeta::TabletMeta(MemTracker* mem_tracker, int64_t table_id, int64_t partit
         schema->set_bf_fpp(tablet_schema.bloom_filter_fpp);
     }
 
-    if (tablet_schema.__isset.is_in_memory) {
-        schema->set_is_in_memory(tablet_schema.is_in_memory);
-    }
+    // NOTE: The in-memory property is no longer supported
+    // if (tablet_schema.__isset.is_in_memory) {
+    //     schema->set_is_in_memory(tablet_schema.is_in_memory);
+    // }
 
     init_from_pb(&tablet_meta_pb);
 }
@@ -449,9 +453,13 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
     }
 
     // init _schema
-    _schema = std::make_shared<TabletSchema>();
-    _schema->init_from_pb(tablet_meta_pb.schema());
-    _mem_tracker->consume(_schema->mem_usage());
+    if (tablet_meta_pb.schema().has_id() && tablet_meta_pb.schema().id() != TabletSchema::invalid_id()) {
+        // Does not collect the memory usage of |_schema|.
+        _schema = GlobalTabletSchemaMap::Instance()->emplace(tablet_meta_pb.schema()).first;
+    } else {
+        _schema = std::make_shared<const TabletSchema>(tablet_meta_pb.schema());
+        _mem_tracker->consume(_schema->mem_usage());
+    }
 
     // init _rs_metas
     for (auto& it : tablet_meta_pb.rs_metas()) {

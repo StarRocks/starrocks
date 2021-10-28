@@ -33,7 +33,6 @@ import mockit.Mocked;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -132,8 +131,7 @@ public class DistributionPrunerRuleTest {
         ScalarOperator predicate =
                 Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2, inPredicateOperator1,
                         inPredicateOperator2, inPredicateOperator3, inPredicateOperator4);
-        LogicalOlapScanOperator operator = new LogicalOlapScanOperator(olapTable,
-                new ArrayList<>(scanColumnMap.keySet()), scanColumnMap, Maps.newHashMap(), null, -1, predicate,
+        LogicalOlapScanOperator operator = new LogicalOlapScanOperator(olapTable, scanColumnMap, Maps.newHashMap(), null, -1, predicate,
                 1, Lists.newArrayList(1L), null, Lists.newArrayList(), null);
         operator.setPredicate(null);
 

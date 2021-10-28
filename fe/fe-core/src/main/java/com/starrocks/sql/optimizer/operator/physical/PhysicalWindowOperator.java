@@ -7,6 +7,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -28,7 +29,8 @@ public class PhysicalWindowOperator extends PhysicalOperator {
                                   List<Ordering> orderByElements,
                                   AnalyticWindow analyticWindow,
                                   long limit,
-                                  ScalarOperator predicate) {
+                                  ScalarOperator predicate,
+                                  Projection projection) {
         super(PHYSICAL_WINDOW);
         this.analyticCall = analyticCall;
         this.partitionExpressions = partitionExpressions;
@@ -37,6 +39,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
 
         this.limit = limit;
         this.predicate = predicate;
+        this.projection = projection;
     }
 
     public Map<ColumnRefOperator, CallOperator> getAnalyticCall() {

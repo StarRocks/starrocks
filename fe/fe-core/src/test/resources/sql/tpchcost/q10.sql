@@ -66,8 +66,8 @@ UNPARTITIONED
 |  <slot 3> : 3: C_ADDRESS
 |  <slot 5> : 5: C_PHONE
 |  <slot 6> : 6: C_ACCTBAL
-|  <slot 38> : 38: N_NAME
 |  <slot 8> : 8: C_COMMENT
+|  <slot 38> : 38: N_NAME
 |  <slot 42> : 25: L_EXTENDEDPRICE * 1.0 - 26: L_DISCOUNT
 |  use vectorized: true
 |
@@ -87,8 +87,8 @@ UNPARTITIONED
 |  <slot 3> : 3: C_ADDRESS
 |  <slot 5> : 5: C_PHONE
 |  <slot 6> : 6: C_ACCTBAL
-|  <slot 38> : 38: N_NAME
 |  <slot 8> : 8: C_COMMENT
+|  <slot 38> : 38: N_NAME
 |  use vectorized: true
 |
 3:HASH JOIN
@@ -122,9 +122,9 @@ EXCHANGE ID: 12
 BUCKET_SHFFULE_HASH_PARTITIONED: 11: O_CUSTKEY
 
 11:Project
+|  <slot 11> : 11: O_CUSTKEY
 |  <slot 25> : 25: L_EXTENDEDPRICE
 |  <slot 26> : 26: L_DISCOUNT
-|  <slot 11> : 11: O_CUSTKEY
 |  use vectorized: true
 |
 10:HASH JOIN

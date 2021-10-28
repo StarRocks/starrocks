@@ -3,7 +3,6 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Catalog;
@@ -39,9 +38,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class Utils {
-    public static int combineHash(int hash, int value) {
-        return hash * 37 + value;
-    }
 
     public static List<ScalarOperator> extractConjuncts(ScalarOperator root) {
         if (null == root) {
@@ -123,24 +119,6 @@ public class Utils {
         }
 
         return count;
-    }
-
-    public static List<ColumnRefOperator> extractScanColumn(GroupExpression groupExpression) {
-        if (OperatorType.LOGICAL_OLAP_SCAN.equals(groupExpression.getOp().getOpType())) {
-            LogicalOlapScanOperator loso = (LogicalOlapScanOperator) groupExpression.getOp();
-
-            return ImmutableList.<ColumnRefOperator>builder().addAll(loso.getColRefToColumnMetaMap().keySet()).build();
-        }
-
-        List<Group> groups = groupExpression.getInputs();
-
-        ImmutableList.Builder<ColumnRefOperator> builder = ImmutableList.builder();
-        for (Group group : groups) {
-            GroupExpression expression = group.getFirstLogicalExpression();
-            builder.addAll(extractScanColumn(expression));
-        }
-
-        return builder.build();
     }
 
     public static void extractOlapScanOperator(GroupExpression groupExpression, List<LogicalOlapScanOperator> list) {

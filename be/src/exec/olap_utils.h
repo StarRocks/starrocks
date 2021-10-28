@@ -25,6 +25,7 @@
 #include <cmath>
 
 #include "common/logging.h"
+#include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/datetime_value.h"
 #include "runtime/primitive_type.h"
@@ -206,6 +207,9 @@ inline SQLFilterOp to_olap_filter_type(TExprOpcode::type type, bool opposite) {
 
     case TExprOpcode::NE:
         return opposite ? FILTER_IN : FILTER_NOT_IN;
+
+    case TExprOpcode::EQ_FOR_NULL:
+        return FILTER_IN;
 
     default:
         VLOG(1) << "TExprOpcode: " << type;

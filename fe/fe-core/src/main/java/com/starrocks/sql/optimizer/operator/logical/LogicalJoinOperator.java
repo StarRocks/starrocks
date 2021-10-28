@@ -10,10 +10,10 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.List;
+import java.util.ArrayList;
 import java.util.Objects;
 
 public class LogicalJoinOperator extends LogicalOperator {
@@ -22,38 +22,30 @@ public class LogicalJoinOperator extends LogicalOperator {
     private final String joinHint;
     // For mark the node has been push  down join on clause, avoid dead-loop
     private boolean hasPushDownJoinOnClause = false;
-    // Output columns after PruneJoinColumnsRule apply.
-    // PruneOutputColumns will not contains onPredicate/predicate used columns if parent node don't require these columns.
-    // PruneOutputColumns need to be calculated because project nodes will be added on top of join nodes after choose best plan (AddProjectForJoinPruneRule),
-    // so column statistics need to be pruned before calculating cost.
-    private List<ColumnRefOperator> pruneOutputColumns;
 
     public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate) {
-        this(joinType, onPredicate, "", -1, null, null, false);
+        this(joinType, onPredicate, "", -1, null, false);
     }
 
     public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate, String joinHint,
                                long limit,
                                ScalarOperator predicate,
-                               List<ColumnRefOperator> pruneOutputColumns,
                                boolean hasPushDownJoinOnClause) {
-        super(OperatorType.LOGICAL_JOIN, limit, predicate);
+        super(OperatorType.LOGICAL_JOIN, limit, predicate, null);
         this.joinType = joinType;
         this.onPredicate = onPredicate;
         Preconditions.checkNotNull(joinHint);
         this.joinHint = joinHint;
 
-        this.pruneOutputColumns = pruneOutputColumns;
         this.hasPushDownJoinOnClause = hasPushDownJoinOnClause;
     }
 
     private LogicalJoinOperator(Builder builder) {
-        super(OperatorType.LOGICAL_JOIN, builder.getLimit(), builder.getPredicate());
+        super(OperatorType.LOGICAL_JOIN, builder.getLimit(), builder.getPredicate(), builder.getProjection());
         this.joinType = builder.joinType;
         this.onPredicate = builder.onPredicate;
         this.joinHint = builder.joinHint;
 
-        this.pruneOutputColumns = builder.pruneOutputColumns;
         this.hasPushDownJoinOnClause = builder.hasPushDownJoinOnClause;
     }
 
@@ -97,24 +89,26 @@ public class LogicalJoinOperator extends LogicalOperator {
         if (predicate != null) {
             result.union(predicate.getUsedColumns());
         }
+
+        if (projection != null) {
+            projection.getColumnRefMap().values().forEach(s -> result.union(s.getUsedColumns()));
+            result.except(new ColumnRefSet(new ArrayList<>(projection.getCommonSubOperatorMap().keySet())));
+            projection.getCommonSubOperatorMap().values().forEach(s -> result.union(s.getUsedColumns()));
+        }
         return result;
-    }
-
-    public void setPruneOutputColumns(List<ColumnRefOperator> pruneOutputColumns) {
-        this.pruneOutputColumns = pruneOutputColumns;
-    }
-
-    public List<ColumnRefOperator> getPruneOutputColumns() {
-        return this.pruneOutputColumns;
     }
 
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
-        ColumnRefSet columns = new ColumnRefSet();
-        for (int i = 0; i < expressionContext.arity(); ++i) {
-            columns.union(expressionContext.getChildLogicalProperty(i).getOutputColumns());
+        if (projection != null) {
+            return new ColumnRefSet(projection.getOutputColumns());
+        } else {
+            ColumnRefSet columns = new ColumnRefSet();
+            for (int i = 0; i < expressionContext.arity(); ++i) {
+                columns.union(expressionContext.getChildLogicalProperty(i).getOutputColumns());
+            }
+            return columns;
         }
-        return columns;
     }
 
     @Override
@@ -142,13 +136,12 @@ public class LogicalJoinOperator extends LogicalOperator {
 
         LogicalJoinOperator rhs = (LogicalJoinOperator) o;
 
-        return joinType == rhs.joinType && Objects.equals(onPredicate, rhs.onPredicate) &&
-                Objects.equals(pruneOutputColumns, rhs.pruneOutputColumns);
+        return joinType == rhs.joinType && Objects.equals(onPredicate, rhs.onPredicate);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), opType, joinType, onPredicate);
+        return Objects.hash(super.hashCode(), joinType, onPredicate);
     }
 
     @Override
@@ -165,7 +158,6 @@ public class LogicalJoinOperator extends LogicalOperator {
         private ScalarOperator onPredicate;
         private String joinHint = "";
         private boolean hasPushDownJoinOnClause = false;
-        private List<ColumnRefOperator> pruneOutputColumns;
 
         @Override
         public LogicalJoinOperator build() {
@@ -178,7 +170,6 @@ public class LogicalJoinOperator extends LogicalOperator {
             this.joinType = joinOperator.joinType;
             this.onPredicate = joinOperator.onPredicate;
             this.joinHint = joinOperator.joinHint;
-            this.pruneOutputColumns = joinOperator.pruneOutputColumns;
             this.hasPushDownJoinOnClause = joinOperator.hasPushDownJoinOnClause;
             return this;
         }
@@ -190,6 +181,16 @@ public class LogicalJoinOperator extends LogicalOperator {
 
         public Builder setOnPredicate(ScalarOperator onPredicate) {
             this.onPredicate = onPredicate;
+            return this;
+        }
+
+        public Builder setProjection(Projection projection) {
+            this.projection = projection;
+            return this;
+        }
+
+        public Builder setJoinHint(String joinHint) {
+            this.joinHint = joinHint;
             return this;
         }
     }

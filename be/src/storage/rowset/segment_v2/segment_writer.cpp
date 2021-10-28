@@ -108,6 +108,7 @@ Status SegmentWriter::init(uint32_t write_mbytes_per_sec __attribute__((unused))
             auto iter = _opts.global_dicts->find(column.name().data());
             if (iter != _opts.global_dicts->end()) {
                 opts.global_dict = &iter->second;
+                _global_dict_columns_valid_info[iter->first] = true;
             }
         }
 
@@ -179,7 +180,9 @@ Status SegmentWriter::_write_data() {
     for (auto& column_writer : _column_writers) {
         RETURN_IF_ERROR(column_writer->write_data());
         if (column_writer->is_global_dict_valid() == false) {
-            _invalid_global_dict_columns.emplace(_tablet_schema->columns()[idx].name());
+            std::string col_name(_tablet_schema->columns()[idx].name().data(),
+                                 _tablet_schema->columns()[idx].name().size());
+            _global_dict_columns_valid_info[col_name] = false;
         }
         idx++;
     }

@@ -163,8 +163,7 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     // equal to tablet id in meta
     new_tablet_meta_pb.set_tablet_id(tablet_id);
     new_tablet_meta_pb.set_schema_hash(schema_hash);
-    TabletSchema tablet_schema;
-    tablet_schema.init_from_pb(new_tablet_meta_pb.schema());
+    TabletSchema tablet_schema(new_tablet_meta_pb.schema());
 
     std::unordered_map<Version, RowsetMetaPB*, HashOfVersion> rs_version_map;
     for (const auto& visible_rowset : cloned_tablet_meta_pb.rs_metas()) {

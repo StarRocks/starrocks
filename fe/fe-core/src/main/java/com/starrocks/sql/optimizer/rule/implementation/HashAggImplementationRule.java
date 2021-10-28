@@ -29,7 +29,8 @@ public class HashAggImplementationRule extends ImplementationRule {
                 logical.getSingleDistinctFunctionPos(),
                 logical.isSplit(),
                 logical.getLimit(),
-                logical.getPredicate());
+                logical.getPredicate(),
+                logical.getProjection());
         OptExpression result = OptExpression.create(physical, input.getInputs());
         return Lists.newArrayList(result);
     }

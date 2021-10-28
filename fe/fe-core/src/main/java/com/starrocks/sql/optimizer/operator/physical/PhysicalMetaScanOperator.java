@@ -2,37 +2,34 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
-import com.google.common.base.Objects;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
-public class PhysicalMetaScanOperator extends PhysicalOperator {
-    private final Table table;
-    private final Map<ColumnRefOperator, Column> colRefToColumnMetaMap;
+public class PhysicalMetaScanOperator extends PhysicalScanOperator {
     private final Map<Integer, String> aggColumnIdToNames;
 
-    public PhysicalMetaScanOperator(Table table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                    Map<Integer, String> aggColumnIdToNames) {
-        super(OperatorType.PHYSICAL_META_SCAN);
-
-        this.table = table;
-        this.colRefToColumnMetaMap = colRefToColumnMetaMap;
+    public PhysicalMetaScanOperator(
+                                    Map<Integer, String> aggColumnIdToNames,
+                                    Table table,
+                                    List<ColumnRefOperator> outputColumns,
+                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                    long limit,
+                                    ScalarOperator predicate,
+                                    Projection projection) {
+        super(OperatorType.PHYSICAL_META_SCAN, table, outputColumns, colRefToColumnMetaMap, limit, predicate,
+                projection);
         this.aggColumnIdToNames = aggColumnIdToNames;
-    }
-
-    public Table getTable() {
-        return table;
-    }
-
-    public Map<ColumnRefOperator, Column> getColRefToColumnMetaMap() {
-        return colRefToColumnMetaMap;
     }
 
     public Map<Integer, String> getAggColumnIdToNames() {
@@ -57,12 +54,15 @@ public class PhysicalMetaScanOperator extends PhysicalOperator {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (!super.equals(o)) {
+            return false;
+        }
         PhysicalMetaScanOperator that = (PhysicalMetaScanOperator) o;
-        return Objects.equal(table, that.table) && Objects.equal(colRefToColumnMetaMap, that.colRefToColumnMetaMap);
+        return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(table, colRefToColumnMetaMap);
+        return Objects.hash(super.hashCode(), aggColumnIdToNames);
     }
 }
