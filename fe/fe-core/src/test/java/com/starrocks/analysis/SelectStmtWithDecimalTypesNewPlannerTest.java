@@ -140,5 +140,25 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         System.out.println(thrift);
         Assert.assertTrue(thrift.contains(expectString));
     }
+
+    @Test
+    public void testMod() throws Exception {
+        String sql = "select mod(0.022330165, NULL) as result from db1.decimal_table";
+	String expectString = "TPlanFragment(plan:TPlan(nodes:[TPlanNode(node_id:1, node_type:PROJECT_NODE, " +
+		"num_children:1, limit:-1, row_tuples:[1], nullable_tuples:[false], compact_data:false, use_vectorized:true, " + 
+		"project_node:TProjectNode(slot_map:{4=TExpr(nodes:[TExprNode(node_type:NULL_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, " + 
+		"scalar_type:TScalarType(type:DECIMAL32, precision:9, scale:9))]), num_children:0, output_scale:-1, use_vectorized:true, " + 
+		"has_nullable_child:false, is_nullable:true, is_monotonic:true)])})), TPlanNode(node_id:0, node_type:OLAP_SCAN_NODE, " + 
+		"num_children:0, limit:-1, row_tuples:[0], nullable_tuples:[false], compact_data:false, olap_scan_node:TOlapScanNode(tuple_id:0, " + 
+		"key_column_name:[key0], key_column_type:[INT], is_preaggregation:true, rollup_name:decimal_table, " + 
+		"enable_column_expr_predicate:false), use_vectorized:true)]), output_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF, " + 
+		"type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL32, precision:9, scale:9))]), " + 
+		"num_children:0, slot_ref:TSlotRef(slot_id:4, tuple_id:1), output_scale:-1, output_column:-1, use_vectorized:true, " + 
+		"has_nullable_child:false, is_nullable:true, is_monotonic:true)])], " + 
+                "output_sink:TDataSink(type:RESULT_SINK, " +
+		"result_sink:TResultSink(type:MYSQL_PROTOCAL)), partition:TDataPartition(type:RANDOM, partition_exprs:[]))";
+	String thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
+	Assert.assertTrue(thrift.contains(expectString));
+    }
 }
 
