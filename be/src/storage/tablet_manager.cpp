@@ -97,8 +97,8 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
             RETURN_IF_ERROR(_drop_tablet_unlocked(old_tablet->tablet_id(), false));
             RETURN_IF_ERROR(_update_tablet_map_and_partition_info(new_tablet));
             LOG(INFO) << "Added duplicated tablet. tablet_id=" << new_tablet->tablet_id()
-                      << " old_schema_hash=" << old_tablet->schema_hash()
-                      << " new_schema_hash=" << new_tablet->schema_hash();
+                      << " old_tablet_path=" << old_tablet->tablet_path()
+                      << " new_tablet_path=" << new_tablet->tablet_path();
         } else {
             return Status::InternalError("tablet already exists");
         }
