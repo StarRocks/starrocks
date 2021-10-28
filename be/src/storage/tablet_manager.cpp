@@ -92,8 +92,8 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
         auto old_version = (old_rowset == nullptr) ? -1 : old_rowset->end_version();
         auto new_version = (new_rowset == nullptr) ? -1 : new_rowset->end_version();
         old_tablet->release_header_lock();
-        bool allow_add = (new_version > old_version) || (new_version == old_version && new_time > old_time);
-        if (allow_add) {
+        bool replace_old = (new_version > old_version) || (new_version == old_version && new_time > old_time);
+        if (replace_old) {
             RETURN_IF_ERROR(_drop_tablet_unlocked(old_tablet->tablet_id(), false));
             RETURN_IF_ERROR(_update_tablet_map_and_partition_info(new_tablet));
             LOG(INFO) << "Added duplicated tablet. tablet_id=" << new_tablet->tablet_id()
