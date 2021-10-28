@@ -166,6 +166,7 @@ Status HashJoinNode::open(RuntimeState* state) {
         }
 
         {
+            RETURN_IF_ERROR(state->check_query_state("HashJoinNode"));
             // copy chunk of right table
             SCOPED_TIMER(_copy_right_table_chunk_timer);
             RETURN_IF_ERROR(_ht.append_chunk(state, chunk));
@@ -175,6 +176,7 @@ Status HashJoinNode::open(RuntimeState* state) {
     {
         // build hash table: compute key columns, and then build the hash table.
         RETURN_IF_ERROR(_build(state));
+        RETURN_IF_ERROR(state->check_query_state("HashJoinNode"));
         COUNTER_SET(_build_rows_counter, static_cast<int64_t>(_ht.get_row_count()));
         COUNTER_SET(_build_buckets_counter, static_cast<int64_t>(_ht.get_bucket_size()));
     }

@@ -92,6 +92,7 @@ Status IntersectNode::open(RuntimeState* state) {
                 state, chunk, _child_expr_lists[0], _build_pool.get(),
                 [=](const ColumnPtr& column, int i) -> void { (*types)[i].is_nullable = column->is_nullable(); }));
         while (true) {
+            RETURN_IF_ERROR(state->check_query_state("IntersectNode"));
             RETURN_IF_CANCELLED(state);
             build_timer.stop();
             RETURN_IF_ERROR(child(0)->get_next(state, &chunk, &eos));

@@ -455,6 +455,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
     RETURN_IF_ERROR(child(1)->open(state));
 
     while (true) {
+        RETURN_IF_ERROR(state->check_query_state("CrossJoin"));
         bool eos = false;
         ChunkPtr chunk = nullptr;
         RETURN_IF_CANCELLED(state);

@@ -147,6 +147,7 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
     bool eos = false;
     _chunks_sorter->setup_runtime(runtime_profile(), "ChunksSorter");
     do {
+        RETURN_IF_ERROR(state->check_query_state("IntersectNode"));
         RETURN_IF_CANCELLED(state);
         ChunkPtr chunk;
         timer.stop();

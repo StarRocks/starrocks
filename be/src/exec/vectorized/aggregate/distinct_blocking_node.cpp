@@ -29,6 +29,7 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
              << _aggregator->needs_finalize();
 
     while (true) {
+        RETURN_IF_ERROR(state->check_query_state("AggrNode"));
         bool eos = false;
         RETURN_IF_CANCELLED(state);
         RETURN_IF_ERROR(_children[0]->get_next(state, &chunk, &eos));
