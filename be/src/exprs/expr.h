@@ -215,22 +215,6 @@ public:
     static std::string debug_string(const std::vector<Expr*>& exprs);
     static std::string debug_string(const std::vector<ExprContext*>& ctxs);
 
-    // Prefix of Expr::GetConstant() symbols, regardless of template specialization
-    static const char* _s_get_constant_symbol_prefix;
-
-    /// The builtin functions are not called from anywhere in the code and the
-    /// symbols are therefore not included in the binary. We call these functions
-    /// by using dlsym. The compiler must think this function is callable to
-    /// not strip these symbols.
-    static void init_builtins_dummy();
-
-    // Any additions to this enum must be reflected in both GetConstant() and
-    // GetIrConstant().
-    enum ExprConstant {
-        RETURN_TYPE_SIZE, // int
-        ARG_TYPE_SIZE     // int[]
-    };
-
     static Expr* copy(ObjectPool* pool, Expr* old_expr);
 
     // Returns true ifi expr support vectorized process
