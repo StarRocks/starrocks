@@ -669,7 +669,9 @@ public class OlapScanNode extends ScanNode {
         if (null != sortColumn) {
             msg.olap_scan_node.setSort_column(sortColumn);
         }
-        msg.olap_scan_node.setEnable_column_expr_predicate(ConnectContext.get().getSessionVariable().getEnableColumnExprPredicate());
+        if (ConnectContext.get() != null) {
+            msg.olap_scan_node.setEnable_column_expr_predicate(ConnectContext.get().getSessionVariable().getEnableColumnExprPredicate());
+        }
     }
 
     // export some tablets
