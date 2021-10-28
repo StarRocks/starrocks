@@ -921,10 +921,12 @@ service FrontendService {
     MasterService.TMasterResult finishTask(1:MasterService.TFinishTaskRequest request)
     MasterService.TMasterResult report(1:MasterService.TReportRequest request)
     MasterService.TFetchResourceResult fetchResource()
-    
-    TFeResult isMethodSupported(1: TIsMethodSupportedRequest request)
 
-    TMasterOpResult forward(1: TMasterOpRequest params)
+    //NOTE: Do not add numbers to the parameters, otherwise it will cause compatibility problems
+    TFeResult isMethodSupported(TIsMethodSupportedRequest request)
+
+    //NOTE: Do not add numbers to the parameters, otherwise it will cause compatibility problems
+    TMasterOpResult forward(TMasterOpRequest params)
 
     TListTableStatusResult listTableStatus(1:TGetTablesParams params)
 
