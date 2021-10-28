@@ -336,7 +336,7 @@ public class PlanFragmentTest extends PlanTestBase {
     @Test
     public void testInnerJoinWithCastPredicate() throws Exception {
         String sql = "SELECT t0.v1 from t0 join test_all_type on t0.v1 = test_all_type.t1c";
-        String planFragment = getFragmentPlan(sql);
+        getFragmentPlan(sql);
     }
 
     @Test
@@ -750,6 +750,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String explainString;
         queryStr = "select k2, count(k3) from nocolocate3 group by k2";
         explainString = getFragmentPlan(queryStr);
+        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("  3:AGGREGATE (merge finalize)\n"
                 + "  |  output: count(4: count(3: k3))\n"
                 + "  |  group by: 2: k2\n"
@@ -939,7 +940,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String query = "SELECT 76072, COUNT(DISTINCT b3) * 10, '', '', now() FROM test_object" +
                 " UNION ALL" +
                 " SELECT 76072, COUNT(DISTINCT b4) *10, '', '', now() FROM test.test_object";
-        String explainString = getFragmentPlan(query);
+        getFragmentPlan(query);
     }
 
     @Test
@@ -956,7 +957,7 @@ public class PlanFragmentTest extends PlanTestBase {
         ScalarOperator cast = new CastOperator(Type.DOUBLE, columnRefOperator);
         ColumnRefOperator castColumnRef = new ColumnRefOperator(1, Type.INT, "cast", true);
 
-        HashMap<ColumnRefOperator, ScalarOperator> projectMap = new HashMap();
+        HashMap<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
         projectMap.put(castColumnRef, cast);
         projectMap.put(columnRefOperator, ConstantOperator.createInt(1));
 
@@ -1630,7 +1631,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testSupersetEnforce() throws Exception {
         String sql = "select * from (select v3, rank() over (partition by v1 order by v2) as j1 from t0) as x0 "
                 + "join t1 on x0.v3 = t1.v4 order by x0.v3, t1.v4 limit 100;";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
     }
 
     @Test
@@ -1948,6 +1949,7 @@ public class PlanFragmentTest extends PlanTestBase {
     public void testCountDistinctWithSameMultiColumns() throws Exception {
         String sql = "select count(distinct t1b,t1c), count(distinct t1b,t1c) from test_all_type";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("6:AGGREGATE (merge finalize)"));
 
         sql = "select count(distinct t1b,t1c), count(distinct t1b,t1c) from test_all_type group by t1d";
@@ -2751,7 +2753,7 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
-    public void testLeadAndLagFunction() throws Exception {
+    public void testLeadAndLagFunction() {
         String sql = "select LAG(k7, 3, 3) OVER () from baseall";
         starRocksAssert.query(sql).analysisError("The third parameter of `lag` can't not convert");
 
@@ -3552,7 +3554,7 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
-    public void TestSemiJoinNameResolve() throws Exception {
+    public void TestSemiJoinNameResolve() {
         String sql = "select join1.dt from  test.join1 right semi join test.join2 on join1.id = join2.id";
         starRocksAssert.query(sql).analysisError("Column '`join1`.`dt`' cannot be resolved");
 
@@ -3571,7 +3573,7 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
-    public void TestJoinOnBitmapColumn() throws Exception {
+    public void TestJoinOnBitmapColumn() {
         String sql = "select * from test.bitmap_table a join test.bitmap_table b on a.id2 = b.id2";
         starRocksAssert.query(sql).analysisError("binary type bitmap with type varchar(-1) is invalid.");
 
@@ -3945,13 +3947,6 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testReplicatedJoin() throws Exception {
-        new Expectations(connectContext.getSessionVariable()) {
-            {
-                connectContext.getSessionVariable().isEnableReplicationJoin();
-                result = true;
-            }
-        };
-
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         String sql = "select * from join1 join join2 on join1.id = join2.id;";
         String plan = getFragmentPlan(sql);
@@ -3961,11 +3956,6 @@ public class PlanFragmentTest extends PlanTestBase {
         sql = "select * from join2 right join join1 on join1.id = join2.id;";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("join op: INNER JOIN (REPLICATED)"));
-
-        sql = "select * from join1 as a join join1 as b on a.id = b.id;";
-        plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("join op: INNER JOIN (REPLICATED)"));
-        Assert.assertFalse(plan.contains("EXCHANGE"));
 
         sql = "select * from join1 as a join (select sum(id),id from join2 group by id) as b on a.id = b.id;";
         plan = getFragmentPlan(sql);
@@ -3998,12 +3988,6 @@ public class PlanFragmentTest extends PlanTestBase {
 
     @Test
     public void testReplicationJoinWithPartitionTable() throws Exception {
-        new Expectations(connectContext.getSessionVariable()) {
-            {
-                connectContext.getSessionVariable().isEnableReplicationJoin();
-                result = true;
-            }
-        };
         connectContext.getSessionVariable().setEnableReplicationJoin(true);
         boolean oldValue = FeConstants.runningUnitTest;
         FeConstants.runningUnitTest = true;
@@ -4358,4 +4342,27 @@ public class PlanFragmentTest extends PlanTestBase {
                 "PLAN FRAGMENT 2"));
     }
 
+    @Test
+    public void testColocateCoverReplicate() throws Exception {
+        String sql = "select * from join1 join join1 as xx on join1.id = xx.id;";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("  |  join op: INNER JOIN (COLOCATE)\n"));
+    }
+
+    @Test
+    public void testReplicatedAgg() throws Exception {
+        connectContext.getSessionVariable().setEnableReplicationJoin(true);
+
+        String sql = "select value, SUM(id) from join1 group by value";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: id)\n" +
+                "  |  group by: 3: value\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode"));
+
+        connectContext.getSessionVariable().setEnableReplicationJoin(false);
+    }
 }

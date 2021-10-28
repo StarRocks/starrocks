@@ -2,6 +2,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
@@ -1227,10 +1228,13 @@ public class PlanFragmentBuilder {
                     distributionMode = HashJoinNode.DistributionMode.BROADCAST;
                 } else if (!(leftFragment.getPlanRoot() instanceof ExchangeNode) &&
                         !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
-                    if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
+                    if (isColocateJoin(optExpr, context, leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
+                        distributionMode = HashJoinNode.DistributionMode.COLOCATE;
+                    } else if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
                             rightFragment.getPlanRoot().canDoReplicatedJoin()) {
                         distributionMode = HashJoinNode.DistributionMode.REPLICATED;
                     } else {
+                        Preconditions.checkState(false, "Must be replicate join or colocate join");
                         distributionMode = HashJoinNode.DistributionMode.COLOCATE;
                     }
                 } else if (isShuffleHashBucket(leftFragment.getPlanRoot(), rightFragment.getPlanRoot())) {
@@ -1408,6 +1412,46 @@ public class PlanFragmentBuilder {
                     }
                 }
             }
+        }
+
+        private boolean isColocateJoin(OptExpression optExpression, ExecPlan context, PlanNode left, PlanNode right) {
+            List<OlapScanNode> rightScanNodes = Lists.newArrayList();
+            right.collectAll((Predicate<PlanNode>) node -> node instanceof OlapScanNode, rightScanNodes);
+            if (rightScanNodes.size() != 1) {
+                return true;
+            }
+
+            PhysicalHashJoinOperator joinNode = (PhysicalHashJoinOperator) optExpression.getOp();
+            List<OlapScanNode> leftScanNodes = Lists.newArrayList();
+            left.collectAll((Predicate<PlanNode>) node -> node instanceof OlapScanNode, leftScanNodes);
+
+            ColumnRefSet leftChildColumns = optExpression.getInputs().get(0).getOutputColumns();
+            ColumnRefSet rightChildColumns = optExpression.getInputs().get(1).getOutputColumns();
+            List<BinaryPredicateOperator> equalOnPredicate =
+                    JoinPredicateUtils.getEqConj(leftChildColumns, rightChildColumns,
+                            Utils.extractConjuncts(joinNode.getJoinPredicate()));
+
+            List<Integer> leftOnPredicateColumns = new ArrayList<>();
+            List<Integer> rightOnPredicateColumns = new ArrayList<>();
+            JoinPredicateUtils.getJoinOnPredicatesColumns(equalOnPredicate, leftChildColumns, rightChildColumns,
+                    leftOnPredicateColumns, rightOnPredicateColumns);
+
+            ColocateTableIndex colocateIndex = Catalog.getCurrentColocateIndex();
+            for (OlapScanNode node : leftScanNodes) {
+                if (leftOnPredicateColumns.stream()
+                        .allMatch(s -> null != context.getDescTbl().getTupleDesc(node.getTupleId()).getSlot(s))) {
+                    boolean isColocateGroup = colocateIndex
+                            .isSameGroup(node.getOlapTable().getId(), rightScanNodes.get(0).getOlapTable().getId());
+                    if (node.getOlapTable().getId() == rightScanNodes.get(0).getOlapTable().getId() &&
+                            !isColocateGroup) {
+                        return true;
+                    } else {
+                        return isColocateGroup &&
+                                !colocateIndex.isGroupUnstable(colocateIndex.getGroup(node.getOlapTable().getId()));
+                    }
+                }
+            }
+            return false;
         }
 
         public boolean isShuffleJoin(HashJoinNode node) {

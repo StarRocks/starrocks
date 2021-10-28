@@ -1122,7 +1122,7 @@ public class Coordinator {
                     }
 
                     // 1. Handle replicated scan node if need
-                    boolean isReplicated = isRelicatedFragment(fragment.getPlanRoot());
+                    boolean isReplicated = isReplicatedFragment(fragment.getPlanRoot());
                     if (isReplicated) {
                         for (Integer planNodeId : value.keySet()) {
                             if (!replicateScanIds.contains(planNodeId)) {
@@ -1163,14 +1163,19 @@ public class Coordinator {
         }
 
         boolean childHasColocate = false;
-        for (PlanNode childNode : node.getChildren()) {
-            childHasColocate |= isColocateFragment(childNode);
+        if (node.isReplicated()) {
+            // Only check left if node is replicate join
+            childHasColocate = isColocateFragment(node.getChild(0));
+        } else {
+            for (PlanNode childNode : node.getChildren()) {
+                childHasColocate |= isColocateFragment(childNode);
+            }
         }
 
         return childHasColocate;
     }
 
-    private boolean isRelicatedFragment(PlanNode node) {
+    private boolean isReplicatedFragment(PlanNode node) {
         if (replicateFragmentIds.contains(node.getFragmentId().asInt())) {
             return true;
         }
@@ -1182,7 +1187,7 @@ public class Coordinator {
 
         boolean childHasColocate = false;
         for (PlanNode childNode : node.getChildren()) {
-            childHasColocate |= isRelicatedFragment(childNode);
+            childHasColocate |= isReplicatedFragment(childNode);
         }
 
         return childHasColocate;
@@ -1335,8 +1340,8 @@ public class Coordinator {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
                 boolean hasBucket =
                         isBucketShuffleJoin(scanNode.getFragmentId().asInt(), scanNode.getFragment().getPlanRoot());
-                boolean hasRelicated = isRelicatedFragment(scanNode.getFragment().getPlanRoot());
-                if (assignment.size() > 0 && hasRelicated && scanNode.canDoReplicatedJoin()) {
+                boolean hasReplicated = isReplicatedFragment(scanNode.getFragment().getPlanRoot());
+                if (assignment.size() > 0 && hasReplicated && scanNode.canDoReplicatedJoin()) {
                     BackendSelector selector = new RelicatedBackendSelector(scanNode, locations, assignment);
                     selector.computeScanRangeAssignment();
                     replicateScanIds.add(scanNode.getId().asInt());
