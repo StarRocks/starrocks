@@ -385,17 +385,19 @@ inline Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::s
                 // X in (1,2) and X not in (3) equivalent to X in (1,2)
                 _fixed_values.swap(in_operands);
                 _fixed_op = FILTER_IN;
+            } else if (!in_operands.empty()) {
+                // X in (1, 3) and X not in (3)
+                // --> X in (1)
+                _fixed_values.swap(in_operands);
+                _fixed_op = FILTER_IN;
             } else {
-                if (!in_operands.empty()) {
-                    _fixed_values.swap(in_operands);
-                    _fixed_op = FILTER_IN;
-                } else {
-                    // X in (2) and X not in (2, 3)
-                    // -> false
-                    _fixed_values.clear();
-                    _fixed_op = FILTER_IN;
-                    _empty_range = true;
-                }
+                // X in (2) and X not in (2, 3)
+                // -> false
+                // X in (1, 2) and X not in (1, 2)
+                // -> false
+                _fixed_values.clear();
+                _fixed_op = FILTER_IN;
+                _empty_range = true;
             }
         } else if (is_fixed_value_range()) {
             DCHECK_EQ(FILTER_IN, _fixed_op);
@@ -428,19 +430,19 @@ inline Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::s
                 // X in (1,2,3,4) and X not in (1,3,5,7) equivalent to X in (2,4)
                 _fixed_values.swap(in_operands);
                 _fixed_op = FILTER_IN;
-            } else {
+            } else if (!in_operands.empty()) {
                 // X in (1, 3) and X not in (3)
                 // --> X in (1)
-                if (!in_operands.empty()) {
-                    _fixed_values.swap(in_operands);
-                    _fixed_op = FILTER_IN;
-                } else {
-                    // X in (2) and X not in (2, 3)
-                    // -> false
-                    _fixed_values.clear();
-                    _empty_range = true;
-                    _fixed_op = FILTER_IN;
-                }
+                _fixed_values.swap(in_operands);
+                _fixed_op = FILTER_IN;
+            } else {
+                // X in (2) and X not in (2, 3)
+                // -> false
+                // X in (1, 2) and X not in (1, 2)
+                // -> false
+                _fixed_values.clear();
+                _empty_range = true;
+                _fixed_op = FILTER_IN;
             }
         } else if (is_low_value_mininum() && is_high_value_maximum()) {
             if (!values.empty()) {
