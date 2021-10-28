@@ -126,8 +126,8 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
     return Status::OK();
 }
 
-Status ExchangeMergeSortSourceOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
-    RETURN_IF_ERROR(_sort_exec_exprs->prepare(state, _row_desc, _row_desc, mem_tracker));
+Status ExchangeMergeSortSourceOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(_sort_exec_exprs->prepare(state, _row_desc, _row_desc));
     RETURN_IF_ERROR(_sort_exec_exprs->open(state));
     return Status::OK();
 }

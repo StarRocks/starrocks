@@ -79,16 +79,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
     auto* runtime_state = _fragment_ctx->runtime_state();
 
-    int64_t bytes_limit = query_options.mem_limit;
-    // NOTE: this MemTracker only for olap
-    _fragment_ctx->set_mem_tracker(
-            std::make_unique<MemTracker>(bytes_limit, "fragment mem-limit", exec_env->query_pool_mem_tracker(), true));
-
     runtime_state->set_batch_size(config::vector_chunk_size);
     RETURN_IF_ERROR(runtime_state->init_mem_trackers(query_id));
     runtime_state->set_be_number(backend_num);
-
-    LOG(INFO) << "Using query memory limit: " << PrettyPrinter::print(bytes_limit, TUnit::BYTES);
 
     // Set up desc tbl
     auto* obj_pool = runtime_state->obj_pool();

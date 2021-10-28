@@ -463,10 +463,9 @@ inline static int get_byte_size_of_primitive_type(PrimitiveType type) {
     return 0;
 }
 
-Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state, const RowDescriptor& row_desc,
-                     MemTracker* tracker) {
+Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state, const RowDescriptor& row_desc) {
     for (auto ctx : ctxs) {
-        RETURN_IF_ERROR(ctx->prepare(state, row_desc, tracker));
+        RETURN_IF_ERROR(ctx->prepare(state, row_desc));
     }
     return Status::OK();
 }

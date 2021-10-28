@@ -84,7 +84,7 @@ class RuntimeFilterProbeDescriptor {
 public:
     RuntimeFilterProbeDescriptor() = default;
     Status init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id);
-    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, MemTracker* tracker, RuntimeProfile* p);
+    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p);
     Status open(RuntimeState* state);
     void close(RuntimeState* state);
     int32_t filter_id() const { return _filter_id; }
@@ -101,8 +101,7 @@ public:
         return true;
     }
     PrimitiveType probe_expr_type() const { return _probe_expr_ctx->root()->type().type; }
-    void replace_probe_expr_ctx(RuntimeState* state, const RowDescriptor& row_desc, MemTracker* tracker,
-                                ExprContext* new_probe_expr_ctx);
+    void replace_probe_expr_ctx(RuntimeState* state, const RowDescriptor& row_desc, ExprContext* new_probe_expr_ctx);
     std::string debug_string() const;
     JoinRuntimeFilter::RunningContext* runtime_filter_ctx() { return &_runtime_filter_ctx; }
 
@@ -125,7 +124,7 @@ public:
     RuntimeFilterProbeCollector();
     RuntimeFilterProbeCollector(RuntimeFilterProbeCollector&& that) noexcept;
     size_t size() const { return _descriptors.size(); }
-    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, MemTracker* tracker, RuntimeProfile* p);
+    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p);
     Status open(RuntimeState* state);
     void close(RuntimeState* state);
     void evaluate(vectorized::Chunk* chunk);

@@ -210,10 +210,6 @@ public:
 
     MemTracker* mem_tracker() const { return _mem_tracker.get(); }
 
-    MemTracker* expr_mem_tracker() const { return _expr_mem_tracker.get(); }
-
-    MemPool* expr_mem_pool() { return _expr_mem_pool.get(); }
-
     bool use_vectorized() { return _use_vectorized; }
 
     vectorized::RuntimeFilterProbeCollector& runtime_filter_collector() { return _runtime_filter_collector; }
@@ -298,13 +294,6 @@ protected:
 
     /// Account for peak memory used by this node
     std::shared_ptr<MemTracker> _mem_tracker;
-
-    /// MemTracker used by 'expr_mem_pool_'.
-    std::shared_ptr<MemTracker> _expr_mem_tracker;
-
-    /// MemPool for allocating data structures used by expression evaluators in this node.
-    /// Created in Prepare().
-    std::shared_ptr<MemPool> _expr_mem_pool;
 
     RuntimeProfile::Counter* _rows_returned_counter;
     RuntimeProfile::Counter* _rows_returned_rate;

@@ -193,7 +193,7 @@ public:
 
     static Status from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition);
 
-    Status prepare(RuntimeState* state, const RowDescriptor& row_desc, MemTracker*);
+    Status prepare(RuntimeState* state, const RowDescriptor& row_desc);
 
     Status open(RuntimeState* state);
 

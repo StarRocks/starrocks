@@ -41,8 +41,6 @@ public:
     void set_fe_addr(const TNetworkAddress& fe_addr) { _fe_addr = fe_addr; }
     const TNetworkAddress& fe_addr() { return _fe_addr; }
     FragmentFuture finish_future() { return _finish_promise.get_future(); }
-    MemTracker* mem_tracker() const { return _mem_tracker.get(); }
-    void set_mem_tracker(std::unique_ptr<MemTracker> mem_tracker) { _mem_tracker = std::move(mem_tracker); }
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
     void set_runtime_state(std::shared_ptr<RuntimeState>&& runtime_state) { _runtime_state = std::move(runtime_state); }
     ExecNode* plan() const { return _plan; }
@@ -90,7 +88,7 @@ public:
 
     Status prepare_all_pipelines() {
         for (auto& pipe : _pipelines) {
-            RETURN_IF_ERROR(pipe->prepare(_runtime_state.get(), _mem_tracker.get()));
+            RETURN_IF_ERROR(pipe->prepare(_runtime_state.get()));
         }
         return Status::OK();
     }
@@ -111,9 +109,8 @@ private:
     // promise used to determine whether fragment finished its execution
     FragmentPromise _finish_promise;
 
-    // never adjust the order of _mem_tracker, _runtime_state, _plan, _pipelines and _drivers, since
-    // _plan depends on _runtime_state and _drivers depends on _mem_tracker and _runtime_state.
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    // never adjust the order of _runtime_state, _plan, _pipelines and _drivers, since
+    // _plan depends on _runtime_state and _drivers depends on _runtime_state.
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     Pipelines _pipelines;

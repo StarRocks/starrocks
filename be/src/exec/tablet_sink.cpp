@@ -526,7 +526,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     SCOPED_TIMER(_profile->total_time_counter());
 
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _input_row_desc, _expr_mem_tracker.get()));
+    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _input_row_desc));
 
     // get table's tuple descriptor
     _output_tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_desc_id);
