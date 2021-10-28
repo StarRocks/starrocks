@@ -2,9 +2,12 @@
 
 #include "exec/vectorized/except_node.h"
 
-#include <memory>
-
 #include "column/column_helper.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/set/except_build_sink_operator.h"
+#include "exec/pipeline/set/except_context.h"
+#include "exec/pipeline/set/except_erase_sink_operator.h"
+#include "exec/pipeline/set/except_output_source_operator.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
@@ -76,7 +79,7 @@ Status ExceptNode::open(RuntimeState* state) {
     }
 
     // initial build hash table used for remove duplicted
-    _hash_set = std::make_unique<HashSerializeSet>();
+    _hash_set = std::make_unique<ExceptHashSerializeSet>();
 
     ChunkPtr chunk = nullptr;
     RETURN_IF_ERROR(child(0)->open(state));
@@ -86,10 +89,9 @@ Status ExceptNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(child(0)->get_next(state, &chunk, &eos));
     if (!eos) {
         ScopedTimer<MonotonicStopWatch> build_timer(_build_set_timer);
-        std::vector<ExceptColumnTypes>* types = &_types;
         RETURN_IF_ERROR(_hash_set->build_set(
                 state, chunk, _child_expr_lists[0], _build_pool.get(),
-                [=](const ColumnPtr& column, int i) -> void { (*types)[i].is_nullable = column->is_nullable(); }));
+                [this](const ColumnPtr& column, int i) -> void { _types[i].is_nullable = column->is_nullable(); }));
         while (true) {
             RETURN_IF_CANCELLED(state);
             build_timer.stop();
@@ -106,8 +108,8 @@ Status ExceptNode::open(RuntimeState* state) {
         }
     }
 
-    // if a table is empty, the result must be empty
-    if (_hash_set->hash_set->size() == 0) {
+    // if a table is empty, the result must be empty.
+    if (_hash_set->empty()) {
         _hash_set_iterator = _hash_set->begin();
         return Status::OK();
     }
@@ -124,7 +126,7 @@ Status ExceptNode::open(RuntimeState* state) {
                 continue;
             } else {
                 SCOPED_TIMER(_erase_duplicate_row_timer);
-                RETURN_IF_ERROR(_hash_set->erase_duplicate_row(state, chunk->num_rows(), chunk, _child_expr_lists[i]));
+                RETURN_IF_ERROR(_hash_set->erase_duplicate_row(state, chunk, _child_expr_lists[i]));
             }
         }
         // TODO: optimize, when hash set has no values, direct return
@@ -150,14 +152,15 @@ Status ExceptNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
 
     int32_t read_index = 0;
-    _hash_set->_results.resize(config::vector_chunk_size);
+    _remained_keys.resize(config::vector_chunk_size);
     while (_hash_set_iterator != _hash_set->end() && read_index < config::vector_chunk_size) {
         if (!_hash_set_iterator->deleted) {
-            _hash_set->_results[read_index] = _hash_set_iterator->slice;
+            _remained_keys[read_index] = _hash_set_iterator->slice;
             ++read_index;
         }
         ++_hash_set_iterator;
     }
+
     ChunkPtr result_chunk = std::make_shared<Chunk>();
     if (read_index > 0) {
         Columns result_columns(_types.size());
@@ -169,7 +172,7 @@ Status ExceptNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
         {
             SCOPED_TIMER(_get_result_timer);
-            _hash_set->insert_keys_to_columns(_hash_set->_results, result_columns, read_index);
+            _hash_set->deserialize_to_columns(_remained_keys, result_columns, read_index);
         }
 
         for (size_t i = 0; i < result_columns.size(); i++) {
@@ -208,6 +211,36 @@ Status ExceptNode::close(RuntimeState* state) {
     }
 
     return ExecNode::close(state);
+}
+
+pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    pipeline::ExceptContextPtr except_ctx = std::make_shared<pipeline::ExceptContext>(_tuple_id);
+
+    // Use the first child to build the hast table by ExceptBuildSinkOperator.
+    pipeline::OpFactories operators_with_except_build_sink = child(0)->decompose_to_pipeline(context);
+    // TODO: make ExceptBuildSinkOperator parallelized and remove local exchange.
+    operators_with_except_build_sink = context->maybe_interpolate_local_exchange(operators_with_except_build_sink);
+    operators_with_except_build_sink.emplace_back(std::make_shared<pipeline::ExceptBuildSinkOperatorFactory>(
+            context->next_operator_id(), id(), except_ctx, _child_expr_lists[0]));
+    context->add_pipeline(operators_with_except_build_sink);
+
+    // Use the rest children to erase keys from the hast table by ExceptEraseSinkOperator.
+    for (size_t i = 1; i < _children.size(); i++) {
+        pipeline::OpFactories operators_with_except_erase_sink = child(i)->decompose_to_pipeline(context);
+        operators_with_except_erase_sink.emplace_back(std::make_shared<pipeline::ExceptEraseSinkOperatorFactory>(
+                context->next_operator_id(), id(), except_ctx, _child_expr_lists[i]));
+        context->add_pipeline(operators_with_except_erase_sink);
+    }
+
+    // ExceptOutputSourceOperator is used to assemble the undeleted keys to output chunks.
+    pipeline::OpFactories operators_with_except_output_source;
+    auto except_output_source = std::make_shared<pipeline::ExceptOutputSourceOperatorFactory>(
+            context->next_operator_id(), id(), except_ctx);
+    // TODO: make ExceptOutputSourceOperator parallelized.
+    except_output_source->set_degree_of_parallelism(1);
+    operators_with_except_output_source.emplace_back(std::move(except_output_source));
+
+    return operators_with_except_output_source;
 }
 
 } // namespace starrocks::vectorized
