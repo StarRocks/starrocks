@@ -33,6 +33,12 @@ public:
 
     void set_iterator(std::shared_ptr<ChunkIterator> iterator) { _inner_iter = std::move(iterator); }
 
+    virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) {
+        _inner_iter->init_encoded_schema(dict_maps);
+        ChunkIterator::init_encoded_schema(dict_maps);
+        return Status::OK();
+    }
+
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override;

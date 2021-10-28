@@ -4,6 +4,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "gutil/casts.h"
 
 namespace starrocks {
 class Expr;
