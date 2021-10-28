@@ -4097,11 +4097,10 @@ public class Catalog {
                 for (Long tabletId : tabletIdSet) {
                     Catalog.getCurrentInvertedIndex().deleteTablet(tabletId);
                 }
-
-                // only remove from memory, because we have not persist it
-                if (getColocateTableIndex().isColocateTable(tableId) && !addToColocateGroupSuccess) {
-                    getColocateTableIndex().removeTable(tableId);
-                }
+            }
+            // only remove from memory, because we have not persist it
+            if (getColocateTableIndex().isColocateTable(tableId) && !addToColocateGroupSuccess) {
+                getColocateTableIndex().removeTable(tableId);
             }
         }
     }
