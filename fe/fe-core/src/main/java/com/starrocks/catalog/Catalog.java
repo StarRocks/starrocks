@@ -4013,7 +4013,8 @@ public class Catalog {
         // if failed in any step, use this set to do clear things
         Set<Long> tabletIdSet = new HashSet<Long>();
 
-        boolean createSuccess = false;
+        boolean createTblSuccess = false;
+        boolean addToColocateGroupSuccess = false;
         // create partition
         try {
             // do not create partition for external table
@@ -4064,8 +4065,8 @@ public class Catalog {
                 if (getDb(db.getFullName()) == null) {
                     throw new DdlException("database has been dropped when creating table");
                 }
-                createSuccess = db.createTableWithLock(olapTable, false);
-                if (!createSuccess) {
+                createTblSuccess = db.createTableWithLock(olapTable, false);
+                if (!createTblSuccess) {
                     if (!stmt.isSetIfNotExists()) {
                         ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
                     } else {
@@ -4084,6 +4085,7 @@ public class Catalog {
                 ColocatePersistInfo info =
                         ColocatePersistInfo.createForAddTable(groupId, tableId, backendsPerBucketSeq);
                 editLog.logColocateAddTable(info);
+                addToColocateGroupSuccess = true;
             }
             LOG.info("successfully create table[{};{}]", tableName, tableId);
             // register or remove table from DynamicPartition after table created
@@ -4091,13 +4093,13 @@ public class Catalog {
             dynamicPartitionScheduler.createOrUpdateRuntimeInfo(
                     tableName, DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
         } finally {
-            if (!createSuccess) {
+            if (!createTblSuccess) {
                 for (Long tabletId : tabletIdSet) {
                     Catalog.getCurrentInvertedIndex().deleteTablet(tabletId);
                 }
 
                 // only remove from memory, because we have not persist it
-                if (getColocateTableIndex().isColocateTable(tableId)) {
+                if (getColocateTableIndex().isColocateTable(tableId) && !addToColocateGroupSuccess) {
                     getColocateTableIndex().removeTable(tableId);
                 }
             }
