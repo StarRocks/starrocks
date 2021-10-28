@@ -51,10 +51,6 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-1:Project
-|  <slot 4> : 1
-|  use vectorized: true
-|
 0:EMPTYSET
 use vectorized: true
 [end]
