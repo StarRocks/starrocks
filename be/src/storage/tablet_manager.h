@@ -131,12 +131,13 @@ public:
     void unregister_clone_tablet(int64_t tablet_id);
 
 private:
-    using tablet_map_t = std::unordered_map<int64_t, TabletSharedPtr>;
+    using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
+    using TabletSet = std::unordered_set<int64_t>;
 
-    struct tablets_shard {
+    struct TabletsShard {
         mutable std::shared_mutex lock;
-        tablet_map_t tablet_map;
-        std::set<int64_t> tablets_under_clone;
+        TabletMap tablet_map;
+        TabletSet tablets_under_clone;
     };
 
     class LockTable {
@@ -190,13 +191,13 @@ private:
 
     std::shared_mutex& _get_tablets_shard_lock(TTabletId tabletId);
 
-    tablet_map_t& _get_tablet_map(TTabletId tablet_id);
+    TabletMap& _get_tablet_map(TTabletId tablet_id);
 
-    tablets_shard& _get_tablets_shard(TTabletId tabletId);
+    TabletsShard& _get_tablets_shard(TTabletId tabletId);
 
     MemTracker* _mem_tracker = nullptr;
 
-    std::vector<tablets_shard> _tablets_shards;
+    std::vector<TabletsShard> _tablets_shards;
     const int32_t _tablets_shards_mask;
     LockTable _schema_change_lock_tbl;
 

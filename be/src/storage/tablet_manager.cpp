@@ -114,7 +114,7 @@ Status TabletManager::_update_tablet_map_and_partition_info(const TabletSharedPt
     // the perspective of root path.
     // Example: unregister all tables when a bad disk found.
     tablet->register_tablet_into_dir();
-    tablet_map_t& tablet_map = _get_tablet_map(tablet->tablet_id());
+    TabletMap& tablet_map = _get_tablet_map(tablet->tablet_id());
     auto [it, inserted] = tablet_map.emplace(tablet->tablet_id(), tablet);
     if (!inserted) {
         return Status::InternalError(fmt::format("tablet {} already exist in map", tablet->tablet_id()));
@@ -124,7 +124,7 @@ Status TabletManager::_update_tablet_map_and_partition_info(const TabletSharedPt
 }
 
 bool TabletManager::_check_tablet_id_exist_unlocked(TTabletId tablet_id) {
-    tablet_map_t& tablet_map = _get_tablet_map(tablet_id);
+    TabletMap& tablet_map = _get_tablet_map(tablet_id);
     return tablet_map.count(tablet_id) > 0;
 }
 
@@ -452,7 +452,7 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
                 LOG(WARNING) << "dropping tablet not exist. tablet_id=" << tablet_id;
                 continue;
             } else {
-                tablet_map_t& tablet_map = _get_tablet_map(tablet_id);
+                TabletMap& tablet_map = _get_tablet_map(tablet_id);
                 _remove_tablet_from_partition(*dropped_tablet);
                 tablet_map.erase(tablet_id);
             }
@@ -870,7 +870,7 @@ Status TabletManager::start_trash_sweep() {
         // we use this vector to save all tablet ptr for saving lock time.
         std::vector<TabletSharedPtr> all_tablets;
         for (auto& tablets_shard : _tablets_shards) {
-            tablet_map_t& tablet_map = tablets_shard.tablet_map;
+            TabletMap& tablet_map = tablets_shard.tablet_map;
             {
                 std::shared_lock rlock(tablets_shard.lock);
                 for (auto& [tablet_id, tablet] : tablet_map) {
@@ -984,7 +984,7 @@ void TabletManager::register_clone_tablet(int64_t tablet_id) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    tablets_shard& shard = _get_tablets_shard(tablet_id);
+    TabletsShard& shard = _get_tablets_shard(tablet_id);
     std::unique_lock wlock(shard.lock);
     shard.tablets_under_clone.insert(tablet_id);
 }
@@ -993,7 +993,7 @@ void TabletManager::unregister_clone_tablet(int64_t tablet_id) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    tablets_shard& shard = _get_tablets_shard(tablet_id);
+    TabletsShard& shard = _get_tablets_shard(tablet_id);
     std::unique_lock wlock(shard.lock);
     shard.tablets_under_clone.erase(tablet_id);
 }
@@ -1005,7 +1005,7 @@ void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId t
 
     // acquire the read lock, so that there is no creating tablet or load tablet from meta tasks
     // create tablet and load tablet task should check whether the dir exists
-    tablets_shard& shard = _get_tablets_shard(tablet_id);
+    TabletsShard& shard = _get_tablets_shard(tablet_id);
     std::shared_lock rlock(shard.lock);
 
     // check if meta already exists
@@ -1034,7 +1034,7 @@ void TabletManager::try_delete_unused_tablet_path(DataDir* data_dir, TTabletId t
 
 bool TabletManager::try_schema_change_lock(TTabletId tablet_id) {
     std::shared_lock rlock(_get_tablets_shard_lock(tablet_id));
-    tablet_map_t& tablet_map = _get_tablet_map(tablet_id);
+    TabletMap& tablet_map = _get_tablet_map(tablet_id);
     auto it = tablet_map.find(tablet_id);
     if (it == tablet_map.end()) {
         LOG(WARNING) << "Fail to lock nonexistent tablet_id=" << tablet_id;
@@ -1223,7 +1223,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
 }
 
 Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, bool keep_state) {
-    tablet_map_t& tablet_map = _get_tablet_map(tablet_id);
+    TabletMap& tablet_map = _get_tablet_map(tablet_id);
     auto it = tablet_map.find(tablet_id);
     if (it == tablet_map.end()) {
         LOG(WARNING) << "Fail to drop nonexistent tablet " << tablet_id;
@@ -1253,7 +1253,7 @@ Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, bool k
 }
 
 TabletSharedPtr TabletManager::_get_tablet_unlocked(TTabletId tablet_id) {
-    tablet_map_t& tablet_map = _get_tablet_map(tablet_id);
+    TabletMap& tablet_map = _get_tablet_map(tablet_id);
     auto it = tablet_map.find(tablet_id);
     return it != tablet_map.end() ? it->second : nullptr;
 }
@@ -1275,11 +1275,11 @@ std::shared_mutex& TabletManager::_get_tablets_shard_lock(TTabletId tabletId) {
     return _get_tablets_shard(tabletId).lock;
 }
 
-TabletManager::tablet_map_t& TabletManager::_get_tablet_map(TTabletId tabletId) {
+TabletManager::TabletMap& TabletManager::_get_tablet_map(TTabletId tabletId) {
     return _get_tablets_shard(tabletId).tablet_map;
 }
 
-TabletManager::tablets_shard& TabletManager::_get_tablets_shard(TTabletId tabletId) {
+TabletManager::TabletsShard& TabletManager::_get_tablets_shard(TTabletId tabletId) {
     return _tablets_shards[tabletId & _tablets_shards_mask];
 }
 
