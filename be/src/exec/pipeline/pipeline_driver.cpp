@@ -36,6 +36,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
     size_t total_chunks_moved = 0;
     int64_t time_spent = 0;
     while (true) {
+        RETURN_IF_LIMIT_EXCEEDED(runtime_state, "Pipeline");
+
         size_t num_chunk_moved = 0;
         bool should_yield = false;
         size_t num_operators = _operators.size();

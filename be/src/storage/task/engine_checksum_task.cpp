@@ -114,6 +114,14 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
     bool eof = false;
     uint32_t row_checksum = 0;
     while (true) {
+#ifndef BE_TEST
+        Status st = _mem_tracker->check_mem_limit("ConsistencyCheck");
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to finish compute checksum. " << st.message() << std::endl;
+            return OLAP_ERR_OTHER_ERROR;
+        }
+#endif
+
         OLAPStatus res = reader.next_row_with_aggregation(&row, mem_pool.get(), agg_object_pool.get(), &eof);
         if (res == OLAP_SUCCESS && eof) {
             VLOG(3) << "reader reads to the end.";
