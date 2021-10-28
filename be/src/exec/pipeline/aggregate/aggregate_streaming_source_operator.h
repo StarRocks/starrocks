@@ -34,17 +34,19 @@ private:
 
 class AggregateStreamingSourceOperatorFactory final : public SourceOperatorFactory {
 public:
-    AggregateStreamingSourceOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
+    AggregateStreamingSourceOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorFactoryPtr aggregator_factory)
             : SourceOperatorFactory(id, "aggregate_streaming_source", plan_node_id),
-              _aggregator(std::move(aggregator)) {}
+              _aggregator_factory(std::move(aggregator_factory)) {}
 
     ~AggregateStreamingSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<AggregateStreamingSourceOperator>(_id, _plan_node_id, _aggregator);
+        return std::make_shared<AggregateStreamingSourceOperator>(
+                _id, _plan_node_id, _aggregator_factory->get_or_create(_aggregator_idx++));
     }
 
 private:
-    AggregatorPtr _aggregator = nullptr;
+    AggregatorFactoryPtr _aggregator_factory = nullptr;
+    size_t _aggregator_idx = 0;
 };
 } // namespace starrocks::pipeline

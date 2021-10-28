@@ -14,7 +14,7 @@ AggregateBaseNode::~AggregateBaseNode() = default;
 
 Status AggregateBaseNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    _aggregator = std::make_shared<Aggregator>(_tnode, child(0)->row_desc());
+    _aggregator = std::make_shared<Aggregator>(_tnode);
     return _aggregator->prepare(state, _pool, mem_tracker(), expr_mem_tracker(), runtime_profile());
 }
 
