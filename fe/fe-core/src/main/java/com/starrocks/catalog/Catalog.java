@@ -4078,6 +4078,8 @@ public class Catalog {
                 unlock();
             }
 
+            // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
+
             // we have added these index to memory, only need to persist here
             if (getColocateTableIndex().isColocateTable(tableId)) {
                 GroupId groupId = getColocateTableIndex().getGroup(tableId);
