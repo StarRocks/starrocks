@@ -144,7 +144,7 @@ static EncodingTypePB convertEncodingType(TEncodingType::type encoding_type) {
         return EncodingTypePB::PLAIN_ENCODING;
     case TEncodingType::PREFIX_ENCODING:
         return EncodingTypePB::PREFIX_ENCODING;
-    case TEncodingType::RLE:
+    case TEncodingType::RLE_ENCODING:
         return EncodingTypePB::RLE;
     case TEncodingType::DICT_ENCODING:
         return EncodingTypePB::DICT_ENCODING;
@@ -182,8 +182,6 @@ static CompressionTypePB convertCompressionType(TCompressionType::type compressi
         return CompressionTypePB::DEFLATE;
     case TCompressionType::BZIP2:
         return CompressionTypePB::BZIP2;
-    case TCompressionType::LZO:
-        return CompressionTypePB::LZO;
     default:
         return CompressionTypePB::DEFAULT_COMPRESSION;
     }

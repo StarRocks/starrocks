@@ -428,7 +428,6 @@ enum TCompressionType {
     GZIP = 8;
     DEFLATE = 9;
     BZIP2 = 10;
-    LZO = 11; // Deprecated
 }
 
 enum TEncodingType {
@@ -436,7 +435,7 @@ enum TEncodingType {
     DEFAULT_ENCODING,
     PLAIN_ENCODING,
     PREFIX_ENCODING,
-    RLE,
+    RLE_ENCODING,
     DICT_ENCODING,
     BIT_SHUFFLE,
     FOR_ENCODING
