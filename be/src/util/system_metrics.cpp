@@ -331,7 +331,7 @@ void SystemMetrics::_update_memory_metrics() {
         _memory_metrics->snapshot_mem_bytes.set_value(ExecEnv::GetInstance()->snapshot_mem_tracker()->consumption());
     }
     if (ExecEnv::GetInstance()->page_cache_mem_tracker() != nullptr) {
-        _memory_metrics->page_cache_mem_bytes.set_value(
+        _memory_metrics->storage_page_cache_mem_bytes.set_value(
                 ExecEnv::GetInstance()->page_cache_mem_tracker()->consumption());
     }
     if (ExecEnv::GetInstance()->update_mem_tracker() != nullptr) {
