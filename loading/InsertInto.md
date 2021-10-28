@@ -1,7 +1,7 @@
 # Insert Into 导入
 
 Insert Into 语句的使用方式和 MySQL 等数据库中 Insert Into 语句的使用方式类似。
-但在 StarRocks 中，所有的数据写入都是 ***一个独立的导入作业*** ，所以这里将 Insert Into 也作为一种导入方式介绍。
+但在 StarRocks 中，所有的数据写入都是 **一个独立的导入作业** ，所以这里将 Insert Into 也作为一种导入方式介绍。
 
 ---
 

@@ -37,7 +37,7 @@
 
     ```SQL
     ALTER DATABASE example_db SET DATA QUOTA 10995116277760;
-    上述单位为字节,等价于
+    -- 上述单位为字节,等价于下面的语句
     ALTER DATABASE example_db SET DATA QUOTA 10T;
 
     ALTER DATABASE example_db SET DATA QUOTA 100G;
