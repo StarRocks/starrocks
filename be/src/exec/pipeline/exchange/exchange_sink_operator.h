@@ -135,14 +135,7 @@ public:
     ExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id, std::shared_ptr<SinkBuffer> buffer,
                                 TPartitionType::type part_type,
                                 const std::vector<TPlanFragmentDestination>& destinations, int sender_id,
-                                PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs)
-            : OperatorFactory(id, "exchange_sink", plan_node_id),
-              _buffer(std::move(buffer)),
-              _part_type(part_type),
-              _destinations(destinations),
-              _sender_id(sender_id),
-              _dest_node_id(dest_node_id),
-              _partition_expr_ctxs(std::move(partition_expr_ctxs)) {}
+                                PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs);
 
     ~ExchangeSinkOperatorFactory() override = default;
 

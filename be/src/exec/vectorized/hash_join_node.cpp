@@ -9,6 +9,10 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/hashjoin/hash_join_build_operator.h"
+#include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/vectorized/hash_joiner.h"
 #include "exprs/expr.h"
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
@@ -20,7 +24,9 @@
 namespace starrocks::vectorized {
 
 HashJoinNode::HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs), _join_type(tnode.hash_join_node.join_op) {
+        : ExecNode(pool, tnode, descs),
+          _hash_join_node(tnode.hash_join_node),
+          _join_type(tnode.hash_join_node.join_op) {
     _is_push_down = tnode.hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && tnode.hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
@@ -335,6 +341,29 @@ Status HashJoinNode::close(RuntimeState* state) {
     _ht.close();
 
     return ExecNode::close(state);
+}
+
+pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    auto hash_joiner = std::make_unique<HashJoiner>(_hash_join_node, _id, _type, limit(), std::move(_is_null_safes),
+                                                    std::move(_build_expr_ctxs), std::move(_probe_expr_ctxs),
+                                                    std::move(_other_join_conjunct_ctxs), std::move(_conjunct_ctxs),
+                                                    child(1)->row_desc(), child(0)->row_desc(), _row_descriptor);
+    auto build_op = std::make_shared<pipeline::HashJoinBuildOperatorFactory>(context->next_operator_id(), id(),
+                                                                             hash_joiner.get());
+    // HashJoinProbeOperatorFactory holds the ownership of HashJoiner object.
+    auto probe_op = std::make_shared<pipeline::HashJoinProbeOperatorFactory>(context->next_operator_id(), id(),
+                                                                             std::move(hash_joiner));
+    auto rhs_operators = child(1)->decompose_to_pipeline(context);
+    auto lhs_operators = child(0)->decompose_to_pipeline(context);
+    // Up to now, both HashJoin{Build, Probe}Operator is not parallelized, so add LocalExchangeOperator
+    // to merge multi-stream into one stream then pipe into HashJoin{Build, Probe}Operator.
+    auto operators_with_build_op = context->maybe_interpolate_local_exchange(rhs_operators);
+    auto operators_with_probe_op = context->maybe_interpolate_local_exchange(lhs_operators);
+    // add build-side pipeline to context and return probe-side pipeline.
+    operators_with_build_op.emplace_back(std::move(build_op));
+    context->add_pipeline(operators_with_build_op);
+    operators_with_probe_op.emplace_back(std::move(probe_op));
+    return operators_with_probe_op;
 }
 
 bool HashJoinNode::_has_null(const ColumnPtr& column) {

@@ -31,6 +31,7 @@ public:
     Status get_next(RuntimeState* state, RowBatch* row_batch, bool* eos) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
     Status close(RuntimeState* state) override;
+    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     static bool _has_null(const ColumnPtr& column);
@@ -69,7 +70,9 @@ private:
     static std::string _get_join_type_str(TJoinOp::type join_type);
 
     friend ExecNode;
-
+    // _hash_join_node is used to construct HashJoiner, the reference is sound since
+    // it's only used in FragmentExecutor::prepare function.
+    const THashJoinNode& _hash_join_node;
     std::vector<ExprContext*> _probe_expr_ctxs;
     std::vector<ExprContext*> _build_expr_ctxs;
     std::vector<ExprContext*> _other_join_conjunct_ctxs;
