@@ -90,9 +90,7 @@ static std::string to_datetime_string(uint64_t& datetime_value) {
 #define TEST_PREDICATE_DEFINITION(CLASS_NAME)                                                                     \
     class CLASS_NAME : public testing::Test {                                                                     \
     public:                                                                                                       \
-        CLASS_NAME() : _vectorized_batch(NULL) {                                                                  \
-            _mem_pool.reset(new MemPool());                                                     \
-        }                                                                                                         \
+        CLASS_NAME() : _vectorized_batch(NULL) { _mem_pool.reset(new MemPool()); }                                \
         ~CLASS_NAME() {                                                                                           \
             if (_vectorized_batch != NULL) {                                                                      \
                 delete _vectorized_batch;                                                                         \

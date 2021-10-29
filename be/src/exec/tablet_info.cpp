@@ -164,9 +164,7 @@ std::string OlapTablePartition::debug_string(TupleDescriptor* tuple_desc) const 
 
 OlapTablePartitionParam::OlapTablePartitionParam(std::shared_ptr<OlapTableSchemaParam> schema,
                                                  const TOlapTablePartitionParam& t_param)
-        : _schema(std::move(schema)),
-          _t_param(t_param),
-          _mem_pool(new MemPool()) {}
+        : _schema(std::move(schema)), _t_param(t_param), _mem_pool(new MemPool()) {}
 
 OlapTablePartitionParam::~OlapTablePartitionParam() = default;
 

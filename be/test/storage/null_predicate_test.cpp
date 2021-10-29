@@ -58,9 +58,7 @@ static uint64_t to_datetime_timestamp(const std::string& value_string) {
 
 class TestNullPredicate : public testing::Test {
 public:
-    TestNullPredicate() : _vectorized_batch(NULL) {
-        _mem_pool.reset(new MemPool());
-    }
+    TestNullPredicate() : _vectorized_batch(NULL) { _mem_pool.reset(new MemPool()); }
 
     ~TestNullPredicate() {
         if (_vectorized_batch != NULL) {

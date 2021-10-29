@@ -89,9 +89,7 @@ static std::string to_datetime_string(uint64_t& datetime_value) {
 
 class TestInListPredicate : public testing::Test {
 public:
-    TestInListPredicate() : _vectorized_batch(NULL) {
-        _mem_pool.reset(new MemPool());
-    }
+    TestInListPredicate() : _vectorized_batch(NULL) { _mem_pool.reset(new MemPool()); }
 
     ~TestInListPredicate() {
         if (_vectorized_batch != NULL) {

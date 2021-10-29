@@ -263,9 +263,7 @@ private:
     SkipList<Key, TestComparator> _list;
 
 public:
-    ConcurrentTest()
-            : _mem_pool(new MemPool()),
-              _list(TestComparator(), _mem_pool.get(), false) {}
+    ConcurrentTest() : _mem_pool(new MemPool()), _list(TestComparator(), _mem_pool.get(), false) {}
 
     // REQUIRES: External synchronization
     void write_step(Random* rnd) {
