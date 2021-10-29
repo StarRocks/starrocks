@@ -21,7 +21,7 @@ public class DecimalV3FunctionAnalyzer {
 
     public static final Set<String> DECIMAL_IDENTICAL_TYPE_FUNCTION_SET =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
-                    .add("least").add("greatest").add("nullif").add("ifnull").add("coalesce").build();
+                    .add("least").add("greatest").add("nullif").add("ifnull").add("coalesce").add("mod").build();
 
     public static final Set<String> DECIMAL_AGG_FUNCTION_SAME_TYPE =
             new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
