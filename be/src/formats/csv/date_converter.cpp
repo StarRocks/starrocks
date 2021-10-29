@@ -5,7 +5,7 @@
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 
 namespace starrocks::vectorized::csv {
 

@@ -5,6 +5,7 @@
 
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "gutil/map_util.h"
+#include "runtime/date_value.hpp"
 #include "storage/vectorized/column_predicate.h"
 #include "storage/vectorized/predicate_parser.h"
 
