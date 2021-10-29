@@ -37,6 +37,7 @@
 #include "service/brpc.h"
 #include "util/thrift_util.h"
 #include "util/uid_util.h"
+#include "util/exception.h"
 
 namespace starrocks {
 
@@ -144,13 +145,15 @@ template <typename T>
 void PInternalServiceImpl<T>::exec_plan_fragment(google::protobuf::RpcController* cntl_base,
                                                  const PExecPlanFragmentRequest* request,
                                                  PExecPlanFragmentResult* response, google::protobuf::Closure* done) {
-    brpc::ClosureGuard closure_guard(done);
-    brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
-    auto st = _exec_plan_fragment(cntl);
-    if (!st.ok()) {
-        LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.get_error_msg();
-    }
-    st.to_protobuf(response->mutable_status());
+    try {
+        brpc::ClosureGuard closure_guard(done);
+        brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
+        auto st = _exec_plan_fragment(cntl);
+        if (!st.ok()) {
+            LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.get_error_msg();
+        }
+        st.to_protobuf(response->mutable_status());
+    } catch (...) {}
 }
 
 template <typename T>
@@ -238,19 +241,25 @@ Status PInternalServiceImpl<T>::_exec_plan_fragment(brpc::Controller* cntl) {
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
     }
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
-    LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
-              << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num << " is_pipeline "
-              << is_pipeline;
-    if (is_pipeline) {
-        auto fragment_executor = std::make_unique<starrocks::pipeline::FragmentExecutor>();
-        auto status = fragment_executor->prepare(_exec_env, t_request);
-        if (status.ok()) {
-            return fragment_executor->execute(_exec_env);
+    try {
+        LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
+                  << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num << " is_pipeline "
+                  << is_pipeline;
+        if (is_pipeline) {
+            auto fragment_executor = std::make_unique<starrocks::pipeline::FragmentExecutor>();
+            auto status = fragment_executor->prepare(_exec_env, t_request);
+            if (status.ok()) {
+                return fragment_executor->execute(_exec_env);
+            } else {
+                return status.is_duplicate_rpc_invocation() ? Status::OK() : status;
+            }
         } else {
-            return status.is_duplicate_rpc_invocation() ? Status::OK() : status;
+            return _exec_env->fragment_mgr()->exec_plan_fragment(t_request);
         }
-    } else {
-        return _exec_env->fragment_mgr()->exec_plan_fragment(t_request);
+    } catch (Exception& e) {
+        char msg[256];
+        snprintf(msg, 256, "query exception, fragment_instance_id=%s", print_id_nothrow(t_request.params.fragment_instance_id).c_str());
+        return Status::InternalError("Caught exception");
     }
 }
 

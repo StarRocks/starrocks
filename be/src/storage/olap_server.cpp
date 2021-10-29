@@ -33,6 +33,7 @@
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 #include "storage/vectorized/compaction.h"
+#include "util/exception.h"
 #include "util/time.h"
 
 using std::string;
@@ -191,7 +192,11 @@ void* StorageEngine::_base_compaction_thread_callback(void* arg, DataDir* data_d
     while (!_stop_bg_worker) {
         // must be here, because this thread is start on start and
         if (!data_dir->reach_capacity_limit(0)) {
-            status = _perform_base_compaction(data_dir);
+            try {
+                status = _perform_base_compaction(data_dir);
+            } catch (Exception &e) {
+                e.log("base compaction");
+            }
         }
         if (status.ok()) {
             continue;
