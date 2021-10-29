@@ -236,7 +236,7 @@ public class JoinPredicateUtils {
         for (BinaryPredicateOperator binaryPredicate : equalOnPredicates) {
             ColumnRefSet leftUsedColumns = binaryPredicate.getChild(0).getUsedColumns();
             ColumnRefSet rightUsedColumns = binaryPredicate.getChild(1).getUsedColumns();
-            // TODO we do not support equalOnPredicate have multi columns in left or right
+            // Join on expression had pushed down to project node, so there must be one column
             if (leftUsedColumns.cardinality() > 1 || rightUsedColumns.cardinality() > 1) {
                 throw new StarRocksPlannerException(
                         "we do not support equal on predicate have multi columns in left or right",

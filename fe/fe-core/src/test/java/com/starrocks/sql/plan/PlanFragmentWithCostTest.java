@@ -625,6 +625,30 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     }
 
     @Test
+    public void testSemiJoinPushDownPredicate() throws Exception {
+        String sql  = "select * from t0 left semi join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 1, 2: v2 = 2"));
+        Assert.assertTrue(plan.contains("TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 5: v5 = 2, 4: v4 = 1"));
+    }
+
+    @Test
+    public void testOuterJoinPushDownPredicate() throws Exception {
+        String sql  = "select * from t0 left outer join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/1"));
+        Assert.assertTrue(plan.contains("TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 5: v5 = 2, 4: v4 = 1"));
+    }
+
+    @Test
     public void testIntersectReorder() throws Exception {
         // check cross join generate plan without exception
         Catalog catalog = connectContext.getCatalog();
