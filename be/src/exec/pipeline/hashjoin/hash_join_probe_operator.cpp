@@ -44,8 +44,8 @@ HashJoinProbeOperatorFactory::HashJoinProbeOperatorFactory(int32_t id, int32_t p
                                                            std::unique_ptr<HashJoiner>&& hash_joiner)
         : OperatorFactory(id, "hash_join_probe", plan_node_id), _hash_joiner(std::move(hash_joiner)) {}
 
-Status HashJoinProbeOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
-    return OperatorFactory::prepare(state, mem_tracker);
+Status HashJoinProbeOperatorFactory::prepare(RuntimeState* state) {
+    return OperatorFactory::prepare(state);
 }
 void HashJoinProbeOperatorFactory::close(RuntimeState* state) {
     OperatorFactory::close(state);
