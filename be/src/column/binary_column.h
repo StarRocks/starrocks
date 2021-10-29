@@ -79,6 +79,8 @@ public:
 
     size_t size() const override { return _offsets.size() - 1; }
 
+    size_t capacity() const override { return _offsets.capacity() - 1; }
+
     size_t type_size() const override { return sizeof(Slice); }
 
     size_t byte_size() const override { return _bytes.size() * sizeof(uint8_t) + _offsets.size() * sizeof(Offset); }
