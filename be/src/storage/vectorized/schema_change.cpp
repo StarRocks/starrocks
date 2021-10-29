@@ -361,7 +361,6 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
                     new_col = base_col;
                 }
             } else if (ConvertTypeResolver::instance()->get_convert_type_info(ref_type, new_type)) {
-                LOG(INFO) << "src type is " << ref_type << ", new type is " << new_type;
                 auto converter = vectorized::get_type_converter(ref_type, new_type);
                 if (converter == nullptr) {
                     LOG(WARNING) << "failed to get type converter, from_type=" << ref_type << ", to_type" << new_type;
@@ -1234,8 +1233,6 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
 
         VLOG(10) << "succeed to convert a history version."
                  << " version=" << sc_params.version.first << "-" << sc_params.version.second;
-        // XXX: The SchemaChange state should not be cancelled at this point,
-        // because the new Delta has to be converted to the old and new Schema versions
     }
 
     if (status.ok()) {
