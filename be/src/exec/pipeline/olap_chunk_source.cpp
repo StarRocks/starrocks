@@ -20,9 +20,10 @@ namespace starrocks::pipeline {
 using namespace vectorized;
 Status OlapChunkSource::prepare(RuntimeState* state) {
     _runtime_state = state;
-    _scan_profile = state->runtime_profile();
     const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
     _slots = &tuple_desc->slots();
+
+    _init_counter(state);
 
     OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status);
     OlapScanConjunctsManager& cm = _conjuncts_manager;
@@ -48,6 +49,45 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     // 5. Init olap reader
     RETURN_IF_ERROR(_init_olap_reader(_runtime_state));
     return Status::OK();
+}
+
+void OlapChunkSource::_init_counter(RuntimeState* state) {
+    _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
+    _scan_profile = _runtime_profile->create_child("SCAN", true, false);
+
+    _create_seg_iter_timer = ADD_TIMER(_scan_profile, "CreateSegmentIter");
+
+    _read_compressed_counter = ADD_COUNTER(_scan_profile, "CompressedBytesRead", TUnit::BYTES);
+    _read_uncompressed_counter = ADD_COUNTER(_scan_profile, "UncompressedBytesRead", TUnit::BYTES);
+
+    _raw_rows_counter = ADD_COUNTER(_scan_profile, "RawRowsRead", TUnit::UNIT);
+    _total_pages_num_counter = ADD_COUNTER(_scan_profile, "TotalPagesNum", TUnit::UNIT);
+    _cached_pages_num_counter = ADD_COUNTER(_scan_profile, "CachedPagesNum", TUnit::UNIT);
+    _pushdown_predicates_counter = ADD_COUNTER(_scan_profile, "PushdownPredicates", TUnit::UNIT);
+
+    // SegmentInit
+    _seg_init_timer = ADD_TIMER(_scan_profile, "SegmentInit");
+    _bi_filter_timer = ADD_CHILD_TIMER(_scan_profile, "BitmapIndexFilter", "SegmentInit");
+    _bi_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BitmapIndexFilterRows", TUnit::UNIT, "SegmentInit");
+    _bf_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BloomFilterFilterRows", TUnit::UNIT, "SegmentInit");
+    _zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, "SegmentInit");
+    _sk_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
+
+    // SegmentRead
+    _block_load_timer = ADD_TIMER(_scan_profile, "SegmentRead");
+    _block_fetch_timer = ADD_CHILD_TIMER(_scan_profile, "BlockFetch", "SegmentRead");
+    _block_load_counter = ADD_CHILD_COUNTER(_scan_profile, "BlockFetchCount", TUnit::UNIT, "SegmentRead");
+    _block_seek_timer = ADD_CHILD_TIMER(_scan_profile, "BlockSeek", "SegmentRead");
+    _block_seek_counter = ADD_CHILD_COUNTER(_scan_profile, "BlockSeekCount", TUnit::UNIT, "SegmentRead");
+    _pred_filter_timer = ADD_CHILD_TIMER(_scan_profile, "PredFilter", "SegmentRead");
+    _pred_filter_counter = ADD_CHILD_COUNTER(_scan_profile, "PredFilterRows", TUnit::UNIT, "SegmentRead");
+    _del_vec_filter_counter = ADD_CHILD_COUNTER(_scan_profile, "DelVecFilterRows", TUnit::UNIT, "SegmentRead");
+    _chunk_copy_timer = ADD_CHILD_TIMER(_scan_profile, "ChunkCopy", "SegmentRead");
+    _decompress_timer = ADD_CHILD_TIMER(_scan_profile, "DecompressT", "SegmentRead");
+    _index_load_timer = ADD_CHILD_TIMER(_scan_profile, "IndexLoad", "SegmentRead");
+
+    // IOTime
+    _io_timer = ADD_TIMER(_scan_profile, "IOTime");
 }
 
 Status OlapChunkSource::_build_scan_range(RuntimeState* state) {
@@ -257,10 +297,70 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
 }
 
 Status OlapChunkSource::close(RuntimeState* state) {
+    _update_counter();
     _prj_iter->close();
     _reader.reset();
     _predicate_free_pool.clear();
     return Status::OK();
+}
+
+void OlapChunkSource::_update_counter() {
+    COUNTER_UPDATE(_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);
+    // COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
+
+    COUNTER_UPDATE(_io_timer, _reader->stats().io_ns);
+    COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
+    _compressed_bytes_read += _reader->stats().compressed_bytes_read;
+    COUNTER_UPDATE(_decompress_timer, _reader->stats().decompress_ns);
+    COUNTER_UPDATE(_read_uncompressed_counter, _reader->stats().uncompressed_bytes_read);
+    // COUNTER_UPDATE(bytes_read_counter(), _reader->stats().bytes_read);
+
+    COUNTER_UPDATE(_block_load_timer, _reader->stats().block_load_ns);
+    COUNTER_UPDATE(_block_load_counter, _reader->stats().blocks_load);
+    COUNTER_UPDATE(_block_fetch_timer, _reader->stats().block_fetch_ns);
+    COUNTER_UPDATE(_block_seek_timer, _reader->stats().block_seek_ns);
+
+    COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
+    _raw_rows_read += _reader->mutable_stats()->raw_rows_read;
+    COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
+
+    COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
+
+    COUNTER_UPDATE(_pred_filter_timer, _reader->stats().vec_cond_evaluate_ns);
+    COUNTER_UPDATE(_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
+    COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
+
+    COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
+    COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
+    COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
+    COUNTER_UPDATE(_index_load_timer, _reader->stats().index_load_ns);
+
+    COUNTER_UPDATE(_total_pages_num_counter, _reader->stats().total_pages_num);
+    COUNTER_UPDATE(_cached_pages_num_counter, _reader->stats().cached_pages_num);
+
+    COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
+    COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+    COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
+
+    // COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.predicates.size());
+
+    StarRocksMetrics::instance()->query_scan_bytes.increment(_compressed_bytes_read);
+    StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
+
+    if (_reader->stats().decode_dict_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_scan_profile, "DictDecode");
+        COUNTER_UPDATE(c, _reader->stats().decode_dict_ns);
+    }
+    if (_reader->stats().late_materialize_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_scan_profile, "LateMaterialize");
+        COUNTER_UPDATE(c, _reader->stats().late_materialize_ns);
+    }
+    if (_reader->stats().del_filter_ns > 0) {
+        RuntimeProfile::Counter* c1 = ADD_TIMER(_scan_profile, "DeleteFilter");
+        RuntimeProfile::Counter* c2 = ADD_COUNTER(_scan_profile, "DeleteFilterRows", TUnit::UNIT);
+        COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
+        COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
+    }
 }
 
 } // namespace starrocks::pipeline

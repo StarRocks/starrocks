@@ -192,7 +192,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     }
 }
 
-std::string PipelineDriver::to_debug_string() const {
+std::string PipelineDriver::to_debug_string() {
     std::stringstream ss;
     ss << "operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {

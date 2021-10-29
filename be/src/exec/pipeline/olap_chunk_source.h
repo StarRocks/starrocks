@@ -26,11 +26,12 @@ namespace pipeline {
 class OlapChunkSource final : public ChunkSource {
 public:
     OlapChunkSource(MorselPtr&& morsel, int32_t tuple_id, std::vector<ExprContext*> conjunct_ctxs,
-                    const vectorized::RuntimeFilterProbeCollector& runtime_filters,
+                    RuntimeProfile* runtime_profile, const vectorized::RuntimeFilterProbeCollector& runtime_filters,
                     std::vector<std::string> key_column_names, bool skip_aggregation)
             : ChunkSource(std::move(morsel)),
               _tuple_id(tuple_id),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
+              _runtime_profile(runtime_profile),
               _runtime_filters(runtime_filters),
               _key_column_names(std::move(key_column_names)),
               _skip_aggregation(skip_aggregation) {
@@ -57,8 +58,10 @@ private:
                                vectorized::TabletReaderParams* params);
     Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns);
     Status _init_olap_reader(RuntimeState* state);
+    void _init_counter(RuntimeState* state);
     Status _build_scan_range(RuntimeState* state);
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, vectorized::Chunk* chunk);
+    void _update_counter();
 
     int32_t _tuple_id;
     std::vector<ExprContext*> _conjunct_ctxs;
@@ -98,11 +101,11 @@ private:
     int64_t _raw_rows_read = 0;
     int64_t _compressed_bytes_read = 0;
 
+    RuntimeProfile* _runtime_profile = nullptr;
     RuntimeProfile* _scan_profile = nullptr;
-    // Non-pushed-down predicates filter time.
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _scan_timer = nullptr;
-    RuntimeProfile::Counter* _capture_rowset_timer = nullptr;
+    RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
     RuntimeProfile::Counter* _tablet_counter = nullptr;
     RuntimeProfile::Counter* _reader_init_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;

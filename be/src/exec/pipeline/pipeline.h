@@ -50,6 +50,20 @@ public:
         }
     }
 
+    std::string to_debug_string() {
+        std::stringstream ss;
+        ss << "operator-chain: [";
+        for (size_t i = 0; i < _op_factories.size(); ++i) {
+            if (i == 0) {
+                ss << _op_factories[i]->get_name();
+            } else {
+                ss << " -> " << _op_factories[i]->get_name();
+            }
+        }
+        ss << "]";
+        return ss.str();
+    }
+
 private:
     uint32_t _id = 0;
     OpFactories _op_factories;
