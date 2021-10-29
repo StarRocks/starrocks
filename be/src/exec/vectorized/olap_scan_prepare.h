@@ -44,7 +44,8 @@ public:
 
     void get_not_push_down_conjuncts(std::vector<ExprContext*>* predicates);
 
-    void parse_conjuncts(bool scan_keys_unlimited, int32_t max_scan_key_num, bool enable_column_expr_predicate = false);
+    Status parse_conjuncts(bool scan_keys_unlimited, int32_t max_scan_key_num,
+                           bool enable_column_expr_predicate = false);
 
 private:
     Status normalize_conjuncts();
