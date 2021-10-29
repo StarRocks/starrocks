@@ -317,9 +317,17 @@ build_rapidjson() {
 # rapidjson
 build_simdjson() {
     check_if_source_exist $SIMDJSON_SOURCE
+    cd $TP_SOURCE_DIR/$SIMDJSON_SOURCE
+
+    #ref: https://github.com/simdjson/simdjson/blob/master/HACKING.md
+    mkdir -p $BUILD_DIR && cd $BUILD_DIR
+    cmake ..
+    cmake --build .
+    mkdir -p $TP_INSTALL_DIR/lib && cp $TP_SOURCE_DIR/$SIMDJSON_SOURCE/$BUILD_DIR/libsimdjson.a $TP_INSTALL_DIR/lib
 
     rm -rf $TP_INSTALL_DIR/simdjson
-    cp -r $TP_SOURCE_DIR/$SIMDJSON_SOURCE/include/simdjson $TP_INCLUDE_DIR/
+    mkdir -p $TP_INSTALL_DIR/simdjson
+    cp $TP_SOURCE_DIR/$SIMDJSON_SOURCE/singleheader/simdjson.h $TP_INCLUDE_DIR/
 }
 
 # snappy

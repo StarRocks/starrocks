@@ -12,6 +12,7 @@ DIAGNOSTIC_POP
 
 #include "column/column_builder.h"
 #include "exprs/vectorized/function_helper.h"
+#include "simdjson.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -117,6 +118,11 @@ public:
                                                               rapidjson::Value* document,
                                                               rapidjson::Document::AllocatorType& mem_allocator);
 
+    // Extract json values from stream.
+    static void get_values_from_stream(const std::vector<JsonPath>& parsed_paths,
+                                       simdjson::dom::document_stream& stream,
+                                       std::vector<simdjson::dom::document_stream::iterator::value_type> values);
+
     static void parse_json_paths(const std::string& path_strings, std::vector<JsonPath>* parsed_paths);
 
     static std::string get_raw_json_string(const rapidjson::Value& value);
@@ -132,6 +138,10 @@ private:
     static rapidjson::Value* match_value(const std::vector<JsonPath>& parsed_paths, rapidjson::Value* document,
                                          rapidjson::Document::AllocatorType& mem_allocator,
                                          bool is_insert_null = false);
+
+    static void get_matched_values_from_stream(
+            const std::string& name, simdjson::dom::document_stream& stream,
+            std::vector<simdjson::dom::document_stream::iterator::value_type> output);
 
     static void get_parsed_paths(const std::vector<std::string>& path_exprs, std::vector<JsonPath>* parsed_paths);
 };

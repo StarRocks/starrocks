@@ -231,7 +231,9 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::vectorized::Sc
           _next_line(0),
           _total_lines(0),
           _closed(false),
-          _buf(_buf_size) {}
+          _buf(_buf_size) {
+    _doc_stream_itr = _doc_stream.end();
+}
 
 JsonReader::~JsonReader() {
     close();
@@ -272,56 +274,28 @@ Status JsonReader::close() {
  *      value2     30
  */
 Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs) {
-    Status st = Status::OK();
-    do {
-        if (_next_line >= _total_lines) {
-            RETURN_IF_ERROR(_read_and_parse_json());
-            _next_line = 0;
-        }
-        _total_lines = (_json_doc->IsArray()) ? _json_doc->Size() : 1;
-        while (_next_line < _total_lines && rows_to_read > 0) {
-            rapidjson::Value* objectValue = _json_doc;
-            if (_json_doc->IsArray()) {
-                objectValue = &(*_json_doc)[_next_line];
-            }
-            if (_scanner->_json_paths.empty()) {
-                for (SlotDescriptor* slot_desc : slot_descs) {
-                    if (slot_desc == nullptr) {
-                        continue;
-                    }
-                    ColumnPtr& column = chunk->get_column_by_slot_id(slot_desc->id());
-                    const char* column_name = slot_desc->col_name().c_str();
-                    if (!objectValue->IsObject() || !objectValue->HasMember(column_name)) {
-                        column->append_nulls(1);
-                    } else {
-                        _construct_column((*objectValue)[column_name], column.get(), slot_desc->type());
-                    }
+    if (!(_doc_stream_itr != _doc_stream.end())) {
+        RETURN_IF_ERROR(_read_and_parse_json());
+    }
+
+    for (; _doc_stream_itr != _doc_stream.end(); ++_doc_stream_itr) {
+        if (!_scanner->_json_paths.empty()) {
+        } else if (!_scanner->_root_paths.empty()) {
+        } else {
+            for (SlotDescriptor* slot_desc : slot_descs) {
+                if (slot_desc == nullptr) {
+                    continue;
                 }
-            } else {
-                size_t slot_size = slot_descs.size();
-                size_t jsonpath_size = _scanner->_json_paths.size();
-                for (size_t i = 0; i < slot_size; i++) {
-                    if (slot_descs[i] == nullptr) {
-                        continue;
-                    }
-                    ColumnPtr& column = chunk->get_column_by_slot_id(slot_descs[i]->id());
-                    if (i >= jsonpath_size) {
-                        column->append_nulls(1);
-                        continue;
-                    }
-                    rapidjson::Value* json_values = JsonFunctions::get_json_object_from_parsed_json(
-                            _scanner->_json_paths[i], objectValue, _origin_json_doc.GetAllocator());
-                    if (json_values == nullptr) {
-                        column->append_nulls(1);
-                    } else {
-                        _construct_column(*json_values, column.get(), slot_descs[i]->type());
-                    }
-                }
+
+                ColumnPtr& column = chunk->get_column_by_slot_id(slot_desc->id());
+                auto col_name = slot_desc->col_name();
+
+                auto value = (*_doc_stream_itr).at_key(col_name);
+                VLOG(10) << "to string value: " << simdjson::to_string(value);
+                _construct_column(value, column.get(), slot_desc->type());
             }
-            rows_to_read--;
-            _next_line++;
         }
-    } while (rows_to_read > 0);
+    }
     return Status::OK();
 }
 
@@ -334,7 +308,8 @@ Status JsonReader::_read_and_parse_json() {
     if (result.size == 0) {
         return Status::EndOfFile("EOF of reading file");
     }
-    _origin_json_doc.Parse(result.data, result.size);
+    auto err = _parser.parse_many(result.data, result.size).get(_doc_stream);
+
 #else
     std::unique_ptr<uint8_t[]> json_binary = nullptr;
     size_t length = 0;
@@ -344,116 +319,43 @@ Status JsonReader::_read_and_parse_json() {
         return Status::EndOfFile("EOF of reading file");
     }
     _origin_json_doc.Parse((char*)json_binary.get(), length);
+
+    auto err = _parser.parse_many(json_binary.get(), length).get(_doc_stream);
 #endif
 
-    if (_origin_json_doc.HasParseError()) {
-        std::string err_msg = strings::Substitute("Failed to parse string to json. code=$0, error=$1",
-                                                  _origin_json_doc.GetParseError(),
-                                                  rapidjson::GetParseError_En(_origin_json_doc.GetParseError()));
-        _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
+    if (err) {
+        std::string err_msg = strings::Substitute("Failed to parse string to json. code=$0, error=$1", err,
+                                                  simdjson::error_message(err));
+        _state->append_error_msg_to_file("", err_msg);
         _counter->num_rows_filtered++;
         return Status::DataQualityError(err_msg.c_str());
     }
 
-    _json_doc = &_origin_json_doc;
-    if (!_scanner->_root_paths.empty()) {
-        _json_doc = JsonFunctions::get_json_object_from_parsed_json(_scanner->_root_paths, &_origin_json_doc,
-                                                                    _origin_json_doc.GetAllocator());
-        if (_json_doc == nullptr) {
-            std::string err_msg("Root is not valid");
-            _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
-            _counter->num_rows_filtered++;
-            return Status::DataQualityError(err_msg.c_str());
-        }
-    }
-
-    if (_json_doc->IsArray() && !_scanner->_strip_outer_array) {
-        std::string err_msg("JSON data is an array, strip_outer_array must be set true");
-        _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
-        _counter->num_rows_filtered++;
-        return Status::DataQualityError(err_msg.c_str());
-    }
-
-    if (!_json_doc->IsArray() && _scanner->_strip_outer_array) {
-        std::string err_msg("JSON data is not an arrayobject, strip_outer_array must be set false");
-        _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
-        _counter->num_rows_filtered++;
-        return Status::DataQualityError(err_msg.c_str());
-    }
+    _doc_stream_itr = _doc_stream.begin();
 
     return Status::OK();
 }
 
-void JsonReader::_construct_column(const rapidjson::Value& objectValue, Column* column,
+// _construct_column constructs column based on no value.
+void JsonReader::_construct_column(simdjson::dom::document_stream::iterator::value_type& value, Column* column,
                                    const TypeDescriptor& type_desc) {
-    if (objectValue.GetType() != rapidjson::kArrayType && type_desc.type == TYPE_ARRAY) {
+    if (value.is_null()) {
         column->append_nulls(1);
-        return;
-    }
-
-    char buf[64] = {0};
-    switch (objectValue.GetType()) {
-    case rapidjson::Type::kNullType: {
+    } else if (value.is_bool()) {
+        if (value.get_bool()) {
+            column->append_strings(std::vector<Slice>{Slice("1")});
+        } else {
+            column->append_strings(std::vector<Slice>{Slice("0")});
+        }
+    } else if (value.is_uint64() || value.is_int64()) {
+        auto f = fmt::format_int(value.get_int64());
+        column->append_strings(std::vector<Slice>{Slice(f.data(), f.size())});
+    } else if (value.is_string()) {
+        column->append_strings(std::vector<Slice>{Slice(value.get_c_str(), value.get_string_length())});
+    } else if (value.is_object()) {
+        column->append_strings(std::vector<Slice>{Slice(simdjson::to_string(value))});
+    } else {
         column->append_nulls(1);
-        break;
-    }
-    case rapidjson::Type::kFalseType: {
-        column->append_strings(std::vector<Slice>{Slice("0")});
-        break;
-    }
-    case rapidjson::Type::kTrueType: {
-        column->append_strings(std::vector<Slice>{Slice("1")});
-        break;
-    }
-    case rapidjson::Type::kNumberType: {
-        if (objectValue.IsUint()) {
-            auto f = fmt::format_int(objectValue.GetUint());
-            column->append_strings(std::vector<Slice>{Slice(f.data(), f.size())});
-        } else if (objectValue.IsInt()) {
-            auto f = fmt::format_int(objectValue.GetInt());
-            column->append_strings(std::vector<Slice>{Slice(f.data(), f.size())});
-        } else if (objectValue.IsUint64()) {
-            auto f = fmt::format_int(objectValue.GetUint64());
-            column->append_strings(std::vector<Slice>{Slice(f.data(), f.size())});
-        } else if (objectValue.IsInt64()) {
-            auto f = fmt::format_int(objectValue.GetInt64());
-            column->append_strings(std::vector<Slice>{Slice(f.data(), f.size())});
-        } else {
-            int len = d2s_buffered_n(objectValue.GetDouble(), buf);
-            column->append_strings(std::vector<Slice>{Slice(buf, len)});
-        }
-        break;
-    }
-    case rapidjson::Type::kStringType: {
-        const char* str_value = objectValue.GetString();
-        column->append_strings(std::vector<Slice>{Slice(str_value, objectValue.GetStringLength())});
-        break;
-    }
-    case rapidjson::Type::kArrayType: {
-        if (type_desc.type == TYPE_ARRAY) {
-            auto null_column = down_cast<NullableColumn*>(column);
-            auto array_column = down_cast<ArrayColumn*>(null_column->mutable_data_column());
-
-            NullData& null_data = null_column->null_column_data();
-            null_data.emplace_back(0);
-            ColumnPtr& elements_column = array_column->elements_column();
-            for (size_t i = 0; i < objectValue.Size(); ++i) {
-                _construct_column(objectValue[i], elements_column.get(), type_desc.children[0]);
-            }
-            auto offsets = array_column->offsets_column();
-            uint32_t size = offsets->get_data().back() + objectValue.Size();
-            offsets->append_numbers(&size, 4);
-        } else {
-            std::string json_str = JsonFunctions::get_raw_json_string(objectValue);
-            column->append_strings(std::vector<Slice>{Slice(json_str.c_str(), json_str.length())});
-        }
-        break;
-    }
-    case rapidjson::Type::kObjectType: {
-        std::string json_str = JsonFunctions::get_raw_json_string(objectValue);
-        column->append_strings(std::vector<Slice>{Slice(json_str.c_str(), json_str.length())});
-        break;
-    }
     }
 }
 

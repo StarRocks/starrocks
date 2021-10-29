@@ -17,6 +17,7 @@ DIAGNOSTIC_POP
 #include "env/env_util.h"
 #include "exec/vectorized/file_scanner.h"
 #include "runtime/stream_load/load_stream_mgr.h"
+#include "simdjson.h"
 #include "util/raw_container.h"
 #include "util/slice.h"
 
@@ -81,9 +82,10 @@ public:
 
     Status close();
 
+    void _construct_column(simdjson::dom::document_stream::iterator::value_type& value, Column* column,
+                           const TypeDescriptor& type_desc);
 private:
     Status _read_and_parse_json();
-    void _construct_column(const rapidjson::Value& objectValue, Column* column, const TypeDescriptor& type_desc);
 
 private:
     RuntimeState* _state = nullptr;
@@ -98,6 +100,11 @@ private:
 
     std::vector<std::vector<JsonPath>> _json_paths;
     std::vector<JsonPath> _root_paths;
+
+    simdjson::dom::parser _parser;
+    simdjson::dom::document_stream _doc_stream;
+    simdjson::dom::document_stream::iterator _doc_stream_itr;
+    std::vector<simdjson::dom::document_stream::iterator::value_type> _values;
 
     rapidjson::Document _origin_json_doc;  // origin json document object from parsed json string
     rapidjson::Value* _json_doc = nullptr; // _json_doc equals _final_json_doc iff not set `json_root`
