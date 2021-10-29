@@ -64,7 +64,7 @@ public:
         return std::make_shared<ResultSinkOperator>(_id, _plan_node_id, _sink_type, _output_expr_ctxs);
     }
 
-    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
+    Status prepare(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 

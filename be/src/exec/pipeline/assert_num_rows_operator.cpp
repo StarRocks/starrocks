@@ -56,7 +56,7 @@ bool AssertNumRowsOperator::is_finished() const {
     return _is_finished && !_cur_chunk;
 }
 
-Status AssertNumRowsOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+Status AssertNumRowsOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 

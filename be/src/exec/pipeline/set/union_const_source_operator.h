@@ -72,7 +72,7 @@ public:
                                                           _const_expr_lists.data() + rows_offset, rows_count);
     }
 
-    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
 private:

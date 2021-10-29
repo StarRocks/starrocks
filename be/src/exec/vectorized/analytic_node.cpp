@@ -64,7 +64,7 @@ Status AnalyticNode::prepare(RuntimeState* state) {
     DCHECK(child(0)->row_desc().is_prefix_of(row_desc()));
 
     _analytor = std::make_shared<Analytor>(_tnode, child(0)->row_desc(), _result_tuple_desc);
-    RETURN_IF_ERROR(_analytor->prepare(state, _pool, mem_tracker(), expr_mem_tracker(), runtime_profile()));
+    RETURN_IF_ERROR(_analytor->prepare(state, _pool, mem_tracker(), runtime_profile()));
 
     return Status::OK();
 }

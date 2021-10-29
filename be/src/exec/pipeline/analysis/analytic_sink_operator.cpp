@@ -10,8 +10,7 @@ Status AnalyticSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     // _analytor is shared by sink operator and source operator
     // we must only prepare it at sink operator
-    RETURN_IF_ERROR(
-            _analytor->prepare(state, state->obj_pool(), get_memtracker(), get_memtracker(), get_runtime_profile()));
+    RETURN_IF_ERROR(_analytor->prepare(state, state->obj_pool(), get_memtracker(), get_runtime_profile()));
     RETURN_IF_ERROR(_analytor->open(state));
 
     TAnalyticWindow window = _tnode.analytic_node.window;

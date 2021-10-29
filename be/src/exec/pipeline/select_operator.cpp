@@ -80,9 +80,9 @@ Status SelectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPt
     return Status::OK();
 }
 
-Status SelectOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+Status SelectOperatorFactory::prepare(RuntimeState* state) {
     RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc, mem_tracker));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     return Status::OK();
 }
