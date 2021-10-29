@@ -529,4 +529,29 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  equal join conjunct: 4: v1 = 1: v4\n" +
                 "  |  use vectorized: true"));
     }
+
+    @Test
+    public void testOutputConstant() throws Exception {
+        String sql = "select v from (select v1, 2 as v, 3 from t0 inner join t1 on v2 = v4) t,t2;";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("8:Project\n" +
+                "  |  <slot 7> : 7: expr\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  7:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates is NULL.\n" +
+                "  |  use vectorized: true"));
+
+        sql = "select * from (select v1, 2 as v, 3 from t0 inner join t1 on v2 = v4) t,t2;";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("5:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 7> : 2\n" +
+                "  |  <slot 8> : 3\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)"));
+    }
 }
