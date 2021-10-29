@@ -684,8 +684,8 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
         Status status = reader->do_get_next(base_chunk.get());
 
         if (!status.ok()) {
-            LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
             if (!status.is_end_of_file()) {
+                LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
                 return false;
             } else {
                 break;
@@ -769,8 +769,8 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
         ChunkPtr new_chunk = nullptr;
         Status status = reader->do_get_next(base_chunk.get());
         if (!status.ok()) {
-            LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
             if (!status.is_end_of_file()) {
+                LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
                 return false;
             } else if (base_chunk->num_rows() <= 0) {
                 break;
