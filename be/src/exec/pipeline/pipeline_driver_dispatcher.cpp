@@ -129,7 +129,12 @@ void GlobalDriverDispatcher::run() {
 }
 
 void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
-    this->_driver_queue->put_back(driver);
+    if (driver->dependencies_block()) {
+        driver->set_driver_state(DriverState::DEPENDENCIES_BLOCK);
+        this->_blocked_driver_poller->add_blocked_driver(driver);
+    } else {
+        this->_driver_queue->put_back(driver);
+    }
 }
 
 void GlobalDriverDispatcher::report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) {

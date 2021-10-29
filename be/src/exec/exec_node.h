@@ -29,6 +29,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "exec/pipeline/operator.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
@@ -192,8 +193,7 @@ public:
     virtual void debug_string(int indentation_level, std::stringstream* out) const;
 
     // Convert old exec node tree to new pipeline
-    virtual std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context);
+    virtual pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context);
 
     const std::vector<ExprContext*>& conjunct_ctxs() const { return _conjunct_ctxs; }
 
