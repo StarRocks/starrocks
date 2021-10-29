@@ -39,7 +39,7 @@ std::atomic<uint64_t> TabletsChannel::_s_tablet_writer_count;
 TabletsChannel::TabletsChannel(const TabletsChannelKey& key, MemTracker* mem_tracker)
         : _key(key), _state(kInitialized), _closed_senders(64) {
     _mem_tracker = std::make_unique<MemTracker>(-1, "tablets channel", mem_tracker, true);
-    _mem_pool = std::make_unique<MemPool>(_mem_tracker.get());
+    _mem_pool = std::make_unique<MemPool>();
     static std::once_flag once_flag;
     std::call_once(once_flag, [] {
         REGISTER_GAUGE_STARROCKS_METRIC(tablet_writer_count, [&]() { return _s_tablet_writer_count.load(); });

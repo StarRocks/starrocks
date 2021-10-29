@@ -94,8 +94,7 @@ TEST_F(TestRowBlockV2, test_convert) {
     block_info.null_supported = true;
     auto res = output_block.init(block_info);
     ASSERT_EQ(OLAP_SUCCESS, res);
-    MemTracker tracker;
-    MemPool pool(&tracker);
+    MemPool pool;
     for (int i = 0; i < input_block.capacity(); ++i) {
         RowBlockRow row = input_block.row(i);
 

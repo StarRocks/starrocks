@@ -26,7 +26,6 @@
 #include <string>
 
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 
 namespace starrocks {
 
@@ -40,8 +39,7 @@ void validate_string(const std::string& std_str, const StringBuffer& str) {
 }
 
 TEST(StringBufferTest, Basic) {
-    MemTracker tracker;
-    MemPool pool(&tracker);
+    MemPool pool;
     StringBuffer str(&pool);
     std::string std_str;
 

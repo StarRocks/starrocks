@@ -43,8 +43,7 @@ using std::vector;
 namespace starrocks {
 
 RowBlock::RowBlock(const TabletSchema* schema) : _capacity(0), _schema(schema) {
-    _tracker = std::make_unique<MemTracker>(-1);
-    _mem_pool = std::make_unique<MemPool>(_tracker.get());
+    _mem_pool = std::make_unique<MemPool>();
 }
 
 RowBlock::~RowBlock() {

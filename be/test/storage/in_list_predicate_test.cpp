@@ -89,10 +89,7 @@ static std::string to_datetime_string(uint64_t& datetime_value) {
 
 class TestInListPredicate : public testing::Test {
 public:
-    TestInListPredicate() : _vectorized_batch(NULL) {
-        _mem_tracker.reset(new MemTracker(-1));
-        _mem_pool.reset(new MemPool(_mem_tracker.get()));
-    }
+    TestInListPredicate() : _vectorized_batch(NULL) { _mem_pool.reset(new MemPool()); }
 
     ~TestInListPredicate() {
         if (_vectorized_batch != NULL) {
@@ -123,7 +120,6 @@ public:
         _vectorized_batch = new VectorizedRowBatch(tablet_schema, ids, size);
         _vectorized_batch->set_size(size);
     }
-    std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
     VectorizedRowBatch* _vectorized_batch;
 };
