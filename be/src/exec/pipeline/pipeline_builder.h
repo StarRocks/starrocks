@@ -22,10 +22,12 @@ public:
         _pipelines.emplace_back(std::make_unique<Pipeline>(next_pipe_id(), operators));
     }
 
+    // Make the output chunks from the drivers of pred operators to ONE driver of the post operators.
     OpFactories maybe_interpolate_local_exchange(OpFactories& pred_operators);
 
-    OpFactories maybe_interpolate_local_shuffle(OpFactories& pred_operators, size_t shuffle_partitions_num,
-                                                const std::vector<ExprContext*>& partition_expr_ctxs);
+    // Make the output chunks from the drivers of pred operators to DOP drivers of the post operators.
+    OpFactories maybe_interpolate_local_exchange(OpFactories& pred_operators,
+                                                 const std::vector<ExprContext*>& partition_expr_ctxs);
 
     // Uses local exchange to gather the output chunks of multiple predecessor pipelines
     // into a new pipeline, which the successor operator belongs to.

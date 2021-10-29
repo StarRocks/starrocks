@@ -172,7 +172,7 @@ set(EXEC_FILES
     pipeline/hashjoin/hash_join_probe_operator.cpp
     pipeline/set/except_context.cpp
     pipeline/set/except_build_sink_operator.cpp
-    pipeline/set/except_erase_sink_operator.cpp
+    pipeline/set/except_probe_sink_operator.cpp
     pipeline/set/except_output_source_operator.cpp
 )
 

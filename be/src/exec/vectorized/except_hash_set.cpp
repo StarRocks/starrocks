@@ -3,13 +3,13 @@
 #include "exec/vectorized/except_hash_set.h"
 
 #include "exec/exec_node.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks::vectorized {
 
 template <typename HashSet>
 Status ExceptHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chunk,
-                                         const std::vector<ExprContext*>& exprs, MemPool* pool,
-                                         const GetTypeFunc& get_type) {
+                                         const std::vector<ExprContext*>& exprs, MemPool* pool) {
     size_t chunk_size = chunk->num_rows();
     _slice_sizes.assign(config::vector_chunk_size, 0);
 
@@ -23,7 +23,7 @@ Status ExceptHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& ch
         }
     }
 
-    _serialize_columns(chunk, exprs, chunk_size, get_type);
+    _serialize_columns(chunk, exprs, chunk_size);
 
     for (size_t i = 0; i < chunk_size; ++i) {
         ExceptSliceFlag key(_buffer + i * _max_one_row_size, _slice_sizes[i]);
@@ -55,7 +55,7 @@ Status ExceptHashSet<HashSet>::erase_duplicate_row(RuntimeState* state, const Ch
         RETURN_IF_LIMIT_EXCEEDED(state, "Except, while probe hash table.");
     }
 
-    _serialize_columns(chunk, exprs, chunk_size, [](const ColumnPtr& column, int i) -> void {});
+    _serialize_columns(chunk, exprs, chunk_size);
 
     for (size_t i = 0; i < chunk_size; ++i) {
         ExceptSliceFlag key(_buffer + i * _max_one_row_size, _slice_sizes[i]);
@@ -99,11 +99,9 @@ size_t ExceptHashSet<HashSet>::_get_max_serialize_size(const ChunkPtr& chunk, co
 
 template <typename HashSet>
 void ExceptHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs,
-                                                size_t chunk_size, const GetTypeFunc& get_type) {
-    for (size_t i = 0; i < exprs.size(); i++) {
-        ColumnPtr key_column = exprs[i]->evaluate(chunk.get());
-
-        get_type(key_column, i);
+                                                size_t chunk_size) {
+    for (auto expr : exprs) {
+        ColumnPtr key_column = expr->evaluate(chunk.get());
 
         // The serialized buffer is always nullable.
         if (key_column->is_nullable()) {

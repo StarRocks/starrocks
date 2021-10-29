@@ -4,11 +4,14 @@
 
 namespace starrocks::pipeline {
 
-Status ExceptContext::prepare(RuntimeState* state, MemTracker* mem_tracker) {
-    _build_pool = std::make_unique<MemPool>(mem_tracker);
+Status ExceptContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs) {
+    _build_pool = std::make_unique<MemPool>();
 
     _dst_tuple_desc = state->desc_tbl().get_tuple_descriptor(_dst_tuple_id);
-    _dst_nullables.assign(_dst_tuple_desc->slots().size(), false);
+    _dst_nullables.reserve(build_exprs.size());
+    for (auto build_expr : build_exprs) {
+        _dst_nullables.emplace_back(build_expr->is_nullable());
+    }
 
     return Status::OK();
 }
@@ -23,15 +26,7 @@ Status ExceptContext::close(RuntimeState* state) {
 
 Status ExceptContext::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk,
                                          const std::vector<ExprContext*>& dst_exprs) {
-    vectorized::ExceptHashSerializeSet::GetTypeFunc get_type_func;
-    if (!_has_set_dst_nullables) {
-        _has_set_dst_nullables = true;
-        get_type_func = [this](const ColumnPtr& column, int i) -> void { _dst_nullables[i] = column->is_nullable(); };
-    } else {
-        get_type_func = [](const ColumnPtr& column, int i) -> void {};
-    }
-
-    return _hash_set->build_set(state, chunk, dst_exprs, _build_pool.get(), get_type_func);
+    return _hash_set->build_set(state, chunk, dst_exprs, _build_pool.get());
 }
 
 Status ExceptContext::erase_chunk_from_ht(RuntimeState* state, const ChunkPtr& chunk,
@@ -55,8 +50,8 @@ StatusOr<vectorized::ChunkPtr> ExceptContext::pull_chunk(RuntimeState* state) {
         // 2. Create dest columns.
         vectorized::Columns dst_columns(_dst_nullables.size());
         for (size_t i = 0; i < _dst_nullables.size(); ++i) {
-            dst_columns[i] =
-                    vectorized::ColumnHelper::create_column(_dst_tuple_desc->slots()[i]->type(), _dst_nullables[i]);
+            const auto& slot = _dst_tuple_desc->slots()[i];
+            dst_columns[i] = vectorized::ColumnHelper::create_column(slot->type(), _dst_nullables[i]);
             dst_columns[i]->reserve(remained_keys_num);
         }
 

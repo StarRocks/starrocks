@@ -6,8 +6,8 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/set/except_build_sink_operator.h"
 #include "exec/pipeline/set/except_context.h"
-#include "exec/pipeline/set/except_erase_sink_operator.h"
 #include "exec/pipeline/set/except_output_source_operator.h"
+#include "exec/pipeline/set/except_probe_sink_operator.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
@@ -52,6 +52,7 @@ Status ExceptNode::prepare(RuntimeState* state) {
     for (int i = 0; i < size_column_type; ++i) {
         _types[i].result_type = _tuple_desc->slots()[i]->type();
         _types[i].is_constant = _child_expr_lists[0][i]->root()->is_constant();
+        _types[i].is_nullable = _child_expr_lists[0][i]->root()->is_nullable();
     }
 
     return Status::OK();
@@ -89,9 +90,7 @@ Status ExceptNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(child(0)->get_next(state, &chunk, &eos));
     if (!eos) {
         ScopedTimer<MonotonicStopWatch> build_timer(_build_set_timer);
-        RETURN_IF_ERROR(_hash_set->build_set(
-                state, chunk, _child_expr_lists[0], _build_pool.get(),
-                [this](const ColumnPtr& column, int i) -> void { _types[i].is_nullable = column->is_nullable(); }));
+        RETURN_IF_ERROR(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get()));
         while (true) {
             RETURN_IF_CANCELLED(state);
             build_timer.stop();
@@ -102,8 +101,7 @@ Status ExceptNode::open(RuntimeState* state) {
             } else if (chunk->num_rows() == 0) {
                 continue;
             } else {
-                RETURN_IF_ERROR(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get(),
-                                                     [](const ColumnPtr& column, int i) -> void {}));
+                RETURN_IF_ERROR(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get()));
             }
         }
     }
@@ -217,22 +215,20 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
     pipeline::ExceptPartitionContextFactoryPtr except_partition_ctx_factory =
             std::make_shared<pipeline::ExceptPartitionContextFactory>(_tuple_id);
 
-    size_t shuffle_partitions_num = context->degree_of_parallelism();
-
     // Use the first child to build the hast table by ExceptBuildSinkOperator.
     pipeline::OpFactories operators_with_except_build_sink = child(0)->decompose_to_pipeline(context);
-    operators_with_except_build_sink = context->maybe_interpolate_local_shuffle(
-            operators_with_except_build_sink, shuffle_partitions_num, _child_expr_lists[0]);
+    operators_with_except_build_sink =
+            context->maybe_interpolate_local_exchange(operators_with_except_build_sink, _child_expr_lists[0]);
     operators_with_except_build_sink.emplace_back(std::make_shared<pipeline::ExceptBuildSinkOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[0]));
     context->add_pipeline(operators_with_except_build_sink);
 
-    // Use the rest children to erase keys from the hast table by ExceptEraseSinkOperator.
+    // Use the rest children to erase keys from the hast table by ExceptProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
         pipeline::OpFactories operators_with_except_erase_sink = child(i)->decompose_to_pipeline(context);
-        operators_with_except_erase_sink = context->maybe_interpolate_local_shuffle(
-                operators_with_except_erase_sink, shuffle_partitions_num, _child_expr_lists[i]);
-        operators_with_except_erase_sink.emplace_back(std::make_shared<pipeline::ExceptEraseSinkOperatorFactory>(
+        operators_with_except_erase_sink =
+                context->maybe_interpolate_local_exchange(operators_with_except_erase_sink, _child_expr_lists[i]);
+        operators_with_except_erase_sink.emplace_back(std::make_shared<pipeline::ExceptProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[i]));
         context->add_pipeline(operators_with_except_erase_sink);
     }
@@ -241,7 +237,7 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
     pipeline::OpFactories operators_with_except_output_source;
     auto except_output_source = std::make_shared<pipeline::ExceptOutputSourceOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory);
-    except_output_source->set_degree_of_parallelism(shuffle_partitions_num);
+    except_output_source->set_degree_of_parallelism(context->degree_of_parallelism());
     operators_with_except_output_source.emplace_back(std::move(except_output_source));
 
     return operators_with_except_output_source;

@@ -1,18 +1,18 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
-#include "exec/pipeline/set/except_erase_sink_operator.h"
+#include "exec/pipeline/set/except_probe_sink_operator.h"
 
 namespace starrocks::pipeline {
 
-StatusOr<vectorized::ChunkPtr> ExceptEraseSinkOperator::pull_chunk(RuntimeState* state) {
+StatusOr<vectorized::ChunkPtr> ExceptProbeSinkOperator::pull_chunk(RuntimeState* state) {
     return Status::InternalError("Shouldn't pull chunk from sink operator");
 }
 
-Status ExceptEraseSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+Status ExceptProbeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     return _except_ctx->erase_chunk_from_ht(state, chunk, _dst_exprs);
 }
 
-Status ExceptEraseSinkOperatorFactory::prepare(RuntimeState* state) {
+Status ExceptProbeSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     RowDescriptor row_desc;
@@ -22,7 +22,7 @@ Status ExceptEraseSinkOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void ExceptEraseSinkOperatorFactory::close(RuntimeState* state) {
+void ExceptProbeSinkOperatorFactory::close(RuntimeState* state) {
     OperatorFactory::close(state);
 
     Expr::close(_dst_exprs, state);

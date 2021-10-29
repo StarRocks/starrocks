@@ -7,18 +7,18 @@
 
 namespace starrocks::pipeline {
 
-// ExceptNode is decomposed to ExceptBuildSinkOperator, ExceptEraseSinkOperator, and ExceptOutputSourceOperator.
+// ExceptNode is decomposed to ExceptBuildSinkOperator, ExceptProbeSinkOperator, and ExceptOutputSourceOperator.
 // - ExceptBuildSinkOperator (BUILD) builds the hast set from the output rows of ExceptNode's first child.
-// - ExceptEraseSinkOperator (ERASE) labels keys as deleted in the hash set from the output rows of reset children.
-//   ERASE depends on BUILD, which means it should wait for BUILD to finish building the hast set.
-//   Multiple ERASEs from multiple children can be parallelized to label keys as deleted.
+// - ExceptProbeSinkOperator (PROBE) labels keys as deleted in the hash set from the output rows of reset children.
+//   PROBE depends on BUILD, which means it should wait for BUILD to finish building the hast set.
+//   Multiple PROBEs from multiple children can be parallelized to label keys as deleted.
 // - ExceptOutputSourceOperator (OUTPUT) traverses the hast set and outputs undeleted rows.
-//   OUTPUT depends on all the ERASEs, which means it should wait for ERASEs to finish labeling keys as delete.
+//   OUTPUT depends on all the PROBEs, which means it should wait for PROBEs to finish labeling keys as delete.
 //
-// The input trunks of BUILD and ERASE are shuffled by the local shuffle operator.
+// The input chunks of BUILD and PROBE are shuffled by the local shuffle operator.
 // The number of shuffled partitions is the degree of parallelism (DOP), which means
-// the number of partition hash sets and the number of BUILD drivers, ERASE drivers of one child, OUTPUT drivers
-// are both DOP. And each pair of BUILD/ERASE/OUTPUT drivers shares a same except partition context.
+// the number of partition hash sets and the number of BUILD drivers, PROBE drivers of one child, OUTPUT drivers
+// are both DOP. And each pair of BUILD/PROBE/OUTPUT drivers shares a same except partition context.
 class ExceptBuildSinkOperator final : public Operator {
 public:
     ExceptBuildSinkOperator(int32_t id, int32_t plan_node_id, std::shared_ptr<ExceptContext> except_ctx,

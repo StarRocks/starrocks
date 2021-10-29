@@ -34,12 +34,12 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_exchange(OpFactories
     }
 }
 
-OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle(
-        OpFactories& pred_operators, size_t shuffle_partitions_num,
-        const std::vector<ExprContext*>& partition_expr_ctxs) {
+OpFactories PipelineBuilderContext::maybe_interpolate_local_exchange(
+        OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs) {
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
 
-    // If there is only one dest partition, we can just use local exchange.
+    // If there is only one dest partition, we can just use local passthrough exchanger.
+    size_t shuffle_partitions_num = degree_of_parallelism();
     if (shuffle_partitions_num <= 1) {
         return maybe_interpolate_local_exchange(pred_operators);
     }

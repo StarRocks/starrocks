@@ -15,6 +15,7 @@ PartitionExchanger::PartitionExchanger(const std::shared_ptr<LocalExchangeMemory
           _is_shuffle(is_shuffle),
           _partition_expr_ctxs(partition_expr_ctxs) {
     _partitions_columns.resize(partition_expr_ctxs.size());
+    _row_indexes.resize(config::vector_chunk_size);
 }
 
 Status PartitionExchanger::accept(const vectorized::ChunkPtr& chunk) {
@@ -61,7 +62,6 @@ Status PartitionExchanger::accept(const vectorized::ChunkPtr& chunk) {
             _channel_row_idx_start_points[i] += _channel_row_idx_start_points[i - 1];
         }
 
-        _row_indexes.assign(num_rows, 0);
         for (int i = num_rows - 1; i >= 0; --i) {
             _row_indexes[_channel_row_idx_start_points[_hash_values[i]] - 1] = i;
             _channel_row_idx_start_points[_hash_values[i]]--;

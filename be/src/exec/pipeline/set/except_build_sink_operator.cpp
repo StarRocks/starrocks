@@ -14,7 +14,7 @@ Status ExceptBuildSinkOperator::push_chunk(RuntimeState* state, const vectorized
 
 Status ExceptBuildSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    return _except_ctx->prepare(state, get_memtracker());
+    return _except_ctx->prepare(state, _dst_exprs);
 }
 
 Status ExceptBuildSinkOperatorFactory::prepare(RuntimeState* state) {

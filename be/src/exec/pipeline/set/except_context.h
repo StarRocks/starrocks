@@ -11,7 +11,6 @@
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
@@ -24,13 +23,13 @@ using ExceptContextPtr = std::shared_ptr<ExceptContext>;
 class ExceptPartitionContextFactory;
 using ExceptPartitionContextFactoryPtr = std::shared_ptr<ExceptPartitionContextFactory>;
 
-// Used as the shared context for ExceptBuildSinkOperator, ExceptEraseSinkOperator, and ExceptOutputSourceOperator.
+// Used as the shared context for ExceptBuildSinkOperator, ExceptProbeSinkOperator, and ExceptOutputSourceOperator.
 class ExceptContext {
 public:
     explicit ExceptContext(const int dst_tuple_id) : _dst_tuple_id(dst_tuple_id) {}
 
     /// The following methods are for Build phase.
-    Status prepare(RuntimeState* state, MemTracker* mem_tracker);
+    Status prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs);
 
     void finish_build_ht() {
         _next_processed_iter = _hash_set->begin();
@@ -70,10 +69,8 @@ private:
     const int _dst_tuple_id;
     // Cache the dest tuple descriptor in the preparation phase of ExceptBuildSinkOperatorFactory.
     TupleDescriptor* _dst_tuple_desc = nullptr;
-    // Indicate whether each dest column is nullable. It is set when appending the src chunk to
-    // the hast set at the first time by _has_set_dst_nullables.
+    // Indicate whether each dest column is nullable.
     std::vector<bool> _dst_nullables;
-    bool _has_set_dst_nullables = false;
 
     // Used to allocate keys in the hash set.
     // _build_pool is created in the preparation phase of ExceptBuildSinkOperatorFactory by calling prepare().
@@ -86,13 +83,13 @@ private:
     // Init when the hash set is finished building in finish_build_ht().
     vectorized::ExceptHashSerializeSet::Iterator _next_processed_iter;
 
-    // Async between the ExceptBuildSinkOperator threads and the ExceptEraseSinkOperator threads.
+    // Async between the ExceptBuildSinkOperator threads and the ExceptProbeSinkOperator threads.
     std::atomic<bool> _is_build_finished{false};
 
-    // Async between the ExceptEraseSinkOperator (ERASE) threads and the ExceptEraseSourceOperator (SOURCE) thread.
+    // Async between the ExceptProbeSinkOperator (PROBE) threads and the ExceptEraseSourceOperator (SOURCE) thread.
     // If SOURCE sees _finished_erase_drivers_num is equal to _erase_drivers_num, which means SOURCE sees every
-    // increment of _finished_erase_drivers_num in finish_one_erase_driver() called by ERASE, then it is certain
-    // to see all the erasing operations on hash set by ERASE, which happen before calling finish_one_erase_driver().
+    // increment of _finished_erase_drivers_num in finish_one_erase_driver() called by PROBE, then it is certain
+    // to see all the erasing operations on hash set by PROBE, which happen before calling finish_one_erase_driver().
     std::atomic<int32_t> _finished_erase_drivers_num{0};
     // _erase_drivers_num is increased when creating drivers by FragmentExecutor::prepare() before appending them to
     // driver_queue, and read by the dispatcher thread after taking them from driver_queue. Therefore, it is guaranteed
@@ -100,10 +97,10 @@ private:
     int32_t _erase_drivers_num = 0;
 };
 
-// The input trunks of BUILD and ERASE are shuffled by the local shuffle operator.
+// The input chunks of BUILD and PROBE are shuffled by the local shuffle operator.
 // The number of shuffled partitions is the degree of parallelism (DOP), which means
-// the number of partition hash sets and the number of BUILD drivers, ERASE drivers of one child, OUTPUT drivers
-// are both DOP. And each pair of BUILD/ERASE/OUTPUT drivers shares a same except partition context.
+// the number of partition hash sets and the number of BUILD drivers, PROBE drivers of one child, OUTPUT drivers
+// are both DOP. And each pair of BUILD/PROBE/OUTPUT drivers shares a same except partition context.
 class ExceptPartitionContextFactory {
 public:
     explicit ExceptPartitionContextFactory(const size_t dst_tuple_id) : _dst_tuple_id(dst_tuple_id) {}

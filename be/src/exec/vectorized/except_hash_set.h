@@ -47,7 +47,6 @@ class ExceptHashSet {
 public:
     using Iterator = typename HashSet::iterator;
     using KeyVector = std::vector<Slice>;
-    using GetTypeFunc = std::function<void(const ColumnPtr&, int)>;
 
     ExceptHashSet()
             : _hash_set(std::make_unique<HashSet>()),
@@ -62,8 +61,7 @@ public:
 
     size_t size() { return _hash_set->size(); }
 
-    Status build_set(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, MemPool* pool,
-                     const GetTypeFunc& get_type);
+    Status build_set(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, MemPool* pool);
 
     Status erase_duplicate_row(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs);
 
@@ -72,8 +70,7 @@ public:
 private:
     size_t _get_max_serialize_size(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs);
 
-    void _serialize_columns(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, size_t chunk_size,
-                            const GetTypeFunc& get_type);
+    void _serialize_columns(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, size_t chunk_size);
 
     size_t _max_one_row_size = 8;
     Buffer<uint32_t> _slice_sizes;
