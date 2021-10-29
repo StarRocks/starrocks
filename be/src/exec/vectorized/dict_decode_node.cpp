@@ -13,6 +13,8 @@
 #include "glog/logging.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/dict_decode_operator.h"
 
 namespace starrocks::vectorized {
 
@@ -144,6 +146,21 @@ Status DictDecodeNode::close(RuntimeState* state) {
     _dict_optimize_parser.close(state);
 
     return Status::OK();
+}
+
+pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+     using namespace pipeline;
+     OpFactories operators = _children[0]->decompose_to_pipeline(context);
+     operators.emplace_back(std::make_shared<DictDecodeOperatorFactory>(
+		context->next_operator_id(),
+		id(),
+		std::move(_encode_column_cids), 
+		std::move(_decode_column_cids),
+		std::move(_expr_ctxs),
+		std::move(_string_functions)
+	));
+
+     return operators;
 }
 
 } // namespace starrocks::vectorized
