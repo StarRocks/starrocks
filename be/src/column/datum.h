@@ -59,40 +59,7 @@ public:
     const HyperLogLog* get_hyperloglog() const { return get<HyperLogLog*>(); }
     const BitmapValue* get_bitmap() const { return get<BitmapValue*>(); }
     const PercentileValue* get_percentile() const { return get<PercentileValue*>(); }
-    /*
-    // when storage_format_version is 1
-    // schema will be set as DateV1, but storage type may be DateV2
-    const DateValue get_datev1() const {
-        if (std::get_if<uint24_t>(&_value)) {
-            DateValue tmp;
-            tmp.from_mysql_date(get_uint24());
-            return tmp;
-        } else {
-            return get_date();
-        }
-    }
 
-    const DecimalV2Value from_decimal_v1() const {
-        if (auto pval = std::get_if<decimal12_t>(&_value)) {
-            return DecimalV2Value((*pval).integer, (*pval).fraction);
-        } else {
-            return std::get<DecimalV2Value>(_value);
-        }
-    }
-
-    // when storage_format_version is 1
-    // schema will be set as Datetime, but storage type may be Timestamp
-    const TimestampValue get_datetime() const {
-        if (std::get_if<int64_t>(&_value)) {
-            LOG(INFO) << "date time to timestamp";
-            TimestampValue timestamp{0};
-            timestamp.from_timestamp_literal(get_int64()));
-            return timestamp;
-        } else {
-            return get_timestamp();
-        }
-    }
-*/
     void set_int8(int8_t v) { set<decltype(v)>(v); }
     void set_uint8(uint8_t v) { set<decltype(v)>(v); }
     void set_int16(int16_t v) { set<decltype(v)>(v); }
