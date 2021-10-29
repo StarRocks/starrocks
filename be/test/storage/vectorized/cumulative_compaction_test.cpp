@@ -147,7 +147,7 @@ public:
         ASSERT_TRUE(FileUtils::create_dir(_schema_hash_path).ok());
 
         _tablet_meta_mem_tracker.reset(new MemTracker(-1));
-        _mem_pool.reset(new MemPool(_tablet_meta_mem_tracker.get()));
+        _mem_pool.reset(new MemPool());
 
         _compaction_mem_tracker.reset(new MemTracker(-1));
     }

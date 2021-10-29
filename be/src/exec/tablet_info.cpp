@@ -166,8 +166,7 @@ OlapTablePartitionParam::OlapTablePartitionParam(std::shared_ptr<OlapTableSchema
                                                  const TOlapTablePartitionParam& t_param)
         : _schema(std::move(schema)),
           _t_param(t_param),
-          _mem_tracker(new MemTracker()),
-          _mem_pool(new MemPool(_mem_tracker.get())) {}
+          _mem_pool(new MemPool()) {}
 
 OlapTablePartitionParam::~OlapTablePartitionParam() = default;
 

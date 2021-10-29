@@ -86,11 +86,10 @@ public:
 
 private:
     BloomFilterIndexIterator(BloomFilterIndexReader* reader, std::unique_ptr<IndexedColumnIterator> bf_iter)
-            : _reader(reader), _bloom_filter_iter(std::move(bf_iter)), _pool(new MemPool(&_tracker)) {}
+            : _reader(reader), _bloom_filter_iter(std::move(bf_iter)), _pool(new MemPool()) {}
 
     BloomFilterIndexReader* _reader;
     std::unique_ptr<IndexedColumnIterator> _bloom_filter_iter;
-    MemTracker _tracker;
     std::unique_ptr<MemPool> _pool;
 };
 

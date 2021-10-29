@@ -100,8 +100,6 @@ public:
     explicit BloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
             : _bf_options(bf_options),
               _typeinfo(std::move(typeinfo)),
-
-              _pool(&_tracker),
               _has_null(false),
               _bf_buffer_size(0) {}
 
@@ -167,7 +165,6 @@ public:
 private:
     BloomFilterOptions _bf_options;
     TypeInfoPtr _typeinfo;
-    MemTracker _tracker;
     MemPool _pool;
     bool _has_null;
     uint64_t _bf_buffer_size;

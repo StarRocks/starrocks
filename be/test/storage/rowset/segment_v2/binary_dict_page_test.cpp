@@ -84,8 +84,7 @@ public:
         ASSERT_EQ(slices.size(), page_decoder.count());
 
         //check values
-        auto tracker = std::make_shared<MemTracker>();
-        MemPool pool(tracker.get());
+        MemPool pool;
         TypeInfoPtr type_info = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
         size_t size = slices.size();
         std::unique_ptr<ColumnVectorBatch> cvb;
@@ -176,8 +175,7 @@ public:
             ASSERT_TRUE(status.ok());
 
             //check values
-            auto tracker = std::make_shared<MemTracker>();
-            MemPool pool(tracker.get());
+            MemPool pool;
             TypeInfoPtr type_info = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
             std::unique_ptr<ColumnVectorBatch> cvb;
             ColumnVectorBatch::create(1, false, type_info, nullptr, &cvb);

@@ -70,7 +70,7 @@ OLAPStatus Merger::merge_rowsets(MemTracker* mem_tracker, const TabletSharedPtr&
     // TODO: add mem_tracker for ObjectPool?
     DeferOp release_object_pool_memory([&tracker] { return tracker->release(tracker->consumption()); });
 
-    std::unique_ptr<MemPool> mem_pool(new MemPool(tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
 
     RowCursor row_cursor;
     RETURN_NOT_OK_LOG(row_cursor.init(tablet->tablet_schema()),
