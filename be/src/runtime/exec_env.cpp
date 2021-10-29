@@ -33,7 +33,6 @@
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
-#include "runtime/disk_io_mgr.h"
 #include "runtime/external_scan_context_mgr.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/heartbeat_flags.h"
@@ -117,7 +116,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     _master_info = new TMasterInfo();
     _load_path_mgr = new LoadPathMgr(this);
-    _disk_io_mgr = new DiskIoMgr();
     _broker_mgr = new BrokerMgr(this);
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
@@ -201,8 +199,6 @@ Status ExecEnv::_init_mem_tracker() {
         return Status::InternalError(ss.str());
     }
 
-    RETURN_IF_ERROR(_disk_io_mgr->init(_mem_tracker));
-
     int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit, &is_percent);
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
@@ -263,10 +259,6 @@ void ExecEnv::_destory() {
     if (_bfd_parser) {
         delete _bfd_parser;
         _bfd_parser = nullptr;
-    }
-    if (_disk_io_mgr) {
-        delete _disk_io_mgr;
-        _disk_io_mgr = nullptr;
     }
     if (_load_path_mgr) {
         delete _load_path_mgr;
