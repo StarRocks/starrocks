@@ -65,17 +65,17 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
         ScalarOperator derivedPredicate = JoinPredicateUtils.equivalenceDerive(on, false);
         List<ScalarOperator> derivedPredicates = Utils.extractConjuncts(derivedPredicate);
 
-        if (join.getJoinType().isInnerJoin()) {
+        if (join.getJoinType().isInnerJoin() || join.getJoinType().isSemiJoin()) {
             return Utils.compoundAnd(on, derivedPredicate);
-        } else if (join.getJoinType().isLeftOuterJoin() || join.getJoinType().isLeftSemiJoin()) {
+        } else if (join.getJoinType().isLeftOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
-                if (rightOutputColumns.contains(derivedPredicate.getUsedColumns())) {
+                if (rightOutputColumns.contains(p.getUsedColumns())) {
                     pushDown.add(p);
                 }
             }
-        } else if (join.getJoinType().isRightOuterJoin() || join.getJoinType().isRightSemiJoin()) {
+        } else if (join.getJoinType().isRightOuterJoin()) {
             for (ScalarOperator p : derivedPredicates) {
-                if (leftOutputColumns.contains(derivedPredicate.getUsedColumns())) {
+                if (leftOutputColumns.contains(p.getUsedColumns())) {
                     pushDown.add(p);
                 }
             }
