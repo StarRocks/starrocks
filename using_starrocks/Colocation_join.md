@@ -114,7 +114,7 @@ SHOW PROC '/colocation_group/10005.10008';
 * **BucketIndex**：分桶序列的下标。
 * **BackendIds**：分桶中数据分片所在的 BE 节点 id 列表。
 
-> 注意：以上命令需要 AMDIN 权限。暂不支持普通用户查看。
+> 注意：以上命令需要 ADMIN 权限。暂不支持普通用户查看。
 
 <br/>
 
