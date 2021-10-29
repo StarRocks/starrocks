@@ -28,8 +28,8 @@ void HashJoinBuildOperator::finish(RuntimeState* state) {
 HashJoinBuildOperatorFactory::HashJoinBuildOperatorFactory(int32_t id, int32_t plan_node_id, HashJoiner* hash_joiner)
         : OperatorFactory(id, "hash_join_build", plan_node_id), _hash_joiner(hash_joiner) {}
 
-Status HashJoinBuildOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
-    RETURN_IF_ERROR(OperatorFactory::prepare(state, mem_tracker));
+Status HashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
     return _hash_joiner->prepare(state);
 }
 
