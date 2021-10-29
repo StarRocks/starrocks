@@ -193,8 +193,4 @@ public:
     }
 };
 
-// select_if var const
-
-// select_if const var
-
 } // namespace starrocks::vectorized
