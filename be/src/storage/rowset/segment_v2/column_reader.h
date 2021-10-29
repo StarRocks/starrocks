@@ -606,7 +606,7 @@ public:
               _schema_length(schema_length),
               _is_default_value_null(false),
               _type_size(0),
-              _pool(new MemPool(&_tracker)),
+              _pool(new MemPool()),
               _num_rows(num_rows) {}
 
     Status init(const ColumnIteratorOptions& opts) override;

@@ -57,7 +57,6 @@ private:
     // _delete_predicates_version will be set as max_version of tablet in schema change vectorized
     Version _delete_predicates_version;
 
-    MemTracker _memtracker;
     MemPool _mempool;
 
     PredicateMap _pushdown_predicates;

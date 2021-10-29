@@ -93,7 +93,7 @@ public:
               _has_null(has_null),
               _num_bitmap(num_bitmap),
               _current_rowid(0),
-              _pool(new MemPool(&_tracker)) {}
+              _pool(new MemPool()) {}
 
     bool has_null_bitmap() const { return _has_null; }
 
@@ -140,7 +140,6 @@ private:
     bool _has_null;
     rowid_t _num_bitmap;
     rowid_t _current_rowid;
-    MemTracker _tracker;
     std::unique_ptr<MemPool> _pool;
 };
 

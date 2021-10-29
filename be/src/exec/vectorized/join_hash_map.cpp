@@ -225,8 +225,8 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items.bucket_size = 0;
     _table_items.build_chunk = std::make_shared<Chunk>();
     _table_items.mem_tracker = param.mem_tracker;
-    _table_items.build_pool = std::make_unique<MemPool>(_table_items.mem_tracker);
-    _table_items.probe_pool = std::make_unique<MemPool>(_table_items.mem_tracker);
+    _table_items.build_pool = std::make_unique<MemPool>();
+    _table_items.probe_pool = std::make_unique<MemPool>();
     _table_items.with_other_conjunct = param.with_other_conjunct;
     _table_items.join_type = param.join_type;
     _table_items.row_desc = param.row_desc;

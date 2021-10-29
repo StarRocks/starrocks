@@ -46,8 +46,8 @@ MemTable::MemTable(int64_t tablet_id, Schema* schema, const TabletSchema* tablet
           _rowset_writer(rowset_writer) {
     _schema_size = _schema->schema_size();
     _mem_tracker = std::make_unique<MemTracker>(-1, "memtable", mem_tracker, true);
-    _buffer_mem_pool = std::make_unique<MemPool>(_mem_tracker.get());
-    _table_mem_pool = std::make_unique<MemPool>(_mem_tracker.get());
+    _buffer_mem_pool = std::make_unique<MemPool>();
+    _table_mem_pool = std::make_unique<MemPool>();
     _skip_list = new Table(_row_comparator, _table_mem_pool.get(), _keys_type == KeysType::DUP_KEYS);
 }
 

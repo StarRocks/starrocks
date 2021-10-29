@@ -120,8 +120,6 @@ private:
     std::vector<std::unique_ptr<ColumnVectorBatch>> _column_vector_batches;
 
     size_t _num_rows;
-    // manages the memory for slice's data
-    std::unique_ptr<MemTracker> _tracker;
     std::unique_ptr<MemPool> _pool;
 
     // index of selected rows for rows passed the predicate
