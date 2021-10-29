@@ -111,7 +111,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // them do the real work on core.
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
 
-    public static final String PIPELINE_QUERY_THREADS = "query_threads";
+    public static final String PIPELINE_DOP = "pipeline_dop";
 
     public static final String PIPELINE_SCAN_MODE = "pipeline_scan_mode";
 
@@ -296,8 +296,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM)
     private int parallelExecInstanceNum = 1;
 
-    @VariableMgr.VarAttr(name = PIPELINE_QUERY_THREADS)
-    private int pipelineQueryThreads = 1;
+    @VariableMgr.VarAttr(name = PIPELINE_DOP)
+    private int pipelineDop = 0;
 
     // 1 means that ScanOperators use async io, otherwise, use sync io instead.
     @VariableMgr.VarAttr(name = PIPELINE_SCAN_MODE)
@@ -745,7 +745,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         final int global_runtime_filter_rpc_timeout = 400;
         tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
-        tResult.setQuery_threads(pipelineQueryThreads);
+        tResult.setPipeline_dop(pipelineDop);
         tResult.setPipeline_scan_mode(pipelineScanMode);
         tResult.setPipeline_query_expire_seconds(pipelineQueryExpireSeconds);
         return tResult;
