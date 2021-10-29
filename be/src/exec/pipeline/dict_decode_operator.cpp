@@ -8,20 +8,20 @@
 namespace starrocks::pipeline {
 
 Status DictDecodeOperator::prepare(RuntimeState* state) {
-   Operator::prepare(state);
-   return Status::OK();
+    Operator::prepare(state);
+    return Status::OK();
 }
 
 Status DictDecodeOperator::close(RuntimeState* state) {
-   Operator::close(state);
-   return Status::OK();
+    Operator::close(state);
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> DictDecodeOperator::pull_chunk(RuntimeState* state) {
-   return std::move(_cur_chunk);
+    return std::move(_cur_chunk);
 }
 
-Status DictDecodeOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) { 
+Status DictDecodeOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     Columns decode_columns(_encode_column_cids.size());
     for (size_t i = 0; i < _encode_column_cids.size(); i++) {
         const ColumnPtr& encode_column = chunk->get_column_by_slot_id(_encode_column_cids[i]);
@@ -31,9 +31,6 @@ Status DictDecodeOperator::push_chunk(RuntimeState* state, const vectorized::Chu
         decode_columns[i] = vectorized::ColumnHelper::create_column(desc, encode_column->is_nullable());
         RETURN_IF_ERROR(_decoders[i]->decode(encode_column.get(), decode_columns[i].get()));
     }
-
-    // just for debug 
-    LOG(WARNING) << "this is run in pipeline";
 
     _cur_chunk = std::make_shared<vectorized::Chunk>();
     for (const auto& [k, v] : chunk->get_slot_id_to_index_map()) {
@@ -50,9 +47,9 @@ Status DictDecodeOperator::push_chunk(RuntimeState* state, const vectorized::Chu
     return Status::OK();
 }
 
-Status DictDecodeOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
     RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc, mem_tracker)); 
+    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc));
 
     const auto& global_dict = state->get_global_dict_map();
     _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
@@ -85,10 +82,10 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_t
     }
 
     return Status::OK();
-} 
+}
 
 void DictDecodeOperatorFactory::close(RuntimeState* state) {
-    Expr::close(_expr_ctxs, state);	
+    Expr::close(_expr_ctxs, state);
 }
 
 } // namespace starrocks::pipeline

@@ -4,14 +4,14 @@
 
 #include "column/column.h"
 #include "column/column_hash.h"
+#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/primitive_type.h"
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
-#include "runtime/primitive_type.h"
-#include "column/type_traits.h"
 
 namespace starrocks {
 class ExprContext;

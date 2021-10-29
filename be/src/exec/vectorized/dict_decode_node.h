@@ -27,6 +27,7 @@ public:
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
+
 protected:
     void debug_string(int indentation_level, std::stringstream* out) const override { *out << "DictDecodeNode"; }
 
