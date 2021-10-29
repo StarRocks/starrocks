@@ -91,9 +91,4 @@ public class InPredicateOperator extends PredicateOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), isNotIn);
     }
-
-    @Override
-    public boolean isStrictPredicate() {
-        return getChild(0).isColumnRefOrCast();
-    }
 }

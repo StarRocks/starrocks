@@ -112,7 +112,9 @@ public class DecodeRewriteTest extends PlanTestBase{
         String sql = "select S_ADDRESS from supplier where S_ADDRESS " +
                 "like '%Customer%Complaints%' group by S_ADDRESS ";
         String plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan.contains("Decode"));
+        Assert.assertTrue(plan.contains("  2:Decode\n" +
+                "  |  <dict id 9> : <string id 3>"));
+        Assert.assertTrue(plan.contains("     PREDICATES: 9: S_ADDRESS LIKE '%Customer%Complaints%'"));
     }
 
     @Test
@@ -185,13 +187,20 @@ public class DecodeRewriteTest extends PlanTestBase{
 
     @Test
     public void testDecodeNodeRewriteMultiCountDistinct() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(distinct a),count(distinct b) from (" +
                 "select lower(upper(S_ADDRESS)) as a, upper(S_ADDRESS) as b, " +
                 "count(*) from supplier group by a,b) as t ";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  3:Decode\n" +
-                "  |  <dict id 16> : <string id 10>\n" +
-                "  |  <dict id 17> : <string id 9>"));
+        Assert.assertFalse(plan.contains("Decode"));
+        Assert.assertTrue(plan.contains("output: multi_distinct_count(16: upper), " +
+                "multi_distinct_count(17: lower)"));
+
+        sql = "select count(distinct S_ADDRESS), count(distinct S_COMMENT) from supplier;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" multi_distinct_count(11: S_ADDRESS), " +
+                "multi_distinct_count(12: S_COMMENT)"));
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 
     @Test
@@ -290,5 +299,59 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  string functions:\n" +
                 "  |  <function id 14> : upper(13: S_ADDRESS)\n" +
                 "  |  <function id 15> : lower(14: upper)"));
+    }
+
+    @Test
+    public void testScanFilter() throws Exception {
+        String sql = "select count(*) from supplier where S_ADDRESS = 'kks' group by S_ADDRESS ";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("3: S_ADDRESS = 'kks'"));
+        Assert.assertTrue(plan.contains("group by: 10: S_ADDRESS"));
+
+        sql = "select count(*) from supplier where S_ADDRESS + 2 > 'kks' group by S_ADDRESS";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("group by: 3: S_ADDRESS"));
+    }
+
+    @Test
+    public void testAggHaving() throws Exception {
+        String sql = "select count(*) from supplier group by S_ADDRESS having S_ADDRESS = 'kks' ";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("3: S_ADDRESS = 'kks'"));
+        Assert.assertTrue(plan.contains("group by: 10: S_ADDRESS"));
+
+        sql = "select count(*) as b from supplier group by S_ADDRESS having b > 3";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  |  group by: 10: S_ADDRESS\n" +
+                "  |  having: 9: count() > 3"));
+    }
+
+    @Test
+    public void testJoin() throws Exception {
+        String sql = "select * from test.join1 right join test.join2 on join1.id = join2.id where round(2.0, 0) > 3.0";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  5:Decode\n" +
+                "  |  <dict id 7> : <string id 3>\n" +
+                "  |  <dict id 8> : <string id 6>"));
+
+
+        sql = "SELECT * \n" +
+                "FROM   emp \n" +
+                "WHERE  EXISTS (SELECT dept.dept_id \n" +
+                "               FROM   dept \n" +
+                "               WHERE  emp.dept_id = dept.dept_id \n" +
+                "               ORDER  BY state) \n" +
+                "ORDER  BY hiredate";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("  5:Decode\n" +
+                "  |  <dict id 10> : <string id 2>"));
+
+        sql = "select * from join1 join pushdown_test on join1.id = pushdown_test.k1;";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  6:Decode\n" +
+                "  |  <dict id 16> : <string id 12>\n" +
+                "  |  <dict id 17> : <string id 3>"));
+        Assert.assertTrue(plan.contains("INNER JOIN (BROADCAST)"));
+
     }
 }

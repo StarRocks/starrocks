@@ -450,7 +450,9 @@ public class DatabaseTransactionMgr {
                 tableToValidDictCacheColumns.put(tableId, new HashSet<>());
             }
             // Valid column set should intersect and remove all invalid columns
-            if (i == 0) {
+            // Only need to add valid column set once
+            if (tableToValidDictCacheColumns.get(tableId).isEmpty() &&
+                    !tabletCommitInfos.get(i).getValidDictCacheColumns().isEmpty()) {
                 tableToValidDictCacheColumns.get(tableId).addAll(tabletCommitInfos.get(i).getValidDictCacheColumns());
             }
 
