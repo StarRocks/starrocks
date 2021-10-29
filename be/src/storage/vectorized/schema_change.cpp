@@ -678,8 +678,7 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
     vectorized::Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
-    std::unique_ptr<MemTracker> mem_tracker(new MemTracker(-1));
-    std::unique_ptr<MemPool> mem_pool(new MemPool(mem_tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
     do {
         Status status = reader->do_get_next(base_chunk.get());
 
@@ -756,8 +755,7 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
     vectorized::Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
 
     ChunkSorter chunk_sorter(_chunk_allocator);
-    std::unique_ptr<MemTracker> mem_tracker(new MemTracker(-1));
-    std::unique_ptr<MemPool> mem_pool(new MemPool(mem_tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
 
     DeferOp release_chunkarr([this, &chunk_arr] {
         for (auto& it : chunk_arr) {

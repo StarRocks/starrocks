@@ -90,10 +90,7 @@ static std::string to_datetime_string(uint64_t& datetime_value) {
 #define TEST_PREDICATE_DEFINITION(CLASS_NAME)                                                                     \
     class CLASS_NAME : public testing::Test {                                                                     \
     public:                                                                                                       \
-        CLASS_NAME() : _vectorized_batch(NULL) {                                                                  \
-            _mem_tracker.reset(new MemTracker(-1));                                                               \
-            _mem_pool.reset(new MemPool(_mem_tracker.get()));                                                     \
-        }                                                                                                         \
+        CLASS_NAME() : _vectorized_batch(NULL) { _mem_pool.reset(new MemPool()); }                                \
         ~CLASS_NAME() {                                                                                           \
             if (_vectorized_batch != NULL) {                                                                      \
                 delete _vectorized_batch;                                                                         \
@@ -120,7 +117,6 @@ static std::string to_datetime_string(uint64_t& datetime_value) {
             _vectorized_batch = new VectorizedRowBatch(tablet_schema, ids, size);                                 \
             _vectorized_batch->set_size(size);                                                                    \
         }                                                                                                         \
-        std::unique_ptr<MemTracker> _mem_tracker;                                                                 \
         std::unique_ptr<MemPool> _mem_pool;                                                                       \
         VectorizedRowBatch* _vectorized_batch;                                                                    \
     };

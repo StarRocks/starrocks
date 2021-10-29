@@ -197,13 +197,13 @@ Status RuntimeState::init_mem_trackers(const TUniqueId& query_id) {
     _instance_mem_tracker =
             std::make_unique<MemTracker>(&_profile, -1, runtime_profile()->name(), _query_mem_tracker.get());
 
-    _instance_mem_pool = std::make_unique<MemPool>(_instance_mem_tracker.get());
+    _instance_mem_pool = std::make_unique<MemPool>();
     return Status::OK();
 }
 
 Status RuntimeState::init_instance_mem_tracker() {
     _instance_mem_tracker = std::make_unique<MemTracker>(-1);
-    _instance_mem_pool = std::make_unique<MemPool>(_instance_mem_tracker.get());
+    _instance_mem_pool = std::make_unique<MemPool>();
     return Status::OK();
 }
 

@@ -217,7 +217,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_
     }
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    _mem_pool.reset(new MemPool(_mem_tracker));
+    _mem_pool.reset(new MemPool());
 
     _compute_timer = ADD_TIMER(_runtime_profile, "ComputeTime");
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());

@@ -27,18 +27,16 @@
 #include <limits>
 
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "util/debug_util.h"
 
 namespace starrocks {
 
 class KeyCoderTest : public testing::Test {
 public:
-    KeyCoderTest() : _pool(&_tracker) {}
+    KeyCoderTest() {}
     virtual ~KeyCoderTest() {}
 
 private:
-    MemTracker _tracker;
     MemPool _pool;
 };
 

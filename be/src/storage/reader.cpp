@@ -301,8 +301,7 @@ void CollectIterator::clear() {
 }
 
 Reader::Reader() {
-    _tracker = std::make_unique<MemTracker>(-1);
-    _predicate_mem_pool = std::make_unique<MemPool>(_tracker.get());
+    _predicate_mem_pool = std::make_unique<MemPool>();
 }
 
 Reader::~Reader() {

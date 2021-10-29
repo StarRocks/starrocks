@@ -14,7 +14,7 @@ protected:
         config::vector_chunk_size = 4096;
         _object_pool = std::make_shared<ObjectPool>();
         _mem_tracker = std::make_shared<MemTracker>();
-        _mem_pool = std::make_shared<MemPool>(_mem_tracker.get());
+        _mem_pool = std::make_shared<MemPool>();
         _runtime_profile = create_runtime_profile();
         _runtime_state = create_runtime_state();
     }
@@ -494,8 +494,8 @@ void JoinHashMapTest::prepare_table_items(JoinHashTableItems* table_items, uint3
     table_items->first.resize(table_items->bucket_size);
     table_items->row_count = row_count;
     table_items->next.resize(row_count + 1);
-    table_items->build_pool = std::make_unique<MemPool>(_mem_tracker.get());
-    table_items->probe_pool = std::make_unique<MemPool>(_mem_tracker.get());
+    table_items->build_pool = std::make_unique<MemPool>();
+    table_items->probe_pool = std::make_unique<MemPool>();
     table_items->mem_tracker = _mem_tracker.get();
     table_items->search_ht_timer = ADD_TIMER(_runtime_profile, "SearchHashTableTimer");
     table_items->output_build_column_timer = ADD_TIMER(_runtime_profile, "OutputBuildColumnTimer");
@@ -1113,8 +1113,8 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFunc) {
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.mem_tracker = runtime_state->instance_mem_tracker();
-    table_items.build_pool = std::make_unique<MemPool>(runtime_state->instance_mem_tracker());
-    table_items.probe_pool = std::make_unique<MemPool>(runtime_state->instance_mem_tracker());
+    table_items.build_pool = std::make_unique<MemPool>();
+    table_items.probe_pool = std::make_unique<MemPool>();
     probe_state.probe_row_count = 10;
     probe_state.buckets.resize(config::vector_chunk_size);
     probe_state.next.resize(config::vector_chunk_size, 0);
@@ -1176,8 +1176,8 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
     table_items.join_keys.emplace_back(JoinKeyDesc{TYPE_INT, false});
     table_items.next.resize(11);
     table_items.mem_tracker = runtime_state->instance_mem_tracker();
-    table_items.build_pool = std::make_unique<MemPool>(runtime_state->instance_mem_tracker());
-    table_items.probe_pool = std::make_unique<MemPool>(runtime_state->instance_mem_tracker());
+    table_items.build_pool = std::make_unique<MemPool>();
+    table_items.probe_pool = std::make_unique<MemPool>();
     probe_state.probe_row_count = 10;
     probe_state.buckets.resize(config::vector_chunk_size);
     probe_state.next.resize(config::vector_chunk_size, 0);
@@ -1689,7 +1689,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     auto runtime_state = create_runtime_state();
     auto mem_tracker = create_mem_tracker(runtime_profile);
     std::shared_ptr<ObjectPool> object_pool = std::make_shared<ObjectPool>();
-    std::shared_ptr<MemPool> mem_pool = std::make_shared<MemPool>(mem_tracker.get());
+    std::shared_ptr<MemPool> mem_pool = std::make_shared<MemPool>();
     config::vector_chunk_size = 4096;
 
     TDescriptorTableBuilder row_desc_builder;

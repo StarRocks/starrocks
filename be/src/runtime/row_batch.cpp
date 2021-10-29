@@ -45,7 +45,7 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, int capacity, MemTracker* mem_
           _num_tuples_per_row(row_desc.tuple_descriptors().size()),
           _row_desc(row_desc),
           _need_to_return(false),
-          _tuple_data_pool(new MemPool(_mem_tracker)) {
+          _tuple_data_pool(new MemPool()) {
     DCHECK(_mem_tracker != nullptr);
     DCHECK_GT(capacity, 0);
     _tuple_ptrs_size = _capacity * _num_tuples_per_row * sizeof(Tuple*);
@@ -74,7 +74,7 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const PRowBatch& input_batch, 
           _num_tuples_per_row(input_batch.row_tuples_size()),
           _row_desc(row_desc),
           _need_to_return(false),
-          _tuple_data_pool(new MemPool(_mem_tracker)) {
+          _tuple_data_pool(new MemPool()) {
     DCHECK(_mem_tracker != nullptr);
     _tuple_ptrs_size = _num_rows * _num_tuples_per_row * sizeof(Tuple*);
     DCHECK_GT(_tuple_ptrs_size, 0);
@@ -166,7 +166,7 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch, 
           _num_tuples_per_row(input_batch.row_tuples.size()),
           _row_desc(row_desc),
           _need_to_return(false),
-          _tuple_data_pool(new MemPool(_mem_tracker)) {
+          _tuple_data_pool(new MemPool()) {
     DCHECK(_mem_tracker != nullptr);
     _tuple_ptrs_size = _num_rows * input_batch.row_tuples.size() * sizeof(Tuple*);
     DCHECK_GT(_tuple_ptrs_size, 0);
