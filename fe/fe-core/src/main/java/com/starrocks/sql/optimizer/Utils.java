@@ -359,8 +359,9 @@ public class Utils {
         return smallestColumnRef;
     }
 
-    public static boolean isReplicatedTable(OlapTable table, long selectedIndexId, Collection<Long> selectedPartitionId,
-                                            Collection<Long> selectedTabletId) {
+    public static boolean canDoReplicatedJoin(OlapTable table, long selectedIndexId,
+                                              Collection<Long> selectedPartitionId,
+                                              Collection<Long> selectedTabletId) {
         int backendSize = Catalog.getCurrentSystemInfo().backendSize();
         int aliveBackendSize = Catalog.getCurrentSystemInfo().getBackendIds(true).size();
         int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
