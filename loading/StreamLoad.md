@@ -165,7 +165,7 @@ curl --location-trusted -u user:password -T /home/store_sales \
 ### 代码集成示例
 
 * JAVA开发stream load，参考：[https://github.com/StarRocks/demo/MiscDemo/stream_load](https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load)
-* Spark 集成stream load，参考： [01_sparkStreaming2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/cn/01_sparkStreaming2StarRocks.md)
+* Spark 集成stream load，参考： [01_sparkStreaming2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/01_sparkStreaming2StarRocks.md)
 
 ---
 
