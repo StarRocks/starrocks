@@ -14,6 +14,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
@@ -57,6 +58,8 @@ public class OperatorBuilderFactory {
             return new LogicalFilterOperator.Builder();
         } else if (operator instanceof LogicalAssertOneRowOperator) {
             return new LogicalAssertOneRowOperator.Builder();
+        } else if (operator instanceof LogicalRepeatOperator) {
+            return new LogicalRepeatOperator.Builder();
         } else {
             throw new StarRocksPlannerException("not implement builder", ErrorType.INTERNAL_ERROR);
         }
