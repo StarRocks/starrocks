@@ -74,8 +74,8 @@ Status ProjectNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::prepare(state));
 
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc(), expr_mem_tracker()));
-    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state, row_desc(), expr_mem_tracker()));
+    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc()));
+    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state, row_desc()));
 
     _expr_compute_timer = ADD_TIMER(runtime_profile(), "ExprComputeTime");
     _common_sub_expr_compute_timer = ADD_TIMER(runtime_profile(), "CommonSubExprComputeTime");
@@ -271,7 +271,7 @@ void ProjectNode::push_down_join_runtime_filter(RuntimeState* state,
             if (_slot_ids[i] == slot_id) {
                 // replace with new probe expr
                 ExprContext* new_probe_expr_ctx = _expr_ctxs[i];
-                rf_desc->replace_probe_expr_ctx(state, row_desc(), expr_mem_tracker(), new_probe_expr_ctx);
+                rf_desc->replace_probe_expr_ctx(state, row_desc(), new_probe_expr_ctx);
                 match = true;
                 break;
             }

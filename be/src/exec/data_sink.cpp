@@ -130,7 +130,6 @@ Status DataSink::init(const TDataSink& thrift_sink) {
 }
 
 Status DataSink::prepare(RuntimeState* state) {
-    _expr_mem_tracker = std::make_unique<MemTracker>(-1, "Data sink", state->instance_mem_tracker());
     return Status::OK();
 }
 

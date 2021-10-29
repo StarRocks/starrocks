@@ -54,16 +54,12 @@ ExprContext::~ExprContext() {
     }
 }
 
-// TODO(zc): memory tracker
-Status ExprContext::prepare(RuntimeState* state, const RowDescriptor& row_desc, MemTracker* tracker) {
+Status ExprContext::prepare(RuntimeState* state, const RowDescriptor& row_desc) {
     if (_prepared) {
         return Status::OK();
     }
-    DCHECK(tracker != nullptr) << std::endl << get_stack_trace();
     DCHECK(_pool.get() == nullptr);
     _prepared = true;
-    // TODO: use param tracker to replace instance_mem_tracker
-    // _pool.reset(new MemPool(new MemTracker(-1)));
     _pool = std::make_unique<MemPool>(state->instance_mem_tracker());
     return _root->prepare(state, row_desc, this);
 }

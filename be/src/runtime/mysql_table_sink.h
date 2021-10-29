@@ -36,7 +36,6 @@ class TMysqlTableSink;
 class RuntimeState;
 class RuntimeProfile;
 class ExprContext;
-class MemTracker;
 
 // This class is a sinker, which put input data to mysql table
 class MysqlTableSink : public DataSink {
@@ -69,7 +68,6 @@ private:
     MysqlTableWriter* _writer = nullptr;
 
     RuntimeProfile* _profile = nullptr;
-    std::unique_ptr<MemTracker> _mem_tracker;
 };
 
 } // namespace starrocks

@@ -70,7 +70,7 @@ public:
                                                  _common_sub_column_ids, _common_sub_expr_ctxs);
     }
 
-    Status prepare(RuntimeState* state, MemTracker* mem_tracker);
+    Status prepare(RuntimeState* state);
     void close(RuntimeState* state);
 
 private:
