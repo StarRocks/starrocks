@@ -17,7 +17,8 @@ Status Aggregator::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, RuntimeProfile* runtime_profile) {
+Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker,
+                           RuntimeProfile* runtime_profile) {
     _pool = pool;
     _mem_tracker = mem_tracker;
     _runtime_profile = runtime_profile;

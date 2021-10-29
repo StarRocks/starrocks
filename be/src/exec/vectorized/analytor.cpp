@@ -80,7 +80,8 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
              << " _rows_end_offset " << _rows_end_offset;
 }
 
-Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, RuntimeProfile* runtime_profile) {
+Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker,
+                         RuntimeProfile* runtime_profile) {
     _pool = pool;
     _mem_tracker = mem_tracker;
     _runtime_profile = runtime_profile;
