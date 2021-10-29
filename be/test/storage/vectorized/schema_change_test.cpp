@@ -253,8 +253,8 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
 
     tm time_tm;
     strptime(origin_val.c_str(), "%Y-%m-%d %H:%M:%S", &time_tm);
-    int64_t value = ((time_tm.tm_year + 1900) * 10000L + (time_tm.tm_mon + 1) * 100L + time_tm.tm_mday) * 1000000L +
-                    time_tm.tm_hour * 10000L + time_tm.tm_min * 100L + time_tm.tm_sec;
+    TimestampValue timestamp = TimestampValue::create(2021, 9, 28, 0, 0, 0);
+    int64_t value = timestamp.timestamp();
     src_datum.set_int64(value);
     Datum dst_datum;
     auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_DATETIME, OLAP_FIELD_TYPE_DATE);
@@ -262,7 +262,7 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
 
-    int dst_value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
+    int dst_value = (2021 << 9) + (9 << 5) + 28;
     EXPECT_EQ(dst_value, dst_datum.get_uint24());
 }
 
@@ -281,16 +281,17 @@ TEST_F(SchemaChangeTest, convert_date_to_datetime) {
     std::string origin_val = "2021-09-28";
     tm time_tm;
     strptime(origin_val.c_str(), "%Y-%m-%d", &time_tm);
-    int value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
-    src_datum.set_uint24(value);
 
+    DateValue date_v2;
+    date_v2.from_date(2021, 9, 28);
+    src_datum.set_date(date_v2);
     Datum dst_datum;
     auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_DATE, OLAP_FIELD_TYPE_DATETIME);
 
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
 
-    int64_t dst_value = ((time_tm.tm_year + 1900) * 10000L + (time_tm.tm_mon + 1) * 100L + time_tm.tm_mday) * 1000000L;
+    int64_t dst_value = (2021 * 10000L + 9 * 100L + 28) * 1000000L;
     EXPECT_EQ(dst_value, dst_datum.get_int64());
 }
 
