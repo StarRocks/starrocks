@@ -45,7 +45,7 @@ void DictDecodeNode::_init_counter() {
 Status DictDecodeNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc(), expr_mem_tracker()));
+    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc()));
 
     const auto& global_dict = state->get_global_dict_map();
     _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());

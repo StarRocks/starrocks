@@ -76,7 +76,7 @@ public:
     // ScanOperator needs to attach MorselQueue.
     bool with_morsels() const override { return true; }
 
-    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
 private:
