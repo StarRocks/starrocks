@@ -61,6 +61,7 @@ Status PartitionExchanger::accept(const vectorized::ChunkPtr& chunk) {
             _channel_row_idx_start_points[i] += _channel_row_idx_start_points[i - 1];
         }
 
+        _row_indexes.assign(num_rows, 0);
         for (int i = num_rows - 1; i >= 0; --i) {
             _row_indexes[_channel_row_idx_start_points[_hash_values[i]] - 1] = i;
             _channel_row_idx_start_points[_hash_values[i]]--;

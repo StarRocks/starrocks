@@ -12,14 +12,19 @@ Status ExceptBuildSinkOperator::push_chunk(RuntimeState* state, const vectorized
     return _except_ctx->append_chunk_to_ht(state, chunk, _dst_exprs);
 }
 
-Status ExceptBuildSinkOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
-    RETURN_IF_ERROR(OperatorFactory::prepare(state, mem_tracker));
+Status ExceptBuildSinkOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare(state));
+    return _except_ctx->prepare(state, get_memtracker());
+}
+
+Status ExceptBuildSinkOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     RowDescriptor row_desc;
-    Expr::prepare(_dst_exprs, state, row_desc, mem_tracker);
+    Expr::prepare(_dst_exprs, state, row_desc);
     Expr::open(_dst_exprs, state);
 
-    return _except_ctx->prepare(state, mem_tracker);
+    return Status::OK();
 }
 
 void ExceptBuildSinkOperatorFactory::close(RuntimeState* state) {

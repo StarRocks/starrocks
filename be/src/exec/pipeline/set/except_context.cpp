@@ -13,10 +13,12 @@ Status ExceptContext::prepare(RuntimeState* state, MemTracker* mem_tracker) {
     return Status::OK();
 }
 
-void ExceptContext::close(RuntimeState* state) {
+Status ExceptContext::close(RuntimeState* state) {
     if (_build_pool != nullptr) {
         _build_pool->free_all();
     }
+
+    return Status::OK();
 }
 
 Status ExceptContext::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk,

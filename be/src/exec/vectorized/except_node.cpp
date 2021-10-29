@@ -214,30 +214,34 @@ Status ExceptNode::close(RuntimeState* state) {
 }
 
 pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
-    pipeline::ExceptContextPtr except_ctx = std::make_shared<pipeline::ExceptContext>(_tuple_id);
+    pipeline::ExceptPartitionContextFactoryPtr except_partition_ctx_factory =
+            std::make_shared<pipeline::ExceptPartitionContextFactory>(_tuple_id);
+
+    size_t shuffle_partitions_num = context->degree_of_parallelism();
 
     // Use the first child to build the hast table by ExceptBuildSinkOperator.
     pipeline::OpFactories operators_with_except_build_sink = child(0)->decompose_to_pipeline(context);
-    // TODO: make ExceptBuildSinkOperator parallelized and remove local exchange.
-    operators_with_except_build_sink = context->maybe_interpolate_local_exchange(operators_with_except_build_sink);
+    operators_with_except_build_sink = context->maybe_interpolate_local_shuffle(
+            operators_with_except_build_sink, shuffle_partitions_num, _child_expr_lists[0]);
     operators_with_except_build_sink.emplace_back(std::make_shared<pipeline::ExceptBuildSinkOperatorFactory>(
-            context->next_operator_id(), id(), except_ctx, _child_expr_lists[0]));
+            context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[0]));
     context->add_pipeline(operators_with_except_build_sink);
 
     // Use the rest children to erase keys from the hast table by ExceptEraseSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
         pipeline::OpFactories operators_with_except_erase_sink = child(i)->decompose_to_pipeline(context);
+        operators_with_except_erase_sink = context->maybe_interpolate_local_shuffle(
+                operators_with_except_erase_sink, shuffle_partitions_num, _child_expr_lists[i]);
         operators_with_except_erase_sink.emplace_back(std::make_shared<pipeline::ExceptEraseSinkOperatorFactory>(
-                context->next_operator_id(), id(), except_ctx, _child_expr_lists[i]));
+                context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[i]));
         context->add_pipeline(operators_with_except_erase_sink);
     }
 
     // ExceptOutputSourceOperator is used to assemble the undeleted keys to output chunks.
     pipeline::OpFactories operators_with_except_output_source;
     auto except_output_source = std::make_shared<pipeline::ExceptOutputSourceOperatorFactory>(
-            context->next_operator_id(), id(), except_ctx);
-    // TODO: make ExceptOutputSourceOperator parallelized.
-    except_output_source->set_degree_of_parallelism(1);
+            context->next_operator_id(), id(), except_partition_ctx_factory);
+    except_output_source->set_degree_of_parallelism(shuffle_partitions_num);
     operators_with_except_output_source.emplace_back(std::move(except_output_source));
 
     return operators_with_except_output_source;

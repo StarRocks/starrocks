@@ -12,11 +12,11 @@ Status ExceptEraseSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& 
     return _except_ctx->erase_chunk_from_ht(state, chunk, _dst_exprs);
 }
 
-Status ExceptEraseSinkOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
-    RETURN_IF_ERROR(OperatorFactory::prepare(state, mem_tracker));
+Status ExceptEraseSinkOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     RowDescriptor row_desc;
-    Expr::prepare(_dst_exprs, state, row_desc, mem_tracker);
+    Expr::prepare(_dst_exprs, state, row_desc);
     Expr::open(_dst_exprs, state);
 
     return Status::OK();

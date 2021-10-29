@@ -21,6 +21,9 @@ namespace starrocks::pipeline {
 class ExceptContext;
 using ExceptContextPtr = std::shared_ptr<ExceptContext>;
 
+class ExceptPartitionContextFactory;
+using ExceptPartitionContextFactoryPtr = std::shared_ptr<ExceptPartitionContextFactory>;
+
 // Used as the shared context for ExceptBuildSinkOperator, ExceptEraseSinkOperator, and ExceptOutputSourceOperator.
 class ExceptContext {
 public:
@@ -58,7 +61,7 @@ public:
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state);
 
-    void close(RuntimeState* state);
+    Status close(RuntimeState* state);
 
 private:
     std::unique_ptr<vectorized::ExceptHashSerializeSet> _hash_set =
@@ -95,6 +98,30 @@ private:
     // driver_queue, and read by the dispatcher thread after taking them from driver_queue. Therefore, it is guaranteed
     // by driver_queue that the dispatcher thread can see every increment of _erase_drivers_num by FragmentExecutor::prepare().
     int32_t _erase_drivers_num = 0;
+};
+
+// The input trunks of BUILD and ERASE are shuffled by the local shuffle operator.
+// The number of shuffled partitions is the degree of parallelism (DOP), which means
+// the number of partition hash sets and the number of BUILD drivers, ERASE drivers of one child, OUTPUT drivers
+// are both DOP. And each pair of BUILD/ERASE/OUTPUT drivers shares a same except partition context.
+class ExceptPartitionContextFactory {
+public:
+    explicit ExceptPartitionContextFactory(const size_t dst_tuple_id) : _dst_tuple_id(dst_tuple_id) {}
+
+    ExceptContextPtr get_or_create(const int partition_id) {
+        auto it = _partition_id2ctx.find(partition_id);
+        if (it != _partition_id2ctx.end()) {
+            return it->second;
+        }
+
+        auto ctx = std::make_shared<ExceptContext>(_dst_tuple_id);
+        _partition_id2ctx[partition_id] = ctx;
+        return ctx;
+    }
+
+private:
+    const size_t _dst_tuple_id;
+    std::unordered_map<size_t, ExceptContextPtr> _partition_id2ctx;
 };
 
 } // namespace starrocks::pipeline

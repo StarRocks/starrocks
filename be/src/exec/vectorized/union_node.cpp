@@ -377,7 +377,7 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         operators_list[i].emplace_back(std::move(union_const_source_op));
     }
 
-    return context->gather_pipelines_to_one(operators_list);
+    return context->maybe_interpolate_local_exchange_to_pipelines(operators_list);
 }
 
 } // namespace starrocks::vectorized

@@ -9,14 +9,16 @@ namespace starrocks::pipeline {
 
 // ExceptNode is decomposed to ExceptBuildSinkOperator, ExceptEraseSinkOperator, and ExceptOutputSourceOperator.
 // - ExceptBuildSinkOperator (BUILD) builds the hast set from the output rows of ExceptNode's first child.
-//   The degree of parallelism is 1, because we currently cannot be parallelized to write keys to the hash set.
 // - ExceptEraseSinkOperator (ERASE) labels keys as deleted in the hash set from the output rows of reset children.
 //   ERASE depends on BUILD, which means it should wait for BUILD to finish building the hast set.
 //   Multiple ERASEs from multiple children can be parallelized to label keys as deleted.
 // - ExceptOutputSourceOperator (OUTPUT) traverses the hast set and outputs undeleted rows.
 //   OUTPUT depends on all the ERASEs, which means it should wait for ERASEs to finish labeling keys as delete.
-//   The degree of parallelism is 1, because it's hard to divide the hash set to multiple iteration ranges.
-// TODO: add local exchange shuffle and divide the hash set to multiple partition hash sets, then BUILD and OUTPUT can be parallelized.
+//
+// The input trunks of BUILD and ERASE are shuffled by the local shuffle operator.
+// The number of shuffled partitions is the degree of parallelism (DOP), which means
+// the number of partition hash sets and the number of BUILD drivers, ERASE drivers of one child, OUTPUT drivers
+// are both DOP. And each pair of BUILD/ERASE/OUTPUT drivers shares a same except partition context.
 class ExceptEraseSinkOperator final : public Operator {
 public:
     ExceptEraseSinkOperator(int32_t id, int32_t plan_node_id, std::shared_ptr<ExceptContext> except_ctx,
@@ -56,23 +58,25 @@ private:
 
 class ExceptEraseSinkOperatorFactory final : public OperatorFactory {
 public:
-    ExceptEraseSinkOperatorFactory(int32_t id, int32_t plan_node_id, std::shared_ptr<ExceptContext> except_ctx,
+    ExceptEraseSinkOperatorFactory(int32_t id, int32_t plan_node_id,
+                                   ExceptPartitionContextFactoryPtr except_partition_ctx_factory,
                                    const std::vector<ExprContext*>& dst_exprs)
             : OperatorFactory(id, "except_erase_sink", plan_node_id),
-              _except_ctx(std::move(except_ctx)),
+              _except_partition_ctx_factory(std::move(except_partition_ctx_factory)),
               _dst_exprs(dst_exprs) {}
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        _except_ctx->create_one_erase_driver();
-        return std::make_shared<ExceptEraseSinkOperator>(_id, _plan_node_id, _except_ctx, _dst_exprs);
+        ExceptContextPtr except_ctx = _except_partition_ctx_factory->get_or_create(driver_sequence);
+        except_ctx->create_one_erase_driver();
+        return std::make_shared<ExceptEraseSinkOperator>(_id, _plan_node_id, std::move(except_ctx), _dst_exprs);
     }
 
-    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
+    Status prepare(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
 private:
-    std::shared_ptr<ExceptContext> _except_ctx;
+    ExceptPartitionContextFactoryPtr _except_partition_ctx_factory;
 
     const std::vector<ExprContext*>& _dst_exprs;
 };
