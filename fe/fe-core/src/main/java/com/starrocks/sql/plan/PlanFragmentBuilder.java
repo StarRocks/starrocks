@@ -1542,6 +1542,13 @@ public class PlanFragmentBuilder {
                     outputGroupingTuple,
                     repeatSlotIdList,
                     repeatOperator.getGroupingIds());
+            List<ScalarOperator> predicates = Utils.extractConjuncts(repeatOperator.getPredicate());
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+
+            for (ScalarOperator predicate : predicates) {
+                repeatNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            }
             repeatNode.computeStatistics(optExpr.getStatistics());
 
             inputFragment.setPlanRoot(repeatNode);

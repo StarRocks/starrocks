@@ -23,7 +23,8 @@ public class RepeatImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalRepeatOperator repeatOperator = (LogicalRepeatOperator) input.getOp();
         PhysicalRepeatOperator physicalRepeat = new PhysicalRepeatOperator(repeatOperator.getOutputGrouping(),
-                repeatOperator.getRepeatColumnRef(), repeatOperator.getGroupingIds());
+                repeatOperator.getRepeatColumnRef(), repeatOperator.getGroupingIds(), repeatOperator.getLimit(),
+                repeatOperator.getPredicate());
         return Lists.newArrayList(OptExpression.create(physicalRepeat, input.getInputs()));
     }
 }

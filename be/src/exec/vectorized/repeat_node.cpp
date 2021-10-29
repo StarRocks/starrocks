@@ -145,6 +145,7 @@ Status RepeatNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
 
     if ((*chunk) != nullptr) {
+        ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
         _num_rows_returned += (*chunk)->num_rows();
     }
     DCHECK_CHUNK(*chunk);
