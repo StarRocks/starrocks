@@ -1919,63 +1919,8 @@ public class SelectStmt extends QueryStmt {
     @Override
     public void substituteSelectListForCreateView(Analyzer analyzer, List<String> newColLabels)
             throws UserException {
-        // analyze with clause
-        if (hasWithClause()) {
-            withClause_.analyze(analyzer);
-        }
-        // start out with table refs to establish aliases
-        TableRef leftTblRef = null;  // the one to the left of tblRef
-        for (int i = 0; i < fromClause_.size(); ++i) {
-            // Resolve and replace non-InlineViewRef table refs with a BaseTableRef or ViewRef.
-            TableRef tblRef = fromClause_.get(i);
-            tblRef = analyzer.resolveTableRef(tblRef);
-            Preconditions.checkNotNull(tblRef);
-            fromClause_.set(i, tblRef);
-            tblRef.setLeftTblRef(leftTblRef);
-            tblRef.analyze(analyzer);
-            leftTblRef = tblRef;
-        }
-        // populate selectListExprs, aliasSMap, and colNames
-        for (SelectListItem item : selectList.getItems()) {
-            if (item.isStar()) {
-                TableName tblName = item.getTblName();
-                if (tblName == null) {
-                    expandStar(analyzer);
-                } else {
-                    expandStar(analyzer, tblName);
-                }
-            } else {
-                // to make sure the sortinfo's AnalyticExpr and resultExprs's AnalyticExpr analytic once
-                if (item.getExpr() instanceof AnalyticExpr) {
-                    item.getExpr().analyze(analyzer);
-                }
-                if (item.getAlias() != null) {
-                    SlotRef aliasRef = new SlotRef(null, item.getAlias());
-                    SlotRef newAliasRef = new SlotRef(null, newColLabels.get(resultExprs.size()));
-                    newAliasRef.analysisDone();
-                    aliasSMap.put(aliasRef, newAliasRef);
-                }
-                resultExprs.add(item.getExpr());
-            }
-        }
-        // substitute group by
-        if (groupByClause != null) {
-            substituteOrdinalsAliases(groupByClause.getGroupingExprs(), "GROUP BY", analyzer);
-        }
-        // substitute having
-        if (havingClause != null) {
-            havingClause = havingClause.clone(aliasSMap);
-        }
-        // substitute order by
-        if (orderByElements != null) {
-            for (int i = 0; i < orderByElements.size(); ++i) {
-                orderByElements = OrderByElement.substitute(orderByElements, aliasSMap, analyzer);
-            }
-        }
-
-        colLabels.clear();
+        substituteSelectList(analyzer, newColLabels);
         sqlString_ = null;
-        colLabels.addAll(newColLabels);
     }
 
     public boolean hasWhereClause() {

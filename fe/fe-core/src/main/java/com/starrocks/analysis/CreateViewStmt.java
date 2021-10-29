@@ -79,6 +79,10 @@ public class CreateViewStmt extends BaseViewStmt {
         Analyzer viewAnalyzer = new Analyzer(analyzer);
         viewDefStmt.analyze(viewAnalyzer);
 
+        createView(analyzer);
+    }
+
+    void createView(Analyzer analyzer) throws UserException {
         if (cols != null) {
             if (cols.size() != viewDefStmt.getColLabels().size()) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_VIEW_WRONG_LIST);
@@ -111,6 +115,7 @@ public class CreateViewStmt extends BaseViewStmt {
             return;
         }
 
+        // It's different with createColumnAndViewDefs in here, cloneStmt is origin stmt which analyze without set `setNeedSql`
         Analyzer tmpAnalyzer = new Analyzer(analyzer);
         List<String> colNames = cols.stream().map(ColWithComment::getColName).collect(Collectors.toList());
         viewDefStmt.substituteSelectListForCreateView(tmpAnalyzer, colNames);
