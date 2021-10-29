@@ -42,6 +42,8 @@
 #include "storage/olap_common.h"
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/rowset/segment_v2/column_writer.h"
+#include "storage/rowset/segment_v2/default_value_column_iterator.h"
+#include "storage/rowset/segment_v2/file_column_iterator.h"
 #include "storage/tablet_schema_helper.h"
 #include "storage/types.h"
 #include "storage/vectorized/chunk_helper.h"

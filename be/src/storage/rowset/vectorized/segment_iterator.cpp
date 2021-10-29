@@ -6,7 +6,6 @@
 #include <memory>
 #include <unordered_map>
 
-#include "butil/containers/flat_map.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -17,13 +16,15 @@
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
 #include "simd/simd.h"
-#include "storage/column_predicate.h"
 #include "storage/del_vector.h"
 #include "storage/fs/fs_util.h"
 #include "storage/row_block2.h"
 #include "storage/rowset/segment_v2/bitmap_index_reader.h"
+#include "storage/rowset/segment_v2/column_decoder.h"
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/rowset/segment_v2/common.h"
+#include "storage/rowset/segment_v2/default_value_column_iterator.h"
+#include "storage/rowset/segment_v2/file_column_iterator.h"
 #include "storage/rowset/segment_v2/row_ranges.h"
 #include "storage/rowset/segment_v2/segment.h"
 #include "storage/rowset/vectorized/rowid_column_iterator.h"
@@ -39,7 +40,6 @@
 #include "storage/vectorized/projection_iterator.h"
 #include "storage/vectorized/range.h"
 #include "storage/vectorized/roaring2range.h"
-#include "util/phmap/phmap_fwd_decl.h"
 #include "util/slice.h"
 #include "util/starrocks_metrics.h"
 
