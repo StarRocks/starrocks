@@ -23,6 +23,7 @@ public:
         if (_has_null) return _null_value;
         return _min_value;
     }
+    size_t num_rows;
 
 private:
     bool _has_null;
