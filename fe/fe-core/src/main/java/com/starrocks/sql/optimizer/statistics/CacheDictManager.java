@@ -190,6 +190,10 @@ public class CacheDictManager implements IDictManager {
     @Override
     public void updateGlobalDict(long tableId, String columnName, long versionTime) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+        if (!dictStatistics.synchronous().asMap().containsKey(columnIdentifier)) {
+            return;
+        }
+
         Optional<ColumnDict> columnDictOptional = dictStatistics.synchronous().get(columnIdentifier);
         Preconditions.checkState(columnDictOptional != null && columnDictOptional.isPresent());
         ColumnDict columnDict = columnDictOptional.get();

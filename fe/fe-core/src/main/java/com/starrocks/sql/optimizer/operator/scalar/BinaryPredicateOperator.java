@@ -9,8 +9,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.EQ_FOR_NULL;
-
 public class BinaryPredicateOperator extends PredicateOperator {
     private static final Map<BinaryType, BinaryType> BINARY_COMMUTATIVE_MAP =
             ImmutableMap.<BinaryType, BinaryType>builder()
@@ -142,15 +140,5 @@ public class BinaryPredicateOperator extends PredicateOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), type);
-    }
-
-    @Override
-    public boolean isStrictPredicate() {
-        if (type == EQ_FOR_NULL) {
-            return false;
-        }
-        // To exclude 1 = 1;
-        // TODO(kks): Currently, we only allow column ref and cast, we should allow some functions
-        return getChild(0).isColumnRefOrCast() || getChild(1).isColumnRefOrCast();
     }
 }

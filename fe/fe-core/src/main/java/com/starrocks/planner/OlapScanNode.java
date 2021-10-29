@@ -171,6 +171,13 @@ public class OlapScanNode extends ScanNode {
         return selectedPartitionIds;
     }
 
+    // The dict id int column ids to dict string column ids
+    private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
+
+    public void setDictStringIdToIntIds(Map<Integer, Integer> dictStringIdToIntIds) {
+        this.dictStringIdToIntIds = dictStringIdToIntIds;
+    }
+
     /**
      * This method is mainly used to update scan range info in OlapScanNode by the new materialized selector.
      * Situation1:
@@ -672,6 +679,7 @@ public class OlapScanNode extends ScanNode {
         if (ConnectContext.get() != null) {
             msg.olap_scan_node.setEnable_column_expr_predicate(ConnectContext.get().getSessionVariable().getEnableColumnExprPredicate());
         }
+        msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
     }
 
     // export some tablets

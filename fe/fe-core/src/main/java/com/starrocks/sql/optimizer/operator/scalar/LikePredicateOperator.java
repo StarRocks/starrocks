@@ -76,9 +76,4 @@ public class LikePredicateOperator extends PredicateOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), likeType);
     }
-
-    @Override
-    public boolean isStrictPredicate() {
-        return getChild(0).isColumnRefOrCast();
-    }
 }
