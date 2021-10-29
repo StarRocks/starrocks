@@ -36,6 +36,7 @@
 #include "storage/vectorized/chunk_iterator.h"
 #include "storage/vectorized/column_or_predicate.h"
 #include "storage/vectorized/column_predicate.h"
+#include "storage/vectorized/column_predicate_rewriter.h"
 #include "storage/vectorized/projection_iterator.h"
 #include "storage/vectorized/range.h"
 #include "storage/vectorized/roaring2range.h"
@@ -364,8 +365,6 @@ private:
 
     void _rewrite_predicates();
 
-    bool _rewrite_predicate(const FieldPtr& field);
-
     Status _decode_dict_codes(ScanContext* ctx);
 
     Status _check_low_cardinality_optimization();
@@ -475,13 +474,20 @@ Status SegmentIterator::_init() {
 
     /// the calling order matters, do not change unless you know why.
 
+    // init stage
+    // The main task is to do some initialization,
+    // initialize the iterator and check if certain optimizations can be applied
     RETURN_IF_ERROR(_check_low_cardinality_optimization());
     RETURN_IF_ERROR(_init_column_iterators(_schema));
+    // filter by index stage
+    // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_init_bitmap_index_iterators());
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
     RETURN_IF_ERROR(_apply_bitmap_index());
     RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    // rewrite stage
+    // Rewriting predicates using segment dictionary codes
     _rewrite_predicates();
     RETURN_IF_ERROR(_init_context());
     _init_column_predicates();
@@ -1132,107 +1138,9 @@ Status SegmentIterator::_init_context() {
 }
 
 void SegmentIterator::_rewrite_predicates() {
-    for (size_t i = 0; i < _predicate_columns; i++) {
-        const FieldPtr& field = _schema.field(i);
-        ColumnId cid = field->id();
-        _predicate_need_rewrite[cid] = _predicate_need_rewrite[cid] && _rewrite_predicate(field);
-    }
-}
-
-bool SegmentIterator::_rewrite_predicate(const FieldPtr& field) {
-    ColumnId cid = field->id();
-    DCHECK(_column_iterators[cid]->all_page_dict_encoded());
-
-    auto iter = _opts.predicates.find(cid);
-    RETURN_IF(iter == _opts.predicates.end(), false);
-
-    PredicateList& preds = iter->second;
-    // the predicate has been erased, because of bitmap index filter.
-    RETURN_IF(preds.empty(), false);
-    const ColumnPredicate* pred = preds[0];
-    if (PredicateType::kEQ == pred->type()) {
-        Datum value = pred->value();
-        int code = _column_iterators[cid]->dict_lookup(value.get_slice());
-        if (code < 0) {
-            // predicate always false, clear scan range, this will make `get_next` return EOF directly.
-            _scan_range = _scan_range.intersection(SparseRange());
-            return false;
-        }
-        auto ptr = new_column_eq_predicate(get_type_info(kDictCodeType), cid, std::to_string(code));
-        preds[0] = _obj_pool.add(ptr);
-        return true;
-    }
-    if (PredicateType::kNE == pred->type()) {
-        Datum value = pred->value();
-        int code = _column_iterators[cid]->dict_lookup(value.get_slice());
-        if (code < 0) {
-            if (!field->is_nullable()) {
-                // predicate always true, clear this predicate.
-                preds.clear();
-                return false;
-            } else {
-                // convert this predicate to `not null` predicate.
-                auto ptr = new_column_null_predicate(get_type_info(kDictCodeType), cid, false);
-                preds[0] = _obj_pool.add(ptr);
-                return true;
-            }
-        }
-        auto ptr = new_column_ne_predicate(get_type_info(kDictCodeType), cid, std::to_string(code));
-        preds[0] = _obj_pool.add(ptr);
-        return true;
-    }
-    if (PredicateType::kInList == pred->type()) {
-        std::vector<Datum> values = pred->values();
-        std::vector<int> codewords;
-        for (const auto& value : values) {
-            if (int code = _column_iterators[cid]->dict_lookup(value.get_slice()); code >= 0) {
-                codewords.emplace_back(code);
-            }
-        }
-        if (codewords.empty()) {
-            // predicate always false, clear scan range.
-            _scan_range = _scan_range.intersection(SparseRange());
-            return false;
-        }
-        std::vector<std::string> str_codewords;
-        str_codewords.reserve(codewords.size());
-        for (int code : codewords) {
-            str_codewords.emplace_back(std::to_string(code));
-        }
-        auto ptr = new_column_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
-        preds[0] = _obj_pool.add(ptr);
-        return true;
-    }
-    if (PredicateType::kNotInList == pred->type()) {
-        std::vector<Datum> values = pred->values();
-        std::vector<int> codewords;
-        for (const auto& value : values) {
-            if (int code = _column_iterators[cid]->dict_lookup(value.get_slice()); code >= 0) {
-                codewords.emplace_back(code);
-            }
-        }
-        if (codewords.empty()) {
-            if (!field->is_nullable()) {
-                // predicate always true, clear this predicate.
-                preds.clear();
-                return false;
-            } else {
-                // convert this predicate to `not null` predicate.
-                auto ptr = new_column_null_predicate(get_type_info(kDictCodeType), cid, false);
-                preds[0] = _obj_pool.add(ptr);
-                return true;
-            }
-        }
-        std::vector<std::string> str_codewords;
-        str_codewords.reserve(codewords.size());
-        for (int code : codewords) {
-            str_codewords.emplace_back(std::to_string(code));
-        }
-        auto ptr = new_column_not_in_predicate(get_type_info(kDictCodeType), cid, str_codewords);
-        preds[0] = _obj_pool.add(ptr);
-        return true;
-    }
-    return false;
+    ColumnPredicateRewriter rewriter(_column_iterators, _opts.predicates, _schema, _predicate_need_rewrite,
+                                     _predicate_columns, _scan_range);
+    rewriter.rewrite_predicate(&_obj_pool);
 }
 
 Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
@@ -1282,12 +1190,17 @@ Status SegmentIterator::_check_low_cardinality_optimization() {
         const PredicateList& preds = iter->second;
 
         if (preds.size() > 0) {
-            if (preds.size() == 1) {
-                _predicate_need_rewrite[cid] =
-                        preds[0]->type() == PredicateType::kEQ || preds[0]->type() == PredicateType::kInList ||
-                        preds[0]->type() == PredicateType::kNE || preds[0]->type() == PredicateType::kNotInList;
-            }
-            if (_can_using_global_dict(field) && !_predicate_need_rewrite[cid]) {
+            bool can_using_global_dict = _can_using_global_dict(field);
+            _predicate_need_rewrite[cid] = std::all_of(preds.begin(), preds.end(), [=](auto* pred) {
+                auto pred_type = pred->type();
+                bool eq_predicate = pred_type == PredicateType::kEQ || pred_type == PredicateType::kInList ||
+                                    pred_type == PredicateType::kNE || pred_type == PredicateType::kNotInList;
+                bool range_predicate =
+                        can_using_global_dict && (pred_type == PredicateType::kGE || pred_type == PredicateType::kLE ||
+                                                  pred_type == PredicateType::kGT || pred_type == PredicateType::kLT);
+                return eq_predicate || range_predicate;
+            });
+            if (can_using_global_dict && !_predicate_need_rewrite[cid]) {
                 std::string msg = fmt::format("expect predicates could use low cardinality in cid:{}", cid);
                 DCHECK(false) << msg;
                 return Status::InternalError(msg);
