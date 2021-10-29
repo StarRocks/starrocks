@@ -58,6 +58,8 @@ public:
 
     size_t size() const override { return _pool.size(); }
 
+    size_t capacity() const override { return _pool.capacity(); }
+
     size_t type_size() const override { return sizeof(T); }
 
     size_t byte_size() const override { return byte_size(0, size()); }

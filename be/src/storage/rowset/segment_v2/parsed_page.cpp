@@ -332,6 +332,8 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     Slice data_slice(body.data, body.size - null_size);
     PageDecoder* decoder = nullptr;
     PageDecoderOptions opts;
+    opts.page_handle = &(page->_page_handle);
+    opts.enable_direct_copy = true;
     RETURN_IF_ERROR(encoding->create_page_decoder(data_slice, opts, &decoder));
     page->_data_decoder.reset(decoder);
     RETURN_IF_ERROR(page->_data_decoder->init());
@@ -341,11 +343,6 @@ Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, con
     page->_page_index = page_index;
     page->_corresponding_element_ordinal = footer.corresponding_element_ordinal();
 
-    if (encoding->encoding() == EncodingTypePB::BIT_SHUFFLE) {
-        // When using BIT_SHUFFLE encoding, the original data is not used after decoded.
-        // So the memory can be released to reduce the memory usage.
-        page->_page_handle.release_memory();
-    }
     *result = std::move(page);
     return Status::OK();
 }

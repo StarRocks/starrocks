@@ -155,7 +155,9 @@ protected:
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
                 vectorized::ColumnPtr dst = vectorized::ChunkHelper::column_from_field_type(type, true);
+                // will do direct copy to column
                 size_t rows_read = src.size();
+                dst->reserve(rows_read);
                 st = iter->next_batch(&rows_read, dst.get());
                 ASSERT_TRUE(st.ok());
                 ASSERT_EQ(src.size(), rows_read);
