@@ -19,7 +19,7 @@ CreateTime： 第一次创建该仓库的时间
 IsReadOnly： 是否为只读仓库
 Location：   仓库中用于备份数据的根目录
 Broker：     依赖的 Broker
-ErrMsg：     Palo 会定期检查仓库的连通性，如果出现问题，这里会显示错误信息
+ErrMsg：     StarRocks 会定期检查仓库的连通性，如果出现问题，这里会显示错误信息
 ```
 
 ## example

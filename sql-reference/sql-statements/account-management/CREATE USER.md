@@ -24,9 +24,7 @@ auth_option: {
 
 2. user_identity 由两部分组成，user_name 和 host，其中 user_name 为用户名。host 标识用户端连接所在的主机地址。host 部分可以使用 % 进行模糊匹配。如果不指定 host，默认为 '%'，即表示该用户可以从任意 host 连接到 StarRocks。
 
-3. host 部分也可指定为 domain，语法为：'user_name'@['domain']，即使用中括号包围，则 StarRocks 会认为这个是一个 domain，并尝试解析其 ip 地址。目前仅支持百度内部的 BNS 解析。
-
-4. auth_option指定用户的认证方式，目前支持mysql_native_password和authentication_ldap_simple
+3. auth_option指定用户的认证方式，目前支持mysql_native_password和authentication_ldap_simple
 
     如果指定了角色（ROLE），则会自动将该角色所拥有的权限赋予新创建的这个用户。如果不指定，则该用户默认没有任何权限。指定的 ROLE 必须已经存在。
 

@@ -24,7 +24,7 @@ OPTIONS
 用户可以通过HTTP的Header部分来传入导入参数
 
 label: 一次导入的标签，相同标签的数据无法多次导入。用户可以通过指定Label的方式来避免一份数据重复导入的问题。
-当前Palo内部保留30分钟内最近成功的label。
+当前StarRocks内部保留30分钟内最近成功的label。
 
 column_separator：用于指定导入文件中的列分隔符，默认为\t。如果是不可见字符，则需要加\x作为前缀，使用十六进制来表示分隔符。
 如hive文件的分隔符\x01，需要指定为-H "column_separator:\x01"

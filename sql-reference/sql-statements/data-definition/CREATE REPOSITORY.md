@@ -21,12 +21,12 @@ PROPERTIES ("key"="value", ...);
 
 ## example
 
-1. 创建名为 bos_repo 的仓库，依赖 BOS broker "bos_broker"，数据根目录为：bos://palo_backup
+1. 创建名为 bos_repo 的仓库，依赖 BOS broker "bos_broker"，数据根目录为：bos://starRocks_backup
 
     ```sql
     CREATE REPOSITORY `bos_repo`
     WITH BROKER `bos_broker`
-    ON LOCATION "bos://palo_backup"
+    ON LOCATION "bos://starRocks_backup"
     PROPERTIES
     (
         "bos_endpoint" = "http://gz.bcebos.com",
@@ -40,7 +40,7 @@ PROPERTIES ("key"="value", ...);
     ```sql
     CREATE READ ONLY REPOSITORY `bos_repo`
     WITH BROKER `bos_broker`
-    ON LOCATION "bos://palo_backup"
+    ON LOCATION "bos://starRocks_backup"
     PROPERTIES
     (
         "bos_endpoint" = "http://gz.bcebos.com",

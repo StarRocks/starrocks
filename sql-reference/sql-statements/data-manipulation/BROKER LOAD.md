@@ -214,7 +214,7 @@ WITH BROKER broker_name
     ```sql
     LOAD LABEL example_db.label1
     (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/file")
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
     INTO TABLE `my_table`
     )
     WITH BROKER my_hdfs_broker
@@ -238,7 +238,7 @@ WITH BROKER broker_name
     ```sql
     LOAD LABEL example_db.label3
     (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/*")
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/*")
     INTO TABLE `my_table`
     COLUMNS TERMINATED BY "\\x01"
     )
@@ -259,7 +259,7 @@ WITH BROKER broker_name
     ```sql
     LOAD LABEL example_db.label4
     (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/old_file)
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/old_file)
     NEGATIVE
     INTO TABLE `my_table`
     COLUMNS TERMINATED BY "\t"
@@ -268,7 +268,7 @@ WITH BROKER broker_name
     (
         "hadoop.security.authentication" = "kerberos",
         "kerberos_principal"="starrocks@YOUR.COM",
-        "kerberos_keytab"="/home/palo/palo.keytab"
+        "kerberos_keytab"="/home/starRocks/starRocks.keytab"
     )
     ````
 
@@ -277,7 +277,7 @@ WITH BROKER broker_name
     ```sql
     LOAD LABEL example_db.label5
     (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/file")
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
     INTO TABLE `my_table`
     PARTITION (p1, p2)
     COLUMNS TERMINATED BY ","
@@ -337,7 +337,7 @@ WITH BROKER broker_name
     ```SQL
     LOAD LABEL example_db.label7
     (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/file")
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
     INTO TABLE `my_table`
     PARTITION (p1, p2)
     COLUMNS TERMINATED BY ","
@@ -352,7 +352,7 @@ WITH BROKER broker_name
 
     LOAD LABEL example_db.label8
     (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/file")
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
     INTO TABLE `my_table`
     PARTITION (p1, p2)
     COLUMNS TERMINATED BY ","
@@ -370,7 +370,7 @@ WITH BROKER broker_name
     ```SQL
     LOAD LABEL example_db.label9
     (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/file")
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
     INTO TABLE `my_table`
     FORMAT AS "parquet"
     (k1, k2, k3)
@@ -385,7 +385,7 @@ WITH BROKER broker_name
     ```SQL
     LOAD LABEL example_db.label10
     (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/dir/city=beijing/*/*")
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/*/*")
     INTO TABLE `my_table`
     FORMAT AS "csv"
     (k1, k2, k3)
@@ -395,9 +395,9 @@ WITH BROKER broker_name
     WITH BROKER hdfs ("username"="hdfs_user", "password"="hdfs_password");
     ```
 
-    hdfs://hdfs_host:hdfs_port/user/palo/data/input/dir/city=beijing目录下包括如下文件：
+    hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing目录下包括如下文件：
 
-    [hdfs://hdfs_host:hdfs_port/user/palo/data/input/dir/city=beijing/utc_date=2019-06-26/0000.csv, hdfs://hdfs_host:hdfs_port/user/palo/data/input/dir/city=beijing/utc_date=2019-06-26/0001.csv, ...]
+    [hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0000.csv, hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0001.csv, ...]
 
     则提取文件路径的中的city和utc_date字段
 
@@ -406,7 +406,7 @@ WITH BROKER broker_name
     ```sql
     LOAD LABEL example_db.label10
     (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/file")
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
     INTO TABLE `my_table`
     where k1 > k2
     )

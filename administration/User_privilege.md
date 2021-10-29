@@ -8,7 +8,7 @@ StarRocks 的权限管理系统参照了 MySQL 的权限管理机制，支持表
 
 在权限系统中，一个用户被识别为一个 User Identity（用户标识）。用户标识由两部分组成：username 和 userhost。其中 username 为用户名，由英文大小写组成。userhost 表示该用户链接来自的 IP。user\_identity 以 username@'userhost' 的方式呈现，表示来自 userhost 的 username。
 
-user\_identity 的另一种表现方式为 username@\['domain'\]，其中 domain 为域名，可以通过 DNS 或 BNS（百度名字服务）解析为一组 IP。最终表现为一组 username@'userhost'，所以后面我们统一使用 username@'userhost' 来表示。
+user\_identity 的另一种表现方式为 username@\['domain'\]，其中 domain 为域名，可以通过 DNS 解析为一组 IP。最终表现为一组 username@'userhost'，所以后面我们统一使用 username@'userhost' 来表示。
 
 * 权限 Privilege
 

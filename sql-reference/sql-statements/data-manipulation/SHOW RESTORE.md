@@ -13,7 +13,7 @@ SHOW RESTORE [FROM db_name]
 说明：
 
 ```plain text
-1. Palo 中仅保存最近一次 RESTORE 任务。
+1. StarRocks 中仅保存最近一次 RESTORE 任务。
 2. 各列含义如下：
 JobId：                  唯一作业id
 Label：                  要恢复的备份的名称

@@ -10,7 +10,7 @@ SHOW BACKUP [FROM db_name]
 说明：
 
 ```plain text
-1. Palo 中仅保存最近一次 BACKUP 任务。
+1. StarRocks 中仅保存最近一次 BACKUP 任务。
 2. 各列含义如下：
 JobId：                  唯一作业id
 SnapshotName：           备份的名称

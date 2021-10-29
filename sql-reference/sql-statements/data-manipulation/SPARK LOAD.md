@@ -154,7 +154,7 @@ NULL值：\N
     ```sql
     LOAD LABEL example_db.label1
     (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/file")
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
     INTO TABLE `my_table`
     )
     WITH RESOURCE 'my_spark'
@@ -172,7 +172,7 @@ NULL值：\N
     ```sql
     LOAD LABEL example_db.label3
     (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/*")
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/*")
     NEGATIVE
     INTO TABLE `my_table`
     COLUMNS TERMINATED BY ","
@@ -206,7 +206,7 @@ NULL值：\N
 
     LOAD LABEL example_db.label6
     (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/file")
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
     INTO TABLE `my_table`
     PARTITION (p1, p2)
     COLUMNS TERMINATED BY ","
@@ -225,7 +225,7 @@ NULL值：\N
     ```sql
     LOAD LABEL example_db.label10
     (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/dir/city=beijing/*/*")
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/*/*")
     INTO TABLE `my_table`
     (k1, k2, k3)
     COLUMNS FROM PATH AS (city, utc_date)
@@ -234,9 +234,9 @@ NULL值：\N
     WITH RESOURCE 'my_spark';
     ```
 
-    hdfs://hdfs_host:hdfs_port/user/palo/data/input/dir/city=beijing目录下包括如下文件：
+    hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing目录下包括如下文件：
 
-    [hdfs://hdfs_host:hdfs_port/user/palo/data/input/dir/city=beijing/utc_date=2019-06-26/0000.csv, hdfs://hdfs_host:hdfs_port/user/palo/data/input/dir/city=beijing/utc_date=2019-06-26/0001.csv, ...]
+    [hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0000.csv, hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/dir/city=beijing/utc_date=2019-06-26/0001.csv, ...]
 
     则提取文件路径的中的city和utc_date字段
 
@@ -245,7 +245,7 @@ NULL值：\N
     ```sql
     LOAD LABEL example_db.label10
     (
-    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/palo/data/input/file")
+    DATA INFILE("hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file")
     INTO TABLE `my_table`
     WHERE k1 > 10
     )
