@@ -231,13 +231,12 @@ public:
     BitShufflePageDecoder(Slice data, const PageDecoderOptions& options)
             : _data(data),
               _options(options),
+              _parsed(false),
               _num_elements(0),
               _compressed_size(0),
               _num_element_after_padding(0),
               _size_of_element(0),
-              _cur_index(0),
-              _parsed(false),
-              _is_decoded(false) {}
+              _cur_index(0) {}
 
     Status init() override {
         CHECK(!_parsed);
@@ -290,6 +289,7 @@ public:
             return Status::InternalError(ss.str());
         }
 
+        RETURN_IF_ERROR(_decode());
         _parsed = true;
         return Status::OK();
     }
@@ -301,7 +301,6 @@ public:
             return Status::InvalidArgument("invalid pos");
         }
 
-        RETURN_IF_ERROR(_decode());
         DCHECK_LE(pos, _num_elements);
         _cur_index = pos;
         return Status::OK();
@@ -313,7 +312,6 @@ public:
         if (_num_elements == 0) {
             return Status::NotFound("page is empty");
         }
-        RETURN_IF_ERROR(_decode());
 
         size_t left = 0;
         size_t right = _num_elements;
@@ -342,7 +340,6 @@ public:
 
     Status next_batch(size_t* n, ColumnBlockView* dst) override {
         DCHECK(_parsed);
-        RETURN_IF_ERROR(_decode());
         if (PREDICT_FALSE(*n == 0 || _cur_index >= _num_elements)) {
             *n = 0;
             return Status::OK();
@@ -370,30 +367,17 @@ private:
     }
 
     Status _decode() {
-        if (_is_decoded) {
-            return Status::OK();
-        }
         if (_num_elements > 0) {
+            int64_t bytes;
             _decoded.resize(_num_element_after_padding * _size_of_element);
-            RETURN_IF_ERROR(_decode_to(_decoded.data()));
-            // release original memory
-            if (_options.page_handle) {
-                _options.page_handle->release_memory();
+            char* in = const_cast<char*>(&_data[BITSHUFFLE_PAGE_HEADER_SIZE]);
+            bytes = bitshuffle::decompress_lz4(in, _decoded.data(), _num_element_after_padding, _size_of_element, 0);
+            if (PREDICT_FALSE(bytes < 0)) {
+                // Ideally, this should not happen.
+                LOG(ERROR) << "bitshuffle decompress failed: " << bitshuffle_error_msg(bytes);
+                return Status::RuntimeError("Unshuffle Process failed");
             }
         }
-        _is_decoded = true;
-        return Status::OK();
-    }
-
-    Status _decode_to(uint8_t* to) {
-        char* in = const_cast<char*>(&_data[BITSHUFFLE_PAGE_HEADER_SIZE]);
-        int64_t bytes = bitshuffle::decompress_lz4(in, to, _num_element_after_padding, _size_of_element, 0);
-        if (PREDICT_FALSE(bytes < 0)) {
-            // Ideally, this should not happen.
-            LOG(ERROR) << "bitshuffle decompress failed: " << bitshuffle_error_msg(bytes);
-            return Status::RuntimeError("Unshuffle Process failed");
-        }
-
         return Status::OK();
     }
 
@@ -403,15 +387,14 @@ private:
 
     Slice _data;
     PageDecoderOptions _options;
-    faststring _decoded;
+    bool _parsed;
     size_t _num_elements;
     size_t _compressed_size;
     size_t _num_element_after_padding;
 
     int _size_of_element;
     size_t _cur_index;
-    bool _parsed;
-    bool _is_decoded;
+    faststring _decoded;
 };
 
 template <FieldType Type>
@@ -421,20 +404,6 @@ inline Status BitShufflePageDecoder<Type>::next_batch(size_t* count, vectorized:
         *count = 0;
         return Status::OK();
     }
-    if (_options.enable_direct_copy && !_is_decoded && *count >= _num_elements && _cur_index <= 0 &&
-        dst->capacity() - dst->size() >= _num_elements) {
-        // if the page is not decoded and to read the whole page data
-        // decode the page directly to dst to save mem copy from _decoded to dst
-        // Now this can be used to optimize compaction
-        size_t old_size = dst->size();
-        dst->resize_uninitialized(old_size + _num_elements);
-        uint8_t* dst_buffer = dst->mutable_raw_data() + SIZE_OF_TYPE * old_size;
-        RETURN_IF_ERROR(_decode_to(dst_buffer));
-        *count = _num_elements;
-        return Status::OK();
-    }
-
-    RETURN_IF_ERROR(_decode());
     *count = std::min(*count, static_cast<size_t>(_num_elements - _cur_index));
     int n = dst->append_numbers(&_decoded[_cur_index * SIZE_OF_TYPE], *count * SIZE_OF_TYPE);
     DCHECK_EQ(*count, n);

@@ -23,7 +23,6 @@
 
 #include <cstddef>
 
-#include "storage/rowset/segment_v2/page_handle.h"
 namespace starrocks {
 namespace segment_v2 {
 
@@ -38,8 +37,6 @@ public:
 
 class PageDecoderOptions {
 public:
-    PageHandle* page_handle = nullptr;
-    bool enable_direct_copy = false;
 };
 
 } // namespace segment_v2
