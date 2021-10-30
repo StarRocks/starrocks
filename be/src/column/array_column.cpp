@@ -24,10 +24,6 @@ size_t ArrayColumn::size() const {
     return _offsets->size() - 1;
 }
 
-size_t ArrayColumn::capacity() const {
-    return _offsets->capacity() - 1;
-}
-
 const uint8_t* ArrayColumn::raw_data() const {
     return _elements->raw_data();
 }
