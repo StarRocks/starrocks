@@ -50,7 +50,7 @@ public:
         }
     }
 
-    std::string to_debug_string() {
+    std::string to_debug_string() const {
         std::stringstream ss;
         ss << "operator-chain: [";
         for (size_t i = 0; i < _op_factories.size(); ++i) {

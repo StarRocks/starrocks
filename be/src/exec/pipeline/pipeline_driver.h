@@ -167,7 +167,7 @@ public:
 
     bool is_root() const { return _is_root; }
 
-    std::string to_debug_string();
+    std::string to_debug_string() const;
 
 private:
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.

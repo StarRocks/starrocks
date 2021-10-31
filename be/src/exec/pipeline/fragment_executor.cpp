@@ -26,6 +26,18 @@
 
 namespace starrocks::pipeline {
 
+static void setup_profile_hierarchy(RuntimeState* runtime_state, const Operators& operators) {
+    for (int32_t j = operators.size() - 1; j >= 0; --j) {
+        auto& curr_op = operators[j];
+        if (j == operators.size() - 1) {
+            runtime_state->runtime_profile()->add_child(curr_op->get_runtime_profile(), true, nullptr);
+        } else {
+            auto& prev_op = operators[j + 1];
+            prev_op->get_runtime_profile()->add_child(curr_op->get_runtime_profile(), true, nullptr);
+        }
+    }
+}
+
 Morsels convert_scan_range_to_morsel(const std::vector<TScanRangeParams>& scan_ranges, int node_id) {
     Morsels morsels;
     for (const auto& scan_range : scan_ranges) {
@@ -160,9 +172,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         const auto& pipeline = pipelines[n];
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
         const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
-        LOG(INFO) << "Pipeline " << pipeline->to_debug_string() << " parallel=" << degree_of_parallelism
-                  << " query_id=" << print_id(query_id)
-                  << " fragment_instance_id=" << print_id(params.fragment_instance_id);
+        VLOG_ROW << "Pipeline " << pipeline->to_debug_string() << " parallel=" << degree_of_parallelism
+                 << " query_id=" << print_id(query_id)
+                 << " fragment_instance_id=" << print_id(params.fragment_instance_id);
         const bool is_root = (n == num_pipelines - 1);
         // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
         // at present, only ScanOperator need a MorselQueue attached.
@@ -178,6 +190,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             }
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
                 Operators&& operators = pipeline->create_operators(degree_of_parallelism, i);
+                setup_profile_hierarchy(runtime_state, operators);
                 DriverPtr driver =
                         std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, 0, is_root);
                 driver->set_morsel_queue(morsel_queue.get());
@@ -187,15 +200,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 } else {
                     scan_operator->set_io_threads(nullptr);
                 }
-                for (int32_t j = operators.size() - 1; j >= 0; --j) {
-                    auto& curr_op = operators[j];
-                    if (j == operators.size() - 1) {
-                        runtime_state->runtime_profile()->add_child(curr_op->get_runtime_profile(), true, nullptr);
-                    } else {
-                        auto& prev_op = operators[j + 1];
-                        prev_op->get_runtime_profile()->add_child(curr_op->get_runtime_profile(), true, nullptr);
-                    }
-                }
                 drivers.emplace_back(std::move(driver));
             }
         } else {
@@ -204,17 +208,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             }
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
+                setup_profile_hierarchy(runtime_state, operators);
                 DriverPtr driver =
                         std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, i, is_root);
-                for (int32_t j = operators.size() - 1; j >= 0; --j) {
-                    auto& curr_op = operators[j];
-                    if (j == operators.size() - 1) {
-                        runtime_state->runtime_profile()->add_child(curr_op->get_runtime_profile(), true, nullptr);
-                    } else {
-                        auto& prev_op = operators[j + 1];
-                        prev_op->get_runtime_profile()->add_child(curr_op->get_runtime_profile(), true, nullptr);
-                    }
-                }
                 drivers.emplace_back(driver);
             }
         }

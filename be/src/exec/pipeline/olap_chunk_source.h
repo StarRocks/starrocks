@@ -54,14 +54,15 @@ public:
 private:
     Status _get_tablet(const TInternalScanRange* scan_range);
     Status _init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
-                               const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns,
-                               vectorized::TabletReaderParams* params);
+                               const std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns);
     Status _init_olap_reader(RuntimeState* state);
     void _init_counter(RuntimeState* state);
     Status _build_scan_range(RuntimeState* state);
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, vectorized::Chunk* chunk);
     void _update_counter();
+
+    vectorized::TabletReaderParams _params = {};
 
     int32_t _tuple_id;
     std::vector<ExprContext*> _conjunct_ctxs;
@@ -102,6 +103,9 @@ private:
     int64_t _compressed_bytes_read = 0;
 
     RuntimeProfile* _runtime_profile = nullptr;
+    RuntimeProfile::Counter* _bytes_read_counter = nullptr;
+    RuntimeProfile::Counter* _rows_read_counter = nullptr;
+
     RuntimeProfile* _scan_profile = nullptr;
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _scan_timer = nullptr;
