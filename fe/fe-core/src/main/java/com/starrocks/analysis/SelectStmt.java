@@ -1756,18 +1756,22 @@ public class SelectStmt extends QueryStmt {
         }
 
         if (!resultExprs.isEmpty()) {
-            for (int i = 0; i < resultExprs.size(); ++i) {
-                // strBuilder.append(selectList.getItems().get(i).toSql());
-                // strBuilder.append((i + 1 != selectList.getItems().size()) ? ", " : "");
-                if (i != 0) {
-                    strBuilder.append(", ");
-                }
-                if (needToSql) {
+            if (needToSql) {
+                for (int i = 0; i < originalExpr.size(); ++i) {
+                    if (i != 0) {
+                        strBuilder.append(", ");
+                    }
                     strBuilder.append(originalExpr.get(i).toSql());
-                } else {
-                    strBuilder.append(resultExprs.get(i).toSql());
+                    strBuilder.append(" AS ").append(SqlUtils.getIdentSql(colLabels.get(i)));
                 }
-                strBuilder.append(" AS ").append(SqlUtils.getIdentSql(colLabels.get(i)));
+            } else {
+                for (int i = 0; i < resultExprs.size(); ++i) {
+                    if (i != 0) {
+                        strBuilder.append(", ");
+                    }
+                    strBuilder.append(resultExprs.get(i).toSql());
+                    strBuilder.append(" AS ").append(SqlUtils.getIdentSql(colLabels.get(i)));
+                }
             }
         } else {
             // For subQuery, the resultExprs is empty, we need to use selectList
@@ -1912,6 +1916,13 @@ public class SelectStmt extends QueryStmt {
 
         colLabels.clear();
         colLabels.addAll(newColLabels);
+    }
+
+    @Override
+    public void substituteSelectListForCreateView(Analyzer analyzer, List<String> newColLabels)
+            throws UserException {
+        substituteSelectList(analyzer, newColLabels);
+        sqlString_ = null;
     }
 
     public boolean hasWhereClause() {
