@@ -15,6 +15,7 @@ PartitionExchanger::PartitionExchanger(const std::shared_ptr<LocalExchangeMemory
           _is_shuffle(is_shuffle),
           _partition_expr_ctxs(partition_expr_ctxs) {
     _partitions_columns.resize(partition_expr_ctxs.size());
+    _row_indexes.resize(config::vector_chunk_size);
 }
 
 Status PartitionExchanger::accept(const vectorized::ChunkPtr& chunk) {
