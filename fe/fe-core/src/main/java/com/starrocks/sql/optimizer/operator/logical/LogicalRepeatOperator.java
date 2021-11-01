@@ -28,6 +28,13 @@ public class LogicalRepeatOperator extends LogicalOperator {
         this.groupingIds = groupingIds;
     }
 
+    private LogicalRepeatOperator(LogicalRepeatOperator.Builder builder) {
+        super(OperatorType.LOGICAL_REPEAT, builder.getLimit(), builder.getPredicate(), builder.getProjection());
+        this.outputGrouping = builder.outputGrouping;
+        this.repeatColumnRefList = builder.repeatColumnRefList;
+        this.groupingIds = builder.groupingIds;
+    }
+
     public List<ColumnRefOperator> getOutputGrouping() {
         return outputGrouping;
     }
@@ -79,5 +86,26 @@ public class LogicalRepeatOperator extends LogicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), outputGrouping, repeatColumnRefList);
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalRepeatOperator, LogicalRepeatOperator.Builder> {
+        private List<ColumnRefOperator> outputGrouping;
+        private List<Set<ColumnRefOperator>> repeatColumnRefList;
+        private List<List<Long>> groupingIds;
+
+        @Override
+        public LogicalRepeatOperator build() {
+            return new LogicalRepeatOperator(this);
+        }
+
+        @Override
+        public LogicalRepeatOperator.Builder withOperator(LogicalRepeatOperator operator) {
+            super.withOperator(operator);
+            this.outputGrouping = operator.outputGrouping;
+            this.repeatColumnRefList = operator.repeatColumnRefList;
+            this.groupingIds = operator.groupingIds;
+            return this;
+        }
     }
 }
