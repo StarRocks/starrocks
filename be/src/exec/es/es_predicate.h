@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "column/column.h"
+#include "column/column_viewer.h"
 #include "exprs/slot_ref.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
@@ -79,7 +80,17 @@ class VExtLiteral : public ExtLiteral {
 public:
     VExtLiteral(PrimitiveType type, ColumnPtr column) {
         DCHECK(!column->empty());
-        _value = _value_to_string(column);
+        if (type == TYPE_DATE) {
+            vectorized::ColumnViewer<TYPE_DATE> viewer(column);
+            DCHECK(!viewer.is_null(0));
+            _value = viewer.value(0).to_string();
+        } else if (type == TYPE_DATETIME) {
+            vectorized::ColumnViewer<TYPE_DATETIME> viewer(column);
+            DCHECK(!viewer.is_null(0));
+            _value = viewer.value(0).to_string();
+        } else {
+            _value = _value_to_string(column);
+        }
     }
     VExtLiteral() = default;
     const std::string& to_string() const { return _value; }
