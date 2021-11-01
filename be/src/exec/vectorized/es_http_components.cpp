@@ -528,7 +528,7 @@ Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* colum
         if (col[0].IsString()) {
             RETURN_IF_ERROR(append_strval(col[0], column));
         } else {
-            append_timestamp(col, column);
+            append_timestamp(col[0], column);
         }
 
     } else {
