@@ -17,7 +17,7 @@ Status Aggregator::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, MemTracker* expr_mem_tracker,
+Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker,
                            RuntimeProfile* runtime_profile) {
     _pool = pool;
     _mem_tracker = mem_tracker;
@@ -175,13 +175,13 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* me
 
     // create an empty RowDescriptor, and it will be removed sooner or later
     RowDescriptor child_row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state, child_row_desc, expr_mem_tracker));
+    RETURN_IF_ERROR(Expr::prepare(_group_by_expr_ctxs, state, child_row_desc));
 
     for (const auto& ctx : _agg_expr_ctxs) {
-        RETURN_IF_ERROR(Expr::prepare(ctx, state, child_row_desc, expr_mem_tracker));
+        RETURN_IF_ERROR(Expr::prepare(ctx, state, child_row_desc));
     }
 
-    _mem_pool = std::make_unique<MemPool>(_mem_tracker);
+    _mem_pool = std::make_unique<MemPool>();
 
     // Initial for FunctionContext of every aggregate functions
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {

@@ -65,7 +65,7 @@ Status HdfsScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _hive_column_names = tnode.hdfs_scan_node.hive_column_names;
     }
 
-    _mem_pool = std::make_unique<MemPool>(state->instance_mem_tracker());
+    _mem_pool = std::make_unique<MemPool>();
 
     return Status::OK();
 }
@@ -80,8 +80,8 @@ Status HdfsScanNode::prepare(RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(ScanNode::prepare(state));
-    RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state, *_min_max_row_desc, expr_mem_tracker()));
-    RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state, row_desc(), expr_mem_tracker()));
+    RETURN_IF_ERROR(Expr::prepare(_min_max_conjunct_ctxs, state, *_min_max_row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_partition_conjunct_ctxs, state, row_desc()));
     _init_counter(state);
 
     _runtime_state = state;

@@ -54,8 +54,7 @@ class IntersectNode : public ExecNode {
 
         HashSetFromExprs()
                 : hash_set(std::make_unique<HashSet>()),
-                  _tracker(std::make_unique<MemTracker>()),
-                  _mem_pool(std::make_unique<MemPool>(_tracker.get())),
+                  _mem_pool(std::make_unique<MemPool>()),
                   _buffer(_mem_pool->allocate(_max_one_row_size * config::vector_chunk_size)) {}
 
         Iterator begin() { return hash_set->begin(); }
@@ -175,7 +174,6 @@ class IntersectNode : public ExecNode {
 
         Buffer<uint32_t> _slice_sizes;
         size_t _max_one_row_size = 8;
-        std::unique_ptr<MemTracker> _tracker;
         std::unique_ptr<MemPool> _mem_pool;
         uint8_t* _buffer;
         ResultVector _results;

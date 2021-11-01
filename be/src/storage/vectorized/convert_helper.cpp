@@ -99,12 +99,9 @@ public:
             dst.set_null();
             return Status::OK();
         }
-
-        auto src_value = src.get_int64();
-        int64_t part1 = (src_value / 1000000L);
-        uint24_t year = static_cast<uint24_t>((part1 / 10000L) % 10000);
-        uint24_t mon = static_cast<uint24_t>((part1 / 100) % 100);
-        uint24_t day = static_cast<uint24_t>(part1 % 100);
+        auto timestamp = src.get_timestamp();
+        int year, mon, day, hour, minute, second, usec;
+        timestamp.to_timestamp(&year, &mon, &day, &hour, &minute, &second, &usec);
         dst.set_uint24((year << 9) + (mon << 5) + day);
         return Status::OK();
     }
@@ -222,9 +219,7 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        TimestampValue timestamp{0};
-        timestamp.from_timestamp_literal(src.get_int64());
-        dst.set_date(timestamp);
+        dst.set_date(src.get_timestamp());
         return Status::OK();
     }
 };
@@ -244,9 +239,7 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        DateValue tmp;
-        tmp.from_mysql_date(src.get_datev1());
-        dst.set_date(tmp);
+        dst.set_date(src.get_date());
         return Status::OK();
     }
 };
@@ -266,11 +259,10 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        auto src_value = src.get_datev1();
-        int day = static_cast<int>(src_value & 31);
-        int mon = static_cast<int>(src_value >> 5 & 15);
-        int year = static_cast<int>(src_value >> 9);
-        dst.set_int64(static_cast<int64>(year * 10000L + mon * 100L + day) * 1000000);
+        DateValue date_v2 = src.get_date();
+        int year, month, day;
+        date_v2.to_date(&year, &month, &day);
+        dst.set_int64(static_cast<int64>(year * 10000L + month * 100L + day) * 1000000);
         return Status::OK();
     }
 };
@@ -338,11 +330,10 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        auto src_value = src.get_datev1();
-        int day = implicit_cast<int>(src_value & 31u);
-        int mon = implicit_cast<int>((src_value >> 5u) & 15u);
-        int year = implicit_cast<int>(src_value >> 9u);
-        dst.set_timestamp(TimestampValue::create(year, mon, day, 0, 0, 0));
+        DateValue date_v2 = src.get_date();
+        int year, month, day;
+        date_v2.to_date(&year, &month, &day);
+        dst.set_timestamp(TimestampValue::create(year, month, day, 0, 0, 0));
         return Status::OK();
     }
 };
@@ -393,9 +384,7 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        TimestampValue timestamp{0};
-        timestamp.from_timestamp_literal(src.get_int64());
-        dst.set_timestamp(timestamp);
+        dst.set_timestamp(src.get_timestamp());
         return Status::OK();
     }
 };
@@ -459,7 +448,7 @@ public:
             dst.set_null();
             return Status::OK();
         }
-        DecimalV2Value dst_value = src.from_decimal_v1();
+        DecimalV2Value dst_value = src.get_decimal();
         dst.set_decimal(dst_value);
         return Status::OK();
     }
@@ -988,6 +977,9 @@ const TypeConverter* get_to_varchar_converter(FieldType from_type, FieldType to_
     }
 }
 
+// Datetime, Date and decimal should not be used
+// Use Timestamp, Date V2 and decimal v2 to replace
+// Should be deleted after storage_format_vesion = 1 is forbid
 const TypeConverter* get_type_converter(FieldType from_type, FieldType to_type) {
     if (from_type == OLAP_FIELD_TYPE_VARCHAR) {
         return get_from_varchar_converter(from_type, to_type);
@@ -1641,6 +1633,7 @@ public:
     ~TimestampToDatetimeFieldConverter() override = default;
 
     void convert(void* dst, const void* src) const override {
+        LOG(INFO) << "convert from datetime to timestamp";
         unaligned_store<int64_t>(dst, unaligned_load<TimestampValue>(src).to_timestamp_literal());
     }
 
@@ -2163,7 +2156,6 @@ Status BlockConverter::convert(::starrocks::RowBlockV2* dst, ::starrocks::RowBlo
                                 src->_selection_vector, src->_selected_size);
     }
     std::swap(dst->_num_rows, src->_num_rows);
-    std::swap(dst->_tracker, src->_tracker);
     std::swap(dst->_pool, src->_pool);
     std::swap(dst->_selection_vector, src->_selection_vector);
     std::swap(dst->_selected_size, src->_selected_size);

@@ -22,7 +22,14 @@ public:
 
     bool is_finished() const override;
 
-    void finish(RuntimeState* state) override { _is_finished = true; }
+    void finish(RuntimeState* state) override {
+        std::lock_guard<std::mutex> l(_chunk_lock);
+
+        if (_partial_chunk != nullptr) {
+            _full_chunk = std::move(_partial_chunk);
+        }
+        _is_finished = true;
+    }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 

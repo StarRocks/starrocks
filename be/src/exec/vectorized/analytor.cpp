@@ -80,7 +80,7 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
              << " _rows_end_offset " << _rows_end_offset;
 }
 
-Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, MemTracker* expr_mem_tracker,
+Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker,
                          RuntimeProfile* runtime_profile) {
     _pool = pool;
     _mem_tracker = mem_tracker;
@@ -217,14 +217,14 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_
     }
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    _mem_pool.reset(new MemPool(_mem_tracker));
+    _mem_pool.reset(new MemPool());
 
     _compute_timer = ADD_TIMER(_runtime_profile, "ComputeTime");
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
 
     SCOPED_TIMER(_compute_timer);
     for (const auto& ctx : _agg_expr_ctxs) {
-        Expr::prepare(ctx, state, _child_row_desc, expr_mem_tracker);
+        Expr::prepare(ctx, state, _child_row_desc);
     }
 
     if (!_partition_ctxs.empty() || !_order_ctxs.empty()) {
@@ -233,10 +233,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_
         tuple_ids.push_back(_buffered_tuple_id);
         RowDescriptor cmp_row_desc(state->desc_tbl(), tuple_ids, vector<bool>(2, false));
         if (!_partition_ctxs.empty()) {
-            RETURN_IF_ERROR(Expr::prepare(_partition_ctxs, state, cmp_row_desc, expr_mem_tracker));
+            RETURN_IF_ERROR(Expr::prepare(_partition_ctxs, state, cmp_row_desc));
         }
         if (!_order_ctxs.empty()) {
-            RETURN_IF_ERROR(Expr::prepare(_order_ctxs, state, cmp_row_desc, expr_mem_tracker));
+            RETURN_IF_ERROR(Expr::prepare(_order_ctxs, state, cmp_row_desc));
         }
     }
 

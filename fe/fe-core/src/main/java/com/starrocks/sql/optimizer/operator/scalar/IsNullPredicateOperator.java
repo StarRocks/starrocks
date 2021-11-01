@@ -60,13 +60,4 @@ public class IsNullPredicateOperator extends PredicateOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), isNotNull);
     }
-
-    @Override
-    public boolean isStrictPredicate() {
-        if (getChild(0).isColumnRefOrCast()) {
-            return isNotNull;
-        } else {
-            return false;
-        }
-    }
 }

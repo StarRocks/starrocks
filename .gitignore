@@ -37,6 +37,7 @@ dependency-reduced-pom.xml
 tags
 .tags
 *.vim
+compile_commands.json
 
 
 #ignore eclipse project file & idea project file

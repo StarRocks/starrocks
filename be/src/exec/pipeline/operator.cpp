@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/operator.h"
 
+#include <algorithm>
+
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
@@ -10,7 +12,9 @@
 namespace starrocks::pipeline {
 Operator::Operator(int32_t id, const std::string& name, int32_t plan_node_id)
         : _id(id), _name(name), _plan_node_id(plan_node_id) {
-    _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("$0 (id=$1)", name, _id));
+    std::string upper_name(_name);
+    std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
+    _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("$0 (id=$1)", upper_name, _id));
     _runtime_profile->set_metadata(_id);
 }
 

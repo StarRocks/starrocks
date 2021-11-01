@@ -12,7 +12,7 @@
 #include "exec/text_converter.hpp"
 #include "exprs/slot_ref.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
 #include "runtime/decimalv3.h"
 #include "runtime/row_batch.h"
@@ -61,7 +61,7 @@ Status MysqlScanNode::prepare(RuntimeState* state) {
     _mysql_scanner.reset(new (std::nothrow) MysqlScanner(_my_param));
     DCHECK(_mysql_scanner != nullptr);
 
-    _tuple_pool.reset(new (std::nothrow) MemPool(mem_tracker()));
+    _tuple_pool.reset(new (std::nothrow) MemPool());
     DCHECK(_tuple_pool != nullptr);
 
     _is_init = true;

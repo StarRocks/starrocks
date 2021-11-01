@@ -130,7 +130,6 @@ public:
     starrocks::pipeline::DriverDispatcher* driver_dispatcher() { return _driver_dispatcher; }
     TMasterInfo* master_info() { return _master_info; }
     LoadPathMgr* load_path_mgr() { return _load_path_mgr; }
-    DiskIoMgr* disk_io_mgr() { return _disk_io_mgr; }
     BfdParser* bfd_parser() const { return _bfd_parser; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
     BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache; }
@@ -211,7 +210,6 @@ private:
     starrocks::pipeline::DriverDispatcher* _driver_dispatcher = nullptr;
     TMasterInfo* _master_info = nullptr;
     LoadPathMgr* _load_path_mgr = nullptr;
-    DiskIoMgr* _disk_io_mgr = nullptr;
 
     BfdParser* _bfd_parser = nullptr;
     BrokerMgr* _broker_mgr = nullptr;

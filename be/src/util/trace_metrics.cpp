@@ -52,7 +52,7 @@ static InternMap* g_intern_map;
 
 const char* TraceMetrics::InternName(const string& name) {
     DCHECK(std::all_of(name.begin(), name.end(), [](char c) { return isprint(c); })) << "not printable: " << name;
-    debug::ScopedLeakCheckDisabler no_leakcheck;
+    [[maybe_unused]] debug::ScopedLeakCheckDisabler no_leakcheck;
     std::lock_guard<SpinLock> l(g_intern_map_lock);
     if (g_intern_map == nullptr) {
         g_intern_map = new InternMap();

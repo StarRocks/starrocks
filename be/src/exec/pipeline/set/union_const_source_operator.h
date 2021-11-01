@@ -29,7 +29,6 @@ public:
               _const_expr_lists(const_expr_lists),
               _rows_total(rows_total) {
         DCHECK_NOTNULL(_const_expr_lists);
-        DCHECK_EQ(_const_expr_lists->size(), _rows_total);
     }
 
     bool has_output() const override { return _next_processed_row_index < _rows_total; }
@@ -72,7 +71,7 @@ public:
                                                           _const_expr_lists.data() + rows_offset, rows_count);
     }
 
-    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
 private:

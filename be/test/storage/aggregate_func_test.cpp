@@ -25,7 +25,6 @@
 
 #include "common/object_pool.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/decimal12.h"
 #include "storage/uint24.h"
 
@@ -43,8 +42,7 @@ void test_min() {
     static const size_t kValSize = sizeof(CppType) + 1; // '1' represent the leading bool flag.
     char buf[64];
 
-    std::unique_ptr<MemTracker> tracker(new MemTracker(-1));
-    std::unique_ptr<MemPool> mem_pool(new MemPool(tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
     ObjectPool agg_object_pool;
     const AggregateInfo* agg = get_aggregate_info(OLAP_FIELD_AGGREGATION_MIN, field_type);
 
@@ -119,8 +117,7 @@ void test_max() {
 
     char buf[64];
 
-    std::unique_ptr<MemTracker> tracker(new MemTracker(-1));
-    std::unique_ptr<MemPool> mem_pool(new MemPool(tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
     ObjectPool agg_object_pool;
     const AggregateInfo* agg = get_aggregate_info(OLAP_FIELD_AGGREGATION_MAX, field_type);
 
@@ -195,8 +192,7 @@ void test_sum() {
     char buf[64];
     RowCursorCell dst(buf);
 
-    std::unique_ptr<MemTracker> tracker(new MemTracker(-1));
-    std::unique_ptr<MemPool> mem_pool(new MemPool(tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
     ObjectPool agg_object_pool;
     const AggregateInfo* agg = get_aggregate_info(OLAP_FIELD_AGGREGATION_SUM, field_type);
 
@@ -270,8 +266,7 @@ void test_replace() {
     char buf[64];
     RowCursorCell dst(buf);
 
-    std::unique_ptr<MemTracker> tracker(new MemTracker(-1));
-    std::unique_ptr<MemPool> mem_pool(new MemPool(tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
     ObjectPool agg_object_pool;
     const AggregateInfo* agg = get_aggregate_info(OLAP_FIELD_AGGREGATION_REPLACE, field_type);
 
@@ -329,8 +324,7 @@ void test_replace_string() {
     dst_slice->data = nullptr;
     dst_slice->size = 0;
 
-    std::unique_ptr<MemTracker> tracker(new MemTracker(-1));
-    std::unique_ptr<MemPool> mem_pool(new MemPool(tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
     ObjectPool agg_object_pool;
     const AggregateInfo* agg = get_aggregate_info(OLAP_FIELD_AGGREGATION_REPLACE, field_type);
 

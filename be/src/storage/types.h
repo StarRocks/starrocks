@@ -33,7 +33,7 @@
 #include "column/datum.h"
 #include "gen_cpp/segment_v2.pb.h" // for ColumnMetaPB
 #include "gutil/strings/numbers.h"
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
 #include "runtime/mem_pool.h"

@@ -30,7 +30,7 @@
 #include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/status.h"         // for Status
+#include "common/statusor.h"       // for Status
 #include "gen_cpp/segment_v2.pb.h" // for ColumnMetaPB
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -123,8 +123,8 @@ public:
     // Note that |meta| is mutable, this method may change its internal state.
     //
     // To developers: keep this method lightweight, should not incur any I/O.
-    static Status create(MemTracker* mem_tracker, const ColumnReaderOptions& opts, ColumnMetaPB* meta,
-                         const std::string& file_name, std::unique_ptr<ColumnReader>* reader);
+    static StatusOr<std::unique_ptr<ColumnReader>> create(MemTracker* mem_tracker, const ColumnReaderOptions& opts,
+                                                          ColumnMetaPB* meta, const std::string& file_name);
 
     ColumnReader(const private_type&, MemTracker* mem_tracker, const ColumnReaderOptions& opts,
                  const std::string& file_name);
@@ -233,7 +233,7 @@ private:
     ColumnReader(ColumnReader&&) = delete;
     void operator=(ColumnReader&&) = delete;
 
-    Status init(ColumnMetaPB* meta);
+    Status _init(ColumnMetaPB* meta);
 
     Status _load_zone_map_index(bool use_page_cache, bool kept_in_memory);
     Status _load_ordinal_index(bool use_page_cache, bool kept_in_memory);
@@ -269,7 +269,7 @@ private:
     FieldType _column_type = OLAP_FIELD_TYPE_UNKNOWN;
     PagePointer _dict_page_pointer;
     ColumnReaderOptions _opts;
-    uint64_t _num_rows;
+    uint64_t _num_rows = 0;
     const std::string& _file_name;
 
     // initialized in init(), used for create PageDecoder
@@ -543,8 +543,8 @@ private:
 
 class ArrayFileColumnIterator final : public ColumnIterator {
 public:
-    explicit ArrayFileColumnIterator(ColumnIterator* null_iterator, ColumnIterator* array_size_iterator,
-                                     ColumnIterator* item_iterator);
+    ArrayFileColumnIterator(ColumnIterator* null_iterator, ColumnIterator* array_size_iterator,
+                            ColumnIterator* element_iterator);
 
     ~ArrayFileColumnIterator() override = default;
 
@@ -606,7 +606,7 @@ public:
               _schema_length(schema_length),
               _is_default_value_null(false),
               _type_size(0),
-              _pool(new MemPool(&_tracker)),
+              _pool(new MemPool()),
               _num_rows(num_rows) {}
 
     Status init(const ColumnIteratorOptions& opts) override;

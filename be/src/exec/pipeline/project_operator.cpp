@@ -65,10 +65,10 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkP
     return Status::OK();
 }
 
-Status ProjectOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+Status ProjectOperatorFactory::prepare(RuntimeState* state) {
     RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc, mem_tracker));
-    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state, row_desc, mem_tracker));
+    RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_common_sub_expr_ctxs, state, row_desc));
 
     RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));

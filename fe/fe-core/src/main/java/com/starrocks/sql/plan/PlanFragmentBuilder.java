@@ -452,6 +452,15 @@ public class PlanFragmentBuilder {
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
 
+            for (ColumnRefOperator entry : node.getGlobalDictStringColumns()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getId()));
+                slotDescriptor.setIsNullable(entry.isNullable());
+                slotDescriptor.setType(entry.getType());
+                slotDescriptor.setIsMaterialized(false);
+                context.getColRefToExpr().put(entry, new SlotRef(entry.toString(), slotDescriptor));
+            }
+
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
             ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -465,6 +474,7 @@ public class PlanFragmentBuilder {
 
             // set isPreAggregation
             scanNode.setIsPreAggregation(node.isPreAggregation(), node.getTurnOffReason());
+            scanNode.setDictStringIdToIntIds(node.getDictStringIdToIntIds());
 
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
@@ -1739,6 +1749,13 @@ public class PlanFragmentBuilder {
                     outputGroupingTuple,
                     repeatSlotIdList,
                     repeatOperator.getGroupingIds());
+            List<ScalarOperator> predicates = Utils.extractConjuncts(repeatOperator.getPredicate());
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+
+            for (ScalarOperator predicate : predicates) {
+                repeatNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            }
             repeatNode.computeStatistics(optExpr.getStatistics());
 
             inputFragment.setPlanRoot(repeatNode);

@@ -90,7 +90,6 @@ private:
     ZoneMap _segment_zone_map;
     // TODO(zc): we should replace this memory pool later, we only allocate min/max
     // for field. But MemPool allocate 4KB least, it will a waste for most cases.
-    MemTracker _tracker;
     MemPool _pool;
 
     // serialized ZoneMapPB for each data page
@@ -99,7 +98,7 @@ private:
 };
 
 template <FieldType type>
-ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(Field* field) : _field(field), _pool(&_tracker) {
+ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(Field* field) : _field(field) {
     _page_zone_map.min_value = _field->allocate_value(&_pool);
     _page_zone_map.max_value = _field->allocate_value(&_pool);
     _reset_zone_map(&_page_zone_map);
@@ -244,8 +243,7 @@ Status ZoneMapIndexReader::load(fs::BlockManager* block_mgr, const std::string& 
     std::unique_ptr<IndexedColumnIterator> iter;
     RETURN_IF_ERROR(reader.new_iterator(&iter));
 
-    MemTracker tracker;
-    MemPool pool(&tracker);
+    MemPool pool;
     _page_zone_maps.resize(reader.num_values());
 
     // read and cache all page zone maps

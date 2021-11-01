@@ -67,6 +67,7 @@ set(EXEC_FILES
     vectorized/olap_scan_prepare.cpp
     vectorized/olap_meta_scanner.cpp
     vectorized/olap_meta_scan_node.cpp
+    vectorized/hash_joiner.cpp
     vectorized/hash_join_node.cpp
     vectorized/join_hash_map.cpp
     vectorized/topn_node.cpp
@@ -76,6 +77,7 @@ set(EXEC_FILES
     vectorized/cross_join_node.cpp
     vectorized/union_node.cpp
     vectorized/tablet_info.cpp
+    vectorized/except_hash_set.cpp
     vectorized/except_node.cpp
     vectorized/file_scanner.cpp
     vectorized/orc_scanner.cpp
@@ -166,6 +168,12 @@ set(EXEC_FILES
     pipeline/assert_num_rows_operator.cpp
     pipeline/set/union_passthrough_operator.cpp
     pipeline/set/union_const_source_operator.cpp
+    pipeline/hashjoin/hash_join_build_operator.cpp
+    pipeline/hashjoin/hash_join_probe_operator.cpp
+    pipeline/set/except_context.cpp
+    pipeline/set/except_build_sink_operator.cpp
+    pipeline/set/except_probe_sink_operator.cpp
+    pipeline/set/except_output_source_operator.cpp
 )
 
 set(EXEC_FILES

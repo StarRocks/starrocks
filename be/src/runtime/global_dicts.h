@@ -6,6 +6,8 @@
 #include "column/column_hash.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
+#include "common/object_pool.h"
+#include "runtime/mem_tracker.h"
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
 
@@ -54,6 +56,7 @@ struct DictOptimizeContext {
     bool result_nullable = false;
     // size: DICT_DECODE_MAX_SIZE + 1
     std::vector<int16_t> code_convert_map;
+    Column::Filter filter;
 };
 
 class DictOptimizeParser {
@@ -61,12 +64,30 @@ public:
     DictOptimizeParser() = default;
     ~DictOptimizeParser() = default;
     void set_mutable_dict_maps(GlobalDictMaps* dict_maps) { _mutable_dict_maps = dict_maps; }
-    void check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
+
+    void rewrite_exprs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
+                       const std::vector<SlotId>& target_slotids);
+    void rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs, RuntimeState* state);
+
+    void close(RuntimeState* state) noexcept;
+
     void eval_expr(RuntimeState* state, ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx, int32_t targetSlotId);
-    void eval_code_convert(const DictOptimizeContext& opt_ctx, const ColumnPtr& input, ColumnPtr* output);
+    void eval_conjuncts(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx);
+
+    void check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
 
 private:
+    template <bool is_predicate>
+    void _check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
+
+    // use code mapping rewrite expr
+    template <bool is_predicate, typename ExprType>
+    void _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
+                            const std::vector<SlotId>& slot_ids);
+
     GlobalDictMaps* _mutable_dict_maps;
+    ObjectPool _free_pool;
+    std::vector<ExprContext*> _expr_close_list;
 };
 
 } // namespace vectorized

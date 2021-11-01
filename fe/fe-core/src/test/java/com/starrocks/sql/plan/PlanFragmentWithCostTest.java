@@ -617,4 +617,61 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("3:AGGREGATE (merge finalize)"));
     }
+
+    @Test
+    public void testSemiJoinPushDownPredicate() throws Exception {
+        String sql  = "select * from t0 left semi join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 1: v1 = 1, 2: v2 = 2"));
+        Assert.assertTrue(plan.contains("TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 5: v5 = 2, 4: v4 = 1"));
+    }
+
+    @Test
+    public void testOuterJoinPushDownPredicate() throws Exception {
+        String sql  = "select * from t0 left outer join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/1"));
+        Assert.assertTrue(plan.contains("TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 5: v5 = 2, 4: v4 = 1"));
+    }
+
+    @Test
+    public void testIntersectReorder() throws Exception {
+        // check cross join generate plan without exception
+        Catalog catalog = connectContext.getCatalog();
+        OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
+        setTableStatistics(t0, 1000);
+        OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
+        setTableStatistics(t1, 100);
+        OlapTable t2 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t2");
+        setTableStatistics(t2, 1);
+
+        String sql = "select v1 from t0 intersect select v7 from t2 intersect select v4 from t1";
+        String planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("  0:INTERSECT\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  2:EXCHANGE\n" +
+                "     use vectorized: true"));
+        Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    HASH_PARTITIONED: <slot 5>\n" +
+                "\n" +
+                "  1:OlapScanNode\n" +
+                "     TABLE: t2"));
+        setTableStatistics(t0, 10000);
+    }
 }

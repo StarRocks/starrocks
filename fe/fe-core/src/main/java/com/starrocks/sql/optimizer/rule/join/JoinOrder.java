@@ -17,6 +17,7 @@ import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.JoinPredicateUtils;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
@@ -252,18 +253,24 @@ public abstract class JoinOrder {
         Map<ColumnRefOperator, ScalarOperator> leftExpression = new HashMap<>();
         Map<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : expressionMap.entrySet()) {
+            // If entry.getValue is Constant, then this ColumnRef does not belong to any child.
+            // Then you can add this constant mapping on any child
             if (predicates.first != null && predicates.first.getUsedColumns().contains(entry.getKey())) {
-                if (leftExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())) {
+                if (leftExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())
+                        || entry.getValue() instanceof ConstantOperator) {
                     leftExpression.put(entry.getKey(), entry.getValue());
-                } else if (rightExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())) {
+                } else if (rightExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())
+                        || entry.getValue() instanceof ConstantOperator) {
                     rightExpression.put(entry.getKey(), entry.getValue());
                 }
             }
 
             if (predicates.second != null && predicates.second.getUsedColumns().contains(entry.getKey())) {
-                if (leftExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())) {
+                if (leftExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())
+                        || entry.getValue() instanceof ConstantOperator) {
                     leftExpression.put(entry.getKey(), entry.getValue());
-                } else if (rightExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())) {
+                } else if (rightExprInfo.expr.getOutputColumns().contains(entry.getValue().getUsedColumns())
+                        || entry.getValue() instanceof ConstantOperator) {
                     rightExpression.put(entry.getKey(), entry.getValue());
                 }
             }

@@ -485,7 +485,7 @@ OLAPStatus PushBrokerReader::init(const Schema* schema, const TBrokerScanRange& 
         LOG(WARNING) << "Failed to init mem trackers, msg: " << status.get_error_msg();
         return OLAP_ERR_PUSH_INIT_ERROR;
     }
-    _mem_pool = std::make_unique<MemPool>(_runtime_state->instance_mem_tracker());
+    _mem_pool = std::make_unique<MemPool>();
 
     switch (t_scan_range.ranges[0].format_type) {
     default:

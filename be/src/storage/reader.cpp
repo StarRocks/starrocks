@@ -25,7 +25,7 @@
 #include <sstream>
 #include <utility>
 
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/string_value.hpp"
@@ -301,8 +301,7 @@ void CollectIterator::clear() {
 }
 
 Reader::Reader() {
-    _tracker = std::make_unique<MemTracker>(-1);
-    _predicate_mem_pool = std::make_unique<MemPool>(_tracker.get());
+    _predicate_mem_pool = std::make_unique<MemPool>();
 }
 
 Reader::~Reader() {

@@ -61,7 +61,7 @@ Status TopNNode::prepare(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
     RETURN_IF_ERROR(ExecNode::prepare(state));
-    RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, child(0)->row_desc(), _row_descriptor, expr_mem_tracker()));
+    RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, child(0)->row_desc(), _row_descriptor));
 
     _abort_on_default_limit_exceeded = _abort_on_default_limit_exceeded && state->abort_on_default_limit_exceeded();
 
@@ -223,7 +223,7 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     // step 0: construct pipeline end with sort operator.
     // get operators before sort operator
     OpFactories operators_sink_with_sort = _children[0]->decompose_to_pipeline(context);
-    operators_sink_with_sort = context->maybe_interpolate_local_exchange(operators_sink_with_sort);
+    operators_sink_with_sort = context->maybe_interpolate_local_passthrough_exchange(operators_sink_with_sort);
 
     static const uint SIZE_OF_CHUNK_FOR_TOPN = 3000;
     static const uint SIZE_OF_CHUNK_FOR_FULL_SORT = 5000;

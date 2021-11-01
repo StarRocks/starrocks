@@ -4,7 +4,7 @@
 
 #include <variant>
 
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
 #include "runtime/timestamp_value.h"
 #include "storage/decimal12.h"
@@ -59,22 +59,6 @@ public:
     const HyperLogLog* get_hyperloglog() const { return get<HyperLogLog*>(); }
     const BitmapValue* get_bitmap() const { return get<BitmapValue*>(); }
     const PercentileValue* get_percentile() const { return get<PercentileValue*>(); }
-
-    int32_t get_datev1() const {
-        if (std::get_if<uint24_t>(&_value)) {
-            return get_uint24();
-        } else {
-            return get_int32();
-        }
-    }
-
-    const DecimalV2Value from_decimal_v1() const {
-        if (auto pval = std::get_if<decimal12_t>(&_value)) {
-            return DecimalV2Value((*pval).integer, (*pval).fraction);
-        } else {
-            return std::get<DecimalV2Value>(_value);
-        }
-    }
 
     void set_int8(int8_t v) { set<decltype(v)>(v); }
     void set_uint8(uint8_t v) { set<decltype(v)>(v); }

@@ -22,7 +22,7 @@ void ScanOperator::_pickup_morsel(RuntimeState* state) {
         auto morsel = std::move(maybe_morsel.value());
         DCHECK(morsel);
         _chunk_source = starrocks::make_exclusive<OlapChunkSource>(
-                std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs, _runtime_filters,
+                std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs, _runtime_profile.get(), _runtime_filters,
                 _olap_scan_node.key_column_name, _olap_scan_node.is_preaggregation);
         _chunk_source->prepare(state);
         _trigger_read_chunk();
@@ -182,9 +182,9 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     }
 }
 
-Status ScanOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc, mem_tracker));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     return Status::OK();
 }

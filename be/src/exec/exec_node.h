@@ -29,6 +29,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+#include "exec/pipeline/operator.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
@@ -192,8 +193,7 @@ public:
     virtual void debug_string(int indentation_level, std::stringstream* out) const;
 
     // Convert old exec node tree to new pipeline
-    virtual std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context);
+    virtual pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context);
 
     const std::vector<ExprContext*>& conjunct_ctxs() const { return _conjunct_ctxs; }
 
@@ -209,10 +209,6 @@ public:
     RuntimeProfile::Counter* memory_used_counter() const { return _memory_used_counter; }
 
     MemTracker* mem_tracker() const { return _mem_tracker.get(); }
-
-    MemTracker* expr_mem_tracker() const { return _expr_mem_tracker.get(); }
-
-    MemPool* expr_mem_pool() { return _expr_mem_pool.get(); }
 
     bool use_vectorized() { return _use_vectorized; }
 
@@ -298,13 +294,6 @@ protected:
 
     /// Account for peak memory used by this node
     std::shared_ptr<MemTracker> _mem_tracker;
-
-    /// MemTracker used by 'expr_mem_pool_'.
-    std::shared_ptr<MemTracker> _expr_mem_tracker;
-
-    /// MemPool for allocating data structures used by expression evaluators in this node.
-    /// Created in Prepare().
-    std::shared_ptr<MemPool> _expr_mem_pool;
 
     RuntimeProfile::Counter* _rows_returned_counter;
     RuntimeProfile::Counter* _rows_returned_rate;

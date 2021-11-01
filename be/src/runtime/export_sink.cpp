@@ -32,14 +32,12 @@
 #include "formats/csv/output_stream_file.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "runtime/tuple_row.h"
 #include "util/runtime_profile.h"
 #include "util/time.h"
 #include "util/types.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -73,10 +71,8 @@ Status ExportSink::prepare(RuntimeState* state) {
     _profile = state->obj_pool()->add(new RuntimeProfile(title.str()));
     SCOPED_TIMER(_profile->total_time_counter());
 
-    _mem_tracker = std::make_unique<MemTracker>(-1, "ExportSink", state->instance_mem_tracker());
-
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc, _mem_tracker.get()));
+    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc));
 
     // TODO(lingbin): add some Counter
     _bytes_written_counter = ADD_COUNTER(profile(), "BytesExported", TUnit::BYTES);

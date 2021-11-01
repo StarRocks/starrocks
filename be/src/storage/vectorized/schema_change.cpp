@@ -361,7 +361,6 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, Table
                     new_col = base_col;
                 }
             } else if (ConvertTypeResolver::instance()->get_convert_type_info(ref_type, new_type)) {
-                LOG(INFO) << "src type is " << ref_type << ", new type is " << new_type;
                 auto converter = vectorized::get_type_converter(ref_type, new_type);
                 if (converter == nullptr) {
                     LOG(WARNING) << "failed to get type converter, from_type=" << ref_type << ", to_type" << new_type;
@@ -678,14 +677,13 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
     vectorized::Schema new_schema = ChunkHelper::convert_schema_to_format_v2(new_tablet->tablet_schema());
     ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
-    std::unique_ptr<MemTracker> mem_tracker(new MemTracker(-1));
-    std::unique_ptr<MemPool> mem_pool(new MemPool(mem_tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
     do {
         Status status = reader->do_get_next(base_chunk.get());
 
         if (!status.ok()) {
-            LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
             if (!status.is_end_of_file()) {
+                LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
                 return false;
             } else {
                 break;
@@ -756,8 +754,7 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
     vectorized::Schema new_schema = ChunkHelper::convert_schema(new_tablet->tablet_schema());
 
     ChunkSorter chunk_sorter(_chunk_allocator);
-    std::unique_ptr<MemTracker> mem_tracker(new MemTracker(-1));
-    std::unique_ptr<MemPool> mem_pool(new MemPool(mem_tracker.get()));
+    std::unique_ptr<MemPool> mem_pool(new MemPool());
 
     DeferOp release_chunkarr([this, &chunk_arr] {
         for (auto& it : chunk_arr) {
@@ -769,8 +766,8 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
         ChunkPtr new_chunk = nullptr;
         Status status = reader->do_get_next(base_chunk.get());
         if (!status.ok()) {
-            LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
             if (!status.is_end_of_file()) {
+                LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
                 return false;
             } else if (base_chunk->num_rows() <= 0) {
                 break;
@@ -1236,8 +1233,6 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
 
         VLOG(10) << "succeed to convert a history version."
                  << " version=" << sc_params.version.first << "-" << sc_params.version.second;
-        // XXX: The SchemaChange state should not be cancelled at this point,
-        // because the new Delta has to be converted to the old and new Schema versions
     }
 
     if (status.ok()) {

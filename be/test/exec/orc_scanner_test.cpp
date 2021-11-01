@@ -363,8 +363,7 @@ TEST_F(OrcScannerTest, normal) {
 
     ORCScanner scanner(&_runtime_state, _profile, params, ranges, _addresses, &_counter);
     ASSERT_TRUE(scanner.open().ok());
-    MemTracker tracker;
-    MemPool tuple_pool(&tracker);
+    MemPool tuple_pool;
 
     Tuple* tuple = (Tuple*)tuple_pool.allocate(_desc_tbl->get_tuple_descriptor(1)->byte_size());
     bool eof = false;
@@ -470,8 +469,7 @@ TEST_F(OrcScannerTest, normal2) {
 
     ORCScanner scanner(&_runtime_state, _profile, params, ranges, _addresses, &_counter);
     ASSERT_TRUE(scanner.open().ok());
-    MemTracker tracker;
-    MemPool tuple_pool(&tracker);
+    MemPool tuple_pool;
 
     Tuple* tuple = (Tuple*)tuple_pool.allocate(_desc_tbl->get_tuple_descriptor(1)->byte_size());
     bool eof = false;
@@ -770,8 +768,7 @@ TEST_F(OrcScannerTest, normal3) {
 
     ORCScanner scanner(&_runtime_state, _profile, params, ranges, _addresses, &_counter);
     ASSERT_TRUE(scanner.open().ok());
-    MemTracker tracker;
-    MemPool tuple_pool(&tracker);
+    MemPool tuple_pool;
 
     Tuple* tuple = (Tuple*)tuple_pool.allocate(_desc_tbl->get_tuple_descriptor(1)->byte_size());
     bool eof = false;

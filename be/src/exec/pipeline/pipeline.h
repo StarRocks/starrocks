@@ -37,9 +37,9 @@ public:
         return down_cast<SourceOperatorFactory*>(_op_factories[0].get());
     }
 
-    Status prepare(RuntimeState* state, MemTracker* mem_tracker) {
+    Status prepare(RuntimeState* state) {
         for (auto& op : _op_factories) {
-            RETURN_IF_ERROR(op->prepare(state, mem_tracker));
+            RETURN_IF_ERROR(op->prepare(state));
         }
         return Status::OK();
     }
@@ -48,6 +48,20 @@ public:
         for (auto& op : _op_factories) {
             op->close(state);
         }
+    }
+
+    std::string to_debug_string() const {
+        std::stringstream ss;
+        ss << "operator-chain: [";
+        for (size_t i = 0; i < _op_factories.size(); ++i) {
+            if (i == 0) {
+                ss << _op_factories[i]->get_name();
+            } else {
+                ss << " -> " << _op_factories[i]->get_name();
+            }
+        }
+        ss << "]";
+        return ss.str();
     }
 
 private:

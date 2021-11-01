@@ -22,7 +22,7 @@ void PipelineTestBase::start_test() {
     _execute();
 }
 
-OpFactories PipelineTestBase::maybe_interpolate_local_exchange(OpFactories& pred_operators) {
+OpFactories PipelineTestBase::maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators) {
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
     auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
     if (source_operator->degree_of_parallelism() > 1) {
@@ -69,10 +69,6 @@ void PipelineTestBase::_prepare() {
 
     _fragment_future = _fragment_ctx->finish_future();
     _runtime_state = _fragment_ctx->runtime_state();
-
-    int64_t bytes_limit = _request.query_options.mem_limit;
-    _fragment_ctx->set_mem_tracker(std::make_unique<MemTracker>(bytes_limit, "pipeline test mem-limit",
-                                                                _exec_env->query_pool_mem_tracker(), true));
 
     _runtime_state->set_batch_size(config::vector_chunk_size);
     ASSERT_TRUE(_runtime_state->init_mem_trackers(query_id).ok());
