@@ -44,6 +44,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
         return pred_operators;
     }
 
+    // TODO: make max_row_count as config::vector_chunk_size * shuffle_partitions_num when the local shuffle is lock free.
     auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size);
     auto local_shuffle_source = std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), mem_mgr);
     auto local_shuffle =
