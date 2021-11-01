@@ -40,7 +40,7 @@ protected:
     size_t next_plan_node_id() { return ++_next_plan_node_id; }
     uint32_t next_pipeline_id() { return ++_next_pipeline_id; }
 
-    OpFactories maybe_interpolate_local_exchange(OpFactories& pred_operators);
+    OpFactories maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators);
 
     // SubClass can init request in this method
     virtual void _prepare_request() {}
