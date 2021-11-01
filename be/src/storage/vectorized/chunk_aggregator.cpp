@@ -6,7 +6,6 @@
 #include "column/nullable_column.h"
 #include "common/config.h"
 #include "gutil/casts.h"
-#include "runtime/current_mem_tracker.h"
 #include "storage/vectorized/column_aggregate_func.h"
 
 namespace starrocks::vectorized {

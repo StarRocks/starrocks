@@ -224,7 +224,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
 Status PlanFragmentExecutor::open() {
     LOG(INFO) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
-    CurrentThread::set_query_id(_runtime_state->query_id());
+    tls_thread_status.set_query_id(_runtime_state->query_id());
 
     Status status = _open_internal_vectorized();
     if (!status.ok() && !status.is_cancelled() && _runtime_state->log_has_space()) {

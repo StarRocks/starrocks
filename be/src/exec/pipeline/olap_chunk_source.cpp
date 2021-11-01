@@ -7,7 +7,6 @@
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter.h"
 #include "gutil/map_util.h"
-#include "runtime/current_mem_tracker.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -277,20 +276,16 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
         }
 
         if (!_not_push_down_predicates.empty()) {
-            int64_t old_mem_usage = chunk->memory_usage();
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
             _not_push_down_predicates.evaluate(chunk, _selection.data(), 0, nrows);
             chunk->filter(_selection);
-            CurrentMemTracker::consume((int64_t)chunk->memory_usage() - old_mem_usage);
             DCHECK_CHUNK(chunk);
         }
         if (!_not_push_down_conjuncts.empty()) {
-            int64_t old_mem_usage = chunk->memory_usage();
             SCOPED_TIMER(_expr_filter_timer);
             ExecNode::eval_conjuncts(_not_push_down_conjuncts, chunk);
-            CurrentMemTracker::consume((int64_t)chunk->memory_usage() - old_mem_usage);
             DCHECK_CHUNK(chunk);
         }
     } while (chunk->num_rows() == 0);
