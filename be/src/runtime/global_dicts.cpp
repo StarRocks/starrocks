@@ -4,40 +4,140 @@
 #include <cstring>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
+#include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
-void DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
-    // if root expr was a slot ref
-    // we don't have to caculate dict
-    if (expr_ctx->root()->is_slotref()) {
-        dict_opt_ctx->could_apply_dict_optimize = false;
-        return;
+class DictConjunctExpr final : public Expr {
+public:
+    DictConjunctExpr(Expr& expr, DictOptimizeContext* dict_ctxs)
+            : Expr(expr), _origin_expr(expr), _dict_opt_ctx(dict_ctxs) {}
+
+    virtual ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) {
+        auto res = BooleanColumn::create();
+        auto& input = ptr->get_column_by_slot_id(_dict_opt_ctx->slot_id);
+        auto& res_data = res->get_data();
+        int size = input->size();
+
+        if (input->is_constant()) {
+            int code = ColumnHelper::get_const_value<TYPE_INT>(input);
+            return ColumnHelper::create_const_column<TYPE_BOOLEAN>(_dict_opt_ctx->filter[code], input->size());
+        } else if (input->is_nullable()) {
+            res_data.resize(size);
+            const auto* null_column = down_cast<NullableColumn*>(input.get());
+            const auto* data_column = down_cast<LowCardDictColumn*>(null_column->data_column().get());
+            const auto& null_data = null_column->immutable_null_column_data();
+            const auto& input_data = data_column->get_data();
+            for (int i = 0; i < size; ++i) {
+                res_data[i] = _dict_opt_ctx->filter[input_data[i]];
+            }
+            for (int i = 0; i < size; ++i) {
+                if (null_data[i]) {
+                    res_data[i] = 0;
+                }
+            }
+        } else {
+            res_data.resize(size);
+            const auto* data_column = down_cast<LowCardDictColumn*>(input.get());
+            const auto& input_data = data_column->get_data();
+            for (int i = 0; i < size; ++i) {
+                res_data[i] = _dict_opt_ctx->filter[input_data[i]];
+            }
+        }
+        return res;
     }
-    if (!expr_ctx->root()->fn().could_apply_dict_optimize) {
-        dict_opt_ctx->could_apply_dict_optimize = false;
-        return;
+    virtual Expr* clone(ObjectPool* pool) const { return pool->add(new DictConjunctExpr(_origin_expr, _dict_opt_ctx)); }
+
+private:
+    Expr& _origin_expr;
+    DictOptimizeContext* _dict_opt_ctx;
+};
+
+class DictStringFuncExpr final : public Expr {
+public:
+    DictStringFuncExpr(Expr& expr, DictOptimizeContext* dict_ctxs)
+            : Expr(expr), _origin_expr(expr), _dict_opt_ctx(dict_ctxs) {}
+
+    virtual ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) {
+        auto& input = ptr->get_column_by_slot_id(_dict_opt_ctx->slot_id);
+        int row_size = input->size();
+
+        auto res = LowCardDictColumn::create_mutable();
+        auto& res_data = res->get_data();
+        res_data.resize(row_size);
+
+        ColumnPtr output = nullptr;
+
+        if (input->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(input.get());
+            const auto* null_column = down_cast<const NullColumn*>(nullable_column->null_column().get());
+            const auto* data_column = down_cast<const LowCardDictColumn*>(nullable_column->data_column().get());
+            const auto& input_data = data_column->get_data();
+
+            for (int i = 0; i < row_size; ++i) {
+                DCHECK(input_data[i] >= 0 && input_data[i] <= DICT_DECODE_MAX_SIZE);
+                res_data[i] = _dict_opt_ctx->code_convert_map[input_data[i]];
+            }
+
+            if (_dict_opt_ctx->result_nullable) {
+                auto res_null_column = null_column->clone();
+                auto& res_null_data = down_cast<NullColumn*>(res_null_column.get())->get_data();
+
+                for (int i = 0; i < row_size; ++i) {
+                    res_null_data[i] |= (res_data[i] == 0);
+                }
+
+                output = NullableColumn::create(std::move(res), std::move(res_null_column));
+            } else {
+                output = NullableColumn::create(std::move(res), null_column->clone());
+            }
+        } else {
+            const auto* data_column = down_cast<const LowCardDictColumn*>(input.get());
+            const auto& input_data = data_column->get_data();
+
+            for (int i = 0; i < row_size; ++i) {
+                res_data[i] = _dict_opt_ctx->code_convert_map[input_data[i]];
+            }
+
+            if (_dict_opt_ctx->result_nullable) {
+                auto res_null = NullColumn::create_mutable();
+                auto& res_null_data = res_null->get_data();
+                res_null_data.resize(row_size);
+
+                for (int i = 0; i < row_size; ++i) {
+                    res_null_data[i] = (res_data[i] == 0);
+                }
+
+                output = NullableColumn::create(std::move(res), std::unique_ptr<Column>(res_null.release()));
+            } else {
+                output = std::move(res);
+            }
+        }
+        return output;
     }
-    std::vector<SlotId> slot_ids;
-    expr_ctx->root()->get_slot_ids(&slot_ids);
-    // For substr(null, 1), slot_ids is empty.
-    if (slot_ids.size() != 1) {
-        return;
+
+    virtual Expr* clone(ObjectPool* pool) const {
+        return pool->add(new DictStringFuncExpr(_origin_expr, _dict_opt_ctx));
     }
-    bool could_apply = _mutable_dict_maps->count(slot_ids.back());
-    dict_opt_ctx->slot_id = slot_ids.back();
-    dict_opt_ctx->could_apply_dict_optimize = could_apply;
-}
+
+private:
+    Expr& _origin_expr;
+    DictOptimizeContext* _dict_opt_ctx;
+};
 
 void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx,
                                    int32_t targetSlotId) {
@@ -100,58 +200,116 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
     _mutable_dict_maps->emplace(targetSlotId, std::make_pair(std::move(result_map), std::move(rresult_map)));
 }
 
-void DictOptimizeParser::eval_code_convert(const DictOptimizeContext& opt_ctx, const ColumnPtr& input,
-                                           ColumnPtr* output) {
-    int row_size = input->size();
+template <bool is_predicate>
+void DictOptimizeParser::_check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
+    if (expr_ctx->root()->is_slotref()) {
+        dict_opt_ctx->could_apply_dict_optimize = false;
+        return;
+    }
 
-    auto res = LowCardDictColumn::create_mutable();
-    auto& res_data = res->get_data();
-    res_data.resize(row_size);
-
-    if (input->is_nullable()) {
-        const auto* nullable_column = down_cast<const NullableColumn*>(input.get());
-        const auto* null_column = down_cast<const NullColumn*>(nullable_column->null_column().get());
-        const auto* data_column = down_cast<const LowCardDictColumn*>(nullable_column->data_column().get());
-        const auto& input_data = data_column->get_data();
-
-        for (int i = 0; i < row_size; ++i) {
-            DCHECK(input_data[i] >= -1 && input_data[i] <= DICT_DECODE_MAX_SIZE);
-            res_data[i] = opt_ctx.code_convert_map[input_data[i]];
+    if constexpr (!is_predicate) {
+        if (!expr_ctx->root()->fn().could_apply_dict_optimize) {
+            return;
         }
+    }
 
-        if (opt_ctx.result_nullable) {
-            auto res_null_column = null_column->clone();
-            auto& res_null_data = down_cast<NullColumn*>(res_null_column.get())->get_data();
+    std::vector<SlotId> slot_ids;
+    expr_ctx->root()->get_slot_ids(&slot_ids);
+    if (slot_ids.size() == 1 && _mutable_dict_maps->count(slot_ids.back())) {
+        dict_opt_ctx->slot_id = slot_ids.back();
+        dict_opt_ctx->could_apply_dict_optimize = true;
+    }
+}
 
-            for (int i = 0; i < row_size; ++i) {
-                res_null_data[i] |= (res_data[i] == 0);
-            }
+void DictOptimizeParser::eval_conjuncts(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx) {
+    DCHECK_EQ(conjunct->root()->type().type, TYPE_BOOLEAN);
+    SlotId need_decode_slot_id = dict_opt_ctx->slot_id;
+    DCHECK(_mutable_dict_maps->count(need_decode_slot_id) > 0);
+    // Slice -> dict-code
+    auto& column_dict_map = _mutable_dict_maps->at(need_decode_slot_id).first;
 
-            *output = NullableColumn::create(std::move(res), std::move(res_null_column));
-        } else {
-            *output = NullableColumn::create(std::move(res), null_column->clone());
-        }
-    } else {
-        const auto* data_column = down_cast<const LowCardDictColumn*>(input.get());
-        const auto& input_data = data_column->get_data();
+    std::vector<Slice> slices;
+    std::vector<int> codes;
 
-        for (int i = 0; i < row_size; ++i) {
-            res_data[i] = opt_ctx.code_convert_map[input_data[i]];
-        }
+    slices.reserve(column_dict_map.size());
+    codes.reserve(column_dict_map.size());
 
-        if (opt_ctx.result_nullable) {
-            auto res_null = NullColumn::create_mutable();
-            auto& res_null_data = res_null->get_data();
-            res_null_data.resize(row_size);
+    for (auto& [slice, code] : column_dict_map) {
+        slices.emplace_back(slice);
+        codes.emplace_back(code);
+    }
 
-            for (int i = 0; i < row_size; ++i) {
-                res_null_data[i] = (res_data[i] == 0);
-            }
+    auto binary_column = BinaryColumn::create();
+    binary_column->append_strings(slices);
 
-            *output = NullableColumn::create(std::move(res), std::unique_ptr<Column>(res_null.release()));
-        } else {
-            *output = std::move(res);
+    ChunkPtr temp_chunk = std::make_shared<Chunk>();
+    temp_chunk->append_column(binary_column, need_decode_slot_id);
+
+    auto result_column = conjunct->evaluate(temp_chunk.get());
+    bool result_nullable = result_column->is_nullable();
+    ColumnPtr data_column = result_column;
+    if (result_nullable) {
+        data_column = down_cast<NullableColumn*>(result_column.get())->data_column();
+    }
+    auto& result_data = down_cast<BooleanColumn*>(data_column.get())->get_data();
+
+    dict_opt_ctx->filter.resize(DICT_DECODE_MAX_SIZE + 1);
+    for (int i = 0; i < result_data.size(); ++i) {
+        dict_opt_ctx->filter[codes[i]] = result_data[i];
+    }
+
+    if (result_nullable) {
+        // null value will be treated as False
+        const auto& null_data = down_cast<NullableColumn*>(result_column.get())->null_column_data();
+        for (int i = 0; i < result_data.size(); ++i) {
+            dict_opt_ctx->filter[codes[i]] &= !(null_data[i] == true);
         }
     }
 }
+
+template <bool is_predicate, typename ExprType>
+void DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
+                                            const std::vector<SlotId>& slot_ids) {
+    auto& expr_ctxs = *pexpr_ctxs;
+    for (int i = 0; i < expr_ctxs.size(); ++i) {
+        auto& expr_ctx = expr_ctxs[i];
+        DictOptimizeContext dict_ctx;
+        _check_could_apply_dict_optimize<is_predicate>(expr_ctx, &dict_ctx);
+        if (dict_ctx.could_apply_dict_optimize) {
+            if constexpr (is_predicate) {
+                eval_conjuncts(expr_ctx, &dict_ctx);
+            } else {
+                eval_expr(state, expr_ctx, &dict_ctx, slot_ids[i]);
+            }
+            auto* dict_ctx_handle = _free_pool.add(new DictOptimizeContext(std::move(dict_ctx)));
+            auto* replaced_expr = _free_pool.add(new ExprType(*expr_ctx->root(), dict_ctx_handle));
+            // Because the ExprContext is close safe,
+            // Add both pre- and post-rewritten expressions to
+            // the free_list to ensure they are closed correctly
+            _expr_close_list.emplace_back(expr_ctx);
+            expr_ctx = _free_pool.add(new ExprContext(replaced_expr));
+            expr_ctx->prepare(state, RowDescriptor{});
+            expr_ctx->open(state);
+            _expr_close_list.emplace_back(expr_ctx);
+        }
+    }
+}
+
+void DictOptimizeParser::rewrite_conjuncts(std::vector<ExprContext*>* pconjuncts_ctxs, RuntimeState* state) {
+    _rewrite_expr_ctxs<true, DictConjunctExpr>(pconjuncts_ctxs, state, std::vector<SlotId>{});
+}
+
+void DictOptimizeParser::rewrite_exprs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
+                                       const std::vector<SlotId>& target_slotids) {
+    _rewrite_expr_ctxs<false, DictStringFuncExpr>(pexpr_ctxs, state, target_slotids);
+}
+
+void DictOptimizeParser::close(RuntimeState* state) noexcept {
+    Expr::close(_expr_close_list, state);
+}
+
+void DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
+    _check_could_apply_dict_optimize<false>(expr_ctx, dict_opt_ctx);
+}
+
 } // namespace starrocks::vectorized
