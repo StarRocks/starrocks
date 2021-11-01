@@ -137,12 +137,11 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.thrift.TConfiguration;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TBinaryProtocol;
 import org.apache.thrift.protocol.TCompactProtocol;
 import org.apache.thrift.protocol.TProtocol;
-import org.apache.thrift.transport.layered.TFramedTransport;
+import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
@@ -440,7 +439,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
                             throw new MetaException(e.toString());
                         }
                     } else {
-                        transport = new TSocket(TConfiguration.custom().build(), store.getHost(), store.getPort(), clientSocketTimeout);
+                        transport = new TSocket(store.getHost(), store.getPort(), clientSocketTimeout);
                     }
 
                     if (useSasl) {
@@ -524,7 +523,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
                                     + "Continuing without it.", e);
                         }
                     }
-                } catch (MetaException | TTransportException e) {
+                } catch (MetaException e) {
                     LOG.error("Unable to connect to metastore with URI " + store
                             + " in attempt " + attempt, e);
                 }
