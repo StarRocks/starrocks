@@ -65,28 +65,6 @@ using vectorized::DoubleColumn;
 using vectorized::FloatColumn;
 using vectorized::BooleanColumn;
 
-const char* Expr::_s_get_constant_symbol_prefix = "_ZN4starrocks4Expr12get_constant";
-
-template <class T>
-bool parse_string(const std::string& str, T* val) {
-    std::stringstream stream(str);
-    stream >> *val;
-    return !stream.fail();
-}
-
-void init_builtins_dummy() {}
-
-FunctionContext* Expr::register_function_context(ExprContext* ctx, RuntimeState* state, int varargs_buffer_size) {
-    FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
-    std::vector<FunctionContext::TypeDesc> arg_types;
-    arg_types.reserve(_children.size());
-    for (auto& i : _children) {
-        arg_types.push_back(AnyValUtil::column_type_to_type_desc(i->_type));
-    }
-    _fn_context_index = ctx->register_func(state, return_type, arg_types, varargs_buffer_size);
-    return ctx->fn_context(_fn_context_index);
-}
-
 // No children here
 Expr::Expr(const Expr& expr)
         : _cache_entry(expr._cache_entry),
@@ -96,77 +74,11 @@ Expr::Expr(const Expr& expr)
           _is_nullable(expr._is_nullable),
           _type(expr._type),
           _output_scale(expr._output_scale),
-          _output_column(expr._output_column),
           _fn(expr._fn),
           _fn_context_index(expr._fn_context_index),
-          _constant_val(expr._constant_val),
           _vector_compute_fn(expr._vector_compute_fn) {}
 
-Expr::Expr(TypeDescriptor type)
-        : _opcode(TExprOpcode::INVALID_OPCODE),
-          // _vector_opcode(TExprOpcode::INVALID_OPCODE),
-          _is_slotref(false),
-          _type(std::move(type)),
-          _output_scale(-1),
-          _output_column(-1),
-          _fn_context_index(-1),
-          _vector_compute_fn() {
-    switch (_type.type) {
-    case TYPE_BOOLEAN:
-        _node_type = (TExprNodeType::BOOL_LITERAL);
-        break;
-
-    case TYPE_TINYINT:
-    case TYPE_SMALLINT:
-    case TYPE_INT:
-    case TYPE_BIGINT:
-        _node_type = (TExprNodeType::INT_LITERAL);
-        break;
-
-    case TYPE_LARGEINT:
-        _node_type = (TExprNodeType::LARGE_INT_LITERAL);
-        break;
-
-    case TYPE_NULL:
-        _node_type = (TExprNodeType::NULL_LITERAL);
-        break;
-
-    case TYPE_FLOAT:
-    case TYPE_DOUBLE:
-    case TYPE_TIME:
-        _node_type = (TExprNodeType::FLOAT_LITERAL);
-        break;
-
-    case TYPE_DECIMAL:
-    case TYPE_DECIMALV2:
-        _node_type = (TExprNodeType::DECIMAL_LITERAL);
-        break;
-
-    case TYPE_DATE:
-    case TYPE_DATETIME:
-        _node_type = (TExprNodeType::DATE_LITERAL);
-        break;
-
-    case TYPE_CHAR:
-    case TYPE_VARCHAR:
-    case TYPE_HLL:
-    case TYPE_OBJECT:
-    case TYPE_PERCENTILE:
-        _node_type = (TExprNodeType::STRING_LITERAL);
-        break;
-    case TYPE_ARRAY:
-        _node_type = (TExprNodeType::ARRAY_EXPR);
-        break;
-    case INVALID_TYPE:
-    case TYPE_BINARY:
-    case TYPE_STRUCT:
-    case TYPE_MAP:
-    case TYPE_DECIMAL32:
-    case TYPE_DECIMAL64:
-    case TYPE_DECIMAL128:
-        break;
-    }
-}
+Expr::Expr(TypeDescriptor type) : Expr(type, false) {}
 
 Expr::Expr(TypeDescriptor type, bool is_slotref)
         : _opcode(TExprOpcode::INVALID_OPCODE),
@@ -174,7 +86,6 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
           _is_slotref(is_slotref),
           _type(std::move(type)),
           _output_scale(-1),
-          _output_column(-1),
           _fn_context_index(-1) {
     if (is_slotref) {
         _node_type = (TExprNodeType::SLOT_REF);
@@ -210,6 +121,7 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
             _node_type = (TExprNodeType::DECIMAL_LITERAL);
             break;
 
+        case TYPE_DATE:
         case TYPE_DATETIME:
             _node_type = (TExprNodeType::DATE_LITERAL);
             break;
@@ -221,6 +133,17 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
         case TYPE_PERCENTILE:
             _node_type = (TExprNodeType::STRING_LITERAL);
             break;
+        case TYPE_ARRAY:
+            _node_type = (TExprNodeType::ARRAY_EXPR);
+            break;
+        case INVALID_TYPE:
+        case TYPE_BINARY:
+        case TYPE_STRUCT:
+        case TYPE_MAP:
+        case TYPE_DECIMAL32:
+        case TYPE_DECIMAL64:
+        case TYPE_DECIMAL128:
+            break;
 
         default:
             DCHECK(false) << "Invalid type.";
@@ -228,21 +151,7 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
     }
 }
 
-Expr::Expr(const TExprNode& node)
-        : _node_type(node.node_type),
-          _opcode(node.__isset.opcode ? node.opcode : TExprOpcode::INVALID_OPCODE),
-          // _vector_opcode(
-          // node.__isset.vector_opcode ? node.vector_opcode : TExprOpcode::INVALID_OPCODE),
-          _is_slotref(false),
-          _is_nullable(node.is_nullable),
-          _type(TypeDescriptor::from_thrift(node.type)),
-          _output_scale(node.output_scale),
-          _output_column(node.__isset.output_column ? node.output_column : -1),
-          _fn_context_index(-1) {
-    if (node.__isset.fn) {
-        _fn = node.fn;
-    }
-}
+Expr::Expr(const TExprNode& node) : Expr(node, false) {}
 
 Expr::Expr(const TExprNode& node, bool is_slotref)
         : _node_type(node.node_type),
@@ -253,10 +162,12 @@ Expr::Expr(const TExprNode& node, bool is_slotref)
           _is_nullable(node.is_nullable),
           _type(TypeDescriptor::from_thrift(node.type)),
           _output_scale(node.output_scale),
-          _output_column(node.__isset.output_column ? node.output_column : -1),
           _fn_context_index(-1) {
     if (node.__isset.fn) {
         _fn = node.fn;
+    }
+    if (node.__isset.is_monotonic) {
+        _is_monotonic = node.is_monotonic;
     }
 }
 
@@ -491,89 +402,9 @@ inline static int get_byte_size_of_primitive_type(PrimitiveType type) {
     return 0;
 }
 
-int Expr::compute_results_layout(const std::vector<Expr*>& exprs, std::vector<int>* offsets, int* var_result_begin) {
-    if (exprs.empty()) {
-        *var_result_begin = -1;
-        return 0;
-    }
-
-    std::vector<MemLayoutData> data;
-    data.resize(exprs.size());
-
-    // Collect all the byte sizes and sort them
-    for (int i = 0; i < exprs.size(); ++i) {
-        data[i].expr_idx = i;
-
-        if (exprs[i]->type().type == TYPE_CHAR || exprs[i]->type().type == TYPE_VARCHAR) {
-            data[i].byte_size = 16;
-            data[i].variable_length = true;
-        } else if (exprs[i]->type().type == TYPE_DECIMAL) {
-            data[i].byte_size = get_byte_size_of_primitive_type(exprs[i]->type().type);
-
-            // Although the current decimal has a fix-length, for the
-            // same value, it will work out different hash value due to the
-            // different memory represent if the variable_length here is set
-            // to false, so we have to keep it.
-            data[i].variable_length = true;
-        } else {
-            data[i].byte_size = get_byte_size_of_primitive_type(exprs[i]->type().type);
-            data[i].variable_length = false;
-        }
-
-        DCHECK_NE(data[i].byte_size, 0);
-    }
-
-    sort(data.begin(), data.end());
-
-    // Walk the types and store in a packed aligned layout
-    int max_alignment = sizeof(int64_t);
-    int current_alignment = data[0].byte_size;
-    int byte_offset = 0;
-
-    offsets->resize(exprs.size());
-    offsets->clear();
-    *var_result_begin = -1;
-
-    for (auto& i : data) {
-        DCHECK_GE(i.byte_size, current_alignment);
-
-        // Don't align more than word (8-byte) size.  This is consistent with what compilers
-        // do.
-        if (i.byte_size != current_alignment && current_alignment != max_alignment) {
-            byte_offset += i.byte_size - current_alignment;
-            current_alignment = std::min(i.byte_size, max_alignment);
-            // TODO(zc): fixed decimal align
-            if (i.byte_size == 40) {
-                current_alignment = 4;
-            }
-        }
-
-        (*offsets)[i.expr_idx] = byte_offset;
-
-        if (i.variable_length && *var_result_begin == -1) {
-            *var_result_begin = byte_offset;
-        }
-
-        byte_offset += i.byte_size;
-    }
-
-    return byte_offset;
-}
-
-int Expr::compute_results_layout(const std::vector<ExprContext*>& ctxs, std::vector<int>* offsets,
-                                 int* var_result_begin) {
-    std::vector<Expr*> exprs;
-    exprs.reserve(ctxs.size());
+Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state, const RowDescriptor& row_desc) {
     for (auto ctx : ctxs) {
-        exprs.push_back(ctx->root());
-    }
-    return compute_results_layout(exprs, offsets, var_result_begin);
-}
-
-Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state, const RowDescriptor& row_desc,
-                     MemTracker* tracker) {
-    for (auto ctx : ctxs) {
-        RETURN_IF_ERROR(ctx->prepare(state, row_desc, tracker));
+        RETURN_IF_ERROR(ctx->prepare(state, row_desc));
     }
     return Status::OK();
 }
@@ -704,79 +535,6 @@ const Expr* Expr::expr_without_cast(const Expr* expr) {
     return expr;
 }
 
-starrocks_udf::AnyVal* Expr::get_const_val(ExprContext* context) {
-    if (!is_constant()) {
-        return nullptr;
-    }
-    if (_constant_val != nullptr) {
-        return _constant_val.get();
-    }
-    switch (_type.type) {
-    case TYPE_BOOLEAN: {
-        _constant_val.reset(new BooleanVal(get_boolean_val(context, nullptr)));
-        break;
-    }
-    case TYPE_TINYINT: {
-        _constant_val.reset(new TinyIntVal(get_tiny_int_val(context, nullptr)));
-        break;
-    }
-    case TYPE_SMALLINT: {
-        _constant_val.reset(new SmallIntVal(get_small_int_val(context, nullptr)));
-        break;
-    }
-    case TYPE_INT: {
-        _constant_val.reset(new IntVal(get_int_val(context, nullptr)));
-        break;
-    }
-    case TYPE_BIGINT: {
-        _constant_val.reset(new BigIntVal(get_big_int_val(context, nullptr)));
-        break;
-    }
-    case TYPE_LARGEINT: {
-        _constant_val.reset(new LargeIntVal(get_large_int_val(context, nullptr)));
-        break;
-    }
-    case TYPE_FLOAT: {
-        _constant_val.reset(new FloatVal(get_float_val(context, nullptr)));
-        break;
-    }
-    case TYPE_DOUBLE:
-    case TYPE_TIME: {
-        _constant_val.reset(new DoubleVal(get_double_val(context, nullptr)));
-        break;
-    }
-    case TYPE_CHAR:
-    case TYPE_VARCHAR:
-    case TYPE_HLL:
-    case TYPE_OBJECT:
-    case TYPE_PERCENTILE: {
-        _constant_val.reset(new StringVal(get_string_val(context, nullptr)));
-        break;
-    }
-    case TYPE_DATE:
-    case TYPE_DATETIME: {
-        _constant_val.reset(new DateTimeVal(get_datetime_val(context, nullptr)));
-        break;
-    }
-    case TYPE_DECIMAL: {
-        _constant_val.reset(new DecimalVal(get_decimal_val(context, nullptr)));
-        break;
-    }
-    case TYPE_DECIMALV2: {
-        _constant_val.reset(new DecimalV2Val(get_decimalv2_val(context, nullptr)));
-        break;
-    }
-    case TYPE_NULL: {
-        _constant_val.reset(new AnyVal(true));
-        break;
-    }
-    default:
-        DCHECK(false) << "Type not implemented: " << type();
-    }
-    DCHECK(_constant_val.get() != nullptr);
-    return _constant_val.get();
-}
-
 bool Expr::is_bound(const std::vector<TupleId>& tuple_ids) const {
     for (auto i : _children) {
         if (!i->is_bound(tuple_ids)) {
@@ -854,16 +612,6 @@ DecimalV2Val Expr::get_decimalv2_val(ExprContext* context, TupleRow* row) {
     return val;
 }
 
-Status Expr::get_fn_context_error(ExprContext* ctx) const {
-    if (_fn_context_index != -1) {
-        FunctionContext* fn_ctx = ctx->fn_context(_fn_context_index);
-        if (fn_ctx->has_error()) {
-            return Status::InternalError(fn_ctx->error_msg());
-        }
-    }
-    return Status::OK();
-}
-
 Expr* Expr::copy(ObjectPool* pool, Expr* old_expr) {
     auto new_expr = old_expr->clone(pool);
     for (auto child : old_expr->_children) {
@@ -871,107 +619,6 @@ Expr* Expr::copy(ObjectPool* pool, Expr* old_expr) {
         new_expr->_children.push_back(new_child);
     }
     return new_expr;
-}
-
-void Expr::assign_fn_ctx_idx(int* next_fn_ctx_idx) {
-    _fn_ctx_idx_start = *next_fn_ctx_idx;
-    if (has_fn_ctx()) {
-        _fn_ctx_idx = *next_fn_ctx_idx;
-        ++(*next_fn_ctx_idx);
-    }
-    for (Expr* child : children()) child->assign_fn_ctx_idx(next_fn_ctx_idx);
-    _fn_ctx_idx_end = *next_fn_ctx_idx;
-}
-
-Status Expr::create(const TExpr& texpr, const RowDescriptor& row_desc, RuntimeState* state, ObjectPool* pool,
-                    Expr** scalar_expr, MemTracker* tracker) {
-    *scalar_expr = nullptr;
-    Expr* root;
-    RETURN_IF_ERROR(create_vectorized_expr(pool, texpr.nodes[0], &root));
-    RETURN_IF_ERROR(create_tree(texpr, pool, root));
-    // TODO pengyubing replace by Init()
-    ExprContext* ctx = pool->add(new ExprContext(root));
-    // TODO chenhao check node type in ScalarExpr Init()
-    Status status = Status::OK();
-    if (texpr.nodes[0].node_type != TExprNodeType::CASE_EXPR) {
-        status = root->prepare(state, row_desc, ctx);
-    }
-    if (UNLIKELY(!status.ok())) {
-        root->close();
-        return status;
-    }
-    int fn_ctx_idx = 0;
-    root->assign_fn_ctx_idx(&fn_ctx_idx);
-    *scalar_expr = root;
-    return Status::OK();
-}
-
-Status Expr::create(const std::vector<TExpr>& texprs, const RowDescriptor& row_desc, RuntimeState* state,
-                    ObjectPool* pool, std::vector<Expr*>* exprs, MemTracker* tracker) {
-    exprs->clear();
-    for (const TExpr& texpr : texprs) {
-        Expr* expr;
-        RETURN_IF_ERROR(create(texpr, row_desc, state, pool, &expr, tracker));
-        DCHECK(expr != nullptr);
-        exprs->push_back(expr);
-    }
-    return Status::OK();
-}
-
-Status Expr::create(const TExpr& texpr, const RowDescriptor& row_desc, RuntimeState* state, Expr** scalar_expr,
-                    MemTracker* tracker) {
-    return Expr::create(texpr, row_desc, state, state->obj_pool(), scalar_expr, tracker);
-}
-
-Status Expr::create(const std::vector<TExpr>& texprs, const RowDescriptor& row_desc, RuntimeState* state,
-                    std::vector<Expr*>* exprs, MemTracker* tracker) {
-    return Expr::create(texprs, row_desc, state, state->obj_pool(), exprs, tracker);
-}
-
-Status Expr::create_tree(const TExpr& texpr, ObjectPool* pool, Expr* root) {
-    DCHECK(!texpr.nodes.empty());
-    DCHECK(root != nullptr);
-    // The root of the tree at nodes[0] is already created and stored in 'root'.
-    int child_node_idx = 0;
-    int num_children = texpr.nodes[0].num_children;
-    for (int i = 0; i < num_children; ++i) {
-        ++child_node_idx;
-        Status status = create_tree_internal(texpr.nodes, pool, root, &child_node_idx);
-        if (UNLIKELY(!status.ok())) {
-            LOG(ERROR) << "Could not construct expr tree.\n"
-                       << status.get_error_msg() << "\n"
-                       << apache::thrift::ThriftDebugString(texpr);
-            return status;
-        }
-    }
-    if (UNLIKELY(child_node_idx + 1 != texpr.nodes.size())) {
-        return Status::InternalError(
-                "Expression tree only partially reconstructed. Not all thrift "
-                "nodes were used.");
-    }
-    return Status::OK();
-}
-
-Status Expr::create_tree_internal(const std::vector<TExprNode>& nodes, ObjectPool* pool, Expr* root,
-                                  int* child_node_idx) {
-    // propagate error case
-    if (*child_node_idx >= nodes.size()) {
-        return Status::InternalError("Failed to reconstruct expression tree from thrift.");
-    }
-
-    const TExprNode& texpr_node = nodes[*child_node_idx];
-    DCHECK_NE(texpr_node.node_type, TExprNodeType::AGG_EXPR);
-    Expr* child_expr;
-    RETURN_IF_ERROR(create_vectorized_expr(pool, texpr_node, &child_expr));
-    root->_children.push_back(child_expr);
-
-    int num_children = nodes[*child_node_idx].num_children;
-    for (int i = 0; i < num_children; ++i) {
-        *child_node_idx += 1;
-        RETURN_IF_ERROR(create_tree_internal(nodes, pool, child_expr, child_node_idx));
-        DCHECK(child_expr->get_child(i) != nullptr);
-    }
-    return Status::OK();
 }
 
 // TODO chenhao
@@ -1008,6 +655,19 @@ ColumnPtr Expr::evaluate_const(ExprContext* context) {
 }
 
 ColumnPtr Expr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
+    return nullptr;
+}
+
+vectorized::ColumnRef* Expr::get_column_ref() {
+    if (this->is_slotref()) {
+        return down_cast<vectorized::ColumnRef*>(this);
+    }
+    for (auto child : this->children()) {
+        vectorized::ColumnRef* ref = nullptr;
+        if ((ref = child->get_column_ref()) != nullptr) {
+            return ref;
+        }
+    }
     return nullptr;
 }
 

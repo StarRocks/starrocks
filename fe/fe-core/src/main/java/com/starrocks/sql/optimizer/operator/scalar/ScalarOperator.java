@@ -108,37 +108,14 @@ public abstract class ScalarOperator implements Cloneable {
         return new ColumnRefSet();
     }
 
-    /**
-     * debug string is used to print scalar operator tree
-     */
     public String debugString() {
         return toString();
-    }
-
-    /**
-     * For a predicate, if input is Null, output is Null or false, we call it is strict.
-     */
-    public boolean isStrictPredicate() {
-        return false;
-    }
-
-    // If 'this' is a ColumnRef or a Cast that wraps a ColumnRef, returns true.
-    public boolean isColumnRefOrCast() {
-        if (this instanceof ColumnRefOperator) {
-            return true;
-        }
-        return this instanceof CastOperator && getChild(0) instanceof ColumnRefOperator;
     }
 
     public boolean isColumnRef() {
         return this instanceof ColumnRefOperator;
     }
 
-    /**
-     * is ConstantOperator?
-     *
-     * @return True/False
-     */
     public boolean isConstantRef() {
         return this instanceof ConstantOperator;
     }

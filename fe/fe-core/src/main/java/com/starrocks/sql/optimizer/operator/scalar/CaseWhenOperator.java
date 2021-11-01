@@ -14,7 +14,7 @@ public class CaseWhenOperator extends CallOperator {
     private boolean hasElse;
 
     private int whenStart;
-    private int whenEnd;
+    private final int whenEnd;
 
     public CaseWhenOperator(CaseWhenOperator other, List<ScalarOperator> children) {
         super("CaseWhen", other.type, children);

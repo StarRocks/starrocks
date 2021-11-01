@@ -8,6 +8,7 @@
 
 #include "column/column_pool.h"
 #include "column/type_traits.h"
+#include "common/global_types.h"
 #include "common/status.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -23,6 +24,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/primitive_type.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/priority_thread_pool.hpp"
 
@@ -54,6 +56,8 @@ Status OlapScanNode::prepare(RuntimeState* state) {
         _runtime_profile->add_info_string("Predicates", _olap_scan_node.sql_predicates);
     }
     _runtime_state = state;
+    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
+    RETURN_IF_ERROR(_rewrite_descriptor());
     return Status::OK();
 }
 
@@ -83,9 +87,12 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     if (!_start && _status.ok()) {
         Status status = _start_scan(state);
         _update_status(status);
-        LOG_IF(ERROR, !status.ok()) << "Failed to start scan node: " << status.to_string();
+        LOG_IF(ERROR, !(status.ok() || status.is_end_of_file())) << "Failed to start scan node: " << status.to_string();
         _start = true;
-        RETURN_IF_ERROR(status);
+        if (!status.ok()) {
+            *eos = true;
+            return status.is_end_of_file() ? Status::OK() : status;
+        }
     } else if (!_start) {
         _result_chunks.shutdown();
         _start = true;
@@ -181,6 +188,8 @@ Status OlapScanNode::close(RuntimeState* state) {
         delete chunk;
     }
 
+    _dict_optimize_parser.close(state);
+
     // Reduce the memory usage if the the average string size is greater than 512.
     release_large_columns<BinaryColumn>(config::vector_chunk_size * 512);
 
@@ -200,6 +209,36 @@ void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
         std::lock_guard<std::mutex> l(_mtx);
         _chunk_pool.push(chk);
     }
+}
+
+// For global dictionary optimized columns,
+// the type at the execution level is INT but at the storage level is TYPE_STRING/TYPE_CHAR,
+// so we need to pass the real type to the Table Scanner.
+Status OlapScanNode::_rewrite_descriptor() {
+    const auto& global_dict = _runtime_state->get_global_dict_map();
+    if (global_dict.empty()) return Status::OK();
+
+    for (auto& slot : _tuple_desc->slots()) {
+        if (global_dict.count(slot->id())) {
+            slot->type().type = TYPE_VARCHAR;
+        }
+    }
+
+    const auto& dict_slots_mapping = _olap_scan_node.dict_string_id_to_int_ids;
+    // rewrite slot-id for conjunct
+    std::vector<SlotId> slots;
+    for (auto& conjunct : _conjunct_ctxs) {
+        slots.clear();
+        Expr* expr_root = conjunct->root();
+        if (expr_root->get_slot_ids(&slots) == 1) {
+            if (auto iter = dict_slots_mapping.find(slots[0]); iter != dict_slots_mapping.end()) {
+                ColumnRef* column_ref = expr_root->get_column_ref();
+                column_ref->set_slot_id(iter->second);
+            }
+        }
+    }
+
+    return Status::OK();
 }
 
 void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
@@ -342,7 +381,7 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     if (_olap_scan_node.__isset.enable_column_expr_predicate) {
         enable_column_expr_predicate = _olap_scan_node.enable_column_expr_predicate;
     }
-    cm.parse_conjuncts(scan_keys_unlimited, max_scan_key_num, enable_column_expr_predicate);
+    RETURN_IF_ERROR(cm.parse_conjuncts(scan_keys_unlimited, max_scan_key_num, enable_column_expr_predicate));
     RETURN_IF_ERROR(_start_scan_thread(state));
 
     return Status::OK();
@@ -450,6 +489,8 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&key_ranges));
     std::vector<ExprContext*> conjunct_ctxs;
     _conjuncts_manager.get_not_push_down_conjuncts(&conjunct_ctxs);
+
+    _dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state);
 
     int scanners_per_tablet = std::max(1, 64 / (int)_scan_ranges.size());
     for (auto& scan_range : _scan_ranges) {

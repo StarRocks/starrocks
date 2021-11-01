@@ -429,7 +429,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     extend_orc_min_max_conjuncts(&_pool, param, thres);
     RowDescriptor row_desc(param->min_max_tuple_desc, true);
     for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state, row_desc, _runtime_state->instance_mem_tracker());
+        ctx->prepare(_runtime_state, row_desc);
         ctx->open(_runtime_state);
     }
 
@@ -465,7 +465,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     extend_orc_min_max_conjuncts(&_pool, param, thres);
     RowDescriptor row_desc(param->min_max_tuple_desc, true);
     for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state, row_desc, _runtime_state->instance_mem_tracker());
+        ctx->prepare(_runtime_state, row_desc);
         ctx->open(_runtime_state);
     }
 
@@ -501,7 +501,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     extend_orc_min_max_conjuncts(&_pool, param, thres);
     RowDescriptor row_desc(param->min_max_tuple_desc, true);
     for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state, row_desc, _runtime_state->instance_mem_tracker());
+        ctx->prepare(_runtime_state, row_desc);
         ctx->open(_runtime_state);
     }
 
@@ -580,7 +580,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     for (auto& it : param->conjunct_ctxs_by_slot) {
         for (auto& it2 : it.second) {
             ExprContext* ctx = it2;
-            ctx->prepare(_runtime_state, row_desc, _runtime_state->instance_mem_tracker());
+            ctx->prepare(_runtime_state, row_desc);
             ctx->open(_runtime_state);
         }
     }
@@ -692,7 +692,7 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
     extend_datetime_orc_min_max_conjuncts(&_pool, param);
     RowDescriptor row_desc(param->min_max_tuple_desc, true);
     for (ExprContext* ctx : param->min_max_conjunct_ctxs) {
-        ctx->prepare(_runtime_state, row_desc, _runtime_state->instance_mem_tracker());
+        ctx->prepare(_runtime_state, row_desc);
         ctx->open(_runtime_state);
     }
 

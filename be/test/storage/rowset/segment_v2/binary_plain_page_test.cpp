@@ -74,8 +74,7 @@ public:
         //test1
 
         if (!vectorize) {
-            MemTracker tracker;
-            MemPool pool(&tracker);
+            MemPool pool;
             size_t size = 3;
             std::unique_ptr<ColumnVectorBatch> cvb;
             ColumnVectorBatch::create(size, true, get_type_info(OLAP_FIELD_TYPE_VARCHAR), nullptr, &cvb);

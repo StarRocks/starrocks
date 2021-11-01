@@ -44,12 +44,12 @@ StatusOr<vectorized::ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::R
     return std::move(chunk);
 }
 
-Status UnionConstSourceOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
-    RETURN_IF_ERROR(OperatorFactory::prepare(state, mem_tracker));
+Status UnionConstSourceOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     RowDescriptor row_desc;
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
-        RETURN_IF_ERROR(Expr::prepare(exprs, state, row_desc, mem_tracker));
+        RETURN_IF_ERROR(Expr::prepare(exprs, state, row_desc));
     }
 
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
@@ -60,11 +60,11 @@ Status UnionConstSourceOperatorFactory::prepare(RuntimeState* state, MemTracker*
 }
 
 void UnionConstSourceOperatorFactory::close(RuntimeState* state) {
-    OperatorFactory::close(state);
-
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
         Expr::close(exprs, state);
     }
+
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

@@ -28,7 +28,6 @@
 #include "codegen/starrocks_ir.h"
 #include "common/logging.h"
 #include "runtime/descriptors.h"
-#include "runtime/disk_io_mgr.h"
 #include "runtime/mem_pool.h"
 #include "runtime/row_batch_interface.hpp"
 

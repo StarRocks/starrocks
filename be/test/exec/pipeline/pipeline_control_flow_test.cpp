@@ -376,7 +376,7 @@ TEST_F(TestPipelineControlFlow, test_local_exchange_operator_with_non_full_chunk
             source_op_factory->set_degree_of_parallelism(i);
             op_factories.push_back(source_op_factory);
 
-            op_factories = maybe_interpolate_local_exchange(op_factories);
+            op_factories = maybe_interpolate_local_passthrough_exchange(op_factories);
 
             op_factories.push_back(std::make_shared<TestNormalOperatorFactory>(next_operator_id(), next_plan_node_id(),
                                                                                normalCounter));
@@ -423,7 +423,7 @@ TEST_F(TestPipelineControlFlow, test_local_exchange_operator_with_full_chunk) {
                     next_operator_id(), next_plan_node_id(), chunk_num, chunk_size, sourceCounter);
             source_op_factory->set_degree_of_parallelism(i);
             op_factories.push_back(source_op_factory);
-            op_factories = maybe_interpolate_local_exchange(op_factories);
+            op_factories = maybe_interpolate_local_passthrough_exchange(op_factories);
             op_factories.push_back(std::make_shared<TestNormalOperatorFactory>(next_operator_id(), next_plan_node_id(),
                                                                                normalCounter));
             op_factories.push_back(

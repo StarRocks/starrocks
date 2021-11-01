@@ -34,14 +34,14 @@ Status IntersectNode::prepare(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
 
     DCHECK(_tuple_desc != nullptr);
-    _build_pool = std::make_unique<MemPool>(mem_tracker());
+    _build_pool = std::make_unique<MemPool>();
 
     _build_set_timer = ADD_TIMER(runtime_profile(), "BuildSetTime");
     _refine_intersect_row_timer = ADD_TIMER(runtime_profile(), "RefineIntersectRowTime");
     _get_result_timer = ADD_TIMER(runtime_profile(), "GetResultTime");
 
     for (size_t i = 0; i < _child_expr_lists.size(); ++i) {
-        RETURN_IF_ERROR(Expr::prepare(_child_expr_lists[i], state, child(i)->row_desc(), expr_mem_tracker()));
+        RETURN_IF_ERROR(Expr::prepare(_child_expr_lists[i], state, child(i)->row_desc()));
         DCHECK_EQ(_child_expr_lists[i].size(), _tuple_desc->slots().size());
     }
 

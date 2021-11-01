@@ -54,7 +54,7 @@ void CrossJoinRightSinkOperator::finish(RuntimeState* state) {
     }
 }
 
-Status CrossJoinRightSinkOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+Status CrossJoinRightSinkOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
 }
 

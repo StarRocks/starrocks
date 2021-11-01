@@ -415,10 +415,10 @@ void CrossJoinLeftOperatorFactory::_init_row_desc() {
     }
 }
 
-Status CrossJoinLeftOperatorFactory::prepare(RuntimeState* state, MemTracker* mem_tracker) {
+Status CrossJoinLeftOperatorFactory::prepare(RuntimeState* state) {
     _init_row_desc();
     RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc, mem_tracker));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     return Status::OK();
 }

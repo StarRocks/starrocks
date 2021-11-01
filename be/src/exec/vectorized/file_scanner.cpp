@@ -27,15 +27,8 @@ FileScanner::FileScanner(starrocks::RuntimeState* state, starrocks::RuntimeProfi
           _params(params),
           _counter(counter),
           _row_desc(nullptr),
-#if BE_TEST
-          _mem_tracker(new MemTracker()),
-#else
-          _mem_tracker(new MemTracker(-1, "Broker FileScanner", state->instance_mem_tracker())),
-//          _mem_pool(_state->instance_mem_tracker()),
-#endif
           _strict_mode(false),
-          _error_counter(0) {
-}
+          _error_counter(0) {}
 
 FileScanner::~FileScanner() {
     Expr::close(_dest_expr_ctx, _state);
@@ -90,7 +83,7 @@ Status FileScanner::init_expr_ctx() {
 
         ExprContext* ctx = nullptr;
         RETURN_IF_ERROR(Expr::create_expr_tree(_state->obj_pool(), it->second, &ctx));
-        RETURN_IF_ERROR(ctx->prepare(_state, *_row_desc.get(), _mem_tracker.get()));
+        RETURN_IF_ERROR(ctx->prepare(_state, *_row_desc.get()));
         RETURN_IF_ERROR(ctx->open(_state));
 
         _dest_expr_ctx.emplace_back(ctx);

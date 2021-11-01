@@ -134,5 +134,13 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
     }
+
+    @Test
+    public void testMod() throws Exception {
+        String sql = "select mod(0.022330165, NULL) as result from db1.decimal_table";
+	String expectString = "TScalarType(type:DECIMAL32, precision:9, scale:9))";
+	String thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
+	Assert.assertTrue(thrift.contains(expectString));
+    }
 }
 

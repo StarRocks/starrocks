@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
@@ -33,6 +34,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private String turnOffReason;
 
     private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+    // For the simple predicate k1 = "olap", could apply global dict optimization,
+    // need to store the string column k1 and generate the string slot in plan fragment builder
+    private List<ColumnRefOperator> globalDictStringColumns = Lists.newArrayList();
+    private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
 
     public PhysicalOlapScanOperator(Table table,
                                     List<ColumnRefOperator> outputColumns,
@@ -89,6 +94,23 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         this.globalDicts = globalDicts;
     }
 
+    public List<ColumnRefOperator> getGlobalDictStringColumns() {
+        return globalDictStringColumns;
+    }
+
+    public void setGlobalDictStringColumns(
+            List<ColumnRefOperator> globalDictStringColumns) {
+        this.globalDictStringColumns = globalDictStringColumns;
+    }
+
+    public Map<Integer, Integer> getDictStringIdToIntIds() {
+        return dictStringIdToIntIds;
+    }
+
+    public void setDictStringIdToIntIds(Map<Integer, Integer> dictStringIdToIntIds) {
+        this.dictStringIdToIntIds = dictStringIdToIntIds;
+    }
+
     @Override
     public String toString() {
         return "PhysicalOlapScan" + " {" +
@@ -119,7 +141,6 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         }
     }
 
-    // FixMe(KKS): Fix filter
     @Override
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
         return true;

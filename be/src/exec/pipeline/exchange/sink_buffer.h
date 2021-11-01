@@ -11,13 +11,15 @@
 namespace starrocks::pipeline {
 
 struct TransmitChunkInfo {
+    size_t channel_id;
     PTransmitChunkParams params;
     doris::PBackendService_Stub* brpc_stub;
 };
 
 class SinkBuffer {
 public:
-    SinkBuffer(size_t channel_number) : _closure_size(channel_number) {
+    SinkBuffer(size_t channel_number, size_t num_sinkers)
+            : _closure_size(channel_number), _num_sinkers_per_channel(channel_number, num_sinkers) {
         for (size_t i = 0; i < channel_number; ++i) {
             auto _chunk_closure = new CallBackClosure<PTransmitChunkResult>();
             _chunk_closure->ref();
@@ -92,15 +94,19 @@ public:
 
     bool is_cancelled() const { return _is_cancelled; }
 
-    void set_sinker_number(int64_t sinker_number) { _sinker_number = sinker_number; }
-
 private:
     void _send_rpc(TransmitChunkInfo& request) {
         if (request.params.eos()) {
-            // Only send eos for last sinker, because we could only send eos once
-            if (--_sinker_number > 0) {
-                _in_flight_rpc_num--;
-                return;
+            // Only the last eos is sent to ExchangeSourceOperator. it must be guaranteed that
+            // eos is the last packet to send to finish the input stream of the corresponding of
+            // ExchangeSourceOperator and eos is sent exactly-once.
+            if (--_num_sinkers_per_channel[request.channel_id] > 0) {
+                if (request.params.chunks_size() == 0) {
+                    _in_flight_rpc_num--;
+                    return;
+                } else {
+                    request.params.set_eos(false);
+                }
             }
         }
         request.params.set_sequence(_request_seq);
@@ -118,8 +124,8 @@ private:
 
     // To avoid lock
     const int32_t _closure_size;
+    vector<size_t> _num_sinkers_per_channel;
     int64_t _request_seq = 0;
-    int64_t _sinker_number = 0;
     std::atomic<int32_t> _in_flight_rpc_num = 0;
     std::atomic<bool> _is_cancelled{false};
     std::deque<CallBackClosure<PTransmitChunkResult>*> _closures;

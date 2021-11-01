@@ -91,16 +91,12 @@ class MemTracker;
 ///    delete p;
 class MemPool {
 public:
-    /// 'tracker' tracks the amount of memory allocated by this pool. Must not be NULL.
-    MemPool(MemTracker* mem_tracker)
+    MemPool()
             : current_chunk_idx_(-1),
               next_chunk_size_(INITIAL_CHUNK_SIZE),
               total_allocated_bytes_(0),
               total_reserved_bytes_(0),
-              peak_allocated_bytes_(0),
-              mem_tracker_(mem_tracker) {
-        DCHECK(mem_tracker != nullptr);
-    }
+              peak_allocated_bytes_(0) {}
 
     /// Frees all chunks of memory and subtracts the total allocated bytes
     /// from the registered limits.
@@ -164,8 +160,6 @@ public:
     int64_t total_allocated_bytes() const { return total_allocated_bytes_; }
     int64_t total_reserved_bytes() const { return total_reserved_bytes_; }
     int64_t peak_allocated_bytes() const { return peak_allocated_bytes_; }
-
-    MemTracker* mem_tracker() { return mem_tracker_; }
 
     static const int DEFAULT_ALIGNMENT = 16;
 
@@ -269,10 +263,6 @@ private:
     int64_t peak_allocated_bytes_;
 
     std::vector<ChunkInfo> chunks_;
-
-    /// The current and peak memory footprint of this pool. This is different from
-    /// total allocated_bytes_ since it includes bytes in chunks that are not used.
-    MemTracker* mem_tracker_;
 };
 
 // Stamp out templated implementations here so they're included in IR module

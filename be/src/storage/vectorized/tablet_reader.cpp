@@ -22,7 +22,7 @@
 namespace starrocks::vectorized {
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema)
-        : ChunkIterator(std::move(schema)), _tablet(tablet), _version(version), _mempool(&_memtracker) {
+        : ChunkIterator(std::move(schema)), _tablet(tablet), _version(version) {
     _delete_predicates_version = version;
 }
 

@@ -24,8 +24,6 @@
 #include <sstream>
 
 #include "exprs/expr.h"
-#include "runtime/mem_tracker.h"
-#include "runtime/mysql_table_sink.h"
 #include "runtime/runtime_state.h"
 #include "util/debug_util.h"
 #include "util/runtime_profile.h"
@@ -56,7 +54,7 @@ Status MysqlTableSink::init(const TDataSink& t_sink) {
 Status MysqlTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
     // Prepare the exprs to run.
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc, _mem_tracker.get()));
+    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, _row_desc));
     std::stringstream title;
     title << "MysqlTableSink (frag_id=" << state->fragment_instance_id() << ")";
     // create profile

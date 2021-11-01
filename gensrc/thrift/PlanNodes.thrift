@@ -330,6 +330,7 @@ struct TOlapScanNode {
   20: optional string rollup_name
   21: optional string sql_predicates
   22: optional bool enable_column_expr_predicate
+  23: optional map<i32, i32> dict_string_id_to_int_ids
 }
 struct TEqJoinCondition {
   // left-hand side of "<a> = <b>"

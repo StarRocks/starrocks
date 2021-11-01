@@ -37,7 +37,7 @@
 #include "exec/scan_node.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/stl_util.h"
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/string_value.hpp"
@@ -194,7 +194,9 @@ public:
 
     void set_index_filter_only(bool is_index_only) { _is_index_filter_only = is_index_only; }
 
-    std::string to_olap_filter(std::list<TCondition>& filters) {
+    bool empty_range() { return _empty_range; }
+
+    void to_olap_filter(std::vector<TCondition>& filters) {
         if (is_fixed_value_range() && _fixed_op != FILTER_NOT_IN) {
             TCondition condition;
             condition.__set_is_index_filter_only(_is_index_filter_only);
@@ -247,7 +249,6 @@ public:
                 filters.push_back(high);
             }
         }
-        return "";
     }
 
     void clear() {
@@ -257,6 +258,7 @@ public:
         _low_op = FILTER_LARGER_OR_EQUAL;
         _high_op = FILTER_LESS_OR_EQUAL;
         _fixed_op = FILTER_IN;
+        _empty_range = false;
     }
 
 private:
@@ -276,6 +278,8 @@ private:
     bool _is_index_filter_only = false;
     // ColumnValueRange don't call add_range or add_fixed_values
     bool _is_init_state = true;
+
+    bool _empty_range = false;
 };
 
 class OlapScanKeys {
@@ -378,14 +382,22 @@ inline Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::s
             std::set<T> not_in_operands = STLSetDifference(_fixed_values, values);
             std::set<T> in_operands = STLSetDifference(values, _fixed_values);
             if (!not_in_operands.empty() && !in_operands.empty()) {
-                return Status::NotSupported("both in and not in operands are non-empty");
-            }
-            if (!in_operands.empty()) {
+                // X in (1,2) and X not in (3) equivalent to X in (1,2)
+                _fixed_values.swap(in_operands);
+                _fixed_op = FILTER_IN;
+            } else if (!in_operands.empty()) {
+                // X in (1, 3) and X not in (3)
+                // --> X in (1)
                 _fixed_values.swap(in_operands);
                 _fixed_op = FILTER_IN;
             } else {
-                _fixed_values.swap(not_in_operands);
-                _fixed_op = FILTER_NOT_IN;
+                // X in (2) and X not in (2, 3)
+                // -> false
+                // X in (1, 2) and X not in (1, 2)
+                // -> false
+                _fixed_values.clear();
+                _fixed_op = FILTER_IN;
+                _empty_range = true;
             }
         } else if (is_fixed_value_range()) {
             DCHECK_EQ(FILTER_IN, _fixed_op);
@@ -414,14 +426,23 @@ inline Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::s
             std::set<T> not_in_operands = STLSetDifference(values, _fixed_values);
             std::set<T> in_operands = STLSetDifference(_fixed_values, values);
             if (!not_in_operands.empty() && !in_operands.empty()) {
-                return Status::NotSupported("both in and not in operands are non-empty");
-            }
-            if (!in_operands.empty()) {
+                // X in (1,2) and X not in (3) equivalent to X in (1,2)
+                // X in (1,2,3,4) and X not in (1,3,5,7) equivalent to X in (2,4)
+                _fixed_values.swap(in_operands);
+                _fixed_op = FILTER_IN;
+            } else if (!in_operands.empty()) {
+                // X in (1, 3) and X not in (3)
+                // --> X in (1)
                 _fixed_values.swap(in_operands);
                 _fixed_op = FILTER_IN;
             } else {
-                _fixed_values.swap(not_in_operands);
-                _fixed_op = FILTER_NOT_IN;
+                // X in (2) and X not in (2, 3)
+                // -> false
+                // X in (1, 2) and X not in (1, 2)
+                // -> false
+                _fixed_values.clear();
+                _empty_range = true;
+                _fixed_op = FILTER_IN;
             }
         } else if (is_low_value_mininum() && is_high_value_maximum()) {
             if (!values.empty()) {
@@ -442,7 +463,7 @@ inline Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::s
 
 template <class T>
 inline bool ColumnValueRange<T>::is_fixed_value_range() const {
-    return _fixed_values.size() != 0;
+    return _fixed_values.size() != 0 || _empty_range;
 }
 
 template <class T>

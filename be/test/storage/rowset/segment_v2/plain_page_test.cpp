@@ -50,8 +50,7 @@ public:
 
     template <FieldType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
-        auto tracker = std::make_shared<MemTracker>();
-        MemPool pool(tracker.get());
+        MemPool pool;
         std::unique_ptr<ColumnVectorBatch> cvb;
         ColumnVectorBatch::create(1, true, get_type_info(type), nullptr, &cvb);
         ColumnBlock block(cvb.get(), &pool);
@@ -89,8 +88,7 @@ public:
 
         ASSERT_EQ(0, page_decoder.current_index());
 
-        MemTracker tracker;
-        MemPool pool(&tracker);
+        MemPool pool;
 
         std::unique_ptr<ColumnVectorBatch> cvb;
         ColumnVectorBatch::create(size, true, get_type_info(Type), nullptr, &cvb);

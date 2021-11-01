@@ -134,7 +134,7 @@ public:
                                                        _probe_column_count, _build_column_count, _cross_join_context);
     }
 
-    Status prepare(RuntimeState* state, MemTracker* mem_tracker) override;
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
 private:

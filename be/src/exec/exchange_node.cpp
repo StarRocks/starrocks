@@ -76,8 +76,7 @@ Status ExchangeNode::prepare(RuntimeState* state) {
             state, _input_row_desc, state->fragment_instance_id(), _id, _num_senders,
             config::exchg_node_buffer_size_bytes, _runtime_profile, _is_merging, _sub_plan_query_statistics_recvr);
     if (_is_merging) {
-        RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _row_descriptor, _row_descriptor, expr_mem_tracker()));
-        // AddExprCtxsToFree(_sort_exec_exprs);
+        RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _row_descriptor, _row_descriptor));
     }
     return Status::OK();
 }

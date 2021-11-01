@@ -124,10 +124,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
-    operators_with_sink = context->maybe_interpolate_local_exchange(operators_with_sink);
+    operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
 
     // shared by sink operator and source operator
-    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode, child(0)->row_desc());
+    AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode);
 
     operators_with_sink.emplace_back(std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(
             context->next_operator_id(), id(), aggregator));

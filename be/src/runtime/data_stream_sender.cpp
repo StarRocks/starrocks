@@ -488,11 +488,11 @@ Status DataStreamSender::prepare(RuntimeState* state) {
         std::shuffle(_channels.begin(), _channels.end(), std::mt19937(std::random_device()()));
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
-        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, _row_desc, _expr_mem_tracker.get()));
+        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, _row_desc));
     } else {
-        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, _row_desc, _expr_mem_tracker.get()));
+        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state, _row_desc));
         for (auto iter : _partition_infos) {
-            RETURN_IF_ERROR(iter->prepare(state, _row_desc, _expr_mem_tracker.get()));
+            RETURN_IF_ERROR(iter->prepare(state, _row_desc));
         }
     }
 

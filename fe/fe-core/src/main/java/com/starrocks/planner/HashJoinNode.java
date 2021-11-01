@@ -520,4 +520,9 @@ public class HashJoinNode extends PlanNode {
             return description;
         }
     }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
 }
