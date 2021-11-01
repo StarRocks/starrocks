@@ -124,8 +124,12 @@ public class GroupExpression {
         propertiesPlanCountMap.put(properties, count);
     }
 
-    public Map<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>, Integer> getPropertiesPlanCountMap() {
-        return propertiesPlanCountMap;
+    public Map<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>, Integer> getPropertiesPlanCountMap(
+            PhysicalPropertySet requiredProperty) {
+        Map<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>, Integer> result = Maps.newLinkedHashMap();
+        propertiesPlanCountMap.entrySet().stream().filter(entry -> entry.getKey().first.equals(requiredProperty))
+                .forEach(entry -> result.put(entry.getKey(), entry.getValue()));
+        return result;
     }
 
     public int getRequiredPropertyPlanCount(PhysicalPropertySet requiredProperty) {
