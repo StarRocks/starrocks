@@ -11,6 +11,7 @@
 #include "common/object_pool.h"
 #include "exprs/expr_context.h"
 #include "storage/rowset/segment_v2/column_reader.h"
+#include "storage/rowset/segment_v2/file_column_iterator.h"
 
 namespace starrocks::vectorized {
 constexpr static const FieldType kDictCodeType = OLAP_FIELD_TYPE_INT;
