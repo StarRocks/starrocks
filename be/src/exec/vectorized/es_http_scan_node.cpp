@@ -112,7 +112,7 @@ Status EsHttpScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         }
     }
 
-    _update_status(Status::EndOfFile("EOF of HdfsScanNode"));
+    _update_status(Status::EndOfFile("EOF of ESScanNode"));
     *eos = true;
     status = _acquire_status();
     return status.is_end_of_file() ? Status::OK() : status;
@@ -306,6 +306,9 @@ Status EsHttpScanNode::_acquire_chunks(EsHttpScanner* scanner) {
                 return Status::Cancelled("Cancelled because of runtime state is cancelled");
             }
             RETURN_IF_ERROR(scanner->get_next(_runtime_state, &chunk, &scanner_eof));
+            if (chunk != nullptr && chunk->has_rows()) {
+                break;
+            }
         }
         // push to block queue
         if (chunk != nullptr && chunk->has_rows()) {
