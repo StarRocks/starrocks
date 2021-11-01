@@ -31,7 +31,7 @@
 
 #include "column/fixed_length_column.h"
 #include "gutil/port.h"
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "storage/olap_common.h"
 #include "storage/rowset/segment_v2/bitshuffle_wrapper.h"
 #include "storage/rowset/segment_v2/common.h"

@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 
 #include "gutil/strings/substitute.h"
 #include "runtime/timestamp_value.h"
@@ -76,10 +76,6 @@ bool DateValue::from_date_literal_with_check(int64_t date_literal) {
 
     _julian = date::from_date(year, month, day);
     return true;
-}
-
-void DateValue::to_date(int* year, int* month, int* day) const {
-    date::to_date_with_cache(_julian, year, month, day);
 }
 
 bool DateValue::get_weeks_of_year_with_cache(int* weeks) const {
@@ -171,10 +167,6 @@ std::string DateValue::day_name() const {
 
 std::string DateValue::to_string() const {
     return date::to_string(_julian);
-}
-
-DateValue::operator TimestampValue() const {
-    return TimestampValue{date::to_timestamp(_julian)};
 }
 
 } // namespace starrocks::vectorized

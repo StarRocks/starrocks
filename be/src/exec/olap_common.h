@@ -37,7 +37,7 @@
 #include "exec/scan_node.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/stl_util.h"
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/string_value.hpp"
