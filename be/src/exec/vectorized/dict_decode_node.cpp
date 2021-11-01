@@ -64,11 +64,14 @@ Status DictDecodeNode::prepare(RuntimeState* state) {
             auto& [expr_ctx, dict_ctx] = _string_functions[need_encode_cid];
             DCHECK(expr_ctx->root()->fn().could_apply_dict_optimize);
             _dict_optimize_parser.check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
-            DCHECK(dict_ctx.could_apply_dict_optimize);
+
+            if (!dict_ctx.could_apply_dict_optimize) {
+                Status::InternalError(fmt::format("Not found dict for function-called cid:{}", need_encode_cid));
+            }
+
             _dict_optimize_parser.eval_expr(state, expr_ctx, &dict_ctx, need_encode_cid);
             dict_iter = global_dict.find(need_encode_cid);
             DCHECK(dict_iter != global_dict.end());
-            return Status::InternalError(fmt::format("Not found dict for function-called cid:{}", need_encode_cid));
         }
 
         DefaultDecoderPtr decoder = std::make_unique<DefaultDecoder>();
@@ -138,6 +141,7 @@ Status DictDecodeNode::close(RuntimeState* state) {
     }
     RETURN_IF_ERROR(ExecNode::close(state));
     Expr::close(_expr_ctxs, state);
+    _dict_optimize_parser.close(state);
 
     return Status::OK();
 }

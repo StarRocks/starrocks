@@ -42,14 +42,14 @@ enum class PredicateType {
     kGT = 3,
     kGE = 4,
     kLT = 5,
-    kLE = 5,
-    kInList = 6,
-    kNotInList = 7,
-    kIsNull = 8,
-    kNotNull = 9,
-    kAnd = 10,
-    kOr = 11,
-    kExpr = 12,
+    kLE = 6,
+    kInList = 7,
+    kNotInList = 8,
+    kIsNull = 9,
+    kNotNull = 10,
+    kAnd = 11,
+    kOr = 12,
+    kExpr = 13,
 };
 
 template <typename T>
