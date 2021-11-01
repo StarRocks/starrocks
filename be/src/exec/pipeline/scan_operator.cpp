@@ -22,7 +22,7 @@ void ScanOperator::_pickup_morsel(RuntimeState* state) {
         auto morsel = std::move(maybe_morsel.value());
         DCHECK(morsel);
         _chunk_source = starrocks::make_exclusive<OlapChunkSource>(
-                std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs, _runtime_filters,
+                std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs, _runtime_profile.get(), _runtime_filters,
                 _olap_scan_node.key_column_name, _olap_scan_node.is_preaggregation);
         _chunk_source->prepare(state);
         _trigger_read_chunk();
