@@ -372,7 +372,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableQueryDump = false;
 
     @VariableMgr.VarAttr(name = CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE)
-    private boolean enableLowCardinalityOptimize = false;
+    private boolean enableLowCardinalityOptimize = true;
 
     // value should be 0~4
     // 0 represents automatic selection, and 1, 2, 3, and 4 represent forced selection of AGG of
