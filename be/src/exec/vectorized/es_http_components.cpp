@@ -152,6 +152,7 @@ Status ScrollParser::fill_chunk(ChunkPtr* chunk, bool* line_eos) {
         *line_eos = true;
         return Status::OK();
     }
+    *line_eos = false;
 
     *chunk = std::make_shared<Chunk>();
     std::vector<SlotDescriptor*> slot_descs = _tuple_desc->slots();
