@@ -81,6 +81,23 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.MIN:
                     value = columnStatistic.getMinValue();
                     return new ColumnStatistic(value, value, 0, callOperator.getType().getSlotSize(), 1);
+                case FunctionSet.YEAR:
+                    // can not estimate year() accurately, just use an approximate value
+                    return new ColumnStatistic(1000, 9999, 0,
+                            callOperator.getType().getSlotSize(), Math.min(columnStatistic.getDistinctValuesCount(), 10));
+                case FunctionSet.MONTH:
+                    return new ColumnStatistic(1, 12, 0,
+                            callOperator.getType().getSlotSize(), Math.min(columnStatistic.getDistinctValuesCount(), 12));
+                case FunctionSet.DAY:
+                    return new ColumnStatistic(1, 31, 0,
+                            callOperator.getType().getSlotSize(), Math.min(columnStatistic.getDistinctValuesCount(), 31));
+                case FunctionSet.HOUR:
+                    return new ColumnStatistic(0, 23, 0,
+                        callOperator.getType().getSlotSize(), Math.min(columnStatistic.getDistinctValuesCount(), 24));
+                case FunctionSet.MINUTE:
+                case FunctionSet.SECOND:
+                    return new ColumnStatistic(0, 59, 0,
+                            callOperator.getType().getSlotSize(), Math.min(columnStatistic.getDistinctValuesCount(), 60));
                 default:
                     // return child column statistic default
                     return columnStatistic;
