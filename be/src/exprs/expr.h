@@ -68,7 +68,8 @@ class UserFunctionCacheEntry;
 
 namespace vectorized {
 class Chunk;
-}
+class ColumnRef;
+} // namespace vectorized
 
 using vectorized::ColumnPtr;
 
@@ -230,6 +231,9 @@ public:
     virtual ColumnPtr evaluate_const(ExprContext* context);
 
     virtual ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr);
+
+    // get the first column ref in expr
+    vectorized::ColumnRef* get_column_ref();
 
 protected:
     friend class MathFunctions;
