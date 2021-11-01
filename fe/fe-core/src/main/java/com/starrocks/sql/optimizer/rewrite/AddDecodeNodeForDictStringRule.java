@@ -552,6 +552,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         if (!ConnectContext.get().getSessionVariable().isEnableLowCardinalityOptimize()) {
             return root;
         }
+
         List<LogicalOlapScanOperator> scanOperators = taskContext.getAllScanOperators();
 
         for (LogicalOlapScanOperator scanOperator : scanOperators) {
