@@ -5,7 +5,7 @@
 #include <utility>
 
 #include "column/column.h"
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
 #include "runtime/timestamp_value.h"
 #include "util/raw_container.h"
