@@ -3,10 +3,12 @@
 package com.starrocks.sql.optimizer.rule.join;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -133,6 +135,11 @@ public class ReorderJoinRule extends Rule {
                 MultiJoinNode multiJoinNode = MultiJoinNode.toMultiJoinNode(innerJoinRoot);
 
                 enumerate(new JoinReorderLeftDeep(context), context, innerJoinRoot, multiJoinNode);
+                //If there is no statistical information, the DP and greedy reorder algorithm are disabled,
+                //and the query plan degenerates to the left deep tree
+                if (Utils.hasUnknownColumnsStats(input) && !FeConstants.runningUnitTest) {
+                    continue;
+                }
 
                 if (multiJoinNode.getAtoms().size() <= context.getSessionVariable().getCboMaxReorderNodeUseDP()
                         && context.getSessionVariable().isCboEnableDPJoinReorder()) {
