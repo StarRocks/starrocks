@@ -4,6 +4,7 @@
 
 #include <utility>
 
+#include "config.h"
 #include "env/env.h"
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "gen_cpp/orc_proto.pb.h"
@@ -11,38 +12,75 @@
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
+
+// note(yan): This class is not thread-safe.
 class ORCHdfsFileStream : public orc::InputStream {
 public:
-    ORCHdfsFileStream(std::shared_ptr<RandomAccessFile> file, uint64_t length, HdfsScanStats* stats)
-            : _file(std::move(file)), _length(length), _stats(stats) {}
-
+    static constexpr size_t kNaturalReadSize = 8 * 1024 * 1024; // 8MB.
+    ORCHdfsFileStream(std::shared_ptr<RandomAccessFile> file, uint64_t file_length, HdfsScanStats* stats)
+            : _file(std::move(file)),
+              _file_length(file_length),
+              _stats(stats),
+              _cache_begin_offset(0),
+              _cache_end_offset(0),
+              _cache_buffer(),
+              _use_cache(config::enable_hdfs_orc_file_stream_cache) {}
     ~ORCHdfsFileStream() override = default;
 
-    uint64_t getLength() const override { return _length; }
+    uint64_t getLength() const override { return _file_length; }
 
-    uint64_t getNaturalReadSize() const override { return 8 * 1024 * 1024; }
+    uint64_t getNaturalReadSize() const override { return kNaturalReadSize; }
 
     void read(void* buf, uint64_t length, uint64_t offset) override {
         SCOPED_RAW_TIMER(&_stats->io_ns);
-        _stats->io_count += 1;
         if (buf == nullptr) {
             throw orc::ParseError("Buffer is null");
         }
-
-        Status status = _file->read_at(offset, Slice((char*)buf, length));
-        if (!status.ok()) {
-            auto msg = strings::Substitute("Failed to read $0: $1", _file->file_name(), status.to_string());
-            throw orc::ParseError(msg);
+        if (!_use_cache) {
+            _stats->io_count += 1;
+            Status status = _file->read_at(offset, Slice((char*)buf, length));
+            if (!status.ok()) {
+                auto msg = strings::Substitute("Failed to read $0: $1", _file->file_name(), status.to_string());
+                throw orc::ParseError(msg);
+            }
+            _stats->bytes_read_from_disk += length;
+            return;
         }
-        _stats->bytes_read_from_disk += length;
+
+        bool in_cache = (offset >= _cache_begin_offset && (offset + length) <= _cache_end_offset);
+        if (!in_cache) {
+            _stats->io_count += 1;
+            size_t read_size = std::max(kNaturalReadSize, length);
+            read_size = std::min(read_size, _file_length - offset); // we don't want to read over file size.
+            _cache_buffer.reserve(read_size);
+            Slice tmp((char*)(_cache_buffer.data()), read_size);
+
+            Status status = _file->read_at(offset, tmp);
+            if (!status.ok()) {
+                auto msg = strings::Substitute("Failed to read $0: $1", _file->file_name(), status.to_string());
+                throw orc::ParseError(msg);
+            }
+
+            _cache_begin_offset = offset;
+            _cache_end_offset = offset + read_size;
+            _stats->bytes_read_from_disk += read_size;
+        }
+
+        uint8_t* cache_data = _cache_buffer.data();
+        memcpy(buf, cache_data + offset - _cache_begin_offset, length);
+        return;
     }
 
     const std::string& getName() const override { return _file->file_name(); }
 
 private:
     std::shared_ptr<RandomAccessFile> _file;
-    uint64_t _length;
+    uint64_t _file_length;
     HdfsScanStats* _stats;
+    size_t _cache_begin_offset;
+    size_t _cache_end_offset;
+    std::vector<uint8_t> _cache_buffer;
+    bool _use_cache;
 };
 
 class OrcRowReaderFilter : public orc::RowReaderFilter {
