@@ -22,7 +22,7 @@ void PipelineTestBase::start_test() {
     _execute();
 }
 
-OpFactories PipelineTestBase::maybe_interpolate_local_exchange(OpFactories& pred_operators) {
+OpFactories PipelineTestBase::maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators) {
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
     auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
     if (source_operator->degree_of_parallelism() > 1) {
