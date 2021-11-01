@@ -1921,6 +1921,7 @@ public class SelectStmt extends QueryStmt {
     @Override
     public void substituteSelectListForCreateView(Analyzer analyzer, List<String> newColLabels)
             throws UserException {
+        resultExprs = Lists.newArrayList();
         substituteSelectList(analyzer, newColLabels);
         sqlString_ = null;
     }

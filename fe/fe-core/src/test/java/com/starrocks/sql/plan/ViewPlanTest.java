@@ -1509,22 +1509,22 @@ public class ViewPlanTest extends PlanTestBase {
         testView(sql);
     }
 
-//    @Test
-//    public void testWithSelectStar() throws Exception {
-//        String sql = "with xx1 as (select v1 + 1, v2 + 2 from t0) select * from xx1";
-//        testView(sql);
-//
-//        sql = "with xx1 as (select * from t0) select * from xx1";
-//        testView(sql);
-//
-//        sql = "with xx1 as (select v1, v2 from t0) select * from xx1";
-//        testView(sql);
-//    }
-
     @Test
     public void testAliasView() throws Exception {
         String sql = "select * from (select a.A, count(*) as cnt from ( SELECT 1 AS A UNION ALL SELECT 2 UNION ALL " +
                 "SELECT 2 UNION ALL SELECT 5 UNION ALL SELECT 3 UNION ALL SELECT 0 AS A ) a group by a.A order by a.A ) b;";
+        String createView = "create view alias_view(col1, col2) as " + sql;
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from alias_view");
+        Assert.assertEquals(sqlPlan, viewPlan);
+        starRocksAssert.dropView("alias_view");
+    }
+
+    @Test
+    public void testAliasView2() throws Exception {
+        String sql = "select SUM(A.v1), SUM(A.v2) from t0 A inner join t1 B on A.v1 = B.v4";
         String createView = "create view alias_view(col1, col2) as " + sql;
         starRocksAssert.withView(createView);
 
