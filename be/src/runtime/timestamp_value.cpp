@@ -21,7 +21,7 @@
 
 #include "runtime/timestamp_value.h"
 
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "runtime/vectorized/time_types.h"
 #include "util/timezone_utils.h"
 
@@ -854,10 +854,6 @@ std::string TimestampValue::to_string() const {
 
 int TimestampValue::to_string(char* s, size_t n) const {
     return timestamp::to_string(_timestamp, s, n);
-}
-
-TimestampValue::operator DateValue() const {
-    return DateValue{timestamp::to_julian(_timestamp)};
 }
 
 } // namespace starrocks::vectorized

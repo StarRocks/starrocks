@@ -79,9 +79,9 @@ public:
 
     static int64_t standardize_date(int64_t value);
 
-    static void to_date(JulianDate julian, int* year, int* month, int* day);
+    inline static void to_date(JulianDate julian, int* year, int* month, int* day);
 
-    static void to_date_with_cache(JulianDate julian, int* year, int* month, int* day);
+    inline static void to_date_with_cache(JulianDate julian, int* year, int* month, int* day);
 
     static bool check(int year, int month, int day);
 
@@ -269,7 +269,7 @@ Timestamp timestamp::to_time(Timestamp timestamp) {
 }
 
 JulianDate timestamp::to_julian(Timestamp timestamp) {
-    return timestamp >> TIMESTAMP_BITS;
+    return static_cast<uint64_t>(timestamp) >> TIMESTAMP_BITS;
 }
 
 void timestamp::to_date(Timestamp timestamp, int* year, int* month, int* day) {
@@ -297,6 +297,17 @@ Timestamp timestamp::from_time(int hour, int minute, int second, int microsecond
 
 bool timestamp::check(int year, int month, int day, int hour, int minute, int second, int microsecond) {
     return date::check(year, month, day) && check_time(hour, minute, second, microsecond);
+}
+
+inline void timestamp::to_time(Timestamp timestamp, int* hour, int* minute, int* second, int* microsecond) {
+    Timestamp time = to_time(timestamp);
+
+    *hour = time / USECS_PER_HOUR;
+    time -= (*hour) * USECS_PER_HOUR;
+    *minute = time / USECS_PER_MINUTE;
+    time -= (*minute) * USECS_PER_MINUTE;
+    *second = time / USECS_PER_SEC;
+    *microsecond = time - (*second * USECS_PER_SEC);
 }
 
 template <TimeUnit UNIT>
@@ -333,5 +344,55 @@ double timestamp::time_to_literal(double time) {
     return hour * 10000 + minute * 100 + second;
 }
 
+struct JulianToDateEntry {
+    // 14 bits
+    uint16_t year;
+
+    // 4 bits
+    uint8_t month;
+
+    // 5 bits
+    uint8_t day;
+
+    // 1-53, Base on 6 bits
+    uint8_t week_th_of_year;
+};
+
+const constexpr uint32_t CACHE_JULIAN_DAYS = 200 * 366;
+extern JulianToDateEntry g_julian_to_date_cache[];
+
+inline void date::to_date(JulianDate julian, int* year, int* month, int* day) {
+    int quad;
+    int extra;
+    int y;
+
+    julian += 32044;
+    quad = julian / 146097;
+    extra = (julian - quad * 146097) * 4 + 3;
+    julian += 60 + quad * 3 + extra / 146097;
+    quad = julian / 1461;
+    julian -= quad * 1461;
+    y = julian * 4 / 1461;
+    julian = ((y != 0) ? ((julian + 305) % 365) : ((julian + 306) % 366)) + 123;
+    y += quad * 4;
+    quad = julian * 2141 / 65536;
+
+    *year = y - 4800;
+    *day = julian - 7834 * quad / 256;
+    *month = (quad + 10) % MONTHS_PER_YEAR + 1;
+}
+
+inline void date::to_date_with_cache(JulianDate julian, int* year, int* month, int* day) {
+    if (julian >= date::UNIX_EPOCH_JULIAN && julian < date::UNIX_EPOCH_JULIAN + CACHE_JULIAN_DAYS) {
+        int p = julian - date::UNIX_EPOCH_JULIAN;
+        *year = g_julian_to_date_cache[p].year;
+        *month = g_julian_to_date_cache[p].month;
+        *day = g_julian_to_date_cache[p].day;
+
+        return;
+    }
+
+    return to_date(julian, year, month, day);
+}
 } // namespace vectorized
 } // namespace starrocks

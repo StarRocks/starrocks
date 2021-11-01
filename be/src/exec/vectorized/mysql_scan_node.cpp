@@ -12,7 +12,7 @@
 #include "exec/text_converter.hpp"
 #include "exprs/slot_ref.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "runtime/decimalv2_value.h"
 #include "runtime/decimalv3.h"
 #include "runtime/row_batch.h"
