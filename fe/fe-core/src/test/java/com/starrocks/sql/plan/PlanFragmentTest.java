@@ -2407,19 +2407,17 @@ public class PlanFragmentTest extends PlanTestBase {
                 ") t\n" +
                 "WHERE IF(k2 IS NULL, 'ALL', k2) = 'ALL'";
         String plan = getFragmentPlan(sql1);
-        System.out.println(plan);
-
-        Assert.assertTrue(plan.contains("  4:Project\n" +
+        Assert.assertTrue(plan.contains("  5:Project\n" +
                 "  |  <slot 5> : 5: sum(4: k4)\n" +
                 "  |  <slot 7> : if(2: k2 IS NULL, 'ALL', 2: k2)\n" +
                 "  |  <slot 8> : if(3: k3 IS NULL, 'ALL', 3: k3)"));
-        Assert.assertTrue(plan.contains("  3:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
                 "  |  output: sum(4: k4)\n" +
                 "  |  group by: 1: k1, 3: k3, 2: k2, 6: GROUPING_ID"));
-        Assert.assertTrue(plan.contains("  2:SELECT\n" +
-                "  |  predicates: if(2: k2 IS NULL, 'ALL', 2: k2) = 'ALL'"));
-        Assert.assertTrue(plan.contains("  1:REPEAT_NODE\n" +
-                "  |  repeat: repeat 3 lines [[1], [1, 2], [1, 3], [1, 2, 3]]"));
+        Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
+                "  |  repeat: repeat 3 lines [[1], [1, 2], [1, 3], [1, 2, 3]]\n" +
+                "  |  PREDICATES: if(2: k2 IS NULL, 'ALL', 2: k2) = 'ALL'"));
 
         String sql2 =
                 "SELECT\n" +
@@ -4199,6 +4197,17 @@ public class PlanFragmentTest extends PlanTestBase {
                 "     use vectorized: true\n" +
                 "\n" +
                 "PLAN FRAGMENT 2"));
+    }
+
+    @Test
+    public void testPredicateOnRepeatNode() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 is null;";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains(" 1:REPEAT_NODE\n" +
+                "  |  repeat: repeat 2 lines [[], [1], [1, 2]]\n" +
+                "  |  PREDICATES: 1: v1 IS NULL"));
+        FeConstants.runningUnitTest = false;
     }
 
 }

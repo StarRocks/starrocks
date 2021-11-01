@@ -40,7 +40,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeApplyWithTableFuncti
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithSortRule;
-import com.starrocks.sql.optimizer.rule.transformation.MergePredicateScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.MergePredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
@@ -189,9 +189,10 @@ public class RuleSet {
                 new PushDownPredicateExceptRule(),
                 new PushDownPredicateIntersectRule(),
                 new PushDownPredicateTableFunctionRule(),
-                MergePredicateScanRule.HIVE_SCAN,
-                MergePredicateScanRule.SCHEMA_SCAN,
-                MergePredicateScanRule.MYSQL_SCAN,
+                MergePredicateRule.HIVE_SCAN,
+                MergePredicateRule.SCHEMA_SCAN,
+                MergePredicateRule.MYSQL_SCAN,
+                MergePredicateRule.REPEAT_NODE,
                 new MergeTwoFiltersRule()
         ));
 

@@ -7,6 +7,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Objects;
@@ -18,11 +19,14 @@ public class PhysicalRepeatOperator extends PhysicalOperator {
     private final List<List<Long>> groupingIds;
 
     public PhysicalRepeatOperator(List<ColumnRefOperator> outputGrouping, List<Set<ColumnRefOperator>> repeatColumnRef,
-                                  List<List<Long>> groupingIds) {
+                                  List<List<Long>> groupingIds, long limit,
+                                  ScalarOperator predicate) {
         super(OperatorType.PHYSICAL_REPEAT);
         this.outputGrouping = outputGrouping;
         this.repeatColumnRef = repeatColumnRef;
         this.groupingIds = groupingIds;
+        this.limit = limit;
+        this.predicate = predicate;
     }
 
     @Override

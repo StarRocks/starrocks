@@ -210,6 +210,10 @@ public class RepeatNode extends PlanNode {
         output.append(" lines ");
         output.append(repeatSlotIdList);
         output.append("\n");
+        if (!conjuncts.isEmpty()) {
+            output.append(detailPrefix).append("PREDICATES: ").append(
+                    getExplainString(conjuncts)).append("\n");
+        }
 
         if (CollectionUtils.isNotEmpty(outputTupleDesc.getSlots()) &&
                 outputTupleDesc.getSlots().stream().noneMatch(slot -> slot.getColumn() == null)) {
