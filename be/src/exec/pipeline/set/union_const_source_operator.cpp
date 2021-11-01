@@ -60,11 +60,11 @@ Status UnionConstSourceOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void UnionConstSourceOperatorFactory::close(RuntimeState* state) {
-    OperatorFactory::close(state);
-
     for (const vector<ExprContext*>& exprs : _const_expr_lists) {
         Expr::close(exprs, state);
     }
+
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

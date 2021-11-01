@@ -6,7 +6,7 @@
 
 namespace starrocks::pipeline {
 
-OpFactories PipelineBuilderContext::maybe_interpolate_local_exchange(OpFactories& pred_operators) {
+OpFactories PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators) {
     // predecessor pipeline has multiple drivers that will produce multiple output streams, but sort operator is
     // not parallelized now and can not accept multiple streams as input, so add a LocalExchange to gather multiple
     // streams and produce one output stream piping into the sort operator.
@@ -34,14 +34,14 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_exchange(OpFactories
     }
 }
 
-OpFactories PipelineBuilderContext::maybe_interpolate_local_exchange(
+OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
         OpFactories& pred_operators, const std::vector<ExprContext*>& partition_expr_ctxs) {
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
 
-    // If there is only one dest partition, we can just use local passthrough exchanger.
+    // If DOP is one, we needn't partition input chunks.
     size_t shuffle_partitions_num = degree_of_parallelism();
     if (shuffle_partitions_num <= 1) {
-        return maybe_interpolate_local_exchange(pred_operators);
+        return pred_operators;
     }
 
     auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size);
@@ -62,10 +62,9 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_exchange(
     return operators_source_with_local_shuffle;
 }
 
-OpFactories PipelineBuilderContext::maybe_interpolate_local_exchange_to_pipelines(
-        std::vector<OpFactories>& pred_operators_list) {
+OpFactories PipelineBuilderContext::gather_pipelines_to_one(std::vector<OpFactories>& pred_operators_list) {
     if (pred_operators_list.size() == 1) {
-        return maybe_interpolate_local_exchange(pred_operators_list[0]);
+        return maybe_interpolate_local_passthrough_exchange(pred_operators_list[0]);
     }
 
     auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size);

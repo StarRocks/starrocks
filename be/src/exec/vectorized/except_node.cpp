@@ -218,7 +218,7 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
     // Use the first child to build the hast table by ExceptBuildSinkOperator.
     pipeline::OpFactories operators_with_except_build_sink = child(0)->decompose_to_pipeline(context);
     operators_with_except_build_sink =
-            context->maybe_interpolate_local_exchange(operators_with_except_build_sink, _child_expr_lists[0]);
+            context->maybe_interpolate_local_shuffle_exchange(operators_with_except_build_sink, _child_expr_lists[0]);
     operators_with_except_build_sink.emplace_back(std::make_shared<pipeline::ExceptBuildSinkOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[0]));
     context->add_pipeline(operators_with_except_build_sink);
@@ -226,8 +226,8 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
     // Use the rest children to erase keys from the hast table by ExceptProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
         pipeline::OpFactories operators_with_except_erase_sink = child(i)->decompose_to_pipeline(context);
-        operators_with_except_erase_sink =
-                context->maybe_interpolate_local_exchange(operators_with_except_erase_sink, _child_expr_lists[i]);
+        operators_with_except_erase_sink = context->maybe_interpolate_local_shuffle_exchange(
+                operators_with_except_erase_sink, _child_expr_lists[i]);
         operators_with_except_erase_sink.emplace_back(std::make_shared<pipeline::ExceptProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[i]));
         context->add_pipeline(operators_with_except_erase_sink);

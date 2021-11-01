@@ -23,9 +23,9 @@ Status ExceptProbeSinkOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void ExceptProbeSinkOperatorFactory::close(RuntimeState* state) {
-    OperatorFactory::close(state);
-
     Expr::close(_dst_exprs, state);
+
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline
