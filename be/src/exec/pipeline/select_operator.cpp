@@ -33,7 +33,7 @@ StatusOr<vectorized::ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
     if (!_pre_output_chunk) {
         auto cur_size = _curr_chunk->num_rows();
         if (cur_size >= batch_size / 2) {
-            std::move(_curr_chunk);
+            return std::move(_curr_chunk);
         } else {
             _pre_output_chunk = std::move(_curr_chunk);
         }
