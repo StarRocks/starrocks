@@ -58,6 +58,7 @@ private:
     Status _init_scanner_columns(std::vector<uint32_t>& scanner_columns);
     Status _init_olap_reader(RuntimeState* state);
     void _init_counter(RuntimeState* state);
+    Status _init_global_dicts(vectorized::TabletReaderParams* params);
     Status _build_scan_range(RuntimeState* state);
     Status _read_chunk_from_storage([[maybe_unused]] RuntimeState* state, vectorized::Chunk* chunk);
     void _update_counter();

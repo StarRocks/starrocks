@@ -139,6 +139,7 @@ set(EXEC_FILES
     pipeline/olap_chunk_source.cpp
     pipeline/pipeline_builder.cpp
     pipeline/project_operator.cpp
+    pipeline/dict_decode_operator.cpp
     pipeline/result_sink_operator.cpp
     pipeline/scan_operator.cpp
     pipeline/select_operator.cpp
