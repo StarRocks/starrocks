@@ -44,8 +44,8 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
         return pred_operators;
     }
 
-    // TODO: make max_row_count as config::vector_chunk_size * shuffle_partitions_num when the local shuffle is lock free.
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size);
+    // To make sure at least one partition source operator is ready to output chunk before sink operators are full.
+    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(shuffle_partitions_num * config::vector_chunk_size);
     auto local_shuffle_source = std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), mem_mgr);
     auto local_shuffle =
             std::make_shared<PartitionExchanger>(mem_mgr, local_shuffle_source.get(), true, partition_expr_ctxs);
@@ -64,11 +64,14 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
 }
 
 OpFactories PipelineBuilderContext::gather_pipelines_to_one(std::vector<OpFactories>& pred_operators_list) {
-    if (pred_operators_list.size() == 1) {
-        return maybe_interpolate_local_passthrough_exchange(pred_operators_list[0]);
+    // Approximately, each pred driver can output config::vector_chunk_size rows at the same time.
+    size_t max_row_count = 0;
+    for (const auto& pred_ops : pred_operators_list) {
+        auto* source_operator = down_cast<SourceOperatorFactory*>(pred_ops[0].get());
+        max_row_count += source_operator->degree_of_parallelism() * config::vector_chunk_size;
     }
+    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(max_row_count);
 
-    auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(config::vector_chunk_size);
     auto local_exchange_source = std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), mem_mgr);
     auto exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
 
@@ -81,7 +84,7 @@ OpFactories PipelineBuilderContext::gather_pipelines_to_one(std::vector<OpFactor
 
     // Create a new pipeline beginning with a local exchange source.
     OpFactories operators_source_with_local_exchange;
-    local_exchange_source->set_degree_of_parallelism(1);
+    local_exchange_source->set_degree_of_parallelism(degree_of_parallelism());
     operators_source_with_local_exchange.emplace_back(std::move(local_exchange_source));
 
     return operators_source_with_local_exchange;

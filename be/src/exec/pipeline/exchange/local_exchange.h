@@ -101,12 +101,15 @@ public:
 
     void finish(RuntimeState* state) override {
         if (decrement_sink_number() == 1) {
-            _source->get_sources()[0]->finish(state);
+            for (auto* source : _source->get_sources()) {
+                source->finish(state);
+            }
         }
     }
 
 private:
     LocalExchangeSourceOperatorFactory* _source;
+    size_t _next_accept_source = 0;
 };
 } // namespace pipeline
 } // namespace starrocks

@@ -95,7 +95,14 @@ Status BroadcastExchanger::accept(const vectorized::ChunkPtr& chunk) {
 
 Status PassthroughExchanger::accept(const vectorized::ChunkPtr& chunk) {
     _memory_manager->update_row_count(chunk->num_rows());
-    _source->get_sources()[0]->add_chunk(chunk);
+
+    size_t sources_num = _source->get_sources().size();
+    if (sources_num == 1) {
+        _source->get_sources()[0]->add_chunk(chunk);
+    } else {
+        _source->get_sources()[(_next_accept_source++) % sources_num]->add_chunk(chunk);
+    }
+
     return Status::OK();
 }
 

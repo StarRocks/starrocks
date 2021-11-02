@@ -3,6 +3,7 @@
 #pragma once
 
 #include <mutex>
+#include <queue>
 #include <utility>
 
 #include "exec/pipeline/exchange/local_exchange_memory_manager.h"
@@ -25,9 +26,6 @@ public:
     void finish(RuntimeState* state) override {
         std::lock_guard<std::mutex> l(_chunk_lock);
 
-        if (_partial_chunk != nullptr) {
-            _full_chunk = std::move(_partial_chunk);
-        }
         _is_finished = true;
     }
 
@@ -35,7 +33,7 @@ public:
 
 private:
     std::atomic<bool> _is_finished{false};
-    vectorized::ChunkPtr _full_chunk = nullptr;
+    std::queue<vectorized::ChunkPtr> _full_chunks;
     vectorized::ChunkUniquePtr _partial_chunk = nullptr;
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;
