@@ -70,6 +70,10 @@ Status PartitionExchanger::accept(const vectorized::ChunkPtr& chunk, const int32
 
     auto& partitioner = _partitioners[sink_driver_sequence];
 
+    // Create a new partition_row_indexes here instead of reusing it in the partitioner.
+    // The chunk and partition_row_indexes are cached in the queue of source operator,
+    // and used later in pull_chunk() of source operator. If we reuse partition_row_indexes in partitioner,
+    // it will be overwritten by the next time calling partitioner.partition_chunk().
     std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
     partitioner.partition_chunk(chunk, *partition_row_indexes);
 

@@ -8,7 +8,7 @@
 namespace starrocks::pipeline {
 
 // Used for PassthroughExchanger.
-// The input chunk is most likely full chunk, so we don't merge it to avoid copying chunk data.
+// The input chunk is most likely full, so we don't merge it to avoid copying chunk data.
 Status LocalExchangeSourceOperator::add_chunk(vectorized::ChunkPtr chunk) {
     std::lock_guard<std::mutex> l(_chunk_lock);
 
@@ -17,8 +17,8 @@ Status LocalExchangeSourceOperator::add_chunk(vectorized::ChunkPtr chunk) {
     return Status::OK();
 }
 
-// Used for partitionExchanger.
-// Only enqueue the partition chunk information here, and merge chunk in pull_chunk.
+// Used for PartitionExchanger.
+// Only enqueue the partition chunk information here, and merge chunk in pull_chunk().
 Status LocalExchangeSourceOperator::add_chunk(vectorized::ChunkPtr chunk,
                                               std::shared_ptr<std::vector<uint32_t>> indexes, uint32_t from,
                                               uint32_t size) {

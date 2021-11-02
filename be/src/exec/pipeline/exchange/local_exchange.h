@@ -92,8 +92,9 @@ public:
 
 private:
     LocalExchangeSourceOperatorFactory* _source;
-    // For local shuffle exchanger.
-    // The sink_driver_sequence-th local sink operator exclusively uses the sink_driver_sequence-th partitioner
+    // Used for local shuffle exchanger.
+    // The sink_driver_sequence-th local sink operator exclusively uses the sink_driver_sequence-th partitioner.
+    // TODO(lzh): limit the size of _partitioners, because it will cost too much memory when dop is high.
     std::vector<Partitioner> _partitioners;
 };
 
