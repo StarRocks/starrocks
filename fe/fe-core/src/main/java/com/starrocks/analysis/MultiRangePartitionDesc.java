@@ -181,29 +181,23 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                             beginTime.toString(DateUtils.YEAR_FORMAT), weekOfYear);
                     beginTime = beginTime.withDayOfWeek(dayOfWeek);
                     beginTime = beginTime.plusWeeks(timeInterval);
-                    if (beginTime.isAfter(finalEndTime)) {
-                        beginTime = finalEndTime;
-                    }
                     break;
                 case MONTH:
                     partitionName = DEFAULT_PREFIX + beginTime.toString(DateUtils.MONTH_FORMAT);
                     beginTime = beginTime.withDayOfMonth(dayOfMonth);
                     beginTime = beginTime.plusMonths(timeInterval);
-                    if (beginTime.isAfter(finalEndTime)) {
-                        beginTime = finalEndTime;
-                    }
                     break;
                 case YEAR:
                     partitionName = DEFAULT_PREFIX + beginTime.toString(DateUtils.YEAR_FORMAT);
                     beginTime = beginTime.plusYears(timeInterval);
                     beginTime = beginTime.withDayOfYear(1);
-                    if (beginTime.isAfter(finalEndTime)) {
-                        beginTime = finalEndTime;
-                    }
                     break;
                 default:
                     throw new AnalysisException("Batch build partition does not support time interval type: " +
                             timeUnit);
+            }
+            if (timeUnitType != TimestampArithmeticExpr.TimeUnit.DAY && beginTime.isAfter(finalEndTime)) {
+                beginTime = finalEndTime;
             }
 
             PartitionValue upperPartitionValue = new PartitionValue(beginTime.toString(beginDateTimeFormat));
