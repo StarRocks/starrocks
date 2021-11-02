@@ -635,7 +635,7 @@ public class FunctionCallExpr extends Expr {
             if (this.children.isEmpty()) {
                 throw new AnalysisException("The " + fnName + " function must has one input param");
             }
-            fn = getBuiltinFunction(analyzer, fnName.getFunction(), new Type[]{getChild(0).type},
+            fn = getBuiltinFunction(analyzer, fnName.getFunction(), new Type[] {getChild(0).type},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         } else if (fnName.getFunction().equalsIgnoreCase("count_distinct")) {
             Type compatibleType = this.children.get(0).getType();
@@ -648,7 +648,7 @@ public class FunctionCallExpr extends Expr {
                 }
             }
 
-            fn = getBuiltinFunction(analyzer, fnName.getFunction(), new Type[]{compatibleType},
+            fn = getBuiltinFunction(analyzer, fnName.getFunction(), new Type[] {compatibleType},
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         } else {
             // now first find function in built-in functions
@@ -684,21 +684,6 @@ public class FunctionCallExpr extends Expr {
         if (fn == null) {
             LOG.warn("fn {} not exists", this.toSqlImpl());
             throw new AnalysisException(getFunctionNotFoundError(collectChildReturnTypes()));
-        }
-
-        if (fnName.getFunction().equalsIgnoreCase("from_unixtime")
-                || fnName.getFunction().equalsIgnoreCase("date_format")) {
-            // if has only one child, it has default time format: yyyy-MM-dd HH:mm:ss.SSSSSS
-            if (children.size() > 1) {
-                final StringLiteral fmtLiteral = (StringLiteral) children.get(1);
-                if (fmtLiteral.getStringValue().equals("yyyyMMdd")) {
-                    children.set(1, new StringLiteral("%Y%m%d"));
-                } else if (fmtLiteral.getStringValue().equals("yyyy-MM-dd")) {
-                    children.set(1, new StringLiteral("%Y-%m-%d"));
-                } else if (fmtLiteral.getStringValue().equals("yyyy-MM-dd HH:mm:ss")) {
-                    children.set(1, new StringLiteral("%Y-%m-%d %H:%i:%s"));
-                }
-            }
         }
 
         if (fnName.getFunction().equalsIgnoreCase("date_trunc")) {
