@@ -359,7 +359,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AnalyticNode::decompose
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
-    context->maybe_interpolate_local_exchange(operators_with_sink);
+    context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
 
     // shared by sink operator and source operator
     AnalytorPtr analytor = std::make_shared<Analytor>(_tnode, child(0)->row_desc(), _result_tuple_desc);

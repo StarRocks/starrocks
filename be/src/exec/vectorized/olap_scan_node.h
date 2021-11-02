@@ -102,6 +102,7 @@ private:
     Status _get_status();
 
     void _fill_chunk_pool(int count, bool force_column_pool);
+    Status _rewrite_descriptor();
     bool _submit_scanner(TabletScanner* scanner, bool blockable);
     void _close_pending_scanners();
     int _compute_priority(int32_t num_submitted_tasks);
@@ -109,8 +110,9 @@ private:
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     RuntimeState* _runtime_state = nullptr;
-    const TupleDescriptor* _tuple_desc = nullptr;
+    TupleDescriptor* _tuple_desc = nullptr;
     OlapScanConjunctsManager _conjuncts_manager;
+    DictOptimizeParser _dict_optimize_parser;
     const Schema* _chunk_schema = nullptr;
     ObjectPool _obj_pool;
 
@@ -149,6 +151,7 @@ private:
     RuntimeProfile::Counter* _pred_filter_timer = nullptr;
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
+    RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
     RuntimeProfile::Counter* _sk_filtered_counter = nullptr;

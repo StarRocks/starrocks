@@ -357,8 +357,8 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     auto lhs_operators = child(0)->decompose_to_pipeline(context);
     // Up to now, both HashJoin{Build, Probe}Operator is not parallelized, so add LocalExchangeOperator
     // to merge multi-stream into one stream then pipe into HashJoin{Build, Probe}Operator.
-    auto operators_with_build_op = context->maybe_interpolate_local_exchange(rhs_operators);
-    auto operators_with_probe_op = context->maybe_interpolate_local_exchange(lhs_operators);
+    auto operators_with_build_op = context->maybe_interpolate_local_passthrough_exchange(rhs_operators);
+    auto operators_with_probe_op = context->maybe_interpolate_local_passthrough_exchange(lhs_operators);
     // add build-side pipeline to context and return probe-side pipeline.
     operators_with_build_op.emplace_back(std::move(build_op));
     context->add_pipeline(operators_with_build_op);

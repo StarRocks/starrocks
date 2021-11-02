@@ -81,6 +81,7 @@ public:
     // virtual ~SlotDescriptor() {};
     SlotId id() const { return _id; }
     const TypeDescriptor& type() const { return _type; }
+    TypeDescriptor& type() { return _type; }
     TupleId parent() const { return _parent; }
     // Returns the column index of this slot, including partition keys.
     // (e.g., col_pos - num_partition_keys = the table column this slot corresponds to)
@@ -111,7 +112,7 @@ private:
     friend class OlapTableSchemaParam;
 
     const SlotId _id;
-    const TypeDescriptor _type;
+    TypeDescriptor _type;
     const TupleId _parent;
     const int _col_pos;
     const int _tuple_offset;
@@ -272,6 +273,7 @@ public:
     int num_null_slots() const { return _num_null_slots; }
     int num_null_bytes() const { return _num_null_bytes; }
     const std::vector<SlotDescriptor*>& slots() const { return _slots; }
+    std::vector<SlotDescriptor*>& slots() { return _slots; }
     const std::vector<SlotDescriptor*>& string_slots() const { return _string_slots; }
     const std::vector<SlotDescriptor*>& no_string_slots() const { return _no_string_slots; }
     bool has_varlen_slots() const { return _has_varlen_slots; }

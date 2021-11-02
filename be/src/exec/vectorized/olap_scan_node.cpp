@@ -8,6 +8,7 @@
 
 #include "column/column_pool.h"
 #include "column/type_traits.h"
+#include "common/global_types.h"
 #include "common/status.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -23,6 +24,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/primitive_type.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "util/priority_thread_pool.hpp"
 
@@ -54,6 +56,8 @@ Status OlapScanNode::prepare(RuntimeState* state) {
         _runtime_profile->add_info_string("Predicates", _olap_scan_node.sql_predicates);
     }
     _runtime_state = state;
+    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
+    RETURN_IF_ERROR(_rewrite_descriptor());
     return Status::OK();
 }
 
@@ -184,6 +188,8 @@ Status OlapScanNode::close(RuntimeState* state) {
         delete chunk;
     }
 
+    _dict_optimize_parser.close(state);
+
     // Reduce the memory usage if the the average string size is greater than 512.
     release_large_columns<BinaryColumn>(config::vector_chunk_size * 512);
 
@@ -203,6 +209,36 @@ void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
         std::lock_guard<std::mutex> l(_mtx);
         _chunk_pool.push(chk);
     }
+}
+
+// For global dictionary optimized columns,
+// the type at the execution level is INT but at the storage level is TYPE_STRING/TYPE_CHAR,
+// so we need to pass the real type to the Table Scanner.
+Status OlapScanNode::_rewrite_descriptor() {
+    const auto& global_dict = _runtime_state->get_global_dict_map();
+    if (global_dict.empty()) return Status::OK();
+
+    for (auto& slot : _tuple_desc->slots()) {
+        if (global_dict.count(slot->id())) {
+            slot->type().type = TYPE_VARCHAR;
+        }
+    }
+
+    const auto& dict_slots_mapping = _olap_scan_node.dict_string_id_to_int_ids;
+    // rewrite slot-id for conjunct
+    std::vector<SlotId> slots;
+    for (auto& conjunct : _conjunct_ctxs) {
+        slots.clear();
+        Expr* expr_root = conjunct->root();
+        if (expr_root->get_slot_ids(&slots) == 1) {
+            if (auto iter = dict_slots_mapping.find(slots[0]); iter != dict_slots_mapping.end()) {
+                ColumnRef* column_ref = expr_root->get_column_ref();
+                column_ref->set_slot_id(iter->second);
+            }
+        }
+    }
+
+    return Status::OK();
 }
 
 void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
@@ -371,6 +407,7 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _bi_filter_timer = ADD_CHILD_TIMER(_scan_profile, "BitmapIndexFilter", "SegmentInit");
     _bi_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BitmapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _bf_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BloomFilterFilterRows", TUnit::UNIT, "SegmentInit");
+    _seg_zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _sk_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
 
@@ -453,6 +490,8 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&key_ranges));
     std::vector<ExprContext*> conjunct_ctxs;
     _conjuncts_manager.get_not_push_down_conjuncts(&conjunct_ctxs);
+
+    _dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state);
 
     int scanners_per_tablet = std::max(1, 64 / (int)_scan_ranges.size());
     for (auto& scan_range : _scan_ranges) {

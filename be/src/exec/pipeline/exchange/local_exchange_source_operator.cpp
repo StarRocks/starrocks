@@ -25,12 +25,14 @@ Status LocalExchangeSourceOperator::add_chunk(vectorized::ChunkPtr chunk) {
 Status LocalExchangeSourceOperator::add_chunk(vectorized::Chunk* chunk, const uint32_t* indexes, uint32_t from,
                                               uint32_t size) {
     std::lock_guard<std::mutex> l(_chunk_lock);
+
     if (_partial_chunk == nullptr) {
         _partial_chunk = chunk->clone_empty_with_slot();
     }
 
     if (_partial_chunk->num_rows() + size > config::vector_chunk_size) {
         _full_chunk = std::move(_partial_chunk);
+        _partial_chunk = chunk->clone_empty_with_slot();
     }
 
     _partial_chunk->append_selective(*chunk, indexes, from, size);
@@ -39,7 +41,7 @@ Status LocalExchangeSourceOperator::add_chunk(vectorized::Chunk* chunk, const ui
 
 bool LocalExchangeSourceOperator::is_finished() const {
     std::lock_guard<std::mutex> l(_chunk_lock);
-    return _is_finished && _full_chunk == nullptr;
+    return _is_finished && _full_chunk == nullptr && _partial_chunk == nullptr;
 }
 
 bool LocalExchangeSourceOperator::has_output() const {
