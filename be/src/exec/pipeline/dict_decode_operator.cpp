@@ -48,6 +48,8 @@ Status DictDecodeOperator::push_chunk(RuntimeState* state, const vectorized::Chu
 }
 
 Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+
     RowDescriptor row_desc;
     RETURN_IF_ERROR(Expr::prepare(_expr_ctxs, state, row_desc));
 
@@ -85,6 +87,7 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void DictDecodeOperatorFactory::close(RuntimeState* state) {
+    OperatorFactory::close(state);
     Expr::close(_expr_ctxs, state);
 }
 
