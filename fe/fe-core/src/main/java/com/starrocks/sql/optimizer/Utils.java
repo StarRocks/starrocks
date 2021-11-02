@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
@@ -36,6 +37,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class Utils {
@@ -406,5 +408,33 @@ public class Utils {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Try cast op to descType, return empty if failed
+     */
+    public static Optional<ScalarOperator> tryCastConstant(ScalarOperator op, Type descType) {
+        // Forbidden cast float, because behavior isn't same with before
+        if (!op.isConstantRef() || op.getType().matchesType(descType) || Type.FLOAT.equals(op.getType())
+                || descType.equals(Type.FLOAT)) {
+            return Optional.empty();
+        }
+
+        try {
+            if (((ConstantOperator) op).isNull()) {
+                return Optional.of(ConstantOperator.createNull(descType));
+            }
+
+            ConstantOperator result = ((ConstantOperator) op).castTo(descType);
+            if (result.toString().equalsIgnoreCase(op.toString())) {
+                return Optional.of(result);
+            } else if (descType.isDate() && (op.getType().isIntegerType() || op.getType().isStringType())) {
+                if (op.toString().equalsIgnoreCase(result.toString().replaceAll("-", ""))) {
+                    return Optional.of(result);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return Optional.empty();
     }
 }

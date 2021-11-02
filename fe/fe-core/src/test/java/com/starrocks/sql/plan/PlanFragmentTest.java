@@ -145,6 +145,16 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testReduceCast() throws Exception {
+        String sql = "select t1a, t1b from test_all_type where t1c > 2000 + 1";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     TABLE: test_all_type\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 3: t1c > 2001"));
+    }
+
+    @Test
     public void testExpression1() throws Exception {
         String sql = "select sum(v1 + v2) from t0";
         String planFragment = getFragmentPlan(sql);

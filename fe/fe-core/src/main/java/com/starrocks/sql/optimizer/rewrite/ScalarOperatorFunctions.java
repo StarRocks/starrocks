@@ -418,7 +418,7 @@ public class ScalarOperatorFunctions {
         return first.isNull() ? second : first;
     }
 
-    private static ConstantOperator createDecimalLiteral(BigDecimal result) {
+    private static ConstantOperator createDecimalConstant(BigDecimal result) {
         Type type;
         if (!Config.enable_decimal_v3) {
             type = ScalarType.DECIMALV2;
