@@ -15,5 +15,11 @@
   + [Data model](/table_design/Data_model.md)
   + [Data distribution](/table_design/Data_distribution.md)
   + [Sort key and shortkey index](/table_design/Sort_key.md)
+  + [Materialized view](/table_design/Materialized_view.md)
+  + [Bitmap indexing](/table_design/Bitmap_index.md)
+  + [Bloomfilter indexing](/table_design/Bloomfilter_index.md)
 + Development
   + [Build in docker](/development/Build_in_docker.md)
++ Release Notes
+  + [v1.19](release_notes/release-1.19.md)
+  
