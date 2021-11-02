@@ -504,16 +504,18 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "and s_nationkey = n_nationkey and n_name = 'CANADA' order by s_name;";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains(" 3:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (REPLICATED)\n" +
+        Assert.assertTrue(plan.contains("  10:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (REPLICATED)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 4: S_NATIONKEY = 9: N_NATIONKEY"));
-        Assert.assertTrue(plan.contains("18:HASH JOIN\n" +
-                "  |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  equal join conjunct: 14: PS_PARTKEY = 20: P_PARTKEY"));
+        Assert.assertTrue(plan.contains("  13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: S_SUPPKEY = 15: PS_SUPPKEY"));
+                "  |  equal join conjunct: 32: L_PARTKEY = 14: PS_PARTKEY\n" +
+                "  |  equal join conjunct: 33: L_SUPPKEY = 15: PS_SUPPKEY\n" +
+                "  |  other join predicates: CAST(16: PS_AVAILQTY AS DOUBLE) > 0.5 * 48: sum(35: L_QUANTITY)"));
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
     }
 

@@ -45,7 +45,7 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-26:MERGING-EXCHANGE
+27:MERGING-EXCHANGE
 limit: 100
 use vectorized: true
 
@@ -54,21 +54,21 @@ OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 2: S_NAME
 
 STREAM DATA SINK
-EXCHANGE ID: 26
+EXCHANGE ID: 27
 UNPARTITIONED
 
-25:TOP-N
+26:TOP-N
 |  order by: <slot 77> 77: count() DESC, <slot 2> 2: S_NAME ASC
 |  offset: 0
 |  limit: 100
 |  use vectorized: true
 |
-24:AGGREGATE (update finalize)
+25:AGGREGATE (update finalize)
 |  output: count(*)
 |  group by: 2: S_NAME
 |  use vectorized: true
 |
-23:EXCHANGE
+24:EXCHANGE
 use vectorized: true
 
 PLAN FRAGMENT 2
@@ -76,112 +76,33 @@ OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 23
+EXCHANGE ID: 24
 HASH_PARTITIONED: 2: S_NAME
 
-22:Project
+23:Project
 |  <slot 2> : 2: S_NAME
 |  use vectorized: true
 |
-21:HASH JOIN
-|  join op: RIGHT ANTI JOIN (COLOCATE)
+22:HASH JOIN
+|  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
 |  hash predicates:
-|  colocate: true
-|  equal join conjunct: 59: L_ORDERKEY = 9: L_ORDERKEY
-|  other join predicates: 61: L_SUPPKEY != 11: L_SUPPKEY
+|  colocate: false, reason:
+|  equal join conjunct: 41: L_ORDERKEY = 9: L_ORDERKEY
+|  other join predicates: 43: L_SUPPKEY != 11: L_SUPPKEY
 |  use vectorized: true
 |
-|----20:Project
-|    |  <slot 2> : 2: S_NAME
-|    |  <slot 9> : 9: L_ORDERKEY
-|    |  <slot 11> : 11: L_SUPPKEY
-|    |  use vectorized: true
-|    |
-|    19:HASH JOIN
-|    |  join op: RIGHT SEMI JOIN (COLOCATE)
-|    |  hash predicates:
-|    |  colocate: true
-|    |  equal join conjunct: 41: L_ORDERKEY = 9: L_ORDERKEY
-|    |  other join predicates: 43: L_SUPPKEY != 11: L_SUPPKEY
-|    |  use vectorized: true
-|    |
-|    |----18:Project
-|    |    |  <slot 2> : 2: S_NAME
-|    |    |  <slot 9> : 9: L_ORDERKEY
-|    |    |  <slot 11> : 11: L_SUPPKEY
-|    |    |  use vectorized: true
-|    |    |
-|    |    17:HASH JOIN
-|    |    |  join op: INNER JOIN (BUCKET_SHUFFLE)
-|    |    |  hash predicates:
-|    |    |  colocate: false, reason:
-|    |    |  equal join conjunct: 9: L_ORDERKEY = 26: O_ORDERKEY
-|    |    |  use vectorized: true
-|    |    |
-|    |    |----16:EXCHANGE
-|    |    |       use vectorized: true
-|    |    |
-|    |    13:Project
-|    |    |  <slot 2> : 2: S_NAME
-|    |    |  <slot 9> : 9: L_ORDERKEY
-|    |    |  <slot 11> : 11: L_SUPPKEY
-|    |    |  use vectorized: true
-|    |    |
-|    |    12:HASH JOIN
-|    |    |  join op: INNER JOIN (BROADCAST)
-|    |    |  hash predicates:
-|    |    |  colocate: false, reason:
-|    |    |  equal join conjunct: 11: L_SUPPKEY = 1: S_SUPPKEY
-|    |    |  use vectorized: true
-|    |    |
-|    |    |----11:EXCHANGE
-|    |    |       use vectorized: true
-|    |    |
-|    |    4:Project
-|    |    |  <slot 9> : 9: L_ORDERKEY
-|    |    |  <slot 11> : 11: L_SUPPKEY
-|    |    |  use vectorized: true
-|    |    |
-|    |    3:OlapScanNode
-|    |       TABLE: lineitem
-|    |       PREAGGREGATION: ON
-|    |       PREDICATES: 21: L_RECEIPTDATE > 20: L_COMMITDATE
-|    |       partitions=1/1
-|    |       rollup: lineitem
-|    |       tabletRatio=20/20
-|    |       tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-|    |       cardinality=300000000
-|    |       avgRowSize=20.0
-|    |       numNodes=0
-|    |       use vectorized: true
-|    |
-|    2:OlapScanNode
-|       TABLE: lineitem
-|       PREAGGREGATION: ON
-|       partitions=1/1
-|       rollup: lineitem
-|       tabletRatio=20/20
-|       tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-|       cardinality=600000000
-|       avgRowSize=12.0
-|       numNodes=0
+|----21:EXCHANGE
 |       use vectorized: true
-|
-1:Project
-|  <slot 59> : 59: L_ORDERKEY
-|  <slot 61> : 61: L_SUPPKEY
-|  use vectorized: true
 |
 0:OlapScanNode
 TABLE: lineitem
 PREAGGREGATION: ON
-PREDICATES: 71: L_RECEIPTDATE > 70: L_COMMITDATE
 partitions=1/1
 rollup: lineitem
 tabletRatio=20/20
 tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-cardinality=300000000
-avgRowSize=20.0
+cardinality=600000000
+avgRowSize=12.0
 numNodes=0
 use vectorized: true
 
@@ -190,14 +111,30 @@ OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 16
-BUCKET_SHFFULE_HASH_PARTITIONED: 26: O_ORDERKEY
+EXCHANGE ID: 21
+BUCKET_SHFFULE_HASH_PARTITIONED: 9: L_ORDERKEY
 
-15:Project
+20:Project
+|  <slot 2> : 2: S_NAME
+|  <slot 9> : 9: L_ORDERKEY
+|  <slot 11> : 11: L_SUPPKEY
+|  use vectorized: true
+|
+19:HASH JOIN
+|  join op: INNER JOIN (BROADCAST)
+|  hash predicates:
+|  colocate: false, reason:
+|  equal join conjunct: 26: O_ORDERKEY = 9: L_ORDERKEY
+|  use vectorized: true
+|
+|----18:EXCHANGE
+|       use vectorized: true
+|
+2:Project
 |  <slot 26> : 26: O_ORDERKEY
 |  use vectorized: true
 |
-14:OlapScanNode
+1:OlapScanNode
 TABLE: orders
 PREAGGREGATION: ON
 PREDICATES: 28: O_ORDERSTATUS = 'F'
@@ -215,25 +152,99 @@ OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 11
+EXCHANGE ID: 18
 UNPARTITIONED
 
-10:Project
+17:Project
+|  <slot 2> : 2: S_NAME
+|  <slot 9> : 9: L_ORDERKEY
+|  <slot 11> : 11: L_SUPPKEY
+|  use vectorized: true
+|
+16:HASH JOIN
+|  join op: RIGHT ANTI JOIN (COLOCATE)
+|  hash predicates:
+|  colocate: true
+|  equal join conjunct: 59: L_ORDERKEY = 9: L_ORDERKEY
+|  other join predicates: 61: L_SUPPKEY != 11: L_SUPPKEY
+|  use vectorized: true
+|
+|----15:Project
+|    |  <slot 2> : 2: S_NAME
+|    |  <slot 9> : 9: L_ORDERKEY
+|    |  <slot 11> : 11: L_SUPPKEY
+|    |  use vectorized: true
+|    |
+|    14:HASH JOIN
+|    |  join op: INNER JOIN (BROADCAST)
+|    |  hash predicates:
+|    |  colocate: false, reason:
+|    |  equal join conjunct: 11: L_SUPPKEY = 1: S_SUPPKEY
+|    |  use vectorized: true
+|    |
+|    |----13:EXCHANGE
+|    |       use vectorized: true
+|    |
+|    6:Project
+|    |  <slot 9> : 9: L_ORDERKEY
+|    |  <slot 11> : 11: L_SUPPKEY
+|    |  use vectorized: true
+|    |
+|    5:OlapScanNode
+|       TABLE: lineitem
+|       PREAGGREGATION: ON
+|       PREDICATES: 21: L_RECEIPTDATE > 20: L_COMMITDATE
+|       partitions=1/1
+|       rollup: lineitem
+|       tabletRatio=20/20
+|       tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
+|       cardinality=300000000
+|       avgRowSize=20.0
+|       numNodes=0
+|       use vectorized: true
+|
+4:Project
+|  <slot 59> : 59: L_ORDERKEY
+|  <slot 61> : 61: L_SUPPKEY
+|  use vectorized: true
+|
+3:OlapScanNode
+TABLE: lineitem
+PREAGGREGATION: ON
+PREDICATES: 71: L_RECEIPTDATE > 70: L_COMMITDATE
+partitions=1/1
+rollup: lineitem
+tabletRatio=20/20
+tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
+cardinality=300000000
+avgRowSize=20.0
+numNodes=0
+use vectorized: true
+
+PLAN FRAGMENT 5
+OUTPUT EXPRS:
+PARTITION: RANDOM
+
+STREAM DATA SINK
+EXCHANGE ID: 13
+UNPARTITIONED
+
+12:Project
 |  <slot 1> : 1: S_SUPPKEY
 |  <slot 2> : 2: S_NAME
 |  use vectorized: true
 |
-9:HASH JOIN
+11:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  hash predicates:
 |  colocate: false, reason:
 |  equal join conjunct: 4: S_NATIONKEY = 36: N_NATIONKEY
 |  use vectorized: true
 |
-|----8:EXCHANGE
+|----10:EXCHANGE
 |       use vectorized: true
 |
-5:OlapScanNode
+7:OlapScanNode
 TABLE: supplier
 PREAGGREGATION: ON
 partitions=1/1
@@ -245,19 +256,19 @@ avgRowSize=33.0
 numNodes=0
 use vectorized: true
 
-PLAN FRAGMENT 5
+PLAN FRAGMENT 6
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
 STREAM DATA SINK
-EXCHANGE ID: 08
+EXCHANGE ID: 10
 UNPARTITIONED
 
-7:Project
+9:Project
 |  <slot 36> : 36: N_NATIONKEY
 |  use vectorized: true
 |
-6:OlapScanNode
+8:OlapScanNode
 TABLE: nation
 PREAGGREGATION: ON
 PREDICATES: 37: N_NAME = 'CANADA'
