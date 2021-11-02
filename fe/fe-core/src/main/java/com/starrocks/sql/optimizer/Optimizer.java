@@ -3,7 +3,6 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -21,7 +20,6 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
@@ -96,14 +94,15 @@ public class Optimizer {
         //After the MERGE_LIMIT, ProjectNode that can be merged may appear.
         //So we do another MergeTwoProjectRule
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
-        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_SET_OPERATOR);
 
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
         tree = new MaterializedViewRule().transform(tree, context).get(0);
         memo.replaceRewriteExpression(memo.getRootGroup(), tree);
 
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PARTITION_PRUNE);
-        ruleRewriteIterative(memo, rootTaskContext, new PruneProjectRule());
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ScalarOperatorsReuseRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new JoinForceLimitRule());
@@ -129,12 +128,6 @@ public class Optimizer {
         if (!connectContext.getSessionVariable().isDisableJoinReorder()) {
             if (Utils.countInnerJoinNodeSize(tree) >
                     connectContext.getSessionVariable().getCboMaxReorderNodeUseExhaustive()) {
-                //If there is no statistical information, the DP and greedy reorder algorithm are disabled,
-                //and the query plan degenerates to the left deep tree
-                if (Utils.hasUnknownColumnsStats(tree) && !FeConstants.runningUnitTest) {
-                    connectContext.getSessionVariable().disableDPJoinReorder();
-                    connectContext.getSessionVariable().disableGreedyJoinReorder();
-                }
                 new ReorderJoinRule().transform(tree, context);
                 context.getRuleSet().addJoinCommutativityWithOutInnerRule();
             } else {

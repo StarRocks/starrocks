@@ -212,6 +212,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
+    RETURN_IF_ERROR(_init_global_dicts(&_params));
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(_init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
@@ -229,6 +230,10 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     if (!_not_push_down_conjuncts.empty() || !_not_push_down_predicates.empty()) {
         _expr_filter_timer = ADD_TIMER(_scan_profile, "ExprFilterTime");
     }
+
+    DCHECK(_params.global_dictmaps != nullptr);
+    RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
+
     RETURN_IF_ERROR(_reader->prepare());
     RETURN_IF_ERROR(_reader->open(_params));
     return Status::OK();
@@ -245,7 +250,7 @@ StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk() {
         return _status;
     }
     using namespace vectorized;
-    ChunkUniquePtr chunk(ChunkHelper::new_chunk_pooled(_prj_iter->schema(), config::vector_chunk_size, true));
+    ChunkUniquePtr chunk(ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), config::vector_chunk_size, true));
     _status = _read_chunk_from_storage(_runtime_state, chunk.get());
     if (!_status.ok()) {
         return _status;
@@ -259,6 +264,29 @@ void OlapChunkSource::cache_next_chunk_blocking() {
 
 StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk_nonblocking() {
     return std::move(_chunk);
+}
+
+// mapping a slot-column-id to schema-columnid
+Status OlapChunkSource::_init_global_dicts(vectorized::TabletReaderParams* params) {
+    const auto& global_dict_map = _runtime_state->get_global_dict_map();
+    auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
+    // mapping column id to storage column ids
+    const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(_tuple_id);
+    for (auto slot : tuple_desc->slots()) {
+        if (!slot->is_materialized()) {
+            continue;
+        }
+        auto iter = global_dict_map.find(slot->id());
+        if (iter != global_dict_map.end()) {
+            auto& dict_map = iter->second.first;
+            int32_t index = _tablet->field_index(slot->col_name());
+            DCHECK(index >= 0);
+            global_dict->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
+        }
+    }
+    params->global_dictmaps = global_dict;
+
+    return Status::OK();
 }
 
 Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized::Chunk* chunk) {
