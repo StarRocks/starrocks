@@ -94,6 +94,7 @@ import org.mortbay.log.Log;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -101,9 +102,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.buildFrom;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 
@@ -431,7 +432,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 double distinctValues =
                         partitionColumnStatistic.getDistinctValuesCount() * 1.0 * selectedPartitionsSize /
                                 allPartitionsSize;
-                return ColumnStatistic.buildFrom(partitionColumnStatistic).
+                return buildFrom(partitionColumnStatistic).
                         setMinValue(min).setMaxValue(max).setDistinctValuesCount(max(distinctValues, 1)).build();
             }
         }
@@ -576,8 +577,21 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics.Builder builder = Statistics.builder();
         Statistics inputStatistics = context.getChildStatistics(0);
 
-        Map<ColumnRefOperator, ColumnStatistic> groupStatisticsMap = groupBys.stream().collect(
-                Collectors.toMap(Function.identity(), inputStatistics::getColumnStatistic));
+        //Update the statistics of the GroupBy column
+        Map<ColumnRefOperator, ColumnStatistic> groupStatisticsMap = new HashMap<>();
+        for (ColumnRefOperator groupByColumn : groupBys) {
+            ColumnStatistic groupByColumnStatics = inputStatistics.getColumnStatistic(groupByColumn);
+            ColumnStatistic.Builder statsBuilder = buildFrom(groupByColumnStatics);
+            if (groupByColumnStatics.getNullsFraction() == 0) {
+                statsBuilder.setNullsFraction(0);
+            } else {
+                statsBuilder.setNullsFraction(1 / (groupByColumnStatics.getDistinctValuesCount() + 1));
+            }
+
+            groupStatisticsMap.put(groupByColumn, statsBuilder.build());
+        }
+
+        //Update the number of output rows of AggregateNode
         double rowCount = 1;
         if (groupStatisticsMap.values().stream().anyMatch(ColumnStatistic::isUnknown)) {
             // estimate with default column statistics
@@ -594,20 +608,23 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
         } else {
             for (int groupByIndex = 0; groupByIndex < groupBys.size(); ++groupByIndex) {
-                ColumnRefOperator groupByColumnRef = groupBys.get(groupByIndex);
-                ColumnStatistic columnStatistic = inputStatistics.getColumnStatistic(groupByColumnRef);
+                ColumnRefOperator groupByColumn = groupBys.get(groupByIndex);
+                ColumnStatistic groupByColumnStatics = inputStatistics.getColumnStatistic(groupByColumn);
+                double cardinality = groupByColumnStatics.getDistinctValuesCount() +
+                        ((groupByColumnStatics.getNullsFraction() == 0.0) ? 0 : 1);
                 if (groupByIndex == 0) {
-                    rowCount *= columnStatistic.getDistinctValuesCount();
+                    rowCount *= cardinality;
                 } else {
-                    rowCount *= columnStatistic.getDistinctValuesCount() *
-                            Math.pow(StatisticsEstimateCoefficient.UNKNOWN_GROUP_BY_CORRELATION_COEFFICIENT,
-                                    groupByIndex + 1);
+                    rowCount *= cardinality * Math.pow(
+                            StatisticsEstimateCoefficient.UNKNOWN_GROUP_BY_CORRELATION_COEFFICIENT, groupByIndex + 1);
                     if (rowCount > inputStatistics.getOutputRowCount()) {
                         rowCount = inputStatistics.getOutputRowCount();
                     }
                 }
             }
         }
+
+        //Update Node Statistics
         builder.addColumnStatistics(groupStatisticsMap);
         rowCount = min(inputStatistics.getOutputRowCount(), rowCount);
         builder.setOutputRowCount(rowCount);
@@ -740,7 +757,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 double columnNullCount = columnStatistic.getNullsFraction() * innerJoinRowCount;
                 double newNullFraction = (columnNullCount + nullRowCount) / outerTableRowCount;
                 builder.addColumnStatistic(entry.getKey(),
-                        ColumnStatistic.buildFrom(columnStatistic).setNullsFraction(newNullFraction).build());
+                        buildFrom(columnStatistic).setNullsFraction(newNullFraction).build());
             }
         }
     }
