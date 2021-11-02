@@ -64,9 +64,15 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             args.add(ConstantOperator.createNull(operator.getThenClause(0).getType()));
         }
 
+        Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
         Function fn =
-                Expr.getBuiltinFunction(FunctionSet.IF, args.stream().map(ScalarOperator::getType).toArray(Type[]::new),
-                        Function.CompareMode.IS_IDENTICAL);
+                Expr.getBuiltinFunction(FunctionSet.IF, argTypes, Function.CompareMode.IS_IDENTICAL);
+
+        if (operator.getChildren().stream().anyMatch(s -> s.getType().isDecimalV3())) {
+            Function decimalFn = new Function(fn.getFunctionName(), argTypes, operator.getType(), fn.hasVarArgs());
+            return new CallOperator("if", operator.getType(), args, decimalFn);
+        }
+
         return new CallOperator("if", operator.getType(), args, fn);
     }
 

@@ -88,14 +88,12 @@ public class InsertPlanTest extends PlanTestBase {
                         "  |  <slot 4> : if(2: expr IS NULL, 0, 1)"));
 
         explainString = getInsertExecPlan("insert into test_insert_mv_count(v1) values(1)");
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains("OUTPUT EXPRS:1: expr | 2: expr | 3: expr | 4: if"));
-        System.out.println(explainString);
         Assert.assertTrue(explainString.contains(
                 "  |  <slot 1> : 1: expr\n" +
                         "  |  <slot 2> : NULL\n" +
                         "  |  <slot 3> : NULL\n" +
-                        "  |  <slot 4> : CASE WHEN NULL IS NULL THEN 0 ELSE 1 END"));
+                        "  |  <slot 4> : if(NULL IS NULL, 0, 1)"));
 
         System.out.println(explainString);
         explainString = getInsertExecPlan("insert into test_insert_mv_count(v3,v1) values(3,1)");
@@ -104,7 +102,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  |  <slot 1> : 1: expr\n" +
                         "  |  <slot 2> : 2: expr\n" +
                         "  |  <slot 3> : NULL\n" +
-                        "  |  <slot 4> : CASE WHEN NULL IS NULL THEN 0 ELSE 1 END"));
+                        "  |  <slot 4> : if(NULL IS NULL, 0, 1)"));
 
         explainString = getInsertExecPlan("insert into test_insert_mv_count select 1,2,3");
         Assert.assertTrue(explainString.contains("OUTPUT EXPRS:1: expr | 2: expr | 3: expr | 4: if"));
