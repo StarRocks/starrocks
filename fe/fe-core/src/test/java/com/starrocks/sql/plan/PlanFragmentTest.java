@@ -4358,6 +4358,136 @@ public class PlanFragmentTest extends PlanTestBase {
     }
 
     @Test
+    public void testUnionEmptyNode() throws Exception {
+        String sql;
+        String plan;
+        sql = "select * from (select * from t0 union all select * from t1 union all select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  2:EXCHANGE\n" +
+                "     use vectorized: true"));
+
+        sql = "select * from (select * from t0 limit 0 union all select * from t1 union all select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:UNION\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  2:EXCHANGE\n" +
+                "     use vectorized: true"));
+
+        sql = "select * from (select * from t0 limit 0 union all select * from t1 where false" +
+                " union all select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:4: v1 | 5: v2 | 6: v3\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : 10: v7\n" +
+                "  |  <slot 5> : 11: v8\n" +
+                "  |  <slot 6> : 12: v9\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  0:OlapScanNode"));
+    }
+
+    @Test
+    public void testIntersectEmptyNode() throws Exception {
+        String sql;
+        String plan;
+        sql = "select * from (select * from t0 intersect select * from t1 intersect select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:INTERSECT\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  2:EXCHANGE"));
+
+        sql = "select * from (select * from t0 limit 0 intersect select * from t1 intersect select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:4: v1 | 5: v2 | 6: v3\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  0:EMPTYSET\n" +
+                "     use vectorized: true"));
+
+        sql = "select * from (select * from t0 limit 0 intersect select * from t1 where false " +
+                "intersect select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:4: v1 | 5: v2 | 6: v3\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  0:EMPTYSET\n" +
+                "     use vectorized: true"));
+    }
+
+    @Test
+    public void testExceptEmptyNode() throws Exception {
+        String sql;
+        String plan;
+        sql = "select * from (select * from t0 except select * from t1 except select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:EXCEPT\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  2:EXCHANGE\n" +
+                "     use vectorized: true"));
+
+        sql = "select * from (select * from t0 limit 0 except select * from t1 except select * from t2) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:4: v1 | 5: v2 | 6: v3\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  0:EMPTYSET\n" +
+                "     use vectorized: true"));
+
+        sql = "select * from ( select * from t2 except select * from t0 limit 0 except " +
+                "select * from t1) as xx";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("  0:EXCEPT\n" +
+                "  |  use vectorized: true\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |       use vectorized: true\n" +
+                "  |    \n" +
+                "  2:EXCHANGE\n" +
+                "     use vectorized: true\n"));
+    }
+  
+    @Test
     public void testPredicateOnRepeatNode() throws Exception {
         FeConstants.runningUnitTest = true;
         String sql = "select * from (select v1, v2, sum(v3) from t0 group by rollup(v1, v2)) as xx where v1 is null;";
@@ -4367,5 +4497,4 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  PREDICATES: 1: v1 IS NULL"));
         FeConstants.runningUnitTest = false;
     }
-
 }

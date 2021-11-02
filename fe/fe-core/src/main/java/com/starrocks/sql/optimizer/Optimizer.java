@@ -20,7 +20,6 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
@@ -95,14 +94,15 @@ public class Optimizer {
         //After the MERGE_LIMIT, ProjectNode that can be merged may appear.
         //So we do another MergeTwoProjectRule
         ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
-        ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_SET_OPERATOR);
 
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
         tree = new MaterializedViewRule().transform(tree, context).get(0);
         memo.replaceRewriteExpression(memo.getRootGroup(), tree);
 
         ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.PARTITION_PRUNE);
-        ruleRewriteIterative(memo, rootTaskContext, new PruneProjectRule());
+        ruleRewriteIterative(memo, rootTaskContext, RuleSetType.PRUNE_PROJECT);
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ScalarOperatorsReuseRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new JoinForceLimitRule());
