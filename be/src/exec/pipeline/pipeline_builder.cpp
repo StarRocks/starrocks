@@ -44,11 +44,13 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_shuffle_exchange(
         return pred_operators;
     }
 
+    auto* pred_source_op = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
+
     // To make sure at least one partition source operator is ready to output chunk before sink operators are full.
     auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(shuffle_partitions_num * config::vector_chunk_size);
     auto local_shuffle_source = std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), mem_mgr);
-    auto local_shuffle =
-            std::make_shared<PartitionExchanger>(mem_mgr, local_shuffle_source.get(), true, partition_expr_ctxs);
+    auto local_shuffle = std::make_shared<PartitionExchanger>(
+            mem_mgr, local_shuffle_source.get(), true, partition_expr_ctxs, pred_source_op->degree_of_parallelism());
 
     // Append local shuffle sink to the tail of the current pipeline, which comes to end.
     auto local_shuffle_sink = std::make_shared<LocalExchangeSinkOperatorFactory>(next_operator_id(), local_shuffle);
