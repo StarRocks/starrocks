@@ -156,7 +156,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             if (properties.containsKey(DynamicPartitionProperty.START_DAY_OF_MONTH)) {
                 String dayOfMonthStr = properties.get(DynamicPartitionProperty.START_DAY_OF_MONTH);
                 try {
-                    DynamicPartitionUtil.checkStartDayOfWeek(dayOfMonthStr);
+                    DynamicPartitionUtil.checkStartDayOfMonth(dayOfMonthStr);
                 } catch (DdlException e) {
                     throw new AnalysisException(e.getMessage());
                 }
