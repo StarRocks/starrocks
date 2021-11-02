@@ -87,8 +87,8 @@ Status DictDecodeOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void DictDecodeOperatorFactory::close(RuntimeState* state) {
-    OperatorFactory::close(state);
     Expr::close(_expr_ctxs, state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline
