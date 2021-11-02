@@ -162,10 +162,6 @@ public class Optimizer {
             // extract the nth execution plan
             int nthExecPlan = connectContext.getSessionVariable().getUseNthExecPlan();
             result = EnumeratePlan.extractNthPlan(requiredProperty, memo.getRootGroup(), nthExecPlan);
-            if (result == null) {
-                throw new StarRocksPlannerException("Can not extract " + nthExecPlan + " from Memo",
-                        ErrorType.INTERNAL_ERROR);
-            }
         }
         tryOpenPreAggregate(result);
         // Rewrite Exchange on top of Sort to Final Sort
