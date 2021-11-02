@@ -62,6 +62,8 @@ public:
             net_read(_cache_data, offset, read_size);
             _cache_begin_offset = offset;
             _cache_end_offset = offset + read_size;
+        } else {
+            _stats->io_counter_cached += 1;
         }
 
         memcpy(buf, _cache_data + offset - _cache_begin_offset, length);
@@ -329,6 +331,7 @@ void HdfsOrcScanner::update_counter() {
     COUNTER_UPDATE(_scanner_params.parent->_expr_filter_timer, _stats.expr_filter_ns);
     COUNTER_UPDATE(_scanner_params.parent->_io_timer, _stats.io_ns);
     COUNTER_UPDATE(_scanner_params.parent->_io_counter, _stats.io_count);
+    COUNTER_UPDATE(_scanner_params.parent->_io_counter_cached, _stats.io_counter_cached);
     COUNTER_UPDATE(_scanner_params.parent->_bytes_read_from_disk_counter, _stats.bytes_read_from_disk);
     COUNTER_UPDATE(_scanner_params.parent->_column_read_timer, _stats.column_read_ns);
     COUNTER_UPDATE(_scanner_params.parent->_column_convert_timer, _stats.column_convert_ns);

@@ -160,6 +160,7 @@ private:
 
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _io_counter = nullptr;
+    RuntimeProfile::Counter* _io_counter_cached = nullptr;
     RuntimeProfile::Counter* _bytes_read_from_disk_counter = nullptr;
     RuntimeProfile::Counter* _column_read_timer = nullptr;
     RuntimeProfile::Counter* _level_decode_timer = nullptr;
