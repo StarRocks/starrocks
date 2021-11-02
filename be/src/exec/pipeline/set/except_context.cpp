@@ -10,7 +10,7 @@ Status ExceptContext::prepare(RuntimeState* state, const std::vector<ExprContext
     _dst_tuple_desc = state->desc_tbl().get_tuple_descriptor(_dst_tuple_id);
     _dst_nullables.reserve(build_exprs.size());
     for (auto build_expr : build_exprs) {
-        _dst_nullables.emplace_back(build_expr->is_nullable());
+        _dst_nullables.emplace_back(build_expr->root()->is_nullable());
     }
 
     return Status::OK();
