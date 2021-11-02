@@ -129,14 +129,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         degree_of_parallelism = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);
     }
 
-    // pipeline scan mode
-    // 0: use sync io
-    // 1: use async io and exec->thread_pool()
-    int32_t pipeline_scan_mode = 1;
-    if (query_options.__isset.pipeline_scan_mode) {
-        pipeline_scan_mode = query_options.pipeline_scan_mode;
-    }
-
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
     std::vector<TScanRangeParams> no_scan_ranges;
@@ -198,11 +190,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                         std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, 0, is_root);
                 driver->set_morsel_queue(morsel_queue.get());
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
-                if (pipeline_scan_mode == 1) {
-                    scan_operator->set_io_threads(exec_env->pipeline_io_thread_pool());
-                } else {
-                    scan_operator->set_io_threads(nullptr);
-                }
+                scan_operator->set_io_threads(exec_env->pipeline_io_thread_pool());
                 drivers.emplace_back(std::move(driver));
             }
         } else {

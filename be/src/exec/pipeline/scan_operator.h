@@ -6,6 +6,7 @@
 
 #include "exec/pipeline/source_operator.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "util/blocking_queue.hpp"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
@@ -42,11 +43,7 @@ public:
 
 private:
     void _pickup_morsel(RuntimeState* state);
-    void _trigger_read_chunk();
-    bool _has_output_blocking() const;
-    bool _has_output_nonblocking() const;
-    StatusOr<vectorized::ChunkPtr> _pull_chunk_blocking(RuntimeState* state);
-    StatusOr<vectorized::ChunkPtr> _pull_chunk_nonblocking(RuntimeState* state);
+    void _start_scan();
 
 private:
     bool _is_finished = false;
@@ -54,7 +51,6 @@ private:
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const vectorized::RuntimeFilterProbeCollector& _runtime_filters;
     PriorityThreadPool* _io_threads = nullptr;
-    OptionalChunkSourceFuture _pending_chunk_source_future;
 };
 
 class ScanOperatorFactory final : public SourceOperatorFactory {

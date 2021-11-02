@@ -244,7 +244,17 @@ bool OlapChunkSource::has_next_chunk() const {
     return _status.ok();
 }
 
-StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk() {
+bool OlapChunkSource::has_output() const {
+    return !_chunk_cache.empty();
+}
+
+StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk() {
+    vectorized::ChunkPtr chunk = nullptr;
+    _chunk_cache.try_get(&chunk);
+    return chunk;
+}
+
+Status OlapChunkSource::cache_next_chunk_blocking() {
     if (!_status.ok()) {
         return _status;
     }
@@ -254,15 +264,8 @@ StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk() {
     if (!_status.ok()) {
         return _status;
     }
-    return std::move(chunk);
-}
-
-void OlapChunkSource::cache_next_chunk_blocking() {
-    _chunk = get_next_chunk();
-}
-
-StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk_nonblocking() {
-    return std::move(_chunk);
+    _chunk_cache.put(std::move(chunk));
+    return _status;
 }
 
 // mapping a slot-column-id to schema-columnid
