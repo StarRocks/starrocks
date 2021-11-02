@@ -258,25 +258,6 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             if (predicate.getBinaryType().equals(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL)) {
                 return ConstantOperator.createBoolean(true);
             }
-
-            /*
-            // The nullable is not accurate if child node will produce null. like:
-            // select t2.a = t2.a from t1 left outer join t2
-            //
-            else if (!predicate.getChild(0).isNullable()) {
-                switch (predicate.getBinaryType()) {
-                    case EQ:
-                    case EQ_FOR_NULL:
-                    case GE:
-                    case LE:
-                        return ConstantOperator.createBoolean(true);
-                    case NE:
-                    case LT:
-                    case GT:
-                        return ConstantOperator.createBoolean(false);
-                }
-            }
-            */
         }
         return predicate;
     }
