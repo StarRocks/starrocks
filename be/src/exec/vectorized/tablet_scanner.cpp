@@ -286,7 +286,7 @@ void TabletScanner::update_counter() {
     COUNTER_UPDATE(_parent->_pred_filter_timer, _reader->stats().vec_cond_evaluate_ns);
     COUNTER_UPDATE(_parent->_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
     COUNTER_UPDATE(_parent->_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
-
+    COUNTER_UPDATE(_parent->_seg_zm_filtered_counter, _reader->stats().segment_stats_filtered);
     COUNTER_UPDATE(_parent->_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_parent->_bf_filtered_counter, _reader->stats().rows_bf_filtered);
     COUNTER_UPDATE(_parent->_sk_filtered_counter, _reader->stats().rows_key_range_filtered);

@@ -149,6 +149,7 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const vectorized::Schema& sche
             continue;
         }
         if (!_column_readers[column_id]->segment_zone_map_filter(pair.second)) {
+            read_options.stats->segment_stats_filtered += _column_readers[column_id]->num_rows();
             return Status::EndOfFile("empty iterator");
         }
     }
