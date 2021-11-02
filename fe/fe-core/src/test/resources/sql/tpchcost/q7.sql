@@ -45,11 +45,11 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 25:MERGING-EXCHANGE
-cardinality: 1483
+cardinality: 250
 column statistics:
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-* year-->[1000.0, 9999.0, 0.0, 4.0, 10.0]
+* year-->[1995.0, 1996.0, 0.0, 4.0, 2.0]
 * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 
 PLAN FRAGMENT 1(F11)
@@ -61,25 +61,25 @@ OutPut Exchange Id: 25
 24:SORT
 |  order by: [46, VARCHAR, false] ASC, [51, VARCHAR, false] ASC, [55, INT, true] ASC
 |  offset: 0
-|  cardinality: 1483
+|  cardinality: 250
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * year-->[1000.0, 9999.0, 0.0, 4.0, 10.0]
+|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0]
 |  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 |
 23:AGGREGATE (merge finalize)
 |  aggregate: sum[([57: sum(56: expr), DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, INT, true]
-|  cardinality: 1483
+|  cardinality: 250
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * year-->[1000.0, 9999.0, 0.0, 4.0, 10.0]
+|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0]
 |  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 |
 22:EXCHANGE
-cardinality: 1483
+cardinality: 297
 
 PLAN FRAGMENT 2(F00)
 
@@ -91,11 +91,11 @@ OutPut Exchange Id: 22
 |  STREAMING
 |  aggregate: sum[([56: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, INT, true]
-|  cardinality: 1483
+|  cardinality: 297
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * year-->[1000.0, 9999.0, 0.0, 4.0, 10.0]
+|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0]
 |  * sum(56: expr)-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 |
 20:Project
@@ -108,7 +108,7 @@ OutPut Exchange Id: 22
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * year-->[1000.0, 9999.0, 0.0, 4.0, 10.0]
+|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0]
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 |
 19:HASH JOIN
@@ -126,7 +126,7 @@ OutPut Exchange Id: 22
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0]
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0]
-|  * year-->[1000.0, 9999.0, 0.0, 4.0, 10.0]
+|  * year-->[1995.0, 1996.0, 0.0, 4.0, 2.0]
 |  * expr-->[810.9, 104949.5, 0.0, 8.0, 932377.0]
 |
 |----18:EXCHANGE
