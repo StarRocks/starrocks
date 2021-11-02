@@ -4,9 +4,13 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+
+import java.util.Optional;
 
 //
 // Reduce duplicate cast functions
@@ -52,6 +56,28 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
         return operator;
     }
 
+    @Override
+    public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator operator,
+                                               ScalarOperatorRewriteContext context) {
+        ScalarOperator child1 = operator.getChild(0);
+        ScalarOperator child2 = operator.getChild(1);
+
+        if (!(child1 instanceof CastOperator && child2.isConstantRef())) {
+            return operator;
+        }
+
+        ScalarOperator castChild = child1.getChild(0);
+
+        if (!(castChild.getType().isNumericType() && child2.getType().isNumericType())) {
+            return operator;
+        }
+
+        Optional<ScalarOperator> resultChild2 = Utils.tryCastConstant(child2, castChild.getType());
+        return resultChild2
+                .map(scalarOperator -> new BinaryPredicateOperator(operator.getBinaryType(), castChild, scalarOperator))
+                .orElse(operator);
+    }
+
     public boolean checkCastTypeReduceAble(Type parent, Type child, Type grandChild) {
         int parentSlotSize = parent.getSlotSize();
         int childSlotSize = child.getSlotSize();
@@ -68,9 +94,6 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
                 PrimitiveType.getAssignmentCompatibleType(grandChild.getPrimitiveType(), child.getPrimitiveType());
         PrimitiveType parentCompatibleType =
                 PrimitiveType.getAssignmentCompatibleType(child.getPrimitiveType(), parent.getPrimitiveType());
-        if (childCompatibleType == PrimitiveType.INVALID_TYPE || parentCompatibleType == PrimitiveType.INVALID_TYPE) {
-            return false;
-        }
-        return true;
+        return childCompatibleType != PrimitiveType.INVALID_TYPE && parentCompatibleType != PrimitiveType.INVALID_TYPE;
     }
 }
