@@ -36,3 +36,19 @@
 * 修复统计信息收集导致fe卡死的问题。
 * 修复set_var针对session生效而不是针对语句生效的问题。
 * 修复Hive分区外表`select count(*)` 返回异常的问题。
+
+## v1.19.1
+
+发布日期： 2021年11月2日
+
+### Improvement
+
+* 优化show frontends 的性能 [# 507](https://github.com/StarRocks/starrocks/pull/507) [# 984](https://github.com/StarRocks/starrocks/pull/984)
+* 补充慢查询监控 [# 502](https://github.com/StarRocks/starrocks/pull/502) [# 891](https://github.com/StarRocks/starrocks/pull/891)
+* 优化hive 外表元数据获取，并行获取元数据[# 425](https://github.com/StarRocks/starrocks/pull/425) [# 451](https://github.com/StarRocks/starrocks/pull/451)
+
+### BugFix
+
+* 修复Thrift协议兼容性问题，解决hive外表对接Kerberos的问题 [# 184](https://github.com/StarRocks/starrocks/pull/184) [# 947](https://github.com/StarRocks/starrocks/pull/947) [# 995](https://github.com/StarRocks/starrocks/pull/995) [# 999](https://github.com/StarRocks/starrocks/pull/999)
+* 修复view创建的若干bug [# 972](https://github.com/StarRocks/starrocks/pull/972) [# 987](https://github.com/StarRocks/starrocks/pull/987)[# 1001](https://github.com/StarRocks/starrocks/pull/1001)
+* 修复FE无法灰度升级的问题 [# 485](https://github.com/StarRocks/starrocks/pull/485) [# 890](https://github.com/StarRocks/starrocks/pull/890)
