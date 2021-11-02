@@ -108,6 +108,11 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     runtime_state->set_fragment_root_id(plan->id());
     _fragment_ctx->set_plan(plan);
 
+    // Set up global dict
+    if (request.fragment.__isset.global_dicts) {
+        RETURN_IF_ERROR(runtime_state->init_global_dict(request.fragment.global_dicts));
+    }
+
     // Set senders of exchange nodes before pipeline build
     std::vector<ExecNode*> exch_nodes;
     plan->collect_nodes(TPlanNodeType::EXCHANGE_NODE, &exch_nodes);
