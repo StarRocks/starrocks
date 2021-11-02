@@ -67,7 +67,7 @@ public class PruneExceptEmptyRule extends TransformationRule {
                     .create(new LogicalValuesOperator(exceptOperator.getOutputColumnRefOp(), Collections.emptyList())));
         } else if (newInputs.size() > 1) {
             return Lists.newArrayList(OptExpression
-                    .create(new LogicalExceptOperator.Builder().withOperator((LogicalExceptOperator) input.getOp())
+                    .create(new LogicalExceptOperator.Builder().withOperator(exceptOperator)
                             .setChildOutputColumns(childOutputs).build(), newInputs));
         }
 
