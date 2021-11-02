@@ -209,7 +209,33 @@ public class PlanFragmentTest extends PlanTestBase {
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("  1:Project\n"
                 + "  |  <slot 4> : 1: v1 + 20\n"
-                + "  |  <slot 5> : CASE2: v2 WHEN 3: v3 THEN 1 ELSE 0 END"));
+                + "  |  <slot 5> : if(2: v2 = 3: v3, 1, 0)"));
+
+        sql = "select v1+20, case when true then v1 else v2 end from t0 where v1 is null";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("  1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : 1: v1 + 20"));
+
+        sql = "select v1+20, ifnull(null, v2) from t0 where v1 is null";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("  1:Project\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 4> : 1: v1 + 20\n" +
+                "  |  use vectorized: true"));
+
+        sql = "select v1+20, if(true, v1, v2) from t0 where v1 is null";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("  1:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 4> : 1: v1 + 20"));
+
+        sql = "select v1+20, if(false, v1, NULL) from t0 where v1 is null";
+        planFragment = getFragmentPlan(sql);
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("  1:Project\n" +
+                "  |  <slot 4> : 1: v1 + 20\n" +
+                "  |  <slot 5> : NULL"));
     }
 
     @Test
@@ -408,7 +434,7 @@ public class PlanFragmentTest extends PlanTestBase {
                         + "end) from t0";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("<slot 10> : substr('2020-09', 6)"));
-        Assert.assertTrue(planFragment.contains("  |  <slot 4> : CASE WHEN 12: expr THEN 1: v1 ELSE 2: v2 END"));
+        Assert.assertTrue(planFragment.contains("  |  <slot 4> : if(12: expr, 1: v1, 2: v2)"));
     }
 
     @Test
@@ -3286,7 +3312,7 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql15 =
                 "select case when case when substr(k7,2,1) then true else false end then 2 when false then 3 else 0 end as col from test.baseall";
         Assert.assertTrue(StringUtils.containsIgnoreCase(getFragmentPlan(sql15),
-                "CASE WHEN CASE WHEN CAST(substr(9: k7, 2, 1) AS BOOLEAN) THEN TRUE ELSE FALSE END THEN 2 WHEN FALSE THEN 3 ELSE 0 END"));
+                "CASE WHEN if(CAST(substr(9: k7, 2, 1) AS BOOLEAN), TRUE, FALSE) THEN 2 WHEN FALSE THEN 3 ELSE 0 END"));
 
         // 1.6 test when expr is null
         String sql16 = "select case when null then 1 else 2 end as col16;";
