@@ -16,12 +16,10 @@ public class SimplifiedSameColumnRule extends BottomUpScalarOperatorRewriteRule 
         if (predicate.getChild(0).isVariable() && predicate.getChild(0).equals(predicate.getChild(1))) {
             if (predicate.getBinaryType().equals(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL)) {
                 return ConstantOperator.createBoolean(true);
-            }
-
-            // The nullable is not accurate if child node will produce null. like:
-            // select t2.a = t2.a from t1 left outer join t2
-            // so we only run the rule in scan node
-            else if (!predicate.getChild(0).isNullable()) {
+            } else if (!predicate.getChild(0).isNullable()) {
+                // The nullable is not accurate if child node will produce null. like:
+                // select t2.a = t2.a from t1 left outer join t2
+                // so we only run the rule in scan node
                 switch (predicate.getBinaryType()) {
                     case EQ:
                     case EQ_FOR_NULL:
