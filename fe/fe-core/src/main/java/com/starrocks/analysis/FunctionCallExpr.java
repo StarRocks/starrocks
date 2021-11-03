@@ -682,21 +682,6 @@ public class FunctionCallExpr extends Expr {
             throw new AnalysisException(getFunctionNotFoundError(collectChildReturnTypes()));
         }
 
-        if (fnName.getFunction().equalsIgnoreCase("from_unixtime")
-                || fnName.getFunction().equalsIgnoreCase("date_format")) {
-            // if has only one child, it has default time format: yyyy-MM-dd HH:mm:ss.SSSSSS
-            if (children.size() > 1) {
-                final StringLiteral fmtLiteral = (StringLiteral) children.get(1);
-                if (fmtLiteral.getStringValue().equals("yyyyMMdd")) {
-                    children.set(1, new StringLiteral("%Y%m%d"));
-                } else if (fmtLiteral.getStringValue().equals("yyyy-MM-dd")) {
-                    children.set(1, new StringLiteral("%Y-%m-%d"));
-                } else if (fmtLiteral.getStringValue().equals("yyyy-MM-dd HH:mm:ss")) {
-                    children.set(1, new StringLiteral("%Y-%m-%d %H:%i:%s"));
-                }
-            }
-        }
-
         if (fnName.getFunction().equalsIgnoreCase("date_trunc")) {
             if (children.size() != 2) {
                 throw new AnalysisException("date_trunc function must have 2 arguments");
