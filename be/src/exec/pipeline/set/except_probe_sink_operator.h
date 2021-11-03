@@ -23,7 +23,7 @@ class ExceptProbeSinkOperator final : public Operator {
 public:
     ExceptProbeSinkOperator(int32_t id, int32_t plan_node_id, std::shared_ptr<ExceptContext> except_ctx,
                             const std::vector<ExprContext*>& dst_exprs, const int32_t dependency_index)
-            : Operator(id, "except_erase_sink", plan_node_id),
+            : Operator(id, "except_probe_sink", plan_node_id),
               _except_ctx(std::move(except_ctx)),
               _dst_exprs(dst_exprs),
               _dependency_index(dependency_index) {}
@@ -50,7 +50,7 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
-    std::shared_ptr<ExceptContext> _except_ctx;
+    ExceptContextPtr _except_ctx;
 
     const std::vector<ExprContext*>& _dst_exprs;
 
@@ -63,7 +63,7 @@ public:
     ExceptProbeSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                                    ExceptPartitionContextFactoryPtr except_partition_ctx_factory,
                                    const std::vector<ExprContext*>& dst_exprs, const int32_t dependency_index)
-            : OperatorFactory(id, "except_erase_sink", plan_node_id),
+            : OperatorFactory(id, "except_probe_sink", plan_node_id),
               _except_partition_ctx_factory(std::move(except_partition_ctx_factory)),
               _dst_exprs(dst_exprs),
               _dependency_index(dependency_index) {}

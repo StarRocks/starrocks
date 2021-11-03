@@ -176,6 +176,10 @@ set(EXEC_FILES
     pipeline/set/except_build_sink_operator.cpp
     pipeline/set/except_probe_sink_operator.cpp
     pipeline/set/except_output_source_operator.cpp
+    pipeline/set/intersect_context.cpp
+    pipeline/set/intersect_build_sink_operator.cpp
+    pipeline/set/intersect_probe_sink_operator.cpp
+    pipeline/set/intersect_output_source_operator.cpp
 )
 
 set(EXEC_FILES

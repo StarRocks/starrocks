@@ -35,6 +35,8 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* row_batch, bool* eos) override;
     Status close(RuntimeState* state) override;
 
+    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+
 private:
     // Tuple id resolved in Prepare() to set tuple_desc_;
     const int _tuple_id;

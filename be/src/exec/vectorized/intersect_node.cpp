@@ -5,6 +5,11 @@
 #include <memory>
 
 #include "column/column_helper.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/set/intersect_build_sink_operator.h"
+#include "exec/pipeline/set/intersect_context.h"
+#include "exec/pipeline/set/intersect_output_source_operator.h"
+#include "exec/pipeline/set/intersect_probe_sink_operator.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
@@ -216,6 +221,38 @@ Status IntersectNode::close(RuntimeState* state) {
     }
 
     return ExecNode::close(state);
+}
+
+pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    pipeline::IntersectPartitionContextFactoryPtr intersect_partition_ctx_factory =
+            std::make_shared<pipeline::IntersectPartitionContextFactory>(_tuple_id, _children.size() - 1);
+
+    // Use the first child to build the hast table by IntersectBuildSinkOperator.
+    pipeline::OpFactories operators_with_intersect_build_sink = child(0)->decompose_to_pipeline(context);
+    operators_with_intersect_build_sink = context->maybe_interpolate_local_shuffle_exchange(
+            operators_with_intersect_build_sink, _child_expr_lists[0]);
+    operators_with_intersect_build_sink.emplace_back(std::make_shared<pipeline::IntersectBuildSinkOperatorFactory>(
+            context->next_operator_id(), id(), intersect_partition_ctx_factory, _child_expr_lists[0]));
+    context->add_pipeline(operators_with_intersect_build_sink);
+
+    // Use the rest children to erase keys from the hast table by IntersectProbeSinkOperator.
+    for (size_t i = 1; i < _children.size(); i++) {
+        pipeline::OpFactories operators_with_intersect_erase_sink = child(i)->decompose_to_pipeline(context);
+        operators_with_intersect_erase_sink = context->maybe_interpolate_local_shuffle_exchange(
+                operators_with_intersect_erase_sink, _child_expr_lists[i]);
+        operators_with_intersect_erase_sink.emplace_back(std::make_shared<pipeline::IntersectProbeSinkOperatorFactory>(
+                context->next_operator_id(), id(), intersect_partition_ctx_factory, _child_expr_lists[i], i - 1));
+        context->add_pipeline(operators_with_intersect_erase_sink);
+    }
+
+    // IntersectOutputSourceOperator is used to assemble the undeleted keys to output chunks.
+    pipeline::OpFactories operators_with_intersect_output_source;
+    auto intersect_output_source = std::make_shared<pipeline::IntersectOutputSourceOperatorFactory>(
+            context->next_operator_id(), id(), intersect_partition_ctx_factory, _children.size() - 1);
+    intersect_output_source->set_degree_of_parallelism(context->degree_of_parallelism());
+    operators_with_intersect_output_source.emplace_back(std::move(intersect_output_source));
+
+    return operators_with_intersect_output_source;
 }
 
 } // namespace starrocks::vectorized

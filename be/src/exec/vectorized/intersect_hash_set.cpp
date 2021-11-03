@@ -39,7 +39,7 @@ Status IntersectHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr&
 
 template <typename HashSet>
 Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, const ChunkPtr& chunkPtr,
-                                                       const std::vector<ExprContext*>& exprs, int hit_times) {
+                                                       const std::vector<ExprContext*>& exprs, const int hit_times) {
     size_t chunk_size = chunkPtr->num_rows();
     _slice_sizes.assign(config::vector_chunk_size, 0);
     size_t cur_max_one_row_size = _get_max_serialize_size(chunkPtr, exprs);
@@ -66,8 +66,7 @@ Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, cons
 }
 
 template <typename HashSet>
-void IntersectHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, const Columns& key_columns,
-                                                       int32_t batch_size) {
+void IntersectHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t batch_size) {
     for (const auto& key_column : key_columns) {
         if (!key_column->is_nullable()) {
             for (auto& key : keys) {
