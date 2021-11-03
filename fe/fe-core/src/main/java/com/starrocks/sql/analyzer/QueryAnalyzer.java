@@ -251,11 +251,11 @@ public class QueryAnalyzer {
         if (stmt.hasLimitClause()) {
             if (stmt.getOffset() > 0 && orderByElements.isEmpty()) {
                 // The offset can only be processed in sort,
-                // so when there is no order by, we manually add a constant sorting column
-                analyzeState.setOrderBy(Lists.newArrayList(new OrderByElement(
-                        new IntLiteral(0), true, true)));
+                // so when there is no order by, we manually set offset to 0
+                analyzeState.setLimit(new LimitElement(0, stmt.getLimit()));
+            } else {
+                analyzeState.setLimit(new LimitElement(stmt.getOffset(), stmt.getLimit()));
             }
-            analyzeState.setLimit(new LimitElement(stmt.getOffset(), stmt.getLimit()));
         }
 
         return analyzeState.build();
