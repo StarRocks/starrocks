@@ -142,17 +142,28 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         // If user set dynamic_partition.start_day_of_week table properties
         // it will follow this configuration to set day of week
         int dayOfWeek = 1;
-        if (properties != null && properties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
-            String dayOfWeekStr = properties.get(DynamicPartitionProperty.START_DAY_OF_WEEK);
-            try {
-                DynamicPartitionUtil.checkStartDayOfWeek(dayOfWeekStr);
-            } catch (DdlException e) {
-                throw new AnalysisException(e.getMessage());
+        int dayOfMonth = 1;
+        if (properties != null) {
+            if (properties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
+                String dayOfWeekStr = properties.get(DynamicPartitionProperty.START_DAY_OF_WEEK);
+                try {
+                    DynamicPartitionUtil.checkStartDayOfWeek(dayOfWeekStr);
+                } catch (DdlException e) {
+                    throw new AnalysisException(e.getMessage());
+                }
+                dayOfWeek = Integer.parseInt(dayOfWeekStr);
             }
-            dayOfWeek = Integer.parseInt(dayOfWeekStr);
+            if (properties.containsKey(DynamicPartitionProperty.START_DAY_OF_MONTH)) {
+                String dayOfMonthStr = properties.get(DynamicPartitionProperty.START_DAY_OF_MONTH);
+                try {
+                    DynamicPartitionUtil.checkStartDayOfMonth(dayOfMonthStr);
+                } catch (DdlException e) {
+                    throw new AnalysisException(e.getMessage());
+                }
+                dayOfMonth = Integer.parseInt(dayOfMonthStr);
+            }
         }
         WeekFields weekFields = WeekFields.of(DayOfWeek.of(dayOfWeek), 1);
-
         while (beginTime.isBefore(endTime)) {
             PartitionValue lowerPartitionValue = new PartitionValue(beginTime.toString(beginDateTimeFormat));
 
@@ -167,19 +178,25 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                     int weekOfYear = localDate.get(weekFields.weekOfYear());
                     partitionName = String.format("%s%s_%02d", DEFAULT_PREFIX,
                             beginTime.toString(DateUtils.YEAR_FORMAT), weekOfYear);
+                    beginTime = beginTime.withDayOfWeek(dayOfWeek);
                     beginTime = beginTime.plusWeeks(timeInterval);
                     break;
                 case MONTH:
                     partitionName = DEFAULT_PREFIX + beginTime.toString(DateUtils.MONTH_FORMAT);
+                    beginTime = beginTime.withDayOfMonth(dayOfMonth);
                     beginTime = beginTime.plusMonths(timeInterval);
                     break;
                 case YEAR:
                     partitionName = DEFAULT_PREFIX + beginTime.toString(DateUtils.YEAR_FORMAT);
+                    beginTime = beginTime.withDayOfYear(1);
                     beginTime = beginTime.plusYears(timeInterval);
                     break;
                 default:
                     throw new AnalysisException("Batch build partition does not support time interval type: " +
                             timeUnit);
+            }
+            if (timeUnitType != TimestampArithmeticExpr.TimeUnit.DAY && beginTime.isAfter(endTime)) {
+                beginTime = endTime;
             }
 
             PartitionValue upperPartitionValue = new PartitionValue(beginTime.toString(beginDateTimeFormat));
