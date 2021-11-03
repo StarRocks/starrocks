@@ -20,6 +20,7 @@ ColumnExprPredicate::ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_
     // note: conjuncts would be shared by multiple scanners
     // so here we have to clone one to keep thread safe.
     _add_expr_ctx(expr_ctx);
+    _is_expr_predicate = true;
 }
 
 ColumnExprPredicate::~ColumnExprPredicate() {
@@ -32,13 +33,16 @@ void ColumnExprPredicate::_add_expr_ctx(ExprContext* expr_ctx) {
     if (expr_ctx != nullptr) {
         DCHECK(expr_ctx->opened());
         ExprContext* ctx = nullptr;
-        expr_ctx->clone(_state, &ctx);
+        DCHECK_IF_ERROR(expr_ctx->clone(_state, &ctx));
         _expr_ctxs.emplace_back(ctx);
         _monotonic &= ctx->root()->is_monotonic();
     }
 }
 
 void ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+    // Does not support range evaluatation.
+    DCHECK(from == 0);
+
     Chunk chunk;
     // `column` is owned by storage layer
     // we don't have ownership
@@ -84,9 +88,12 @@ void ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uin
 }
 
 void ColumnExprPredicate::evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+    // Does not support range evaluatation.
+    DCHECK(from == 0);
+
     uint16_t size = to - from;
-    std::vector<uint8_t> tmp_sel(size);
-    uint8_t* tmp = tmp_sel.data();
+    _tmp_select.reserve(size);
+    uint8_t* tmp = _tmp_select.data();
     evaluate(column, tmp, 0, size);
     for (uint16_t i = 0; i < size; i++) {
         sel[i + from] &= tmp[i];
@@ -94,9 +101,12 @@ void ColumnExprPredicate::evaluate_and(const Column* column, uint8_t* sel, uint1
 }
 
 void ColumnExprPredicate::evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
+    // Does not support range evaluatation.
+    DCHECK(from == 0);
+
     uint16_t size = to - from;
-    std::vector<uint8_t> tmp_sel(size);
-    uint8_t* tmp = tmp_sel.data();
+    _tmp_select.reserve(size);
+    uint8_t* tmp = _tmp_select.data();
     evaluate(column, tmp, 0, size);
     for (uint16_t i = 0; i < size; i++) {
         sel[i + from] |= tmp[i];

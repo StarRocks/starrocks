@@ -120,6 +120,10 @@ public:
     // If this function return false, prefer using evaluate_branless to get a better performance
     virtual bool can_vectorized() const = 0;
 
+    // Indicate if this predicate uses ExprContext*. The predicates of this kind has one major limitation
+    // that it does not support `evaluate` range. In another word, `from` must be zero.
+    bool is_expr_predicate() const { return _is_expr_predicate; }
+
     bool is_index_filter_only() const { return _is_index_filter_only; }
 
     void set_index_filter_only(bool is_index_only) { _is_index_filter_only = is_index_only; }
@@ -156,6 +160,8 @@ protected:
     ColumnId _column_id;
     // Whether this predicate only used to filter index, not filter chunk row
     bool _is_index_filter_only = false;
+    // If this predicate uses ExprContext*
+    bool _is_expr_predicate = false;
 };
 
 using PredicateList = std::vector<const ColumnPredicate*>;

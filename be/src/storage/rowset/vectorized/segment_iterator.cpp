@@ -355,6 +355,7 @@ private:
     Status _read_columns(const Schema& schema, Chunk* chunk, size_t nrows);
 
     uint16_t _filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to);
+    uint16_t _filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid);
 
     void _init_column_predicates();
 
@@ -405,6 +406,7 @@ private:
 
     std::vector<const ColumnPredicate*> _vectorized_preds;
     std::vector<const ColumnPredicate*> _branchless_preds;
+    std::vector<const ColumnPredicate*> _expr_ctx_preds; // predicates using ExprContext*
     // _selection is used to accelerate
     Buffer<uint8_t> _selection;
 
@@ -555,7 +557,9 @@ void SegmentIterator::_init_column_predicates() {
             if (pred->is_index_filter_only()) {
                 continue;
             }
-            if (pred->can_vectorized()) {
+            if (pred->is_expr_predicate()) {
+                _expr_ctx_preds.emplace_back(pred);
+            } else if (pred->can_vectorized()) {
                 _vectorized_preds.emplace_back(pred);
             } else {
                 _branchless_preds.emplace_back(pred);
@@ -825,6 +829,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         chunk_start = next_start;
         DCHECK_EQ(chunk_start, chunk->num_rows());
     }
+    chunk_start = _filter_by_expr_predicates(chunk, rowid);
 
     _opts.stats->block_load_ns += sw.elapsed_time();
 
@@ -1002,7 +1007,6 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
     }
 
     auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
-
     uint16_t chunk_size = to;
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
     if (hit_count == 0) {
@@ -1020,6 +1024,40 @@ uint16_t SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t
     }
     _opts.stats->rows_del_vec_filtered += del_vec_filtered;
     _opts.stats->rows_vec_cond_filtered += (to - chunk_size) - del_vec_filtered;
+    return chunk_size;
+}
+
+uint16_t SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid) {
+    size_t chunk_size = chunk->num_rows();
+    if (_expr_ctx_preds.size() != 0 && chunk_size > 0) {
+        const auto* pred = _expr_ctx_preds[0];
+        Column* c = chunk->get_column_by_id(pred->column_id()).get();
+        pred->evaluate(c, _selection.data(), 0, chunk_size);
+
+        for (int i = 1; i < _expr_ctx_preds.size(); ++i) {
+            pred = _expr_ctx_preds[i];
+            c = chunk->get_column_by_id(pred->column_id()).get();
+            pred->evaluate_and(c, _selection.data(), 0, chunk_size);
+        }
+
+        size_t hit_count = SIMD::count_nonzero(_selection.data(), chunk_size);
+        size_t new_size = chunk_size;
+        if (hit_count == 0) {
+            chunk->set_num_rows(0);
+            new_size = 0;
+            if (rowid != nullptr) {
+                rowid->resize(0);
+            }
+        } else if (hit_count != chunk_size) {
+            new_size = chunk->filter_range(_selection, 0, chunk_size);
+            if (rowid != nullptr) {
+                auto size = ColumnHelper::filter_range<uint32_t>(_selection, rowid->data(), 0, chunk_size);
+                rowid->resize(size);
+            }
+        }
+        _opts.stats->rows_vec_cond_filtered += (chunk_size - new_size);
+        chunk_size = new_size;
+    }
     return chunk_size;
 }
 

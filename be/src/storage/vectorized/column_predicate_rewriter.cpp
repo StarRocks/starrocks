@@ -332,12 +332,11 @@ bool ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool, const Co
     // probe_expr will be copied into filter, so we don't need to allocate it.
     ExprContext* filter =
             RuntimeFilterHelper::create_runtime_in_filter(state, pool, probe_expr, eq_null, null_in_set, is_not_in);
-    Status st = RuntimeFilterHelper::fill_runtime_in_filter(used_values, probe_expr, filter, 0);
-    DCHECK(st.ok());
+    DCHECK_IF_ERROR(RuntimeFilterHelper::fill_runtime_in_filter(used_values, probe_expr, filter, 0));
 
     RowDescriptor row_desc; // I think we don't need to use it at all.
-    filter->prepare(state, row_desc);
-    filter->open(state);
+    DCHECK_IF_ERROR(filter->prepare(state, row_desc));
+    DCHECK_IF_ERROR(filter->open(state));
     *ptr = new ColumnExprPredicate(get_type_info(kDictCodeType), pred->column_id(), state, filter, pred->slot_desc());
     filter->close(state);
 
