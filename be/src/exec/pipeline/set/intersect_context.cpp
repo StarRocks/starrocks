@@ -2,9 +2,7 @@
 
 #include "exec/pipeline/set/intersect_context.h"
 
-namespace starrocks {
-
-namespace pipeline {
+namespace starrocks::pipeline {
 
 Status IntersectContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs) {
     _build_pool = std::make_unique<MemPool>();
@@ -69,6 +67,4 @@ StatusOr<vectorized::ChunkPtr> IntersectContext::pull_chunk(RuntimeState* state)
     return std::move(dst_chunk);
 }
 
-} // namespace pipeline
-
-} // namespace starrocks
+} // namespace starrocks::pipeline

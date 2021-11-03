@@ -10,10 +10,9 @@ namespace starrocks::pipeline {
 // ExceptNode is decomposed to ExceptBuildSinkOperator, ExceptProbeSinkOperator, and ExceptOutputSourceOperator.
 // - ExceptBuildSinkOperator (BUILD) builds the hast set from the output rows of ExceptNode's first child.
 // - ExceptProbeSinkOperator (PROBE) labels keys as deleted in the hash set from the output rows of reset children.
-//   PROBE depends on BUILD, which means it should wait for BUILD to finish building the hast set.
-//   Multiple PROBEs from multiple children can be parallelized to label keys as deleted.
+//   The first PROBE depends on BUILD, and the rest i-th PROBE depends on the (i-1)-th PROBE.
 // - ExceptOutputSourceOperator (OUTPUT) traverses the hast set and outputs undeleted rows.
-//   OUTPUT depends on all the PROBEs, which means it should wait for PROBEs to finish labeling keys as delete.
+//   OUTPUT depends on the last PROBE, which means it should wait for all the PROBEs to finish labeling keys as delete.
 //
 // The input chunks of BUILD and PROBE are shuffled by the local shuffle operator.
 // The number of shuffled partitions is the degree of parallelism (DOP), which means

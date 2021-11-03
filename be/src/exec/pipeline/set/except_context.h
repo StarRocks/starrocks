@@ -80,7 +80,7 @@ private:
     // The BUILD, PROBES, and OUTPUT operators execute sequentially.
     // BUILD -> 1-th PROBE -> 2-th PROBE -> ... -> n-th PROBE -> OUTPUT.
     // _finished_dependency_index will increase by one when a BUILD or PROBE is finished.
-    // i-th PROBE must wait for _finished_dependency_index becoming i-1,
+    // The i-th PROBE must wait for _finished_dependency_index becoming i-1,
     // and OUTPUT must wait for _finished_dependency_index becoming n.
     std::atomic<int32_t> _finished_dependency_index{-1};
 };

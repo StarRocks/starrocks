@@ -8,6 +8,18 @@
 
 namespace starrocks::pipeline {
 
+// IntersectNode is decomposed to IntersectBuildSinkOperator, IntersectProbeSinkOperator, and IntersectOutputSourceOperator.
+// - IntersectBuildSinkOperator (BUILD) builds the hast set from the output rows of IntersectNode's first child.
+// - IntersectProbeSinkOperator (PROBE) labels the hit times of a key as i in the hash set,if the original hit
+//   times is i-1. The first PROBE depends on BUILD, and the rest i-th PROBE depends on the (i-1)-th PROBE.
+// - IntersectOutputSourceOperator (OUTPUT) traverses the hast set and outputs rows,
+//   whose hit times are equal to the number of PROBEs. OUTPUT depends on the last PROBE,
+//   which means it should wait for all the PROBEs to finish labeling keys as delete.
+//
+// The input chunks of BUILD and PROBE are shuffled by the local shuffle operator.
+// The number of shuffled partitions is the degree of parallelism (DOP), which means
+// the number of partition hash sets and the number of BUILD drivers, PROBE drivers of one child, OUTPUT drivers
+// are both DOP. And each pair of BUILD/PROBE/OUTPUT drivers shares a same intersect partition context.
 class IntersectOutputSourceOperator final : public SourceOperator {
 public:
     IntersectOutputSourceOperator(int32_t id, int32_t plan_node_id, std::shared_ptr<IntersectContext> intersect_ctx,
