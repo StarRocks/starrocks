@@ -304,8 +304,7 @@ Status TabletMetaManager::get_tablet_meta(DataDir* store, TTabletId tablet_id, T
 
 Status TabletMetaManager::get_json_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
                                         std::string* json_meta) {
-    MemTracker mem_tracker;
-    TabletMetaSharedPtr tablet_meta(new TabletMeta(&mem_tracker));
+    TabletMetaSharedPtr tablet_meta(new TabletMeta());
     RETURN_IF_ERROR(get_tablet_meta(store, tablet_id, schema_hash, tablet_meta));
 
     if (tablet_meta->tablet_schema_ptr()->keys_type() != PRIMARY_KEYS) {

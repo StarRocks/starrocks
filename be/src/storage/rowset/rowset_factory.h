@@ -35,7 +35,7 @@ class RowsetFactory {
 public:
     // return OK on success and set inited rowset in `*rowset`.
     // return error if failed to create or init rowset.
-    static Status create_rowset(MemTracker* mem_tracker, const TabletSchema* schema, const std::string& rowset_path,
+    static Status create_rowset(const TabletSchema* schema, const std::string& rowset_path,
                                 const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset);
 
     // create and init rowset writer.
