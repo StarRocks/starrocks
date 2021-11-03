@@ -235,7 +235,7 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select v1 from t0 order by v1 asc ,v2 desc");
         analyzeSuccess("select v1 from t0 order by v1 limit 10");
         analyzeSuccess("select v1 from t0 order by v1, v2");
-        analyzeFail("select v1 from t0 limit 2, 10");
+        analyzeSuccess("select v1 from t0 limit 2, 10");
 
         /**
          * Test output scope resolve
