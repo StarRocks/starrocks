@@ -45,6 +45,7 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
@@ -115,6 +116,9 @@ public class Alter {
                 throw new DdlException("Do not support alter non-OLAP table[" + tableName + "]");
             }
             OlapTable olapTable = (OlapTable) table;
+            if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+                throw new DdlException("Do not support create materialized view on primary key table[" + tableName + "]");
+            }
             olapTable.checkStableAndNormal(db.getClusterName());
 
             ((MaterializedViewHandler) materializedViewHandler).processCreateMaterializedView(stmt, db,
