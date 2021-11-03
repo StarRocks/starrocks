@@ -25,6 +25,7 @@
 #include <mutex>
 #include <vector>
 
+#include "util/scoped_cleanup.h"
 #include "util/spinlock.h"
 
 namespace starrocks {
@@ -45,9 +46,11 @@ public:
 
     template <class T>
     T* add(T* t) {
+        auto cleanup = MakeScopedCleanup([&]() { delete reinterpret_cast<T*>(t); });
         // TODO: Consider using a lock-free structure.
         std::lock_guard<SpinLock> l(_lock);
         _objects.emplace_back(Element{t, [](void* obj) { delete reinterpret_cast<T*>(obj); }});
+        cleanup.cancel();
         return t;
     }
 
