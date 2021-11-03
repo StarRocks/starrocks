@@ -68,7 +68,7 @@ public class StreamLoadTask {
     private PartitionNames partitions;
     private String path;
     private boolean negative;
-    private boolean strictMode = false; // default is false
+    private boolean strictMode = true; // default is true
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     private int timeout = Config.stream_load_default_timeout_second;
     private long loadMemLimit = 0;
