@@ -94,7 +94,7 @@ void RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRunti
 }
 
 ExprContext* RuntimeFilterHelper::create_runtime_in_filter(RuntimeState* state, ObjectPool* pool, Expr* probe_expr,
-                                                           bool eq_null) {
+                                                           bool eq_null, bool null_in_set, bool is_not_in) {
     TExprNode node;
     PrimitiveType probe_type = probe_expr->type().type;
 
@@ -109,7 +109,7 @@ ExprContext* RuntimeFilterHelper::create_runtime_in_filter(RuntimeState* state, 
     TTypeDesc t_type_desc;
     t_type_desc.types.push_back(ttype_node);
     node.__set_type(t_type_desc);
-    node.in_predicate.__set_is_not_in(false);
+    node.in_predicate.__set_is_not_in(is_not_in);
     node.__set_opcode(TExprOpcode::FILTER_IN);
     node.__isset.vector_opcode = true;
     node.__set_vector_opcode(to_in_opcode(probe_type));
@@ -120,6 +120,7 @@ ExprContext* RuntimeFilterHelper::create_runtime_in_filter(RuntimeState* state, 
 #define M(NAME)                                                                               \
     case PrimitiveType::NAME: {                                                               \
         auto* in_pred = pool->add(new VectorizedInConstPredicate<PrimitiveType::NAME>(node)); \
+        in_pred->set_null_in_set(null_in_set);                                                \
         Status st = in_pred->prepare(state);                                                  \
         if (!st.ok()) return nullptr;                                                         \
         in_pred->add_child(Expr::copy(pool, probe_expr));                                     \

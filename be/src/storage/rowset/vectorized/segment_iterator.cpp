@@ -1188,23 +1188,9 @@ Status SegmentIterator::_check_low_cardinality_optimization() {
         auto iter = _opts.predicates.find(cid);
         DCHECK(iter != _opts.predicates.end());
         const PredicateList& preds = iter->second;
-
         if (preds.size() > 0) {
-            bool can_using_global_dict = _can_using_global_dict(field);
-            _predicate_need_rewrite[cid] = std::all_of(preds.begin(), preds.end(), [=](auto* pred) {
-                auto pred_type = pred->type();
-                bool eq_predicate = pred_type == PredicateType::kEQ || pred_type == PredicateType::kInList ||
-                                    pred_type == PredicateType::kNE || pred_type == PredicateType::kNotInList;
-                bool range_predicate =
-                        can_using_global_dict && (pred_type == PredicateType::kGE || pred_type == PredicateType::kLE ||
-                                                  pred_type == PredicateType::kGT || pred_type == PredicateType::kLT);
-                return eq_predicate || range_predicate;
-            });
-            if (can_using_global_dict && !_predicate_need_rewrite[cid]) {
-                std::string msg = fmt::format("expect predicates could use low cardinality in cid:{}", cid);
-                DCHECK(false) << msg;
-                return Status::InternalError(msg);
-            }
+            // for string column of low cardinality, we can always rewrite predicates.
+            _predicate_need_rewrite[cid] = true;
         }
     }
     return Status::OK();
