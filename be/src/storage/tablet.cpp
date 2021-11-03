@@ -43,6 +43,7 @@
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
+#include "util/defer_op.h"
 #include "util/path_util.h"
 #include "util/time.h"
 
