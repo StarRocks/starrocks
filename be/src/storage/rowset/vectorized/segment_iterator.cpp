@@ -16,7 +16,6 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
-#include "runtime/current_mem_tracker.h"
 #include "simd/simd.h"
 #include "storage/column_predicate.h"
 #include "storage/del_vector.h"
@@ -288,7 +287,6 @@ private:
         ~ScanContext() = default;
 
         void close() {
-            CurrentMemTracker::release(memory_usage());
             _read_chunk.reset();
             _dict_chunk.reset();
             _final_chunk.reset();
@@ -466,8 +464,6 @@ Status SegmentIterator::_init() {
 
     _selection.resize(_opts.chunk_size);
     _selected_idx.resize(_opts.chunk_size);
-    CurrentMemTracker::consume(_selection.capacity() * sizeof(_selection[0]));
-    CurrentMemTracker::consume(_selected_idx.capacity() * sizeof(_selected_idx[0]));
     StarRocksMetrics::instance()->segment_read_total.increment(1);
     // get file handle from file descriptor of segment
     RETURN_IF_ERROR(_opts.block_mgr->open_block(_segment->file_name(), &_rblock));
@@ -802,14 +798,9 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     uint16_t chunk_start = 0;
     bool need_switch_context = false;
 
-    CurrentMemTracker::release(_context->memory_usage());
     _context->_read_chunk->reset();
     _context->_dict_chunk->reset();
     _context->_final_chunk->reset();
-
-    int64_t old_mem_usage = _context->memory_usage();
-    int64_t curr_mem_usage = old_mem_usage; // Will be updated later.
-    CurrentMemTracker::consume(old_mem_usage);
 
     Chunk* chunk = _context->_read_chunk.get();
 
@@ -835,8 +826,6 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         // Return directly if chunk_start is zero, i.e, chunk is empty.
         // Otherwise, chunk will be swapped with result, which is incorrect
         // because the chunk is a pointer to _read_chunk instead of _final_chunk.
-        curr_mem_usage = _context->memory_usage();
-        CurrentMemTracker::consume(curr_mem_usage - old_mem_usage);
         return Status::EndOfFile("no more data in segment");
     }
 
@@ -884,9 +873,6 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
     }
 
-    curr_mem_usage = _context->memory_usage();
-    CurrentMemTracker::consume(curr_mem_usage - old_mem_usage);
-
     result->swap_chunk(*chunk);
 
     if (need_switch_context) {
@@ -907,13 +893,11 @@ void SegmentIterator::_switch_context(ScanContext* to) {
 
     if (to->_read_chunk == nullptr) {
         to->_read_chunk = ChunkHelper::new_chunk(to->_read_schema, _opts.chunk_size);
-        CurrentMemTracker::consume(to->_read_chunk->memory_usage());
     }
 
     if (to->_has_dict_column) {
         if (to->_dict_chunk == nullptr) {
             to->_dict_chunk = ChunkHelper::new_chunk(to->_dict_decode_schema, _opts.chunk_size);
-            CurrentMemTracker::consume(to->_dict_chunk->memory_usage());
         }
     } else {
         to->_dict_chunk = to->_read_chunk;
@@ -923,7 +907,6 @@ void SegmentIterator::_switch_context(ScanContext* to) {
         if (to->_final_chunk == nullptr) {
             DCHECK_GT(this->encoded_schema().num_fields(), 0);
             to->_final_chunk = ChunkHelper::new_chunk(this->encoded_schema(), _opts.chunk_size);
-            CurrentMemTracker::consume(to->_final_chunk->memory_usage());
         }
     } else {
         to->_final_chunk = to->_dict_chunk;
@@ -1366,8 +1349,6 @@ void SegmentIterator::close() {
     _rblock.reset();
     _segment.reset();
 
-    CurrentMemTracker::release(_selection.capacity() * sizeof(_selection[0]));
-    CurrentMemTracker::release(_selected_idx.capacity() * sizeof(_selected_idx[0]));
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);
 
