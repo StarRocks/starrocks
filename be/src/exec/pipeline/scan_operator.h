@@ -41,9 +41,10 @@ private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
     void _pickup_morsel(RuntimeState* state);
-    void _start_scan();
+    void _trigger_next_scan();
 
 private:
+    const size_t _batch_size = 16;
     mutable bool _is_finished = false;
     bool _has_next_morsel = true;
     std::atomic_bool _is_io_task_active = false;

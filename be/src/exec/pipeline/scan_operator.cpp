@@ -37,15 +37,24 @@ bool ScanOperator::has_output() const {
         return false;
     }
 
+    if (!_has_next_morsel) {
+        return false;
+    }
+
+    // Still have cached chunks
     if (_chunk_source->has_output()) {
         return true;
     }
 
-    if (_chunk_source->has_next_chunk()) {
+    // io task is busy caching chunks, so we just wait
+    if (_is_io_task_active.load(std::memory_order_acquire)) {
         return false;
     }
 
-    // Current morsel is eof, so we need to try to get another morsel in pull_chunk
+    // Here are two situation
+    // 1. Cache is empty out and morsel is not eof, _trigger_next_scan is required
+    // 2. Cache is empty and morsel is eof, _pickup_morsel is required
+    // Either of which needs to be triggered in pull_chunk, so we return true here
     return true;
 }
 
@@ -70,24 +79,25 @@ bool ScanOperator::is_finished() const {
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
-    // Current morsel is eof, try to pickup another morsel
-    if (!_chunk_source->has_output() && !_chunk_source->has_next_chunk()) {
-        _pickup_morsel(state);
+    if (!_chunk_source->has_output()) {
+        if (_chunk_source->has_next_chunk()) {
+            _trigger_next_scan();
+        } else {
+            _pickup_morsel(state);
+        }
         return nullptr;
     }
 
-    return _chunk_source->get_next_chunk();
+    return _chunk_source->get_next_chunk_from_cache();
 }
 
-void ScanOperator::_start_scan() {
+void ScanOperator::_trigger_next_scan() {
     PriorityThreadPool::Task task;
 
     auto chunk_source = _chunk_source;
     task.work_function = [chunk_source, this]() {
         _is_io_task_active.store(true, std::memory_order_release);
-        while (chunk_source->has_next_chunk()) {
-            chunk_source->cache_next_chunk_blocking();
-        }
+        chunk_source->cache_next_batch_chunks_blocking(_batch_size);
         _is_io_task_active.store(false, std::memory_order_release);
     };
     // TODO(by satanson): set a proper priority
@@ -113,7 +123,7 @@ void ScanOperator::_pickup_morsel(RuntimeState* state) {
                 std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs, _runtime_profile.get(), _runtime_filters,
                 _olap_scan_node.key_column_name, _olap_scan_node.is_preaggregation);
         _chunk_source->prepare(state);
-        _start_scan();
+        _trigger_next_scan();
     }
 }
 
