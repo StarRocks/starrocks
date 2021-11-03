@@ -62,7 +62,7 @@ public:
 protected:
     void SetUp() override {}
 
-    void TearDown() override { _tracker.release(_tracker.consumption()); }
+    void TearDown() override {}
 
     template <FieldType type, EncodingTypePB encoding, uint32_t version, bool adaptive = true>
     void test_nullable_data(const vectorized::Column& src, const std::string null_encoding = "0") {
@@ -131,7 +131,7 @@ protected:
             ColumnReaderOptions reader_opts;
             reader_opts.storage_format_version = version;
             reader_opts.block_mgr = block_mgr.get();
-            auto res = ColumnReader::create(&_tracker, reader_opts, &meta, fname);
+            auto res = ColumnReader::create(reader_opts, &meta, fname);
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -344,7 +344,7 @@ protected:
             ColumnReaderOptions reader_opts;
             reader_opts.block_mgr = block_mgr.get();
             reader_opts.storage_format_version = 2;
-            auto res = ColumnReader::create(&_tracker, reader_opts, &meta, fname);
+            auto res = ColumnReader::create(reader_opts, &meta, fname);
             ASSERT_TRUE(res.ok());
             auto reader = std::move(res).value();
 
@@ -500,7 +500,6 @@ protected:
         test_nullable_data<type, BIT_SHUFFLE, 2>(*col, "1");
     }
 
-    MemTracker _tracker;
     MemPool _pool;
 };
 

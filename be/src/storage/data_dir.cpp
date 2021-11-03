@@ -499,9 +499,7 @@ OLAPStatus DataDir::load() {
         }
         RowsetSharedPtr rowset;
         OLAPStatus create_status =
-                RowsetFactory::create_rowset(_tablet_manager->tablet_meta_mem_tracker(), &tablet->tablet_schema(),
-                                             tablet->tablet_path(), rowset_meta, &rowset)
-                                .ok()
+                RowsetFactory::create_rowset(&tablet->tablet_schema(), tablet->tablet_path(), rowset_meta, &rowset).ok()
                         ? OLAP_SUCCESS
                         : OLAP_ERR_OTHER_ERROR;
         if (create_status != OLAP_SUCCESS) {

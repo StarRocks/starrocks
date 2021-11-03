@@ -134,8 +134,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& updates) {
         RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
         CHECK(rowset_meta->init(rowset_meta_data)) << "Corrupted rowset meta";
         RowsetSharedPtr rowset;
-        st = RowsetFactory::create_rowset(_tablet._mem_tracker, &_tablet.tablet_schema(), _tablet.tablet_path(),
-                                          rowset_meta, &rowset);
+        st = RowsetFactory::create_rowset(&_tablet.tablet_schema(), _tablet.tablet_path(), rowset_meta, &rowset);
         if (st.ok()) {
             _pending_commits.emplace(version, rowset);
         } else {
@@ -157,8 +156,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& updates) {
     // them on demand.
     auto rowset_iterate_func = [&](const RowsetMetaSharedPtr& rowset_meta) -> bool {
         RowsetSharedPtr rowset;
-        st = RowsetFactory::create_rowset(_tablet._mem_tracker, &_tablet.tablet_schema(), _tablet.tablet_path(),
-                                          rowset_meta, &rowset);
+        st = RowsetFactory::create_rowset(&_tablet.tablet_schema(), _tablet.tablet_path(), rowset_meta, &rowset);
         if (st.ok()) {
             _rowsets[rowset_meta->get_rowset_seg_id()] = std::move(rowset);
         } else {
@@ -690,7 +688,6 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             << " rowset:" << rowset_id;
     RowsetSharedPtr rowset = _get_rowset(rowset_id);
     auto manager = StorageEngine::instance()->update_manager();
-    auto mem_tracker = manager->mem_tracker();
     // 1. load index
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
     index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
@@ -732,12 +729,6 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         if (upserts[i] != nullptr) {
             index.upsert(rowset_id + i, 0, *upserts[i], &new_deletes);
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
-            if (mem_tracker->limit_exceeded()) {
-                // TODO: handle this
-                LOG(WARNING) << "apply_rowset_commit memory limit exceeded tablet:" << _tablet.tablet_id()
-                             << " rowset:" << rowset_id << " seg:" << i << " index:" << index.memory_info()
-                             << " total:" << manager->memory_stats();
-            }
         }
     }
     for (const auto& one_delete : state.deletes()) {
@@ -1931,8 +1922,8 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
             if (rowset_meta->tablet_id() != _tablet.tablet_id()) {
                 return Status::InternalError("mismatched tablet id");
             }
-            RETURN_IF_ERROR(RowsetFactory::create_rowset(_tablet.mem_tracker(), &_tablet.tablet_schema(),
-                                                         _tablet.tablet_path(), rowset_meta, &rowset));
+            RETURN_IF_ERROR(RowsetFactory::create_rowset(&_tablet.tablet_schema(), _tablet.tablet_path(), rowset_meta,
+                                                         &rowset));
             if (rowset->start_version() != rowset->end_version()) {
                 return Status::InternalError("mismatched start and end version");
             }
@@ -1994,8 +1985,8 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
                     std::max<uint32_t>(new_next_rowset_id, new_id + std::max(1L, rowset_meta_pb.num_segments()));
             rowset_meta->set_rowset_seg_id(new_id);
             RowsetSharedPtr* rowset = &new_rowsets[new_id];
-            RETURN_IF_ERROR(RowsetFactory::create_rowset(_tablet._mem_tracker, &_tablet.tablet_schema(),
-                                                         _tablet.tablet_path(), rowset_meta, rowset));
+            RETURN_IF_ERROR(
+                    RowsetFactory::create_rowset(&_tablet.tablet_schema(), _tablet.tablet_path(), rowset_meta, rowset));
             VLOG(2) << "add a new rowset " << tablet_id << "@" << new_id << "@" << rowset_meta->rowset_id();
         }
 

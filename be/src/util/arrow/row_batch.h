@@ -61,7 +61,7 @@ Status convert_to_arrow_batch(const RowBatch& batch, const std::shared_ptr<arrow
 // Convert an Arrow RecordBatch to a StarRocks RowBatch. A valid RowDescriptor
 // whose schema is the same with RecordBatch's should be given. Memory used
 // by result RowBatch will be tracked by tracker.
-Status convert_to_row_batch(const arrow::RecordBatch& batch, const RowDescriptor& row_desc, MemTracker* tracker,
+Status convert_to_row_batch(const arrow::RecordBatch& batch, const RowDescriptor& row_desc,
                             std::shared_ptr<RowBatch>* result);
 
 Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::string* result);
