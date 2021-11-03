@@ -22,25 +22,26 @@ namespace starrocks::pipeline {
 class ExceptProbeSinkOperator final : public Operator {
 public:
     ExceptProbeSinkOperator(int32_t id, int32_t plan_node_id, std::shared_ptr<ExceptContext> except_ctx,
-                            const std::vector<ExprContext*>& dst_exprs)
+                            const std::vector<ExprContext*>& dst_exprs, const int32_t dependency_index)
             : Operator(id, "except_erase_sink", plan_node_id),
               _except_ctx(std::move(except_ctx)),
-              _dst_exprs(dst_exprs) {}
+              _dst_exprs(dst_exprs),
+              _dependency_index(dependency_index) {}
 
     bool need_input() const override {
-        return _except_ctx->is_build_ht_finished() && !(_is_finished || _except_ctx->is_ht_empty());
+        return _except_ctx->is_dependency_finished(_dependency_index) && !(_is_finished || _except_ctx->is_ht_empty());
     }
 
     bool has_output() const override { return false; }
 
     bool is_finished() const override {
-        return _except_ctx->is_build_ht_finished() && (_is_finished || _except_ctx->is_ht_empty());
+        return _except_ctx->is_dependency_finished(_dependency_index) && (_is_finished || _except_ctx->is_ht_empty());
     }
 
     void finish(RuntimeState* state) override {
         if (!_is_finished) {
             _is_finished = true;
-            _except_ctx->finish_one_erase_driver();
+            _except_ctx->finish_probe_ht();
         }
     }
 
@@ -54,21 +55,23 @@ private:
     const std::vector<ExprContext*>& _dst_exprs;
 
     bool _is_finished = false;
+    const int32_t _dependency_index;
 };
 
 class ExceptProbeSinkOperatorFactory final : public OperatorFactory {
 public:
     ExceptProbeSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                                    ExceptPartitionContextFactoryPtr except_partition_ctx_factory,
-                                   const std::vector<ExprContext*>& dst_exprs)
+                                   const std::vector<ExprContext*>& dst_exprs, const int32_t dependency_index)
             : OperatorFactory(id, "except_erase_sink", plan_node_id),
               _except_partition_ctx_factory(std::move(except_partition_ctx_factory)),
-              _dst_exprs(dst_exprs) {}
+              _dst_exprs(dst_exprs),
+              _dependency_index(dependency_index) {}
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         ExceptContextPtr except_ctx = _except_partition_ctx_factory->get_or_create(driver_sequence);
-        except_ctx->create_one_erase_driver();
-        return std::make_shared<ExceptProbeSinkOperator>(_id, _plan_node_id, std::move(except_ctx), _dst_exprs);
+        return std::make_shared<ExceptProbeSinkOperator>(_id, _plan_node_id, std::move(except_ctx), _dst_exprs,
+                                                         _dependency_index);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -79,6 +82,7 @@ private:
     ExceptPartitionContextFactoryPtr _except_partition_ctx_factory;
 
     const std::vector<ExprContext*>& _dst_exprs;
+    const int32_t _dependency_index;
 };
 
 } // namespace starrocks::pipeline

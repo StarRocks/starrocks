@@ -229,14 +229,14 @@ pipeline::OpFactories ExceptNode::decompose_to_pipeline(pipeline::PipelineBuilde
         operators_with_except_erase_sink = context->maybe_interpolate_local_shuffle_exchange(
                 operators_with_except_erase_sink, _child_expr_lists[i]);
         operators_with_except_erase_sink.emplace_back(std::make_shared<pipeline::ExceptProbeSinkOperatorFactory>(
-                context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[i]));
+                context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[i], i - 1));
         context->add_pipeline(operators_with_except_erase_sink);
     }
 
     // ExceptOutputSourceOperator is used to assemble the undeleted keys to output chunks.
     pipeline::OpFactories operators_with_except_output_source;
     auto except_output_source = std::make_shared<pipeline::ExceptOutputSourceOperatorFactory>(
-            context->next_operator_id(), id(), except_partition_ctx_factory);
+            context->next_operator_id(), id(), except_partition_ctx_factory, _children.size() - 1);
     except_output_source->set_degree_of_parallelism(context->degree_of_parallelism());
     operators_with_except_output_source.emplace_back(std::move(except_output_source));
 

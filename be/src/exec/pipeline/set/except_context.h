@@ -28,39 +28,31 @@ class ExceptContext {
 public:
     explicit ExceptContext(const int dst_tuple_id) : _dst_tuple_id(dst_tuple_id) {}
 
-    /// The following methods are for Build phase.
-    Status prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs);
+    bool is_ht_empty() const { return _hash_set->empty(); }
 
     void finish_build_ht() {
         _next_processed_iter = _hash_set->begin();
-        _is_build_finished.store(true, std::memory_order_release);
+        _finished_dependency_index.fetch_add(1, std::memory_order_release);
     }
 
-    bool is_build_ht_finished() const { return _is_build_finished.load(std::memory_order_acquire); }
+    void finish_probe_ht() { _finished_dependency_index.fetch_add(1, std::memory_order_release); }
 
-    bool is_ht_empty() const { return _hash_set->empty(); }
+    bool is_dependency_finished(const int32_t dependency_index) const {
+        return _finished_dependency_index.load(std::memory_order_acquire) == dependency_index;
+    }
+
+    bool is_output_finished() const { return _next_processed_iter == _hash_set->end(); }
+
+    Status prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs);
+
+    Status close(RuntimeState* state);
 
     Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& dst_exprs);
-
-    /// The following methods are for Erase phase.
-    void finish_one_erase_driver() { _finished_erase_drivers_num.fetch_add(1, std::memory_order_release); }
-
-    // Used when creating drivers by FragmentExecutor::prepare().
-    void create_one_erase_driver() { _erase_drivers_num++; }
-
-    bool is_erase_ht_finished() {
-        return _finished_erase_drivers_num.load(std::memory_order_acquire) == _erase_drivers_num;
-    }
 
     Status erase_chunk_from_ht(RuntimeState* state, const ChunkPtr& chunk,
                                const std::vector<ExprContext*>& child_exprs);
 
-    /// The following methods are for Output Phase.
-    bool is_output_finished() const { return _next_processed_iter == _hash_set->end(); }
-
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state);
-
-    Status close(RuntimeState* state);
 
 private:
     std::unique_ptr<vectorized::ExceptHashSerializeSet> _hash_set =
@@ -83,18 +75,12 @@ private:
     // Init when the hash set is finished building in finish_build_ht().
     vectorized::ExceptHashSerializeSet::Iterator _next_processed_iter;
 
-    // Async between the ExceptBuildSinkOperator threads and the ExceptProbeSinkOperator threads.
-    std::atomic<bool> _is_build_finished{false};
-
-    // Async between the ExceptProbeSinkOperator (PROBE) threads and the ExceptEraseSourceOperator (SOURCE) thread.
-    // If SOURCE sees _finished_erase_drivers_num is equal to _erase_drivers_num, which means SOURCE sees every
-    // increment of _finished_erase_drivers_num in finish_one_erase_driver() called by PROBE, then it is certain
-    // to see all the erasing operations on hash set by PROBE, which happen before calling finish_one_erase_driver().
-    std::atomic<int32_t> _finished_erase_drivers_num{0};
-    // _erase_drivers_num is increased when creating drivers by FragmentExecutor::prepare() before appending them to
-    // driver_queue, and read by the dispatcher thread after taking them from driver_queue. Therefore, it is guaranteed
-    // by driver_queue that the dispatcher thread can see every increment of _erase_drivers_num by FragmentExecutor::prepare().
-    int32_t _erase_drivers_num = 0;
+    // The BUILD, PROBES, and OUTPUT operators execute sequentially.
+    // BUILD -> 1-th PROBE -> 2-th PROBE -> ... -> n-th PROBE -> OUTPUT.
+    // _finished_dependency_index will increase by one when a BUILD or PROBE is finished.
+    // i-th PROBE must wait for _finished_dependency_index becoming i-1,
+    // and OUTPUT must wait for _finished_dependency_index becoming n.
+    std::atomic<int32_t> _finished_dependency_index{-1};
 };
 
 // The input chunks of BUILD and PROBE are shuffled by the local shuffle operator.

@@ -22,15 +22,18 @@ namespace starrocks::pipeline {
 // are both DOP. And each pair of BUILD/PROBE/OUTPUT drivers shares a same except partition context.
 class ExceptOutputSourceOperator final : public SourceOperator {
 public:
-    ExceptOutputSourceOperator(int32_t id, int32_t plan_node_id, std::shared_ptr<ExceptContext> except_ctx)
-            : SourceOperator(id, "except_output_source", plan_node_id), _except_ctx(std::move(except_ctx)) {}
+    ExceptOutputSourceOperator(int32_t id, int32_t plan_node_id, std::shared_ptr<ExceptContext> except_ctx,
+                               const int32_t dependency_index)
+            : SourceOperator(id, "except_output_source", plan_node_id),
+              _except_ctx(std::move(except_ctx)),
+              _dependency_index(dependency_index) {}
 
     bool has_output() const override {
-        return _except_ctx->is_erase_ht_finished() && !_except_ctx->is_output_finished();
+        return _except_ctx->is_dependency_finished(_dependency_index) && !_except_ctx->is_output_finished();
     }
 
     bool is_finished() const override {
-        return _except_ctx->is_erase_ht_finished() && _except_ctx->is_output_finished();
+        return _except_ctx->is_dependency_finished(_dependency_index) && _except_ctx->is_output_finished();
     }
 
     // Finish is noop.
@@ -42,24 +45,28 @@ public:
 
 private:
     std::shared_ptr<ExceptContext> _except_ctx;
+    const int32_t _dependency_index;
 };
 
 class ExceptOutputSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     ExceptOutputSourceOperatorFactory(int32_t id, int32_t plan_node_id,
-                                      ExceptPartitionContextFactoryPtr except_partition_ctx_factory)
+                                      ExceptPartitionContextFactoryPtr except_partition_ctx_factory,
+                                      const int32_t dependency_index)
             : SourceOperatorFactory(id, "except_output_source", plan_node_id),
-              _except_partition_ctx_factory(std::move(except_partition_ctx_factory)) {}
+              _except_partition_ctx_factory(std::move(except_partition_ctx_factory)),
+              _dependency_index(dependency_index) {}
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<ExceptOutputSourceOperator>(
-                _id, _plan_node_id, _except_partition_ctx_factory->get_or_create(driver_sequence));
+                _id, _plan_node_id, _except_partition_ctx_factory->get_or_create(driver_sequence), _dependency_index);
     }
 
     void close(RuntimeState* state) override;
 
 private:
     ExceptPartitionContextFactoryPtr _except_partition_ctx_factory;
+    const int32_t _dependency_index;
 };
 
 } // namespace starrocks::pipeline
