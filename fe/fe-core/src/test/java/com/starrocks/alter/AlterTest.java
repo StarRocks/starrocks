@@ -1020,7 +1020,7 @@ public class AlterTest {
         Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
                 .getTable("test_partition_exists");
 
-        Assert.assertEquals(2, ((OlapTable) table).getPartitions().size());
+        Assert.assertEquals(3, ((OlapTable) table).getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
@@ -1065,7 +1065,7 @@ public class AlterTest {
         Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
                 .getTable("test_partition_exists2");
 
-        Assert.assertEquals(2, ((OlapTable) table).getPartitions().size());
+        Assert.assertEquals(3, ((OlapTable) table).getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists2";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
