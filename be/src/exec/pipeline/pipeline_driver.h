@@ -34,6 +34,10 @@ enum DriverState : uint32_t {
     FINISH = 6,
     CANCELED = 7,
     INTERNAL_ERROR = 8,
+    // PENDING_FINISH means a driver's SinkOperator has finished, but its SourceOperator still have a pending
+    // io task executed by io threads synchronously, a driver turns to FINISH from PENDING_FINISH after the
+    // pending io task's completion.
+    PENDING_FINISH = 9,
 };
 
 static inline std::string ds_to_string(DriverState ds) {
@@ -56,6 +60,8 @@ static inline std::string ds_to_string(DriverState ds) {
         return "CANCELED";
     case INTERNAL_ERROR:
         return "INTERNAL_ERROR";
+    case PENDING_FINISH:
+        return "PENDING_FINISH";
     }
     DCHECK(false);
     return "UNKNOWN_STATE";
@@ -137,6 +143,7 @@ public:
         return _state == DriverState::FINISH || _state == DriverState::CANCELED ||
                _state == DriverState::INTERNAL_ERROR;
     }
+    bool pending_finish() { return _state == DriverState::PENDING_FINISH; }
     // return false if all the dependencies are ready, otherwise return true.
     bool dependencies_block() {
         if (_all_dependencies_ready) {

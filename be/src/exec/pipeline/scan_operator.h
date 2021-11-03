@@ -32,6 +32,8 @@ public:
 
     bool has_output() const override;
 
+    bool pending_finish() override;
+
     bool is_finished() const override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;

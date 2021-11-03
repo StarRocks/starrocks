@@ -58,6 +58,12 @@ bool ScanOperator::has_output() const {
     return true;
 }
 
+bool ScanOperator::pending_finish() {
+    // TODO(hcf) remove pending_finish next pull request
+    DCHECK(_is_finished);
+    return false;
+}
+
 bool ScanOperator::is_finished() const {
     if (_is_finished) {
         return true;

@@ -122,7 +122,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
 
         if (sink_operator()->is_finished()) {
             finish_operators(runtime_state);
-            _state = DriverState::FINISH;
+            _state = source_operator()->pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH;
             return _state;
         }
 
@@ -209,7 +209,13 @@ std::string PipelineDriver::to_readable_string() const {
 bool PipelineDriver::_check_fragment_is_canceled(RuntimeState* runtime_state) {
     if (_fragment_ctx->is_canceled()) {
         finish_operators(runtime_state);
-        _state = _fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED;
+        // If the fragment is cancelled after the source operator commits an i/o task to i/o threads,
+        // the driver cannot be finished immediately and should wait for the completion of the pending i/o task.
+        if (source_operator()->pending_finish()) {
+            _state = DriverState::PENDING_FINISH;
+        } else {
+            _state = _fragment_ctx->final_status().ok() ? DriverState::FINISH : DriverState::CANCELED;
+        }
         return true;
     }
     return false;
