@@ -354,10 +354,6 @@ Status ExecNode::close(RuntimeState* state) {
     Expr::close(_conjunct_ctxs, state);
     _runtime_filter_collector.close(state);
 
-    if (_mem_tracker != nullptr) {
-        _mem_tracker->close();
-    }
-
     return result;
 }
 
