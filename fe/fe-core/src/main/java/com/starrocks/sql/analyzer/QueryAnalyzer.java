@@ -250,10 +250,12 @@ public class QueryAnalyzer {
 
         if (stmt.hasLimitClause()) {
             if (stmt.getOffset() > 0 && orderByElements.isEmpty()) {
-                throw new SemanticException("OFFSET requires an ORDER BY clause: LIMIT {}, {}", stmt.getOffset(),
-                        stmt.getLimit());
+                // The offset can only be processed in sort,
+                // so when there is no order by, we manually set offset to 0
+                analyzeState.setLimit(new LimitElement(0, stmt.getLimit()));
+            } else {
+                analyzeState.setLimit(new LimitElement(stmt.getOffset(), stmt.getLimit()));
             }
-            analyzeState.setLimit(new LimitElement(stmt.getOffset(), stmt.getLimit()));
         }
 
         return analyzeState.build();
