@@ -12,8 +12,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/vectorized/olap_scan_node.h"
-#include "runtime/current_mem_tracker.h"
-#include "storage/field.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/predicate_parser.h"
@@ -227,20 +225,16 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
         }
 
         if (!_predicates.empty()) {
-            int64_t old_mem_usage = chunk->memory_usage();
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
             _predicates.evaluate(chunk, _selection.data(), 0, nrows);
             chunk->filter(_selection);
-            CurrentMemTracker::consume((int64_t)chunk->memory_usage() - old_mem_usage);
             DCHECK_CHUNK(chunk);
         }
         if (!_conjunct_ctxs.empty()) {
-            int64_t old_mem_usage = chunk->memory_usage();
             SCOPED_TIMER(_expr_filter_timer);
             ExecNode::eval_conjuncts(_conjunct_ctxs, chunk);
-            CurrentMemTracker::consume((int64_t)chunk->memory_usage() - old_mem_usage);
             DCHECK_CHUNK(chunk);
         }
     } while (chunk->num_rows() == 0);
