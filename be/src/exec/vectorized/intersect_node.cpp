@@ -50,6 +50,7 @@ Status IntersectNode::prepare(RuntimeState* state) {
     for (int i = 0; i < size_column_type; ++i) {
         _types[i].result_type = _tuple_desc->slots()[i]->type();
         _types[i].is_constant = _child_expr_lists[0][i]->root()->is_constant();
+        _types[i].is_nullable = _child_expr_lists[0][i]->root()->is_nullable();
     }
 
     return Status::OK();
@@ -77,7 +78,7 @@ Status IntersectNode::open(RuntimeState* state) {
     }
 
     // initial build hash table used for record hitting.
-    _hash_set = std::make_unique<HashSerializeSet>();
+    _hash_set = std::make_unique<IntersectHashSerializeSet>();
 
     ChunkPtr chunk = nullptr;
     RETURN_IF_ERROR(child(0)->open(state));
@@ -88,9 +89,7 @@ Status IntersectNode::open(RuntimeState* state) {
     if (!eos) {
         ScopedTimer<MonotonicStopWatch> build_timer(_build_set_timer);
         std::vector<IntersectColumnTypes>* types = &_types;
-        RETURN_IF_ERROR(_hash_set->build_set(
-                state, chunk, _child_expr_lists[0], _build_pool.get(),
-                [=](const ColumnPtr& column, int i) -> void { (*types)[i].is_nullable = column->is_nullable(); }));
+        RETURN_IF_ERROR(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get()));
         while (true) {
             RETURN_IF_CANCELLED(state);
             build_timer.stop();
@@ -103,13 +102,12 @@ Status IntersectNode::open(RuntimeState* state) {
             if (chunk->num_rows() == 0) {
                 continue;
             }
-            RETURN_IF_ERROR(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get(),
-                                                 [](const ColumnPtr& column, int i) -> void {}));
+            RETURN_IF_ERROR(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get()));
         }
     }
 
     // if a table is empty, the result must be empty
-    if (_hash_set->hash_set->empty()) {
+    if (_hash_set->empty()) {
         _hash_set_iterator = _hash_set->begin();
         return Status::OK();
     }
@@ -133,7 +131,7 @@ Status IntersectNode::open(RuntimeState* state) {
         }
 
         // if a table is empty, the result must be empty
-        if (_hash_set->hash_set->empty()) {
+        if (_hash_set->empty()) {
             _hash_set_iterator = _hash_set->begin();
             return Status::OK();
         }
@@ -159,10 +157,10 @@ Status IntersectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
     }
 
     int32_t read_index = 0;
-    _hash_set->_results.resize(config::vector_chunk_size);
+    _remained_keys.resize(config::vector_chunk_size);
     while (_hash_set_iterator != _hash_set->end() && read_index < config::vector_chunk_size) {
         if (_hash_set_iterator->hit_times == _intersect_times) {
-            _hash_set->_results[read_index] = _hash_set_iterator->slice;
+            _remained_keys[read_index] = _hash_set_iterator->slice;
             ++read_index;
         }
         ++_hash_set_iterator;
@@ -179,7 +177,7 @@ Status IntersectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
 
         {
             SCOPED_TIMER(_get_result_timer);
-            _hash_set->insert_keys_to_columns(_hash_set->_results, result_columns, read_index);
+            _hash_set->deserialize_to_columns(_remained_keys, result_columns, read_index);
         }
 
         for (size_t i = 0; i < result_columns.size(); i++) {

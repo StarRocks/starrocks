@@ -87,6 +87,7 @@ set(EXEC_FILES
     vectorized/parquet_reader.cpp
     vectorized/file_scan_node.cpp
     vectorized/assert_num_rows_node.cpp
+    vectorized/intersect_hash_set.cpp
     vectorized/intersect_node.cpp
     vectorized/hdfs_scanner.cpp
     vectorized/hdfs_scanner_orc.cpp
