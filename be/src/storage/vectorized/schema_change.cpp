@@ -1168,7 +1168,6 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         TabletSharedPtr new_tablet = sc_params.new_tablet;
         TabletSharedPtr base_tablet = sc_params.base_tablet;
         RowsetWriterContext writer_context(kDataFormatUnknown, config::storage_format_version);
-        writer_context.mem_tracker = ExecEnv::GetInstance()->schema_change_mem_tracker();
         writer_context.rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.tablet_uid = new_tablet->tablet_uid();
         writer_context.tablet_id = new_tablet->tablet_id();
