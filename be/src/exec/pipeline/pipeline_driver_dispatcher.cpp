@@ -37,7 +37,6 @@ void GlobalDriverDispatcher::finalize_driver(DriverRawPtr driver, RuntimeState* 
     driver->finalize(runtime_state, state);
     if (driver->query_ctx()->is_finished()) {
         auto query_id = driver->query_ctx()->query_id();
-        DCHECK(!driver->source_operator()->pending_finish());
         QueryContextManager::instance()->remove(query_id);
     }
 }
@@ -64,12 +63,7 @@ void GlobalDriverDispatcher::run() {
             VLOG_ROW << "[Driver] Canceled: driver=" << driver
                      << ", error=" << fragment_ctx->final_status().to_string();
             driver->finish_operators(runtime_state);
-            if (driver->source_operator()->pending_finish()) {
-                driver->set_driver_state(DriverState::PENDING_FINISH);
-                _blocked_driver_poller->add_blocked_driver(driver);
-            } else {
-                finalize_driver(driver, runtime_state, DriverState::CANCELED);
-            }
+            finalize_driver(driver, runtime_state, DriverState::CANCELED);
             continue;
         }
         // a blocked driver is canceled because of fragment cancellation or query expiration.
@@ -87,12 +81,7 @@ void GlobalDriverDispatcher::run() {
             VLOG_ROW << "[Driver] Process error: error=" << status.status().to_string();
             query_ctx->cancel(status.status());
             driver->finish_operators(runtime_state);
-            if (driver->source_operator()->pending_finish()) {
-                driver->set_driver_state(DriverState::PENDING_FINISH);
-                _blocked_driver_poller->add_blocked_driver(driver);
-            } else {
-                finalize_driver(driver, runtime_state, DriverState::INTERNAL_ERROR);
-            }
+            finalize_driver(driver, runtime_state, DriverState::INTERNAL_ERROR);
             continue;
         }
         auto driver_state = status.value();
@@ -115,7 +104,6 @@ void GlobalDriverDispatcher::run() {
         }
         case INPUT_EMPTY:
         case OUTPUT_FULL:
-        case PENDING_FINISH:
         case DEPENDENCIES_BLOCK: {
             VLOG_ROW << strings::Substitute("[Driver] Blocked, source=$0, state=$1",
                                             driver->source_operator()->get_name(), ds_to_string(driver_state));
