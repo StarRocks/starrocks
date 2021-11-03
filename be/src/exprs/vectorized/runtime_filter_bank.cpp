@@ -136,7 +136,8 @@ ExprContext* RuntimeFilterHelper::create_runtime_in_filter(RuntimeState* state, 
     }
 }
 
-Status RuntimeFilterHelper::fill_runtime_in_filter(const ColumnPtr& column, Expr* probe_expr, ExprContext* filter) {
+Status RuntimeFilterHelper::fill_runtime_in_filter(const ColumnPtr& column, Expr* probe_expr, ExprContext* filter,
+                                                   size_t column_offset) {
     PrimitiveType type = probe_expr->type().type;
     Expr* expr = filter->root();
 
@@ -148,7 +149,7 @@ Status RuntimeFilterHelper::fill_runtime_in_filter(const ColumnPtr& column, Expr
         using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;        \
         auto* in_pre = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);               \
         auto& data_ptr = ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); \
-        for (size_t j = 1; j < data_ptr.size(); j++) {                                \
+        for (size_t j = column_offset; j < data_ptr.size(); j++) {                    \
             in_pre->insert(&data_ptr[j]);                                             \
         }                                                                             \
         break;                                                                        \
@@ -165,7 +166,7 @@ Status RuntimeFilterHelper::fill_runtime_in_filter(const ColumnPtr& column, Expr
         auto* in_pre = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);                                         \
         auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);                            \
         auto& data_array = ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_data(); \
-        for (size_t j = 1; j < data_array.size(); j++) {                                                        \
+        for (size_t j = column_offset; j < data_array.size(); j++) {                                            \
             if (!nullable_column->is_null(j)) {                                                                 \
                 in_pre->insert(&data_array[j]);                                                                 \
             } else {                                                                                            \
@@ -188,7 +189,7 @@ JoinRuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* 
 }
 
 Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, PrimitiveType type,
-                                                      JoinRuntimeFilter* filter) {
+                                                      JoinRuntimeFilter* filter, size_t column_offset) {
     JoinRuntimeFilter* expr = filter;
     if (!column->is_nullable()) {
         switch (type) {
@@ -197,7 +198,7 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, P
         using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;        \
         auto* filter = (RuntimeBloomFilter<PrimitiveType::FIELD_TYPE>*)(expr);        \
         auto& data_ptr = ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); \
-        for (size_t j = 1; j < data_ptr.size(); j++) {                                \
+        for (size_t j = column_offset; j < data_ptr.size(); j++) {                    \
             filter->insert(&data_ptr[j]);                                             \
         }                                                                             \
         break;                                                                        \
@@ -214,7 +215,7 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, P
         auto* filter = (RuntimeBloomFilter<PrimitiveType::FIELD_TYPE>*)(expr);                                  \
         auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);                            \
         auto& data_array = ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_data(); \
-        for (size_t j = 1; j < data_array.size(); j++) {                                                        \
+        for (size_t j = column_offset; j < data_array.size(); j++) {                                            \
             if (!nullable_column->is_null(j)) {                                                                 \
                 filter->insert(&data_array[j]);                                                                 \
             } else {                                                                                            \

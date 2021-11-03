@@ -332,7 +332,7 @@ bool ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool, const Co
     // probe_expr will be copied into filter, so we don't need to allocate it.
     ExprContext* filter =
             RuntimeFilterHelper::create_runtime_in_filter(state, pool, probe_expr, eq_null, null_in_set, is_not_in);
-    Status st = RuntimeFilterHelper::fill_runtime_in_filter(used_values, probe_expr, filter);
+    Status st = RuntimeFilterHelper::fill_runtime_in_filter(used_values, probe_expr, filter, 0);
     DCHECK(st.ok());
 
     RowDescriptor row_desc; // I think we don't need to use it at all.
