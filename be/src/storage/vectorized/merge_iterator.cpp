@@ -9,8 +9,6 @@
 #include "boost/heap/skew_heap.hpp"
 #include "column/chunk.h"
 #include "common/config.h"
-#include "common/status.h"
-#include "runtime/current_mem_tracker.h"
 #include "storage/iterators.h" // StorageReadOptions
 #include "storage/vectorized/chunk_helper.h"
 
@@ -127,7 +125,6 @@ inline Status HeapMergeIterator::_init() {
     DCHECK_EQ(_children.size(), _chunk_pool.size());
     for (size_t i = 0; i < _children.size(); i++) {
         _chunk_pool[i] = ChunkHelper::new_chunk(_schema, _chunk_size);
-        CurrentMemTracker::consume(_chunk_pool[i]->memory_usage());
         RETURN_IF_ERROR(_fill_heap(i));
     }
     _inited = true;
@@ -172,7 +169,6 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk) {
             }
         }
     }
-    CurrentMemTracker::consume(static_cast<int64_t>(chunk->memory_usage()) - static_cast<int64_t>(prev_mem_usage));
     if (!st.ok()) {
         return st;
     } else if (rows > 0) {
@@ -185,9 +181,7 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk) {
 inline Status HeapMergeIterator::_fill_heap(size_t child) {
     Chunk* chunk = _chunk_pool[child].get();
 
-    CurrentMemTracker::release(chunk->memory_usage());
     chunk->reset();
-    CurrentMemTracker::consume(chunk->memory_usage());
 
     Status st = _children[child]->get_next(chunk);
     if (st.ok()) {
@@ -207,7 +201,6 @@ inline void HeapMergeIterator::_close_child(size_t child) {
     if (_chunk_pool[child] == nullptr) {
         return;
     }
-    CurrentMemTracker::release(_chunk_pool[child]->memory_usage());
     _chunk_pool[child].reset();
     _merged_rows += _children[child]->merged_rows();
     _children[child]->close();
