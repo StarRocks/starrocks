@@ -51,24 +51,20 @@
 
 namespace starrocks::segment_v2 {
 
-StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(MemTracker* mem_tracker, const ColumnReaderOptions& opts,
-                                                             ColumnMetaPB* meta, const std::string& file_name) {
-    auto r = std::make_unique<ColumnReader>(private_type(0), mem_tracker, opts, file_name);
+StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(const ColumnReaderOptions& opts, ColumnMetaPB* meta,
+                                                             const std::string& file_name) {
+    auto r = std::make_unique<ColumnReader>(private_type(0), opts, file_name);
     RETURN_IF_ERROR(r->_init(meta));
     return std::move(r);
 }
 
-ColumnReader::ColumnReader(const private_type&, MemTracker* mem_tracker, const ColumnReaderOptions& opts,
-                           const std::string& file_name)
-        : _mem_tracker(mem_tracker),
-          _opts(opts),
+ColumnReader::ColumnReader(const private_type&, const ColumnReaderOptions& opts, const std::string& file_name)
+        : _opts(opts),
           _file_name(file_name),
           _zone_map_index(),
           _ordinal_index(),
           _bitmap_index(),
-          _bloom_filter_index() {
-    _mem_tracker->consume(sizeof(ColumnReader));
-}
+          _bloom_filter_index() {}
 
 ColumnReader::~ColumnReader() {
     delete (_flags[kHasOrdinalIndexMetaPos] ? _ordinal_index.meta : nullptr);
@@ -135,21 +131,21 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             _sub_readers->reserve(3);
 
             // elements
-            auto res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(0), _file_name);
+            auto res = ColumnReader::create(_opts, meta->mutable_children_columns(0), _file_name);
             if (!res.ok()) {
                 return res.status();
             }
             _sub_readers->emplace_back(std::move(res).value());
 
             // null flags
-            res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(1), _file_name);
+            res = ColumnReader::create(_opts, meta->mutable_children_columns(1), _file_name);
             if (!res.ok()) {
                 return res.status();
             }
             _sub_readers->emplace_back(std::move(res).value());
 
             // offsets
-            res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(2), _file_name);
+            res = ColumnReader::create(_opts, meta->mutable_children_columns(2), _file_name);
             if (!res.ok()) {
                 return res.status();
             }
@@ -161,14 +157,14 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             _sub_readers->reserve(2);
 
             // elements
-            auto res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(0), _file_name);
+            auto res = ColumnReader::create(_opts, meta->mutable_children_columns(0), _file_name);
             if (!res.ok()) {
                 return res.status();
             }
             _sub_readers->emplace_back(std::move(res).value());
 
             // offsets
-            res = ColumnReader::create(_mem_tracker, _opts, meta->mutable_children_columns(1), _file_name);
+            res = ColumnReader::create(_opts, meta->mutable_children_columns(1), _file_name);
             if (!res.ok()) {
                 return res.status();
             }
@@ -387,7 +383,6 @@ Status ColumnReader::_load_ordinal_index(bool use_page_cache, bool kept_in_memor
         delete index_meta;
         _flags.set(kHasOrdinalIndexMetaPos, false);
         _flags.set(kHasOrdinalIndexReaderPos, true);
-        _mem_tracker->consume(static_cast<int64_t>(_ordinal_index.reader->mem_usage()));
     }
     return st;
 }
@@ -401,7 +396,6 @@ Status ColumnReader::_load_zone_map_index(bool use_page_cache, bool kept_in_memo
         delete index_meta;
         _flags.set(kHasZoneMapIndexMetaPos, false);
         _flags.set(kHasZoneMapIndexReaderPos, true);
-        _mem_tracker->consume(static_cast<int64_t>(_zone_map_index.reader->mem_usage()));
     }
     return st;
 }
@@ -415,7 +409,6 @@ Status ColumnReader::_load_bitmap_index(bool use_page_cache, bool kept_in_memory
         delete index_meta;
         _flags.set(kHasBitmapIndexMetaPos, false);
         _flags.set(kHasBitmapIndexReaderPos, true);
-        _mem_tracker->consume(static_cast<int64_t>(_bitmap_index.reader->mem_usage()));
     }
     return st;
 }
@@ -429,7 +422,6 @@ Status ColumnReader::_load_bloom_filter_index(bool use_page_cache, bool kept_in_
         delete index_meta;
         _flags.set(kHasBloomFilterIndexMetaPos, false);
         _flags.set(kHasBloomFilterIndexReaderPos, true);
-        _mem_tracker->consume(static_cast<int64_t>(_bloom_filter_index.reader->mem_usage()));
     }
     return st;
 }

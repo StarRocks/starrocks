@@ -24,7 +24,6 @@
 #include <snappy/snappy.h>
 
 #include <cstdint> // for intptr_t
-#include <memory>
 
 #include "gen_cpp/Data_types.h"
 #include "gen_cpp/data.pb.h"
@@ -37,22 +36,19 @@ using std::vector;
 
 namespace starrocks {
 
-RowBatch::RowBatch(const RowDescriptor& row_desc, int capacity, MemTracker* mem_tracker)
-        : _mem_tracker(mem_tracker),
-          _has_in_flight_row(false),
+RowBatch::RowBatch(const RowDescriptor& row_desc, int capacity)
+        : _has_in_flight_row(false),
           _num_rows(0),
           _capacity(capacity),
           _num_tuples_per_row(row_desc.tuple_descriptors().size()),
           _row_desc(row_desc),
           _need_to_return(false),
           _tuple_data_pool(new MemPool()) {
-    DCHECK(_mem_tracker != nullptr);
     DCHECK_GT(capacity, 0);
     _tuple_ptrs_size = _capacity * _num_tuples_per_row * sizeof(Tuple*);
     DCHECK_GT(_tuple_ptrs_size, 0);
     // TODO: switch to Init() pattern so we can check memory limit and return Status.
     if (config::enable_partitioned_aggregation) {
-        _mem_tracker->consume(_tuple_ptrs_size);
         _tuple_ptrs = reinterpret_cast<Tuple**>(malloc(_tuple_ptrs_size));
         DCHECK(_tuple_ptrs != nullptr);
     } else {
@@ -66,21 +62,18 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, int capacity, MemTracker* mem_
 //              xfer += iprot->readString(this->tuple_data[_i9]);
 // to allocated string data in special mempool
 // (change via python script that runs over Data_types.cc)
-RowBatch::RowBatch(const RowDescriptor& row_desc, const PRowBatch& input_batch, MemTracker* tracker)
-        : _mem_tracker(tracker),
-          _has_in_flight_row(false),
+RowBatch::RowBatch(const RowDescriptor& row_desc, const PRowBatch& input_batch)
+        : _has_in_flight_row(false),
           _num_rows(input_batch.num_rows()),
           _capacity(_num_rows),
           _num_tuples_per_row(input_batch.row_tuples_size()),
           _row_desc(row_desc),
           _need_to_return(false),
           _tuple_data_pool(new MemPool()) {
-    DCHECK(_mem_tracker != nullptr);
     _tuple_ptrs_size = _num_rows * _num_tuples_per_row * sizeof(Tuple*);
     DCHECK_GT(_tuple_ptrs_size, 0);
     // TODO: switch to Init() pattern so we can check memory limit and return Status.
     if (config::enable_partitioned_aggregation) {
-        _mem_tracker->consume(_tuple_ptrs_size);
         _tuple_ptrs = reinterpret_cast<Tuple**>(malloc(_tuple_ptrs_size));
         DCHECK(_tuple_ptrs != nullptr);
     } else {
@@ -158,21 +151,18 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const PRowBatch& input_batch, 
 //              xfer += iprot->readString(this->tuple_data[_i9]);
 // to allocated string data in special mempool
 // (change via python script that runs over Data_types.cc)
-RowBatch::RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch, MemTracker* tracker)
-        : _mem_tracker(tracker),
-          _has_in_flight_row(false),
+RowBatch::RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch)
+        : _has_in_flight_row(false),
           _num_rows(input_batch.num_rows),
           _capacity(_num_rows),
           _num_tuples_per_row(input_batch.row_tuples.size()),
           _row_desc(row_desc),
           _need_to_return(false),
           _tuple_data_pool(new MemPool()) {
-    DCHECK(_mem_tracker != nullptr);
     _tuple_ptrs_size = _num_rows * input_batch.row_tuples.size() * sizeof(Tuple*);
     DCHECK_GT(_tuple_ptrs_size, 0);
     // TODO: switch to Init() pattern so we can check memory limit and return Status.
     if (config::enable_partitioned_aggregation) {
-        _mem_tracker->consume(_tuple_ptrs_size);
         _tuple_ptrs = reinterpret_cast<Tuple**>(malloc(_tuple_ptrs_size));
         DCHECK(_tuple_ptrs != nullptr);
     } else {
@@ -259,7 +249,6 @@ void RowBatch::clear() {
     if (config::enable_partitioned_aggregation) {
         DCHECK(_tuple_ptrs != nullptr);
         free(_tuple_ptrs);
-        _mem_tracker->release(_tuple_ptrs_size);
         _tuple_ptrs = nullptr;
     }
     _cleared = true;

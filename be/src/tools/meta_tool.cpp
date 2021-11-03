@@ -35,7 +35,6 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "json2pb/pb_to_json.h"
-#include "runtime/mem_tracker.h"
 #include "storage/data_dir.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
@@ -109,8 +108,7 @@ std::string get_usage(const std::string& progname) {
 }
 
 void show_meta() {
-    auto mem_tracker = std::make_unique<MemTracker>();
-    TabletMeta tablet_meta(mem_tracker.get());
+    TabletMeta tablet_meta;
     Status s = tablet_meta.create_from_file(FLAGS_pb_meta_path);
     if (!s.ok()) {
         std::cout << "load pb meta file:" << FLAGS_pb_meta_path << " failed"
