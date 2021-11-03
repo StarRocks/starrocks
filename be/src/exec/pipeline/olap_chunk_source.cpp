@@ -264,7 +264,7 @@ Status OlapChunkSource::cache_next_chunk_blocking() {
     if (!_status.ok()) {
         return _status;
     }
-    _chunk_cache.put(std::move(chunk));
+    _chunk_cache.blocking_put(std::move(chunk));
     return _status;
 }
 

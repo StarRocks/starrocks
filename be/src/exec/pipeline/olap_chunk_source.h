@@ -76,7 +76,7 @@ private:
     TInternalScanRange* _scan_range;
 
     Status _status = Status::OK();
-    UnboundedBlockingQueue<vectorized::ChunkPtr> _chunk_cache;
+    BlockingQueue<vectorized::ChunkPtr> _chunk_cache = BlockingQueue<vectorized::ChunkPtr>(128);
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     vectorized::ConjunctivePredicates _not_push_down_predicates;

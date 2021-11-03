@@ -36,17 +36,19 @@ public:
 
     bool is_finished() const override;
 
-    void finish(RuntimeState* state) override;
-
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
 
 private:
+    // This method is only invoked when current morsel is reached eof
+    // and all cached chunk of this morsel has benn read out
     void _pickup_morsel(RuntimeState* state);
     void _start_scan();
 
 private:
-    bool _is_finished = false;
+    mutable bool _is_finished = false;
+    bool _has_next_morsel = true;
+    std::atomic_bool _is_io_task_active = false;
     const TOlapScanNode& _olap_scan_node;
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const vectorized::RuntimeFilterProbeCollector& _runtime_filters;

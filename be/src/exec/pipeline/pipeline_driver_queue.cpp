@@ -17,7 +17,8 @@ void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
         _queues[level % QUEUE_SIZE].queue.emplace(driver);
         if (_is_empty) {
             _is_empty = false;
-            _cv.notify_one();
+            // Notify all workers to avoid starving
+            _cv.notify_all();
         }
     }
 }

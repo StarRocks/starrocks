@@ -40,7 +40,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state) {
         bool should_yield = false;
         size_t num_operators = _operators.size();
         size_t _new_first_unfinished = _first_unfinished;
-        VLOG_ROW << "[Driver] " << to_debug_string() << ", driver=" << this;
+        VLOG_ROW << "[Driver] " << to_readable_string() << ", driver=" << this;
         for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
             {
                 SCOPED_RAW_TIMER(&time_spent);
@@ -192,7 +192,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     }
 }
 
-std::string PipelineDriver::to_debug_string() const {
+std::string PipelineDriver::to_readable_string() const {
     std::stringstream ss;
     ss << "operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {

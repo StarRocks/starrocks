@@ -56,21 +56,26 @@ bool ScanOperator::pending_finish() {
 }
 
 bool ScanOperator::is_finished() const {
+    if (_is_finished) {
+        return true;
+    }
+
+    if (_has_next_morsel) {
+        return false;
+    }
+
+    // If there is no next morsel, and io task is active
+    // we just wait for the io thread to end during which current pipeline
+    // will still be scheduled multiply times, but it can be guarantee that
+    // the waiting time is very short
+    if (!_is_io_task_active.load(std::memory_order_acquire)) {
+        _is_finished = true;
+    }
+
     return _is_finished;
 }
 
-void ScanOperator::finish(RuntimeState* state) {
-    _is_finished = true;
-    if (_chunk_source) {
-        _chunk_source->close(state);
-    }
-}
-
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
-    if (_is_finished) {
-        return Status::EndOfFile("End-Of-Stream");
-    }
-
     // Current morsel is eof, try to pickup another morsel
     if (!_chunk_source->has_output() && !_chunk_source->has_next_chunk()) {
         _pickup_morsel(state);
@@ -84,13 +89,12 @@ void ScanOperator::_start_scan() {
     PriorityThreadPool::Task task;
 
     auto chunk_source = _chunk_source;
-    task.work_function = [chunk_source]() {
-        while (true) {
-            auto status = chunk_source->cache_next_chunk_blocking();
-            if (!status.ok()) {
-                break;
-            }
+    task.work_function = [chunk_source, this]() {
+        _is_io_task_active.store(true, std::memory_order_release);
+        while (chunk_source->has_next_chunk()) {
+            chunk_source->cache_next_chunk_blocking();
         }
+        _is_io_task_active.store(false, std::memory_order_release);
     };
     // TODO(by satanson): set a proper priority
     task.priority = 20;
@@ -107,7 +111,7 @@ void ScanOperator::_pickup_morsel(RuntimeState* state) {
     if (!maybe_morsel.has_value()) {
         // release _chunk_source before _curr_morsel, because _chunk_source depends on _curr_morsel.
         _chunk_source = nullptr;
-        _is_finished = true;
+        _has_next_morsel = false;
     } else {
         auto morsel = std::move(maybe_morsel.value());
         DCHECK(morsel);
