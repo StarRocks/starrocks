@@ -15,11 +15,7 @@ void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
     {
         std::unique_lock<std::mutex> lock(_global_mutex);
         _queues[level % QUEUE_SIZE].queue.emplace(driver);
-        if (_is_empty) {
-            _is_empty = false;
-            // Notify all workers to avoid starving
-            _cv.notify_all();
-        }
+        _cv.notify_one();
     }
 }
 
@@ -53,7 +49,6 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(size_t* queue_index) {
             if (queue_idx >= 0) {
                 break;
             }
-            _is_empty = true;
             _cv.wait(lock);
         }
         // record queue's index to accumulate time for it.
