@@ -26,6 +26,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
 Status ScanOperator::close(RuntimeState* state) {
     state->exec_env()->decrement_num_scan_operators(1);
     if (_chunk_source) {
+        DCHECK(_io_task_state.load(std::memory_order_acquire) == IOTaskState::INACTIVE);
         _chunk_source->close(state);
     }
     Operator::close(state);
@@ -41,13 +42,15 @@ bool ScanOperator::has_output() const {
         return false;
     }
 
+    DCHECK(_chunk_source != nullptr);
+
     // Still have cached chunks
     if (_chunk_source->has_output()) {
         return true;
     }
 
-    // io task is busy caching chunks, so we just wait
-    if (_is_io_task_active.load(std::memory_order_acquire)) {
+    // io task is busy reading chunks, so we just wait
+    if (_io_task_state.load(std::memory_order_acquire) != IOTaskState::INACTIVE) {
         return false;
     }
 
@@ -77,7 +80,7 @@ bool ScanOperator::is_finished() const {
     // we just wait for the io thread to end during which current pipeline
     // will still be scheduled multiply times, but it can be guarantee that
     // the waiting time is very short
-    if (!_is_io_task_active.load(std::memory_order_acquire)) {
+    if (_io_task_state.load(std::memory_order_acquire) == IOTaskState::INACTIVE) {
         _is_finished = true;
     }
 
@@ -85,6 +88,7 @@ bool ScanOperator::is_finished() const {
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
+    DCHECK(_chunk_source != nullptr);
     if (!_chunk_source->has_output()) {
         if (_chunk_source->has_next_chunk()) {
             _trigger_next_scan();
@@ -98,13 +102,14 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
 }
 
 void ScanOperator::_trigger_next_scan() {
-    PriorityThreadPool::Task task;
+    DCHECK(_io_task_state.load(std::memory_order_acquire) == IOTaskState::INACTIVE);
 
-    auto chunk_source = _chunk_source;
-    task.work_function = [chunk_source, this]() {
-        _is_io_task_active.store(true, std::memory_order_release);
-        chunk_source->cache_next_batch_chunks_blocking(_batch_size);
-        _is_io_task_active.store(false, std::memory_order_release);
+    PriorityThreadPool::Task task;
+    _io_task_state.store(IOTaskState::PENDING, std::memory_order_release);
+    task.work_function = [this]() {
+        _io_task_state.store(IOTaskState::ACTIVE, std::memory_order_release);
+        _chunk_source->cache_next_batch_chunks_blocking(_batch_size);
+        _io_task_state.store(IOTaskState::INACTIVE, std::memory_order_release);
     };
     // TODO(by satanson): set a proper priority
     task.priority = 20;
@@ -114,6 +119,7 @@ void ScanOperator::_trigger_next_scan() {
 
 void ScanOperator::_pickup_morsel(RuntimeState* state) {
     DCHECK(_morsel_queue != nullptr);
+    DCHECK(_io_task_state.load(std::memory_order_acquire) == IOTaskState::INACTIVE);
     if (_chunk_source) {
         _chunk_source->close(state);
     }
