@@ -24,11 +24,12 @@ class RowDescriptor;
 class MemTracker;
 class ExecEnv;
 class RuntimeProfile;
-
+namespace pipeline {
+class RuntimeBloomFilterEvalContext;
+}
 namespace vectorized {
 class HashJoinNode;
 class RuntimeFilterProbeCollector;
-
 class RuntimeFilterHelper {
 public:
     // ==================================
@@ -61,6 +62,8 @@ public:
     const std::vector<TNetworkAddress>& merge_nodes() const { return _merge_nodes; }
     void set_runtime_filter(JoinRuntimeFilter* rf) { _runtime_filter = rf; }
     JoinRuntimeFilter* runtime_filter() { return _runtime_filter; }
+    void set_is_pipeline(bool flag) { _is_pipeline = flag; }
+    bool is_pipeline() const { return _is_pipeline; }
 
 private:
     friend class HashJoinNode;
@@ -75,6 +78,7 @@ private:
     TUniqueId _sender_finst_id;
     std::vector<TNetworkAddress> _merge_nodes;
     JoinRuntimeFilter* _runtime_filter = nullptr;
+    bool _is_pipeline = false;
 };
 
 class RuntimeFilterProbeDescriptor {
@@ -126,6 +130,7 @@ public:
     Status open(RuntimeState* state);
     void close(RuntimeState* state);
     void evaluate(vectorized::Chunk* chunk);
+    void evaluate(vectorized::Chunk* chunk, pipeline::RuntimeBloomFilterEvalContext& eval_context);
     void add_descriptor(RuntimeFilterProbeDescriptor* desc);
     // accept RuntimeFilterCollector from parent node
     // which means parent node to push down runtime filter.
@@ -137,11 +142,13 @@ public:
     void wait();
     std::string debug_string() const;
     bool empty() const { return _descriptors.empty(); }
+    void init_counter();
 
 private:
     void update_selectivity(vectorized::Chunk* chunk);
+    void update_selectivity(vectorized::Chunk* chunk, pipeline::RuntimeBloomFilterEvalContext& eval_context);
     void do_evaluate(vectorized::Chunk* chunk);
-    void init_counter();
+    void do_evaluate(vectorized::Chunk* chunk, pipeline::RuntimeBloomFilterEvalContext& eval_context);
     // mapping from filter id to runtime filter descriptor.
     std::map<int32_t, RuntimeFilterProbeDescriptor*> _descriptors;
     std::map<double, RuntimeFilterProbeDescriptor*> _selectivity;

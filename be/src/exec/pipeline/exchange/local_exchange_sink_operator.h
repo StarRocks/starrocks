@@ -10,9 +10,11 @@
 namespace starrocks::pipeline {
 class LocalExchangeSinkOperator final : public Operator {
 public:
-    LocalExchangeSinkOperator(int32_t id, const std::shared_ptr<LocalExchanger>& exchanger,
+    LocalExchangeSinkOperator(OperatorFactory* factory, int32_t id, const std::shared_ptr<LocalExchanger>& exchanger,
                               const int32_t driver_sequence)
-            : Operator(id, "local_exchange_sink", -1), _exchanger(exchanger), _driver_sequence(driver_sequence) {}
+            : Operator(factory, id, "local_exchange_sink", -1),
+              _exchanger(exchanger),
+              _driver_sequence(driver_sequence) {}
 
     ~LocalExchangeSinkOperator() override = default;
 
@@ -48,7 +50,7 @@ public:
     ~LocalExchangeSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<LocalExchangeSinkOperator>(_id, _exchanger, driver_sequence);
+        return std::make_shared<LocalExchangeSinkOperator>(this, _id, _exchanger, driver_sequence);
     }
 
 private:

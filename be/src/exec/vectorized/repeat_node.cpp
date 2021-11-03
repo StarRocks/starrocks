@@ -201,7 +201,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > RepeatNode::decompose_t
             std::move(_null_slot_ids), std::move(_repeat_id_list), _repeat_times_required, _repeat_times_last,
             std::move(_column_null), std::move(_grouping_columns), std::move(_grouping_list),
             std::move(_output_tuple_id), _tuple_desc, std::move(_conjunct_ctxs)));
-
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
     return operators;
 }
 

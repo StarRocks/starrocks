@@ -61,8 +61,8 @@ void GlobalDriverDispatcher::run() {
 
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
-        // This writing is to ensure that MemTracker will not be destructed before the thread ends.
-        // This writing method is a bit tricky, and when there is a better way, replace it
+        // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
+        //  This writing method is a bit tricky, and when there is a better way, replace it
         auto runtime_state_ptr = fragment_ctx->runtime_state_ptr();
         auto* runtime_state = runtime_state_ptr.get();
         {
@@ -107,26 +107,26 @@ void GlobalDriverDispatcher::run() {
             switch (driver_state) {
             case READY:
             case RUNNING: {
-                VLOG_ROW << strings::Substitute("[Driver] Push back again, source=$0, state=$1",
-                                                driver->source_operator()->get_name(), ds_to_string(driver_state));
+                // VLOG_ROW << strings::Substitute("[Driver] Push back again, source=$0, state=$1",
+                //                                driver->source_operator()->get_name(), ds_to_string(driver_state));
                 this->_driver_queue->put_back(driver);
                 break;
             }
             case FINISH:
             case CANCELED:
             case INTERNAL_ERROR: {
-                VLOG_ROW << strings::Substitute("[Driver] Finished, source=$0, state=$1, status=$2",
-                                                driver->source_operator()->get_name(), ds_to_string(driver_state),
-                                                fragment_ctx->final_status().to_string());
+                // VLOG_ROW << strings::Substitute("[Driver] Finished, source=$0, state=$1, status=$2",
+                //                                driver->source_operator()->get_name(), ds_to_string(driver_state),
+                //                                fragment_ctx->final_status().to_string());
                 finalize_driver(driver, runtime_state, driver_state);
                 break;
             }
             case INPUT_EMPTY:
             case OUTPUT_FULL:
             case PENDING_FINISH:
-            case DEPENDENCIES_BLOCK: {
-                VLOG_ROW << strings::Substitute("[Driver] Blocked, source=$0, state=$1",
-                                                driver->source_operator()->get_name(), ds_to_string(driver_state));
+            case PRECONDITION_BLOCK: {
+                // VLOG_ROW << strings::Substitute("[Driver] Blocked, source=$0, state=$1",
+                //                                 driver->source_operator()->get_name(), ds_to_string(driver_state));
                 _blocked_driver_poller->add_blocked_driver(driver);
                 break;
             }
@@ -138,11 +138,12 @@ void GlobalDriverDispatcher::run() {
 }
 
 void GlobalDriverDispatcher::dispatch(DriverRawPtr driver) {
-    driver->dispatch_operators();
-    if (driver->dependencies_block()) {
-        driver->set_driver_state(DriverState::DEPENDENCIES_BLOCK);
+    if (driver->is_precondition_block()) {
+        driver->set_driver_state(DriverState::PRECONDITION_BLOCK);
+        driver->mark_precondition_not_ready();
         this->_blocked_driver_poller->add_blocked_driver(driver);
     } else {
+        driver->dispatch_operators();
         this->_driver_queue->put_back(driver);
     }
 }

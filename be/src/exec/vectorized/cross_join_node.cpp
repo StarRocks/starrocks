@@ -536,6 +536,7 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     // step 0: construct pipeline end with cross join right operator.
     OpFactories right_ops = _children[1]->decompose_to_pipeline(context);
 
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // communication with CrossJoinLeft through shared_datas.
     auto* right_source = down_cast<SourceOperatorFactory*>(right_ops[0].get());
     auto cross_join_context = std::make_shared<pipeline::CrossJoinContext>(right_source->degree_of_parallelism());
@@ -543,6 +544,7 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     // cross_join_right as sink operator
     auto right_factory =
             std::make_shared<CrossJoinRightSinkOperatorFactory>(context->next_operator_id(), id(), cross_join_context);
+    this->init_runtime_filter_for_operator(right_factory.get(), context, rc_rf_probe_collector);
     right_ops.emplace_back(std::move(right_factory));
     context->add_pipeline(right_ops);
 
@@ -553,6 +555,7 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     auto left_factory = std::make_shared<CrossJoinLeftOperatorFactory>(
             context->next_operator_id(), id(), _row_descriptor, child(0)->row_desc(), child(1)->row_desc(),
             std::move(_conjunct_ctxs), std::move(cross_join_context));
+    this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
     left_ops.emplace_back(std::move(left_factory));
 
     // return as the following pipeline

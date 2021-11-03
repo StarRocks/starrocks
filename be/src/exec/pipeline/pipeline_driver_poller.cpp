@@ -51,6 +51,7 @@ void PipelineDriverPoller::run_internal() {
         auto driver_it = local_blocked_drivers.begin();
         while (driver_it != local_blocked_drivers.end()) {
             auto* driver = *driver_it;
+            // VLOG_ROW << "[Driver] check block: " << driver->to_readable_string();
 
             if (driver->pending_finish() && !driver->is_still_pending_finish()) {
                 // driver->pending_finish() return true means that when a driver's sink operator is finished,
@@ -94,6 +95,13 @@ void PipelineDriverPoller::run_internal() {
                     _dispatch_queue->put_back(driver);
                 }
             } else if (driver->is_not_blocked()) {
+                if (driver->driver_state() == DriverState::PRECONDITION_BLOCK) {
+                    // TODO(trueeyu): This writing is to ensure that MemTracker will not be destructed before the thread ends.
+                    //  This writing method is a bit tricky, and when there is a better way, replace it
+                    auto runtime_state_ptr = driver->fragment_ctx()->runtime_state_ptr();
+                    driver->mark_precondition_ready(runtime_state_ptr.get());
+                    driver->_precondition_block_timer->update(driver->_precondition_block_timer_sw->elapsed_time());
+                }
                 driver->set_driver_state(DriverState::READY);
                 remove_blocked_driver(local_blocked_drivers, driver_it);
                 _dispatch_queue->put_back(driver);
@@ -123,8 +131,12 @@ void PipelineDriverPoller::run_internal() {
 }
 
 void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
+    // VLOG_ROW << "[Driver] add_blocked_driver: " << driver->to_readable_string();
     std::unique_lock<std::mutex> lock(this->_mutex);
     driver->_pending_timer_sw->reset();
+    if (driver->driver_state() == DriverState::PRECONDITION_BLOCK) {
+        driver->_precondition_block_timer_sw->reset();
+    }
     this->_blocked_drivers.push_back(driver);
     this->_cond.notify_one();
 }

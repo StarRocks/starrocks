@@ -104,6 +104,7 @@ private:
     bool _right_table_has_remain = false;
     bool _build_eos = false;
     bool _probe_eos = false; // probe table scan finished;
+    size_t _runtime_join_filter_pushdown_limit = 1024000;
 
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _build_ht_timer = nullptr;

@@ -220,6 +220,7 @@ public:
         _has_null |= rf->_has_null;
         _bf.merge(rf->_bf);
     }
+
     virtual void concat(JoinRuntimeFilter* rf) {
         _has_null |= rf->_has_null;
         _hash_partition_bf.emplace_back(std::move(rf->_bf));
@@ -335,6 +336,7 @@ public:
     }
 
     Column::Filter& evaluate(Column* input_column, RunningContext* ctx) const override {
+        LOG(WARNING) << "[SATANSON] evaluate_bloom_filter: bf=" << this;
         if (_hash_partition_number != 0) {
             return t_evaluate<true>(input_column, ctx);
         } else {

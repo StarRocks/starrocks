@@ -9,22 +9,28 @@
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/runtime_filter_types.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
 namespace starrocks {
 namespace pipeline {
+
+using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 class FragmentContext {
     friend FragmentContextManager;
 
 public:
     FragmentContext() : _cancel_flag(false) {}
     ~FragmentContext() {
+        auto runtime_state_ptr = _runtime_state;
+        _runtime_filter_hub.close_all_in_filters(runtime_state_ptr.get());
         _drivers.clear();
         close_all_pipelines();
         if (_plan != nullptr) {
@@ -99,6 +105,14 @@ public:
         }
     }
 
+    RuntimeFilterHub* runtime_filter_hub() { return &_runtime_filter_hub; }
+
+    void set_runtime_filter_port(std::unique_ptr<RuntimeFilterPort>&& runtime_filter_port) {
+        _runtime_filter_port = std::move(runtime_filter_port);
+    }
+
+    RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port.get(); }
+
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -115,6 +129,8 @@ private:
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     Pipelines _pipelines;
     Drivers _drivers;
+    std::unique_ptr<RuntimeFilterPort> _runtime_filter_port;
+    RuntimeFilterHub _runtime_filter_hub;
     // _morsel_queues is mapping from an source_id to its corresponding
     // MorselQueue that is shared among drivers created from the same pipeline,
     // drivers contend for Morsels from MorselQueue.

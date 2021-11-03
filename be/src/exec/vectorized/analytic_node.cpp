@@ -350,12 +350,16 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AnalyticNode::decompose
     // shared by sink operator and source operator
     AnalytorPtr analytor = std::make_shared<Analytor>(_tnode, child(0)->row_desc(), _result_tuple_desc);
 
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
+
     operators_with_sink.emplace_back(
             std::make_shared<AnalyticSinkOperatorFactory>(context->next_operator_id(), id(), _tnode, analytor));
+    this->init_runtime_filter_for_operator(operators_with_sink.back().get(), context, rc_rf_probe_collector);
     context->add_pipeline(operators_with_sink);
 
     OpFactories operators_with_source;
     auto source_operator = std::make_shared<AnalyticSourceOperatorFactory>(context->next_operator_id(), id(), analytor);
+    this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
     // TODO(hcf) Currently, the shared data structure analytor does not support concurrency.
     // So the degree of parallism must set to 1, we'll fix it laterr

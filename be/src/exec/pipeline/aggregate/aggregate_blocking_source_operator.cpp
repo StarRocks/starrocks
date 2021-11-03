@@ -44,13 +44,11 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(Runti
 #undef HASH_MAP_METHOD
     }
 
-    // TODO(hcf) force annotation
-    // eval_join_runtime_filters(chunk.get());
+    eval_runtime_bloom_filters(&chunk);
 
     // For having
+    eval_conjuncts_and_in_filters(_aggregator->conjunct_ctxs(), chunk.get());
     size_t old_size = chunk->num_rows();
-
-    ExecNode::eval_conjuncts(_aggregator->conjunct_ctxs(), chunk.get());
     _aggregator->update_num_rows_returned(-(old_size - chunk->num_rows()));
 
     DCHECK_CHUNK(chunk);

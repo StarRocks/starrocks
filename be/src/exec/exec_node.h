@@ -29,7 +29,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
@@ -54,8 +54,13 @@ class DataSink;
 namespace pipeline {
 class OperatorFactory;
 class PipelineBuilderContext;
+class RefCountedRuntimeFilterProbeCollector;
 } // namespace pipeline
-
+using OperatorFactory = starrocks::pipeline::OperatorFactory;
+using OperatorFactoryPtr = std::shared_ptr<OperatorFactory>;
+using OpFactories = std::vector<OperatorFactoryPtr>;
+using RcRfProbeCollector = starrocks::pipeline::RefCountedRuntimeFilterProbeCollector;
+using RcRfProbeCollectorPtr = std::shared_ptr<RcRfProbeCollector>;
 using std::string;
 using std::stringstream;
 using std::vector;
@@ -174,7 +179,7 @@ public:
     virtual void debug_string(int indentation_level, std::stringstream* out) const;
 
     // Convert old exec node tree to new pipeline
-    virtual pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context);
+    virtual OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context);
 
     const std::vector<ExprContext*>& conjunct_ctxs() const { return _conjunct_ctxs; }
 
@@ -195,6 +200,14 @@ public:
 
     vectorized::RuntimeFilterProbeCollector& runtime_filter_collector() { return _runtime_filter_collector; }
 
+    std::set<TPlanNodeId> local_rf_waiting_set() { return _local_rf_waiting_set; }
+
+    void init_runtime_filter_for_operator(OperatorFactory* op, pipeline::PipelineBuilderContext* context,
+                                          const RcRfProbeCollectorPtr& rc_rf_probe_collector);
+
+    // Extract node id from p->name().
+    static int get_node_id_from_profile(RuntimeProfile* p);
+
     // Names of counters shared by all exec nodes
     static const std::string ROW_THROUGHPUT_COUNTER;
 
@@ -210,6 +223,7 @@ protected:
 
     vectorized::RuntimeFilterProbeCollector _runtime_filter_collector;
     std::vector<SlotId> _filter_null_value_columns;
+    std::set<TPlanNodeId> _local_rf_waiting_set;
 
     std::vector<ExecNode*> _children;
     RowDescriptor _row_descriptor;

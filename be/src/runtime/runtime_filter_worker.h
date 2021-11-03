@@ -70,6 +70,9 @@ public:
     size_t max_size = 0;
     bool stop = false;
 
+    // for pipeline engine
+    bool is_pipeline = false;
+
     // statistics.
     // timestamp in ms since unix epoch;
     // we care about diff not abs value.

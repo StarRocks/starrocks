@@ -12,8 +12,11 @@ class RowDescriptor;
 namespace pipeline {
 class ExchangeSourceOperator : public SourceOperator {
 public:
-    ExchangeSourceOperator(int32_t id, int32_t plan_node_id, int32_t num_sender, const RowDescriptor& row_desc)
-            : SourceOperator(id, "exchange_source", plan_node_id), _num_sender(num_sender), _row_desc(row_desc) {}
+    ExchangeSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t num_sender,
+                           const RowDescriptor& row_desc)
+            : SourceOperator(factory, id, "exchange_source", plan_node_id),
+              _num_sender(num_sender),
+              _row_desc(row_desc) {}
 
     ~ExchangeSourceOperator() override = default;
 
@@ -46,7 +49,7 @@ public:
     ~ExchangeSourceOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<ExchangeSourceOperator>(_id, _plan_node_id, _num_sender, _row_desc);
+        return std::make_shared<ExchangeSourceOperator>(this, _id, _plan_node_id, _num_sender, _row_desc);
     }
 
 private:

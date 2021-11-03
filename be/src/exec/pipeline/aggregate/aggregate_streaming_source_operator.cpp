@@ -67,6 +67,7 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(Runt
     // correctly process the state of hash table(_is_ht_eos)
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
     _output_chunk_from_hash_map(&chunk);
+    eval_runtime_bloom_filters(&chunk);
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }

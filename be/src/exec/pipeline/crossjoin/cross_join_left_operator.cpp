@@ -352,7 +352,7 @@ StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* s
         // When the chunk is full or the current probe chunk is finished
         // crossing join with build chunks, we can output this chunk.
         if (chunk->num_rows() >= config::vector_chunk_size || _is_curr_probe_chunk_finished()) {
-            ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
+            eval_conjuncts_and_in_filters(_conjunct_ctxs, chunk.get());
             break;
         }
     }
@@ -393,8 +393,7 @@ Status CrossJoinLeftOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorWithDependencyFactory::prepare(state));
 
     _init_row_desc();
-    RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, _row_desc));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
     return Status::OK();

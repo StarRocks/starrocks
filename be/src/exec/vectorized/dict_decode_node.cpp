@@ -160,7 +160,8 @@ pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBu
     operators.emplace_back(std::make_shared<DictDecodeOperatorFactory>(
             context->next_operator_id(), id(), std::move(_encode_column_cids), std::move(_decode_column_cids),
             std::move(_expr_ctxs), std::move(_string_functions)));
-
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
     return operators;
 }
 

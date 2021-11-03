@@ -549,9 +549,10 @@ void OlapScanNode::_close_pending_scanners() {
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators;
-    auto scan_operator =
-            std::make_shared<ScanOperatorFactory>(context->next_operator_id(), id(), _olap_scan_node,
-                                                  std::move(_conjunct_ctxs), std::move(_runtime_filter_collector));
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    auto scan_operator = std::make_shared<ScanOperatorFactory>(context->next_operator_id(), id(), _olap_scan_node,
+                                                               std::move(_conjunct_ctxs));
+    this->init_runtime_filter_for_operator(scan_operator.get(), context, rc_rf_probe_collector);
     auto& morsel_queues = context->fragment_context()->morsel_queues();
     auto source_id = scan_operator->plan_node_id();
     DCHECK(morsel_queues.count(source_id));

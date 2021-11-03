@@ -29,7 +29,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
         _unused_output_columns.emplace_back(col_name);
     }
 
-    _pickup_morsel(state);
     return Status::OK();
 }
 
@@ -47,6 +46,10 @@ Status ScanOperator::close(RuntimeState* state) {
 bool ScanOperator::has_output() const {
     if (_is_finished) {
         return false;
+    }
+
+    if (UNLIKELY(_initial_pickup_morsel)) {
+        return true;
     }
 
     DCHECK(_chunk_source != nullptr);
@@ -84,6 +87,11 @@ void ScanOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
+    if (UNLIKELY(_initial_pickup_morsel)) {
+        _pickup_morsel(state);
+        _initial_pickup_morsel = false;
+        return nullptr;
+    }
     DCHECK(_chunk_source != nullptr);
     if (!_chunk_source->has_output()) {
         if (_chunk_source->has_next_chunk()) {
@@ -100,6 +108,14 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     if (_chunk_source->get_buffer_size() < (_batch_size >> 1) && !_is_io_task_active.load(std::memory_order_acquire) &&
         _chunk_source->has_next_chunk()) {
         _trigger_next_scan(state);
+    }
+
+    if (chunk.value() != nullptr) {
+        chunk.value()->check_or_die();
+    }
+    eval_runtime_bloom_filters(&chunk.value());
+    if (chunk.value() != nullptr) {
+        chunk.value()->check_or_die();
     }
     return chunk;
 }
@@ -138,17 +154,18 @@ void ScanOperator::_pickup_morsel(RuntimeState* state) {
     } else {
         auto morsel = std::move(maybe_morsel.value());
         DCHECK(morsel);
-        _chunk_source = std::make_shared<OlapChunkSource>(
-                std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs, _runtime_profile.get(), _runtime_filters,
-                _olap_scan_node.key_column_name, _olap_scan_node.is_preaggregation, &_unused_output_columns);
+        _chunk_source = std::make_shared<OlapChunkSource>(std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs,
+                                                          runtime_in_filters(), runtime_bloom_filters(),
+                                                          _runtime_profile.get(), _olap_scan_node.key_column_name,
+                                                          _olap_scan_node.is_preaggregation, &_unused_output_columns);
         _chunk_source->prepare(state);
         _trigger_next_scan(state);
     }
 }
 
 Status ScanOperatorFactory::prepare(RuntimeState* state) {
-    RowDescriptor row_desc;
-    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc));
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, _row_desc));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
     auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
@@ -159,6 +176,7 @@ Status ScanOperatorFactory::prepare(RuntimeState* state) {
 
 void ScanOperatorFactory::close(RuntimeState* state) {
     Expr::close(_conjunct_ctxs, state);
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline

@@ -45,6 +45,7 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctStreamingSourceOperator::pull_ch
 
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
     _output_chunk_from_hash_set(&chunk);
+    eval_runtime_bloom_filters(&chunk);
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }

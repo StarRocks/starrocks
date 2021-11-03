@@ -143,6 +143,9 @@ pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::Pipelin
             context->next_operator_id(), id(), _desired_num_rows, _subquery_string, std::move(_assertion));
     operator_before_assert_num_rows_source.emplace_back(std::move(source_factory));
 
+    auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
+    this->init_runtime_filter_for_operator(operator_before_assert_num_rows_source.back().get(), context,
+                                           rc_rf_probe_collector);
     return operator_before_assert_num_rows_source;
 }
 
