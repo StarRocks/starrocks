@@ -138,11 +138,16 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _rows_returned_rate(nullptr),
           _memory_used_counter(nullptr),
           _use_vectorized(tnode.use_vectorized),
+          _runtime_state(nullptr),
           _is_closed(false) {
     init_runtime_profile(print_plan_node_type(tnode.node_type));
 }
 
-ExecNode::~ExecNode() = default;
+ExecNode::~ExecNode() {
+    if (runtime_state() != nullptr) {
+        ExecNode::close(_runtime_state);
+    }
+}
 
 void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs, bool is_vectorized) {
     if (_type != TPlanNodeType::AGGREGATION_NODE) {
@@ -209,6 +214,7 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
 
 Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
     VLOG(2) << "ExecNode init:\n" << apache::thrift::ThriftDebugString(tnode);
+    _runtime_state = state;
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.conjuncts, &_conjunct_ctxs));
     RETURN_IF_ERROR(init_join_runtime_filters(tnode, state));
     return Status::OK();

@@ -46,7 +46,7 @@ HashJoiner::HashJoiner(const THashJoinNode& hash_join_node, TPlanNodeId node_id,
         _build_runtime_filters_from_planner = hash_join_node.build_runtime_filters_from_planner;
     }
 
-    _expr_mem_tracker.reset(new MemTracker(-1, "Exprs", nullptr));
+    _expr_mem_tracker = std::make_unique<MemTracker>(-1, "Exprs", nullptr);
 
     std::string name = strings::Substitute("$0 (id=$1)", print_plan_node_type(node_type), node_id);
     _runtime_profile.reset(new RuntimeProfile(std::move(name)));

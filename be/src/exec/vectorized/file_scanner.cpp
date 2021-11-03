@@ -2,6 +2,8 @@
 
 #include "exec/vectorized/file_scanner.h"
 
+#include <memory>
+
 #include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "env/compressed_file.h"
@@ -270,9 +272,9 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
     }
 
     using DecompressorPtr = std::shared_ptr<Decompressor>;
-    Decompressor* dec = nullptr;
+    std::unique_ptr<Decompressor> dec;
     RETURN_IF_ERROR(Decompressor::create_decompressor(compression, &dec));
-    *file = std::make_shared<CompressedSequentialFile>(std::move(src_file), DecompressorPtr(dec));
+    *file = std::make_shared<CompressedSequentialFile>(std::move(src_file), DecompressorPtr(dec.release()));
     return Status::OK();
 }
 

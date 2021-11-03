@@ -22,6 +22,7 @@
 #include "exec/broker_reader.h"
 
 #include <sstream>
+#include <string>
 
 #include "common/logging.h"
 #include "gen_cpp/FileBrokerService_types.h"
