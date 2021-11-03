@@ -160,7 +160,7 @@ public class Alter {
                 }
             }
             if (table == null) {
-                throw new DdlException("Materialized view " + stmt.getMvName() + " is not find");
+                throw new MetaNotFoundException("Materialized view " + stmt.getMvName() + " is not find");
             }
             // check table type
             if (table.getType() != TableType.OLAP) {
@@ -176,6 +176,12 @@ public class Alter {
             // drop materialized view
             ((MaterializedViewHandler) materializedViewHandler).processDropMaterializedView(stmt, db, olapTable);
 
+        } catch (MetaNotFoundException e) {
+            if (stmt.isSetIfExists()) {
+                LOG.info(e.getMessage());
+            } else {
+                throw e;
+            }
         } finally {
             db.writeUnlock();
         }
