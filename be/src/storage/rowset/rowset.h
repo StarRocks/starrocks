@@ -30,7 +30,6 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/mem_tracker.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/vectorized/chunk_iterator.h"
 
@@ -138,17 +137,6 @@ public:
     // instead of multiple `ChunkIterator`s, will be created and appended into |segment_iterators|.
     virtual Status get_segment_iterators(const vectorized::Schema& schema, const vectorized::RowsetReadOptions& options,
                                          std::vector<vectorized::ChunkIteratorPtr>* seg_iterators) = 0;
-
-    // Split range denoted by `start_key` and `end_key` into sub-ranges, each contains roughly
-    // `request_block_row_count` rows. Sub-range is represented by pair of OlapTuples and added to `ranges`.
-    //
-    // e.g., if the function generates 2 sub-ranges, the result `ranges` should contain 4 tuple: t1, t2, t2, t3.
-    // Note that the end tuple of sub-range i is the same as the start tuple of sub-range i+1.
-    //
-    // The first/last tuple must be start_key/end_key.to_tuple(). If we can't divide the input range,
-    // the result `ranges` should be [start_key.to_tuple(), end_key.to_tuple()]
-    virtual OLAPStatus split_range(const RowCursor& start_key, const RowCursor& end_key,
-                                   uint64_t request_block_row_count, std::vector<OlapTuple>* ranges) = 0;
 
     const RowsetMetaSharedPtr& rowset_meta() const { return _rowset_meta; }
 
@@ -268,8 +256,7 @@ protected:
     Rowset(const Rowset&) = delete;
     const Rowset& operator=(const Rowset&) = delete;
     // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
-    Rowset(MemTracker* mem_tracker, const TabletSchema* schema, std::string rowset_path,
-           RowsetMetaSharedPtr rowset_meta);
+    Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
 
     // this is non-public because all clients should use RowsetFactory to obtain pointer to initialized Rowset
     virtual OLAPStatus init() = 0;
@@ -282,8 +269,6 @@ protected:
 
     // allow subclass to add custom logic when rowset is being published
     virtual void make_visible_extra(Version version, VersionHash version_hash) {}
-
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
     const TabletSchema* _schema;
     std::string _rowset_path;

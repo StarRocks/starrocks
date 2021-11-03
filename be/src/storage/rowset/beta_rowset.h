@@ -43,9 +43,8 @@ class KVStore;
 
 class BetaRowset : public Rowset {
 public:
-    BetaRowset(MemTracker* mem_tracker, const TabletSchema* schema, std::string rowset_path,
-               RowsetMetaSharedPtr rowset_meta);
-    ~BetaRowset() override { _mem_tracker->release(_mem_tracker->consumption()); }
+    BetaRowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
+    ~BetaRowset() override {}
 
     OLAPStatus create_reader(RowsetReaderSharedPtr* result) override;
 
@@ -76,9 +75,6 @@ public:
 
     static std::string segment_srcrssid_file_path(const std::string& segment_dir, const RowsetId& rowset_id,
                                                   int segment_id);
-
-    OLAPStatus split_range(const RowCursor& start_key, const RowCursor& end_key, uint64_t request_block_row_count,
-                           std::vector<OlapTuple>* ranges) override;
 
     OLAPStatus remove() override;
 

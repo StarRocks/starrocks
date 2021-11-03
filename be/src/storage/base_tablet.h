@@ -38,7 +38,7 @@ class DataDir;
 // storage engine evolves.
 class BaseTablet : public std::enable_shared_from_this<BaseTablet> {
 public:
-    BaseTablet(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir);
+    BaseTablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir);
     virtual ~BaseTablet() = default;
 
     inline DataDir* data_dir() const;
@@ -66,14 +66,10 @@ public:
     // properties encapsulated in TabletSchema
     inline const TabletSchema& tablet_schema() const;
 
-    inline MemTracker* mem_tracker() { return _mem_tracker; }
-
 protected:
     virtual void on_shutdown() {}
 
     void _gen_tablet_path();
-
-    MemTracker* _mem_tracker = nullptr;
 
     TabletState _state;
     TabletMetaSharedPtr _tablet_meta;

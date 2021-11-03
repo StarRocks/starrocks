@@ -136,7 +136,6 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk) {
         RETURN_IF_ERROR(_init());
     }
     size_t rows = 0;
-    size_t prev_mem_usage = chunk->memory_usage();
     Status st;
 
     while (!_heap.empty() && rows < _chunk_size) {
