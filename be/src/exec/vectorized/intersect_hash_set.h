@@ -9,9 +9,7 @@
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
 
-namespace starrocks {
-
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class IntersectSliceFlag;
 struct IntersectSliceFlagEqual;
@@ -82,6 +80,4 @@ private:
     uint8_t* _buffer;
 };
 
-} // namespace vectorized
-
-} // namespace starrocks
+} // namespace starrocks::vectorized

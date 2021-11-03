@@ -68,6 +68,8 @@ Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, cons
 template <typename HashSet>
 void IntersectHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t batch_size) {
     for (const auto& key_column : key_columns) {
+        // Because the serialized key is always nullable,
+        // drop the null byte of the key if the dest column is non-nullable.
         if (!key_column->is_nullable()) {
             for (auto& key : keys) {
                 key.data += sizeof(bool);
@@ -97,25 +99,15 @@ size_t IntersectHashSet<HashSet>::_get_max_serialize_size(const ChunkPtr& chunkP
 template <typename HashSet>
 void IntersectHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
                                                    size_t chunk_size) {
-    const bool null = false;
     for (auto expr : exprs) {
         ColumnPtr key_column = expr->evaluate(chunkPtr.get());
+
+        // The serialized buffer is always nullable.
         if (key_column->is_nullable()) {
             key_column->serialize_batch(_buffer, _slice_sizes, chunk_size, _max_one_row_size);
         } else {
-            if (!key_column->is_constant()) {
-                for (size_t i = 0; i < chunk_size; ++i) {
-                    memcpy(_buffer + i * _max_one_row_size + _slice_sizes[i], &null, sizeof(bool));
-                    _slice_sizes[i] += sizeof(bool);
-                    _slice_sizes[i] += key_column->serialize(i, _buffer + i * _max_one_row_size + _slice_sizes[i]);
-                }
-            } else {
-                for (size_t i = 0; i < chunk_size; ++i) {
-                    memcpy(_buffer + i * _max_one_row_size + _slice_sizes[i], &null, sizeof(bool));
-                    _slice_sizes[i] += sizeof(bool);
-                    _slice_sizes[i] += key_column->serialize(0, _buffer + i * _max_one_row_size + _slice_sizes[i]);
-                }
-            }
+            key_column->serialize_batch_with_null_masks(_buffer, _slice_sizes, chunk_size, _max_one_row_size, nullptr,
+                                                        false);
         }
     }
 }
