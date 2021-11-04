@@ -280,6 +280,23 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
 
     for (; _doc_stream_itr != _doc_stream.end(); ++_doc_stream_itr) {
         if (!_scanner->_json_paths.empty()) {
+            size_t slot_size = slot_descs.size();
+            size_t jsonpath_size = _scanner->_json_paths.size();
+            for (size_t i = 0; i < slot_size; i++) {
+                if (slot_descs[i] == nullptr) {
+                    continue;
+                }
+                ColumnPtr& column = chunk->get_column_by_slot_id(slot_descs[i]->id());
+                if (i >= jsonpath_size) {
+                    column->append_nulls(1);
+                    continue;
+                }
+                auto values = JsonFunctions::extract_values_from_document(_doc_stream_itr, _scanner->_json_paths[i]);
+
+                for (auto &value : values) {
+                    _construct_column(value, column.get(), slot_descs[i]->type());
+                }
+            }
         } else if (!_scanner->_root_paths.empty()) {
         } else {
             for (SlotDescriptor* slot_desc : slot_descs) {

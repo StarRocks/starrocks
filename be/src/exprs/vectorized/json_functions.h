@@ -118,6 +118,9 @@ public:
                                                               rapidjson::Value* document,
                                                               rapidjson::Document::AllocatorType& mem_allocator);
 
+    static std::vector<simdjson::dom::document_stream::iterator::value_type> extract_values_from_document(
+            simdjson::dom::document_stream::iterator& doc_itr, const std::vector<JsonPath>& jsonpath);
+
     // Extract json values from stream.
     static void get_values_from_stream(const std::vector<JsonPath>& parsed_paths,
                                        simdjson::dom::document_stream& stream,
@@ -143,7 +146,7 @@ private:
             const std::string& name, simdjson::dom::document_stream& stream,
             std::vector<simdjson::dom::document_stream::iterator::value_type> output);
 
-    static void get_parsed_paths(const std::vector<std::string>& path_exprs, std::vector<JsonPath>* parsed_paths);
+    static Status get_parsed_paths(const std::vector<std::string>& path_exprs, std::vector<JsonPath>* parsed_paths);
 };
 
 } // namespace vectorized

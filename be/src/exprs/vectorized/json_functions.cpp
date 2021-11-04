@@ -14,6 +14,7 @@
 #include "column/column_viewer.h"
 #include "common/status.h"
 #include "rapidjson/error/en.h"
+#include "gutil/strings/substitute.h"
 
 namespace starrocks::vectorized {
 
@@ -21,9 +22,10 @@ namespace starrocks::vectorized {
 // json path cannot contains: ", [, ]
 static const re2::RE2 JSON_PATTERN(R"(^([^\"\[\]]*)(?:\[([0-9]+|\*)\])?)");
 
-void JsonFunctions::get_parsed_paths(const std::vector<std::string>& path_exprs, std::vector<JsonPath>* parsed_paths) {
+Status JsonFunctions::get_parsed_paths(const std::vector<std::string>& path_exprs, std::vector<JsonPath>* parsed_paths) {
     if (path_exprs[0] != "$") {
         parsed_paths->emplace_back("", -1, false);
+        return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", path_exprs[0]));
     } else {
         parsed_paths->emplace_back("$", -1, true);
     }
@@ -33,6 +35,7 @@ void JsonFunctions::get_parsed_paths(const std::vector<std::string>& path_exprs,
         std::string index;
         if (UNLIKELY(!RE2::FullMatch(path_exprs[i], JSON_PATTERN, &col, &index))) {
             parsed_paths->emplace_back("", -1, false);
+            return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", path_exprs[i]));
         } else {
             int idx = -1;
             if (!index.empty()) {
@@ -45,6 +48,7 @@ void JsonFunctions::get_parsed_paths(const std::vector<std::string>& path_exprs,
             parsed_paths->emplace_back(col, idx, true);
         }
     }
+    return Status::OK();
 }
 
 Status JsonFunctions::json_path_prepare(starrocks_udf::FunctionContext* context,
@@ -135,6 +139,40 @@ rapidjson::Value* JsonFunctions::get_json_object_from_parsed_json(const std::vec
         return nullptr;
     }
     return root;
+}
+
+std::vector<simdjson::dom::document_stream::iterator::value_type> JsonFunctions::extract_values_from_document(
+        simdjson::dom::document_stream::iterator& doc_itr, const std::vector<JsonPath>& jsonpath) {
+    std::vector<simdjson::dom::document_stream::iterator::value_type> values;
+
+    auto doc = *doc_itr;
+
+    if ((doc).is_null()) {
+        return values;
+    }
+
+    // Skip the first $.
+    for (int i = 1; i < jsonpath.size(); i++) {
+        if (UNLIKELY(!jsonpath[i].is_valid)) {
+            return values;
+        }
+
+        const std::string& col = jsonpath[i].key;
+        int index = jsonpath[i].idx;
+
+        if (LIKELY(!col.empty() && doc.is_object())) {
+            values.push_back(doc.at_key(col));
+        } else if (UNLIKELY(index != -1 && doc.is_array())) {
+            auto array = doc.get_array();
+            if (index >= array.size()) {
+                return values;
+            }
+            values.emplace_back(array.at(index));
+        } else {
+            return values;
+        }
+    }
+    return values;
 }
 
 rapidjson::Value* JsonFunctions::match_value(const std::vector<JsonPath>& parsed_paths, rapidjson::Value* document,
@@ -242,10 +280,9 @@ void JsonFunctions::get_matched_values_from_stream(
     }
 }
 
-void JsonFunctions::get_values_from_stream(
-        const std::vector<JsonPath>& parsed_paths, simdjson::dom::document_stream& stream,
-        std::vector<simdjson::dom::document_stream::iterator::value_type> values) {
-
+void JsonFunctions::get_values_from_stream(const std::vector<JsonPath>& parsed_paths,
+                                           simdjson::dom::document_stream& stream,
+                                           std::vector<simdjson::dom::document_stream::iterator::value_type> values) {
     for (int i = 1; i < parsed_paths.size(); i++) {
         VLOG(10) << "parsed_paths: " << parsed_paths[i].debug_string();
 
@@ -261,7 +298,7 @@ void JsonFunctions::get_values_from_stream(
         }
 
         if (UNLIKELY(index != -1)) {
-            if(index == -2) {
+            if (index == -2) {
                 // TODO:
             } else if (index >= values.size()) {
                 values.clear();
