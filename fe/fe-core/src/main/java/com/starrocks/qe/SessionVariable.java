@@ -353,6 +353,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CBO_ENABLE_GREEDY_JOIN_REORDER)
     private boolean cboEnableGreedyJoinReorder = true;
 
+    @VariableMgr.VarAttr(name = CBO_ENABLE_REPLICATED_JOIN)
+    private boolean enableReplicationJoin = true;
+
     @VariableMgr.VarAttr(name = TRANSACTION_VISIBLE_WAIT_TIMEOUT)
     private long transactionVisibleWaitTimeout = 10;
 
@@ -674,17 +677,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePipelineEngine;
     }
 
-    // @FIXME:
-    // Forbidden replicate join now, it's will cause bug:
-    // 1. Always cover colocate join if colocate join and replicate join are satisfied at the same time
-    //    a. Resolve the bug is complicated because Join choose Replicate or Colocate dependent on children is
-    //       ExchangeNode in PlanFragmentBuilder.java
-    // 2. If right node is Aggregate(Local update finalize)-Scan in replicate join, the result is wrong
-    //    a. Coordinator will take left scan node choose colocate node selector, actually only right aggregate
-    //       is colocate
-    // 3. If right node contains join other scan node(ES/Hive), replicate join result is wrong.
     public boolean isEnableReplicationJoin() {
-        return false;
+        return enableReplicationJoin;
     }
 
     public boolean isSetUseNthExecPlan() {
@@ -700,6 +694,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setEnableReplicationJoin(boolean enableReplicationJoin) {
+        this.enableReplicationJoin = enableReplicationJoin;
     }
 
     public boolean isUseCorrelatedJoinEstimate() {
@@ -709,7 +704,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setUseCorrelatedJoinEstimate(boolean useCorrelatedJoinEstimate) {
         this.useCorrelatedJoinEstimate = useCorrelatedJoinEstimate;
     }
-
 
     public boolean isEnableLowCardinalityOptimize() {
         return enableLowCardinalityOptimize;
