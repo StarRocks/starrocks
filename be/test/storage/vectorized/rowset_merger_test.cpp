@@ -129,14 +129,13 @@ public:
         request.tablet_schema.columns.push_back(k3);
         auto st = StorageEngine::instance()->create_tablet(request);
         ASSERT_TRUE(st.ok()) << st.to_string();
-        _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash);
+        _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
         ASSERT_TRUE(_tablet);
     }
 
     void TearDown() override {
         if (_tablet) {
-            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), _tablet->schema_hash(),
-                                                                     false);
+            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), false);
             _tablet.reset();
         }
     }

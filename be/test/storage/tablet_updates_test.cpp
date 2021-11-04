@@ -142,13 +142,11 @@ public:
 
     void TearDown() override {
         if (_tablet2) {
-            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet2->tablet_id(), _tablet2->schema_hash(),
-                                                                     false);
+            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet2->tablet_id(), false);
             _tablet2.reset();
         }
         if (_tablet) {
-            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), _tablet->schema_hash(),
-                                                                     false);
+            StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), false);
             _tablet.reset();
         }
     }
@@ -768,8 +766,8 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental) {
 
     DeferOp defer([&]() {
         auto tablet_mgr = StorageEngine::instance()->tablet_manager();
-        (void)tablet_mgr->drop_tablet(tablet0->tablet_id(), tablet0->schema_hash());
-        (void)tablet_mgr->drop_tablet(tablet1->tablet_id(), tablet1->schema_hash());
+        (void)tablet_mgr->drop_tablet(tablet0->tablet_id());
+        (void)tablet_mgr->drop_tablet(tablet1->tablet_id());
         (void)FileUtils::remove_all(tablet0->tablet_path());
         (void)FileUtils::remove_all(tablet1->tablet_path());
     });

@@ -221,8 +221,7 @@ void EngineCloneTask::_set_tablet_info(Status status, bool is_new_tablet) {
                              << ", schema_hash:" << _clone_req.schema_hash << ", signature:" << _signature
                              << ", version:" << tablet_info.version
                              << ", expected_version: " << _clone_req.committed_version;
-                Status drop_status = StorageEngine::instance()->tablet_manager()->drop_tablet(_clone_req.tablet_id,
-                                                                                              _clone_req.schema_hash);
+                Status drop_status = StorageEngine::instance()->tablet_manager()->drop_tablet(_clone_req.tablet_id);
                 if (!drop_status.ok() && !drop_status.is_not_found()) {
                     // just log
                     LOG(WARNING) << "Fail to drop stale cloned table. tablet id=" << _clone_req.tablet_id;
