@@ -261,7 +261,8 @@ Status OlapChunkSource::cache_next_batch_chunks_blocking(size_t batch_size) {
     using namespace vectorized;
 
     for (size_t i = 0; i < batch_size; ++i) {
-        ChunkUniquePtr chunk(ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), config::vector_chunk_size, true));
+        ChunkUniquePtr chunk(
+                ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), config::vector_chunk_size, true));
         _status = _read_chunk_from_storage(_runtime_state, chunk.get());
         if (!_status.ok()) {
             break;
