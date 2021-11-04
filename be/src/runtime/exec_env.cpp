@@ -185,6 +185,7 @@ Status ExecEnv::init_mem_tracker() {
     _local_column_pool_mem_tracker = new MemTracker(-1, "local_column_pool", _column_pool_mem_tracker);
     _page_cache_mem_tracker = new MemTracker(-1, "page_cache", nullptr);
     _update_mem_tracker = new MemTracker(bytes_limit * 0.6, "update", nullptr);
+    _consistency_mem_tracker = new MemTracker(-1, "consistency", _mem_tracker);
 
     return Status::OK();
 }
@@ -291,6 +292,10 @@ void ExecEnv::_destory() {
     if (_thread_mgr) {
         delete _thread_mgr;
         _thread_mgr = nullptr;
+    }
+    if (_consistency_mem_tracker) {
+        delete _consistency_mem_tracker;
+        _consistency_mem_tracker = nullptr;
     }
     if (_update_mem_tracker) {
         delete _update_mem_tracker;

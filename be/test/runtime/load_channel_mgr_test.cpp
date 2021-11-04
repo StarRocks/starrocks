@@ -178,7 +178,6 @@ TEST_F(LoadChannelMgrTest, normal) {
     DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
     auto tuple_desc = desc_tbl->get_tuple_descriptor(0);
     RowDescriptor row_desc(*desc_tbl, {0}, {false});
-    MemTracker tracker;
     PUniqueId load_id;
     load_id.set_hi(2);
     load_id.set_lo(3);
@@ -267,7 +266,6 @@ TEST_F(LoadChannelMgrTest, cancel) {
     DescriptorTbl* desc_tbl = nullptr;
     DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
     RowDescriptor row_desc(*desc_tbl, {0}, {false});
-    MemTracker tracker;
     PUniqueId load_id;
     load_id.set_hi(2);
     load_id.set_lo(3);
@@ -311,7 +309,6 @@ TEST_F(LoadChannelMgrTest, open_failed) {
     DescriptorTbl* desc_tbl = nullptr;
     DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
     RowDescriptor row_desc(*desc_tbl, {0}, {false});
-    MemTracker tracker;
     PUniqueId load_id;
     load_id.set_hi(2);
     load_id.set_lo(3);
@@ -347,7 +344,6 @@ TEST_F(LoadChannelMgrTest, add_failed) {
     DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
     auto tuple_desc = desc_tbl->get_tuple_descriptor(0);
     RowDescriptor row_desc(*desc_tbl, {0}, {false});
-    MemTracker tracker;
     PUniqueId load_id;
     load_id.set_hi(2);
     load_id.set_lo(3);
@@ -435,7 +431,6 @@ TEST_F(LoadChannelMgrTest, close_failed) {
     DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
     auto tuple_desc = desc_tbl->get_tuple_descriptor(0);
     RowDescriptor row_desc(*desc_tbl, {0}, {false});
-    MemTracker tracker;
     PUniqueId load_id;
     load_id.set_hi(2);
     load_id.set_lo(3);
@@ -528,7 +523,6 @@ TEST_F(LoadChannelMgrTest, unknown_tablet) {
     DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
     auto tuple_desc = desc_tbl->get_tuple_descriptor(0);
     RowDescriptor row_desc(*desc_tbl, {0}, {false});
-    MemTracker tracker;
     PUniqueId load_id;
     load_id.set_hi(2);
     load_id.set_lo(3);
@@ -615,7 +609,6 @@ TEST_F(LoadChannelMgrTest, duplicate_packet) {
     DescriptorTbl::create(&obj_pool, tdesc_tbl, &desc_tbl);
     auto tuple_desc = desc_tbl->get_tuple_descriptor(0);
     RowDescriptor row_desc(*desc_tbl, {0}, {false});
-    MemTracker tracker;
     PUniqueId load_id;
     load_id.set_hi(2);
     load_id.set_lo(3);
