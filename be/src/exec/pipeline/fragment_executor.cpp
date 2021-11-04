@@ -129,14 +129,6 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         degree_of_parallelism = std::max<int32_t>(1, std::thread::hardware_concurrency() / 2);
     }
 
-    // pipeline scan mode
-    // 0: use sync io
-    // 1: use async io and exec->thread_pool()
-    int32_t pipeline_scan_mode = 1;
-    if (query_options.__isset.pipeline_scan_mode) {
-        pipeline_scan_mode = query_options.pipeline_scan_mode;
-    }
-
     // set scan ranges
     std::vector<ExecNode*> scan_nodes;
     std::vector<TScanRangeParams> no_scan_ranges;
@@ -175,9 +167,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         const auto& pipeline = pipelines[n];
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
         const auto degree_of_parallelism = pipeline->source_operator_factory()->degree_of_parallelism();
-        VLOG_ROW << "Pipeline " << pipeline->to_debug_string() << " parallel=" << degree_of_parallelism
-                 << " query_id=" << print_id(query_id)
-                 << " fragment_instance_id=" << print_id(params.fragment_instance_id);
+        LOG(INFO) << "Pipeline " << pipeline->to_readable_string() << " parallel=" << degree_of_parallelism
+                  << " fragment_instance_id=" << print_id(params.fragment_instance_id);
         const bool is_root = (n == num_pipelines - 1);
         // If pipeline's SourceOperator is with morsels, a MorselQueue is added to the SourceOperator.
         // at present, only ScanOperator need a MorselQueue attached.
@@ -198,11 +189,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                         std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, 0, is_root);
                 driver->set_morsel_queue(morsel_queue.get());
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
-                if (pipeline_scan_mode == 1) {
-                    scan_operator->set_io_threads(exec_env->pipeline_io_thread_pool());
-                } else {
-                    scan_operator->set_io_threads(nullptr);
-                }
+                scan_operator->set_io_threads(exec_env->pipeline_io_thread_pool());
                 drivers.emplace_back(std::move(driver));
             }
         } else {

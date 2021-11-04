@@ -244,25 +244,32 @@ bool OlapChunkSource::has_next_chunk() const {
     return _status.ok();
 }
 
-StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk() {
+bool OlapChunkSource::has_output() const {
+    return !_chunk_cache.empty();
+}
+
+StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_cache() {
+    vectorized::ChunkPtr chunk = nullptr;
+    _chunk_cache.try_get(&chunk);
+    return chunk;
+}
+
+Status OlapChunkSource::cache_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) {
     if (!_status.ok()) {
         return _status;
     }
     using namespace vectorized;
-    ChunkUniquePtr chunk(ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), config::vector_chunk_size, true));
-    _status = _read_chunk_from_storage(_runtime_state, chunk.get());
-    if (!_status.ok()) {
-        return _status;
+
+    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+        ChunkUniquePtr chunk(
+                ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), config::vector_chunk_size, true));
+        _status = _read_chunk_from_storage(_runtime_state, chunk.get());
+        if (!_status.ok()) {
+            break;
+        }
+        _chunk_cache.put(std::move(chunk));
     }
-    return std::move(chunk);
-}
-
-void OlapChunkSource::cache_next_chunk_blocking() {
-    _chunk = get_next_chunk();
-}
-
-StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk_nonblocking() {
-    return std::move(_chunk);
+    return _status;
 }
 
 // mapping a slot-column-id to schema-columnid
