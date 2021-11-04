@@ -58,7 +58,6 @@ extern const uint32_t k_segment_magic_length;
 struct SegmentWriterOptions {
     uint32_t storage_format_version = 1;
     uint32_t num_rows_per_block = 1024;
-    MemTracker* mem_tracker = nullptr;
     vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
 };
 
