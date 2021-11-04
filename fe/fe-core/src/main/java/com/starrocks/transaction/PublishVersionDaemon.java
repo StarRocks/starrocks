@@ -113,6 +113,7 @@ public class PublishVersionDaemon extends MasterDaemon {
             }
 
             if (shouldFinishTxn) {
+                LOG.info("begin finish tasks for transaction: {}", transactionState.getTransactionId());
                 globalTransactionMgr.finishTransaction(transactionState.getDbId(), transactionState.getTransactionId(),
                         publishErrorReplicaIds);
                 if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {

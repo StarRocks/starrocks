@@ -717,6 +717,7 @@ public class DatabaseTransactionMgr {
             }
         }
         db.writeLock();
+        LOG.info("begin finish transaction {} loop", transactionId);
         try {
             boolean hasError = false;
             for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
@@ -832,6 +833,7 @@ public class DatabaseTransactionMgr {
                     }
                 }
             }
+            LOG.info("end finish transaction {} loop", transactionId);
             if (hasError) {
                 return;
             }
