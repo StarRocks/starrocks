@@ -184,7 +184,6 @@ protected:
     void create_rowset_writer_context(const TabletSchema* tablet_schema, RowsetWriterContext* rowset_writer_context) {
         RowsetId rowset_id;
         rowset_id.init(10000);
-        rowset_writer_context->mem_tracker = _tablet_meta_mem_tracker.get();
         rowset_writer_context->rowset_id = rowset_id;
         rowset_writer_context->tablet_id = 12345;
         rowset_writer_context->tablet_schema_hash = 1111;

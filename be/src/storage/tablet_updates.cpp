@@ -13,6 +13,7 @@
 #include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "rocksdb/write_batch.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/primary_key_encoder.h"
@@ -912,7 +913,7 @@ StatusOr<std::unique_ptr<CompactionInfo>> TabletUpdates::_get_compaction() {
     return info;
 }
 
-Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, MemTracker* mem_tracker, bool wait_apply) {
+Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, bool wait_apply) {
     auto info = (*pinfo).get();
     vector<RowsetSharedPtr> input_rowsets(info->inputs.size());
     {
@@ -932,10 +933,8 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, Mem
         }
     }
 
-    std::unique_ptr<MemTracker> sub_tracker = std::make_unique<MemTracker>(-1, "update-compation", mem_tracker, true);
     // create rowset writer
     RowsetWriterContext context(kDataFormatV2, config::storage_format_version);
-    context.mem_tracker = sub_tracker.get();
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
     context.tablet_uid = _tablet.tablet_uid();
     context.tablet_id = _tablet.tablet_id();
@@ -1445,7 +1444,11 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
               << int_list_to_string(info->inputs) << " #rows:" << total_rows << "->" << total_rows_after_compaction
               << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
               << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
-    Status st = _do_compaction(&info, mem_tracker, true);
+
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
+    Status st = _do_compaction(&info, true);
     if (!st.ok()) {
         _compaction_running = false;
     }
