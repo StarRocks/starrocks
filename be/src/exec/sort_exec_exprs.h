@@ -27,8 +27,6 @@
 
 namespace starrocks {
 
-class MemTracker;
-
 // Helper class to Prepare() , Open() and Close() the ordering expressions used to perform
 // comparisons in a sort. Used by TopNNode, SortNode.  When two
 // rows are compared, the ordering expressions are evaluated once for each side.

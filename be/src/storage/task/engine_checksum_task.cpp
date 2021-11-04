@@ -116,6 +116,14 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
     st = reader.get_next(chunk.get());
 
     while (st.ok()) {
+#ifndef BE_TEST
+        Status st = _mem_tracker->check_mem_limit("ConsistencyCheck");
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to finish compute checksum. " << st.message() << std::endl;
+            return OLAP_ERR_OTHER_ERROR;
+        }
+#endif
+
         num_rows = chunk->num_rows();
         for (auto& column : chunk->columns()) {
             column->crc32_hash(hash_codes, 0, num_rows);
