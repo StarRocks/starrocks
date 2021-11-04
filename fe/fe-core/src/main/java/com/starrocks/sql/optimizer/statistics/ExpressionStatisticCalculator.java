@@ -10,14 +10,20 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.time.DateTimeException;
 import java.util.List;
 import java.util.OptionalDouble;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.Utils.getDatetimeFromLong;
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
 public class ExpressionStatisticCalculator {
+    private static final Logger LOG = LogManager.getLogger(ExpressionStatisticCalculator.class);
+
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input) {
         return operator.accept(new ExpressionStatisticVisitor(input), null);
     }
@@ -81,6 +87,35 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.MIN:
                     value = columnStatistic.getMinValue();
                     return new ColumnStatistic(value, value, 0, callOperator.getType().getSlotSize(), 1);
+                case FunctionSet.YEAR:
+                    int minValue = 1000;
+                    int maxValue = 3000;
+                    try {
+                        minValue = getDatetimeFromLong((long) columnStatistic.getMinValue()).getYear();
+                        maxValue = getDatetimeFromLong((long) columnStatistic.getMaxValue()).getYear();
+                    } catch (DateTimeException e) {
+                        LOG.warn("get date type column statistics min/max failed. " + e);
+                    }
+                    return new ColumnStatistic(minValue, maxValue, 0,
+                            callOperator.getType().getSlotSize(),
+                            Math.min(columnStatistic.getDistinctValuesCount(), (maxValue - minValue + 1)));
+                case FunctionSet.MONTH:
+                    return new ColumnStatistic(1, 12, 0,
+                            callOperator.getType().getSlotSize(),
+                            Math.min(columnStatistic.getDistinctValuesCount(), 12));
+                case FunctionSet.DAY:
+                    return new ColumnStatistic(1, 31, 0,
+                            callOperator.getType().getSlotSize(),
+                            Math.min(columnStatistic.getDistinctValuesCount(), 31));
+                case FunctionSet.HOUR:
+                    return new ColumnStatistic(0, 23, 0,
+                            callOperator.getType().getSlotSize(),
+                            Math.min(columnStatistic.getDistinctValuesCount(), 24));
+                case FunctionSet.MINUTE:
+                case FunctionSet.SECOND:
+                    return new ColumnStatistic(0, 59, 0,
+                            callOperator.getType().getSlotSize(),
+                            Math.min(columnStatistic.getDistinctValuesCount(), 60));
                 default:
                     // return child column statistic default
                     return columnStatistic;
