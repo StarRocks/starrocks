@@ -35,16 +35,6 @@ public class PhysicalDistributionOperator extends PhysicalOperator {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        return this == obj;
-    }
-
-    @Override
-    public int hashCode() {
-        return this.distributionSpec.hashCode();
-    }
-
-    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitPhysicalDistribution(this, context);
     }

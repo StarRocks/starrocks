@@ -147,13 +147,22 @@ public class Optimizer {
 
         context.getTaskScheduler().executeTasks(rootTaskContext, memo.getRootGroup());
 
-        OptExpression result = extractBestPlan(requiredProperty, memo.getRootGroup());
+        OptExpression result;
+        if (!connectContext.getSessionVariable().isSetUseNthExecPlan()) {
+            result = extractBestPlan(requiredProperty, memo.getRootGroup());
+        } else {
+            // extract the nth execution plan
+            int nthExecPlan = connectContext.getSessionVariable().getUseNthExecPlan();
+            result = EnumeratePlan.extractNthPlan(requiredProperty, memo.getRootGroup(), nthExecPlan);
+        }
         tryOpenPreAggregate(result);
         // Rewrite Exchange on top of Sort to Final Sort
         result = new ExchangeSortToMergeRule().rewrite(result);
         result = new AddDecodeNodeForDictStringRule().rewrite(result, rootTaskContext);
         return result;
     }
+
+
 
     /**
      * Extract the lowest cost physical operator tree from memo
