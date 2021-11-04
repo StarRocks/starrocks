@@ -28,7 +28,7 @@ public:
     ~ColumnEqPredicate() override = default;
 
     template <typename Op>
-    void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+    inline void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
         auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
         auto* sel = selection;
         if (!column->has_null()) {
@@ -122,7 +122,7 @@ public:
     ~BinaryColumnEqPredicate() override = default;
 
     template <typename Op>
-    void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+    inline void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
         auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
         auto* sel = selection;
         if (!column->has_null()) {
