@@ -282,7 +282,7 @@ create table users (
     property3 tinyint NOT NULL,
     ....
 ) PRIMARY KEY (user_id)
-DISTRIBUTED BY HASH(order_id) BUCKETS 4
+DISTRIBUTED BY HASH(user_id) BUCKETS 4
 PROPERTIES("replication_num" = "3");
 ~~~
 
