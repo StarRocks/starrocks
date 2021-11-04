@@ -98,6 +98,7 @@ public:
 
     uint32_t num_rows() const { return _num_rows; }
 
+    // TODO: remove this method, create `ColumnIterator` via `ColumnReader`.
     Status new_column_iterator(uint32_t cid, ColumnIterator** iter);
 
     Status new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** iter);

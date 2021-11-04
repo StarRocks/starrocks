@@ -36,6 +36,7 @@
 #include "gutil/strings/substitute.h"
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/segment_v2/column_reader.h"
+#include "storage/rowset/segment_v2/default_value_column_iterator.h"
 #include "storage/rowset/segment_v2/empty_segment_iterator.h"
 #include "storage/rowset/segment_v2/page_io.h"
 #include "storage/rowset/segment_v2/segment_iterator.h"

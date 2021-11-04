@@ -6,6 +6,7 @@
 
 #include "column/datum_convert.h"
 #include "storage/rowset/beta_rowset.h"
+#include "storage/rowset/segment_v2/column_iterator.h"
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/chunk_helper.h"

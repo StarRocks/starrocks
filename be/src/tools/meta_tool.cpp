@@ -39,6 +39,7 @@
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/rowset/segment_v2/binary_plain_page.h"
+#include "storage/rowset/segment_v2/column_iterator.h"
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
