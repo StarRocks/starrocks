@@ -46,6 +46,7 @@ void ExchangeMergeSortSourceOperator::finish(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> ExchangeMergeSortSourceOperator::pull_chunk(RuntimeState* state) {
     auto chunk = std::make_shared<vectorized::Chunk>();
+    // TODO(yan): run `eval_join_runtime_filters`
     get_next_merging(state, &chunk);
     return std::move(chunk);
 }
