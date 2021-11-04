@@ -178,7 +178,7 @@ Status ExecEnv::init_mem_tracker() {
     _load_mem_tracker = new MemTracker(MemTracker::LOAD, load_mem_limit, "load", nullptr);
     _tablet_meta_mem_tracker = new MemTracker(-1, "tablet_meta", _mem_tracker);
     _compaction_mem_tracker = new MemTracker(-1, "compaction", _mem_tracker);
-    _schema_change_mem_tracker = new MemTracker(-1, "schema_change", nullptr);
+    _schema_change_mem_tracker = new MemTracker(-1, "schema_change", _mem_tracker);
     _snapshot_mem_tracker = new MemTracker(-1, "snapshot", nullptr);
     _column_pool_mem_tracker = new MemTracker(-1, "column_pool", nullptr);
     _central_column_pool_mem_tracker = new MemTracker(-1, "central_column_pool", _column_pool_mem_tracker);
