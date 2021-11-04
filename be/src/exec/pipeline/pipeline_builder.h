@@ -10,7 +10,6 @@
 
 namespace starrocks {
 class ExecNode;
-class MemTracker;
 namespace pipeline {
 
 class PipelineBuilderContext {

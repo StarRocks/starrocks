@@ -78,7 +78,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         _runtime_state->set_batch_size(config::vector_chunk_size);
     }
 
-    RETURN_IF_ERROR(_runtime_state->init_mem_trackers(_query_id));
+    _runtime_state->init_mem_trackers(_query_id);
     _runtime_state->set_be_number(request.backend_num);
     if (request.__isset.import_label) {
         _runtime_state->set_import_label(request.import_label);

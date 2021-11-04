@@ -6,7 +6,6 @@
 #include "exec/vectorized/hash_joiner.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
-#include "runtime/mem_tracker.h"
 
 namespace starrocks {
 namespace pipeline {
