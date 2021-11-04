@@ -50,6 +50,7 @@ enum class PredicateType {
     kAnd = 11,
     kOr = 12,
     kExpr = 13,
+    kTrue = 14,
 };
 
 template <typename T>
@@ -119,6 +120,10 @@ public:
     // If this function return false, prefer using evaluate_branless to get a better performance
     virtual bool can_vectorized() const = 0;
 
+    // Indicate if this predicate uses ExprContext*. The predicates of this kind has one major limitation
+    // that it does not support `evaluate` range. In another word, `from` must be zero.
+    bool is_expr_predicate() const { return _is_expr_predicate; }
+
     bool is_index_filter_only() const { return _is_index_filter_only; }
 
     void set_index_filter_only(bool is_index_only) { _is_index_filter_only = is_index_only; }
@@ -155,6 +160,8 @@ protected:
     ColumnId _column_id;
     // Whether this predicate only used to filter index, not filter chunk row
     bool _is_index_filter_only = false;
+    // If this predicate uses ExprContext*
+    bool _is_expr_predicate = false;
 };
 
 using PredicateList = std::vector<const ColumnPredicate*>;
@@ -274,8 +281,6 @@ ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type, ColumnId id,
 ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type, ColumnId id,
                                              const std::vector<std::string>& operands);
 ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type, ColumnId, bool is_null);
-ColumnPredicate* new_column_expr_predicate(const TypeInfoPtr& type, ColumnId, RuntimeState*, ExprContext* expr_ctx,
-                                           const SlotDescriptor* slot_desc);
 
 template <FieldType field_type, template <FieldType> typename Predicate, typename NewColumnPredicateFunc>
 Status predicate_convert_to(Predicate<field_type> const& input_predicate,

@@ -23,6 +23,8 @@
 #include "util/runtime_profile.h"
 namespace starrocks::vectorized {
 
+static constexpr size_t kHashJoinKeyColumnOffset = 1;
+
 HashJoinNode::HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
           _hash_join_node(tnode.hash_join_node),
@@ -722,7 +724,8 @@ Status HashJoinNode::_push_down_in_filter(RuntimeState* state) {
             ExprContext* filter =
                     RuntimeFilterHelper::create_runtime_in_filter(state, _pool, probe_expr, _is_null_safes[i]);
             if (filter == nullptr) continue;
-            RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_in_filter(column, probe_expr, filter));
+            RETURN_IF_ERROR(
+                    RuntimeFilterHelper::fill_runtime_in_filter(column, probe_expr, filter, kHashJoinKeyColumnOffset));
             _runtime_in_filters.push_back(filter);
         }
     }
@@ -753,7 +756,8 @@ Status HashJoinNode::_do_publish_runtime_filters(RuntimeState* state, int64_t li
         filter->set_join_mode(rf_desc->join_mode());
         filter->init(_ht.get_row_count());
         ColumnPtr column = _ht.get_key_columns()[rf_desc->build_expr_order()];
-        RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_bloom_filter(column, build_type, filter));
+        RETURN_IF_ERROR(
+                RuntimeFilterHelper::fill_runtime_bloom_filter(column, build_type, filter, kHashJoinKeyColumnOffset));
         rf_desc->set_runtime_filter(filter);
     }
 
