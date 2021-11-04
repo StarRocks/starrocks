@@ -22,7 +22,6 @@
 #include <gtest/gtest.h>
 
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/field.h"
 #include "storage/types.h"
 #include "util/slice.h"
