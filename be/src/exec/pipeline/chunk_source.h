@@ -32,7 +32,7 @@ public:
 
     virtual StatusOr<vectorized::ChunkPtr> get_next_chunk_from_cache() = 0;
 
-    virtual Status cache_next_batch_chunks_blocking(size_t batch_size) = 0;
+    virtual Status cache_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) = 0;
 
 protected:
     // The morsel will own by pipeline driver

@@ -26,8 +26,6 @@ public:
     // since FragmentContext is unregistered prematurely after all the drivers are finalized.
     virtual bool pending_finish() { return false; }
 
-    void finish(RuntimeState* state) override {}
-
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override {
         return Status::InternalError("Shouldn't push chunk to source operator");
     }

@@ -15,17 +15,6 @@ class RuntimeFilterProbeCollector;
 }
 namespace pipeline {
 
-enum IOTaskState {
-    // no io task
-    INACTIVE,
-
-    // io task is created but not start
-    PENDING,
-
-    // io task is running
-    ACTIVE,
-};
-
 class ScanOperator final : public SourceOperator {
 public:
     ScanOperator(int32_t id, int32_t plan_node_id, const TOlapScanNode& olap_scan_node,
@@ -48,6 +37,8 @@ public:
 
     bool is_finished() const override;
 
+    void finish(RuntimeState* state) override;
+
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     void set_io_threads(PriorityThreadPool* io_threads) { _io_threads = io_threads; }
 
@@ -60,8 +51,7 @@ private:
 private:
     const size_t _batch_size = 16;
     mutable bool _is_finished = false;
-    bool _has_next_morsel = true;
-    std::atomic<IOTaskState> _io_task_state = IOTaskState::INACTIVE;
+    std::atomic_bool _is_io_task_active = false;
     const TOlapScanNode& _olap_scan_node;
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const vectorized::RuntimeFilterProbeCollector& _runtime_filters;

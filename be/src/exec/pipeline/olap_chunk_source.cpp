@@ -254,13 +254,13 @@ StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_cache() {
     return chunk;
 }
 
-Status OlapChunkSource::cache_next_batch_chunks_blocking(size_t batch_size) {
+Status OlapChunkSource::cache_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) {
     if (!_status.ok()) {
         return _status;
     }
     using namespace vectorized;
 
-    for (size_t i = 0; i < batch_size; ++i) {
+    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
         ChunkUniquePtr chunk(
                 ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), config::vector_chunk_size, true));
         _status = _read_chunk_from_storage(_runtime_state, chunk.get());

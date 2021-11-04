@@ -26,7 +26,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
 Status ScanOperator::close(RuntimeState* state) {
     state->exec_env()->decrement_num_scan_operators(1);
     if (_chunk_source) {
-        DCHECK(_io_task_state.load(std::memory_order_acquire) == IOTaskState::INACTIVE);
+        DCHECK(!_is_io_task_active.load(std::memory_order_acquire));
         _chunk_source->close(state);
     }
     Operator::close(state);
@@ -38,10 +38,6 @@ bool ScanOperator::has_output() const {
         return false;
     }
 
-    if (!_has_next_morsel) {
-        return false;
-    }
-
     DCHECK(_chunk_source != nullptr);
 
     // Still have cached chunks
@@ -50,7 +46,7 @@ bool ScanOperator::has_output() const {
     }
 
     // io task is busy reading chunks, so we just wait
-    if (_io_task_state.load(std::memory_order_acquire) != IOTaskState::INACTIVE) {
+    if (_is_io_task_active.load(std::memory_order_acquire)) {
         return false;
     }
 
@@ -62,29 +58,18 @@ bool ScanOperator::has_output() const {
 }
 
 bool ScanOperator::pending_finish() {
-    // TODO(hcf) remove pending_finish next pull request
     DCHECK(_is_finished);
-    return false;
+    // If there is no next morsel, and io task is active
+    // we just wait for the io thread to end
+    return _is_io_task_active.load(std::memory_order_acquire);
 }
 
 bool ScanOperator::is_finished() const {
-    if (_is_finished) {
-        return true;
-    }
-
-    if (_has_next_morsel) {
-        return false;
-    }
-
-    // If there is no next morsel, and io task is active
-    // we just wait for the io thread to end during which current pipeline
-    // will still be scheduled multiply times, but it can be guarantee that
-    // the waiting time is very short
-    if (_io_task_state.load(std::memory_order_acquire) == IOTaskState::INACTIVE) {
-        _is_finished = true;
-    }
-
     return _is_finished;
+}
+
+void ScanOperator::finish(RuntimeState* state) {
+    _is_finished = true;
 }
 
 StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
@@ -102,14 +87,13 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
 }
 
 void ScanOperator::_trigger_next_scan() {
-    DCHECK(_io_task_state.load(std::memory_order_acquire) == IOTaskState::INACTIVE);
+    DCHECK(!_is_io_task_active.load(std::memory_order_acquire));
 
     PriorityThreadPool::Task task;
-    _io_task_state.store(IOTaskState::PENDING, std::memory_order_release);
+    _is_io_task_active.store(true, std::memory_order_release);
     task.work_function = [this]() {
-        _io_task_state.store(IOTaskState::ACTIVE, std::memory_order_release);
-        _chunk_source->cache_next_batch_chunks_blocking(_batch_size);
-        _io_task_state.store(IOTaskState::INACTIVE, std::memory_order_release);
+        _chunk_source->cache_next_batch_chunks_blocking(_batch_size, _is_finished);
+        _is_io_task_active.store(false, std::memory_order_release);
     };
     // TODO(by satanson): set a proper priority
     task.priority = 20;
@@ -119,7 +103,7 @@ void ScanOperator::_trigger_next_scan() {
 
 void ScanOperator::_pickup_morsel(RuntimeState* state) {
     DCHECK(_morsel_queue != nullptr);
-    DCHECK(_io_task_state.load(std::memory_order_acquire) == IOTaskState::INACTIVE);
+    DCHECK(!_is_io_task_active.load(std::memory_order_acquire));
     if (_chunk_source) {
         _chunk_source->close(state);
     }
@@ -127,7 +111,7 @@ void ScanOperator::_pickup_morsel(RuntimeState* state) {
     if (!maybe_morsel.has_value()) {
         // release _chunk_source before _curr_morsel, because _chunk_source depends on _curr_morsel.
         _chunk_source = nullptr;
-        _has_next_morsel = false;
+        _is_finished = true;
     } else {
         auto morsel = std::move(maybe_morsel.value());
         DCHECK(morsel);

@@ -51,7 +51,7 @@ public:
 
     StatusOr<vectorized::ChunkPtr> get_next_chunk_from_cache() override;
 
-    Status cache_next_batch_chunks_blocking(size_t batch_size) override;
+    Status cache_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) override;
 
 private:
     Status _get_tablet(const TInternalScanRange* scan_range);
