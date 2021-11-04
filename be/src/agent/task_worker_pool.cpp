@@ -1054,7 +1054,8 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
         TStatus task_status;
 
         uint32_t checksum = 0;
-        EngineChecksumTask engine_task(check_consistency_req.tablet_id, check_consistency_req.schema_hash,
+        EngineChecksumTask engine_task(ExecEnv::GetInstance()->consistency_mem_tracker(),
+                                       check_consistency_req.tablet_id, check_consistency_req.schema_hash,
                                        check_consistency_req.version, check_consistency_req.version_hash, &checksum);
         OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
         if (res != OLAP_SUCCESS) {

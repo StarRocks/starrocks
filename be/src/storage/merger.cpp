@@ -28,7 +28,6 @@
 #include "storage/reader.h"
 #include "storage/row_cursor.h"
 #include "storage/tablet.h"
-#include "util/defer_op.h"
 #include "util/trace.h"
 
 namespace starrocks {
