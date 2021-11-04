@@ -94,7 +94,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     auto* runtime_state = _fragment_ctx->runtime_state();
 
     runtime_state->set_batch_size(config::vector_chunk_size);
-    RETURN_IF_ERROR(runtime_state->init_mem_trackers(query_id));
+    runtime_state->init_mem_trackers(query_id);
     runtime_state->set_be_number(backend_num);
 
     // Set up desc tbl

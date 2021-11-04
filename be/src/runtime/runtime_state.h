@@ -82,7 +82,7 @@ public:
     // Specific parts of the fragment (i.e. exec nodes, sinks, data stream senders, etc)
     // will add a fourth level when they are initialized.
     // This function also initializes a user function mem tracker (in the fourth level).
-    Status init_mem_trackers(const TUniqueId& query_id);
+    void init_mem_trackers(const TUniqueId& query_id);
 
     // for ut only
     Status init_instance_mem_tracker();
