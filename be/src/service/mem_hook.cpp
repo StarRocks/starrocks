@@ -10,6 +10,7 @@
 
 #define ALIAS(my_fn) __attribute__((alias(#my_fn), used))
 
+/*
 //// void* ptr = new AAA();
 void* operator new(size_t size) {
     void* ptr = tc_new(size);
@@ -164,6 +165,7 @@ void operator delete[](void* p, size_t size, std::align_val_t al) noexcept {
 
     return tc_deletearray(p);
 }
+*/
 
 extern "C" {
 // malloc

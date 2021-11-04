@@ -33,7 +33,7 @@
 
 namespace starrocks {
 
-OLAPStatus Merger::merge_rowsets(MemTracker* mem_tracker, const TabletSharedPtr& tablet, ReaderType reader_type,
+OLAPStatus Merger::merge_rowsets(int64_t mem_limit, const TabletSharedPtr& tablet, ReaderType reader_type,
                                  const std::vector<RowsetReaderSharedPtr>& src_rowset_readers,
                                  RowsetWriter* dst_rowset_writer, Merger::Statistics* stats_output) {
     TRACE_COUNTER_SCOPE_LATENCY_US("merge_rowsets_latency_us");
@@ -47,7 +47,7 @@ OLAPStatus Merger::merge_rowsets(MemTracker* mem_tracker, const TabletSharedPtr&
     int64_t num_rows = 0;
     int64_t total_row_size = 0;
     uint64_t chunk_size = DEFAULT_CHUNK_SIZE;
-    if (mem_tracker->limit() > 0) {
+    if (mem_limit > 0) {
         for (auto& rowset_reader : src_rowset_readers) {
             num_rows += rowset_reader->rowset()->num_rows();
             total_row_size += rowset_reader->rowset()->total_row_size();
@@ -55,20 +55,13 @@ OLAPStatus Merger::merge_rowsets(MemTracker* mem_tracker, const TabletSharedPtr&
 
         int64_t avg_row_size = (total_row_size + 1) / (num_rows + 1);
         // The result of thie division operation be zero, so added one
-        chunk_size = 1 + mem_tracker->limit() / (src_rowset_readers.size() * avg_row_size + 1);
+        chunk_size = 1 + mem_limit / (src_rowset_readers.size() * avg_row_size + 1);
     }
     if (chunk_size > config::vector_chunk_size) {
         chunk_size = config::vector_chunk_size;
     }
     reader_params.chunk_size = chunk_size;
     RETURN_NOT_OK(reader.init(reader_params));
-
-    auto tracker = std::make_unique<MemTracker>(-1, "merger", mem_tracker, true);
-
-    // release the memory of object pool.
-    // The memory of object allocate from ObjectPool is recorded in the mem_tracker.
-    // TODO: add mem_tracker for ObjectPool?
-    DeferOp release_object_pool_memory([&tracker] { return tracker->release(tracker->consumption()); });
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 
@@ -77,9 +70,6 @@ OLAPStatus Merger::merge_rowsets(MemTracker* mem_tracker, const TabletSharedPtr&
                       "failed to init row cursor when merging rowsets of tablet " + tablet->full_name());
     RETURN_NOT_OK_LOG(row_cursor.allocate_memory_for_string_type(tablet->tablet_schema()),
                       "failed to allocate memory for compaction");
-    tracker->consume(row_cursor.get_variable_len());
-    DeferOp release_row_cursor_memory(
-            [&tracker, &row_cursor] { return tracker->release(row_cursor.get_variable_len()); });
 
     // The following procedure would last for long time, half of one day, etc.
     int64_t output_rows = 0;
