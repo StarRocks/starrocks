@@ -95,16 +95,22 @@ public class FunctionSet {
     public static final String DIVIDE = "divide";
 
     // date functions
+    public static final String YEAR = "year";
     public static final String YEARS_ADD = "years_add";
     public static final String YEARS_SUB = "years_sub";
+    public static final String MONTH = "month";
     public static final String MONTHS_ADD = "months_add";
     public static final String MONTHS_SUB = "months_sub";
+    public static final String DAY = "day";
     public static final String DAYS_ADD = "days_add";
     public static final String DAYS_SUB = "days_sub";
     public static final String ADDDATE = "adddate";
     public static final String SUBDATE = "subdate";
     public static final String DATE_ADD = "date_add";
     public static final String DATE_SUB = "date_sub";
+    public static final String HOUR = "hour";
+    public static final String MINUTE = "minute";
+    public static final String SECOND = "second";
 
     private static final Logger LOG = LogManager.getLogger(FunctionSet.class);
 
