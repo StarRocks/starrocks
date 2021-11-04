@@ -700,5 +700,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     cardinality: 1000000000\n" +
                 "     probe runtime filters:\n" +
                 "     - filter_id = 0, probe_expr = (1: v4)"));
+
+        setTableStatistics(t0, 10000);
     }
 }

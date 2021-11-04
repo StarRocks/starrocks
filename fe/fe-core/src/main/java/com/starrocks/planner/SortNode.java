@@ -300,6 +300,9 @@ public class SortNode extends PlanNode {
 
     @Override
     public boolean canPushDownRuntimeFilter() {
-        return false;
+        if (useTopN) {
+            return false;
+        }
+        return true;
     }
 }
