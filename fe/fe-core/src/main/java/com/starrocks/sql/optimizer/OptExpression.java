@@ -26,6 +26,9 @@ public class OptExpression {
 
     private LogicalProperty property;
     private Statistics statistics;
+    // The number of plans in the entire search space，this parameter is valid only when cbo_use_nth_exec_plan configured.
+    // Default value is 0
+    private int planCount = 0;
 
     // For easily convert a GroupExpression to OptExpression when pattern match
     // we just use OptExpression to wrap GroupExpression
@@ -118,6 +121,14 @@ public class OptExpression {
 
     public void setStatistics(Statistics statistics) {
         this.statistics = statistics;
+    }
+
+    public int getPlanCount() {
+        return planCount;
+    }
+
+    public void setPlanCount(int planCount) {
+        this.planCount = planCount;
     }
 
     @Override

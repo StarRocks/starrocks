@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -13,6 +14,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A group is a set of logically equivalent logical and
@@ -41,6 +43,8 @@ public class Group {
     // confidence statistics is the statistics in group with highest confidence
     private Statistics confidenceStatistics;
     private final Map<PhysicalPropertySet, Pair<Double, GroupExpression>> lowestCostExpressions;
+    // GroupExpressions in this Group which could satisfy the required property.
+    private final Map<PhysicalPropertySet, Set<GroupExpression>> satisfyRequiredPropertyGroupExpressions;
 
     // All expressions in one group have same logical property.
     private LogicalProperty logicalProperty;
@@ -52,6 +56,7 @@ public class Group {
         logicalExpressions = Lists.newArrayList();
         physicalExpressions = Lists.newArrayList();
         lowestCostExpressions = Maps.newHashMap();
+        satisfyRequiredPropertyGroupExpressions = Maps.newHashMap();
     }
 
     public int getId() {
@@ -132,6 +137,26 @@ public class Group {
         }
     }
 
+    public Set<GroupExpression> getSatisfyRequiredGroupExpressions(PhysicalPropertySet requiredProperty) {
+        return satisfyRequiredPropertyGroupExpressions.get(requiredProperty);
+    }
+
+    public void addSatisfyRequiredPropertyGroupExpression(PhysicalPropertySet outputProperty,
+                                                          GroupExpression groupExpression) {
+        if (!satisfyRequiredPropertyGroupExpressions.containsKey(outputProperty)) {
+            satisfyRequiredPropertyGroupExpressions.put(outputProperty, Sets.newLinkedHashSet());
+        }
+        satisfyRequiredPropertyGroupExpressions.get(outputProperty).add(groupExpression);
+    }
+
+    public void addSatisfyRequiredPropertyGroupExpressions(PhysicalPropertySet outputProperty,
+                                                          Set<GroupExpression> groupExpressions) {
+        if (!satisfyRequiredPropertyGroupExpressions.containsKey(outputProperty)) {
+            satisfyRequiredPropertyGroupExpressions.put(outputProperty, Sets.newLinkedHashSet());
+        }
+        satisfyRequiredPropertyGroupExpressions.get(outputProperty).addAll(groupExpressions);
+    }
+
     public void replaceBestExpressionProperty(PhysicalPropertySet oldProperty, PhysicalPropertySet newProperty,
                                               double cost) {
         Pair<Double, GroupExpression> lowestExpression = lowestCostExpressions.get(oldProperty);
@@ -171,6 +196,7 @@ public class Group {
             setBestExpressionWithStatistics(entry.getValue().second, entry.getValue().first, entry.getKey(),
                     other.confidenceStatistics != null ? other.confidenceStatistics : other.statistics);
         }
+        other.satisfyRequiredPropertyGroupExpressions.forEach(this::addSatisfyRequiredPropertyGroupExpressions);
     }
 
     public void removeGroupExpression(GroupExpression groupExpression) {

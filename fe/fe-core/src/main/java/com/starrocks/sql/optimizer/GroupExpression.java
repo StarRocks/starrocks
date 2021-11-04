@@ -2,8 +2,10 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -15,6 +17,7 @@ import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * A group-expression is the same as an expression except
@@ -35,11 +38,15 @@ public class GroupExpression {
     private final BitSet ruleMasks = new BitSet(RuleType.NUM_RULES.ordinal() + 1);
     private boolean statsDerived = false;
     private final Map<PhysicalPropertySet, Pair<Double, List<PhysicalPropertySet>>> lowestCostTable;
+    private final Set<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>> validOutputInputProperties;
+    private Map<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>, Integer> propertiesPlanCountMap;
 
     public GroupExpression(Operator op, List<Group> inputs) {
         this.op = op;
         this.inputs = inputs;
         this.lowestCostTable = Maps.newHashMap();
+        this.validOutputInputProperties = Sets.newLinkedHashSet();
+        this.propertiesPlanCountMap = Maps.newLinkedHashMap();
     }
 
     public Group getGroup() {
@@ -92,6 +99,42 @@ public class GroupExpression {
 
     public boolean hasRuleExplored(Rule rule) {
         return ruleMasks.get(rule.type().ordinal());
+    }
+
+    public void addValidOutputInputProperties(PhysicalPropertySet outputProperty,
+                                              List<PhysicalPropertySet> inputProperties) {
+        validOutputInputProperties.add(new Pair<>(outputProperty, inputProperties));
+    }
+
+    public List<List<PhysicalPropertySet>> getRequiredInputProperties(PhysicalPropertySet requiredProperty) {
+        List<List<PhysicalPropertySet>> result = Lists.newArrayList();
+        for (Pair<PhysicalPropertySet, List<PhysicalPropertySet>> outputInputProperty : validOutputInputProperties) {
+            if (outputInputProperty.first.equals(requiredProperty)) {
+                result.add(outputInputProperty.second);
+            }
+        }
+        return result;
+    }
+
+    public boolean hasValidSubPlan() {
+        return !validOutputInputProperties.isEmpty();
+    }
+
+    public void addPlanCountOfProperties(Pair<PhysicalPropertySet, List<PhysicalPropertySet>> properties, int count) {
+        propertiesPlanCountMap.put(properties, count);
+    }
+
+    public Map<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>, Integer> getPropertiesPlanCountMap(
+            PhysicalPropertySet requiredProperty) {
+        Map<Pair<PhysicalPropertySet, List<PhysicalPropertySet>>, Integer> result = Maps.newLinkedHashMap();
+        propertiesPlanCountMap.entrySet().stream().filter(entry -> entry.getKey().first.equals(requiredProperty))
+                .forEach(entry -> result.put(entry.getKey(), entry.getValue()));
+        return result;
+    }
+
+    public int getRequiredPropertyPlanCount(PhysicalPropertySet requiredProperty) {
+        return propertiesPlanCountMap.entrySet().stream().filter(entry -> entry.getKey().first.equals(requiredProperty))
+                .mapToInt(Map.Entry::getValue).sum();
     }
 
     /**
