@@ -1499,7 +1499,9 @@ ColumnPtr StringFunctions::append_trailing_char_if_absent(FunctionContext* conte
 
             dst_offsets[row + 1] = dst_offset;
         }
-        dst_data.shrink_to_fit();
+        if (!dst_data.empty()) {
+            dst_data.resize(dst_offsets.back());
+        }
         return dst;
     } else {
         ColumnViewer<TYPE_VARCHAR> src_viewer(columns[0]);
