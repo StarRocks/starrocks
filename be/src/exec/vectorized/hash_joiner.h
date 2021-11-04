@@ -91,7 +91,13 @@ struct HashJoinerParam {
 class HashJoiner final : public pipeline::ContextWithDependency {
 public:
     explicit HashJoiner(const HashJoinerParam& param);
-    ~HashJoiner() = default;
+
+    ~HashJoiner() {
+        if (_runtime_state != nullptr) {
+            close(_runtime_state);
+        }
+    }
+
     Status prepare(RuntimeState* state);
     Status close(RuntimeState* state) override;
     bool need_input() const;
@@ -278,6 +284,9 @@ private:
     }
 
     ObjectPool* _pool;
+
+    RuntimeState* _runtime_state = nullptr;
+
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     const int64_t _limit; // -1: no limit
     int64_t _num_rows_returned;

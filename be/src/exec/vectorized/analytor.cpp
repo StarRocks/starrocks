@@ -80,10 +80,13 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
 }
 
 Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
+    _state = state;
+
     _pool = pool;
     _runtime_profile = runtime_profile;
     _limit = _tnode.limit;
     _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
+    _mem_pool = std::make_unique<MemPool>();
 
     const TAnalyticNode& analytic_node = _tnode.analytic_node;
 
@@ -213,7 +216,6 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     }
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
-    _mem_pool.reset(new MemPool());
 
     _compute_timer = ADD_TIMER(_runtime_profile, "ComputeTime");
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
@@ -254,6 +256,12 @@ Status Analytor::open(RuntimeState* state) {
 }
 
 Status Analytor::close(RuntimeState* state) {
+    if (_is_closed) {
+        return Status::OK();
+    }
+
+    _is_closed = true;
+
     for (auto* ctx : _agg_fn_ctxs) {
         if (ctx != nullptr && ctx->impl()) {
             ctx->impl()->close();
@@ -294,7 +302,7 @@ vectorized::ChunkPtr Analytor::poll_chunk_buffer() {
 
 void Analytor::offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk) {
     std::lock_guard<std::mutex> l(_buffer_mutex);
-    _buffer.push(std::move(chunk));
+    _buffer.push(chunk);
 }
 
 FrameRange Analytor::get_sliding_frame_range() {

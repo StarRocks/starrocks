@@ -71,8 +71,6 @@ private:
     TupleId _output_tuple_id;
     const TupleDescriptor* _tuple_desc;
 
-    RuntimeState* _runtime_state = nullptr;
-
     // time to append columns for grouping_id column and grouping()/grouping_id()'s virtual columns.
     RuntimeProfile::Counter* _extend_column_timer = nullptr;
 
