@@ -91,6 +91,7 @@ protected:
     void TearDown() override {
         delete k_engine;
         k_engine = nullptr;
+        starrocks::ExecEnv::GetInstance()->set_storage_engine(nullptr);
         if (FileUtils::check_exist(config::storage_root_path)) {
             ASSERT_TRUE(FileUtils::remove_all(config::storage_root_path).ok());
         }
