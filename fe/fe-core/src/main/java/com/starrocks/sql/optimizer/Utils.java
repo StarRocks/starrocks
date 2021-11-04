@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
@@ -325,6 +326,10 @@ public class Utils {
 
     public static long getLongFromDateTime(LocalDateTime dateTime) {
         return dateTime.atZone(ZoneId.systemDefault()).toInstant().getEpochSecond();
+    }
+
+    public static LocalDateTime getDatetimeFromLong(long dateTime) {
+        return LocalDateTime.ofInstant(Instant.ofEpochSecond(dateTime), ZoneId.systemDefault());
     }
 
     public static long convertBitSetToLong(BitSet bitSet, int length) {
