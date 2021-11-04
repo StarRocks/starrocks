@@ -113,8 +113,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_DOP = "pipeline_dop";
 
-    public static final String PIPELINE_SCAN_MODE = "pipeline_scan_mode";
-
     public static final String PIPELINE_QUERY_EXPIRE_SECONDS = "pipeline_query_expire_seconds";
 
     // hash join right table push down
@@ -302,10 +300,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
-
-    // 1 means that ScanOperators use async io, otherwise, use sync io instead.
-    @VariableMgr.VarAttr(name = PIPELINE_SCAN_MODE)
-    private int pipelineScanMode = 1;
 
     // a query that can not make any progress for more than pipelineQueryExpireSeconds
     // (300s in default) will be canceled.
@@ -756,7 +750,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
         tResult.setPipeline_dop(pipelineDop);
-        tResult.setPipeline_scan_mode(pipelineScanMode);
         tResult.setPipeline_query_expire_seconds(pipelineQueryExpireSeconds);
         return tResult;
     }
