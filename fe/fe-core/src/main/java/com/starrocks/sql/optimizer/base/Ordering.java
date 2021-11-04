@@ -35,25 +35,25 @@ public class Ordering {
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(columnRef, isAsc, isNullFirst);
-    }
-
-    @Override
-    public boolean equals(Object object) {
-        if (object == this) {
-            return true;
-        }
-
-        if (!(object instanceof Ordering)) {
-            return false;
-        }
-
-        return matches((Ordering) object);
-    }
-
-    @Override
     public String toString() {
         return columnRef.toString() + (isAsc ? " ASC" : " DESC") + (isNullFirst ? " NULLS FIRST" : " NULLS LAST");
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        Ordering ordering = (Ordering) o;
+        return isAsc == ordering.isAsc && isNullFirst == ordering.isNullFirst &&
+                Objects.equals(columnRef, ordering.columnRef);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(columnRef, isAsc, isNullFirst);
     }
 }

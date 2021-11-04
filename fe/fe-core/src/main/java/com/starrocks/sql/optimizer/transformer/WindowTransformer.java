@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -229,7 +230,7 @@ public class WindowTransformer {
      * SortGroup represent the window functions that can be calculated in one SortNode
      * to reduce the generation of SortNode
      */
-    public static List<WindowTransformer.SortGroup> reorderWindowOperator(
+    public static List<WindowTransformer.SortGroup> reorderWindowOperator_depr(
             List<WindowOperator> windowOperators, ColumnRefFactory columnRefFactory, OptExprBuilder subOpt) {
         /*
          * Step 1.
@@ -265,8 +266,8 @@ public class WindowTransformer {
                 orderings.add(new Ordering(col, orderByElement.getIsAsc(),
                         OrderByElement.nullsFirst(orderByElement.getNullsFirstParam(), orderByElement.getIsAsc())));
             }
-            logicalWindowOperators
-                    .add(new LogicalWindowOperator(analyticCall, partitions, orderings, windowOperator.getWindow()));
+            logicalWindowOperators.add(
+                    new LogicalWindowOperator(analyticCall, partitions, orderings, windowOperator.getWindow()));
         }
 
         /*
@@ -352,6 +353,142 @@ public class WindowTransformer {
     }
 
     /**
+     * Reorder window function and build SortGroup
+     * SortGroup represent the window functions that can be calculated in one SortNode
+     * to reduce the generation of SortNode
+     */
+    public static List<WindowTransformer.SortGroup> reorderWindowOperator(
+            List<WindowOperator> windowOperators, ColumnRefFactory columnRefFactory, OptExprBuilder subOpt) {
+        /*
+         * Step 1.
+         * Generate a LogicalAnalyticOperator for each group of
+         * window function with the same window frame, partition and order by
+         */
+        List<LogicalWindowOperator> logicalWindowOperators = new ArrayList<>();
+        for (WindowTransformer.WindowOperator windowOperator : windowOperators) {
+            Map<ColumnRefOperator, CallOperator> analyticCall = new HashMap<>();
+
+            for (Pair<FunctionCallExpr, AnalyticExpr> functionCallExpr : windowOperator.getWindowFunctions()) {
+                ScalarOperator agg =
+                        SqlToScalarOperatorTranslator
+                                .translate(functionCallExpr.first, subOpt.getExpressionMapping(), null, null);
+                ColumnRefOperator columnRefOperator =
+                        columnRefFactory.create(agg.toString(), agg.getType(), agg.isNullable());
+                analyticCall.put(columnRefOperator, (CallOperator) agg);
+                subOpt.getExpressionMapping().put(functionCallExpr.second, columnRefOperator);
+            }
+
+            List<ScalarOperator> partitions = new ArrayList<>();
+            for (Expr partitionExpression : windowOperator.getPartitionExprs()) {
+                ScalarOperator operator = SqlToScalarOperatorTranslator
+                        .translate(partitionExpression, subOpt.getExpressionMapping(), null, null);
+                partitions.add(operator);
+            }
+
+            List<Ordering> orderings = new ArrayList<>();
+            for (OrderByElement orderByElement : windowOperator.getOrderByElements()) {
+                ColumnRefOperator col =
+                        (ColumnRefOperator) SqlToScalarOperatorTranslator
+                                .translate(orderByElement.getExpr(), subOpt.getExpressionMapping());
+                orderings.add(new Ordering(col, orderByElement.getIsAsc(),
+                        OrderByElement.nullsFirst(orderByElement.getNullsFirstParam(), orderByElement.getIsAsc())));
+            }
+            logicalWindowOperators
+                    .add(new LogicalWindowOperator(analyticCall, partitions, orderings, windowOperator.getWindow()));
+        }
+
+        /*
+         * Step 2.
+         * SortGroup represent the window functions that can be calculated in one SortNode
+         * to reduce the generation of SortNode
+         */
+        List<WindowTransformer.SortGroup> sortedGroups = new ArrayList<>();
+        for (LogicalWindowOperator windowOperator : logicalWindowOperators) {
+            boolean find = false;
+            for (WindowTransformer.SortGroup windowInSorted : sortedGroups) {
+                if (!isPrefixHyperPartitionSet(new ArrayList<>(windowInSorted.getPartitionExprs()),
+                        new ArrayList<>(windowOperator.getPartitionExpressions()))
+                        && !isPrefixHyperPartitionSet(new ArrayList<>(windowOperator.getPartitionExpressions()),
+                        new ArrayList<>(windowInSorted.getPartitionExprs()))) {
+                    continue;
+                }
+
+                if (isPrefixHyperSortSet(new ArrayList<>(windowOperator.getOrderByElements()),
+                        new ArrayList<>(windowInSorted.getOrderByElements()))) {
+                    windowInSorted.setOrderByElements(windowOperator.getOrderByElements());
+                } else if (!isPrefixHyperSortSet(new ArrayList<>(windowInSorted.getOrderByElements()),
+                        new ArrayList<>(windowOperator.getOrderByElements()))) {
+                    continue;
+                }
+
+                if (isPrefixHyperPartitionSet(new ArrayList<>(windowOperator.getPartitionExpressions()),
+                        new ArrayList<>(windowInSorted.getPartitionExprs()))) {
+                    windowInSorted.setPartitionExpressions(windowOperator.getPartitionExpressions());
+                }
+                windowInSorted.addWindowOperator(windowOperator);
+                find = true;
+                break;
+            }
+
+            if (!find) {
+                WindowTransformer.SortGroup sortGroup = new WindowTransformer.SortGroup(
+                        windowOperator.getOrderByElements(), windowOperator.getPartitionExpressions());
+                sortGroup.addWindowOperator(windowOperator);
+                sortedGroups.add(sortGroup);
+            }
+        }
+
+        /*
+         * Step 3.
+         * Put the nodes with more sort columns at the bottom of the query plan
+         * to ensure that the Enforce operation can meet the conditions, and only one SortNode will be generated
+         */
+        //sortedGroups.forEach(sortGroup -> sortGroup.getWindowOperators()
+        //        .sort((w1, w2) -> w2.getOrderByElements().size() - w1.getOrderByElements().size()));
+
+        sortedGroups.forEach(sortGroup -> sortGroup.getWindowOperators()
+                .sort(Comparator.comparingInt(w -> w.getPartitionExpressions().size())));
+
+        /*
+         * Step4.
+         * The SortGroup with fewer partition columns are placed at the top level,
+         * and the nodes with the same partition are placed together to reduce the generation of Exchange nodes.
+         */
+        sortedGroups.sort((o1, o2) -> {
+            if (o1.getPartitionExprs().size() > o2.getPartitionExprs().size()) {
+                return -1;
+            } else if (o1.getPartitionExprs().size() < o2.getPartitionExprs().size()) {
+                return 1;
+            } else {
+                int sortKey = 0;
+                for (int i = 0; i < o1.getPartitionExprs().size(); ++i) {
+                    sortKey += ((ColumnRefOperator) (o1.getPartitionExprs().get(i))).getId()
+                            - ((ColumnRefOperator) (o2.getPartitionExprs().get(i))).getId();
+                }
+                return sortKey;
+            }
+        });
+
+        return sortedGroups;
+    }
+
+    private static boolean isPrefixHyperPartitionSet(List<Object> hyperSet, List<Object> subSet) {
+        if (hyperSet.isEmpty() && subSet.isEmpty()) {
+            return true;
+        }
+
+        List<List<Object>> partitionPrefix = IntStream.rangeClosed(1, hyperSet.size())
+                .mapToObj(i -> hyperSet.subList(0, i)).collect(Collectors.toList());
+        return partitionPrefix.contains(subSet);
+    }
+
+    private static boolean isPrefixHyperSortSet(List<Object> hyperSet, List<Object> subSet) {
+        List<List<Object>> partitionPrefix = IntStream.rangeClosed(0, hyperSet.size())
+                .mapToObj(i -> hyperSet.subList(0, i)).collect(Collectors.toList());
+        return partitionPrefix.contains(subSet);
+    }
+
+    /**
      * SortGroup represent the window functions that can be calculated in one SortNode
      * to reduce the generation of SortNode
      * eg. select sum(v1) over(partition by v2 order by v3), avg(v1) over(partition by v2 order by v3, v1) from t0;
@@ -360,7 +497,7 @@ public class WindowTransformer {
     public static class SortGroup {
         private final List<LogicalWindowOperator> windowOperators = new ArrayList<>();
         private List<Ordering> orderByElements;
-        private final List<ScalarOperator> partitionExpressions;
+        private List<ScalarOperator> partitionExpressions;
 
         public SortGroup(List<Ordering> orderByElements, List<ScalarOperator> partitionExpressions) {
             this.orderByElements = orderByElements;
@@ -371,8 +508,16 @@ public class WindowTransformer {
             return partitionExpressions;
         }
 
+        public void setPartitionExpressions(List<ScalarOperator> partitionExpressions) {
+            this.partitionExpressions = partitionExpressions;
+        }
+
         public List<Ordering> getOrderByElements() {
-            return orderByElements;
+            if (orderByElements == null) {
+                return new ArrayList<>();
+            } else {
+                return orderByElements;
+            }
         }
 
         public void setOrderByElements(List<Ordering> orderByElements) {

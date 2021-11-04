@@ -24,6 +24,9 @@ public class LogicalWindowOperator extends LogicalOperator {
     private final List<Ordering> orderByElements;
     private final AnalyticWindow analyticWindow;
 
+    //TODO:
+    private List<Ordering> enforceOrderBy;
+
     public LogicalWindowOperator(Map<ColumnRefOperator, CallOperator> windowCall,
                                  List<ScalarOperator> partitionExpressions,
                                  List<Ordering> orderByElements, AnalyticWindow analyticWindow) {
@@ -40,6 +43,8 @@ public class LogicalWindowOperator extends LogicalOperator {
         this.partitionExpressions = builder.partitionExpressions;
         this.orderByElements = builder.orderByElements;
         this.analyticWindow = builder.analyticWindow;
+
+        this.enforceOrderBy = builder.enforceOrderBy;
     }
 
     public Map<ColumnRefOperator, CallOperator> getWindowCall() {
@@ -56,6 +61,10 @@ public class LogicalWindowOperator extends LogicalOperator {
 
     public AnalyticWindow getAnalyticWindow() {
         return analyticWindow;
+    }
+
+    public List<Ordering> getEnforceOrderBy() {
+        return enforceOrderBy;
     }
 
     @Override
@@ -108,6 +117,7 @@ public class LogicalWindowOperator extends LogicalOperator {
         private List<ScalarOperator> partitionExpressions;
         private List<Ordering> orderByElements;
         private AnalyticWindow analyticWindow;
+        List<Ordering> enforceOrderBy;
 
         @Override
         public LogicalWindowOperator build() {
@@ -122,6 +132,12 @@ public class LogicalWindowOperator extends LogicalOperator {
             this.partitionExpressions = windowOperator.partitionExpressions;
             this.orderByElements = windowOperator.orderByElements;
             this.analyticWindow = windowOperator.analyticWindow;
+            this.enforceOrderBy = windowOperator.enforceOrderBy;
+            return this;
+        }
+
+        public Builder setEnforceOrderBy(List<Ordering> enforceOrderBy) {
+            this.enforceOrderBy = enforceOrderBy;
             return this;
         }
     }

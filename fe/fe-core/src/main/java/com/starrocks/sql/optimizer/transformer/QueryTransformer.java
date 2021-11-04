@@ -251,7 +251,16 @@ class QueryTransformer {
                 WindowTransformer.reorderWindowOperator(windowOperators, columnRefFactory, subOpt);
         for (WindowTransformer.SortGroup sortGroup : sortedGroups) {
             for (LogicalWindowOperator logicalWindowOperator : sortGroup.getWindowOperators()) {
-                subOpt = subOpt.withNewRoot(logicalWindowOperator);
+                List<Ordering> sortEnforceProperty = new ArrayList<>();
+                sortGroup.getPartitionExprs()
+                        .forEach(p -> sortEnforceProperty.add(new Ordering((ColumnRefOperator) p, true, true)));
+                sortEnforceProperty.addAll(sortGroup.getOrderByElements());
+
+                LogicalWindowOperator newWindowOperator =
+                        new LogicalWindowOperator.Builder().withOperator(logicalWindowOperator)
+                                .setEnforceOrderBy(sortEnforceProperty.stream().distinct().collect(Collectors.toList()))
+                                .build();
+                subOpt = subOpt.withNewRoot(newWindowOperator);
             }
         }
 
@@ -397,7 +406,7 @@ class QueryTransformer {
                 groupingTranslations.put(groupingFunction, grouping);
 
                 groupingIds.add(tempGroupingIdsBitSets.stream().map(bitset ->
-                        Utils.convertBitSetToLong(bitset, groupingFunction.getChildren().size()))
+                                Utils.convertBitSetToLong(bitset, groupingFunction.getChildren().size()))
                         .collect(Collectors.toList()));
                 groupByColumnRefs.add(grouping);
                 repeatOutput.add(grouping);

@@ -17,7 +17,6 @@ import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.OrderSpec;
-import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -876,21 +875,24 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalAnalytic(PhysicalWindowOperator node, ExpressionContext context) {
         List<Integer> partitionColumnRefSet = new ArrayList<>();
-        List<Ordering> orderings = new ArrayList<>();
+        //List<Ordering> orderings = new ArrayList<>();
 
         node.getPartitionExpressions().forEach(e -> {
             partitionColumnRefSet
                     .addAll(Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList()));
-            orderings.add(new Ordering((ColumnRefOperator) e, true, true));
+            //orderings.add(new Ordering((ColumnRefOperator) e, true, true));
         });
 
+        /*
         node.getOrderByElements().forEach(o -> {
             if (orderings.stream().noneMatch(ordering -> ordering.getColumnRef().equals(o.getColumnRef()))) {
                 orderings.add(o);
             }
         });
 
-        SortProperty sortProperty = new SortProperty(new OrderSpec(orderings));
+         */
+
+        SortProperty sortProperty = new SortProperty(new OrderSpec(node.getEnforceOrderBy()));
 
         Optional<HashDistributionDesc> required = getRequiredLocalDesc();
         if (required.isPresent()) {
