@@ -278,13 +278,13 @@ public class Database extends MetaObject implements Writable {
         checkReplicaQuota();
     }
 
-    public boolean createTableWithLock(Table table, boolean isReplay, boolean setIfNotExist) {
-        boolean result = true;
+    // return false if table already exists
+    public boolean createTableWithLock(Table table, boolean isReplay) {
         writeLock();
         try {
             String tableName = table.getName();
             if (nameToTable.containsKey(tableName)) {
-                result = setIfNotExist;
+                return false;
             } else {
                 idToTable.put(table.getId(), table);
                 nameToTable.put(table.getName(), table);
@@ -297,7 +297,7 @@ public class Database extends MetaObject implements Writable {
 
                 table.onCreate();
             }
-            return result;
+            return true;
         } finally {
             writeUnlock();
         }
