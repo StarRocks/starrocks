@@ -9,7 +9,6 @@
 namespace starrocks {
 class Expr;
 class ExprContext;
-class MemTracker;
 class RuntimeProfile;
 class RuntimeState;
 namespace pipeline {
@@ -54,8 +53,6 @@ public:
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
 
-    MemTracker* get_memtracker() const { return _mem_tracker.get(); }
-
     RuntimeProfile* get_runtime_profile() const { return _runtime_profile.get(); }
 
     std::string get_name() const {
@@ -70,7 +67,6 @@ protected:
     // Which plan node this operator belongs to
     int32_t _plan_node_id = -1;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
-    std::shared_ptr<MemTracker> _mem_tracker;
 };
 
 class OperatorFactory {

@@ -18,7 +18,6 @@
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
 namespace starrocks {
-class MemTracker;
 namespace pipeline {
 class FragmentContext {
     friend FragmentContextManager;

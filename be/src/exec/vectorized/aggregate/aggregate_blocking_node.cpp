@@ -63,7 +63,6 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
                 APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
 
-                RETURN_IF_ERROR(_aggregator->check_hash_map_memory_usage(state));
                 _aggregator->try_convert_to_two_level_map();
             }
             if (_aggregator->is_none_group_by_exprs()) {
