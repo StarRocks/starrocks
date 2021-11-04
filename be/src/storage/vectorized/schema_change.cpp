@@ -28,6 +28,7 @@
 #include <memory>
 #include <vector>
 
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/mem_pool.h"
@@ -642,6 +643,14 @@ bool ChunkMerger::_pop_heap() {
 
 bool LinkedSchemaChange::process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer,
                                  TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
+#ifndef BE_TEST
+    Status st = tls_thread_status.mem_tracker()->check_mem_limit("LinkedSchemaChange");
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
+        return false;
+    }
+#endif
+
     OLAPStatus status =
             new_rowset_writer->add_rowset_for_linked_schema_change(rowset, _chunk_changer.get_schema_mapping());
     if (status != OLAP_SUCCESS) {
@@ -667,6 +676,13 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     do {
+#ifndef BE_TEST
+        Status st = tls_thread_status.mem_tracker()->check_mem_limit("DirectSchemaChange");
+        if (!st.ok()) {
+            LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
+            return false;
+        }
+#endif
         Status status = reader->do_get_next(base_chunk.get());
 
         if (!status.ok()) {
@@ -748,6 +764,13 @@ bool SchemaChangeWithSorting::process(vectorized::TabletReader* reader, RowsetWr
         }
     });
     while (true) {
+#ifndef BE_TEST
+        Status st = tls_thread_status.mem_tracker()->check_mem_limit("SortSchemaChange");
+        if (!st.ok()) {
+            LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
+            return false;
+        }
+#endif
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
         ChunkPtr new_chunk = nullptr;
         Status status = reader->do_get_next(base_chunk.get());

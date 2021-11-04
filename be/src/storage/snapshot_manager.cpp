@@ -30,6 +30,7 @@
 #include "env/env.h"
 #include "env/output_stream_wrapper.h"
 #include "gen_cpp/Types_constants.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/rowset/beta_rowset.h"
@@ -38,6 +39,7 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_updates.h"
+#include "util/defer_op.h"
 #include "util/raw_container.h"
 
 using std::map;
@@ -57,13 +59,17 @@ SnapshotManager* SnapshotManager::instance() {
     if (_s_instance == nullptr) {
         std::lock_guard<std::mutex> lock(_mlock);
         if (_s_instance == nullptr) {
-            _s_instance = new SnapshotManager(ExecEnv::GetInstance()->snapshot_mem_tracker());
+            _s_instance = new SnapshotManager(ExecEnv::GetInstance()->clone_mem_tracker());
         }
     }
     return _s_instance;
 }
 
 Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* snapshot_path) {
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "snapshot", _mem_tracker);
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     LOG(INFO) << "Received a snapshot request: " << apache::thrift::ThriftDebugString(request);
     if (config::storage_format_version == 1) {
         // If you upgrade from storage_format_version=1
@@ -106,6 +112,10 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
 }
 
 OLAPStatus SnapshotManager::release_snapshot(const string& snapshot_path) {
+    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "snapshot", _mem_tracker);
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     // If the requested snapshot_path is located under the root/snapshot folder,
     // it is considered legitimate and can be deleted.
     // Otherwise, it is considered an illegal request and returns an error result
