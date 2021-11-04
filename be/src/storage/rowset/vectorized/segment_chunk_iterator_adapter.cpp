@@ -2,7 +2,6 @@
 
 #include "storage/rowset/vectorized/segment_chunk_iterator_adapter.h"
 
-#include "runtime/current_mem_tracker.h"
 #include "storage/vectorized/chunk_helper.h"
 
 namespace starrocks::vectorized {
@@ -29,23 +28,16 @@ Status SegmentChunkIteratorAdapter::prepare(const SegmentReadOptions& options) {
 Status SegmentChunkIteratorAdapter::do_get_next(Chunk* out_chunk) {
     if (_in_chunk == nullptr) {
         _in_chunk = ChunkHelper::new_chunk(_inner_iter->schema(), _chunk_size);
-        CurrentMemTracker::consume(_in_chunk->memory_usage());
     }
     DCHECK_EQ(out_chunk->num_columns(), _in_chunk->num_columns());
 
     RETURN_IF_ERROR(_inner_iter->get_next(_in_chunk.get()));
-
-    CurrentMemTracker::release(_in_chunk->memory_usage());
-    CurrentMemTracker::release(out_chunk->memory_usage());
 
     SCOPED_RAW_TIMER(&_convert_time);
 
     auto tmp = _converter.move_convert(_in_chunk.get());
     out_chunk->swap_chunk(*tmp);
     _in_chunk->reset();
-
-    CurrentMemTracker::consume(_in_chunk->memory_usage());
-    CurrentMemTracker::consume(out_chunk->memory_usage());
 
     return Status::OK();
 }
@@ -54,23 +46,16 @@ Status SegmentChunkIteratorAdapter::do_get_next(Chunk* out_chunk, vector<uint32_
     if (_in_chunk == nullptr) {
         auto reserve_size = config::vector_chunk_size;
         _in_chunk = ChunkHelper::new_chunk(_inner_iter->schema(), reserve_size);
-        CurrentMemTracker::consume(_in_chunk->memory_usage());
     }
     DCHECK_EQ(out_chunk->num_columns(), _in_chunk->num_columns());
 
     RETURN_IF_ERROR(_inner_iter->get_next(_in_chunk.get(), rowid));
-
-    CurrentMemTracker::release(_in_chunk->memory_usage());
-    CurrentMemTracker::release(out_chunk->memory_usage());
 
     SCOPED_RAW_TIMER(&_convert_time);
 
     auto tmp = _converter.move_convert(_in_chunk.get());
     out_chunk->swap_chunk(*tmp);
     _in_chunk->reset();
-
-    CurrentMemTracker::consume(_in_chunk->memory_usage());
-    CurrentMemTracker::consume(out_chunk->memory_usage());
 
     return Status::OK();
 }
@@ -85,7 +70,6 @@ void SegmentChunkIteratorAdapter::close() {
     }
 
     if (_in_chunk != nullptr) {
-        CurrentMemTracker::release(_in_chunk->memory_usage());
         _in_chunk.reset();
     }
 }

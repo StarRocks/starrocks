@@ -24,9 +24,6 @@ Status Operator::prepare(RuntimeState* state) {
 }
 
 Status Operator::close(RuntimeState* state) {
-    if (_mem_tracker != nullptr) {
-        _mem_tracker->close();
-    }
     return Status::OK();
 }
 

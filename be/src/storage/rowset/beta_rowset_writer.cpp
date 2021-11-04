@@ -252,14 +252,11 @@ Status BetaRowsetWriter::_final_merge() {
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
 
-    MemTracker tracker;
-    DeferOp memory_tracker_releaser([&tracker] { return tracker.release(tracker.consumption()); });
-
     for (int seg_id = 0; seg_id < _num_segment; ++seg_id) {
         std::string tmp_segment_file =
                 BetaRowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
 
-        auto segment_ptr = segment_v2::Segment::open(&tracker, fs::fs_util::block_manager(), tmp_segment_file, seg_id,
+        auto segment_ptr = segment_v2::Segment::open(fs::fs_util::block_manager(), tmp_segment_file, seg_id,
                                                      _context.tablet_schema);
         if (!segment_ptr.ok()) {
             LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
@@ -401,8 +398,7 @@ RowsetSharedPtr BetaRowsetWriter::build() {
 
     RowsetSharedPtr rowset;
     auto status =
-            RowsetFactory::create_rowset(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _context.tablet_schema,
-                                         _context.rowset_path_prefix, _rowset_meta, &rowset);
+            RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, _rowset_meta, &rowset);
     if (!status.ok()) {
         LOG(WARNING) << "Fail to create rowset: " << status;
         return nullptr;
@@ -436,7 +432,6 @@ std::unique_ptr<SegmentWriter> BetaRowsetWriter::_create_segment_writer() {
     DCHECK(wblock != nullptr);
     segment_v2::SegmentWriterOptions writer_options;
     writer_options.storage_format_version = _context.storage_format_version;
-    writer_options.mem_tracker = _context.mem_tracker;
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
     writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
     std::unique_ptr<SegmentWriter> segment_writer =

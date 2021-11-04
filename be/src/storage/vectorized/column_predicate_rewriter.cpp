@@ -16,6 +16,7 @@
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "simd/simd.h"
 #include "storage/rowset/segment_v2/column_reader.h"
+#include "storage/rowset/segment_v2/file_column_iterator.h"
 #include "storage/vectorized/column_expr_predicate.h"
 
 namespace starrocks::vectorized {

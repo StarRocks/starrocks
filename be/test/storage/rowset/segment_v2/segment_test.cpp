@@ -37,6 +37,7 @@
 #include "storage/olap_common.h"
 #include "storage/row_block2.h"
 #include "storage/row_cursor.h"
+#include "storage/rowset/segment_v2/column_iterator.h"
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/rowset/segment_v2/segment_iterator.h"
 #include "storage/rowset/segment_v2/segment_writer.h"
@@ -128,7 +129,7 @@ protected:
         uint64_t file_size, index_size;
         ASSERT_OK(writer.finalize(&file_size, &index_size));
 
-        *res = *Segment::open(_mem_tracker.get(), _block_mgr, filename, 0, &query_schema);
+        *res = *Segment::open(_block_mgr, filename, 0, &query_schema);
         ASSERT_EQ(nrows, (*res)->num_rows());
     }
 
@@ -811,7 +812,7 @@ TEST_F(SegmentReaderWriterTest, TestStringDict) {
     ASSERT_OK(writer.finalize(&file_size, &index_size));
 
     {
-        auto segment = *Segment::open(_mem_tracker.get(), _block_mgr, fname, 0, tablet_schema.get());
+        auto segment = *Segment::open(_block_mgr, fname, 0, tablet_schema.get());
         ASSERT_EQ(4096, segment->num_rows());
         Schema schema(*tablet_schema);
         OlapReaderStatistics stats;

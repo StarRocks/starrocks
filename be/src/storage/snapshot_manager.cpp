@@ -145,8 +145,7 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     if (has_meta_file) {
         return Status::OK();
     } else {
-        MemTracker mem_tracker;
-        TabletMeta cloned_tablet_meta(&mem_tracker);
+        TabletMeta cloned_tablet_meta;
         if (Status st = cloned_tablet_meta.create_from_file(cloned_header_file); !st.ok()) {
             LOG(WARNING) << "Fail to create rowset meta from " << cloned_header_file << ": " << st;
             return Status::RuntimeError("fail to load cloned header file");
@@ -216,9 +215,7 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
     rowset_meta->init_from_pb(rs_meta_pb);
     RowsetSharedPtr org_rowset;
-    if (!RowsetFactory::create_rowset(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), &tablet_schema, new_path,
-                                      rowset_meta, &org_rowset)
-                 .ok()) {
+    if (!RowsetFactory::create_rowset(&tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
         return Status::RuntimeError("fail to create rowset");
     }
     // do not use cache to load index
@@ -227,7 +224,6 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     RETURN_IF_ERROR(org_rowset->load());
     RowsetMetaSharedPtr org_rowset_meta = org_rowset->rowset_meta();
     RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
-    context.mem_tracker = _mem_tracker;
     context.rowset_id = rowset_id;
     context.tablet_id = org_rowset_meta->tablet_id();
     context.partition_id = org_rowset_meta->partition_id();
@@ -298,8 +294,7 @@ std::string SnapshotManager::_get_header_full_path(const TabletSharedPtr& tablet
 StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPtr& tablet,
                                                             const std::vector<int64_t>& delta_versions,
                                                             int64_t timeout_s) {
-    MemTracker mem_tracker;
-    TabletMetaSharedPtr snapshot_tablet_meta = std::make_shared<TabletMeta>(&mem_tracker);
+    TabletMetaSharedPtr snapshot_tablet_meta = std::make_shared<TabletMeta>();
     std::vector<RowsetSharedPtr> snapshot_rowsets;
     std::vector<RowsetMetaSharedPtr> snapshot_rowset_metas;
 
@@ -364,8 +359,7 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
 
 StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tablet, int64_t snapshot_version,
                                                      int64_t timeout_s) {
-    MemTracker mem_tracker;
-    TabletMetaSharedPtr snapshot_tablet_meta = std::make_shared<TabletMeta>(&mem_tracker);
+    TabletMetaSharedPtr snapshot_tablet_meta = std::make_shared<TabletMeta>();
     std::vector<RowsetSharedPtr> snapshot_rowsets;
     std::vector<RowsetMetaSharedPtr> snapshot_rowset_metas;
 

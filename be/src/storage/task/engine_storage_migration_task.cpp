@@ -132,8 +132,7 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
             return OLAP_ERR_FILE_ALREADY_EXIST;
         }
 
-        auto mem_tracker = std::make_unique<MemTracker>();
-        TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta(mem_tracker.get()));
+        TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta());
         Status st = TabletMetaManager::get_tablet_meta(_dest_store, _tablet_id, _schema_hash, new_tablet_meta);
         if (st.ok()) {
             LOG(WARNING) << "tablet_meta already exists. data_dir:" << _dest_store->path()
@@ -184,8 +183,7 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
             break;
         }
 
-        auto mem_tracker = std::make_unique<MemTracker>();
-        TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta(mem_tracker.get()));
+        TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta());
         Status st = TabletMetaManager::get_tablet_meta(_dest_store, _tablet_id, _schema_hash, new_tablet_meta);
         if (st.ok()) {
             LOG(WARNING) << "tablet_meta already exists. data_dir:" << _dest_store->path()

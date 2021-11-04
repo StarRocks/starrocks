@@ -293,7 +293,7 @@ void DataStreamRecvr::SenderQueue::add_batch(const PRowBatch& pb_batch, int be_n
         // Note: if this function makes a row batch, the batch *must* be added
         // to _batch_queue. It is not valid to create the row batch and destroy
         // it in this thread.
-        batch = new RowBatch(_recvr->row_desc(), pb_batch, _recvr->mem_tracker());
+        batch = new RowBatch(_recvr->row_desc(), pb_batch);
     }
 
     VLOG_ROW << "added #rows=" << batch->num_rows() << " batch_size=" << batch_size << "\n";
@@ -697,7 +697,6 @@ void DataStreamRecvr::close() {
     _mgr->deregister_recvr(fragment_instance_id(), dest_node_id());
     _mgr = nullptr;
     _chunks_merger.reset();
-    _mem_tracker->close();
     _mem_tracker.reset();
 }
 

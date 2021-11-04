@@ -2,6 +2,9 @@
 
 #include "storage/vectorized/base_compaction.h"
 
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.cpp"
+#include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/trace.h"
 
@@ -10,11 +13,7 @@ namespace starrocks::vectorized {
 BaseCompaction::BaseCompaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
         : Compaction(mem_tracker, std::move(tablet)) {}
 
-BaseCompaction::~BaseCompaction() {
-    DCHECK_EQ(0, _mem_tracker->consumption());
-    // release the memory statistics just for safe
-    _mem_tracker->release(_mem_tracker->consumption());
-}
+BaseCompaction::~BaseCompaction() {}
 
 Status BaseCompaction::compact() {
     if (!_tablet->init_succeeded()) {
@@ -31,6 +30,9 @@ Status BaseCompaction::compact() {
     RETURN_IF_ERROR(pick_rowsets_to_compact());
     TRACE("rowsets picked");
     TRACE_COUNTER_INCREMENT("input_rowsets_count", _input_rowsets.size());
+
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
     // 2. do base compaction, merge rowsets
     RETURN_IF_ERROR(do_compaction());

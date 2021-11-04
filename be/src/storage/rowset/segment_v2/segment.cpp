@@ -36,6 +36,7 @@
 #include "gutil/strings/substitute.h"
 #include "storage/fs/fs_util.h"
 #include "storage/rowset/segment_v2/column_reader.h"
+#include "storage/rowset/segment_v2/default_value_column_iterator.h"
 #include "storage/rowset/segment_v2/empty_segment_iterator.h"
 #include "storage/rowset/segment_v2/page_io.h"
 #include "storage/rowset/segment_v2/segment_iterator.h"
@@ -63,24 +64,17 @@ namespace starrocks::segment_v2 {
 
 using strings::Substitute;
 
-StatusOr<std::shared_ptr<Segment>> Segment::open(MemTracker* mem_tracker, fs::BlockManager* blk_mgr,
-                                                 const std::string& filename, uint32_t segment_id,
-                                                 const TabletSchema* tablet_schema, size_t* footer_length_hint) {
-    auto segment =
-            std::make_shared<Segment>(private_type(0), mem_tracker, blk_mgr, filename, segment_id, tablet_schema);
+StatusOr<std::shared_ptr<Segment>> Segment::open(fs::BlockManager* blk_mgr, const std::string& filename,
+                                                 uint32_t segment_id, const TabletSchema* tablet_schema,
+                                                 size_t* footer_length_hint) {
+    auto segment = std::make_shared<Segment>(private_type(0), blk_mgr, filename, segment_id, tablet_schema);
     RETURN_IF_ERROR(segment->_open(footer_length_hint));
     return std::move(segment);
 }
 
-Segment::Segment(const private_type&, MemTracker* mem_tracker, fs::BlockManager* blk_mgr, std::string fname,
-                 uint32_t segment_id, const TabletSchema* tablet_schema)
-        : _mem_tracker(mem_tracker),
-          _block_mgr(blk_mgr),
-          _fname(std::move(fname)),
-          _tablet_schema(tablet_schema),
-          _segment_id(segment_id) {
-    _mem_tracker->consume(sizeof(Segment) + _fname.size());
-}
+Segment::Segment(const private_type&, fs::BlockManager* blk_mgr, std::string fname, uint32_t segment_id,
+                 const TabletSchema* tablet_schema)
+        : _block_mgr(blk_mgr), _fname(std::move(fname)), _tablet_schema(tablet_schema), _segment_id(segment_id) {}
 
 Segment::~Segment() = default;
 
@@ -275,14 +269,12 @@ Status Segment::_load_index() {
         Slice body;
         PageFooterPB footer;
         RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &_sk_index_handle, &body, &footer));
-        _mem_tracker->consume(_sk_index_handle.mem_usage());
 
         DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);
         DCHECK(footer.has_short_key_page_footer());
 
         _sk_index_decoder = std::make_unique<ShortKeyIndexDecoder>();
         RETURN_IF_ERROR(_sk_index_decoder->parse(body, footer.short_key_page_footer()));
-        _mem_tracker->consume(_sk_index_decoder->mem_usage());
 
         return Status::OK();
     });
@@ -307,7 +299,7 @@ Status Segment::_create_column_readers(SegmentFooterPB* footer) {
         opts.block_mgr = _block_mgr;
         opts.storage_format_version = footer->version();
         opts.kept_in_memory = _tablet_schema->is_in_memory();
-        auto res = ColumnReader::create(_mem_tracker, opts, footer->mutable_columns(iter->second), _fname);
+        auto res = ColumnReader::create(opts, footer->mutable_columns(iter->second), _fname);
         if (!res.ok()) {
             return res.status();
         }
