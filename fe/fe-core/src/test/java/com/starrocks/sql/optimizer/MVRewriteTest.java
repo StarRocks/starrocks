@@ -1034,6 +1034,7 @@ public class MVRewriteTest {
                 "       bitmap_count ( BITMAP_UNION ( CASE WHEN (T1.is_finish = '1') THEN T1.user_id_td ELSE NULL END)) AS `c4`\n" +
                 "FROM kkk AS T1\n" +
                 "GROUP BY T1.dt";
+        System.out.println(starRocksAssert.query(query).explainQuery());
         starRocksAssert.query(query).explainContains("rollup: kkk_mv");
         starRocksAssert.dropTable("kkk");
     }

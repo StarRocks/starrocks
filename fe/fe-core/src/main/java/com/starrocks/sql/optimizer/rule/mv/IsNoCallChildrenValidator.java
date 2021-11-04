@@ -1,7 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 package com.starrocks.sql.optimizer.rule.mv;
 
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -30,6 +32,20 @@ public class IsNoCallChildrenValidator extends ScalarOperatorVisitor<Boolean, Vo
                 if (!elseClause.accept(this, null)) {
                     return false;
                 }
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public Boolean visitCall(CallOperator operator, Void context) {
+        if (!FunctionSet.IF.equalsIgnoreCase(operator.getFnName())) {
+            return false;
+        }
+
+        for (int i = 0; i < operator.getChildren().size(); i++) {
+            if (!operator.getChild(i).accept(this, null)) {
+                return false;
             }
         }
         return true;

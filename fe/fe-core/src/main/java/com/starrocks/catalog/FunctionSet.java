@@ -87,6 +87,7 @@ public class FunctionSet {
     public static final String TO_BITMAP = "to_bitmap";
     public static final String NULL_OR_EMPTY = "null_or_empty";
     public static final String IF = "if";
+    public static final String IF_NULL = "ifnull";
 
     // Arithmetic functions:
     public static final String ADD = "add";

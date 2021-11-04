@@ -609,15 +609,6 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
-    public void ifNull() {
-        ConstantOperator date = ConstantOperator.createDatetime(LocalDateTime.of(2000, 10, 21, 12, 0));
-        ConstantOperator value = ConstantOperator.createNull(Type.DATE);
-        ConstantOperator result = ScalarOperatorFunctions.ifNull(value, date);
-
-        assertEquals(date, result);
-    }
-
-    @Test
     public void fromUnixTime2() throws AnalysisException {
         ConstantOperator date =
                 ScalarOperatorFunctions.fromUnixTime(O_INT_10, ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s"));

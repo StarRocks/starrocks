@@ -22,27 +22,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class ScalarOperatorEvaluatorTest {
-
-    @Test
-    public void evaluationRight() {
-        CallOperator operator = new CallOperator("ifnull", Type.INT,
-                Lists.newArrayList(ConstantOperator.createInt(1), ConstantOperator.createInt(2)));
-
-        Function fn = new Function(new FunctionName("ifnull"), new Type[] {Type.INT, Type.INT}, Type.INT, false);
-
-        new Expectations(operator) {
-            {
-                operator.getFunction();
-                result = fn;
-            }
-        };
-
-        ScalarOperator result = ScalarOperatorEvaluator.INSTANCE.evaluation(operator);
-
-        assertEquals(OperatorType.CONSTANT, result.getOpType());
-        assertEquals(1, ((ConstantOperator) result).getInt());
-    }
-
     @Test
     public void evaluationNotConstant() {
         CallOperator operator = new CallOperator("ifnull", Type.INT,
