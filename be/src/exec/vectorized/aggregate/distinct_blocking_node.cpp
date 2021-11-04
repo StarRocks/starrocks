@@ -61,8 +61,6 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
                     break;
                 }
             }
-
-            RETURN_IF_ERROR(_aggregator->check_hash_set_memory_usage(state));
         }
     }
 

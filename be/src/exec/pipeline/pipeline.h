@@ -6,7 +6,6 @@
 #include "exec/pipeline/source_operator.h"
 
 namespace starrocks {
-class MemTracker;
 namespace pipeline {
 
 class Pipeline;
