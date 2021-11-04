@@ -49,6 +49,9 @@ private:
     void _trigger_next_scan();
 
 private:
+    // TODO(hcf) ugly, remove this later
+    RuntimeState* _state = nullptr;
+
     const size_t _batch_size = 16;
     mutable bool _is_finished = false;
     std::atomic_bool _is_io_task_active = false;

@@ -12,6 +12,7 @@ namespace starrocks::pipeline {
 Status ScanOperator::prepare(RuntimeState* state) {
     Operator::prepare(state);
     DCHECK(_io_threads != nullptr);
+    _state = state;
     auto num_scan_operators = 1 + state->exec_env()->increment_num_scan_operators(1);
     if (num_scan_operators > _io_threads->get_queue_capacity()) {
         state->exec_env()->decrement_num_scan_operators(1);
@@ -24,10 +25,12 @@ Status ScanOperator::prepare(RuntimeState* state) {
 }
 
 Status ScanOperator::close(RuntimeState* state) {
-    state->exec_env()->decrement_num_scan_operators(1);
-    if (_chunk_source) {
-        DCHECK(!_is_io_task_active.load(std::memory_order_acquire));
-        _chunk_source->close(state);
+    if (!_is_io_task_active.load(std::memory_order_acquire)) {
+        if (_chunk_source) {
+            state->exec_env()->decrement_num_scan_operators(1);
+            _chunk_source->close(state);
+            _chunk_source = nullptr;
+        }
     }
     Operator::close(state);
     return Status::OK();
@@ -61,7 +64,16 @@ bool ScanOperator::pending_finish() {
     DCHECK(_is_finished);
     // If there is no next morsel, and io task is active
     // we just wait for the io thread to end
-    return _is_io_task_active.load(std::memory_order_acquire);
+    if (_is_io_task_active.load(std::memory_order_acquire)) {
+        return true;
+    } else {
+        if (_chunk_source) {
+            _state->exec_env()->decrement_num_scan_operators(1);
+            _chunk_source->close(_state);
+            _chunk_source = nullptr;
+        }
+        return false;
+    }
 }
 
 bool ScanOperator::is_finished() const {
@@ -106,6 +118,7 @@ void ScanOperator::_pickup_morsel(RuntimeState* state) {
     DCHECK(!_is_io_task_active.load(std::memory_order_acquire));
     if (_chunk_source) {
         _chunk_source->close(state);
+        _chunk_source = nullptr;
     }
     auto maybe_morsel = _morsel_queue->try_get();
     if (!maybe_morsel.has_value()) {
