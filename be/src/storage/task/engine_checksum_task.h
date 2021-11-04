@@ -34,16 +34,16 @@ class EngineChecksumTask : public EngineTask {
 public:
     OLAPStatus execute() override;
 
-public:
-    EngineChecksumTask(TTabletId tablet_id, TSchemaHash schema_hash, TVersion version, TVersionHash version_hash,
-                       uint32_t* checksum);
+    EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet_id, TSchemaHash schema_hash, TVersion version,
+                       TVersionHash version_hash, uint32_t* checksum);
 
     ~EngineChecksumTask() override = default;
 
 private:
     OLAPStatus _compute_checksum();
 
-private:
+    std::unique_ptr<MemTracker> _mem_tracker;
+
     TTabletId _tablet_id;
     TSchemaHash _schema_hash;
     TVersion _version;
