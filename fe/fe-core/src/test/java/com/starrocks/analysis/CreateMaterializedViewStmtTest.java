@@ -207,6 +207,71 @@ public class CreateMaterializedViewStmtTest {
     }
 
     @Test
+    public void testSumDistinct(@Injectable SlotRef slotRef, @Injectable ArithmeticExpr arithmeticExpr,
+                                  @Injectable SelectStmt selectStmt, @Injectable Column column,
+                                  @Injectable TableRef tableRef,
+                                  @Injectable SlotDescriptor slotDescriptor) throws UserException {
+        SelectList selectList = new SelectList();
+        SelectListItem selectListItem = new SelectListItem(slotRef, null);
+        selectList.addItem(selectListItem);
+
+        TableName tableName = new TableName("db", "table");
+        SlotRef slotRef2 = new SlotRef(tableName, "v1");
+        List<Expr> fnChildren = Lists.newArrayList(slotRef2);
+        Deencapsulation.setField(slotRef2, "desc", slotDescriptor);
+        FunctionParams functionParams = new FunctionParams(true, fnChildren);
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(FunctionSet.SUM, functionParams);
+        functionCallExpr.setFn(AggregateFunction.createBuiltin(FunctionSet.SUM,
+                new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
+        SelectListItem selectListItem2 = new SelectListItem(functionCallExpr, null);
+        selectList.addItem(selectListItem2);
+
+        new Expectations() {
+            {
+                analyzer.getClusterName();
+                result = "default";
+                selectStmt.analyze(analyzer);
+                selectStmt.getSelectList();
+                result = selectList;
+                arithmeticExpr.toString();
+                result = "a+b";
+                slotRef.getColumnName();
+                result = "k1";
+                selectStmt.getWhereClause();
+                minTimes = 0;
+                result = null;
+                selectStmt.getHavingPred();
+                minTimes = 0;
+                result = null;
+                selectStmt.getTableRefs();
+                minTimes = 0;
+                result = Lists.newArrayList(tableRef);
+                slotDescriptor.getColumn();
+                minTimes = 0;
+                result = column;
+                selectStmt.getLimit();
+                minTimes = 0;
+                result = -1;
+                column.getType();
+                minTimes = 0;
+                result = Type.INT;
+                slotRef.getType();
+                result = Type.INT;
+            }
+        };
+        CreateMaterializedViewStmt createMaterializedViewStmt =
+                new CreateMaterializedViewStmt("test", selectStmt, null);
+        try {
+            createMaterializedViewStmt.analyze(analyzer);
+            Assert.fail();
+        } catch (AnalysisException e) {
+            Assert.assertTrue(
+                    e.getMessage().contains("Materialized view does not support distinct function"));
+            System.out.print(e.getMessage());
+        }
+    }
+
+    @Test
     public void testAggregateWithFunctionColumnInSelectClause(@Injectable ArithmeticExpr arithmeticExpr,
                                                               @Injectable SelectStmt selectStmt) throws UserException {
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("sum", Lists.newArrayList(arithmeticExpr));
