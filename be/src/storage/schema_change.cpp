@@ -1030,6 +1030,14 @@ bool RowBlockMerger::_pop_heap() {
 
 bool LinkedSchemaChange::process(RowsetReaderSharedPtr rowset_reader, RowsetWriter* new_rowset_writer,
                                  TabletSharedPtr new_tablet, TabletSharedPtr base_tablet) {
+#ifndef BE_TEST
+    Status st = tls_thread_status.mem_tracker()->check_mem_limit("LinkedSchemaChange");
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
+        return false;
+    }
+#endif
+
     OLAPStatus status = new_rowset_writer->add_rowset_for_linked_schema_change(rowset_reader->rowset(),
                                                                                _row_block_changer.get_schema_mapping());
     if (status != OLAP_SUCCESS) {
@@ -1121,6 +1129,14 @@ bool SchemaChangeDirectly::process(RowsetReaderSharedPtr rowset_reader, RowsetWr
     RowBlock* ref_row_block = nullptr;
     rowset_reader->next_block(&ref_row_block);
     while (ref_row_block != nullptr && ref_row_block->has_remaining()) {
+#ifndef BE_TEST
+        Status st = tls_thread_status.mem_tracker()->check_mem_limit("DirectSchemaChange");
+        if (!st.ok()) {
+            LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
+            return false;
+        }
+#endif
+
         if (new_row_block == nullptr || new_row_block->capacity() < ref_row_block->row_block_info().row_num) {
             if (new_row_block != nullptr) {
                 _row_block_allocator->release(new_row_block);
@@ -1262,6 +1278,14 @@ bool SchemaChangeWithSorting::process(RowsetReaderSharedPtr rowset_reader, Rowse
     RowBlock* ref_row_block = nullptr;
     rowset_reader->next_block(&ref_row_block);
     while (ref_row_block != nullptr && ref_row_block->has_remaining()) {
+#ifndef BE_TEST
+        Status st = tls_thread_status.mem_tracker()->check_mem_limit("SortingSchemaChange");
+        if (!st.ok()) {
+            LOG(WARNING) << "fail to execute schema change: " << st.message() << std::endl;
+            return false;
+        }
+#endif
+
         if (OLAP_SUCCESS !=
             _row_block_allocator->allocate(&new_row_block, ref_row_block->row_block_info().row_num, true)) {
             LOG(WARNING) << "failed to allocate RowBlock.";
