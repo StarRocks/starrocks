@@ -432,7 +432,6 @@ std::unique_ptr<SegmentWriter> BetaRowsetWriter::_create_segment_writer() {
     DCHECK(wblock != nullptr);
     segment_v2::SegmentWriterOptions writer_options;
     writer_options.storage_format_version = _context.storage_format_version;
-    writer_options.mem_tracker = _context.mem_tracker;
     const auto* schema = _rowset_schema != nullptr ? _rowset_schema.get() : _context.tablet_schema;
     writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
     std::unique_ptr<SegmentWriter> segment_writer =
