@@ -174,8 +174,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParams* params,
-                                                         const butil::IOBuf& attachment) {
+Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParams* params, const butil::IOBuf& attachment) {
     params->mutable_finst_id()->CopyFrom(_finst_id);
     params->set_node_id(_dest_node_id);
     params->set_sender_id(_parent->_sender_id);
