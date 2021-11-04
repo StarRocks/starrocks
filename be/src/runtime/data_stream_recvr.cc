@@ -57,7 +57,7 @@ class DataStreamRecvr::SenderQueue {
 public:
     SenderQueue(DataStreamRecvr* parent_recvr, int num_senders);
 
-    ~SenderQueue() = default;
+    ~SenderQueue();
 
     // Return the next batch form this sender queue. Sets the returned batch in _cur_batch.
     // A returned batch that is not filled to capacity does *not* indicate
@@ -134,7 +134,7 @@ private:
 
     // queue of (batch length, batch) pairs.  The SenderQueue block owns memory to
     // these batches. They are handed off to the caller via get_batch.
-    typedef list<pair<int, RowBatch*>> RowBatchQueue;
+    typedef list<pair<int, std::unique_ptr<RowBatch>>> RowBatchQueue;
     RowBatchQueue _batch_queue;
 
     typedef std::list<std::pair<int, ChunkUniquePtr>> ChunkQueue;
@@ -287,17 +287,17 @@ void DataStreamRecvr::SenderQueue::add_batch(const PRowBatch& pb_batch, int be_n
         return;
     }
 
-    RowBatch* batch = nullptr;
+    std::unique_ptr<RowBatch> batch;
     {
         SCOPED_TIMER(_recvr->_deserialize_row_batch_timer);
         // Note: if this function makes a row batch, the batch *must* be added
         // to _batch_queue. It is not valid to create the row batch and destroy
         // it in this thread.
-        batch = new RowBatch(_recvr->row_desc(), pb_batch, _recvr->mem_tracker());
+        batch = std::make_unique<RowBatch>(_recvr->row_desc(), pb_batch, _recvr->mem_tracker());
     }
 
     VLOG_ROW << "added #rows=" << batch->num_rows() << " batch_size=" << batch_size << "\n";
-    _batch_queue.emplace_back(batch_size, batch);
+    _batch_queue.emplace_back(batch_size, std::move(batch));
 
     // if done is nullptr, this function can't delay this response
     if (done != nullptr && _recvr->exceeds_limit(batch_size)) {
@@ -530,12 +530,12 @@ void DataStreamRecvr::SenderQueue::close() {
         _pending_closures.clear();
     }
 
-    // Delete any batches queued in _batch_queue
-    for (auto& it : _batch_queue) {
-        delete it.second;
-    }
-
+    _batch_queue.clear();
     _current_batch.reset();
+}
+
+DataStreamRecvr::SenderQueue::~SenderQueue() {
+    close();
 }
 
 Status DataStreamRecvr::create_merger(const SortExecExprs* exprs, const std::vector<bool>* is_asc,
@@ -692,17 +692,22 @@ void DataStreamRecvr::close() {
     for (auto& _sender_queue : _sender_queues) {
         _sender_queue->close();
     }
+    _sender_queues.clear();
     // Remove this receiver from the DataStreamMgr that created it.
     // TODO: log error msg
-    _mgr->deregister_recvr(fragment_instance_id(), dest_node_id());
-    _mgr = nullptr;
+    if (_mgr) {
+        _mgr->deregister_recvr(fragment_instance_id(), dest_node_id());
+        _mgr = nullptr;
+    }
     _chunks_merger.reset();
-    _mem_tracker->close();
-    _mem_tracker.reset();
+    if (_mem_tracker.get() != nullptr) {
+        _mem_tracker->close();
+        _mem_tracker.reset();
+    }
 }
 
 DataStreamRecvr::~DataStreamRecvr() {
-    DCHECK(_mgr == nullptr) << "Must call close()";
+    close();
 }
 
 Status DataStreamRecvr::get_chunk(std::unique_ptr<vectorized::Chunk>* chunk) {
