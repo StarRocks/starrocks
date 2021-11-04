@@ -1034,15 +1034,16 @@ Status TabletManager::start_trash_sweep() {
                     it = _shutdown_tablets.erase(it);
                     continue;
                 }
-                // move data to trash
                 TabletSharedPtr& tablet = *it;
-                std::string tablet_path = tablet->tablet_path();
-                if (Env::Default()->path_exists(tablet_path).ok()) {
+                const std::string& tablet_path = tablet->tablet_path();
+                st = Env::Default()->path_exists(tablet_path);
+                if (st.ok() && config::trash_file_expire_time_sec > 0) { // Move tablet directory to trash
                     if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
-                        Status st = SnapshotManager::instance()->make_snapshot_on_tablet_meta(tablet);
-                        if (!st.ok()) {
+                        if (st = SnapshotManager::instance()->make_snapshot_on_tablet_meta(tablet); !st.ok()) {
                             LOG(WARNING) << "Fail to make_snapshot_on_tablet_meta, tablet_id=" << tablet->tablet_id()
                                          << " schema_hash=" << tablet->schema_hash() << ", status=" << st.to_string();
+                            ++it;
+                            continue;
                         }
                     } else {
                         // take snapshot of tablet meta
@@ -1050,6 +1051,7 @@ Status TabletManager::start_trash_sweep() {
                                 tablet_path, std::to_string(tablet->tablet_id()) + ".hdr");
                         tablet->tablet_meta()->save(meta_file_path);
                     }
+
                     if (move_to_trash(tablet_path, tablet_path) == OLAP_SUCCESS) {
                         LOG(INFO) << "Moved " << tablet_path << " to trash";
                     } else {
@@ -1057,8 +1059,21 @@ Status TabletManager::start_trash_sweep() {
                         ++it;
                         continue;
                     }
+                } else if (st.ok()) { // Remove tablet directory directly
+                    if (st = FileUtils::remove_all(tablet_path); !st.ok()) {
+                        LOG(WARNING) << "Fail to remove " << tablet_path << ": " << st;
+                        ++it;
+                        continue;
+                    }
+                    LOG(INFO) << "Removed " << tablet_path;
+                } else if (!st.is_not_found()) {
+                    LOG(WARNING) << "Fail to check " << tablet_path << ": " << st;
+                    ++it;
+                    continue;
+                } else {
+                    // Nothing to do, tablet directory does not exist.
                 }
-                Status st;
+
                 if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
                     st = tablet->updates()->clear_meta();
                 } else {
@@ -1071,7 +1086,7 @@ Status TabletManager::start_trash_sweep() {
                     it = _shutdown_tablets.erase(it);
                     ++clean_num;
                 }
-            } else if (st.is_not_found()) {
+            } else if (st.is_not_found()) { // tablet meta does not exist in the KV store.
                 // if could not find tablet info in meta store, then check if dir existed
                 st = Env::Default()->path_exists((*it)->tablet_path());
                 if (st.ok()) {
