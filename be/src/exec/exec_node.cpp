@@ -613,6 +613,7 @@ static void eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, ve
 void ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
                               vectorized::FilterPtr* filter_ptr) {
     // No need to do expression if none rows
+    DCHECK(chunk != nullptr);
     if (chunk->num_rows() == 0) {
         return;
     }
