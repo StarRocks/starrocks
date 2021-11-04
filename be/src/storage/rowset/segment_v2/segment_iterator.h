@@ -27,6 +27,7 @@
 
 #include "common/status.h"
 #include "storage/olap_cond.h"
+#include "storage/rowset/segment_v2/column_iterator.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/row_ranges.h"
 #include "storage/rowset/segment_v2/segment.h"
