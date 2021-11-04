@@ -4,22 +4,20 @@ flink的用户想要将数据sink到StarRocks当中，但是flink官方只提供
 
 ## 使用方式
 
-[点击下载插件](https://github.com/StarRocks/flink-connector-starrocks/releases)
-
 [源码地址](https://github.com/StarRocks/flink-connector-starrocks)
 
-将`com.starrocks.table.connector.flink.StarRocksDynamicTableSinkFactory`加入到：`src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`。
-
 将以下内容加入`pom.xml`:
+
+点击 [版本信息](https://search.maven.org/search?q=g:com.starrocks) 查看页面Latest Version信息，替换下面x.x.x内容
 
 ```xml
 <dependency>
     <groupId>com.starrocks</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
     <!-- for flink-1.11, flink-1.12 -->
-    <version>1.1.1_flink-1.11</version>
+    <version>x.x.x_flink-1.11</version>
     <!-- for flink-1.13 -->
-    <version>1.1.1_flink-1.13</version>
+    <version>x.x.x_flink-1.13</version>
 </dependency>
 ```
 
@@ -273,9 +271,9 @@ tEnv.executeSql(
     flink.starrocks.load-url= 192.168.1.1:8030
     flink.starrocks.username=root
     flink.starrocks.password=
-    # 如果导入数据不方便选出合适的分隔符可以考虑使用Json格式，但是会有一定的性能损失
+    # 如果导入数据不方便选出合适的分隔符可以考虑使用Json格式，但是会有一定的性能损失,使用方法：用以下参数替换flink.starrocks.sink.properties.column_separator和flink.starrocks.sink.properties.row_delimiter参数
+    flink.starrocks.sink.properties.strip_outer_array=true
     flink.starrocks.sink.properties.format=json
-    flink.starrocks.sink.buffer-flush.interval-ms=5000
     ~~~
 
 2. Flink.starrocks.sink 的参数可以参考[上文](##使用方式)，比如可以给不同的规则配置不同的导入频率等参数。
