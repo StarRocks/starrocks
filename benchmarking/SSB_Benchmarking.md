@@ -151,13 +151,15 @@ cd ssb-poc
 make && make install  
 ~~~
 
-所有相关工具安装到output目录
+所有相关工具都会安装到output目录
 
 #### 生成数据
 
 ~~~shell
 bin/gen-ssb.sh 100 data_dir
 ~~~
+
+这里会在data\_dir目录下生成100GB规模的数据
 
 #### 建表
 
@@ -179,7 +181,7 @@ bin/gen-ssb.sh 100 data_dir
 
 3. 字段是否可以为空
 
-    StarRocks的建表这里都采取的NOT NULL关键字，因为在SSB生成的标准数据集合中并没有空字段，但是对于实际的业务
+    StarRocks的建表这里都采取的NOT NULL关键字，因为在SSB生成的标准数据集合中并没有空字段。
 
 针对我们三台BE的环境我们采取的建表方式如下：
 
@@ -355,7 +357,7 @@ PROPERTIES (
 );
 ~~~
 
-修改配置文件连接集群
+修改配置文件后连接集群
 
 ~~~shell
 # for mysql cmd
@@ -373,23 +375,23 @@ broker_port: 8000
 ...
 ~~~
 
-执行脚本创建
+执行建表脚本
 
 ~~~shell
 bin/create_db_table.sh ddl_100
 ~~~
 
-完成后我们创建了6张表，lineorder, supplier, dates, customer, part, lineorder\_flat
+完成后我们创建了6张表：lineorder, supplier, dates, customer, part, lineorder\_flat
 
 ### 数据导入
 
-这里我们通过stream load
+这里我们通过stream load导入数据
 
 ~~~shell
 bin/stream_load.sh data_dir
 ~~~
 
-data\_dir 是9.3.1.2生成的数据目录
+data\_dir是之前生成的数据目录
 
 ### 查询
 
@@ -399,14 +401,9 @@ data\_dir 是9.3.1.2生成的数据目录
 bin/benchmark.sh -p -d ssb
 ~~~
 
-生成ssb单表数据
+测试ssb宽表查询(SQL 参见 share/ssb\_test/sql/ssb-flat/)
 
 ~~~shell
 bin/flat_insert.sh
-~~~
-
-测试ssb单表查询(SQL 参见 share/ssb\_test/sql/ssb-flat/)
-
-~~~shell
 bin/benchmark.sh -p -d ssb-flat
 ~~~
