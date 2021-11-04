@@ -25,6 +25,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
@@ -275,6 +276,8 @@ public class CreateMaterializedViewStmtTest {
     public void testAggregateWithFunctionColumnInSelectClause(@Injectable ArithmeticExpr arithmeticExpr,
                                                               @Injectable SelectStmt selectStmt) throws UserException {
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("sum", Lists.newArrayList(arithmeticExpr));
+        functionCallExpr.setFn(Expr.getBuiltinFunction(
+                "sum", new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
         SelectList selectList = new SelectList();
         SelectListItem selectListItem = new SelectListItem(functionCallExpr, null);
         selectList.addItem(selectListItem);
@@ -461,6 +464,8 @@ public class CreateMaterializedViewStmtTest {
         Deencapsulation.setField(slotRef2, "desc", slotDescriptor);
         List<Expr> fnChildren = Lists.newArrayList(slotRef2);
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("sum", fnChildren);
+        functionCallExpr.setFn(Expr.getBuiltinFunction(
+                "sum", new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
         SelectListItem selectListItem2 = new SelectListItem(functionCallExpr, null);
         selectList.addItem(selectListItem2);
         OrderByElement orderByElement1 = new OrderByElement(functionCallExpr, false, false);
@@ -509,6 +514,8 @@ public class CreateMaterializedViewStmtTest {
         selectList.addItem(selectListItem1);
         List<Expr> fnChildren = Lists.newArrayList(slotRef1);
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("sum", fnChildren);
+        functionCallExpr.setFn(Expr.getBuiltinFunction(
+                "sum", new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
         SelectListItem selectListItem2 = new SelectListItem(functionCallExpr, null);
         selectList.addItem(selectListItem2);
 
@@ -544,6 +551,8 @@ public class CreateMaterializedViewStmtTest {
         Deencapsulation.setField(slotRef2, "desc", slotDescriptor);
         List<Expr> fn1Children = Lists.newArrayList(slotRef2);
         FunctionCallExpr functionCallExpr1 = new FunctionCallExpr("sum", fn1Children);
+        functionCallExpr1.setFn(Expr.getBuiltinFunction(
+                "sum", new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
         SelectListItem selectListItem2 = new SelectListItem(functionCallExpr1, null);
         selectList.addItem(selectListItem2);
         FunctionCallExpr functionCallExpr2 = new FunctionCallExpr("max", fn1Children);
@@ -593,6 +602,8 @@ public class CreateMaterializedViewStmtTest {
         Deencapsulation.setField(functionChild0, "desc", slotDescriptor);
         List<Expr> fn1Children = Lists.newArrayList(functionChild0);
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("sum", fn1Children);
+        functionCallExpr.setFn(Expr.getBuiltinFunction(
+                "sum", new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
         SelectListItem selectListItem3 = new SelectListItem(functionCallExpr, null);
         selectList.addItem(selectListItem3);
         OrderByElement orderByElement1 = new OrderByElement(slotRef1, false, false);
@@ -658,6 +669,8 @@ public class CreateMaterializedViewStmtTest {
         Deencapsulation.setField(functionChild0, "desc", slotDescriptor);
         List<Expr> fn1Children = Lists.newArrayList(functionChild0);
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("sum", fn1Children);
+        functionCallExpr.setFn(Expr.getBuiltinFunction(
+                "sum", new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
         SelectListItem selectListItem5 = new SelectListItem(functionCallExpr, null);
         selectList.addItem(selectListItem5);
         final String columnName1 = "k1";
@@ -1175,6 +1188,8 @@ public class CreateMaterializedViewStmtTest {
         Deencapsulation.setField(slotRef, "desc", slotDescriptor);
         List<Expr> children = Lists.newArrayList(slotRef);
         FunctionCallExpr functionCallExpr = new FunctionCallExpr("sum", children);
+        functionCallExpr.setFn(Expr.getBuiltinFunction(
+                "sum", new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
         SelectListItem selectListItem3 = new SelectListItem(functionCallExpr, null);
         selectList.addItem(selectListItem3);
         OrderByElement orderByElement1 = new OrderByElement(slotRef1, false, false);
