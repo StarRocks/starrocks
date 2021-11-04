@@ -8,7 +8,8 @@
 namespace starrocks {
 namespace vectorized {
 
-OlapMetaScanner::OlapMetaScanner(OlapMetaScanNode* parent) : _parent(parent), _is_open(false) {}
+OlapMetaScanner::OlapMetaScanner(OlapMetaScanNode* parent)
+        : _parent(parent), _runtime_state(nullptr), _is_open(false) {}
 
 Status OlapMetaScanner::init(RuntimeState* runtime_state, const OlapMetaScannerParams& params) {
     _runtime_state = runtime_state;
@@ -67,7 +68,7 @@ Status OlapMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
 
     std::string err;
-    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash, true, &err);
+    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
     if (!_tablet) {
         std::stringstream ss;
         ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash

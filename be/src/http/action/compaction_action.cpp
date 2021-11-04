@@ -49,17 +49,15 @@ Status CompactionAction::_handle_show_compaction(HttpRequest* req, std::string* 
         return Status::NotSupported("The overall compaction status is not supported yet");
     }
 
-    uint64_t tablet_id = 0;
-    uint32_t schema_hash = 0;
+    uint64_t tablet_id;
     try {
         tablet_id = std::stoull(req_tablet_id);
-        schema_hash = std::stoul(req_schema_hash);
     } catch (const std::exception& e) {
         LOG(WARNING) << "invalid argument.tablet_id:" << req_tablet_id << ", schema_hash:" << req_schema_hash;
         return Status::InternalError(strings::Substitute("convert failed, $0", e.what()));
     }
 
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash);
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     if (tablet == nullptr) {
         return Status::NotFound("Tablet not found");
     }
