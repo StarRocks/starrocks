@@ -38,6 +38,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class Utils {
@@ -125,16 +126,24 @@ public class Utils {
     }
 
     public static void extractOlapScanOperator(GroupExpression groupExpression, List<LogicalOlapScanOperator> list) {
-        if (OperatorType.LOGICAL_OLAP_SCAN.equals(groupExpression.getOp().getOpType())) {
-            LogicalOlapScanOperator loso = (LogicalOlapScanOperator) groupExpression.getOp();
-            list.add(loso);
+        extractOperator(groupExpression, list, p -> OperatorType.LOGICAL_OLAP_SCAN.equals(p.getOpType()));
+    }
+
+    public static void extractScanOperator(GroupExpression groupExpression, List<LogicalScanOperator> list) {
+        extractOperator(groupExpression, list, p -> p instanceof LogicalScanOperator);
+    }
+
+    private static <E extends Operator> void extractOperator(GroupExpression root, List<E> list,
+                                                             Predicate<Operator> lambda) {
+        if (lambda.test(root.getOp())) {
+            list.add((E) root.getOp());
             return;
         }
 
-        List<Group> groups = groupExpression.getInputs();
+        List<Group> groups = root.getInputs();
         for (Group group : groups) {
             GroupExpression expression = group.getFirstLogicalExpression();
-            extractOlapScanOperator(expression, list);
+            extractOperator(expression, list, lambda);
         }
     }
 
@@ -365,7 +374,7 @@ public class Utils {
         int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
         for (Long partitionId : selectedPartitionId) {
             Partition partition = table.getPartition(partitionId);
-            if (partition.getReplicaCount() < backendSize) {
+            if (table.getPartitionInfo().getReplicationNum(partitionId) < backendSize) {
                 return false;
             }
             long visibleVersion = partition.getVisibleVersion();
