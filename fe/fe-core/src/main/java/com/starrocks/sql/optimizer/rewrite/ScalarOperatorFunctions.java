@@ -397,19 +397,6 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(resultBuilder.toString());
     }
 
-    @FEFunction.List(list = {
-            @FEFunction(name = "ifnull", argTypes = {"VARCHAR", "VARCHAR"}, returnType = "VARCHAR"),
-            @FEFunction(name = "ifnull", argTypes = {"TINYINT", "TINYINT"}, returnType = "TINYINT"),
-            @FEFunction(name = "ifnull", argTypes = {"INT", "INT"}, returnType = "INT"),
-            @FEFunction(name = "ifnull", argTypes = {"BIGINT", "BIGINT"}, returnType = "BIGINT"),
-            @FEFunction(name = "ifnull", argTypes = {"DATETIME", "DATETIME"}, returnType = "DATETIME"),
-            @FEFunction(name = "ifnull", argTypes = {"DATE", "DATETIME"}, returnType = "DATETIME"),
-            @FEFunction(name = "ifnull", argTypes = {"DATETIME", "DATE"}, returnType = "DATETIME")
-    })
-    public static ConstantOperator ifNull(ConstantOperator first, ConstantOperator second) {
-        return first.isNull() ? second : first;
-    }
-
     private static ConstantOperator createDecimalLiteral(BigDecimal result) {
         Type type;
         if (!Config.enable_decimal_v3) {

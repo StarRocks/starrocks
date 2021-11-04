@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
