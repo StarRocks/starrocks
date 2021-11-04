@@ -21,7 +21,6 @@
 
 #include "exprs/anyval_util.h"
 
-#include "common/compiler_util.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 

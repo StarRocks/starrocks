@@ -575,6 +575,7 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
     std::unique_ptr<MemTracker> mem_tracker =
             std::make_unique<MemTracker>(config::compaction_mem_limit, "", _options.compaction_mem_tracker);
     vectorized::BaseCompaction base_compaction(mem_tracker.get(), best_tablet);
+
     Status res = base_compaction.compact();
     if (!res.ok()) {
         best_tablet->set_last_base_compaction_failure_time(UnixMillis());

@@ -895,7 +895,7 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
                 }
             }
         } else {
-            EngineCloneTask engine_task(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), clone_req,
+            EngineCloneTask engine_task(ExecEnv::GetInstance()->clone_mem_tracker(), clone_req,
                                         worker_pool_this->_master_info, agent_task_req.signature, &error_msgs,
                                         &tablet_infos, &status);
             OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
