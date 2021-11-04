@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <thread>
 
 #include "storage/del_vector.h"
 

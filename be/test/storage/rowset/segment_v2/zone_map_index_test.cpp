@@ -27,6 +27,7 @@
 #include <string>
 
 #include "env/env_memory.h"
+#include "runtime/mem_tracker.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/page_cache.h"
 #include "storage/tablet_schema_helper.h"

@@ -82,7 +82,6 @@ Status AggregateIterator::do_get_next(Chunk* chunk) {
             _curr_chunk->reset();
 
             Status st = _child->get_next(_curr_chunk.get());
-
             if (st.is_end_of_file()) {
                 _fetch_finish = true;
                 break;

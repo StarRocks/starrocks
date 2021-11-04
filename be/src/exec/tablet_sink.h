@@ -28,6 +28,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <thread>
 
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -41,6 +42,7 @@
 #include "util/bitmap.h"
 #include "util/ref_count_closure.h"
 #include "util/thrift_util.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 

@@ -29,7 +29,6 @@
 #include "gen_cpp/segment_v2.pb.h"
 #include "gutil/macros.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/page_pointer.h"
 #include "util/slice.h"

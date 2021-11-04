@@ -29,7 +29,6 @@
 #include "common/status.h"
 #include "gen_cpp/segment_v2.pb.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/field.h"
 #include "storage/rowset/segment_v2/binary_plain_page.h"
 #include "util/slice.h"

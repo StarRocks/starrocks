@@ -27,6 +27,7 @@
 #include <string>
 #include <vector>
 
+#include "runtime/mem_tracker.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/push_handler.h"

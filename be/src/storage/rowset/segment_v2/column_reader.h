@@ -210,6 +210,10 @@ private:
     void operator=(ColumnReader&&) = delete;
 
     Status _init(ColumnMetaPB* meta);
+    ColumnReader(const ColumnReaderOptions& opts, const ColumnMetaPB& meta, uint64_t num_rows,
+                 const std::string& file_name);
+
+    Status init(const ColumnMetaPB& meta);
 
     Status _load_zone_map_index(bool use_page_cache, bool kept_in_memory);
     Status _load_ordinal_index(bool use_page_cache, bool kept_in_memory);

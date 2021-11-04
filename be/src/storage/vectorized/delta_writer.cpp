@@ -200,8 +200,6 @@ Status DeltaWriter::flush_memtable_async() {
 
     if (_flush_token->get_stats().cur_flush_count < 1) {
         // equal means there is no memtable in flush queue, just flush this memtable
-        VLOG(3) << "flush memtable to reduce mem consumption. memtable size: " << _mem_table->memory_usage()
-                << ", tablet: " << _req.tablet_id << ", load id: " << print_id(_req.load_id);
         RETURN_IF_ERROR(_flush_memtable_async());
         _reset_mem_table();
     } else {
@@ -226,7 +224,7 @@ Status DeltaWriter::wait_memtable_flushed() {
 }
 
 void DeltaWriter::_reset_mem_table() {
-    _mem_table = std::make_shared<MemTable>(_tablet->tablet_id(), _tablet_schema, _req.slots, _rowset_writer.get(),
+    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), _tablet_schema, _req.slots, _rowset_writer.get(),
                                             _mem_tracker.get());
 }
 

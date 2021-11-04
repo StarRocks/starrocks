@@ -4,6 +4,7 @@
 
 #include "column/datum_convert.h"
 #include "gtest/gtest.h"
+#include "runtime/mem_tracker.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/chunk_helper.h"
