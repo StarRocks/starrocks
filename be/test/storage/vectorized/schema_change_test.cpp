@@ -14,16 +14,12 @@
 namespace starrocks::vectorized {
 
 class SchemaChangeTest : public testing::Test {
-    void SetUp() override {
-        _mem_tracker = new MemTracker(-1);
-        _sc_procedure = nullptr;
-    }
+    void SetUp() override { _sc_procedure = nullptr; }
 
     void TearDown() override {
         if (_sc_procedure != nullptr) {
             delete _sc_procedure;
         }
-        delete _mem_tracker;
     }
 
     void SetCreateTabletReq(TCreateTabletReq* request, int64_t tablet_id) {
@@ -153,7 +149,6 @@ class SchemaChangeTest : public testing::Test {
     }
 
     SchemaChange* _sc_procedure;
-    MemTracker* _mem_tracker;
 };
 
 TEST_F(SchemaChangeTest, convert_tinyint_to_varchar) {
@@ -444,7 +439,7 @@ TEST_F(SchemaChangeTest, schema_change_directly) {
         column_mapping->ref_column = i;
     }
 
-    _sc_procedure = new (std::nothrow) SchemaChangeDirectly(_mem_tracker, chunk_changer);
+    _sc_procedure = new (std::nothrow) SchemaChangeDirectly(chunk_changer);
     Version version(3, 3);
     RowsetSharedPtr rowset = base_tablet->get_rowset_by_version(version);
     ASSERT_TRUE(rowset != nullptr);
@@ -504,7 +499,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     column_mapping->ref_column = 3;
 
     _sc_procedure = new (std::nothrow) SchemaChangeWithSorting(
-            _mem_tracker, chunk_changer, config::memory_limitation_per_thread_for_schema_change * 1024 * 1024 * 1024);
+            chunk_changer, config::memory_limitation_per_thread_for_schema_change * 1024 * 1024 * 1024);
     Version version(3, 3);
     RowsetSharedPtr rowset = base_tablet->get_rowset_by_version(version);
     ASSERT_TRUE(rowset != nullptr);
