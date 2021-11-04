@@ -38,7 +38,7 @@ private:
 public:
     static void eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status);
 
-    void get_column_predicates(PredicateParser* parser, std::vector<ColumnPredicate*>* preds);
+    void get_column_predicates(PredicateParser* parser, std::vector<std::unique_ptr<ColumnPredicate>>* preds);
 
     Status get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges);
 

@@ -24,7 +24,11 @@ namespace vectorized {
 class MysqlScanNode : public ScanNode {
 public:
     MysqlScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~MysqlScanNode() override = default;
+    ~MysqlScanNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     // initialize _mysql_scanner, and create _text_converter.
     Status prepare(RuntimeState* state) override;

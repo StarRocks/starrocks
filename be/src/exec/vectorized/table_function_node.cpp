@@ -14,7 +14,11 @@ TableFunctionNode::TableFunctionNode(ObjectPool* pool, const TPlanNode& tnode, c
     _input_chunk_ptr = nullptr;
 }
 
-TableFunctionNode::~TableFunctionNode() = default;
+TableFunctionNode::~TableFunctionNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
 
 Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));

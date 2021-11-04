@@ -83,7 +83,6 @@ private:
 
 private:
     TupleId _tuple_id;
-    RuntimeState* _runtime_state;
     TupleDescriptor* _tuple_desc;
     std::vector<TScanRangeParams> _scan_ranges;
 

@@ -23,7 +23,11 @@ TopNNode::TopNNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
     _sort_timer = nullptr;
 }
 
-TopNNode::~TopNNode() = default;
+TopNNode::~TopNNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
 
 Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));

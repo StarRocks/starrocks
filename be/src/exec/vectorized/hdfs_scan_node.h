@@ -28,7 +28,11 @@ struct HdfsFileDesc {
 class HdfsScanNode final : public starrocks::ScanNode {
 public:
     HdfsScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~HdfsScanNode() override = default;
+    ~HdfsScanNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;

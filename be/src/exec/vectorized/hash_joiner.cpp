@@ -59,6 +59,8 @@ HashJoiner::HashJoiner(const THashJoinNode& hash_join_node, TPlanNodeId node_id,
 }
 
 Status HashJoiner::prepare(RuntimeState* state) {
+    _runtime_state = state;
+
     _build_timer = ADD_TIMER(_runtime_profile, "BuildTime");
 
     _copy_right_table_chunk_timer = ADD_CHILD_TIMER(_runtime_profile, "1-CopyRightTableChunkTime", "BuildTime");

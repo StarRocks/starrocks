@@ -11,7 +11,7 @@ namespace starrocks::vectorized {
 class UnionNode : public ExecNode {
 public:
     UnionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~UnionNode() override = default;
+    ~UnionNode() override;
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;

@@ -34,7 +34,11 @@ ProjectNode::ProjectNode(starrocks::ObjectPool* pool, const starrocks::TPlanNode
                          const starrocks::DescriptorTbl& desc)
         : ExecNode(pool, node, desc) {}
 
-ProjectNode::~ProjectNode() = default;
+ProjectNode::~ProjectNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
 
 Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));

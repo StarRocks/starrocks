@@ -14,7 +14,12 @@ namespace starrocks::vectorized {
 class DictDecodeNode final : public ExecNode {
 public:
     DictDecodeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~DictDecodeNode() override {}
+
+    ~DictDecodeNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState* state) override;

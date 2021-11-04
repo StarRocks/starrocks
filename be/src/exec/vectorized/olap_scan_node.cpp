@@ -119,8 +119,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         }
     }
 
-    Chunk* ptr = nullptr;
-    if (_result_chunks.blocking_get(&ptr)) {
+    if (_result_chunks.blocking_get(chunk)) {
         // If the second argument of `_fill_chunk_pool` is false *AND* the column pool is empty,
         // the column object in the chunk will be destroyed and its memory will be deallocated
         // when the last remaining shared_ptr owning it is destroyed, otherwise the column object
@@ -133,7 +132,6 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         // true to ensure that the newly allocated column objects will be returned back into the column
         // pool.
         _fill_chunk_pool(1, first_call);
-        *chunk = std::shared_ptr<Chunk>(ptr);
         eval_join_runtime_filters(chunk);
         _num_rows_returned += (*chunk)->num_rows();
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
@@ -170,16 +168,13 @@ Status OlapScanNode::close(RuntimeState* state) {
 
     _close_pending_scanners();
 
-    // free chunks in _chunk_pool.
-    while (!_chunk_pool.empty()) {
-        Chunk* chunk = _chunk_pool.pop();
-        delete chunk;
-    }
+    // Free chunks in _chunk_pool.
+    _chunk_pool.clear();
 
-    // free chunks in _result_chunks
-    Chunk* chunk = nullptr;
+    // Free chunks in _result_chunks.
+    ChunkPtr chunk = nullptr;
     while (_result_chunks.blocking_get(&chunk)) {
-        delete chunk;
+        chunk.reset();
     }
 
     _dict_optimize_parser.close(state);
@@ -191,16 +186,20 @@ Status OlapScanNode::close(RuntimeState* state) {
 }
 
 OlapScanNode::~OlapScanNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
     DCHECK(is_closed());
 }
 
 void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
     const size_t capacity = config::vector_chunk_size;
     for (int i = 0; i < count; i++) {
-        Chunk* chk = ChunkHelper::new_chunk_pooled(*_chunk_schema, capacity, force_column_pool);
-
-        std::lock_guard<std::mutex> l(_mtx);
-        _chunk_pool.push(chk);
+        ChunkPtr chunk(ChunkHelper::new_chunk_pooled(*_chunk_schema, capacity, force_column_pool));
+        {
+            std::lock_guard<std::mutex> l(_mtx);
+            _chunk_pool.push(std::move(chunk));
+        }
     }
 }
 
@@ -226,9 +225,9 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
     // judge if we need to yield. So we record all raw data read in this round
     // scan, if this exceed threshold, we yield this thread.
     bool resubmit = false;
-    Chunk* chunk;
     int64_t raw_rows_threshold = scanner->raw_rows_read() + config::doris_scanner_row_num;
     while (status.ok()) {
+        ChunkPtr chunk;
         {
             std::lock_guard<std::mutex> l(_mtx);
             if (_chunk_pool.empty()) {
@@ -241,18 +240,17 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
             chunk = _chunk_pool.pop();
         }
         DCHECK_EQ(chunk->num_rows(), 0);
-        status = scanner->get_chunk(_runtime_state, chunk);
+        status = scanner->get_chunk(_runtime_state, chunk.get());
         if (!status.ok()) {
             QUERY_LOG_IF(ERROR, !status.is_end_of_file()) << status;
             std::lock_guard<std::mutex> l(_mtx);
-            _chunk_pool.push(chunk);
+            _chunk_pool.push(std::move(chunk));
             break;
         }
         DCHECK_CHUNK(chunk);
         // _result_chunks will be shutdown if error happened or has reached limit.
-        if (!_result_chunks.put(chunk)) {
+        if (!_result_chunks.put(std::move(chunk))) {
             status = Status::Aborted("_result_chunks has been shutdown");
-            delete chunk;
             break;
         }
         if (scanner->raw_rows_read() >= raw_rows_threshold) {
@@ -306,7 +304,7 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
 Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
     for (auto& scan_range : scan_ranges) {
         DCHECK(scan_range.scan_range.__isset.internal_scan_range);
-        _scan_ranges.emplace_back(new TInternalScanRange(scan_range.scan_range.internal_scan_range));
+        _scan_ranges.emplace_back(std::make_unique<TInternalScanRange>(scan_range.scan_range.internal_scan_range));
         COUNTER_UPDATE(_tablet_counter, 1);
     }
 
@@ -502,7 +500,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
 
 Status OlapScanNode::set_scan_ranges(const std::vector<TInternalScanRange>& ranges) {
     for (auto& r : ranges) {
-        _scan_ranges.emplace_back(new TInternalScanRange(r));
+        _scan_ranges.emplace_back(std::make_unique<TInternalScanRange>(r));
     }
     return Status::OK();
 }

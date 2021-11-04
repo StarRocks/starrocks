@@ -13,8 +13,12 @@ namespace vectorized {
 
 class AnalyticNode : public ExecNode {
 public:
-    ~AnalyticNode() override = default;
     AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
+    ~AnalyticNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState* state) override;
@@ -27,7 +31,7 @@ public:
             pipeline::PipelineBuilderContext* context) override;
 
 private:
-    const TPlanNode _tnode;
+    const TPlanNode& _tnode;
     // Tuple descriptor for storing results of analytic fn evaluation.
     const TupleDescriptor* _result_tuple_desc;
     AnalytorPtr _analytor = nullptr;

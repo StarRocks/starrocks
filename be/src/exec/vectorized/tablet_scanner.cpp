@@ -22,6 +22,12 @@ namespace starrocks::vectorized {
 
 TabletScanner::TabletScanner(OlapScanNode* parent) : _parent(parent) {}
 
+TabletScanner::~TabletScanner() {
+    if (_runtime_state != nullptr) {
+        close(_runtime_state);
+    }
+}
+
 Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParams& params) {
     _runtime_state = runtime_state;
     _skip_aggregation = params.skip_aggregation;
@@ -121,15 +127,15 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     _params.chunk_size = config::vector_chunk_size;
 
     PredicateParser parser(_tablet->tablet_schema());
-    std::vector<vectorized::ColumnPredicate*> preds;
+    std::vector<PredicatePtr> preds;
     _parent->_conjuncts_manager.get_column_predicates(&parser, &preds);
-    for (auto* p : preds) {
-        _predicate_free_pool.emplace_back(p);
-        if (parser.can_pushdown(p)) {
-            _params.predicates.push_back(p);
+    for (auto& p : preds) {
+        if (parser.can_pushdown(p.get())) {
+            _params.predicates.push_back(p.get());
         } else {
-            _predicates.add(p);
+            _predicates.add(p.get());
         }
+        _predicate_free_pool.emplace_back(std::move(p));
     }
 
     ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);

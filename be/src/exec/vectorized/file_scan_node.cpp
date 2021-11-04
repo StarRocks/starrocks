@@ -21,19 +21,23 @@
 #include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
+#include "util/scoped_cleanup.h"
 
 namespace starrocks::vectorized {
 
 FileScanNode::FileScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs),
           _tuple_id(tnode.file_scan_node.tuple_id),
-          _runtime_state(nullptr),
           _tuple_desc(nullptr),
           _max_queue_size(32),
           _num_running_scanners(0),
           _scan_finished(false) {}
 
-FileScanNode::~FileScanNode() = default;
+FileScanNode::~FileScanNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
 
 Status FileScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::init(tnode));
@@ -44,7 +48,6 @@ Status FileScanNode::prepare(RuntimeState* state) {
     VLOG_QUERY << "FileScanNode prepare";
     RETURN_IF_ERROR(ScanNode::prepare(state));
     // get tuple desc
-    _runtime_state = state;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
     if (_tuple_desc == nullptr) {
         std::stringstream ss;
@@ -114,7 +117,7 @@ Status FileScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     ChunkPtr temp_chunk;
     {
         std::unique_lock<std::mutex> l(_chunk_queue_lock);
-        while (_process_status.ok() && !_runtime_state->is_cancelled() && _num_running_scanners > 0 &&
+        while (_process_status.ok() && !runtime_state()->is_cancelled() && _num_running_scanners > 0 &&
                _chunk_queue.empty()) {
             SCOPED_TIMER(_wait_scanner_timer);
             _queue_reader_cond.wait_for(l, std::chrono::seconds(1));
@@ -123,7 +126,7 @@ Status FileScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
             // Some scanner process failed.
             return _process_status;
         }
-        if (_runtime_state->is_cancelled()) {
+        if (runtime_state()->is_cancelled()) {
             if (update_status(Status::Cancelled("Cancelled FileScanNode::get_next"))) {
                 _queue_writer_cond.notify_all();
             }
@@ -198,13 +201,13 @@ void FileScanNode::debug_string(int ident_level, std::stringstream* out) const {
 
 std::unique_ptr<FileScanner> FileScanNode::create_scanner(const TBrokerScanRange& scan_range, ScannerCounter* counter) {
     if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_ORC) {
-        return std::make_unique<ORCScanner>(_runtime_state, runtime_profile(), scan_range, counter);
+        return std::make_unique<ORCScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     } else if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_PARQUET) {
-        return std::make_unique<ParquetScanner>(_runtime_state, runtime_profile(), scan_range, counter);
+        return std::make_unique<ParquetScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     } else if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_JSON) {
-        return std::make_unique<JsonScanner>(_runtime_state, runtime_profile(), scan_range, counter);
+        return std::make_unique<JsonScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     } else {
-        return std::make_unique<CSVScanner>(_runtime_state, runtime_profile(), scan_range, counter);
+        return std::make_unique<CSVScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     }
 }
 
@@ -221,7 +224,7 @@ Status FileScanNode::scanner_scan(const TBrokerScanRange& scan_range, const std:
     RETURN_IF_ERROR(scanner->open());
 
     while (true) {
-        RETURN_IF_CANCELLED(_runtime_state);
+        RETURN_IF_CANCELLED(runtime_state());
         // If we have finished all works
         if (_scan_finished.load()) {
             return Status::OK();
@@ -241,7 +244,7 @@ Status FileScanNode::scanner_scan(const TBrokerScanRange& scan_range, const std:
         // Row batch has been filled, push this to the queue
         if (temp_chunk->num_rows() > 0) {
             std::unique_lock<std::mutex> l(_chunk_queue_lock);
-            while (_process_status.ok() && !_scan_finished.load() && !_runtime_state->is_cancelled() &&
+            while (_process_status.ok() && !_scan_finished.load() && !runtime_state()->is_cancelled() &&
                    // stop pushing more batch if
                    // 1. too many batches in queue, or
                    // 2. at least one batch in queue and memory exceed limit.
@@ -258,7 +261,7 @@ Status FileScanNode::scanner_scan(const TBrokerScanRange& scan_range, const std:
                 return Status::OK();
             }
             // Runtime state is canceled, just return cancel
-            if (_runtime_state->is_cancelled()) {
+            if (runtime_state()->is_cancelled()) {
                 return Status::Cancelled("Cancelled FileScanNode::scanner_scan");
             }
             // Queue size Must be smaller than _max_queue_size
@@ -275,7 +278,9 @@ Status FileScanNode::scanner_scan(const TBrokerScanRange& scan_range, const std:
 void FileScanNode::scanner_worker(int start_idx, int length) {
     // Clone expr context
     std::vector<ExprContext*> scanner_expr_ctxs;
-    auto status = Expr::clone_if_not_exists(_conjunct_ctxs, _runtime_state, &scanner_expr_ctxs);
+    MakeScopedCleanup([this, &scanner_expr_ctxs] { Expr::close(scanner_expr_ctxs, runtime_state()); });
+    auto status = Expr::clone_if_not_exists(_conjunct_ctxs, runtime_state(), &scanner_expr_ctxs);
+
     if (!status.ok()) {
         LOG(WARNING) << "Clone conjuncts failed.";
     } else {
@@ -305,8 +310,8 @@ void FileScanNode::scanner_worker(int start_idx, int length) {
         }
 
         // Update stats
-        _runtime_state->update_num_rows_load_filtered(counter.num_rows_filtered);
-        _runtime_state->update_num_rows_load_unselected(counter.num_rows_unselected);
+        runtime_state()->update_num_rows_load_filtered(counter.num_rows_filtered);
+        runtime_state()->update_num_rows_load_unselected(counter.num_rows_unselected);
 
         COUNTER_UPDATE(_scanner_total_timer, counter.total_ns);
         COUNTER_UPDATE(_scanner_fill_timer, counter.fill_ns);
@@ -332,7 +337,6 @@ void FileScanNode::scanner_worker(int start_idx, int length) {
     if (!status.ok() && !status.is_end_of_file()) {
         _queue_writer_cond.notify_all();
     }
-    Expr::close(scanner_expr_ctxs, _runtime_state);
 }
 
 } // namespace starrocks::vectorized

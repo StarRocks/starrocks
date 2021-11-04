@@ -23,7 +23,11 @@ class RuntimeFilterBuildDescriptor;
 class HashJoinNode : public ExecNode {
 public:
     HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~HashJoinNode() override = default;
+    ~HashJoinNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;

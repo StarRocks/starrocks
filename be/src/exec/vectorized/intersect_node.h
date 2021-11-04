@@ -27,6 +27,12 @@ class IntersectNode : public ExecNode {
 public:
     IntersectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
 
+    ~IntersectNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
+
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;

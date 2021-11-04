@@ -35,7 +35,11 @@ class Analytor {
     friend class ManagedFunctionStates;
 
 public:
-    ~Analytor() = default;
+    ~Analytor() {
+        if (_state != nullptr) {
+            close(_state);
+        }
+    }
     Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc);
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
@@ -121,6 +125,9 @@ public:
 #endif
 
 private:
+    RuntimeState* _state = nullptr;
+    bool _is_closed = false;
+
     const TPlanNode& _tnode;
     const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
@@ -136,7 +143,7 @@ private:
     RuntimeProfile* _runtime_profile;
     RuntimeProfile::Counter* _rows_returned_counter;
     // Time spent processing the child rows.
-    RuntimeProfile::Counter* _compute_timer{};
+    RuntimeProfile::Counter* _compute_timer;
     int64_t _num_rows_returned = 0;
     int64_t _limit; // -1: no limit
     bool _has_lead_lag_function = false;

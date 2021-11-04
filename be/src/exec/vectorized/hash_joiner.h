@@ -45,7 +45,12 @@ public:
                std::vector<ExprContext*>&& conjunct_ctxs, const RowDescriptor& build_row_descriptor,
                const RowDescriptor& probe_row_descriptor, const RowDescriptor& row_descriptor);
 
-    ~HashJoiner() = default;
+    ~HashJoiner() {
+        if (_runtime_state != nullptr) {
+            close(_runtime_state);
+        }
+    }
+
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state);
     bool need_input() const;
@@ -205,6 +210,8 @@ private:
     void _process_other_conjunct(ChunkPtr* chunk);
 
     static std::string _get_join_type_str(TJoinOp::type join_type);
+
+    RuntimeState* _runtime_state = nullptr;
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     const int64_t _limit; // -1: no limit

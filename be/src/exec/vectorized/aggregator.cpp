@@ -19,6 +19,8 @@ Status Aggregator::open(RuntimeState* state) {
 
 Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
                            MemTracker* mem_tracker) {
+    _state = state;
+
     _pool = pool;
     _runtime_profile = runtime_profile;
     _mem_tracker = mem_tracker;
@@ -213,6 +215,12 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 }
 
 Status Aggregator::close(RuntimeState* state) {
+    if (_is_closed) {
+        return Status::OK();
+    }
+
+    _is_closed = true;
+
     for (auto ctx : _agg_fn_ctxs) {
         if (ctx != nullptr && ctx->impl()) {
             ctx->impl()->close();

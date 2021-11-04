@@ -716,15 +716,16 @@ Status OlapScanConjunctsManager::build_scan_keys(bool unlimited, int32_t max_sca
     return Status::OK();
 }
 
-void OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser, std::vector<ColumnPredicate*>* preds) {
+void OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser,
+                                                     std::vector<std::unique_ptr<ColumnPredicate>>* preds) {
     for (auto& f : olap_filters) {
-        ColumnPredicate* p = parser->parse_thrift_cond(f);
+        std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
         p->set_index_filter_only(f.is_index_filter_only);
-        preds->push_back(p);
+        preds->emplace_back(std::move(p));
     }
     for (auto& f : is_null_vector) {
-        ColumnPredicate* p = parser->parse_thrift_cond(f);
-        preds->push_back(p);
+        std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
+        preds->emplace_back(std::move(p));
     }
 
     const auto& slots = tuple_desc->slots();
@@ -733,8 +734,8 @@ void OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser, st
         auto& expr_ctxs = iter.second;
         const SlotDescriptor* slot_desc = slots[slot_index];
         for (ExprContext* ctx : expr_ctxs) {
-            ColumnPredicate* p = parser->parse_expr_ctx(*slot_desc, runtime_state, ctx);
-            preds->push_back(p);
+            std::unique_ptr<ColumnPredicate> p(parser->parse_expr_ctx(*slot_desc, runtime_state, ctx));
+            preds->emplace_back(std::move(p));
         }
     }
 }
@@ -760,7 +761,7 @@ void OlapScanConjunctsManager::eval_const_conjuncts(const std::vector<ExprContex
 Status OlapScanConjunctsManager::get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges) {
     RETURN_IF_ERROR(scan_keys.get_key_range(key_ranges));
     if (key_ranges->empty()) {
-        key_ranges->emplace_back(new OlapScanRange());
+        key_ranges->emplace_back(std::make_unique<OlapScanRange>());
     }
     return Status::OK();
 }

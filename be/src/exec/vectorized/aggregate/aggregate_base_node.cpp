@@ -10,7 +10,11 @@ namespace starrocks::vectorized {
 AggregateBaseNode::AggregateBaseNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs), _tnode(tnode) {}
 
-AggregateBaseNode::~AggregateBaseNode() = default;
+AggregateBaseNode::~AggregateBaseNode() {
+    if (runtime_state() != nullptr) {
+        close(runtime_state());
+    }
+}
 
 Status AggregateBaseNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));

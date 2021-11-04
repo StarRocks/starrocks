@@ -10,7 +10,12 @@ namespace vectorized {
 class CrossJoinNode : public ExecNode {
 public:
     CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~CrossJoinNode() override = default;
+
+    ~CrossJoinNode() override {
+        if (runtime_state() != nullptr) {
+            close(runtime_state());
+        }
+    }
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
