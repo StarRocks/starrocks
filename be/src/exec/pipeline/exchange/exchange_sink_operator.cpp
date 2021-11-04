@@ -57,7 +57,7 @@ public:
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
     // by all the channels.
-    Status send_chunk_request(PTransmitChunkParams* params, const std::shared_ptr<butil::IOBuf>& attachment);
+    Status send_chunk_request(PTransmitChunkParams* params, const butil::IOBuf& attachment);
 
     // Used when doing shuffle.
     // This function will copy selective rows in chunks to batch.
@@ -162,9 +162,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
     // last packet
     if (_current_request_bytes > _parent->_request_bytes_threshold || eos) {
         request.set_eos(eos);
-        auto attachment = std::make_shared<butil::IOBuf>();
-        _parent->construct_brpc_attachment(&request, attachment.get());
-        TransmitChunkInfo info = {this->_channel_id, std::move(request), _brpc_stub, std::move(attachment)};
+        butil::IOBuf attachment;
+        _parent->construct_brpc_attachment(&request, &attachment);
+        TransmitChunkInfo info = {this->_channel_id, std::move(request), _brpc_stub, attachment};
         _parent->_buffer->add_request(info);
         _current_request_bytes = 0;
         // The original design is bad, we must release_finst_id here!
@@ -175,7 +175,7 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
 }
 
 Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParams* params,
-                                                         const std::shared_ptr<butil::IOBuf>& attachment) {
+                                                         const butil::IOBuf& attachment) {
     params->mutable_finst_id()->CopyFrom(_finst_id);
     params->set_node_id(_dest_node_id);
     params->set_sender_id(_parent->_sender_id);
@@ -327,8 +327,8 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         _current_request_bytes += pchunk->data().size();
         // 3. if request bytes exceede the threshold, send current request
         if (_current_request_bytes > _request_bytes_threshold) {
-            auto attachment = std::make_shared<butil::IOBuf>();
-            construct_brpc_attachment(&_chunk_request, attachment.get());
+            butil::IOBuf attachment;
+            construct_brpc_attachment(&_chunk_request, &attachment);
             for (const auto& channel : _channels) {
                 RETURN_IF_ERROR(channel->send_chunk_request(&_chunk_request, attachment));
             }
