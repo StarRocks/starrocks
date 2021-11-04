@@ -158,6 +158,7 @@ public:
     Version max_version() const;
 
     inline TabletState tablet_state() const;
+    // NOTE: Normally you should NOT call this method directly but call Tablet::set_tablet_state().
     inline void set_tablet_state(TabletState state);
 
     inline bool in_restore_mode() const;
