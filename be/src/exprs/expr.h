@@ -69,6 +69,7 @@ class UserFunctionCacheEntry;
 namespace vectorized {
 class Chunk;
 class ColumnRef;
+class ColumnPredicateRewriter;
 } // namespace vectorized
 
 using vectorized::ColumnPtr;
@@ -242,6 +243,7 @@ protected:
     friend class JsonFunctions;
     friend class Literal;
     friend class ExprContext;
+    friend class vectorized::ColumnPredicateRewriter;
 
     explicit Expr(TypeDescriptor type);
     explicit Expr(const TExprNode& node);

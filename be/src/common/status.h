@@ -309,6 +309,12 @@ inline std::ostream& operator<<(std::ostream& os, const Status& st) {
         }                                                                      \
     } while (0);
 
+#define DCHECK_IF_ERROR(stmt)       \
+    do {                            \
+        const Status& _st = (stmt); \
+        DCHECK(_st.ok());           \
+    } while (0)
+
 } // namespace starrocks
 
 #define RETURN_IF(cond, ret) \
