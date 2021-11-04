@@ -386,6 +386,7 @@ public class UtFrameUtils {
             ExecPlan execPlan = new PlanFragmentBuilder()
                     .createPhysicalPlan(optimizedPlan, plannerContext, connectContext,
                             logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>());
+            execPlan.setPlanCount(optimizedPlan.getPlanCount());
 
             OperatorStrings operatorPrinter = new OperatorStrings();
             return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);

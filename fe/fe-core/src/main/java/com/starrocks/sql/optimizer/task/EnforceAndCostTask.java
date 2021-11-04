@@ -326,6 +326,11 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         groupExpression.setPropertyWithCost(outputProperty, inputProperties, curTotalCost);
         this.groupExpression.getGroup().setBestExpression(groupExpression,
                 curTotalCost, outputProperty);
+        if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
+            // record the output/input properties when child group could satisfy this group expression required property
+            groupExpression.addValidOutputInputProperties(outputProperty, inputProperties);
+            this.groupExpression.getGroup().addSatisfyRequiredPropertyGroupExpression(outputProperty, groupExpression);
+        }
     }
 
     private PhysicalPropertySet enforceProperty(PhysicalPropertySet outputProperty,
@@ -410,5 +415,9 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
         enforcer.setPropertyWithCost(newOutputProperty, Lists.newArrayList(oldOutputProperty), curTotalCost);
         groupExpression.getGroup().setBestExpression(enforcer, curTotalCost, newOutputProperty);
+        if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
+            enforcer.addValidOutputInputProperties(newOutputProperty, Lists.newArrayList(oldOutputProperty));
+            groupExpression.getGroup().addSatisfyRequiredPropertyGroupExpression(newOutputProperty, enforcer);
+        }
     }
 }
