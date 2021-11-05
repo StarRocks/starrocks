@@ -160,4 +160,5 @@ add_library(Olap STATIC
     vectorized/compaction.cpp
     vectorized/rowset_merger.cpp
     vectorized/column_predicate_rewriter.cpp
+    vectorized/column_predicate_dict_conjuct.cpp
 )

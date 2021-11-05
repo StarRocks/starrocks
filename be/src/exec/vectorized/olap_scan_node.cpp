@@ -53,7 +53,9 @@ Status OlapScanNode::prepare(RuntimeState* state) {
     }
     _runtime_state = state;
     _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
-    RETURN_IF_ERROR(_rewrite_descriptor());
+    DictOptimizeParser::rewrite_descriptor(state, _tuple_desc->slots(), _conjunct_ctxs,
+                                           _olap_scan_node.dict_string_id_to_int_ids);
+
     return Status::OK();
 }
 
@@ -200,36 +202,6 @@ void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
         std::lock_guard<std::mutex> l(_mtx);
         _chunk_pool.push(chk);
     }
-}
-
-// For global dictionary optimized columns,
-// the type at the execution level is INT but at the storage level is TYPE_STRING/TYPE_CHAR,
-// so we need to pass the real type to the Table Scanner.
-Status OlapScanNode::_rewrite_descriptor() {
-    const auto& global_dict = _runtime_state->get_global_dict_map();
-    if (global_dict.empty()) return Status::OK();
-
-    for (auto& slot : _tuple_desc->slots()) {
-        if (global_dict.count(slot->id())) {
-            slot->type().type = TYPE_VARCHAR;
-        }
-    }
-
-    const auto& dict_slots_mapping = _olap_scan_node.dict_string_id_to_int_ids;
-    // rewrite slot-id for conjunct
-    std::vector<SlotId> slots;
-    for (auto& conjunct : _conjunct_ctxs) {
-        slots.clear();
-        Expr* expr_root = conjunct->root();
-        if (expr_root->get_slot_ids(&slots) == 1) {
-            if (auto iter = dict_slots_mapping.find(slots[0]); iter != dict_slots_mapping.end()) {
-                ColumnRef* column_ref = expr_root->get_column_ref();
-                column_ref->set_slot_id(iter->second);
-            }
-        }
-    }
-
-    return Status::OK();
 }
 
 void OlapScanNode::_scanner_thread(TabletScanner* scanner) {

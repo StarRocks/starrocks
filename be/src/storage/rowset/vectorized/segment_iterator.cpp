@@ -1165,6 +1165,11 @@ void SegmentIterator::_rewrite_predicates() {
     ColumnPredicateRewriter rewriter(_column_iterators, _opts.predicates, _schema, _predicate_need_rewrite,
                                      _predicate_columns, _scan_range);
     rewriter.rewrite_predicate(&_obj_pool);
+
+    for (auto& conjunct_predicate : _opts.delete_predicates.predicate_list()) {
+        ConjunctivePredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps);
+        crewriter.rewrite_predicate(&_obj_pool);
+    }
 }
 
 Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
