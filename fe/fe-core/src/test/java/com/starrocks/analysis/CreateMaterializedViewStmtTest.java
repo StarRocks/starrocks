@@ -100,8 +100,12 @@ public class CreateMaterializedViewStmtTest {
         slotRef2.setType(Type.INT);
         List<Expr> fnChildren = Lists.newArrayList(slotRef2);
         FunctionCallExpr toBitMapFunc = new FunctionCallExpr(FunctionSet.TO_BITMAP, fnChildren);
+        toBitMapFunc.setFn(Expr.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] {Type.BIGINT},
+                Function.CompareMode.IS_SUPERTYPE_OF));
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(FunctionSet.BITMAP_UNION,
                 Lists.newArrayList(toBitMapFunc));
+        functionCallExpr.setFn(Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION, new Type[] {Type.BITMAP},
+                Function.CompareMode.IS_SUPERTYPE_OF));
         SelectListItem selectListItem2 = new SelectListItem(functionCallExpr, null);
         selectList.addItem(selectListItem2);
 
@@ -209,9 +213,9 @@ public class CreateMaterializedViewStmtTest {
 
     @Test
     public void testSumDistinct(@Injectable SlotRef slotRef, @Injectable ArithmeticExpr arithmeticExpr,
-                                  @Injectable SelectStmt selectStmt, @Injectable Column column,
-                                  @Injectable TableRef tableRef,
-                                  @Injectable SlotDescriptor slotDescriptor) throws UserException {
+                                @Injectable SelectStmt selectStmt, @Injectable Column column,
+                                @Injectable TableRef tableRef,
+                                @Injectable SlotDescriptor slotDescriptor) throws UserException {
         SelectList selectList = new SelectList();
         SelectListItem selectListItem = new SelectListItem(slotRef, null);
         selectList.addItem(selectListItem);
@@ -556,6 +560,8 @@ public class CreateMaterializedViewStmtTest {
         SelectListItem selectListItem2 = new SelectListItem(functionCallExpr1, null);
         selectList.addItem(selectListItem2);
         FunctionCallExpr functionCallExpr2 = new FunctionCallExpr("max", fn1Children);
+        functionCallExpr2.setFn(
+                Expr.getBuiltinFunction("max", new Type[] {Type.BIGINT}, Function.CompareMode.IS_SUPERTYPE_OF));
         SelectListItem selectListItem3 = new SelectListItem(functionCallExpr2, null);
         selectList.addItem(selectListItem3);
 
