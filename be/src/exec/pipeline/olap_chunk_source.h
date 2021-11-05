@@ -31,10 +31,10 @@ public:
             : ChunkSource(std::move(morsel)),
               _tuple_id(tuple_id),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
+              _runtime_profile(runtime_profile),
               _runtime_filters(runtime_filters),
               _key_column_names(std::move(key_column_names)),
-              _skip_aggregation(skip_aggregation),
-              _runtime_profile(runtime_profile) {
+              _skip_aggregation(skip_aggregation) {
         OlapMorsel* olap_morsel = (OlapMorsel*)_morsel.get();
         _scan_range = olap_morsel->get_scan_range();
     }
