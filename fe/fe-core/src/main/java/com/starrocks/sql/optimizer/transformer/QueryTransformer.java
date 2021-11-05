@@ -251,16 +251,10 @@ class QueryTransformer {
                 WindowTransformer.reorderWindowOperator(windowOperators, columnRefFactory, subOpt);
         for (WindowTransformer.SortGroup sortGroup : sortedGroups) {
             for (LogicalWindowOperator logicalWindowOperator : sortGroup.getWindowOperators()) {
-                List<Ordering> sortEnforceProperty = new ArrayList<>();
-                sortGroup.getPartitionExprs()
-                        .forEach(p -> sortEnforceProperty.add(new Ordering((ColumnRefOperator) p, true, true)));
-                sortEnforceProperty.addAll(sortGroup.getOrderByElements());
-
-                LogicalWindowOperator newWindowOperator =
+                LogicalWindowOperator newLogicalWindowOperator =
                         new LogicalWindowOperator.Builder().withOperator(logicalWindowOperator)
-                                .setEnforceOrderBy(sortEnforceProperty.stream().distinct().collect(Collectors.toList()))
-                                .build();
-                subOpt = subOpt.withNewRoot(newWindowOperator);
+                                .setEnforceSortColumns(sortGroup.getEnforceSortColumns()).build();
+                subOpt = subOpt.withNewRoot(newLogicalWindowOperator);
             }
         }
 

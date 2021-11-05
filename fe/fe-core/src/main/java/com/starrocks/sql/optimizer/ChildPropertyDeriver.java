@@ -875,22 +875,11 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalAnalytic(PhysicalWindowOperator node, ExpressionContext context) {
         List<Integer> partitionColumnRefSet = new ArrayList<>();
-        //List<Ordering> orderings = new ArrayList<>();
 
         node.getPartitionExpressions().forEach(e -> {
             partitionColumnRefSet
                     .addAll(Arrays.stream(e.getUsedColumns().getColumnIds()).boxed().collect(Collectors.toList()));
-            //orderings.add(new Ordering((ColumnRefOperator) e, true, true));
         });
-
-        /*
-        node.getOrderByElements().forEach(o -> {
-            if (orderings.stream().noneMatch(ordering -> ordering.getColumnRef().equals(o.getColumnRef()))) {
-                orderings.add(o);
-            }
-        });
-
-         */
 
         SortProperty sortProperty = new SortProperty(new OrderSpec(node.getEnforceOrderBy()));
 
