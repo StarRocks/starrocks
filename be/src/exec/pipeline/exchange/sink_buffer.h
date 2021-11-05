@@ -14,6 +14,9 @@ struct TransmitChunkInfo {
     size_t channel_id;
     PTransmitChunkParams params;
     doris::PBackendService_Stub* brpc_stub;
+
+    // for protocol header.
+    butil::IOBuf attachment;
 };
 
 class SinkBuffer {
@@ -118,6 +121,7 @@ private:
         closure->ref();
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(500);
+        closure->cntl.request_attachment().append(request.attachment);
         request.brpc_stub->transmit_chunk(&closure->cntl, &request.params, &closure->result, closure);
         _request_seq++;
     }
