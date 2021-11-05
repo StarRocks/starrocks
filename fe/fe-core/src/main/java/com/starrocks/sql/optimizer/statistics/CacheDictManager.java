@@ -35,6 +35,7 @@ import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
 public class CacheDictManager implements IDictManager {
     private static final Logger LOG = LogManager.getLogger(CacheDictManager.class);
     private static final Set<ColumnIdentifier> NoDictStringColumns = Sets.newHashSet();
+    private static final Set<Long> ForbitDictStringColumns = Sets.newHashSet();
 
     public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
 
@@ -141,6 +142,11 @@ public class CacheDictManager implements IDictManager {
             return false;
         }
 
+        if (ForbitDictStringColumns.contains(tableId)) {
+            LOG.debug("{} forbit low cardinality string column", columnName);
+            return false;
+        }
+
         Set<Long> dbIds = ConnectContext.get().getCurrentSqlDbIds();
         for (Long id : dbIds) {
             Database db = Catalog.getCurrentCatalog().getDb(id);
@@ -192,6 +198,12 @@ public class CacheDictManager implements IDictManager {
     }
 
     @Override
+    public void forbitGlobalDict(long tableId) {
+        LOG.debug("remove dict for table {}", tableId);
+        ForbitDictStringColumns.add(tableId);
+    }
+
+    @Override
     public void updateGlobalDict(long tableId, String columnName, long versionTime) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (!dictStatistics.synchronous().asMap().containsKey(columnIdentifier)) {
@@ -222,5 +234,4 @@ public class CacheDictManager implements IDictManager {
         Preconditions.checkArgument(false, "Shouldn't run here");
         return null;
     }
-
 }
