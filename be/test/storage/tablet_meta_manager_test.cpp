@@ -57,8 +57,9 @@ TEST_F(TabletMetaManagerTest, test_save_load_tablet_meta) {
 
     ASSERT_TRUE(TabletMetaManager::save(_data_dir.get(), meta->tablet_id(), meta->schema_hash(), meta).ok());
     auto load_meta = std::make_shared<TabletMeta>();
-    ASSERT_TRUE(TabletMetaManager::get_tablet_meta(_data_dir.get(), meta->tablet_id(), meta->schema_hash(), load_meta)
-                        .ok());
+    ASSERT_TRUE(
+            TabletMetaManager::get_tablet_meta(_data_dir.get(), meta->tablet_id(), meta->schema_hash(), load_meta.get())
+                    .ok());
     ASSERT_EQ(1, load_meta->table_id());
     ASSERT_EQ(2, load_meta->tablet_id());
     ASSERT_EQ(3, load_meta->schema_hash());

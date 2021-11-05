@@ -78,7 +78,7 @@ void tear_down() {
 }
 
 void set_default_create_tablet_request(TCreateTabletReq* request) {
-    request->tablet_id = 10003;
+    request->tablet_id = random();
     request->__set_version(1);
     request->__set_version_hash(0);
     request->tablet_schema.schema_hash = 270068375;
@@ -159,7 +159,7 @@ void set_default_create_tablet_request(TCreateTabletReq* request) {
 }
 
 void set_create_duplicate_tablet_request(TCreateTabletReq* request) {
-    request->tablet_id = 10009;
+    request->tablet_id = random();
     request->__set_version(1);
     request->__set_version_hash(0);
     request->tablet_schema.schema_hash = 270068376;
