@@ -97,6 +97,7 @@ public class PublishVersionDaemon extends MasterDaemon {
             boolean allTaskFinished = true;
             for (PublishVersionTask publishVersionTask : transTasks.values()) {
                 if (publishVersionTask.isFinished()) {
+                    LOG.info("after publish version tasks is finished transaction: {}", transactionState.getTransactionId());
                     // sometimes backend finish publish version task, but it maybe failed to change transactionid to version for some tablets
                     // and it will upload the failed tabletinfo to fe and fe will deal with them
                     Set<Long> errReplicas = publishVersionTask.collectErrorReplicas();
@@ -104,11 +105,13 @@ public class PublishVersionDaemon extends MasterDaemon {
                         publishErrorReplicaIds.addAll(errReplicas);
                     }
                 } else {
+                    LOG.info("allTaskFinished = false transaction: {}", transactionState.getTransactionId());
                     allTaskFinished = false;
                 }
             }
             boolean shouldFinishTxn = true;
             if (!allTaskFinished) {
+                LOG.info("begin canTxnFinished transaction: {}", transactionState.getTransactionId());
                 shouldFinishTxn = globalTransactionMgr.canTxnFinished(transactionState, publishErrorReplicaIds);
             }
 

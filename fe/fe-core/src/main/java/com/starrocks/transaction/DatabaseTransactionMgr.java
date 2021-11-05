@@ -636,7 +636,7 @@ public class DatabaseTransactionMgr {
             return true;
         }
         db.readLock();
-
+        LOG.info("canTxnFinished in readLock: {}", txn.getTransactionId());
         try {
             // check each table involved in transaction
             for (TableCommitInfo tableCommitInfo : txn.getIdToTableCommitInfos().values()) {
@@ -717,7 +717,6 @@ public class DatabaseTransactionMgr {
             }
         }
         db.writeLock();
-        LOG.info("begin finish transaction {} loop", transactionId);
         try {
             boolean hasError = false;
             for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
@@ -833,7 +832,6 @@ public class DatabaseTransactionMgr {
                     }
                 }
             }
-            LOG.info("end finish transaction {} loop", transactionId);
             if (hasError) {
                 return;
             }
