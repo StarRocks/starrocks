@@ -152,18 +152,23 @@ Status JsonScanner::_construct_cast_exprs() {
 }
 
 Status JsonScanner::_parse_json_paths(const std::string& jsonpath, std::vector<std::vector<JsonPath>>* path_vecs) {
-    rapidjson::Document doc;
-    doc.Parse(jsonpath.c_str(), jsonpath.length());
-    if (doc.HasParseError() || !doc.IsArray()) {
+    simdjson::dom::parser parser;
+    simdjson::dom::element elem;
+
+    auto err = parser.parse(jsonpath.c_str(), jsonpath.length()).get(elem);
+
+    if (err || !elem.is_array()) {
         return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", jsonpath));
     }
-    for (int i = 0; i < doc.Size(); i++) {
-        const rapidjson::Value& path = doc[i];
-        if (!path.IsString()) {
+
+    auto paths = elem.get_array();
+
+    for(auto path : paths) {
+        if (!path.is_string()) {
             return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", jsonpath));
         }
         std::vector<JsonPath> parsed_paths;
-        JsonFunctions::parse_json_paths(path.GetString(), &parsed_paths);
+        JsonFunctions::parse_json_paths(std::string(path.get_string().value()), &parsed_paths);
         path_vecs->push_back(parsed_paths);
     }
     return Status::OK();
