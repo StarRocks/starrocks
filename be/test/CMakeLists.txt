@@ -269,6 +269,7 @@ SET_TARGET_PROPERTIES(${PLUGIN_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$
 # Thus we need a standalone binary without sanitizer to test it.
 add_executable(bytes_test
         ./column/bytes_test.cpp
+        ../src/service/mem_hook.cpp
         )
 
 set_target_properties(bytes_test PROPERTIES
@@ -283,7 +284,6 @@ TARGET_LINK_LIBRARIES(bytes_test
         pthread
         gtest
         tcmalloc
-        Service
         )
 
 add_executable(starrocks_column_to_arrow_test ./util/arrow/starrocks_column_to_arrow_test.cpp)

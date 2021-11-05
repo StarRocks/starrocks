@@ -6,7 +6,9 @@
 #include <iostream>
 #include <new>
 
+#ifndef BE_TEST
 #include "runtime/current_thread.h"
+#endif
 
 #define ALIAS(my_fn) __attribute__((alias(#my_fn), used))
 
