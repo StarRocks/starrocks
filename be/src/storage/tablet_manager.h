@@ -165,7 +165,6 @@ private:
 
     Status _update_tablet_map_and_partition_info(const TabletSharedPtr& tablet);
 
-    bool _check_tablet_id_exist_unlocked(TTabletId tablet_id);
     Status _create_inital_rowset_unlocked(const TCreateTabletReq& request, Tablet* tablet);
 
     Status _drop_tablet_directly_unlocked(TTabletId tablet_id, bool keep_state = false);

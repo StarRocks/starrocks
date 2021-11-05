@@ -123,11 +123,6 @@ Status TabletManager::_update_tablet_map_and_partition_info(const TabletSharedPt
     return Status::OK();
 }
 
-bool TabletManager::_check_tablet_id_exist_unlocked(TTabletId tablet_id) {
-    TabletMap& tablet_map = _get_tablet_map(tablet_id);
-    return tablet_map.count(tablet_id) > 0;
-}
-
 Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector<DataDir*> stores) {
     StarRocksMetrics::instance()->create_tablet_requests_total.increment(1);
 
