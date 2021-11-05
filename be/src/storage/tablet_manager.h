@@ -165,7 +165,6 @@ private:
 
     Status _update_tablet_map_and_partition_info(const TabletSharedPtr& tablet);
 
-    bool _check_tablet_id_exist_unlocked(TTabletId tablet_id);
     Status _create_inital_rowset_unlocked(const TCreateTabletReq& request, Tablet* tablet);
 
     Status _drop_tablet_directly_unlocked(TTabletId tablet_id, bool keep_state = false);
@@ -202,13 +201,13 @@ private:
     const int32_t _tablets_shards_mask;
     LockTable _schema_change_lock_tbl;
 
-    // Protect _partition_tablet_map, should not be obtained before _tablet_map_lock to avoid dead lock
+    // Protect _partition_tablet_map, should not be obtained before _tablet_map_lock to avoid deadlock
     std::shared_mutex _partition_tablet_map_lock;
-    // Protect _shutdown_tablets, should not be obtained before _tablet_map_lock to avoid dead lock
+    // Protect _shutdown_tablets, should not be obtained before _tablet_map_lock to avoid deadlock
     std::shared_mutex _shutdown_tablets_lock;
     // partition_id => tablet_info
     std::map<int64_t, std::set<TabletInfo>> _partition_tablet_map;
-    std::vector<TabletSharedPtr> _shutdown_tablets;
+    std::map<int64_t, TabletSharedPtr> _shutdown_tablets;
 
     std::mutex _tablet_stat_mutex;
     // cache to save tablets' statistics, such as data-size and row-count
