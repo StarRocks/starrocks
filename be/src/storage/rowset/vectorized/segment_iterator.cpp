@@ -24,8 +24,8 @@
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/default_value_column_iterator.h"
-#include "storage/rowset/segment_v2/file_column_iterator.h"
 #include "storage/rowset/segment_v2/row_ranges.h"
+#include "storage/rowset/segment_v2/scalar_column_iterator.h"
 #include "storage/rowset/segment_v2/segment.h"
 #include "storage/rowset/vectorized/rowid_column_iterator.h"
 #include "storage/rowset/vectorized/segment_options.h"
@@ -234,7 +234,7 @@ Status GlobalDictCodeColumnIterator::_build_to_global_dict() {
     if (_local_to_global_holder.size() > 0) {
         return Status::OK();
     }
-    auto file_column_iter = down_cast<FileColumnIterator*>(_col_iter);
+    auto file_column_iter = down_cast<ScalarColumnIterator*>(_col_iter);
     int dict_size = file_column_iter->dict_size();
 
     auto column = BinaryColumn::create();

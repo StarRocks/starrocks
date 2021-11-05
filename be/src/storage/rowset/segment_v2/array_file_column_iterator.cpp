@@ -4,7 +4,7 @@
 
 #include "column/array_column.h"
 #include "column/nullable_column.h"
-#include "storage/rowset/segment_v2/file_column_iterator.h"
+#include "storage/rowset/segment_v2/scalar_column_iterator.h"
 
 namespace starrocks {
 namespace segment_v2 {
