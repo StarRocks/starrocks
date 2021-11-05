@@ -223,7 +223,7 @@ public:
     }
 
     // Return limit exceeded tracker or null
-    MemTracker* find_limit_exceeded_tracker() {
+    MemTracker* find_limit_exceeded_tracker() const {
         for (auto& _limit_tracker : _limit_trackers) {
             if (_limit_tracker->limit_exceeded()) {
                 return _limit_tracker;
@@ -290,10 +290,15 @@ public:
     Status MemLimitExceeded(RuntimeState* state, const std::string& details, int64_t failed_allocation = 0);
 
     Status check_mem_limit(const std::string& msg) const {
+        MemTracker* tracker = find_limit_exceeded_tracker();
+        if (LIKELY(tracker == nullptr)) {
+            return Status::OK();
+        }
+
         std::stringstream str;
         str << "Memory exceed limit. " << msg << " ";
-        str << "Used: " << consumption() << ", Limit: " << limit() << ". ";
-        switch (type()) {
+        str << "Used: " << tracker->consumption() << ", Limit: " << tracker->limit() << ". ";
+        switch (tracker->type()) {
         case MemTracker::NO_SET:
             break;
         case MemTracker::QUERY:
