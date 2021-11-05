@@ -218,6 +218,15 @@ void* my_calloc(size_t n, size_t size) __THROW {
     return ptr;
 }
 
+void my_cfree(void* ptr) __THROW {
+#ifndef BE_TEST
+    size_t size = tc_malloc_size(ptr);
+    starrocks::tls_thread_status.mem_release(size);
+#endif
+
+    tc_cfree(ptr);
+}
+
 // memalign
 void* my_memalign(size_t align, size_t size) __THROW {
     void* ptr = tc_memalign(align, size);
@@ -282,6 +291,7 @@ void* malloc(size_t size) __THROW ALIAS(my_alloc);
 void free(void* p) __THROW ALIAS(my_free);
 void* realloc(void* p, size_t size) __THROW ALIAS(my_realloc);
 void* calloc(size_t n, size_t size) __THROW ALIAS(my_calloc);
+void cfree(void* ptr) __THROW ALIAS(my_cfree);
 void* memalign(size_t align, size_t size) __THROW ALIAS(my_memalign);
 void* aligned_alloc(size_t align, size_t size) __THROW ALIAS(my_aligned_alloc);
 void* valloc(size_t size) __THROW ALIAS(my_valloc);
