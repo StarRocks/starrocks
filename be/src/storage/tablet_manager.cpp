@@ -140,6 +140,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     if (tablet != nullptr && tablet->tablet_state() != TABLET_SHUTDOWN) {
         return Status::OK();
     } else if (tablet != nullptr) {
+        StarRocksMetrics::instance()->create_tablet_requests_failed.increment(1);
         DCHECK_EQ(TABLET_SHUTDOWN, tablet->tablet_state());
         return Status::InternalError("tablet still resident in shutdown queue");
     }
