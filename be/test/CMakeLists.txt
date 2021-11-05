@@ -280,10 +280,10 @@ set_target_properties(bytes_test PROPERTIES
         "-static-libstdc++;-static-libgcc;-fno-sanitize=address")
 
 TARGET_LINK_LIBRARIES(bytes_test
-        Service
         pthread
         gtest
         tcmalloc
+        Service
         )
 
 add_executable(starrocks_column_to_arrow_test ./util/arrow/starrocks_column_to_arrow_test.cpp)
