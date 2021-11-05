@@ -119,10 +119,10 @@ GPERFTOOLS_SOURCE=gperftools-gperftools-2.7
 GPERFTOOLS_MD5SUM="797e7b7f6663288e2b90ab664861c61a"
 
 # zlib
-ZLIB_DOWNLOAD="https://zlib.net/zlib-1.2.11.tar.gz"
+ZLIB_DOWNLOAD="https://github.com/madler/zlib/archive/refs/tags/v1.2.11.tar.gz"
 ZLIB_NAME=zlib-1.2.11.tar.gz
 ZLIB_SOURCE=zlib-1.2.11
-ZLIB_MD5SUM="1c9f62f0778697a09d36121ead88e08e"
+ZLIB_MD5SUM="0095d2d2d1f3442ce1318336637b695f"
 
 # lz4
 LZ4_DOWNLOAD="https://github.com/lz4/lz4/archive/v1.9.3.tar.gz"
