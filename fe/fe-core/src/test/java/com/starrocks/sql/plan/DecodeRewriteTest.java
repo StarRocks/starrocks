@@ -31,6 +31,27 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE part_v2  ( P_PARTKEY     INTEGER NOT NULL,\n" +
+                "                          P_NAME        VARCHAR(55) NOT NULL,\n" +
+                "                          P_MFGR        VARCHAR(25) NOT NULL,\n" +
+                "                          P_BRAND       VARCHAR(10) NOT NULL,\n" +
+                "                          P_TYPE        VARCHAR(25) NOT NULL,\n" +
+                "                          P_SIZE        INTEGER NOT NULL,\n" +
+                "                          P_CONTAINER   VARCHAR(10) NOT NULL,\n" +
+                "                          P_RETAILPRICE double NOT NULL,\n" +
+                "                          P_COMMENT     VARCHAR(23) NOT NULL,\n" +
+                "                          PAD char(1) NOT NULL)\n" +
+                "ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`p_partkey`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         FeConstants.USE_MOCK_DICT_MANAGER = true;
     }
@@ -226,8 +247,6 @@ public class DecodeRewriteTest extends PlanTestBase{
 
         sql = "select count(distinct S_NATIONKEY) from supplier group by S_ADDRESS";
         plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("is_nullable:false, is_monotonic:true)])]), " +
-                "global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
         Assert.assertTrue(plan.contains("partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
                 "global_dicts:[TGlobalDict(columnId:10, strings:[mock], ids:[1])"));
 
@@ -353,5 +372,20 @@ public class DecodeRewriteTest extends PlanTestBase{
                 "  |  <dict id 17> : <string id 3>"));
         Assert.assertTrue(plan.contains("INNER JOIN (BROADCAST)"));
 
+    }
+
+    @Test
+    public void testJoinGlobalDict() throws Exception {
+        String sql = "select part_v2.P_COMMENT from lineitem join part_v2 on L_PARTKEY = p_partkey where p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2';";
+
+        String plan = getThriftPlan(sql);
+
+        Assert.assertTrue(plan.contains("enable_column_expr_predicate:true, dict_string_id_to_int_ids:{}"));
+        Assert.assertTrue(plan.contains("P_MFGR IN ('MFGR#1', 'MFGR#2'), enable_column_expr_predicate:true, " +
+                "dict_string_id_to_int_ids:{}"));
+        Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
+                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), global_dicts:[TGlobalDict(columnId:28"));
+        Assert.assertTrue(plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]))), " +
+                "partition:TDataPartition(type:RANDOM, partition_exprs:[]), global_dicts:[TGlobalDict(columnId:28"));
     }
 }
