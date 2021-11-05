@@ -97,7 +97,7 @@ public class PublishVersionDaemon extends MasterDaemon {
             boolean allTaskFinished = true;
             for (PublishVersionTask publishVersionTask : transTasks.values()) {
                 if (publishVersionTask.isFinished()) {
-                    LOG.info("after publish version tasks is finished transaction: {}", transactionState.getTransactionId());
+                    LOG.info("after publish version tasks is finished transaction: {} for {}", transactionState.getTransactionId(), publishVersionTask.getBackendId());
                     // sometimes backend finish publish version task, but it maybe failed to change transactionid to version for some tablets
                     // and it will upload the failed tabletinfo to fe and fe will deal with them
                     Set<Long> errReplicas = publishVersionTask.collectErrorReplicas();
