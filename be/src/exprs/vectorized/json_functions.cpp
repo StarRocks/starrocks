@@ -145,11 +145,11 @@ std::vector<simdjson::dom::document_stream::iterator::value_type> JsonFunctions:
         simdjson::dom::document_stream::iterator& doc_itr, const std::vector<JsonPath>& jsonpath) {
     std::vector<simdjson::dom::document_stream::iterator::value_type> values;
 
-    auto doc = *doc_itr;
-
-    if ((doc).is_null()) {
+    if ((*doc_itr).is_null()) {
         return values;
     }
+
+    values.emplace_back((*doc_itr).value());
 
     // Skip the first $.
     for (int i = 1; i < jsonpath.size(); i++) {
@@ -160,16 +160,25 @@ std::vector<simdjson::dom::document_stream::iterator::value_type> JsonFunctions:
         const std::string& col = jsonpath[i].key;
         int index = jsonpath[i].idx;
 
-        if (LIKELY(!col.empty() && doc.is_object())) {
-            values.push_back(doc.at_key(col));
-        } else if (UNLIKELY(index != -1 && doc.is_array())) {
-            auto array = doc.get_array();
-            if (index >= array.size()) {
-                return values;
+        std::vector<simdjson::dom::document_stream::iterator::value_type> filtered_values;
+        for (auto& val : values) {
+            if (LIKELY(!col.empty())) {
+                auto col_val = val.at_key(col);
+
+                if (UNLIKELY(index != -1 && col_val.is_array())) {
+                    auto arr = col_val.get_array();
+                    if(index >= arr.size()) {
+                        continue;
+                    }
+                    col_val = arr.at(index);
+                }
+
+                filtered_values.emplace_back(col_val);
             }
-            values.emplace_back(array.at(index));
-        } else {
-            return values;
+        }
+
+        if (!filtered_values.empty()) {
+            std::swap(values, filtered_values);
         }
     }
     return values;

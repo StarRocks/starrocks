@@ -308,7 +308,6 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
                 auto col_name = slot_desc->col_name();
 
                 auto value = (*_doc_stream_itr).at_key(col_name);
-                VLOG(10) << "to string value: " << simdjson::to_string(value);
                 _construct_column(value, column.get(), slot_desc->type());
             }
         }
