@@ -1219,6 +1219,7 @@ public class PlanFragmentBuilder {
                     joinNode.setReplicated(true);
                 }
 
+                leftFragment.mergeGlobalDicts(rightFragment.getGlobalDicts());
                 return leftFragment;
             } else {
                 JoinOperator joinOperator = node.getJoinType();
@@ -1329,6 +1330,7 @@ public class PlanFragmentBuilder {
                     context.getFragments().add(leftFragment);
                     leftFragment.setPlanRoot(hashJoinNode);
                     leftFragment.addChild(rightFragment.getChild(0));
+                    leftFragment.mergeGlobalDicts(rightFragment.getGlobalDicts());
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.PARTITIONED)) {
                     List<Integer> leftOnPredicateColumns = new ArrayList<>();
@@ -1368,6 +1370,8 @@ public class PlanFragmentBuilder {
                     joinFragment.addChild(leftFragment.getChild(0));
                     joinFragment.addChild(rightFragment.getChild(0));
 
+                    joinFragment.mergeGlobalDicts(leftFragment.getGlobalDicts());
+                    joinFragment.mergeGlobalDicts(rightFragment.getGlobalDicts());
                     context.getFragments().add(joinFragment);
 
                     return joinFragment;
@@ -1387,6 +1391,8 @@ public class PlanFragmentBuilder {
 
                     context.getFragments().remove(leftFragment);
                     context.getFragments().add(leftFragment);
+
+                    leftFragment.mergeGlobalDicts(rightFragment.getGlobalDicts());
                     return leftFragment;
                 } else if (distributionMode.equals(HashJoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
                     List<Integer> leftOnPredicateColumns = new ArrayList<>();
@@ -1398,10 +1404,10 @@ public class PlanFragmentBuilder {
                     // distributionMode is SHUFFLE_HASH_BUCKET
                     if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
                             !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
-                        return computeRunTimeBucketShufflePlanFragment(context, leftOnPredicateColumns, rightFragment,
+                        return computeRunTimeBucketShufflePlanFragment(context, rightFragment,
                                 leftFragment, hashJoinNode);
                     } else {
-                        return computeRunTimeBucketShufflePlanFragment(context, rightOnPredicateColumns, leftFragment,
+                        return computeRunTimeBucketShufflePlanFragment(context, leftFragment,
                                 rightFragment, hashJoinNode);
                     }
                 } else {
@@ -1414,10 +1420,10 @@ public class PlanFragmentBuilder {
                     // distributionMode is BUCKET_SHUFFLE
                     if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
                             !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
-                        return computeBucketShufflePlanFragment(context, leftOnPredicateColumns, rightFragment,
+                        return computeBucketShufflePlanFragment(context, rightFragment,
                                 leftFragment, hashJoinNode);
                     } else {
-                        return computeBucketShufflePlanFragment(context, rightOnPredicateColumns, leftFragment,
+                        return computeBucketShufflePlanFragment(context, leftFragment,
                                 rightFragment, hashJoinNode);
                     }
                 }
@@ -1497,7 +1503,7 @@ public class PlanFragmentBuilder {
             return false;
         }
 
-        public PlanFragment computeBucketShufflePlanFragment(ExecPlan context, List<Integer> columns,
+        public PlanFragment computeBucketShufflePlanFragment(ExecPlan context,
                                                              PlanFragment stayFragment,
                                                              PlanFragment removeFragment, HashJoinNode hashJoinNode) {
             hashJoinNode.setLocalHashBucket(true);
@@ -1514,10 +1520,11 @@ public class PlanFragmentBuilder {
 
             stayFragment.setPlanRoot(hashJoinNode);
             stayFragment.addChild(removeFragment.getChild(0));
+            stayFragment.mergeGlobalDicts(removeFragment.getGlobalDicts());
             return stayFragment;
         }
 
-        public PlanFragment computeRunTimeBucketShufflePlanFragment(ExecPlan context, List<Integer> columns,
+        public PlanFragment computeRunTimeBucketShufflePlanFragment(ExecPlan context,
                                                                     PlanFragment stayFragment,
                                                                     PlanFragment removeFragment,
                                                                     HashJoinNode hashJoinNode) {
@@ -1535,6 +1542,7 @@ public class PlanFragmentBuilder {
 
             stayFragment.setPlanRoot(hashJoinNode);
             stayFragment.addChild(removeFragment.getChild(0));
+            stayFragment.mergeGlobalDicts(removeFragment.getGlobalDicts());
             return stayFragment;
         }
 
