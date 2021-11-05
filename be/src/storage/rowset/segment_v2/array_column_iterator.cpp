@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
-#include "storage/rowset/segment_v2/array_file_column_iterator.h"
+#include "storage/rowset/segment_v2/array_column_iterator.h"
 
 #include "column/array_column.h"
 #include "column/nullable_column.h"
@@ -9,14 +9,14 @@
 namespace starrocks {
 namespace segment_v2 {
 
-ArrayFileColumnIterator::ArrayFileColumnIterator(ColumnIterator* null_iterator, ColumnIterator* array_size_iterator,
-                                                 ColumnIterator* element_iterator) {
+ArrayColumnIterator::ArrayColumnIterator(ColumnIterator* null_iterator, ColumnIterator* array_size_iterator,
+                                         ColumnIterator* element_iterator) {
     _null_iterator.reset(null_iterator);
     _array_size_iterator.reset(array_size_iterator);
     _element_iterator.reset(element_iterator);
 }
 
-Status ArrayFileColumnIterator::init(const ColumnIteratorOptions& opts) {
+Status ArrayColumnIterator::init(const ColumnIteratorOptions& opts) {
     if (_null_iterator != nullptr) {
         RETURN_IF_ERROR(_null_iterator->init(opts));
     }
@@ -32,7 +32,7 @@ Status ArrayFileColumnIterator::init(const ColumnIteratorOptions& opts) {
 }
 
 // every time invoke this method, _array_size_batch will be modified, so this method is not thread safe.
-Status ArrayFileColumnIterator::next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) {
+Status ArrayColumnIterator::next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) {
     ColumnBlock* array_block = dst->column_block();
     auto* array_batch = reinterpret_cast<ArrayColumnVectorBatch*>(array_block->vector_batch());
 
@@ -79,7 +79,7 @@ Status ArrayFileColumnIterator::next_batch(size_t* n, ColumnBlockView* dst, bool
     return Status::OK();
 }
 
-Status ArrayFileColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
+Status ArrayColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
     vectorized::ArrayColumn* array_column = nullptr;
     vectorized::NullColumn* null_column = nullptr;
     if (dst->is_nullable()) {
@@ -122,7 +122,7 @@ Status ArrayFileColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
     return Status::OK();
 }
 
-Status ArrayFileColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
+Status ArrayColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, vectorized::Column* values) {
     vectorized::ArrayColumn* array_column = nullptr;
     vectorized::NullColumn* null_column = nullptr;
     // 1. Read null column
@@ -163,7 +163,7 @@ Status ArrayFileColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, siz
     return Status::OK();
 }
 
-Status ArrayFileColumnIterator::seek_to_first() {
+Status ArrayColumnIterator::seek_to_first() {
     if (_null_iterator != nullptr) {
         RETURN_IF_ERROR(_null_iterator->seek_to_first());
     }
@@ -172,7 +172,7 @@ Status ArrayFileColumnIterator::seek_to_first() {
     return Status::OK();
 }
 
-Status ArrayFileColumnIterator::seek_to_ordinal(ordinal_t ord) {
+Status ArrayColumnIterator::seek_to_ordinal(ordinal_t ord) {
     if (_null_iterator != nullptr) {
         RETURN_IF_ERROR(_null_iterator->seek_to_ordinal(ord));
     }

@@ -81,7 +81,7 @@ add_library(Olap STATIC
     update_manager.cpp
     utils.cpp
     wrapper_field.cpp
-    rowset/segment_v2/array_file_column_iterator.cpp
+    rowset/segment_v2/array_column_iterator.cpp
     rowset/segment_v2/binary_plain_page.cpp
     rowset/segment_v2/bitmap_index_reader.cpp
     rowset/segment_v2/bitmap_index_writer.cpp
