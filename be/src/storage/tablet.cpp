@@ -708,8 +708,7 @@ bool Tablet::check_migrate(const TabletSharedPtr& tablet) {
         LOG(WARNING) << "tablet is migrating. tablet_id=" << tablet->tablet_id();
         return true;
     } else {
-        if (tablet !=
-            StorageEngine::instance()->tablet_manager()->get_tablet(tablet->tablet_id(), tablet->schema_hash())) {
+        if (tablet != StorageEngine::instance()->tablet_manager()->get_tablet(tablet->tablet_id())) {
             LOG(WARNING) << "tablet has been migrated. tablet_id=" << tablet->tablet_id();
             return true;
         }

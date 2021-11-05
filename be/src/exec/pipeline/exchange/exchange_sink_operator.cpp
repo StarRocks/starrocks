@@ -19,7 +19,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/dpp_sink_internal.h"
 #include "runtime/exec_env.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/raw_value.h"
 #include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
@@ -163,7 +162,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
     // last packet
     if (_current_request_bytes > _parent->_request_bytes_threshold || eos) {
         request.set_eos(eos);
-        TransmitChunkInfo info = {this->_channel_id, std::move(request), _brpc_stub};
+        butil::IOBuf attachment;
+        _parent->construct_brpc_attachment(&request, &attachment);
+        TransmitChunkInfo info = {this->_channel_id, std::move(request), _brpc_stub, attachment};
         _parent->_buffer->add_request(info);
         _current_request_bytes = 0;
         // The original design is bad, we must release_finst_id here!
@@ -181,7 +182,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParams* p
 
     params->set_eos(false);
     // TODO (by satanson): eliminate redundant copy in broadcast scenarios
-    TransmitChunkInfo info = {this->_channel_id, *params, _brpc_stub};
+    TransmitChunkInfo info = {this->_channel_id, *params, _brpc_stub, attachment};
     _parent->_buffer->add_request(info);
 
     // The original design is bad, we must release_finst_id here!
@@ -326,7 +327,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         // 3. if request bytes exceede the threshold, send current request
         if (_current_request_bytes > _request_bytes_threshold) {
             butil::IOBuf attachment;
-            // construct_brpc_attachment(&_chunk_request, &attachment);
+            construct_brpc_attachment(&_chunk_request, &attachment);
             for (const auto& channel : _channels) {
                 RETURN_IF_ERROR(channel->send_chunk_request(&_chunk_request, attachment));
             }

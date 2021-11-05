@@ -38,7 +38,7 @@ public:
     ~Analytor() = default;
     Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc);
 
-    Status prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker, RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     Status open(RuntimeState* state);
     Status close(RuntimeState* state);
 
@@ -128,7 +128,6 @@ private:
     const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
     ObjectPool* _pool;
-    MemTracker* _mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
 
     // only used in pipeline engine

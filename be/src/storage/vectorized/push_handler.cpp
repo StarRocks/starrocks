@@ -41,7 +41,7 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TDescr
     _runtime_profile = _runtime_state->runtime_profile();
     _runtime_profile->set_name("PushBrokerReader");
 
-    RETURN_IF_ERROR(_runtime_state->init_mem_trackers(dummy_id));
+    _runtime_state->init_mem_trackers(dummy_id);
 
     // init tuple desc
     auto tuple_id = t_scan_range.params.dest_tuple_id;
@@ -312,7 +312,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                           << ", related_schema_hash=" << related_schema_hash
                           << ", transaction_id=" << request.transaction_id;
                 TabletSharedPtr related_tablet =
-                        StorageEngine::instance()->tablet_manager()->get_tablet(related_tablet_id, related_schema_hash);
+                        StorageEngine::instance()->tablet_manager()->get_tablet(related_tablet_id);
 
                 // if related tablet not exists, only push current tablet
                 if (related_tablet == nullptr) {

@@ -5,7 +5,6 @@
 #include <algorithm>
 
 #include "gutil/strings/substitute.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
@@ -19,7 +18,6 @@ Operator::Operator(int32_t id, const std::string& name, int32_t plan_node_id)
 }
 
 Status Operator::prepare(RuntimeState* state) {
-    _mem_tracker = std::make_shared<MemTracker>(_runtime_profile.get(), -1, _runtime_profile->name(), nullptr);
     return Status::OK();
 }
 

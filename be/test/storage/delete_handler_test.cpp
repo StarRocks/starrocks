@@ -78,7 +78,7 @@ void tear_down() {
 }
 
 void set_default_create_tablet_request(TCreateTabletReq* request) {
-    request->tablet_id = 10003;
+    request->tablet_id = random();
     request->__set_version(1);
     request->__set_version_hash(0);
     request->tablet_schema.schema_hash = 270068375;
@@ -159,7 +159,7 @@ void set_default_create_tablet_request(TCreateTabletReq* request) {
 }
 
 void set_create_duplicate_tablet_request(TCreateTabletReq* request) {
-    request->tablet_id = 10009;
+    request->tablet_id = random();
     request->__set_version(1);
     request->__set_version_hash(0);
     request->tablet_schema.schema_hash = 270068376;
@@ -250,16 +250,14 @@ protected:
         set_default_create_tablet_request(&_create_tablet);
         auto res = k_engine->create_tablet(_create_tablet);
         ASSERT_TRUE(res.ok()) << res.to_string();
-        tablet = k_engine->tablet_manager()->get_tablet(_create_tablet.tablet_id,
-                                                        _create_tablet.tablet_schema.schema_hash);
+        tablet = k_engine->tablet_manager()->get_tablet(_create_tablet.tablet_id);
         ASSERT_TRUE(tablet.get() != nullptr);
         _tablet_path = tablet->tablet_path();
 
         set_create_duplicate_tablet_request(&_create_dup_tablet);
         res = k_engine->create_tablet(_create_dup_tablet);
         ASSERT_TRUE(res.ok()) << res.to_string();
-        dup_tablet = k_engine->tablet_manager()->get_tablet(_create_dup_tablet.tablet_id,
-                                                            _create_dup_tablet.tablet_schema.schema_hash);
+        dup_tablet = k_engine->tablet_manager()->get_tablet(_create_dup_tablet.tablet_id);
         ASSERT_TRUE(dup_tablet.get() != nullptr);
         _dup_tablet_path = tablet->tablet_path();
     }
@@ -267,8 +265,7 @@ protected:
     void TearDown() {
         tablet.reset();
         dup_tablet.reset();
-        (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id,
-                                                                       _create_tablet.tablet_schema.schema_hash);
+        (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id);
         ASSERT_TRUE(FileUtils::remove_all(config::storage_root_path).ok());
     }
 
@@ -408,16 +405,14 @@ protected:
         set_default_create_tablet_request(&_create_tablet);
         auto res = k_engine->create_tablet(_create_tablet);
         ASSERT_TRUE(res.ok()) << res.to_string();
-        tablet = k_engine->tablet_manager()->get_tablet(_create_tablet.tablet_id,
-                                                        _create_tablet.tablet_schema.schema_hash);
+        tablet = k_engine->tablet_manager()->get_tablet(_create_tablet.tablet_id);
         ASSERT_TRUE(tablet.get() != nullptr);
         _tablet_path = tablet->tablet_path();
     }
 
     void TearDown() {
         tablet.reset();
-        (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id,
-                                                                       _create_tablet.tablet_schema.schema_hash);
+        (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id);
         ASSERT_TRUE(FileUtils::remove_all(config::storage_root_path).ok());
     }
 
@@ -737,8 +732,7 @@ protected:
         set_default_create_tablet_request(&_create_tablet);
         auto res = k_engine->create_tablet(_create_tablet);
         ASSERT_TRUE(res.ok()) << res.to_string();
-        tablet = k_engine->tablet_manager()->get_tablet(_create_tablet.tablet_id,
-                                                        _create_tablet.tablet_schema.schema_hash);
+        tablet = k_engine->tablet_manager()->get_tablet(_create_tablet.tablet_id);
         ASSERT_TRUE(tablet != nullptr);
         _tablet_path = tablet->tablet_path();
 
@@ -749,8 +743,7 @@ protected:
     void TearDown() {
         tablet.reset();
         _delete_handler.finalize();
-        (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id,
-                                                                       _create_tablet.tablet_schema.schema_hash);
+        (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id);
         ASSERT_TRUE(FileUtils::remove_all(config::storage_root_path).ok());
     }
 
