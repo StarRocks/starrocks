@@ -29,7 +29,7 @@ private:
     // shared by AggregateStreamingSinkOperator
     AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
-    bool _is_finished = false;
+    mutable bool _is_finished = false;
 };
 
 class AggregateStreamingSourceOperatorFactory final : public SourceOperatorFactory {

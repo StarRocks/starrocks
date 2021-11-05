@@ -43,7 +43,7 @@ void PipelineDriverPoller::run_internal() {
         size_t previous_num_blocked_drivers = local_blocked_drivers.size();
         auto driver_it = local_blocked_drivers.begin();
         while (driver_it != local_blocked_drivers.end()) {
-            auto& driver = *driver_it;
+            auto* driver = *driver_it;
 
             if (driver->pending_finish() && !driver->source_operator()->pending_finish()) {
                 // driver->pending_finish() return true means that when a driver's sink operator is finished,
@@ -54,10 +54,10 @@ void PipelineDriverPoller::run_internal() {
                 // FragmentContext is unregistered prematurely.
                 driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
                                                                                : DriverState::FINISH);
-                _dispatch_queue->put_back(*driver_it);
-                local_blocked_drivers.erase(driver_it++);
+                remove_blocked_driver(local_blocked_drivers, driver_it);
+                _dispatch_queue->put_back(driver);
             } else if (driver->is_finished()) {
-                local_blocked_drivers.erase(driver_it++);
+                remove_blocked_driver(local_blocked_drivers, driver_it);
             } else if (!driver->pending_finish() && driver->query_ctx()->is_expired()) {
                 // there are not any drivers belonging to a query context can make progress for an expiration period
                 // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
@@ -71,8 +71,8 @@ void PipelineDriverPoller::run_internal() {
                     ++driver_it;
                 } else {
                     driver->set_driver_state(DriverState::FINISH);
-                    _dispatch_queue->put_back(*driver_it);
-                    local_blocked_drivers.erase(driver_it++);
+                    remove_blocked_driver(local_blocked_drivers, driver_it);
+                    _dispatch_queue->put_back(driver);
                 }
             } else if (!driver->pending_finish() && driver->fragment_ctx()->is_canceled()) {
                 // If the fragment is cancelled when the source operator is already pending i/o task,
@@ -83,13 +83,13 @@ void PipelineDriverPoller::run_internal() {
                     ++driver_it;
                 } else {
                     driver->set_driver_state(DriverState::CANCELED);
-                    _dispatch_queue->put_back(*driver_it);
-                    local_blocked_drivers.erase(driver_it++);
+                    remove_blocked_driver(local_blocked_drivers, driver_it);
+                    _dispatch_queue->put_back(driver);
                 }
             } else if (driver->is_not_blocked()) {
                 driver->set_driver_state(DriverState::READY);
-                _dispatch_queue->put_back(*driver_it);
-                local_blocked_drivers.erase(driver_it++);
+                remove_blocked_driver(local_blocked_drivers, driver_it);
+                _dispatch_queue->put_back(driver);
             } else {
                 ++driver_it;
             }
@@ -117,8 +117,14 @@ void PipelineDriverPoller::run_internal() {
 
 void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
     std::unique_lock<std::mutex> lock(this->_mutex);
+    driver->_pending_watcher->stage_start();
     this->_blocked_drivers.push_back(driver);
     this->_cond.notify_one();
+}
+
+void PipelineDriverPoller::remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it) {
+    (*driver_it)->_pending_watcher->stage_stop();
+    local_blocked_drivers.erase(driver_it++);
 }
 
 } // namespace starrocks::pipeline

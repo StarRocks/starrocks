@@ -2,9 +2,11 @@
 
 #pragma once
 
+#include <ctime>
+
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/source_operator.h"
-
+#include "gutil/strings/substitute.h"
 namespace starrocks {
 namespace pipeline {
 

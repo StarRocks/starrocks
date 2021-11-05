@@ -26,11 +26,13 @@
 
 namespace starrocks::pipeline {
 
-static void setup_profile_hierarchy(RuntimeState* runtime_state, const Operators& operators) {
+static void setup_profile_hierarchy(RuntimeState* runtime_state, const DriverPtr& driver) {
+    runtime_state->runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
+    auto& operators = driver->operators();
     for (int32_t j = operators.size() - 1; j >= 0; --j) {
         auto& curr_op = operators[j];
         if (j == operators.size() - 1) {
-            runtime_state->runtime_profile()->add_child(curr_op->get_runtime_profile(), true, nullptr);
+            driver->runtime_profile()->add_child(curr_op->get_runtime_profile(), true, nullptr);
         } else {
             auto& prev_op = operators[j + 1];
             prev_op->get_runtime_profile()->add_child(curr_op->get_runtime_profile(), true, nullptr);
@@ -163,6 +165,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     Drivers drivers;
     const auto& pipelines = _fragment_ctx->pipelines();
     const size_t num_pipelines = pipelines.size();
+    size_t driver_id = 0;
     for (auto n = 0; n < num_pipelines; ++n) {
         const auto& pipeline = pipelines[n];
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
@@ -183,13 +186,13 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                 _fragment_ctx->set_num_root_drivers(degree_of_parallelism);
             }
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
-                Operators&& operators = pipeline->create_operators(degree_of_parallelism, i);
-                setup_profile_hierarchy(runtime_state, operators);
-                DriverPtr driver =
-                        std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, 0, is_root);
+                auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
+                DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx,
+                                                                    driver_id++, is_root);
                 driver->set_morsel_queue(morsel_queue.get());
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
                 scan_operator->set_io_threads(exec_env->pipeline_io_thread_pool());
+                setup_profile_hierarchy(runtime_state, driver);
                 drivers.emplace_back(std::move(driver));
             }
         } else {
@@ -198,10 +201,10 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             }
             for (size_t i = 0; i < degree_of_parallelism; ++i) {
                 auto&& operators = pipeline->create_operators(degree_of_parallelism, i);
-                setup_profile_hierarchy(runtime_state, operators);
-                DriverPtr driver =
-                        std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, i, is_root);
-                drivers.emplace_back(driver);
+                DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx,
+                                                                    driver_id++, is_root);
+                setup_profile_hierarchy(runtime_state, driver);
+                drivers.emplace_back(std::move(driver));
             }
         }
     }
