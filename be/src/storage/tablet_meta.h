@@ -159,6 +159,8 @@ public:
 
     inline TabletState tablet_state() const;
     // NOTE: Normally you should NOT call this method directly but call Tablet::set_tablet_state().
+    // This is a dangerous method, it may change the state from SHUTDOWN to RUNNING again, which should not happen
+    // in normal cases
     inline void set_tablet_state(TabletState state);
 
     inline bool in_restore_mode() const;
