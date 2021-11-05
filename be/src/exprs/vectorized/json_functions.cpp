@@ -141,27 +141,28 @@ rapidjson::Value* JsonFunctions::get_json_object_from_parsed_json(const std::vec
     return root;
 }
 
-std::vector<simdjson::dom::document_stream::iterator::value_type> JsonFunctions::extract_values_from_document(
-        simdjson::dom::document_stream::iterator& doc_itr, const std::vector<JsonPath>& jsonpath) {
-    std::vector<simdjson::dom::document_stream::iterator::value_type> values;
+std::vector<simdjson::dom::element> JsonFunctions::extract_from_element(
+        simdjson::dom::element& elem, const std::vector<JsonPath>& jsonpath) {
+    std::vector<simdjson::dom::element> output;
 
-    if ((*doc_itr).is_null()) {
-        return values;
+    if (elem.is_null()) {
+        return output;
     }
 
-    values.emplace_back((*doc_itr).value());
+    output.emplace_back(std::move(elem));
 
     // Skip the first $.
     for (int i = 1; i < jsonpath.size(); i++) {
         if (UNLIKELY(!jsonpath[i].is_valid)) {
-            return values;
+            return output;
         }
 
         const std::string& col = jsonpath[i].key;
         int index = jsonpath[i].idx;
 
-        std::vector<simdjson::dom::document_stream::iterator::value_type> filtered_values;
-        for (auto& val : values) {
+        decltype(output) filtered;
+
+        for (auto& val : output) {
             if (LIKELY(!col.empty())) {
                 auto col_val = val.at_key(col);
 
@@ -173,15 +174,15 @@ std::vector<simdjson::dom::document_stream::iterator::value_type> JsonFunctions:
                     col_val = arr.at(index);
                 }
 
-                filtered_values.emplace_back(col_val);
+                filtered.emplace_back(std::move(col_val));
             }
         }
 
-        if (!filtered_values.empty()) {
-            std::swap(values, filtered_values);
+        if (!filtered.empty()) {
+            std::swap(output, filtered);
         }
     }
-    return values;
+    return output;
 }
 
 rapidjson::Value* JsonFunctions::match_value(const std::vector<JsonPath>& parsed_paths, rapidjson::Value* document,

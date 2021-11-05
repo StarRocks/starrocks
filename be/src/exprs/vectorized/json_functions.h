@@ -118,8 +118,8 @@ public:
                                                               rapidjson::Value* document,
                                                               rapidjson::Document::AllocatorType& mem_allocator);
 
-    static std::vector<simdjson::dom::document_stream::iterator::value_type> extract_values_from_document(
-            simdjson::dom::document_stream::iterator& doc_itr, const std::vector<JsonPath>& jsonpath);
+    static std::vector<simdjson::dom::element> extract_from_element(simdjson::dom::element& elem,
+                                                                    const std::vector<JsonPath>& jsonpath);
 
     // Extract json values from stream.
     static void get_values_from_stream(const std::vector<JsonPath>& parsed_paths,

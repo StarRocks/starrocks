@@ -284,36 +284,53 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
     }
 
     for (; _doc_stream_itr != _doc_stream.end(); ++_doc_stream_itr) {
-        if (!_scanner->_json_paths.empty()) {
-            size_t slot_size = slot_descs.size();
-            size_t jsonpath_size = _scanner->_json_paths.size();
-            for (size_t i = 0; i < slot_size; i++) {
-                if (slot_descs[i] == nullptr) {
-                    continue;
-                }
-                ColumnPtr& column = chunk->get_column_by_slot_id(slot_descs[i]->id());
-                if (i >= jsonpath_size) {
-                    column->append_nulls(1);
-                    continue;
-                }
-                auto values = JsonFunctions::extract_values_from_document(_doc_stream_itr, _scanner->_json_paths[i]);
 
-                for (auto &value : values) {
-                    _construct_column(value, column.get(), slot_descs[i]->type());
-                }
+        auto v = (*_doc_stream_itr).value();
+        std::vector<simdjson::dom::element> elems;
+
+        if (_strip_outer_array && v.is_array()) {
+            // Expand the array.
+            auto arr = v.get_array();
+            for(auto a : arr) {
+                elems.push_back(a);
             }
-        } else if (!_scanner->_root_paths.empty()) {
         } else {
-            for (SlotDescriptor* slot_desc : slot_descs) {
-                if (slot_desc == nullptr) {
-                    continue;
+            elems.emplace_back(std::move(v));
+        }
+
+        for (auto& elem : elems) {
+            if (!_scanner->_json_paths.empty()) {
+                size_t slot_size = slot_descs.size();
+                size_t jsonpath_size = _scanner->_json_paths.size();
+
+                for (size_t i = 0; i < slot_size; i++) {
+                    if (slot_descs[i] == nullptr) {
+                        continue;
+                    }
+                    ColumnPtr& column = chunk->get_column_by_slot_id(slot_descs[i]->id());
+                    if (i >= jsonpath_size) {
+                        column->append_nulls(1);
+                        continue;
+                    }
+                    auto values = JsonFunctions::extract_from_element(elem, _scanner->_json_paths[i]);
+
+                    for (auto& val : values) {
+                        _construct_column(val, column.get(), slot_descs[i]->type());
+                    }
                 }
+            } else if (!_scanner->_root_paths.empty()) {
+            } else {
+                for (SlotDescriptor* slot_desc : slot_descs) {
+                    if (slot_desc == nullptr) {
+                        continue;
+                    }
 
-                ColumnPtr& column = chunk->get_column_by_slot_id(slot_desc->id());
-                auto col_name = slot_desc->col_name();
+                    ColumnPtr& column = chunk->get_column_by_slot_id(slot_desc->id());
+                    auto col_name = slot_desc->col_name();
 
-                auto value = (*_doc_stream_itr).at_key(col_name);
-                _construct_column(value, column.get(), slot_desc->type());
+                    auto val = elem.at_key(col_name).value();
+                    _construct_column(val, column.get(), slot_desc->type());
+                }
             }
         }
     }
@@ -358,23 +375,22 @@ Status JsonReader::_read_and_parse_json() {
 }
 
 // _construct_column constructs column based on no value.
-void JsonReader::_construct_column(simdjson::dom::document_stream::iterator::value_type& value, Column* column,
-                                   const TypeDescriptor& type_desc) {
-    if (value.is_null()) {
+void JsonReader::_construct_column(simdjson::dom::element& elem, Column* column, const TypeDescriptor& type_desc) {
+    if (elem.is_null()) {
         column->append_nulls(1);
-    } else if (value.is_bool()) {
-        if (value.get_bool()) {
+    } else if (elem.is_bool()) {
+        if (elem.get_bool()) {
             column->append_strings(std::vector<Slice>{Slice("1")});
         } else {
             column->append_strings(std::vector<Slice>{Slice("0")});
         }
-    } else if (value.is_uint64() || value.is_int64()) {
-        auto f = fmt::format_int(value.get_int64());
+    } else if (elem.is_uint64() || elem.is_int64()) {
+        auto f = fmt::format_int(elem.get_int64());
         column->append_strings(std::vector<Slice>{Slice(f.data(), f.size())});
-    } else if (value.is_string()) {
-        column->append_strings(std::vector<Slice>{Slice(value.get_c_str(), value.get_string_length())});
-    } else if (value.is_object()) {
-        column->append_strings(std::vector<Slice>{Slice(simdjson::to_string(value))});
+    } else if (elem.is_string()) {
+        column->append_strings(std::vector<Slice>{Slice(elem.get_c_str(), elem.get_string_length())});
+    } else if (elem.is_object()) {
+        column->append_strings(std::vector<Slice>{Slice(simdjson::to_string(elem))});
     } else {
         column->append_nulls(1);
     }

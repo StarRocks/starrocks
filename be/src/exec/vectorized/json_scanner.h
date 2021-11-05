@@ -82,7 +82,7 @@ public:
 
     Status close();
 
-    void _construct_column(simdjson::dom::document_stream::iterator::value_type& value, Column* column,
+    void _construct_column(simdjson::dom::element& elem, Column* column,
                            const TypeDescriptor& type_desc);
 private:
     Status _read_and_parse_json();
