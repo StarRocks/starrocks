@@ -280,6 +280,7 @@ set_target_properties(bytes_test PROPERTIES
         "-static-libstdc++;-static-libgcc;-fno-sanitize=address")
 
 TARGET_LINK_LIBRARIES(bytes_test
+        Service
         pthread
         gtest
         tcmalloc
