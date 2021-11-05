@@ -1,5 +1,5 @@
 --- gperftools-gperftools-2.7/src/libc_override_gcc_and_weak.h	2018-04-30 14:00:34.000000000 +0800
-+++ gperftools-gperftools-2.7/src/libc_override_gcc_and_weak.h	2021-11-02 20:20:15.404945205 +0800
++++ gperftools-gperftools-2.7/src/libc_override_gcc_and_weak.h	2021-11-05 17:26:30.853784606 +0800
 @@ -57,168 +57,7 @@
  
  #define ALIAS(tc_fn)   __attribute__ ((alias (#tc_fn), used))
@@ -169,3 +169,14 @@
  #ifndef __UCLIBC__
    void malloc_stats(void) __THROW                 ALIAS(tc_malloc_stats);
  #endif
+--- gperftools-gperftools-2.7/src/tests/tcmalloc_unittest.cc	2018-04-30 14:00:34.000000000 +0800
++++ gperftools-gperftools-2.7/src/tests/tcmalloc_unittest.cc	2021-11-05 17:26:59.906356097 +0800
+@@ -1300,7 +1300,7 @@ static int RunAllTests(int argc, char**
+     CHECK(p1 != NULL);
+     VerifyNewHookWasCalled();
+     VerifyDeleteHookWasCalled();
+-    cfree(p1);  // synonym for free
++    tc_cfree(p1);  // synonym for free
+     VerifyDeleteHookWasCalled();
+ 
+     if (kOSSupportsMemalign) {
