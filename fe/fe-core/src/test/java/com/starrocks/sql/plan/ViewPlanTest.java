@@ -1555,6 +1555,12 @@ public class ViewPlanTest extends PlanTestBase {
                 "select 1 c_1 union all select 2) a group by cast(c_1 as string)  union all  " +
                 "select count(c_1) c1 ,cast(c_1 as string) c2 from (select 1 c_1 union all select 2) a " +
                 "group by cast(c_1 as string);";
-        testView(sql);
+        String createView = "create view alias_view(col_1,col_2) as " + sql;
+        starRocksAssert.withView(createView);
+
+        String sqlPlan = getFragmentPlan(sql);
+        String viewPlan = getFragmentPlan("select * from test_view15");
+        Assert.assertEquals(sqlPlan, viewPlan);
+        starRocksAssert.dropView("test_view15");
     }
 }
