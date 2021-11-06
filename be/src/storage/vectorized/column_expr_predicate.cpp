@@ -66,7 +66,7 @@ void ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, uin
         if (!bits->has_null()) {
             value = ColumnHelper::get_const_value<TYPE_BOOLEAN>(bits);
         }
-        memcpy(selection + from, &value, (to - from));
+        memset(selection + from, value, (to - from));
         return;
     }
 
