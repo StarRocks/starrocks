@@ -377,11 +377,9 @@ public class DecodeRewriteTest extends PlanTestBase{
     @Test
     public void testJoinGlobalDict() throws Exception {
         String sql = "select part_v2.P_COMMENT from lineitem join part_v2 on L_PARTKEY = p_partkey where p_mfgr = 'MFGR#1' or p_mfgr = 'MFGR#2';";
-
         String plan = getThriftPlan(sql);
-
-        Assert.assertTrue(plan.contains("enable_column_expr_predicate:true, dict_string_id_to_int_ids:{}"));
-        Assert.assertTrue(plan.contains("P_MFGR IN ('MFGR#1', 'MFGR#2'), enable_column_expr_predicate:true, " +
+        Assert.assertTrue(plan.contains("enable_column_expr_predicate:false, dict_string_id_to_int_ids:{}"));
+        Assert.assertTrue(plan.contains("P_MFGR IN ('MFGR#1', 'MFGR#2'), enable_column_expr_predicate:false, " +
                 "dict_string_id_to_int_ids:{}"));
         Assert.assertTrue(plan.contains("RESULT_SINK, result_sink:TResultSink(type:MYSQL_PROTOCAL)), " +
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), global_dicts:[TGlobalDict(columnId:28"));
