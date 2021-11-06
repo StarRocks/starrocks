@@ -917,12 +917,18 @@ Status TabletManager::start_trash_sweep() {
                     continue;
                 }
             } else if (st.ok()) {
-                // Ignore the result.
-                (void)FileUtils::remove_all(tablet_path);
+                st = FileUtils::remove_all(tablet_path);
+                if (st.ok()) {
+                    LOG(INFO) << "Removed " << tablet_path;
+                } else {
+                    LOG(WARNING) << "Fail to remove " << tablet_path << ": " << st;
+                }
+                st = Status::OK(); // ignore the `remove_all()` error.
             } else if (st.is_not_found()) {
                 st = Status::OK();
             } else {
                 LOG(WARNING) << "Fail to check " << tablet_path << ": " << st;
+                // theoretically, we can ignore this error and keep on deleting the tablet meta.
                 continue;
             }
             DCHECK(st.ok()) << st;
