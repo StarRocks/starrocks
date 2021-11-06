@@ -636,7 +636,7 @@ public class DatabaseTransactionMgr {
             return true;
         }
         db.readLock();
-
+        LOG.info("canTxnFinished in readLock: {}", txn.getTransactionId());
         try {
             // check each table involved in transaction
             for (TableCommitInfo tableCommitInfo : txn.getIdToTableCommitInfos().values()) {
