@@ -82,47 +82,6 @@ void Tuple::deep_copy(Tuple* dst, const TupleDescriptor& desc, MemPool* pool, bo
     }
 }
 
-Tuple* Tuple::dcopy_with_new(const TupleDescriptor& desc, MemPool* pool, int64_t* bytes) {
-    Tuple* result = reinterpret_cast<Tuple*>(pool->allocate(desc.byte_size()));
-    *bytes = dcopy_with_new(result, desc);
-    return result;
-}
-
-int64_t Tuple::dcopy_with_new(Tuple* dst, const TupleDescriptor& desc) {
-    memory_copy(dst, this, desc.byte_size());
-
-    int64_t bytes = 0;
-    // allocate in the same pool and then copy all non-null string slots
-    for (auto slot : desc.string_slots()) {
-        DCHECK(slot->type().is_string_type());
-
-        if (!dst->is_null(slot->null_indicator_offset())) {
-            StringValue* string_v = dst->get_string_slot(slot->tuple_offset());
-            bytes += string_v->len;
-            if (string_v->len != 0) {
-                char* string_copy = new char[string_v->len];
-                memory_copy(string_copy, string_v->ptr, string_v->len);
-                string_v->ptr = string_copy;
-            } else {
-                string_v->ptr = nullptr;
-            }
-        }
-    }
-    return bytes;
-}
-
-int64_t Tuple::release_string(const TupleDescriptor& desc) {
-    int64_t bytes = 0;
-    for (auto slot : desc.string_slots()) {
-        if (!is_null(slot->null_indicator_offset())) {
-            StringValue* string_v = get_string_slot(slot->tuple_offset());
-            delete[] string_v->ptr;
-            bytes += string_v->len;
-        }
-    }
-    return bytes;
-}
-
 void Tuple::deep_copy(const TupleDescriptor& desc, char** data, int* offset, bool convert_ptrs) {
     Tuple* dst = reinterpret_cast<Tuple*>(*data);
     memory_copy(dst, this, desc.byte_size());
