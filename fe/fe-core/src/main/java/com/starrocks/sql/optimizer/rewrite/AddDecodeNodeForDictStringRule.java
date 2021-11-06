@@ -209,8 +209,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         for (ScalarOperator predicate : predicates) {
                             if (predicate.getUsedColumns().contains(columnId)) {
                                 if (couldApplyDictOptimize(predicate)) {
-                                    newDictColumn = context.columnRefFactory.create(
-                                            stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
+                                    if (newDictColumn == null) {
+                                        newDictColumn = context.columnRefFactory.create(
+                                                stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
+                                    }
 
                                     // For simple predicate, our olap scan node handle it by string,
                                     // So we couldn't rewrite it.
