@@ -4,8 +4,8 @@
 #include "exec/exec_node.h"
 #include "exec/pipeline/source_operator.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
+
 // UNION ALL operator has three kinds of sub-node as follows:
 // 1. Passthrough.
 //    The src column from sub-node is projected to the dest column without expressions.
@@ -41,6 +41,8 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
+    void _move_column(ColumnPtr& dst_column, ColumnPtr& src_column);
+
     const std::vector<SlotDescriptor*>& _dst_slots;
 
     // The evaluation of each const expr_list is projected to ONE dest row.
@@ -81,5 +83,4 @@ private:
     const std::vector<std::vector<ExprContext*>>& _const_expr_lists;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

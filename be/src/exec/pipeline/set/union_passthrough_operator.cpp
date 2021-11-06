@@ -5,8 +5,8 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
+
 Status UnionPassthroughOperator::push_chunk(RuntimeState* state, const ChunkPtr& src_chunk) {
     DCHECK_EQ(_dst_chunk, nullptr);
 
@@ -59,15 +59,31 @@ void UnionPassthroughOperator::_clone_column(ChunkPtr& dst_chunk, const ColumnPt
 
 void UnionPassthroughOperator::_move_column(ChunkPtr& dst_chunk, const ColumnPtr& src_column,
                                             const SlotDescriptor* dst_slot, size_t row_count) {
-    if (src_column->is_nullable() || !dst_slot->is_nullable()) {
-        dst_chunk->append_column(src_column, dst_slot->id());
+    if (src_column->is_constant()) {
+        if (src_column->is_nullable()) {
+            auto nullable_column = vectorized::ColumnHelper::create_column(dst_slot->type(), true);
+            nullable_column->reserve(row_count);
+            nullable_column->append_nulls(row_count);
+            dst_chunk->append_column(std::move(nullable_column), dst_slot->id());
+        } else {
+            auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(src_column);
+            // Note: we must create a new column every time here,
+            // because VectorizedLiteral always return a same shared_ptr and we will modify it later.
+            ColumnPtr new_column = vectorized::ColumnHelper::create_column(dst_slot->type(), dst_slot->is_nullable());
+            new_column->append(*const_column->data_column(), 0, 1);
+            new_column->assign(row_count, 0);
+            dst_chunk->append_column(std::move(new_column), dst_slot->id());
+        }
     } else {
-        // If the dst slot is nullable and the src slot isn't nullable, we need insert null mask to column.
-        ColumnPtr nullable_column =
-                vectorized::NullableColumn::create(src_column, vectorized::NullColumn::create(row_count, 0));
-        dst_chunk->append_column(std::move(nullable_column), dst_slot->id());
+        if (src_column->is_nullable() || !dst_slot->is_nullable()) {
+            dst_chunk->append_column(src_column, dst_slot->id());
+        } else {
+            // If the dst slot is nullable and the src slot isn't nullable, we need insert null mask to column.
+            ColumnPtr nullable_column =
+                    vectorized::NullableColumn::create(src_column, vectorized::NullColumn::create(row_count, 0));
+            dst_chunk->append_column(std::move(nullable_column), dst_slot->id());
+        }
     }
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

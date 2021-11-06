@@ -39,7 +39,7 @@ bool LocalExchangeSourceOperator::is_finished() const {
 bool LocalExchangeSourceOperator::has_output() const {
     std::lock_guard<std::mutex> l(_chunk_lock);
 
-    return !_full_chunk_queue.empty() || _partition_rows_num > config::vector_chunk_size ||
+    return !_full_chunk_queue.empty() || _partition_rows_num >= config::vector_chunk_size ||
            (_is_finished && _partition_rows_num > 0);
 }
 

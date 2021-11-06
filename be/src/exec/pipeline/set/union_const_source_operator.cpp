@@ -26,13 +26,8 @@ StatusOr<vectorized::ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::R
             // Each const_expr_list is projected to ONE dest row.
             DCHECK_EQ(_const_expr_lists[_next_processed_row_index + row_i].size(), columns_count);
             ColumnPtr src_column = _const_expr_lists[_next_processed_row_index + row_i][col_i]->evaluate(nullptr);
-            if (src_column->is_nullable()) {
-                DCHECK(dst_column->is_nullable());
-                dst_column->append_nulls(1);
-            } else {
-                auto* src_const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(src_column);
-                dst_column->append(*src_const_column->data_column(), 0, 1);
-            }
+
+            _move_column(dst_column, src_column);
         }
 
         chunk->append_column(std::move(dst_column), dst_slot->id());
@@ -42,6 +37,20 @@ StatusOr<vectorized::ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::R
 
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
+}
+
+void UnionConstSourceOperator::_move_column(ColumnPtr& dst_column, ColumnPtr& src_column) {
+    if (src_column->is_constant()) {
+        if (src_column->is_nullable()) {
+            DCHECK(dst_column->is_nullable());
+            dst_column->append_nulls(1);
+        } else {
+            auto* src_const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(src_column);
+            dst_column->append(*src_const_column->data_column(), 0, 1);
+        }
+    } else {
+        dst_column->append(*src_column, 0, 1);
+    }
 }
 
 Status UnionConstSourceOperatorFactory::prepare(RuntimeState* state) {
