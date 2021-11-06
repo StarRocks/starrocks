@@ -112,7 +112,8 @@ public class ScalarOperatorFunctions {
         try {
             // unix style
             if (!SUPPORT_DATETIME_FORMATTER.contains(format.trim())) {
-                DateLiteral literal = new DateLiteral(date.getDatetime().format(DATE_TIME_FORMATTER), date.getType());
+                DateLiteral literal = new DateLiteral(date.getDatetime().format(DATE_TIME_FORMATTER), Type.DATETIME);
+                literal.setType(date.getType());
                 return ConstantOperator.createVarchar(literal.dateFormat(fmtLiteral.getVarchar()));
             } else {
                 String result = date.getDatetime().format(DateTimeFormatter.ofPattern(fmtLiteral.getVarchar()));

@@ -1542,9 +1542,19 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testExpressionRewriteView() throws Exception {
-        String sql = "select from_unixtime(unix_timestamp(id_datetime, 'yyyy-MM-dd'), 'yyyy-MM-dd') as x1, sum(t1c) as x3 " +
-                "from test_all_type " +
-                "group by from_unixtime(unix_timestamp(id_datetime, 'yyyy-MM-dd'), 'yyyy-MM-dd')";
+        String sql =
+                "select from_unixtime(unix_timestamp(id_datetime, 'yyyy-MM-dd'), 'yyyy-MM-dd') as x1, sum(t1c) as x3 " +
+                        "from test_all_type " +
+                        "group by from_unixtime(unix_timestamp(id_datetime, 'yyyy-MM-dd'), 'yyyy-MM-dd')";
+        testView(sql);
+    }
+
+    @Test
+    public void testUnionView() throws Exception {
+        String sql = "create view test_view15 (col_1,col_2) as  select count(c_1) c1 ,cast(c_1 as string) c2 from (" +
+                "select 1 c_1 union all select 2) a group by cast(c_1 as string)  union all  " +
+                "select count(c_1) c1 ,cast(c_1 as string) c2 from (select 1 c_1 union all select 2) a " +
+                "group by cast(c_1 as string);";
         testView(sql);
     }
 }
