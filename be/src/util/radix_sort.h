@@ -40,6 +40,7 @@
 #include <type_traits>
 
 #include "common/compiler_util.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -78,9 +79,9 @@ decay_t<To> bit_cast(const From& from) {
 /** Used as a template parameter. See below.
   */
 struct RadixSortMallocAllocator {
-    void* allocate(size_t size) { return malloc(size); }
+    void* allocate(size_t size) { return new char[size]; }
 
-    void deallocate(void* ptr, size_t /*size*/) { return free(ptr); }
+    void deallocate(void* ptr, size_t /*size*/) { return delete[]((char*)ptr); }
 };
 
 /** A transformation that transforms the bit representation of a key into an unsigned integer number,
@@ -241,6 +242,7 @@ public:
 
         /// We will do several passes through the array. On each pass, the data is transferred to another array. Let's allocate this temporary array.
         Element* swap_buffer = reinterpret_cast<Element*>(allocator.allocate(size * sizeof(Element)));
+        DeferOp delete_swap_buffer([&] { allocator.deallocate(swap_buffer, size * sizeof(Element)); });
 
         /// Transform the array and calculate the histogram.
         /// NOTE This is slightly suboptimal. Look at https://github.com/powturbo/TurboHist
@@ -288,8 +290,6 @@ public:
         /// If the number of passes is odd, the result array is in a temporary buffer. Copy it to the place of the original array.
         /// NOTE Sometimes it will be more optimal to provide non-destructive interface, that will not modify original array.
         if (NUM_PASSES % 2) memcpy(arr, swap_buffer, size * sizeof(Element));
-
-        allocator.deallocate(swap_buffer, size * sizeof(Element));
     }
 };
 
