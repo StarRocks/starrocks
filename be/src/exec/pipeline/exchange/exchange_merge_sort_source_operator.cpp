@@ -77,7 +77,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
             } else {
                 break;
             }
-        } while (!should_exit && _num_rows_input < _offset);
+        } while (!_is_finished && !should_exit && _num_rows_input < _offset);
 
         // tmp_chunk is the last chunk, no extra chunks needs to be read
         if (_num_rows_input > _offset) {
