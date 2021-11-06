@@ -1551,11 +1551,11 @@ public class ViewPlanTest extends PlanTestBase {
 
     @Test
     public void testUnionView() throws Exception {
-        String sql = "create view test_view15 (col_1,col_2) as  select count(c_1) c1 ,cast(c_1 as string) c2 from (" +
+        String sql = "select count(c_1) c1 ,cast(c_1 as string) c2 from (" +
                 "select 1 c_1 union all select 2) a group by cast(c_1 as string)  union all  " +
                 "select count(c_1) c1 ,cast(c_1 as string) c2 from (select 1 c_1 union all select 2) a " +
                 "group by cast(c_1 as string);";
-        String createView = "create view alias_view(col_1,col_2) as " + sql;
+        String createView = "create view test_view15 (col_1,col_2) as " + sql;
         starRocksAssert.withView(createView);
 
         String sqlPlan = getFragmentPlan(sql);
