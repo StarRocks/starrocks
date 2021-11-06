@@ -165,10 +165,14 @@ public class CacheDictManager implements IDictManager {
                 return false;
             }
             if (!realResult.isPresent()) {
-                LOG.debug("invalidate {}", columnName);
+                LOG.debug("Invalidate column {} dict cache because don't present", columnName);
                 dictStatistics.synchronous().invalidate(columnIdentifier);
+            } else if (realResult.get().getVersionTime() < versionTime) {
+                LOG.debug("Invalidate column {} dict cache because out of date", columnName);
+                dictStatistics.synchronous().invalidate(columnIdentifier);
+            } else {
+                return true;
             }
-            return realResult.filter(columnDict -> columnDict.getVersionTime() >= versionTime).isPresent();
         }
         LOG.debug("{} first get column dict", columnName);
         return false;
