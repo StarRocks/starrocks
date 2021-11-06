@@ -170,6 +170,23 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
 [plan-9]
 TOP-N (order by [[32: substring ASC NULLS FIRST]])
     TOP-N (order by [[32: substring ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{33: count()=count(), 34: sum(6: C_ACCTBAL)=sum(6: C_ACCTBAL)}] group by [[32: substring]] having [null]
+            EXCHANGE SHUFFLE[32]
+                CROSS JOIN (join-predicate [null] post-join-predicate [6: C_ACCTBAL > 19: avg(15: C_ACCTBAL)])
+                    AGGREGATE ([GLOBAL] aggregate [{19: avg(15: C_ACCTBAL)=avg(19: avg(15: C_ACCTBAL))}] group by [[]] having [null]
+                        EXCHANGE GATHER
+                            AGGREGATE ([LOCAL] aggregate [{19: avg(15: C_ACCTBAL)=avg(15: C_ACCTBAL)}] group by [[]] having [null]
+                                SCAN (columns[14: C_PHONE, 15: C_ACCTBAL] predicate[15: C_ACCTBAL > 0.0 AND substring(14: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
+                    EXCHANGE BROADCAST
+                        RIGHT ANTI JOIN (join-predicate [22: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                            EXCHANGE SHUFFLE[22]
+                                SCAN (columns[22: O_CUSTKEY] predicate[null])
+                            EXCHANGE SHUFFLE[1]
+                                SCAN (columns[1: C_CUSTKEY, 5: C_PHONE, 6: C_ACCTBAL] predicate[substring(5: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
+[end]
+[plan-10]
+TOP-N (order by [[32: substring ASC NULLS FIRST]])
+    TOP-N (order by [[32: substring ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{33: count()=count(33: count()), 34: sum(6: C_ACCTBAL)=sum(34: sum(6: C_ACCTBAL))}] group by [[32: substring]] having [null]
             EXCHANGE SHUFFLE[32]
                 AGGREGATE ([LOCAL] aggregate [{33: count()=count(), 34: sum(6: C_ACCTBAL)=sum(6: C_ACCTBAL)}] group by [[32: substring]] having [null]
@@ -184,7 +201,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[22]
                             SCAN (columns[22: O_CUSTKEY] predicate[null])
 [end]
-[plan-10]
+[plan-11]
 TOP-N (order by [[32: substring ASC NULLS FIRST]])
     TOP-N (order by [[32: substring ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{33: count()=count(33: count()), 34: sum(6: C_ACCTBAL)=sum(34: sum(6: C_ACCTBAL))}] group by [[32: substring]] having [null]
@@ -202,7 +219,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[22]
                             SCAN (columns[22: O_CUSTKEY] predicate[null])
 [end]
-[plan-11]
+[plan-12]
 TOP-N (order by [[32: substring ASC NULLS FIRST]])
     TOP-N (order by [[32: substring ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{33: count()=count(33: count()), 34: sum(6: C_ACCTBAL)=sum(34: sum(6: C_ACCTBAL))}] group by [[32: substring]] having [null]
@@ -220,7 +237,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[22]
                             SCAN (columns[22: O_CUSTKEY] predicate[null])
 [end]
-[plan-12]
+[plan-13]
 TOP-N (order by [[32: substring ASC NULLS FIRST]])
     TOP-N (order by [[32: substring ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{33: count()=count(33: count()), 34: sum(6: C_ACCTBAL)=sum(34: sum(6: C_ACCTBAL))}] group by [[32: substring]] having [null]
@@ -236,7 +253,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[22]
                             SCAN (columns[22: O_CUSTKEY] predicate[null])
 [end]
-[plan-13]
+[plan-14]
 TOP-N (order by [[32: substring ASC NULLS FIRST]])
     TOP-N (order by [[32: substring ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{33: count()=count(33: count()), 34: sum(6: C_ACCTBAL)=sum(34: sum(6: C_ACCTBAL))}] group by [[32: substring]] having [null]
@@ -253,7 +270,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[22]
                             SCAN (columns[22: O_CUSTKEY] predicate[null])
 [end]
-[plan-14]
+[plan-15]
 TOP-N (order by [[32: substring ASC NULLS FIRST]])
     TOP-N (order by [[32: substring ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{33: count()=count(33: count()), 34: sum(6: C_ACCTBAL)=sum(34: sum(6: C_ACCTBAL))}] group by [[32: substring]] having [null]
@@ -270,7 +287,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                                         EXCHANGE GATHER
                                             SCAN (columns[14: C_PHONE, 15: C_ACCTBAL] predicate[15: C_ACCTBAL > 0.0 AND substring(14: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
 [end]
-[plan-15]
+[plan-16]
 TOP-N (order by [[32: substring ASC NULLS FIRST]])
     TOP-N (order by [[32: substring ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{33: count()=count(33: count()), 34: sum(6: C_ACCTBAL)=sum(34: sum(6: C_ACCTBAL))}] group by [[32: substring]] having [null]
@@ -288,7 +305,7 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                                             AGGREGATE ([LOCAL] aggregate [{19: avg(15: C_ACCTBAL)=avg(15: C_ACCTBAL)}] group by [[]] having [null]
                                                 SCAN (columns[14: C_PHONE, 15: C_ACCTBAL] predicate[15: C_ACCTBAL > 0.0 AND substring(14: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
 [end]
-[plan-16]
+[plan-17]
 TOP-N (order by [[32: substring ASC NULLS FIRST]])
     TOP-N (order by [[32: substring ASC NULLS FIRST]])
         AGGREGATE ([GLOBAL] aggregate [{33: count()=count(33: count()), 34: sum(6: C_ACCTBAL)=sum(34: sum(6: C_ACCTBAL))}] group by [[32: substring]] having [null]
@@ -304,5 +321,23 @@ TOP-N (order by [[32: substring ASC NULLS FIRST]])
                                         AGGREGATE ([LOCAL] aggregate [{19: avg(15: C_ACCTBAL)=avg(15: C_ACCTBAL)}] group by [[]] having [null]
                                             SCAN (columns[14: C_PHONE, 15: C_ACCTBAL] predicate[15: C_ACCTBAL > 0.0 AND substring(14: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
                                 EXCHANGE BROADCAST
+                                    SCAN (columns[1: C_CUSTKEY, 5: C_PHONE, 6: C_ACCTBAL] predicate[substring(5: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
+[end]
+[plan-18]
+TOP-N (order by [[32: substring ASC NULLS FIRST]])
+    TOP-N (order by [[32: substring ASC NULLS FIRST]])
+        AGGREGATE ([GLOBAL] aggregate [{33: count()=count(33: count()), 34: sum(6: C_ACCTBAL)=sum(34: sum(6: C_ACCTBAL))}] group by [[32: substring]] having [null]
+            EXCHANGE SHUFFLE[32]
+                AGGREGATE ([LOCAL] aggregate [{33: count()=count(), 34: sum(6: C_ACCTBAL)=sum(6: C_ACCTBAL)}] group by [[32: substring]] having [null]
+                    CROSS JOIN (join-predicate [null] post-join-predicate [6: C_ACCTBAL > 19: avg(15: C_ACCTBAL)])
+                        AGGREGATE ([GLOBAL] aggregate [{19: avg(15: C_ACCTBAL)=avg(19: avg(15: C_ACCTBAL))}] group by [[]] having [null]
+                            EXCHANGE GATHER
+                                AGGREGATE ([LOCAL] aggregate [{19: avg(15: C_ACCTBAL)=avg(15: C_ACCTBAL)}] group by [[]] having [null]
+                                    SCAN (columns[14: C_PHONE, 15: C_ACCTBAL] predicate[15: C_ACCTBAL > 0.0 AND substring(14: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
+                        EXCHANGE BROADCAST
+                            RIGHT ANTI JOIN (join-predicate [22: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
+                                EXCHANGE SHUFFLE[22]
+                                    SCAN (columns[22: O_CUSTKEY] predicate[null])
+                                EXCHANGE SHUFFLE[1]
                                     SCAN (columns[1: C_CUSTKEY, 5: C_PHONE, 6: C_ACCTBAL] predicate[substring(5: C_PHONE, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
 [end]
