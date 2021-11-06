@@ -17,9 +17,6 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
     // Create profile
     _profile = std::make_unique<RuntimeProfile>("result sink");
 
-    // Create sender
-    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(), 1024, &_sender));
-
     // Create writer based on sink type
     switch (_sink_type) {
     case TResultSinkType::MYSQL_PROTOCAL:
@@ -38,18 +35,19 @@ Status ResultSinkOperator::close(RuntimeState* state) {
     // Close the writer
     if (_writer != nullptr) {
         st = _writer->close();
+        _written_rows_num.fetch_add(_writer->get_written_rows(), std::memory_order_release);
     }
 
-    // Close sender
-    if (_sender != nullptr) {
-        if (_writer != nullptr) {
-            _sender->update_num_written_rows(_writer->get_written_rows());
+    // Close the shared sender when the last result sink operator is closing.
+    if (1 + _closed_result_sinks_num.fetch_add(1, std::memory_order_release) == _result_sinks_num) {
+        if (_sender != nullptr) {
+            _sender->update_num_written_rows(_written_rows_num.load(std::memory_order_acquire));
+            _sender->close(st);
         }
-        _sender->close(st);
-    }
 
-    state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
-                                                    state->fragment_instance_id());
+        state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
+                                                        state->fragment_instance_id());
+    }
 
     Operator::close(state);
     return Status::OK();
@@ -90,10 +88,16 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const vectorized::Chu
         return status.status();
     }
 }
+
 Status ResultSinkOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(), 1024, &_sender));
+
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs));
+
     RowDescriptor row_desc;
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state, row_desc));
+    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+
     return Status::OK();
 }
 
