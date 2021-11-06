@@ -290,12 +290,22 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
 
         if (_strip_outer_array && v.is_array()) {
             // Expand the array.
-            auto arr = v.get_array();
-            for(auto a : arr) {
-                elems.push_back(a);
+            auto array = v.get_array();
+            for (auto a : array) {
+                if (!_scanner->_root_paths.empty()) {
+                    auto va = JsonFunctions::extract_from_element(a, _scanner->_root_paths);
+                    elems.emplace(elems.end(), va.begin(), va.end());
+                } else {
+                    elems.emplace_back(a);
+                }
             }
         } else {
-            elems.emplace_back(std::move(v));
+            if (!_scanner->_root_paths.empty()) {
+                auto vv = JsonFunctions::extract_from_element(v, _scanner->_root_paths);
+                elems.insert(elems.end(), vv.begin(), vv.end());
+            } else {
+                elems.emplace_back(std::move(v));
+            }
         }
 
         for (auto& elem : elems) {
@@ -318,7 +328,6 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
                         _construct_column(val, column.get(), slot_descs[i]->type());
                     }
                 }
-            } else if (!_scanner->_root_paths.empty()) {
             } else {
                 for (SlotDescriptor* slot_desc : slot_descs) {
                     if (slot_desc == nullptr) {
@@ -356,9 +365,7 @@ Status JsonReader::_read_and_parse_json() {
     if (length == 0) {
         return Status::EndOfFile("EOF of reading file");
     }
-    _origin_json_doc.Parse((char*)json_binary.get(), length);
-
-    auto err = _parser.parse_many(json_binary.get(), length).get(_doc_stream);
+    auto err = _parser.parse_many(json_binary.get(), length, 32 * 1024 * 1024).get(_doc_stream);
 #endif
 
     if (err) {
