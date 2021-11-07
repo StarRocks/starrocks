@@ -24,6 +24,7 @@
 #include <memory>
 
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "storage/reader.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/tablet_reader.h"
@@ -115,7 +116,8 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
     auto chunk = vectorized::ChunkHelper::new_chunk(schema, reader_params.chunk_size);
     st = reader.get_next(chunk.get());
 
-    while (st.ok()) {
+    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    while (st.ok() && !bg_worker_stopped) {
 #ifndef BE_TEST
         Status st = _mem_tracker->check_mem_limit("ConsistencyCheck");
         if (!st.ok()) {
@@ -133,6 +135,7 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
         }
         chunk->reset();
         st = reader.get_next(chunk.get());
+        bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
     }
 
     if (!st.is_end_of_file() && !st.ok()) {

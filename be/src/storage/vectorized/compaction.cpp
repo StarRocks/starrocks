@@ -6,6 +6,7 @@
 
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/tablet_reader.h"
@@ -96,7 +97,7 @@ Status Compaction::do_compaction_impl() {
     TRACE("check correctness finished");
 
     // 4. modify rowsets in memory
-    modify_rowsets();
+    RETURN_IF_ERROR(modify_rowsets());
     TRACE("modify rowsets finished");
 
     // 5. update last success compaction time
@@ -188,6 +189,8 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
         }
 #endif
 
+    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    while (!bg_worker_stopped) {
         chunk->reset();
         Status status = reader.get_next(chunk.get());
         if (!status.ok()) {
@@ -206,6 +209,13 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
             return Status::InternalError("writer add_chunk error.");
         }
         output_rows += chunk->num_rows();
+
+        bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    }
+
+    if (bg_worker_stopped) {
+        return Status::InternalError(
+                "Process is going to quit. The compaction should be stopped as soon as possible.");
     }
 
     if (stats_output != nullptr) {
@@ -224,13 +234,21 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
     return Status::OK();
 }
 
-void Compaction::modify_rowsets() {
+Status Compaction::modify_rowsets() {
+    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+   if (bg_worker_stopped) {
+        return Status::InternalError(
+                "Process is going to quit. The compaction should be stopped as soon as possible.");
+    }
+
     std::vector<RowsetSharedPtr> output_rowsets;
     output_rowsets.push_back(_output_rowset);
 
     std::unique_lock wrlock(_tablet->get_header_lock());
     _tablet->modify_rowsets(output_rowsets, _input_rowsets);
     _tablet->save_meta();
+
+    return Status::OK();
 }
 
 Status Compaction::check_version_continuity(const std::vector<RowsetSharedPtr>& rowsets) {

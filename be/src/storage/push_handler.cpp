@@ -385,7 +385,8 @@ OLAPStatus PushHandler::_convert_v2(const TabletSharedPtr& cur_tablet, RowsetSha
 
             // 4. Read data from broker and write into Rowset of cur_tablet
             VLOG(3) << "start to convert etl file to delta.";
-            while (!reader->eof()) {
+            bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+            while (!reader->eof() && !bg_worker_stopped) {
                 res = reader->next(&row);
                 if (OLAP_SUCCESS != res) {
                     LOG(WARNING) << "read next row failed."
@@ -403,7 +404,14 @@ OLAPStatus PushHandler::_convert_v2(const TabletSharedPtr& cur_tablet, RowsetSha
                     }
                     num_rows++;
                 }
+                bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+             }
+
+            if (bg_worker_stopped) {
+                res = OLAP_ERR_PUSH_INPUT_DATA_ERROR;
+                break;
             }
+
             if (res != OLAP_SUCCESS) {
                 reader->close();
                 break;

@@ -34,6 +34,7 @@
 #include "runtime/user_function_cache.h"
 #include "runtime/vectorized/time_types.h"
 #include "storage/options.h"
+#include "storage/storage_engine.h"
 #include "util/cpu_info.h"
 #include "util/debug_util.h"
 #include "util/disk_info.h"
@@ -128,7 +129,12 @@ void* calculate_metrics(void* dummy) {
     std::map<std::string, int64_t> lst_net_send_bytes;
     std::map<std::string, int64_t> lst_net_receive_bytes;
 
-    while (true) {
+    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
+    bool bg_worker_stopped = false;
+    if (storage_engine != nullptr) {
+        bg_worker_stopped = storage_engine->bg_worker_stopped();
+    }
+    while (!bg_worker_stopped) {
         StarRocksMetrics::instance()->metrics()->trigger_hook();
 
         if (last_ts == -1L) {
@@ -174,6 +180,10 @@ void* calculate_metrics(void* dummy) {
         }
 
         sleep(15); // 15 seconds
+        storage_engine = ExecEnv::GetInstance()->storage_engine();
+        if (storage_engine != nullptr) {
+            bg_worker_stopped = storage_engine->bg_worker_stopped();
+        }
     }
 
     return nullptr;

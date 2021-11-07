@@ -20,6 +20,12 @@ void MultiWorkerPool::start() {
     }
 }
 
+void MultiWorkerPool::stop() {
+    for (const auto& pool : _pools) {
+        pool->stop();
+    }
+}
+
 void MultiWorkerPool::submit_publish_version_task(const TAgentTaskRequest& task) {
     auto req = task.publish_version_req;
     for (auto& partition : req.partition_version_infos) {

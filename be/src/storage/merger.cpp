@@ -27,8 +27,10 @@
 #include "storage/olap_define.h"
 #include "storage/reader.h"
 #include "storage/row_cursor.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "util/trace.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -72,7 +74,8 @@ OLAPStatus Merger::merge_rowsets(int64_t mem_limit, const TabletSharedPtr& table
 
     // The following procedure would last for long time, half of one day, etc.
     int64_t output_rows = 0;
-    while (true) {
+    bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    while (true && !bg_worker_stopped) {
         ObjectPool objectPool;
         bool eof = false;
         // Read one row into row_cursor
@@ -87,6 +90,12 @@ OLAPStatus Merger::merge_rowsets(int64_t mem_limit, const TabletSharedPtr& table
         // the memory allocate by mem pool has been copied,
         // so we should release memory immediately
         mem_pool->clear();
+
+        bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
+    }
+
+    if (bg_worker_stopped) {
+        return OLAP_ERR_ALTER_STATUS_ERR;
     }
 
     if (stats_output != nullptr) {

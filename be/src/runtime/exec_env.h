@@ -152,7 +152,7 @@ public:
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
-    void _destory();
+    void _destroy();
 
     Status _init_mem_tracker();
 

@@ -15,9 +15,10 @@ public:
     MultiWorkerPool(const TaskWorkerType worker_type, ExecEnv* env, const TMasterInfo& master_info, int worker_num);
 
     ~MultiWorkerPool() override = default;
-    ;
 
     void start() override;
+
+    void stop() override;
 
     // submit task to queue and wait to be executed
     void submit_task(const TAgentTaskRequest& task) override;

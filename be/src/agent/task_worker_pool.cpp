@@ -90,8 +90,7 @@ TaskWorkerPool::~TaskWorkerPool() {
     // "In glibc 2.25 we implemented a new version of POSIX condition variables to provide stronger
     // ordering guarantees. The change in the implementation caused the undefined behaviour
     // to change."
-    std::lock_guard l(_worker_thread_lock);
-    _worker_thread_condition_variable->notify_all();
+    stop();
     delete _worker_thread_condition_variable;
 }
 
@@ -167,6 +166,16 @@ void TaskWorkerPool::start() {
         _spawn_callback_worker_thread(_callback_function);
     }
 #endif
+}
+
+void TaskWorkerPool::stop() {
+    if (_stopped) {
+        return;
+    }
+    _stopped = true;
+    std::lock_guard l(_worker_thread_lock);
+    _worker_thread_condition_variable->notify_all();
+    sleep(1); // wait thread to exit
 }
 
 void TaskWorkerPool::submit_task(const TAgentTaskRequest& task) {
@@ -290,8 +299,11 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
         TCreateTabletReq create_tablet_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             agent_task_req = worker_pool_this->_tasks.front();
@@ -355,8 +367,11 @@ void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
         TDropTabletReq drop_tablet_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             agent_task_req = worker_pool_this->_tasks.front();
@@ -407,8 +422,11 @@ void* TaskWorkerPool::_alter_tablet_worker_thread_callback(void* arg_this) {
         TAgentTaskRequest agent_task_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             agent_task_req = worker_pool_this->_tasks.front();
@@ -555,8 +573,11 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
         int32_t index = 0;
         do {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             index = worker_pool_this->_get_next_task_index(
@@ -573,6 +594,10 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
             push_req = agent_task_req.push_req;
             worker_pool_this->_tasks.erase(worker_pool_this->_tasks.begin() + index);
         } while (false);
+
+        if (worker_pool_this->_stopped) {
+            break;
+        }
 
 #ifndef BE_TEST
         if (index < 0) {
@@ -650,8 +675,11 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
         TPublishVersionRequest publish_version_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             agent_task_req = worker_pool_this->_tasks.front();
@@ -715,8 +743,11 @@ void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_t
         TClearTransactionTaskRequest clear_transaction_task_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             agent_task_req = worker_pool_this->_tasks.front();
@@ -773,8 +804,11 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
         TUpdateTabletMetaInfoReq update_tablet_meta_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             agent_task_req = worker_pool_this->_tasks.front();
@@ -842,8 +876,11 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
 
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             agent_task_req = worker_pool_this->_tasks.front();
@@ -939,8 +976,11 @@ void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_t
         TStorageMediumMigrateReq storage_medium_migrate_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             agent_task_req = worker_pool_this->_tasks.front();
@@ -1039,8 +1079,11 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
         TCheckConsistencyReq check_consistency_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             agent_task_req = worker_pool_this->_tasks.front();
@@ -1092,7 +1135,7 @@ void* TaskWorkerPool::_report_task_worker_thread_callback(void* arg_this) {
     request.__set_backend(worker_pool_this->_backend);
 
 #ifndef BE_TEST
-    while (true) {
+    while ((!worker_pool_this->_stopped)) {
 #endif
         {
             std::lock_guard task_signatures_lock(_s_task_signatures_lock);
@@ -1124,7 +1167,7 @@ void* TaskWorkerPool::_report_disk_state_worker_thread_callback(void* arg_this) 
     request.__set_backend(worker_pool_this->_backend);
 
 #ifndef BE_TEST
-    while (true) {
+    while ((!worker_pool_this->_stopped)) {
         if (worker_pool_this->_master_info.network_address.port == 0) {
             // port == 0 means not received heartbeat yet
             // sleep a short time and try again
@@ -1186,7 +1229,7 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
     AgentStatus status = STARROCKS_SUCCESS;
 
 #ifndef BE_TEST
-    while (true) {
+    while ((!worker_pool_this->_stopped)) {
         if (worker_pool_this->_master_info.network_address.port == 0) {
             // port == 0 means not received heartbeat yet
             // sleep a short time and try again
@@ -1206,7 +1249,7 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
             StorageEngine::instance()->wait_for_report_notify(config::report_tablet_interval_seconds, true);
             continue;
 #else
-        return (void*)0;
+            return (void*)0;
 #endif
         }
         int64_t max_compaction_score =
@@ -1243,8 +1286,11 @@ void* TaskWorkerPool::_upload_worker_thread_callback(void* arg_this) {
         TUploadReq upload_request;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             agent_task_req = worker_pool_this->_tasks.front();
@@ -1298,8 +1344,11 @@ void* TaskWorkerPool::_download_worker_thread_callback(void* arg_this) {
         TDownloadReq download_request;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             agent_task_req = worker_pool_this->_tasks.front();
@@ -1355,8 +1404,11 @@ void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
         TSnapshotRequest snapshot_request;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             agent_task_req = worker_pool_this->_tasks.front();
@@ -1430,8 +1482,11 @@ void* TaskWorkerPool::_release_snapshot_thread_callback(void* arg_this) {
         TReleaseSnapshotRequest release_snapshot_request;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             agent_task_req = worker_pool_this->_tasks.front();
@@ -1497,8 +1552,11 @@ void* TaskWorkerPool::_move_dir_thread_callback(void* arg_this) {
         TMoveDirReq move_dir_req;
         {
             std::unique_lock l(worker_pool_this->_worker_thread_lock);
-            while (worker_pool_this->_tasks.empty()) {
+            while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
+            }
+            if (worker_pool_this->_stopped) {
+                break;
             }
 
             agent_task_req = worker_pool_this->_tasks.front();

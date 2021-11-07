@@ -230,7 +230,7 @@ Status ExecEnv::_init_mem_tracker() {
     return Status::OK();
 }
 
-void ExecEnv::_destory() {
+void ExecEnv::_destroy() {
     if (_runtime_filter_worker) {
         delete _runtime_filter_worker;
         _runtime_filter_worker = nullptr;
@@ -391,7 +391,7 @@ void ExecEnv::_destory() {
 }
 
 void ExecEnv::destroy(ExecEnv* env) {
-    env->_destory();
+    env->_destroy();
 }
 
 void ExecEnv::set_storage_engine(StorageEngine* storage_engine) {

@@ -227,8 +227,8 @@ int main(int argc, char** argv) {
     }
 
     // 2. brpc service
-    starrocks::BRpcService brpc_service(exec_env);
-    status = brpc_service.start(starrocks::config::brpc_port);
+    std::unique_ptr<starrocks::BRpcService> brpc_service = std::make_unique<starrocks::BRpcService>(exec_env);
+    status = brpc_service->start(starrocks::config::brpc_port);
     if (!status.ok()) {
         LOG(ERROR) << "BRPC service did not start correctly, exiting";
         starrocks::shutdown_logging();
@@ -236,9 +236,10 @@ int main(int argc, char** argv) {
     }
 
     // 3. http service
-    starrocks::HttpService http_service(exec_env, starrocks::config::webserver_port,
-                                        starrocks::config::webserver_num_workers);
-    status = http_service.start();
+    std::unique_ptr<starrocks::HttpService> http_service =
+        std::make_unique<starrocks::HttpService>(exec_env, starrocks::config::webserver_port,
+                                                 starrocks::config::webserver_num_workers);
+    status = http_service->start();
     if (!status.ok()) {
         LOG(ERROR) << "Internal Error:" << status.message();
         LOG(ERROR) << "StarRocks Be http service did not start correctly, exiting";
@@ -260,24 +261,34 @@ int main(int argc, char** argv) {
     }
 
     status = heartbeat_thrift_server->start();
-    if (!status.ok()) {
-        LOG(ERROR) << "StarRocks BE HeartBeat Service did not start correctly, exiting";
-        starrocks::shutdown_logging();
-        exit(1);
-    }
+     if (!status.ok()) {
+        LOG(ERROR) << "Doris BE HeartBeat Service did not start correctly. Error="
+                   << status.to_string();
+         starrocks::shutdown_logging();
+         exit(1);
+     } else {
+         LOG(INFO) << "Doris BE HeartBeat Service started correctly.";
+     }
 
     while (!starrocks::k_starrocks_exit) {
-#if defined(LEAK_SANITIZER)
-        __lsan_do_leak_check();
-#endif
         sleep(10);
     }
     heartbeat_thrift_server->stop();
     heartbeat_thrift_server->join();
+    delete heartbeat_thrift_server;
+
+    http_service.reset();
+    brpc_service.reset();
+
     be_server->stop();
     be_server->join();
-
     delete be_server;
+
+    engine->stop();
+    delete engine;
+
+    starrocks::ExecEnv::destroy(exec_env);
+
     return 0;
 }
 

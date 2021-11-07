@@ -126,7 +126,11 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 }
 
 StorageEngine::~StorageEngine() {
-    _clear();
+#ifdef BE_TEST
+    if (_s_instance == this) {
+        _s_instance = nullptr;
+    }
+#endif
 }
 
 void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
@@ -454,24 +458,19 @@ bool StorageEngine::_delete_tablets_on_unused_root_path() {
     return !tablet_info_vec.empty();
 }
 
-void StorageEngine::_clear() {
-    SAFE_DELETE(_index_stream_lru_cache);
-    _file_cache.reset();
-
-    std::lock_guard<std::mutex> l(_store_lock);
-    for (auto& store_pair : _store_map) {
-        store_pair.second->stop_bg_worker();
-        delete store_pair.second;
-        store_pair.second = nullptr;
+void StorageEngine::stop() {
+    {
+        std::lock_guard<std::mutex> l(_store_lock);
+        for (auto& store_pair : _store_map) {
+            store_pair.second->stop_bg_worker();
+            delete store_pair.second;
+           store_pair.second = nullptr;
+        }
+        _store_map.clear();
     }
-    _store_map.clear();
+    _bg_worker_stopped = true;
 
-    _stop_bg_worker = true;
-#ifdef BE_TEST
-    if (_s_instance == this) {
-        _s_instance = nullptr;
-    }
-#endif
+    sleep(30); // wait five seconds to exit all threads gracefully
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {

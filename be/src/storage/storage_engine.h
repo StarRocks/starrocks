@@ -171,13 +171,15 @@ public:
     // start all backgroud threads. This should be call after env is ready.
     Status start_bg_threads();
 
+    void stop();
+    
+    bool bg_worker_stopped() { return _bg_worker_stopped; }
+
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
     Status _open();
 
-    // Clear status(tables, ...)
-    void _clear();
 
     Status _init_store_map();
 
@@ -265,7 +267,6 @@ private:
     int32_t _effective_cluster_id;
     bool _is_all_cluster_id_exist;
 
-    Cache* _file_descriptor_lru_cache = nullptr;
     Cache* _index_stream_lru_cache = nullptr;
 
     // _file_cache is a lru_cache for file descriptors of files opened by starrocks,
@@ -283,7 +284,7 @@ private:
     // map<rowset_id(str), RowsetSharedPtr>, if we use RowsetId as the key, we need custom hash func
     std::unordered_map<std::string, RowsetSharedPtr> _unused_rowsets;
 
-    bool _stop_bg_worker = false;
+    bool _bg_worker_stopped = false;
     // thread to expire update cache;
     std::thread _update_cache_expire_thread;
     std::thread _unused_rowset_monitor_thread;

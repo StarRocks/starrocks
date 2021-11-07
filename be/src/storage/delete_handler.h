@@ -83,7 +83,7 @@ struct DeleteConditions {
 //    bool filter_data;
 //    filter_data = delete_handler.is_filter_data(data_version, row_cursor);
 // 3. If there are many rows to check, call is_filter_data() repeatly
-// 4. destory
+// 4. destroy 
 //    delete_handler.finalize();
 //
 // NOTE:
