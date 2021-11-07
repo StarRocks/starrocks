@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
@@ -68,8 +69,9 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
 
         Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
         Function fn =
-                Expr.getBuiltinFunction(FunctionSet.IF, argTypes, Function.CompareMode.IS_IDENTICAL);
+                Expr.getBuiltinFunction(FunctionSet.IF, argTypes, Function.CompareMode.IS_INDISTINGUISHABLE);
 
+        Preconditions.checkState(fn != null);
         if (operator.getChildren().stream().anyMatch(s -> s.getType().isDecimalV3())) {
             Function decimalFn = ScalarFunction.createVectorizedBuiltin(fn.getId(), fn.getFunctionName().getFunction(),
                     Arrays.stream(argTypes).collect(Collectors.toList()), fn.hasVarArgs(), operator.getType());
