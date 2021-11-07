@@ -4541,4 +4541,11 @@ public class PlanFragmentTest extends PlanTestBase {
                 "  |  PREDICATES: 1: v1 IS NULL"));
         FeConstants.runningUnitTest = false;
     }
+
+    @Test
+    public void testCaseWhen() throws Exception {
+        String sql = "SELECT v1 FROM t0 WHERE CASE WHEN (v1 IS NOT NULL) THEN NULL END";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("PREDICATES: if(1: v1 IS NOT NULL, NULL, NULL)"));
+    }
 }
