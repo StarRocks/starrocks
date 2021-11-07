@@ -47,7 +47,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     // example:
     // case xx when 1 then 2 end => if (xx = 1, 2, NULL)
     ScalarOperator simplifiedCaseWhenToIfFunction(CaseWhenOperator operator) {
-        if (operator.getWhenClauseSize() != 1) {
+        if (operator.getWhenClauseSize() != -1) {
             return operator;
         }
 
