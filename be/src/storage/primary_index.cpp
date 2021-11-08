@@ -13,7 +13,6 @@
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/tablet_reader.h"
 #include "util/starrocks_metrics.h"
-#include "util/tsl/sparse_map.h"
 
 namespace starrocks {
 
