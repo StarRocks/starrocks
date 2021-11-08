@@ -2,6 +2,9 @@
 
 #pragma once
 
+#include <mutex>
+#include <queue>
+
 #include "column/chunk.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
@@ -12,34 +15,39 @@
 
 namespace starrocks::pipeline {
 
+using PTransmitChunkParamsPtr = std::shared_ptr<PTransmitChunkParams>;
+using IOBufPtr = std::shared_ptr<butil::IOBuf>;
+
 struct TransmitChunkInfo {
     size_t channel_id;
-    PTransmitChunkParams params;
     doris::PBackendService_Stub* brpc_stub;
-
-    // for protocol header.
-    butil::IOBuf attachment;
+    PTransmitChunkParamsPtr params;
+    IOBufPtr attachment;
 };
 
-// TODO(hcf) There is a potential optimization point that different channels can be parallel
 class SinkBuffer {
 public:
     SinkBuffer(MemTracker* mem_tracker, size_t channel_number, size_t num_sinkers)
             : _mem_tracker(mem_tracker), _num_sinkers_per_channel(channel_number, num_sinkers) {
-        _closure = new CallBackClosure<PTransmitChunkResult>();
-        _closure->ref();
-        _closure->addFailedHandler([this]() noexcept {
-            _is_cancelled = true;
-            LOG(WARNING) << " transmit chunk rpc failed";
-        });
-
-        _closure->addSuccessHandler([this](const PTransmitChunkResult& result) noexcept {
-            Status status(result.status());
-            if (!status.ok()) {
+        for (size_t i = 0; i < channel_number; ++i) {
+            auto* closure = new CallBackClosure<PTransmitChunkResult>();
+            closure->ref();
+            closure->addFailedHandler([this]() noexcept {
+                _in_flight_rpc_num--;
                 _is_cancelled = true;
-                LOG(WARNING) << " transmit chunk rpc failed, " << status.message();
-            }
-        });
+                LOG(WARNING) << " transmit chunk rpc failed";
+            });
+            closure->addSuccessHandler([this](const PTransmitChunkResult& result) noexcept {
+                _in_flight_rpc_num--;
+                Status status(result.status());
+                if (!status.ok()) {
+                    _is_cancelled = true;
+                    LOG(WARNING) << " transmit chunk rpc failed, " << status.message();
+                }
+            });
+            _closures.push_back(closure);
+            _caches.emplace_back();
+        }
         try {
             _thread = std::thread{&SinkBuffer::process, this};
         } catch (const std::exception& exp) {
@@ -50,34 +58,76 @@ public:
     }
 
     ~SinkBuffer() {
-        _pending_chunks.shutdown();
+        _is_finished = true;
+        _cache_empty_cv.notify_one();
         _thread.join();
-        if (_closure->unref()) {
-            delete _closure;
+        for (auto* closure : _closures) {
+            if (closure->unref()) {
+                delete closure;
+            }
         }
     }
 
-    void add_request(const TransmitChunkInfo& request) { _pending_chunks.put(request); }
+    void add_request(const TransmitChunkInfo& request) {
+        std::lock_guard<std::mutex> l(_mutex);
+        _caches[request.channel_id].push(request);
+        _cache_empty_cv.notify_one();
+    }
 
     void process() {
         try {
             MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
             DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-            while (true) {
-                if (_closure->has_in_flight_rpc()) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                    continue;
+            while (!_is_finished) {
+                {
+                    std::unique_lock<std::mutex> l(_mutex);
+                    bool is_cache_empty = true;
+                    for (auto& cache : _caches) {
+                        if (!cache.empty()) {
+                            is_cache_empty = false;
+                            break;
+                        }
+                    }
+                    if (is_cache_empty) {
+                        _cache_empty_cv.wait(l);
+                    }
                 }
 
-                TransmitChunkInfo info;
-                if (!_pending_chunks.blocking_get(&info)) {
-                    break;
-                }
-                _send_rpc(info);
+                const size_t spin_threshould = 100;
+                size_t spin_iter = 0;
 
-                // The original design is bad, we must release_finst_id here!
-                info.params.release_finst_id();
+                for (; spin_iter < spin_threshould; ++spin_iter) {
+                    bool find_any = false;
+                    for (auto& cache : _caches) {
+                        if (cache.empty()) {
+                            continue;
+                        }
+
+                        // std::queue' read is concurrent safe without mutex
+                        if (!_closures[cache.front().channel_id]->has_in_flight_rpc()) {
+                            TransmitChunkInfo info = cache.front();
+                            find_any = true;
+                            _send_rpc(info);
+                            {
+                                std::lock_guard<std::mutex> l(_mutex);
+                                cache.pop();
+                            }
+                            info.params->release_finst_id();
+                        }
+                    }
+
+                    if (find_any) {
+                        spin_iter = 0;
+                    }
+                }
+
+                // Find none ready closure after multiply spin, just wait for a while
+#ifdef __x86_64__
+                _mm_pause();
+#else
+                sched_yield();
+#endif
             }
         } catch (const std::exception& exp) {
             LOG(FATAL) << "[ExchangeSinkOperator] sink_buffer::process: " << exp.what();
@@ -86,34 +136,45 @@ public:
         }
     }
 
-    bool is_full() const { return _pending_chunks.get_size() >= config::pipeline_io_cache_size; }
+    bool is_full() const {
+        // TODO(hcf) if one channel is congested, it may cause all other channel unwritable
+        // std::queue' read is concurrent safe without mutex
+        for (auto& cache : _caches) {
+            if (cache.size() > config::pipeline_io_cache_size) {
+                return true;
+            }
+        }
+        return false;
+    }
 
-    bool is_finished() const { return (_pending_chunks.empty() && !_closure->has_in_flight_rpc()) || _is_cancelled; }
+    bool is_finished() const { return _in_flight_rpc_num == 0 || _is_cancelled; }
 
     bool is_cancelled() const { return _is_cancelled; }
 
 private:
     void _send_rpc(TransmitChunkInfo& request) {
-        if (request.params.eos()) {
+        if (request.params->eos()) {
             // Only the last eos is sent to ExchangeSourceOperator. it must be guaranteed that
             // eos is the last packet to send to finish the input stream of the corresponding of
             // ExchangeSourceOperator and eos is sent exactly-once.
             if (--_num_sinkers_per_channel[request.channel_id] > 0) {
-                if (request.params.chunks_size() == 0) {
+                if (request.params->chunks_size() == 0) {
+                    _in_flight_rpc_num--;
                     return;
                 } else {
-                    request.params.set_eos(false);
+                    request.params->set_eos(false);
                 }
             }
         }
-        request.params.set_sequence(_request_seq);
-        DCHECK(!_closure->has_in_flight_rpc());
-        // Move the closure has flight rpc to tail
-        _closure->ref();
-        _closure->cntl.Reset();
-        _closure->cntl.set_timeout_ms(500);
-        _closure->cntl.request_attachment().append(request.attachment);
-        request.brpc_stub->transmit_chunk(&_closure->cntl, &request.params, &_closure->result, _closure);
+        request.params->set_sequence(_request_seq);
+        auto* closure = _closures[request.channel_id];
+        DCHECK(!closure->has_in_flight_rpc());
+        closure->ref();
+        closure->cntl.Reset();
+        closure->cntl.set_timeout_ms(500);
+        closure->cntl.request_attachment().append(*request.attachment);
+        _in_flight_rpc_num++;
+        request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
         _request_seq++;
     }
 
@@ -121,10 +182,16 @@ private:
     MemTracker* _mem_tracker = nullptr;
     vector<size_t> _num_sinkers_per_channel;
     int64_t _request_seq = 0;
-    std::atomic<bool> _is_cancelled{false};
-    CallBackClosure<PTransmitChunkResult>* _closure;
+    std::atomic<int32_t> _in_flight_rpc_num = 0;
+    std::atomic_bool _is_cancelled = false;
+
+    std::vector<CallBackClosure<PTransmitChunkResult>*> _closures;
+    std::vector<std::queue<TransmitChunkInfo>> _caches;
+    std::condition_variable _cache_empty_cv;
+    std::mutex _mutex;
+
     std::thread _thread;
-    UnboundedBlockingQueue<TransmitChunkInfo> _pending_chunks;
+    std::atomic_bool _is_finished = false;
 };
 
 } // namespace starrocks::pipeline

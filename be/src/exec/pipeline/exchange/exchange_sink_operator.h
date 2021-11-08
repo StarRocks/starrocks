@@ -9,6 +9,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
+#include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/operator.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -54,7 +55,7 @@ public:
     // For other chunk, only serialize the chunk data to ChunkPB.
     Status serialize_chunk(const vectorized::Chunk* chunk, ChunkPB* dst, bool* is_first_chunk, int num_receivers = 1);
 
-    void construct_brpc_attachment(PTransmitChunkParams* _chunk_request, butil::IOBuf* attachment);
+    void construct_brpc_attachment(PTransmitChunkParamsPtr _chunk_request, IOBufPtr attachment);
 
     RuntimeProfile* profile() { return _profile; }
 
@@ -81,9 +82,9 @@ private:
     int _curr_random_channel_idx = 0;
 
     // Only used when broadcast
-    PTransmitChunkParams _chunk_request;
+    PTransmitChunkParamsPtr _chunk_request;
     size_t _current_request_bytes = 0;
-    size_t _request_bytes_threshold = 0;
+    size_t _request_bytes_threshold = config::max_transmit_batched_bytes;
 
     bool _is_first_chunk = true;
 
