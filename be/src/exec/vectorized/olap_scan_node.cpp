@@ -235,8 +235,8 @@ Status OlapScanNode::_rewrite_descriptor() {
 void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
     DeferOp op([&] {
-      tls_thread_status.set_mem_tracker(prev_tracker);
-      _running_threads.fetch_sub(1, std::memory_order_release);
+        tls_thread_status.set_mem_tracker(prev_tracker);
+        _running_threads.fetch_sub(1, std::memory_order_release);
     });
 
     tls_thread_status.set_query_id(scanner->runtime_state()->query_id());
