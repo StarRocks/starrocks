@@ -116,7 +116,8 @@ public:
         return dst_column;
     }
 
-    static ColumnPtr unpack_nullable_column(const TypeDescriptor& dst_type_desc, bool dst_nullable,
+    // Update column according to whether the dest column and source column are nullable or not.
+    static ColumnPtr update_column_nullable(const TypeDescriptor& dst_type_desc, bool dst_nullable,
                                             const ColumnPtr& src_column, int num_rows) {
         if (src_column->is_nullable()) {
             if (dst_nullable) {
@@ -147,13 +148,13 @@ public:
             return copy_and_unfold_const_column(dst_type_desc, dst_nullable, src_column, num_rows);
         }
 
-        return unpack_nullable_column(dst_type_desc, dst_nullable, src_column, num_rows);
+        return update_column_nullable(dst_type_desc, dst_nullable, src_column, num_rows);
     }
 
     // Copy the source column according to the specific dest type and nullable.
     static ColumnPtr clone_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, const ColumnPtr& src_column,
                                   int num_rows) {
-        auto dst_column = unpack_nullable_column(dst_type_desc, dst_nullable, src_column, num_rows);
+        auto dst_column = update_column_nullable(dst_type_desc, dst_nullable, src_column, num_rows);
         return dst_column->clone_shared();
     }
 
