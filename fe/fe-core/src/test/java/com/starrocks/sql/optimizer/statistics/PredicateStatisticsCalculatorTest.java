@@ -58,4 +58,28 @@ public class PredicateStatisticsCalculatorTest {
                 PredicateStatisticsCalculator.statisticsCalculate(compoundPredicateOperator, statistics);
         Assert.assertEquals(58.0270, estimatedStatistics.getOutputRowCount(), 0.001);
     }
+
+    @Test
+    public void testColumnEqualToColumn() {
+        ColumnRefOperator c1 = new ColumnRefOperator(0, Type.INT, "c1", true);
+        ColumnRefOperator c2 = new ColumnRefOperator(1, Type.INT, "c2", true);
+
+        Statistics statistics = Statistics.builder()
+                .addColumnStatistic(c1,
+                        ColumnStatistic.builder().setNullsFraction(0.5).setDistinctValuesCount(10).build())
+                .addColumnStatistic(c2,
+                        ColumnStatistic.builder().setNullsFraction(0.8).setDistinctValuesCount(80).build())
+                .setOutputRowCount(10000).build();
+
+        BinaryPredicateOperator binaryPredicateOperator =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, c1, c2);
+        Statistics estimatedStatistics =
+                PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
+
+        Assert.assertEquals(12.49, estimatedStatistics.getOutputRowCount(), 0.1);
+        Assert.assertEquals(10, estimatedStatistics.getColumnStatistic(c1).getDistinctValuesCount(), 0.001);
+        Assert.assertEquals(0, estimatedStatistics.getColumnStatistic(c1).getNullsFraction(), 0.001);
+        Assert.assertEquals(10, estimatedStatistics.getColumnStatistic(c2).getDistinctValuesCount(), 0.001);
+        Assert.assertEquals(0, estimatedStatistics.getColumnStatistic(c2).getNullsFraction(), 0.001);
+    }
 }
