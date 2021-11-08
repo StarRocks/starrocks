@@ -196,8 +196,11 @@ Status ExecEnv::init_mem_tracker() {
     _column_pool_mem_tracker = new MemTracker(-1, "column_pool", _mem_tracker);
     _page_cache_mem_tracker = new MemTracker(-1, "page_cache", nullptr);
     _update_mem_tracker = new MemTracker(bytes_limit * 0.6, "update", nullptr);
+    _chunk_allocator_mem_tracker = new MemTracker(-1, "chunk_allocator", _mem_tracker);
     _clone_mem_tracker = new MemTracker(-1, "clone", _mem_tracker);
     _consistency_mem_tracker = new MemTracker(-1, "consistency", _mem_tracker);
+
+    ChunkAllocator::init_instance(_chunk_allocator_mem_tracker, config::chunk_reserved_bytes_limit);
 
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
@@ -315,6 +318,10 @@ void ExecEnv::_destory() {
     if (_clone_mem_tracker) {
         delete _clone_mem_tracker;
         _clone_mem_tracker = nullptr;
+    }
+    if (_chunk_allocator_mem_tracker) {
+        delete _chunk_allocator_mem_tracker;
+        _chunk_allocator_mem_tracker = nullptr;
     }
     if (_update_mem_tracker) {
         delete _update_mem_tracker;

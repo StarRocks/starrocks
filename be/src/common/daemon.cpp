@@ -274,8 +274,6 @@ void init_daemon(int argc, char** argv, const std::vector<StorePath>& paths) {
     init_starrocks_metrics(paths);
     init_signals();
     init_minidump();
-
-    ChunkAllocator::init_instance(config::chunk_reserved_bytes_limit);
 }
 
 } // namespace starrocks
