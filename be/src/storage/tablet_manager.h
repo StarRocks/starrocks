@@ -72,6 +72,7 @@ public:
 
     TabletSharedPtr find_best_tablet_to_do_update_compaction(DataDir* data_dir);
 
+    // TODO: pass |include_deleted| as an enum instead of boolean to avoid unexpected implicit cast.
     TabletSharedPtr get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr);
 
     TabletSharedPtr get_tablet(TTabletId tablet_id, const TabletUid& tablet_uid, bool include_deleted = false,
