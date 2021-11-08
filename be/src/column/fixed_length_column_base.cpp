@@ -256,10 +256,14 @@ template <typename T>
 std::string FixedLengthColumnBase<T>::debug_string() const {
     std::stringstream ss;
     ss << "[";
-    for (int i = 0; i < _data.size() - 1; ++i) {
+    size_t size = this->size();
+    for (int i = 0; i < size - 1; ++i) {
         ss << debug_item(i) << ", ";
     }
-    ss << debug_item(_data.size() - 1) << "]";
+    if (size > 0) {
+        ss << debug_item(size - 1);
+    }
+    ss << "]";
     return ss.str();
 }
 
