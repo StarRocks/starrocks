@@ -41,8 +41,6 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
-    void _move_column(ColumnPtr& dst_column, ColumnPtr& src_column);
-
     const std::vector<SlotDescriptor*>& _dst_slots;
 
     // The evaluation of each const expr_list is projected to ONE dest row.

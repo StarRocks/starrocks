@@ -19,9 +19,13 @@ Status UnionPassthroughOperator::push_chunk(RuntimeState* state, const ChunkPtr&
             // If there are multiple dest slots mapping to the same src slot id,
             // we should clone the src column instead of directly moving the src column.
             if (src_slot_item.ref_count > 1) {
-                _clone_column(_dst_chunk, src_column, dst_slot, src_chunk->num_rows());
+                auto dst_column = vectorized::ColumnHelper::clone_column(dst_slot->type(), dst_slot->is_nullable(),
+                                                                         src_column, src_chunk->num_rows());
+                _dst_chunk->append_column(std::move(dst_column), dst_slot->id());
             } else {
-                _move_column(_dst_chunk, src_column, dst_slot, src_chunk->num_rows());
+                auto dst_column = vectorized::ColumnHelper::move_column(dst_slot->type(), dst_slot->is_nullable(),
+                                                                        src_column, src_chunk->num_rows());
+                _dst_chunk->append_column(std::move(dst_column), dst_slot->id());
             }
         }
     } else {
@@ -32,7 +36,9 @@ Status UnionPassthroughOperator::push_chunk(RuntimeState* state, const ChunkPtr&
         for (auto* src_slot : _src_slots) {
             auto* dst_slot = _dst_slots[i++];
             ColumnPtr& src_column = src_chunk->get_column_by_slot_id(src_slot->id());
-            _move_column(_dst_chunk, src_column, dst_slot, src_chunk->num_rows());
+            auto dst_column = vectorized::ColumnHelper::move_column(dst_slot->type(), dst_slot->is_nullable(),
+                                                                    src_column, src_chunk->num_rows());
+            _dst_chunk->append_column(std::move(dst_column), dst_slot->id());
         }
     }
 
@@ -43,47 +49,6 @@ Status UnionPassthroughOperator::push_chunk(RuntimeState* state, const ChunkPtr&
 
 StatusOr<vectorized::ChunkPtr> UnionPassthroughOperator::pull_chunk(RuntimeState* state) {
     return std::move(_dst_chunk);
-}
-
-void UnionPassthroughOperator::_clone_column(ChunkPtr& dst_chunk, const ColumnPtr& src_column,
-                                             const SlotDescriptor* dst_slot, size_t row_count) {
-    if (src_column->is_nullable() || !dst_slot->is_nullable()) {
-        dst_chunk->append_column(src_column->clone_shared(), dst_slot->id());
-    } else {
-        // If the dst slot is nullable and the src slot isn't nullable, we need insert null mask to column.
-        ColumnPtr nullable_column = vectorized::NullableColumn::create(src_column->clone_shared(),
-                                                                       vectorized::NullColumn::create(row_count, 0));
-        dst_chunk->append_column(std::move(nullable_column), dst_slot->id());
-    }
-}
-
-void UnionPassthroughOperator::_move_column(ChunkPtr& dst_chunk, const ColumnPtr& src_column,
-                                            const SlotDescriptor* dst_slot, size_t row_count) {
-    if (src_column->is_constant()) {
-        if (src_column->is_nullable()) {
-            auto nullable_column = vectorized::ColumnHelper::create_column(dst_slot->type(), true);
-            nullable_column->reserve(row_count);
-            nullable_column->append_nulls(row_count);
-            dst_chunk->append_column(std::move(nullable_column), dst_slot->id());
-        } else {
-            auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(src_column);
-            // Note: we must create a new column every time here,
-            // because VectorizedLiteral always return a same shared_ptr and we will modify it later.
-            ColumnPtr new_column = vectorized::ColumnHelper::create_column(dst_slot->type(), dst_slot->is_nullable());
-            new_column->append(*const_column->data_column(), 0, 1);
-            new_column->assign(row_count, 0);
-            dst_chunk->append_column(std::move(new_column), dst_slot->id());
-        }
-    } else {
-        if (src_column->is_nullable() || !dst_slot->is_nullable()) {
-            dst_chunk->append_column(src_column, dst_slot->id());
-        } else {
-            // If the dst slot is nullable and the src slot isn't nullable, we need insert null mask to column.
-            ColumnPtr nullable_column =
-                    vectorized::NullableColumn::create(src_column, vectorized::NullColumn::create(row_count, 0));
-            dst_chunk->append_column(std::move(nullable_column), dst_slot->id());
-        }
-    }
 }
 
 } // namespace starrocks::pipeline
