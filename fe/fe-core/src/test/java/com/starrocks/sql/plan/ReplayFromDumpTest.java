@@ -172,9 +172,10 @@ public class ReplayFromDumpTest {
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
         // Check the size of the left and right tables
+        System.out.println(replayPair.second);
         Assert.assertTrue(replayPair.second.contains("  |  \n" +
                 "  |----21:EXCHANGE\n" +
-                "  |       cardinality: 102\n" +
+                "  |       cardinality: 101\n" +
                 "  |    \n" +
                 "  5:OlapScanNode\n" +
                 "     table: customer, rollup: customer"));
