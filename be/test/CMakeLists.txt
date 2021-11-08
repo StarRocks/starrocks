@@ -170,6 +170,7 @@ set(EXEC_FILES
         ./storage/vectorized/projection_iterator_test.cpp
         ./storage/vectorized/push_handler_test.cpp
         ./storage/vectorized/range_test.cpp
+        ./storage/vectorized/row_source_mask_test.cpp
         ./storage/vectorized/union_iterator_test.cpp
         ./storage/vectorized/unique_iterator_test.cpp
         ./storage/vectorized/cumulative_compaction_test.cpp

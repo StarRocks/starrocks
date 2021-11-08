@@ -305,6 +305,10 @@ CONF_mInt32(base_compaction_trace_threshold, "120");
 CONF_mInt32(cumulative_compaction_trace_threshold, "60");
 CONF_mInt32(update_compaction_trace_threshold, "20");
 
+// for vertical compaction
+// max mask memory bytes, default is 200M
+CONF_Int64(vertical_compaction_max_mask_memory_bytes, "209715200");
+
 // Port to start debug webserver on
 CONF_Int32(webserver_port, "8040");
 // Number of webserver workers
