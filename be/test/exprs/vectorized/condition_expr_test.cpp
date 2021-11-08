@@ -8,6 +8,7 @@
 #include <random>
 
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -243,6 +244,28 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
         ASSERT_EQ(result, res_col4->get_data()[i]);
     }
     // Test INT8 const const
+
+    // Test Nullable(INT8) var const
+    {
+        expr_node.type = gen_type_desc(TPrimitiveType::TINYINT);
+        auto if_expr = std::unique_ptr<Expr>(VectorizedConditionExprFactory::create_if_expr(expr_node));
+        MockNullVectorizedExpr<TYPE_TINYINT> col_x(expr_node, batch_size, 10);
+        MockConstVectorizedExpr<TYPE_TINYINT> col_y(expr_node, 123);
+
+        if_expr->_children.push_back(&select_col);
+        if_expr->_children.push_back(&col_x);
+        if_expr->_children.push_back(&col_y);
+
+        ptr = if_expr->evaluate(nullptr, nullptr);
+
+        ColumnViewer<TYPE_TINYINT> viewer(ptr);
+        for (int i = 0; i < ptr->size(); ++i) {
+            auto result = select_col.get_data()[i] ? 10 : 123;
+            if (!viewer.is_null(i)) {
+                ASSERT_EQ(viewer.value(i), result);
+            }
+        }
+    }
 }
 
 } // namespace vectorized
