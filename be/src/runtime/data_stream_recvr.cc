@@ -249,7 +249,7 @@ void DataStreamRecvr::SenderQueue::add_batch(const PRowBatch& pb_batch, int be_n
     auto iter = _packet_seq_map.find(be_number);
     if (iter != _packet_seq_map.end()) {
         if (iter->second >= packet_seq) {
-            LOG(WARNING) << "packet already exist [cur_packet_id= " << iter->second
+            LOG(WARNING) << "packet already exist [cur_packet_id=" << iter->second
                          << " receive_packet_id=" << packet_seq << "]";
             return;
         }
@@ -380,7 +380,7 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
         auto iter = _packet_seq_map.find(be_number);
         if (iter != _packet_seq_map.end()) {
             if (iter->second >= sequence) {
-                LOG(WARNING) << "packet already exist [cur_packet_id= " << iter->second
+                LOG(WARNING) << "packet already exist [cur_packet_id=" << iter->second
                              << " receive_packet_id=" << sequence << "]";
                 return Status::OK();
             }
