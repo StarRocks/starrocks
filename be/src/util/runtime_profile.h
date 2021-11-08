@@ -679,39 +679,6 @@ private:
     int64_t* _counter;
 };
 
-// Utility class to update time elapsed manually
-// 'T' must implement the stopWatch "interface" (start,stop,elapsed_time) but
-// we use templates not to pay for virtual function overhead.
-template <class T>
-class StageTimer {
-public:
-    explicit StageTimer(RuntimeProfile::Counter* counter) : _counter(counter) {
-        _sw.start();
-        if (counter == nullptr) {
-            return;
-        }
-        DCHECK(counter->type() == TUnit::TIME_NS);
-    }
-
-    // Disable copy constructor and assignment
-    StageTimer(const StageTimer& timer) = delete;
-    StageTimer& operator=(const StageTimer& timer) = delete;
-
-    // Update counter
-    void stage_stop() {
-        if (_counter != nullptr) {
-            _counter->update(_sw.elapsed_time());
-        }
-    }
-
-    void stage_start() { _sw.reset(); }
-
-    ~StageTimer() {}
-
-private:
-    T _sw;
-    RuntimeProfile::Counter* _counter;
-};
 } // namespace starrocks
 
 #endif

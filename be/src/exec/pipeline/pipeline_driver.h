@@ -199,8 +199,8 @@ private:
     RuntimeProfile::Counter* _total_timer = nullptr;
     RuntimeProfile::Counter* _active_timer = nullptr;
     RuntimeProfile::Counter* _pending_timer = nullptr;
-    StageTimer<MonotonicStopWatch>* _total_watcher = nullptr;
-    StageTimer<MonotonicStopWatch>* _pending_watcher = nullptr;
+    MonotonicStopWatch* _total_timer_sw = nullptr;
+    MonotonicStopWatch* _pending_timer_sw = nullptr;
 };
 
 } // namespace pipeline

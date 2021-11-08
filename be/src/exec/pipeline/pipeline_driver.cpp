@@ -32,8 +32,11 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
     _active_timer = ADD_TIMER(_runtime_profile, "DriverActiveTime");
     _pending_timer = ADD_TIMER(_runtime_profile, "DriverPendingTime");
-    _total_watcher = runtime_state->obj_pool()->add(new StageTimer<MonotonicStopWatch>(_total_timer));
-    _pending_watcher = runtime_state->obj_pool()->add(new StageTimer<MonotonicStopWatch>(_pending_timer));
+
+    _total_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
+    _pending_timer_sw = runtime_state->obj_pool()->add(new MonotonicStopWatch());
+    _total_timer_sw->start();
+    _pending_timer_sw->start();
 
     return Status::OK();
 }
@@ -183,7 +186,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     _state = state;
 
     // Calculate total time before report profile
-    _total_watcher->stage_stop();
+    _total_timer->update(_total_timer_sw->elapsed_time());
 
     // last root driver cancel the all drivers' execution and notify FE the
     // fragment's completion but do not unregister the FragmentContext because
