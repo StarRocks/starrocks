@@ -5,28 +5,42 @@
 namespace starrocks::pipeline {
 
 bool AggregateStreamingSourceOperator::has_output() const {
-    // There are two cases where chunk buffer is not null
-    // case1：streaming mode is 'FORCE_STREAMING'
-    // case2：streaming mode is 'AUTO'
-    //     case 2.1: very poor aggregation
-    //     case 2.2: middle cases, first aggregate locally and output by stream
     if (!_aggregator->is_chunk_buffer_empty()) {
+        // There are two cases where chunk buffer is not empty
+        // case1: streaming mode is 'FORCE_STREAMING'
+        // case2: streaming mode is 'AUTO'
+        //     case 2.1: very poor aggregation
+        //     case 2.2: middle cases, first aggregate locally and output by stream
         return true;
     }
 
-    // There are two cases where chunk buffer is null,
-    // it will apply local aggregate, so need to wait sink operator finish
-    // case1：streaming mode is 'FORCE_PREAGGREGATION'
-    // case2：streaming mode is 'AUTO'
-    //     case 2.1: very high aggregation
+    // There are four cases where chunk buffer is empty
+    // case1: streaming mode is 'FORCE_STREAMING'
+    // case2: streaming mode is 'AUTO'
+    //     case 2.1: very poor aggregation
+    //     case 2.2: middle cases, first aggregate locally and output by stream
+    // case3: streaming mode is 'FORCE_PREAGGREGATION'
+    // case4: streaming mode is 'AUTO'
+    //     case 4.1: very high aggregation
+    //
+    // case1 and case2 means that it will wait for the next chunk from the buffer
+    // case3 and case4 means that it will apply local aggregate, so need to wait sink operator finish
     return _aggregator->is_sink_complete() && !_aggregator->is_ht_eos();
 }
 
 bool AggregateStreamingSourceOperator::is_finished() const {
+    // source operator may finish early
+    if (_is_finished) {
+        return true;
+    }
+
     // since there are two behavior of streaming operator
     // case 1: chunk-at-a-time, so we check whether the chunk buffer is empty
     // case 2: local aggregate, so we check whether hash table is eos
-    return _aggregator->is_sink_complete() && _aggregator->is_chunk_buffer_empty() && _aggregator->is_ht_eos();
+    if (_aggregator->is_sink_complete() && _aggregator->is_chunk_buffer_empty() && _aggregator->is_ht_eos()) {
+        _is_finished = true;
+    }
+    return _is_finished;
 }
 
 void AggregateStreamingSourceOperator::finish(RuntimeState* state) {
@@ -41,10 +55,14 @@ Status AggregateStreamingSourceOperator::close(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(RuntimeState* state) {
+    // It is no need to distinguish whether streaming or aggregation mode
+    // We just first read chunk from buffer and finally read chunk from hash table
     if (!_aggregator->is_chunk_buffer_empty()) {
         return std::move(_aggregator->poll_chunk_buffer());
     }
 
+    // Even if it is streaming mode, the purpose of reading from hash table is to
+    // correctly process the state of hash table(_is_ht_eos)
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
     _output_chunk_from_hash_map(&chunk);
     DCHECK_CHUNK(chunk);
