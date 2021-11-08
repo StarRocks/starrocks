@@ -573,8 +573,12 @@ Status HdfsScanNode::_find_and_insert_hdfs_file(const THdfsScanRange& scan_range
         _hdfs_files.emplace_back(hdfs_file_desc);
     }
 
-    if (namenode.rfind("s3a://", 0) == 0) {
-        _is_hdfs_fs = false;
+    std::unordered_set<std::string> object_storage_scheme_set = {"s3a://", "oss://"};
+    for (string scheme : object_storage_scheme_set) {
+        if (namenode.rfind(scheme, 0) == 0) {
+            _is_hdfs_fs = false;
+            break;
+        }
     }
 
     return Status::OK();
