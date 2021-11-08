@@ -14,8 +14,6 @@ class HashJoinBuildOperator final : public Operator {
 public:
     HashJoinBuildOperator(int32_t id, const string& name, int32_t plan_node_id, HashJoiner* hash_joiner);
     ~HashJoinBuildOperator() = default;
-    Status prepare(RuntimeState* state) override { return Status::OK(); };
-    Status close(RuntimeState* state) override { return Status::OK(); };
 
     bool has_output() const override {
         CHECK(false) << "has_output not supported in HashJoinBuildOperator";
