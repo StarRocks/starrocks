@@ -302,9 +302,11 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             agent_task_req = worker_pool_this->_tasks.front();
             create_tablet_req = agent_task_req.create_tablet_req;
@@ -370,9 +372,11 @@ void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             agent_task_req = worker_pool_this->_tasks.front();
             drop_tablet_req = agent_task_req.drop_tablet_req;
@@ -425,9 +429,11 @@ void* TaskWorkerPool::_alter_tablet_worker_thread_callback(void* arg_this) {
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             agent_task_req = worker_pool_this->_tasks.front();
             worker_pool_this->_tasks.pop_front();
@@ -576,9 +582,11 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             index = worker_pool_this->_get_next_task_index(
                     config::push_worker_count_normal_priority + config::push_worker_count_high_priority,
@@ -595,9 +603,11 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
             worker_pool_this->_tasks.erase(worker_pool_this->_tasks.begin() + index);
         } while (false);
 
+#ifndef BE_TEST
         if (worker_pool_this->_stopped) {
             break;
         }
+#endif
 
 #ifndef BE_TEST
         if (index < 0) {
@@ -678,9 +688,11 @@ void* TaskWorkerPool::_publish_version_worker_thread_callback(void* arg_this) {
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             agent_task_req = worker_pool_this->_tasks.front();
             publish_version_req = agent_task_req.publish_version_req;
@@ -746,9 +758,11 @@ void* TaskWorkerPool::_clear_transaction_task_worker_thread_callback(void* arg_t
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             agent_task_req = worker_pool_this->_tasks.front();
             clear_transaction_task_req = agent_task_req.clear_transaction_task_req;
@@ -807,9 +821,11 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             agent_task_req = worker_pool_this->_tasks.front();
             update_tablet_meta_req = agent_task_req.update_tablet_meta_info_req;
@@ -879,9 +895,11 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             agent_task_req = worker_pool_this->_tasks.front();
             clone_req = agent_task_req.clone_req;
@@ -979,9 +997,11 @@ void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_t
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             agent_task_req = worker_pool_this->_tasks.front();
             storage_medium_migrate_req = agent_task_req.storage_medium_migrate_req;
@@ -1082,9 +1102,11 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             agent_task_req = worker_pool_this->_tasks.front();
             check_consistency_req = agent_task_req.check_consistency_req;
@@ -1289,9 +1311,11 @@ void* TaskWorkerPool::_upload_worker_thread_callback(void* arg_this) {
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             agent_task_req = worker_pool_this->_tasks.front();
             upload_request = agent_task_req.upload_req;
@@ -1347,9 +1371,11 @@ void* TaskWorkerPool::_download_worker_thread_callback(void* arg_this) {
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             agent_task_req = worker_pool_this->_tasks.front();
             download_request = agent_task_req.download_req;
@@ -1407,9 +1433,11 @@ void* TaskWorkerPool::_make_snapshot_thread_callback(void* arg_this) {
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             agent_task_req = worker_pool_this->_tasks.front();
             snapshot_request = agent_task_req.snapshot_req;
@@ -1485,9 +1513,11 @@ void* TaskWorkerPool::_release_snapshot_thread_callback(void* arg_this) {
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             agent_task_req = worker_pool_this->_tasks.front();
             release_snapshot_request = agent_task_req.release_snapshot_req;
@@ -1555,9 +1585,11 @@ void* TaskWorkerPool::_move_dir_thread_callback(void* arg_this) {
             while (worker_pool_this->_tasks.empty() && !(worker_pool_this->_stopped)) {
                 worker_pool_this->_worker_thread_condition_variable->wait(l);
             }
+#ifndef BE_TEST
             if (worker_pool_this->_stopped) {
                 break;
             }
+#endif
 
             agent_task_req = worker_pool_this->_tasks.front();
             move_dir_req = agent_task_req.move_dir_req;

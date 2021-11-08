@@ -255,10 +255,6 @@ void ExecEnv::_destroy() {
         delete _stream_load_executor;
         _stream_load_executor = nullptr;
     }
-    if (_storage_engine) {
-        delete _storage_engine;
-        _storage_engine = nullptr;
-    }
     if (_brpc_stub_cache) {
         delete _brpc_stub_cache;
         _brpc_stub_cache = nullptr;

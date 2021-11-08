@@ -471,6 +471,9 @@ void StorageEngine::stop() {
     _bg_worker_stopped = true;
 
     sleep(30); // wait five seconds to exit all threads gracefully
+
+    SAFE_DELETE(_index_stream_lru_cache);
+    _file_cache.reset();
 }
 
 void StorageEngine::clear_transaction_task(const TTransactionId transaction_id) {

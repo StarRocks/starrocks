@@ -72,7 +72,12 @@ void* tcmalloc_gc_thread(void* dummy) {
     using namespace starrocks::vectorized;
     const static float kFreeRatio = 0.5;
     GCHelper gch(config::tc_gc_period, config::memory_maintenance_sleep_time_s, MonoTime::Now());
-    while (true) {
+    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
+    bool bg_worker_stopped = false;
+    if (storage_engine != nullptr) {
+        bg_worker_stopped = storage_engine->bg_worker_stopped();
+    }
+    while (!bg_worker_stopped) {
         sleep(config::memory_maintenance_sleep_time_s);
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER)
         MallocExtension::instance()->MarkThreadBusy();
@@ -107,6 +112,11 @@ void* tcmalloc_gc_thread(void* dummy) {
         }
         MallocExtension::instance()->MarkThreadIdle();
 #endif
+
+        storage_engine = ExecEnv::GetInstance()->storage_engine();
+        if (storage_engine != nullptr) {
+            bg_worker_stopped = storage_engine->bg_worker_stopped();
+        }
     }
 
     return nullptr;
