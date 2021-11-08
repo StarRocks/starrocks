@@ -18,6 +18,13 @@ Operator::Operator(int32_t id, const std::string& name, int32_t plan_node_id)
 }
 
 Status Operator::prepare(RuntimeState* state) {
+    _push_timer = ADD_TIMER(_runtime_profile, "PushTotalTime");
+    _pull_timer = ADD_TIMER(_runtime_profile, "PullTotalTime");
+
+    _push_chunk_num_counter = ADD_COUNTER(_runtime_profile, "PushChunkNum", TUnit::UNIT);
+    _push_row_num_counter = ADD_COUNTER(_runtime_profile, "PushRowNum", TUnit::UNIT);
+    _pull_chunk_num_counter = ADD_COUNTER(_runtime_profile, "PullChunkNum", TUnit::UNIT);
+    _pull_row_num_counter = ADD_COUNTER(_runtime_profile, "PullRowNum", TUnit::UNIT);
     return Status::OK();
 }
 

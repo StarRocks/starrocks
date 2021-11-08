@@ -5,6 +5,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class Expr;
@@ -17,6 +18,8 @@ using OperatorPtr = std::shared_ptr<Operator>;
 using Operators = std::vector<OperatorPtr>;
 
 class Operator {
+    friend class PipelineDriver;
+
 public:
     Operator(int32_t id, const std::string& name, int32_t plan_node_id);
     virtual ~Operator() = default;
@@ -67,6 +70,15 @@ protected:
     // Which plan node this operator belongs to
     int32_t _plan_node_id = -1;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
+
+    // Common metrics
+    RuntimeProfile::Counter* _push_timer = nullptr;
+    RuntimeProfile::Counter* _pull_timer = nullptr;
+
+    RuntimeProfile::Counter* _push_chunk_num_counter = nullptr;
+    RuntimeProfile::Counter* _push_row_num_counter = nullptr;
+    RuntimeProfile::Counter* _pull_chunk_num_counter = nullptr;
+    RuntimeProfile::Counter* _pull_row_num_counter = nullptr;
 };
 
 class OperatorFactory {
