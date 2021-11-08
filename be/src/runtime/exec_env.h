@@ -116,6 +116,7 @@ public:
     MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker; }
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker; }
     MemTracker* update_mem_tracker() { return _update_mem_tracker; }
+    MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker; }
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker; }
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker; }
 
@@ -190,6 +191,8 @@ private:
 
     // The memory tracker for update manager
     MemTracker* _update_mem_tracker = nullptr;
+
+    MemTracker* _chunk_allocator_mem_tracker = nullptr;
 
     MemTracker* _clone_mem_tracker = nullptr;
 
