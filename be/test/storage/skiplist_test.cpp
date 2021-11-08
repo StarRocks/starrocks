@@ -29,7 +29,6 @@
 #include <thread>
 
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/schema.h"
 #include "util/hash_util.hpp"
 #include "util/priority_thread_pool.hpp"

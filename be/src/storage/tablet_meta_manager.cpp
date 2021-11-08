@@ -295,7 +295,7 @@ Status TabletMetaManager::get_primary_meta(KVStore* meta, TTabletId tablet_id, T
 // there are some rowset meta in local meta store and in in-memory tablet meta
 // but not in tablet meta in local meta store
 Status TabletMetaManager::get_tablet_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
-                                          const TabletMetaSharedPtr& tablet_meta) {
+                                          TabletMeta* tablet_meta) {
     std::string key = encode_tablet_meta_key(tablet_id, schema_hash);
     std::string value;
     RETURN_IF_ERROR(store->get_meta()->get(META_COLUMN_FAMILY_INDEX, key, &value));
@@ -304,19 +304,18 @@ Status TabletMetaManager::get_tablet_meta(DataDir* store, TTabletId tablet_id, T
 
 Status TabletMetaManager::get_json_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
                                         std::string* json_meta) {
-    MemTracker mem_tracker;
-    TabletMetaSharedPtr tablet_meta(new TabletMeta(&mem_tracker));
-    RETURN_IF_ERROR(get_tablet_meta(store, tablet_id, schema_hash, tablet_meta));
+    TabletMeta tablet_meta;
+    RETURN_IF_ERROR(get_tablet_meta(store, tablet_id, schema_hash, &tablet_meta));
 
-    if (tablet_meta->tablet_schema_ptr()->keys_type() != PRIMARY_KEYS) {
+    if (tablet_meta.tablet_schema_ptr()->keys_type() != PRIMARY_KEYS) {
         json2pb::Pb2JsonOptions json_options;
         json_options.pretty_json = true;
-        tablet_meta->to_json(json_meta, json_options);
+        tablet_meta.to_json(json_meta, json_options);
         return Status::OK();
     }
 
     TabletMetaPB tablet_meta_pb;
-    tablet_meta->to_meta_pb(&tablet_meta_pb);
+    tablet_meta.to_meta_pb(&tablet_meta_pb);
     KVStore* meta = store->get_meta();
     return get_primary_meta(meta, tablet_id, tablet_meta_pb, json_meta);
 }

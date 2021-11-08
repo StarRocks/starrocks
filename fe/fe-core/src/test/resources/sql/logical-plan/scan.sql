@@ -43,7 +43,7 @@ logical project (cast(col as int(11)))
 [sql]
 select v1+20, case v2 when v3 then 1 else 0 end from t0;
 [result]
-logical project (col + 20,CaseWhen(col, col, 1, 0))
+logical project (col + 20,if(col = col, 1, 0))
     logical project (col,col,col)
         logical scan
 [end]

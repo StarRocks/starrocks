@@ -803,7 +803,15 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return false;
     }
 
+    public boolean canPushDownRuntimeFilter() {
+        return true;
+    }
+
     public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+        if (!canPushDownRuntimeFilter()) {
+            return false;
+        }
+
         // theoretically runtime filter can be applied on multiple child nodes.
         boolean accept = false;
         for (PlanNode node : children) {

@@ -249,7 +249,7 @@ void DataStreamRecvr::SenderQueue::add_batch(const PRowBatch& pb_batch, int be_n
     auto iter = _packet_seq_map.find(be_number);
     if (iter != _packet_seq_map.end()) {
         if (iter->second >= packet_seq) {
-            LOG(WARNING) << "packet already exist [cur_packet_id= " << iter->second
+            LOG(WARNING) << "packet already exist [cur_packet_id=" << iter->second
                          << " receive_packet_id=" << packet_seq << "]";
             return;
         }
@@ -293,7 +293,7 @@ void DataStreamRecvr::SenderQueue::add_batch(const PRowBatch& pb_batch, int be_n
         // Note: if this function makes a row batch, the batch *must* be added
         // to _batch_queue. It is not valid to create the row batch and destroy
         // it in this thread.
-        batch = std::make_unique<RowBatch>(_recvr->row_desc(), pb_batch, _recvr->mem_tracker());
+        batch = std::make_unique<RowBatch>(_recvr->row_desc(), pb_batch);
         if (batch->init(pb_batch)) {
             LOG(WARNING) << "batch init failed, [cur_packet_id= " << iter->second << " receive_packet_id=" << packet_seq
                          << "]";
@@ -385,7 +385,7 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
         auto iter = _packet_seq_map.find(be_number);
         if (iter != _packet_seq_map.end()) {
             if (iter->second >= sequence) {
-                LOG(WARNING) << "packet already exist [cur_packet_id= " << iter->second
+                LOG(WARNING) << "packet already exist [cur_packet_id=" << iter->second
                              << " receive_packet_id=" << sequence << "]";
                 return Status::OK();
             }
@@ -705,10 +705,7 @@ void DataStreamRecvr::close() {
         _mgr = nullptr;
     }
     _chunks_merger.reset();
-    if (_mem_tracker.get() != nullptr) {
-        _mem_tracker->close();
-        _mem_tracker.reset();
-    }
+    _mem_tracker.reset();
 }
 
 DataStreamRecvr::~DataStreamRecvr() {

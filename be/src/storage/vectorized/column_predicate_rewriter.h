@@ -21,26 +21,31 @@ public:
     using ColumnIterators = std::vector<segment_v2::ColumnIterator*>;
     using PushDownPredicates = std::unordered_map<ColumnId, PredicateList>;
 
-    ColumnPredicateRewriter(ColumnIterators& column_iterators, PushDownPredicates& pushdown_predicates, Schema& schema,
-                            std::vector<uint8_t>& need_rewrite, int predicate_column_size, SparseRange& scan_range)
+    ColumnPredicateRewriter(ColumnIterators& column_iterators, PushDownPredicates& pushdown_predicates,
+                            const Schema& schema, const std::vector<uint8_t>& need_rewrite, int column_size,
+                            SparseRange& scan_range)
             : _column_iterators(column_iterators),
               _predicates(pushdown_predicates),
               _schema(schema),
-              _predicate_need_rewrite(need_rewrite),
-              _predicate_column_size(predicate_column_size),
+              _need_rewrite(need_rewrite),
+              _column_size(column_size),
               _scan_range(scan_range) {}
 
     void rewrite_predicate(ObjectPool* pool);
 
 private:
     bool _rewrite_predicate(ObjectPool* pool, const FieldPtr& field);
-    void get_segment_dict(std::vector<std::pair<std::string, int>>* dicts, segment_v2::ColumnIterator* iter);
+    bool _rewrite_expr_predicate(ObjectPool* pool, const ColumnPredicate*, const ColumnPtr& dict_column,
+                                 const ColumnPtr& code_column, bool field_nullable, ColumnPredicate** ptr);
+    void _get_segment_dict(std::vector<std::pair<std::string, int>>* dicts, segment_v2::ColumnIterator* iter);
+    void _get_segment_dict_vec(segment_v2::ColumnIterator* iter, ColumnPtr* dict_column, ColumnPtr* code_column,
+                               bool field_nullable);
 
     ColumnIterators& _column_iterators;
     PushDownPredicates& _predicates;
-    Schema& _schema;
-    std::vector<uint8_t>& _predicate_need_rewrite;
-    int _predicate_column_size;
+    const Schema& _schema;
+    const std::vector<uint8_t>& _need_rewrite;
+    const int _column_size;
     SparseRange& _scan_range;
 };
 } // namespace starrocks::vectorized

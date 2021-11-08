@@ -31,6 +31,8 @@ public:
     void shutdown();
     // add blocked driver to poller
     void add_blocked_driver(const DriverRawPtr driver);
+    // remove blocked driver from poller
+    void remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it);
 
 private:
     void run_internal();

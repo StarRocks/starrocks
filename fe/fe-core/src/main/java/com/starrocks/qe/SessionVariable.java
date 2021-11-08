@@ -113,8 +113,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PIPELINE_DOP = "pipeline_dop";
 
-    public static final String PIPELINE_SCAN_MODE = "pipeline_scan_mode";
-
     public static final String PIPELINE_QUERY_EXPIRE_SECONDS = "pipeline_query_expire_seconds";
 
     // hash join right table push down
@@ -153,6 +151,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
     public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
+    public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -289,6 +288,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_USE_CORRELATED_JOIN_ESTIMATE)
     private boolean useCorrelatedJoinEstimate = true;
+
+    @VariableMgr.VarAttr(name = CBO_USE_NTH_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
+    private int useNthExecPlan = 0;
     /*
      * the parallel exec instance num for one Fragment in one BE
      * 1 means disable this feature
@@ -298,10 +300,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
-
-    // 1 means that ScanOperators use async io, otherwise, use sync io instead.
-    @VariableMgr.VarAttr(name = PIPELINE_SCAN_MODE)
-    private int pipelineScanMode = 1;
 
     // a query that can not make any progress for more than pipelineQueryExpireSeconds
     // (300s in default) will be canceled.
@@ -348,6 +346,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_ENABLE_GREEDY_JOIN_REORDER)
     private boolean cboEnableGreedyJoinReorder = true;
+
+    @VariableMgr.VarAttr(name = CBO_ENABLE_REPLICATED_JOIN)
+    private boolean enableReplicationJoin = true;
 
     @VariableMgr.VarAttr(name = TRANSACTION_VISIBLE_WAIT_TIMEOUT)
     private long transactionVisibleWaitTimeout = 10;
@@ -397,7 +398,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableGroupbyUseOutputAlias = false;
 
     @VariableMgr.VarAttr(name = ENABLE_COLUMN_EXPR_PREDICATE)
-    private boolean enableColumnExprPredicate = true;
+    private boolean enableColumnExprPredicate = false;
 
     // The following variables are deprecated and invisible //
     // ----------------------------------------------------------------------------//
@@ -670,20 +671,24 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePipelineEngine;
     }
 
-    // @FIXME:
-    // Forbidden replicate join now, it's will cause bug:
-    // 1. Always cover colocate join if colocate join and replicate join are satisfied at the same time
-    //    a. Resolve the bug is complicated because Join choose Replicate or Colocate dependent on children is
-    //       ExchangeNode in PlanFragmentBuilder.java
-    // 2. If right node is Aggregate(Local update finalize)-Scan in replicate join, the result is wrong
-    //    a. Coordinator will take left scan node choose colocate node selector, actually only right aggregate
-    //       is colocate
-    // 3. If right node contains join other scan node(ES/Hive), replicate join result is wrong.
     public boolean isEnableReplicationJoin() {
-        return false;
+        return enableReplicationJoin;
+    }
+
+    public boolean isSetUseNthExecPlan() {
+        return useNthExecPlan > 0;
+    }
+
+    public int getUseNthExecPlan() {
+        return useNthExecPlan;
+    }
+
+    public void setUseNthExecPlan(int nthExecPlan) {
+        this.useNthExecPlan = nthExecPlan;
     }
 
     public void setEnableReplicationJoin(boolean enableReplicationJoin) {
+        this.enableReplicationJoin = enableReplicationJoin;
     }
 
     public boolean isUseCorrelatedJoinEstimate() {
@@ -693,7 +698,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setUseCorrelatedJoinEstimate(boolean useCorrelatedJoinEstimate) {
         this.useCorrelatedJoinEstimate = useCorrelatedJoinEstimate;
     }
-
 
     public boolean isEnableLowCardinalityOptimize() {
         return enableLowCardinalityOptimize;
@@ -746,7 +750,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
         tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
         tResult.setPipeline_dop(pipelineDop);
-        tResult.setPipeline_scan_mode(pipelineScanMode);
         tResult.setPipeline_query_expire_seconds(pipelineQueryExpireSeconds);
         return tResult;
     }

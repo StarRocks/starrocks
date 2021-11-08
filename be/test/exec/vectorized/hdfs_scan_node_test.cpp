@@ -132,7 +132,7 @@ void HdfsScanNodeTest::_create_runtime_state() {
     TUniqueId id;
     _mem_tracker = std::make_shared<MemTracker>(-1, "olap scanner test");
     _runtime_state->set_fragment_mem_tracker(_mem_tracker.get());
-    Status status = _runtime_state->init_mem_trackers(id);
+    _runtime_state->init_mem_trackers(id);
 }
 
 std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node() {

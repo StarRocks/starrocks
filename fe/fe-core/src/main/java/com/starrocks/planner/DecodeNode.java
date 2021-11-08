@@ -25,7 +25,7 @@ public class DecodeNode extends PlanNode{
                       Map<SlotId, Expr> stringFunctions) {
         super(id, tupleDescriptor.getId().asList(), "Decode");
         addChild(child);
-        this.tupleIds.addAll(child.tblRefIds);
+        this.tupleIds.addAll(child.tupleIds);
         this.dictIdToStringIds = dictIdToStringIds;
         this.stringFunctions = stringFunctions;
     }
@@ -33,6 +33,11 @@ public class DecodeNode extends PlanNode{
     @Override
     public boolean isVectorized() {
         return true;
+    }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
     @Override

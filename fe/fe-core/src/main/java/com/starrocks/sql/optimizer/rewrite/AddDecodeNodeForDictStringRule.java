@@ -110,8 +110,12 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
             this.hasEncoded = true;
             this.stringColumnIdToDictColumnIds.putAll(other.stringColumnIdToDictColumnIds);
             this.stringFunctions.putAll(other.stringFunctions);
-            this.globalDicts.addAll(other.globalDicts);
             this.disableDictOptimizeColumns = other.disableDictOptimizeColumns;
+            for (Pair<Integer, ColumnDict> dict : other.globalDicts) {
+                if (!this.globalDicts.contains(dict)) {
+                    this.globalDicts.add(dict);
+                }
+            }
             return this;
         }
     }
@@ -205,8 +209,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                         for (ScalarOperator predicate : predicates) {
                             if (predicate.getUsedColumns().contains(columnId)) {
                                 if (couldApplyDictOptimize(predicate)) {
-                                    newDictColumn = context.columnRefFactory.create(
-                                            stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
+                                    if (newDictColumn == null) {
+                                        newDictColumn = context.columnRefFactory.create(
+                                                stringColumn.getName(), ID_TYPE, stringColumn.isNullable());
+                                    }
 
                                     // For simple predicate, our olap scan node handle it by string,
                                     // So we couldn't rewrite it.
@@ -223,7 +229,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                         Preconditions.checkState(rewritePredicate.equals(predicate));
                                     }
                                 } else {
+                                    globalDictStringColumns.remove(stringColumn);
+                                    dictStringIdToIntIds.remove(stringColumn.getId());
                                     couldEncoded = false;
+                                    break;
                                 }
                             }
                         }
@@ -484,6 +493,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                 }
             }
 
+            context.clear();
             context.merge(mergeContext);
             return visitProjectionAfter(optExpression, context);
         }

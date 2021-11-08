@@ -55,7 +55,7 @@ protected:
     // merge rows from vectorized reader and write into `_output_rs_writer`.
     // return Status::OK() and set statistics into `*stats_output`.
     // return others on error
-    Status merge_rowsets(MemTracker* mem_tracker, Statistics* stats_output);
+    Status merge_rowsets(int64_t mem_limit, Statistics* stats_output);
 
     void modify_rowsets();
 
@@ -68,7 +68,7 @@ protected:
     static Semaphore _concurrency_sem;
 
 protected:
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    MemTracker* _mem_tracker = nullptr;
     TabletSharedPtr _tablet;
 
     std::vector<RowsetSharedPtr> _input_rowsets;

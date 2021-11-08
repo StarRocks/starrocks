@@ -1000,7 +1000,7 @@ public class ShowExecutor {
     }
 
     // Show alter statement.
-    private void handleShowCollation() throws AnalysisException {
+    private void handleShowCollation() {
         ShowCollationStmt showStmt = (ShowCollationStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
         List<String> row = Lists.newArrayList();
@@ -1008,6 +1008,15 @@ public class ShowExecutor {
         row.add("utf8_general_ci");
         row.add("utf8");
         row.add("33");
+        row.add("Yes");
+        row.add("Yes");
+        row.add("1");
+        rows.add(row);
+        // | binary | binary | 63 | Yes | Yes | 1 |
+        row = Lists.newArrayList();
+        row.add("binary");
+        row.add("binary");
+        row.add("63");
         row.add("Yes");
         row.add("Yes");
         row.add("1");

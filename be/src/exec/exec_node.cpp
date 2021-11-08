@@ -354,10 +354,6 @@ Status ExecNode::close(RuntimeState* state) {
     Expr::close(_conjunct_ctxs, state);
     _runtime_filter_collector.close(state);
 
-    if (_mem_tracker != nullptr) {
-        _mem_tracker->close();
-    }
-
     return result;
 }
 
@@ -617,6 +613,7 @@ static void eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, ve
 void ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
                               vectorized::FilterPtr* filter_ptr) {
     // No need to do expression if none rows
+    DCHECK(chunk != nullptr);
     if (chunk->num_rows() == 0) {
         return;
     }

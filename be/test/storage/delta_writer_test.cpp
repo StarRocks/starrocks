@@ -302,7 +302,7 @@ TEST_F(TestDeltaWriter, open) {
     TDropTabletReq drop_request;
     auto tablet_id = 10003;
     auto schema_hash = 270068375;
-    st = k_engine->tablet_manager()->drop_tablet(tablet_id, schema_hash);
+    st = k_engine->tablet_manager()->drop_tablet(tablet_id);
     ASSERT_TRUE(st.ok()) << st.to_string();
 }
 
@@ -392,7 +392,7 @@ TEST_F(TestDeltaWriter, write) {
     ASSERT_EQ(OLAP_SUCCESS, res);
 
     // publish version success
-    TabletSharedPtr tablet = k_engine->tablet_manager()->get_tablet(write_req.tablet_id, write_req.schema_hash);
+    TabletSharedPtr tablet = k_engine->tablet_manager()->get_tablet(write_req.tablet_id);
     std::cout << "before publish, tablet row nums:" << tablet->num_rows() << std::endl;
     KVStore* meta = tablet->data_dir()->get_meta();
     Version version;
@@ -417,7 +417,7 @@ TEST_F(TestDeltaWriter, write) {
     }
     ASSERT_EQ(1, tablet->num_rows());
 
-    st = k_engine->tablet_manager()->drop_tablet(write_req.tablet_id, write_req.schema_hash);
+    st = k_engine->tablet_manager()->drop_tablet(write_req.tablet_id);
     ASSERT_TRUE(st.ok()) << st.to_string();
 }
 

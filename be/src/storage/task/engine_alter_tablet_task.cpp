@@ -21,23 +21,31 @@
 
 #include "storage/task/engine_alter_tablet_task.h"
 
+#include "runtime/current_thread.h"
 #include "storage/schema_change.h"
 #include "storage/vectorized/schema_change.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
 using std::to_string;
 
-EngineAlterTabletTask::EngineAlterTabletTask(const TAlterTabletReqV2& request, int64_t signature,
-                                             const TTaskType::type task_type, std::vector<string>* error_msgs,
-                                             const string& process_name)
+EngineAlterTabletTask::EngineAlterTabletTask(MemTracker* mem_tracker, const TAlterTabletReqV2& request,
+                                             int64_t signature, const TTaskType::type task_type,
+                                             std::vector<string>* error_msgs, const string& process_name)
         : _alter_tablet_req(request),
           _signature(signature),
           _task_type(task_type),
           _error_msgs(error_msgs),
-          _process_name(process_name) {}
+          _process_name(process_name) {
+    size_t mem_limit = static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
+    _mem_tracker = std::make_unique<MemTracker>(mem_limit, "schema change task", mem_tracker);
+}
 
 OLAPStatus EngineAlterTabletTask::execute() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     StarRocksMetrics::instance()->create_rollup_requests_total.increment(1);
 
     Status res;

@@ -11,12 +11,10 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {
-class MemTracker;
 namespace pipeline {
 
 using std::chrono::seconds;
@@ -61,7 +59,6 @@ public:
 private:
     std::unique_ptr<RuntimeState> _runtime_state;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
-    std::unique_ptr<MemTracker> _mem_tracker;
     TQueryOptions _query_options;
     TUniqueId _query_id;
     std::unique_ptr<FragmentContextManager> _fragment_mgr;

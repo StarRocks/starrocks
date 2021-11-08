@@ -84,7 +84,7 @@ Status RestoreTabletAction::_handle(HttpRequest* req) {
     int32_t schema_hash = std::atoi(schema_hash_str.c_str());
     LOG(INFO) << "get restore tablet action request: " << tablet_id << "-" << schema_hash;
 
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash);
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     if (tablet != nullptr) {
         LOG(WARNING) << "find tablet. tablet_id=" << tablet_id << " schema_hash=" << schema_hash;
         return Status::InternalError("tablet already exists, can not restore.");
@@ -147,8 +147,7 @@ Status RestoreTabletAction::_restore(const std::string& key, int64_t tablet_id, 
     LOG(INFO) << "tablet path in trash:" << latest_tablet_path;
     std::string original_header_path = latest_tablet_path + "/" + std::to_string(tablet_id) + ".hdr";
     std::string original_meta_path = latest_tablet_path + "/meta";
-    auto mem_tracker = std::make_unique<MemTracker>();
-    TabletMeta tablet_meta(mem_tracker.get());
+    TabletMeta tablet_meta;
     if (FileUtils::check_exist(original_header_path)) {
         DCHECK(!FileUtils::check_exist(original_meta_path));
         if (Status load_status = tablet_meta.create_from_file(original_header_path); !load_status.ok()) {

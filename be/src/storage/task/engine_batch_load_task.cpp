@@ -100,7 +100,7 @@ AgentStatus EngineBatchLoadTask::_init() {
 
     // Check replica exist
     TabletSharedPtr tablet;
-    tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_push_req.tablet_id, _push_req.schema_hash);
+    tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_push_req.tablet_id);
     if (tablet == nullptr) {
         LOG(WARNING) << "get tables failed. "
                      << "tablet_id: " << _push_req.tablet_id << ", schema_hash: " << _push_req.schema_hash;
@@ -151,8 +151,7 @@ OLAPStatus EngineBatchLoadTask::_push(const TPushReq& request, std::vector<TTabl
         return OLAP_ERR_CE_CMD_PARAMS_ERROR;
     }
 
-    TabletSharedPtr tablet =
-            StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id, request.schema_hash);
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
     if (tablet == nullptr) {
         LOG(WARNING) << "false to find tablet. tablet=" << request.tablet_id << ", schema_hash=" << request.schema_hash;
         StarRocksMetrics::instance()->push_requests_fail_total.increment(1);
@@ -214,8 +213,7 @@ OLAPStatus EngineBatchLoadTask::_delete_data(const TPushReq& request, std::vecto
     }
 
     // 1. Get all tablets with same tablet_id
-    TabletSharedPtr tablet =
-            StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id, request.schema_hash);
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(request.tablet_id);
     if (tablet == nullptr) {
         LOG(WARNING) << "can't find tablet. tablet=" << request.tablet_id << ", schema_hash=" << request.schema_hash;
         return OLAP_ERR_TABLE_NOT_FOUND;

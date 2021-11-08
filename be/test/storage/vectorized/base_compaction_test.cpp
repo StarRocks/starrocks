@@ -146,7 +146,6 @@ public:
         _schema_hash_path = tablet_path + "/1111";
         ASSERT_TRUE(FileUtils::create_dir(_schema_hash_path).ok());
 
-        _tablet_meta_mem_tracker.reset(new MemTracker(-1));
         _mem_pool.reset(new MemPool());
 
         _compaction_mem_tracker.reset(new MemTracker(-1));
@@ -162,14 +161,13 @@ protected:
     std::unique_ptr<TabletSchema> _tablet_schema;
     RowsetTypePB _rowset_type = BETA_ROWSET;
     std::string _schema_hash_path;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
 };
 
 TEST_F(BaseCompactionTest, test_init_succeeded) {
-    TabletMetaSharedPtr tablet_meta(new TabletMeta(_tablet_meta_mem_tracker.get()));
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta, nullptr);
+    TabletMetaSharedPtr tablet_meta(new TabletMeta());
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
     BaseCompaction base_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(base_compaction.compact().ok());
 }
@@ -178,10 +176,10 @@ TEST_F(BaseCompactionTest, test_input_rowsets_LE_1) {
     TabletSchemaPB schema_pb;
     schema_pb.set_keys_type(KeysType::DUP_KEYS);
     auto schema = std::make_shared<const TabletSchema>(schema_pb);
-    TabletMetaSharedPtr tablet_meta(new TabletMeta(_tablet_meta_mem_tracker.get()));
+    TabletMetaSharedPtr tablet_meta(new TabletMeta());
     tablet_meta->set_tablet_schema(schema);
 
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta, nullptr);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
     tablet->init();
     BaseCompaction base_compaction(_compaction_mem_tracker.get(), tablet);
     ASSERT_FALSE(base_compaction.compact().ok());
@@ -205,7 +203,7 @@ TEST_F(BaseCompactionTest, test_input_rowsets_EQ_2) {
     ASSERT_EQ(src_rowset_id, src_rowset->rowset_id());
     ASSERT_EQ(1024, src_rowset->num_rows());
 
-    TabletMetaSharedPtr tablet_meta(new TabletMeta(_tablet_meta_mem_tracker.get()));
+    TabletMetaSharedPtr tablet_meta(new TabletMeta());
     create_tablet_meta(tablet_meta.get());
     tablet_meta->add_rs_meta(src_rowset->rowset_meta());
 
@@ -230,7 +228,7 @@ TEST_F(BaseCompactionTest, test_input_rowsets_EQ_2) {
         tablet_meta->add_rs_meta(src_rowset->rowset_meta());
     }
 
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta, nullptr);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
     tablet->init();
     tablet->calculate_cumulative_point();
 
@@ -258,7 +256,7 @@ TEST_F(BaseCompactionTest, test_compact_succeed) {
     ASSERT_EQ(src_rowset_id, src_rowset->rowset_id());
     ASSERT_EQ(1024, src_rowset->num_rows());
 
-    TabletMetaSharedPtr tablet_meta(new TabletMeta(_tablet_meta_mem_tracker.get()));
+    TabletMetaSharedPtr tablet_meta(new TabletMeta());
     create_tablet_meta(tablet_meta.get());
     tablet_meta->add_rs_meta(src_rowset->rowset_meta());
 
@@ -304,9 +302,8 @@ TEST_F(BaseCompactionTest, test_compact_succeed) {
         tablet_meta->add_rs_meta(src_rowset->rowset_meta());
     }
 
-    TabletSharedPtr tablet =
-            Tablet::create_tablet_from_meta(_tablet_meta_mem_tracker.get(), tablet_meta,
-                                            starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0]);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(
+            tablet_meta, starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0]);
     tablet->init();
     tablet->calculate_cumulative_point();
 

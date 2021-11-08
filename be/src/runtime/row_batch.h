@@ -73,7 +73,7 @@ class RowBatch : public RowBatchInterface {
 public:
     // Create RowBatch for a maximum of 'capacity' rows of tuples specified
     // by 'row_desc'.
-    RowBatch(const RowDescriptor& row_desc, int capacity, MemTracker* mem_tracker);
+    RowBatch(const RowDescriptor& row_desc, int capacity);
     bool init();
 
     // Populate a row batch from input_batch by copying input_batch's
@@ -81,9 +81,9 @@ public:
     // in the data back into pointers.
     // TODO: figure out how to transfer the data from input_batch to this RowBatch
     // (so that we don't need to make yet another copy)
-    RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch, MemTracker* tracker);
+    RowBatch(const RowDescriptor& row_desc, const TRowBatch& input_batch);
 
-    RowBatch(const RowDescriptor& row_desc, const PRowBatch& input_batch, MemTracker* tracker);
+    RowBatch(const RowDescriptor& row_desc, const PRowBatch& input_batch);
     bool init(const PRowBatch& input_batch);
 
     // Releases all resources accumulated at this row batch.  This includes
@@ -197,13 +197,6 @@ public:
     // Resets the row batch, returning all resources it has accumulated.
     void reset();
 
-    // Called to indicate this row batch must be returned up the operator tree.
-    // This is used to control memory management for streaming rows.
-    // TODO: consider using this mechanism instead of add_io_buffer/add_tuple_stream. This is
-    // the property we need rather than meticulously passing resources up so the operator
-    // tree.
-    void mark_need_to_return() { _need_to_return = true; }
-
     void copy_row(TupleRow* src, TupleRow* dest) { memcpy(dest, src, _num_tuples_per_row * sizeof(Tuple*)); }
 
     // Create a serialized version of this row batch in output_batch, attaching all of the
@@ -229,10 +222,6 @@ public:
     std::string to_string();
 
 private:
-    MemTracker* _mem_tracker; // not owned
-
-    // All members need to be handled in RowBatch::swap()
-
     bool _has_in_flight_row; // if true, last row hasn't been committed yet
     int _num_rows;           // # of committed rows
     int _capacity;           // maximum # of rows

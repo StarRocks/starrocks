@@ -60,15 +60,14 @@ class RuntimeState;
 class TColumnValue;
 class TExpr;
 class TExprNode;
-class TupleIsNullPredicate;
 class VectorizedRowBatch;
 class Literal;
-class MemTracker;
 class UserFunctionCacheEntry;
 
 namespace vectorized {
 class Chunk;
 class ColumnRef;
+class ColumnPredicateRewriter;
 } // namespace vectorized
 
 using vectorized::ColumnPtr;
@@ -198,7 +197,6 @@ public:
                                           int* node_idx, Expr** root_expr, ExprContext** ctx);
 
     /// Convenience function for preparing multiple expr trees.
-    /// Allocations from 'ctxs' will be counted against 'tracker'.
     static Status prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state, const RowDescriptor& row_desc);
 
     /// Convenience function for opening multiple expr trees.
@@ -242,6 +240,7 @@ protected:
     friend class JsonFunctions;
     friend class Literal;
     friend class ExprContext;
+    friend class vectorized::ColumnPredicateRewriter;
 
     explicit Expr(TypeDescriptor type);
     explicit Expr(const TExprNode& node);

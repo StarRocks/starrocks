@@ -88,12 +88,13 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = " select  if(1, cast('3.14' AS decimal32(9, 2)), cast('1.9999' AS decimal32(5, 4))) " +
                 "AS res0 from db1.decimal_table;";
         String thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
+        System.out.println(thrift);
         Assert.assertTrue(thrift.contains(
-                "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
+                "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
 
         thrift = UtFrameUtils.getPlanThriftStringForNewPlanner(ctx, sql);
         Assert.assertTrue(thrift.contains(
-                "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
+                "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
     }
 
     @Test

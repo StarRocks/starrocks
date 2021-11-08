@@ -6,7 +6,6 @@
 #include "exec/vectorized/hash_joiner.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
-#include "runtime/mem_tracker.h"
 
 namespace starrocks {
 namespace pipeline {
@@ -15,8 +14,8 @@ class HashJoinBuildOperator final : public Operator {
 public:
     HashJoinBuildOperator(int32_t id, const string& name, int32_t plan_node_id, HashJoiner* hash_joiner);
     ~HashJoinBuildOperator() = default;
-    Status prepare(RuntimeState* state) override { return Status::OK(); };
-    Status close(RuntimeState* state) override { return Status::OK(); };
+    Status prepare(RuntimeState* state) override { return Operator::prepare(state); };
+    Status close(RuntimeState* state) override { return Operator::close(state); };
 
     bool has_output() const override {
         CHECK(false) << "has_output not supported in HashJoinBuildOperator";

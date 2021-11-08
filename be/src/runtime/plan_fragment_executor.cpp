@@ -78,7 +78,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         _runtime_state->set_batch_size(config::vector_chunk_size);
     }
 
-    RETURN_IF_ERROR(_runtime_state->init_mem_trackers(_query_id));
+    _runtime_state->init_mem_trackers(_query_id);
     _runtime_state->set_be_number(request.backend_num);
     if (request.__isset.import_label) {
         _runtime_state->set_import_label(request.import_label);
@@ -224,7 +224,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
 Status PlanFragmentExecutor::open() {
     LOG(INFO) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
-    CurrentThread::set_query_id(_runtime_state->query_id());
+    tls_thread_status.set_query_id(_runtime_state->query_id());
 
     Status status = _open_internal_vectorized();
     if (!status.ok() && !status.is_cancelled() && _runtime_state->log_has_space()) {

@@ -446,7 +446,7 @@ LEFT OUTER JOIN (join-predicate [3: v3 = 5: v5] post-join-predicate [1: v1 = 123
 [sql]
 select v1 from t0 where case when (select max(v4) from t1 where v3 = v5) > 1 then 2 else 3 end > 2
 [result]
-LEFT OUTER JOIN (join-predicate [3: v3 = 5: v5] post-join-predicate [CASE WHEN 7: max(4: v4) > 1 THEN 2 ELSE 3 END > 2])
+LEFT OUTER JOIN (join-predicate [3: v3 = 5: v5] post-join-predicate [if(7: max(4: v4) > 1, 2, 3) > 2])
     SCAN (columns[1: v1, 3: v3] predicate[null])
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{7: max(4: v4)=max(7: max(4: v4))}] group by [[5: v5]] having [null]
