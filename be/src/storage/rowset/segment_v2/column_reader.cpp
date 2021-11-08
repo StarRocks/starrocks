@@ -36,10 +36,10 @@
 #include "storage/rowset/segment_v2/bitmap_index_reader.h"
 #include "storage/rowset/segment_v2/bloom_filter_index_reader.h"
 #include "storage/rowset/segment_v2/encoding_info.h"
-#include "storage/rowset/segment_v2/file_column_iterator.h"
 #include "storage/rowset/segment_v2/page_handle.h" // for PageHandle
 #include "storage/rowset/segment_v2/page_io.h"
 #include "storage/rowset/segment_v2/page_pointer.h" // for PagePointer
+#include "storage/rowset/segment_v2/scalar_column_iterator.h"
 #include "storage/rowset/segment_v2/zone_map_index.h"
 #include "storage/types.h" // for TypeInfo
 #include "storage/vectorized/column_predicate.h"
@@ -490,7 +490,7 @@ bool ColumnReader::segment_zone_map_filter(const std::vector<const vectorized::C
 
 Status ColumnReader::new_iterator(ColumnIterator** iterator) {
     if (is_scalar_field_type(delegate_type(_column_type))) {
-        *iterator = new FileColumnIterator(this);
+        *iterator = new ScalarColumnIterator(this);
         return Status::OK();
     } else if (_column_type == FieldType::OLAP_FIELD_TYPE_ARRAY) {
         size_t col = 0;

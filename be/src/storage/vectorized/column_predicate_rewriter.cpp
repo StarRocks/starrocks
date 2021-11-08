@@ -16,7 +16,7 @@
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "simd/simd.h"
 #include "storage/rowset/segment_v2/column_reader.h"
-#include "storage/rowset/segment_v2/file_column_iterator.h"
+#include "storage/rowset/segment_v2/scalar_column_iterator.h"
 #include "storage/vectorized/column_expr_predicate.h"
 
 namespace starrocks::vectorized {
@@ -225,7 +225,7 @@ void ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::strin
     if (!dicts->empty()) {
         return;
     }
-    auto column_iterator = down_cast<segment_v2::FileColumnIterator*>(iter);
+    auto column_iterator = down_cast<segment_v2::ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
     int dict_codes[dict_size];
     std::iota(dict_codes, dict_codes + dict_size, 0);
@@ -243,7 +243,7 @@ void ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::strin
 
 void ColumnPredicateRewriter::_get_segment_dict_vec(segment_v2::ColumnIterator* iter, ColumnPtr* dict_column,
                                                     ColumnPtr* code_column, bool field_nullable) {
-    auto column_iterator = down_cast<segment_v2::FileColumnIterator*>(iter);
+    auto column_iterator = down_cast<segment_v2::ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
     int dict_codes[dict_size];
     std::iota(dict_codes, dict_codes + dict_size, 0);
