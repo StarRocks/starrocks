@@ -52,7 +52,7 @@ private:
     TResultSinkType::type _sink_type;
     std::vector<ExprContext*> _output_expr_ctxs;
 
-    /// The following four fields are shared by all the ResultSinkOperators
+    /// The following three fields are shared by all the ResultSinkOperators
     /// created by the same ResultSinkOperatorFactory.
     const std::shared_ptr<BufferControlBlock>& _sender;
     std::atomic<int32_t>& _num_result_sinks;
