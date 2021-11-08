@@ -35,7 +35,7 @@ import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
 public class CacheDictManager implements IDictManager {
     private static final Logger LOG = LogManager.getLogger(CacheDictManager.class);
     private static final Set<ColumnIdentifier> noDictStringColumns = Sets.newHashSet();
-    private static final Set<Long> forbitDictStringColumns = Sets.newHashSet();
+    private static final Set<Long> forbiddenDictTableIds = Sets.newHashSet();
 
     public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
 
@@ -142,7 +142,7 @@ public class CacheDictManager implements IDictManager {
             return false;
         }
 
-        if (forbitDictStringColumns.contains(tableId)) {
+        if (forbiddenDictTableIds.contains(tableId)) {
             LOG.debug("table {} forbit low cardinality global dict", tableId);
             return false;
         }
@@ -200,7 +200,7 @@ public class CacheDictManager implements IDictManager {
     @Override
     public void forbitGlobalDict(long tableId) {
         LOG.debug("remove dict for table {}", tableId);
-        forbitDictStringColumns.add(tableId);
+        forbiddenDictTableIds.add(tableId);
     }
 
     @Override
