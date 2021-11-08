@@ -12,6 +12,12 @@
 
 namespace starrocks::vectorized {
 
+// DictConjuctPredicateOperator for global dictionary optimization.
+// It converts all predicates into code mappings.
+// eg: where key = 'SR' will convert to
+// [0] "SR" -> true
+// [1] "RK" -> false
+//
 template <FieldType field_type>
 class DictConjuctPredicateOperator {
 public:

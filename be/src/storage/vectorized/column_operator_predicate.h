@@ -6,6 +6,8 @@
 #include "storage/vectorized/column_predicate.h"
 
 namespace starrocks::vectorized {
+// Implementing a complete ColumnPredicate is very difficult, most of the ColumnPredicate logic is similar,
+// we just need to implement similar apply operation can be more convenient to implement a new ColumnPredicate.
 
 template <FieldType field_type, class ColumnType, template <FieldType> class ColumnOperator, typename... Args>
 class ColumnOperatorPredicate final : public ColumnPredicate {
