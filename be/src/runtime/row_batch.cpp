@@ -45,19 +45,21 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, int capacity, MemTracker* mem_
           _num_tuples_per_row(row_desc.tuple_descriptors().size()),
           _row_desc(row_desc),
           _need_to_return(false),
-          _tuple_data_pool(new MemPool()) {
+          _tuple_data_pool(new MemPool()) {}
+
+// called after construction function above
+bool RowBatch::init() {
     DCHECK(_mem_tracker != nullptr);
-    DCHECK_GT(capacity, 0);
+    DCHECK_GT(_capacity, 0);
     _tuple_ptrs_size = _capacity * _num_tuples_per_row * sizeof(Tuple*);
     DCHECK_GT(_tuple_ptrs_size, 0);
-    // TODO: switch to Init() pattern so we can check memory limit and return Status.
     if (config::enable_partitioned_aggregation) {
         _mem_tracker->consume(_tuple_ptrs_size);
         _tuple_ptrs = reinterpret_cast<Tuple**>(malloc(_tuple_ptrs_size));
-        DCHECK(_tuple_ptrs != nullptr);
     } else {
         _tuple_ptrs = reinterpret_cast<Tuple**>(_tuple_data_pool->allocate(_tuple_ptrs_size));
     }
+    return _tuple_ptrs == nullptr;
 }
 
 // TODO: we want our input_batch's tuple_data to come from our (not yet implemented)
@@ -74,17 +76,22 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const PRowBatch& input_batch, 
           _num_tuples_per_row(input_batch.row_tuples_size()),
           _row_desc(row_desc),
           _need_to_return(false),
-          _tuple_data_pool(new MemPool()) {
+          _tuple_data_pool(new MemPool()) {}
+
+// called after construction function above
+bool RowBatch::init(const PRowBatch& input_batch) {
     DCHECK(_mem_tracker != nullptr);
     _tuple_ptrs_size = _num_rows * _num_tuples_per_row * sizeof(Tuple*);
     DCHECK_GT(_tuple_ptrs_size, 0);
-    // TODO: switch to Init() pattern so we can check memory limit and return Status.
     if (config::enable_partitioned_aggregation) {
         _mem_tracker->consume(_tuple_ptrs_size);
         _tuple_ptrs = reinterpret_cast<Tuple**>(malloc(_tuple_ptrs_size));
-        DCHECK(_tuple_ptrs != nullptr);
     } else {
         _tuple_ptrs = reinterpret_cast<Tuple**>(_tuple_data_pool->allocate(_tuple_ptrs_size));
+    }
+
+    if (nullptr == _tuple_ptrs) {
+        return true;
     }
 
     uint8_t* tuple_data = nullptr;
@@ -116,7 +123,7 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const PRowBatch& input_batch, 
 
     // Check whether we have slots that require offset-to-pointer conversion.
     if (!_row_desc.has_varlen_slots()) {
-        return;
+        return false;
     }
     const std::vector<TupleDescriptor*>& tuple_descs = _row_desc.tuple_descriptors();
 
@@ -150,6 +157,7 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const PRowBatch& input_batch, 
             }
         }
     }
+    return false;
 }
 
 // TODO: we want our input_batch's tuple_data to come from our (not yet implemented)

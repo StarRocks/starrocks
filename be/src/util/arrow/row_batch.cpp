@@ -416,6 +416,9 @@ Status ToRowBatchConverter::convert(std::shared_ptr<RowBatch>* result) {
 
     size_t num_rows = _batch.num_rows();
     _output.reset(new RowBatch(_row_desc, num_rows, _tracker));
+    if (_output->init()) {
+        return Status::InvalidArgument("output row batch init failed");
+    }
     _output->commit_rows(num_rows);
     auto pool = _output->tuple_data_pool();
     for (size_t row_id = 0; row_id < num_rows; ++row_id) {
