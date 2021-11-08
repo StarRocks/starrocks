@@ -47,7 +47,7 @@ HashJoiner::HashJoiner(const THashJoinNode& hash_join_node, TPlanNodeId node_id,
     }
 
     std::string name = strings::Substitute("$0 (id=$1)", print_plan_node_type(node_type), node_id);
-    _runtime_profile.reset(new RuntimeProfile(std::move(name)));
+    _runtime_profile = std::make_shared<RuntimeProfile>(std::move(name));
     _runtime_profile->set_metadata(node_id);
 
     if (hash_join_node.__isset.sql_join_predicates) {
