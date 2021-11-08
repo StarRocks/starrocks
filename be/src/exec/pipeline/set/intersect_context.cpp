@@ -36,27 +36,27 @@ Status IntersectContext::refine_chunk_from_ht(RuntimeState* state, const ChunkPt
 
 StatusOr<vectorized::ChunkPtr> IntersectContext::pull_chunk(RuntimeState* state) {
     // 1. Get at most *config::vector_chunk_size* remained keys from ht.
-    size_t remained_keys_num = 0;
+    size_t num_remained_keys = 0;
     _remained_keys.resize(config::vector_chunk_size);
-    while (_next_processed_iter != _hash_set->end() && remained_keys_num < config::vector_chunk_size) {
+    while (_next_processed_iter != _hash_set->end() && num_remained_keys < config::vector_chunk_size) {
         if (_next_processed_iter->hit_times == _intersect_times) {
-            _remained_keys[remained_keys_num++] = _next_processed_iter->slice;
+            _remained_keys[num_remained_keys++] = _next_processed_iter->slice;
         }
         ++_next_processed_iter;
     }
 
     ChunkPtr dst_chunk = std::make_shared<vectorized::Chunk>();
-    if (remained_keys_num > 0) {
+    if (num_remained_keys > 0) {
         // 2. Create dest columns.
         vectorized::Columns dst_columns(_dst_nullables.size());
         for (size_t i = 0; i < _dst_nullables.size(); ++i) {
             const auto& slot = _dst_tuple_desc->slots()[i];
             dst_columns[i] = vectorized::ColumnHelper::create_column(slot->type(), _dst_nullables[i]);
-            dst_columns[i]->reserve(remained_keys_num);
+            dst_columns[i]->reserve(num_remained_keys);
         }
 
         // 3. Serialize remained keys to the dest columns.
-        _hash_set->deserialize_to_columns(_remained_keys, dst_columns, remained_keys_num);
+        _hash_set->deserialize_to_columns(_remained_keys, dst_columns, num_remained_keys);
 
         // 4. Add dest columns to the dest chunk.
         for (size_t i = 0; i < dst_columns.size(); i++) {
