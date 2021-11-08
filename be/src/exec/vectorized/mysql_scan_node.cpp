@@ -58,10 +58,10 @@ Status MysqlScanNode::prepare(RuntimeState* state) {
     _my_param.passwd = mysql_table->passwd();
     _my_param.db = mysql_table->mysql_db();
     // new one scanner
-    _mysql_scanner.reset(new (std::nothrow) MysqlScanner(_my_param));
+    _mysql_scanner = std::make_unique<MysqlScanner>(_my_param);
     DCHECK(_mysql_scanner != nullptr);
 
-    _tuple_pool.reset(new (std::nothrow) MemPool());
+    _tuple_pool = std::make_unique<MemPool>();
     DCHECK(_tuple_pool != nullptr);
 
     _is_init = true;
