@@ -10,8 +10,8 @@ namespace starrocks::vectorized {
 
 RowSourceMaskBuffer::RowSourceMaskBuffer(int64_t tablet_id, const std::string& storage_root_path)
         : _mask_column(std::move(UInt16Column::create_mutable())),
-        _tablet_id(tablet_id),
-        _storage_root_path(storage_root_path) {}
+          _tablet_id(tablet_id),
+          _storage_root_path(storage_root_path) {}
 
 RowSourceMaskBuffer::~RowSourceMaskBuffer() {
     _reset_mask_column();
@@ -92,7 +92,8 @@ Status RowSourceMaskBuffer::flush() {
 Status RowSourceMaskBuffer::_create_tmp_file() {
     std::stringstream tmp_file_path_s;
     // storage/tmp/compaction_mask_12345.abcdef
-    tmp_file_path_s << _storage_root_path << TMP_PREFIX << "/" << "compaction_mask_" << _tablet_id << ".XXXXXX";
+    tmp_file_path_s << _storage_root_path << TMP_PREFIX << "/"
+                    << "compaction_mask_" << _tablet_id << ".XXXXXX";
     std::string tmp_file_path = tmp_file_path_s.str();
     _tmp_file_fd = mkstemp(tmp_file_path.data());
     if (_tmp_file_fd < 0) {

@@ -28,13 +28,9 @@ struct RowSourceMask {
 
     bool get_agg_flag() const { return (data & MASK_FLAG) != 0; }
 
-    void set_source_num(uint16_t source_num) {
-        data = (data & MASK_FLAG) | (source_num & MASK_NUMBER);
-    }
+    void set_source_num(uint16_t source_num) { data = (data & MASK_FLAG) | (source_num & MASK_NUMBER); }
 
-    void set_agg_flag(bool agg_flag) {
-        data = agg_flag ? data | MASK_FLAG : data & ~MASK_FLAG;
-    }
+    void set_agg_flag(bool agg_flag) { data = agg_flag ? data | MASK_FLAG : data & ~MASK_FLAG; }
 
     uint16_t data = 0;
 
@@ -65,10 +61,10 @@ struct RowSourceMask {
 //
 class RowSourceMaskBuffer {
 public:
-    explicit RowSourceMaskBuffer(int64_t tablet_id, const std::string &storage_root_path);
+    explicit RowSourceMaskBuffer(int64_t tablet_id, const std::string& storage_root_path);
     ~RowSourceMaskBuffer();
 
-    Status write(const std::vector<RowSourceMask> &source_masks);
+    Status write(const std::vector<RowSourceMask>& source_masks);
     StatusOr<bool> has_remaining();
     bool has_same_source(uint16_t source, size_t count) const;
 
