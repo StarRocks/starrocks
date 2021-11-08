@@ -65,34 +65,33 @@ Status SchemaScanner::init(SchemaScannerParam* param, ObjectPool* pool) {
     return Status::OK();
 }
 
-SchemaScanner* SchemaScanner::create(TSchemaTableType::type type) {
+std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type) {
     switch (type) {
     case TSchemaTableType::SCH_TABLES:
-        return new (std::nothrow) vectorized::SchemaTablesScanner();
+        return std::make_unique<vectorized::SchemaTablesScanner>();
     case TSchemaTableType::SCH_SCHEMATA:
-        return new (std::nothrow) vectorized::SchemaSchemataScanner();
+        return std::make_unique<vectorized::SchemaSchemataScanner>();
     case TSchemaTableType::SCH_COLUMNS:
-        return new (std::nothrow) vectorized::SchemaColumnsScanner();
+        return std::make_unique<vectorized::SchemaColumnsScanner>();
     case TSchemaTableType::SCH_CHARSETS:
-        return new (std::nothrow) vectorized::SchemaCharsetsScanner();
+        return std::make_unique<vectorized::SchemaCharsetsScanner>();
     case TSchemaTableType::SCH_COLLATIONS:
-        return new (std::nothrow) vectorized::SchemaCollationsScanner();
+        return std::make_unique<vectorized::SchemaCollationsScanner>();
     case TSchemaTableType::SCH_GLOBAL_VARIABLES:
-        return new (std::nothrow) vectorized::SchemaVariablesScanner(TVarType::GLOBAL);
+        return std::make_unique<vectorized::SchemaVariablesScanner>(TVarType::GLOBAL);
     case TSchemaTableType::SCH_SESSION_VARIABLES:
     case TSchemaTableType::SCH_VARIABLES:
-        return new (std::nothrow) vectorized::SchemaVariablesScanner(TVarType::SESSION);
+        return std::make_unique<vectorized::SchemaVariablesScanner>(TVarType::SESSION);
     case TSchemaTableType::SCH_USER_PRIVILEGES:
-        return new (std::nothrow) vectorized::SchemaUserPrivilegesScanner();
+        return std::make_unique<vectorized::SchemaUserPrivilegesScanner>();
     case TSchemaTableType::SCH_SCHEMA_PRIVILEGES:
-        return new (std::nothrow) vectorized::SchemaSchemaPrivilegesScanner();
+        return std::make_unique<vectorized::SchemaSchemaPrivilegesScanner>();
     case TSchemaTableType::SCH_TABLE_PRIVILEGES:
-        return new (std::nothrow) vectorized::SchemaTablePrivilegesScanner();
+        return std::make_unique<vectorized::SchemaTablePrivilegesScanner>();
     case TSchemaTableType::SCH_VIEWS:
-        return new (std::nothrow) vectorized::SchemaViewsScanner();
+        return std::make_unique<vectorized::SchemaViewsScanner>();
     default:
-        return new (std::nothrow) vectorized::SchemaDummyScanner();
-        break;
+        return std::make_unique<vectorized::SchemaDummyScanner>();
     }
 }
 

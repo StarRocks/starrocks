@@ -54,7 +54,7 @@ public:
     virtual Status start(RuntimeState* state);
     virtual Status get_next(vectorized::ChunkPtr* chunk, bool* eos);
     // factory function
-    static SchemaScanner* create(TSchemaTableType::type type);
+    static std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type);
 
     static void set_starrocks_server(StarRocksServer* starrocks_server) { _s_starrocks_server = starrocks_server; }
 
