@@ -13,8 +13,6 @@ public class AggTableTest extends PlanTestBase {
             fail();
         }
         String result = sql.split("TABLE: test_agg")[1].trim().split("\n")[0].trim();
-
-        System.out.println(result);
         assertEquals(result, "PREAGGREGATION: OFF. Reason: " + reason);
     }
 
