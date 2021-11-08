@@ -180,9 +180,37 @@ public class CreateTableWithPartitionTest {
                 ");";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
         PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
-        Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2020_13 VALUES [('2020-03-25'), ('2020-04-01'))"));
-        Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2020_14 VALUES [('2020-04-01'), ('2020-04-08'))"));
-        Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2020_15 VALUES [('2020-04-08'), ('2020-04-15'))"));
+        Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2020_13 VALUES [('2020-03-25'), ('2020-03-30'))"));
+        Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2020_14 VALUES [('2020-03-30'), ('2020-04-06'))"));
+        Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2020_15 VALUES [('2020-04-06'), ('2020-04-10'))"));
+
+    }
+
+    @Test
+    public void testCreateTableBatchPartitionWeekThroughYear() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createTableSql = "CREATE TABLE testCreateTableBatchPartitionWeekThroughYear (\n" +
+                "    k1 DATE,\n" +
+                "    k2 INT,\n" +
+                "    k3 SMALLINT,\n" +
+                "    v1 VARCHAR(2048),\n" +
+                "    v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1, k2, k3)\n" +
+                "PARTITION BY RANGE (k1) (\n" +
+                "    START (\"2020-12-25\") END (\"2021-01-15\") EVERY (INTERVAL 1 WEEK)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
+        Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2020_52 VALUES [('2020-12-25'), ('2020-12-28'))"));
+        Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2020_53 VALUES [('2020-12-28'), ('2021-01-04'))"));
+        Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2021_02 VALUES [('2021-01-04'), ('2021-01-11'))"));
+        Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p2021_03 VALUES [('2021-01-11'), ('2021-01-15'))"));
 
     }
 
@@ -212,6 +240,35 @@ public class CreateTableWithPartitionTest {
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p202003 VALUES [('2020-03-01'), ('2020-04-01'))"));
         Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p202004 VALUES [('2020-04-01'), ('2020-05-01'))"));
         Assert.assertFalse(partitionDesc.toSql().contains("PARTITION p202005 VALUES [('2020-05-01'), ('2020-06-01'))"));
+
+    }
+
+    @Test
+    public void testCreateTableBatchPartitionMonthNatural() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createTableSql = "CREATE TABLE testCreateTableBatchPartitionMonthNatural (\n" +
+                "    k1 DATE,\n" +
+                "    k2 INT,\n" +
+                "    k3 SMALLINT,\n" +
+                "    v1 VARCHAR(2048),\n" +
+                "    v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                ")\n" +
+                "ENGINE=olap\n" +
+                "DUPLICATE KEY(k1, k2, k3)\n" +
+                "PARTITION BY RANGE (k1) (\n" +
+                "    START (\"2020-12-04\") END (\"2021-03-15\") EVERY (INTERVAL 1 MONTH)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseAndAnalyzeStmt(createTableSql, ctx);
+        PartitionDesc partitionDesc = createTableStmt.getPartitionDesc();
+        Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p202012 VALUES [('2020-12-04'), ('2021-01-01'))"));
+        Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01'))"));
+        Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01'))"));
+        Assert.assertTrue(partitionDesc.toSql().contains("PARTITION p202103 VALUES [('2021-03-01'), ('2021-03-15'))"));
+        Assert.assertFalse(partitionDesc.toSql().contains("PARTITION p202104 VALUES"));
 
     }
 

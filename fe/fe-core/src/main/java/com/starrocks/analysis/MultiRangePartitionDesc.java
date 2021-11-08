@@ -4,13 +4,19 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.DynamicPartitionUtil;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormatter;
 
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.temporal.WeekFields;
 import java.util.List;
 import java.util.Map;
 
@@ -127,6 +133,37 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         List<SingleRangePartitionDesc> singleRangePartitionDescs = Lists.newArrayList();
         long currentLoopNum = 0;
         long maxAllowedLimit = Config.max_partitions_in_one_batch;
+
+        // In china, the Monday is the first day of week. In western country, the Sunday is the first day of week.
+        // The semantics is should be consistent between batching partition and dynamic partition.
+        // If the option is not set, the Monday will be the first day of week.
+        // The 1st January is the first week of every year. Every year have 52 weeks.
+        // The last week will end at 31st December.
+        // If user set dynamic_partition.start_day_of_week table properties
+        // it will follow this configuration to set day of week
+        int dayOfWeek = 1;
+        int dayOfMonth = 1;
+        if (properties != null) {
+            if (properties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
+                String dayOfWeekStr = properties.get(DynamicPartitionProperty.START_DAY_OF_WEEK);
+                try {
+                    DynamicPartitionUtil.checkStartDayOfWeek(dayOfWeekStr);
+                } catch (DdlException e) {
+                    throw new AnalysisException(e.getMessage());
+                }
+                dayOfWeek = Integer.parseInt(dayOfWeekStr);
+            }
+            if (properties.containsKey(DynamicPartitionProperty.START_DAY_OF_MONTH)) {
+                String dayOfMonthStr = properties.get(DynamicPartitionProperty.START_DAY_OF_MONTH);
+                try {
+                    DynamicPartitionUtil.checkStartDayOfMonth(dayOfMonthStr);
+                } catch (DdlException e) {
+                    throw new AnalysisException(e.getMessage());
+                }
+                dayOfMonth = Integer.parseInt(dayOfMonthStr);
+            }
+        }
+        WeekFields weekFields = WeekFields.of(DayOfWeek.of(dayOfWeek), 1);
         while (beginTime.isBefore(endTime)) {
             PartitionValue lowerPartitionValue = new PartitionValue(beginTime.toString(beginDateTimeFormat));
 
@@ -136,20 +173,30 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                     beginTime = beginTime.plusDays(timeInterval);
                     break;
                 case WEEK:
-                    partitionName = DEFAULT_PREFIX + beginTime.toString(DateUtils.WEEK_FORMAT);
+                    LocalDate localDate = LocalDate.of(beginTime.getYear(), beginTime.getMonthOfYear(),
+                            beginTime.getDayOfMonth());
+                    int weekOfYear = localDate.get(weekFields.weekOfYear());
+                    partitionName = String.format("%s%s_%02d", DEFAULT_PREFIX,
+                            beginTime.toString(DateUtils.YEAR_FORMAT), weekOfYear);
+                    beginTime = beginTime.withDayOfWeek(dayOfWeek);
                     beginTime = beginTime.plusWeeks(timeInterval);
                     break;
                 case MONTH:
                     partitionName = DEFAULT_PREFIX + beginTime.toString(DateUtils.MONTH_FORMAT);
+                    beginTime = beginTime.withDayOfMonth(dayOfMonth);
                     beginTime = beginTime.plusMonths(timeInterval);
                     break;
                 case YEAR:
                     partitionName = DEFAULT_PREFIX + beginTime.toString(DateUtils.YEAR_FORMAT);
+                    beginTime = beginTime.withDayOfYear(1);
                     beginTime = beginTime.plusYears(timeInterval);
                     break;
                 default:
                     throw new AnalysisException("Batch build partition does not support time interval type: " +
                             timeUnit);
+            }
+            if (timeUnitType != TimestampArithmeticExpr.TimeUnit.DAY && beginTime.isAfter(endTime)) {
+                beginTime = endTime;
             }
 
             PartitionValue upperPartitionValue = new PartitionValue(beginTime.toString(beginDateTimeFormat));

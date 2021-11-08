@@ -680,7 +680,7 @@ public class AlterTest {
     @Test
     public void testCatalogAddPartitionsWeek() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        String createSQL = "CREATE TABLE test.test_partition (\n" +
+        String createSQL = "CREATE TABLE test.test_partition_week (\n" +
                 "      k2 DATE,\n" +
                 "      k3 SMALLINT,\n" +
                 "      v1 VARCHAR(2048),\n" +
@@ -699,20 +699,20 @@ public class AlterTest {
         Catalog.getCurrentCatalog().createTable(createTableStmt);
         Database db = Catalog.getCurrentCatalog().getDb("default_cluster:test");
 
-        String alterSQL = "ALTER TABLE test_partition ADD\n" +
+        String alterSQL = "ALTER TABLE test_partition_week ADD\n" +
                 "    PARTITIONS START (\"2017-03-25\") END (\"2017-04-10\") EVERY (interval 1 week)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
-        Catalog.getCurrentCatalog().addPartitions(db, "test_partition", addPartitionClause);
+        Catalog.getCurrentCatalog().addPartitions(db, "test_partition_week", addPartitionClause);
 
         Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
-                .getTable("test_partition");
+                .getTable("test_partition_week");
 
-        Assert.assertNotNull(table.getPartition("p2017_12"));
         Assert.assertNotNull(table.getPartition("p2017_13"));
         Assert.assertNotNull(table.getPartition("p2017_14"));
+        Assert.assertNotNull(table.getPartition("p2017_15"));
 
-        String dropSQL = "drop table test_partition";
+        String dropSQL = "drop table test_partition_week";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
         Catalog.getCurrentCatalog().dropTable(dropTableStmt);
     }
@@ -1020,7 +1020,7 @@ public class AlterTest {
         Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
                 .getTable("test_partition_exists");
 
-        Assert.assertEquals(2, ((OlapTable) table).getPartitions().size());
+        Assert.assertEquals(3, ((OlapTable) table).getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
@@ -1065,7 +1065,7 @@ public class AlterTest {
         Table table = Catalog.getCurrentCatalog().getDb("default_cluster:test")
                 .getTable("test_partition_exists2");
 
-        Assert.assertEquals(2, ((OlapTable) table).getPartitions().size());
+        Assert.assertEquals(3, ((OlapTable) table).getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists2";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
