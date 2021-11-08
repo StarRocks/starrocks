@@ -25,8 +25,6 @@
 
 #include "common/config.h"
 #include "runtime/memory/chunk.h"
-#include "util/cpu_info.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
