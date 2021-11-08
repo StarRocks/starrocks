@@ -134,7 +134,8 @@ bool ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPt
         }
         if (PredicateType::kGE == pred->type() || PredicateType::kGT == pred->type()) {
             _get_segment_dict(&sorted_dicts, _column_iterators[cid]);
-            auto value = pred->value().get_slice().to_string();
+            // use non-padding string value.
+            auto value = pred->values()[0].get_slice().to_string();
             auto iter = std::lower_bound(
                     sorted_dicts.begin(), sorted_dicts.end(), value,
                     [](const auto& entity, const auto& value) { return entity.first.compare(value) < 0; });
@@ -160,11 +161,12 @@ bool ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPt
         }
         if (PredicateType::kLE == pred->type() || PredicateType::kLT == pred->type()) {
             _get_segment_dict(&sorted_dicts, _column_iterators[cid]);
-            std::vector<std::string> str_codewords;
-            auto value = pred->value().get_slice().to_string();
+            // use non-padding string value.
+            auto value = pred->values()[0].get_slice().to_string();
             auto iter = std::lower_bound(
                     sorted_dicts.begin(), sorted_dicts.end(), value,
                     [](const auto& entity, const auto& value) { return entity.first.compare(value) < 0; });
+            std::vector<std::string> str_codewords;
             auto begin_iter = sorted_dicts.begin();
             // X < 3.5 find 4, range(-inf, 3)
             // X < 3 find 3, range(-inf, 2)
