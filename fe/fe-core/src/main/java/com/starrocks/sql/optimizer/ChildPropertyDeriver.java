@@ -436,7 +436,12 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
     private void tryBucketShuffle(PhysicalHashJoinOperator node, HashDistributionSpec leftShuffleDistribution,
                                   HashDistributionSpec rightShuffleDistribution) {
         JoinOperator nodeJoinType = node.getJoinType();
-        if (nodeJoinType.isCrossJoin()) {
+        // Right outer join/Full outer join need fill null rows, will cause null rows lose if left table prune bucket
+        // e.g. : select * from t1 right outer join t2 on t1.v1 = t2.v1 and t1.v2 = 2;
+        // t1 will lose scan tablet because can be prune bucket by `t1.v2 = 2`, then the data of t2 can't send to t1
+        // because the bucket shuffle will reduce useless data(t1 has none data) shuffle of be.
+        //
+        if (nodeJoinType.isCrossJoin() || nodeJoinType.isFullOuterJoin() || nodeJoinType.isRightJoin()) {
             return;
         }
 
