@@ -180,6 +180,14 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
     while (true) {
+#ifndef BE_TEST
+        Status st = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");
+        if (!st.ok()) {
+            LOG(WARNING) << "fail to execute compaction: " << st.message() << std::endl;
+            return Status::InternalError(st.message());
+        }
+#endif
+
         chunk->reset();
         Status status = reader.get_next(chunk.get());
         if (!status.ok()) {
