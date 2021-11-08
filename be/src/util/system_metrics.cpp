@@ -81,6 +81,7 @@ public:
     METRIC_DEFINE_INT_GAUGE(compaction_mem_bytes, MetricUnit::BYTES);
     // SchemaChange memory usage
     METRIC_DEFINE_INT_GAUGE(schema_change_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(column_pool_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(clone_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(consistency_mem_bytes, MetricUnit::BYTES);
 
@@ -251,6 +252,7 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("tablet_meta_mem_bytes", &_memory_metrics->tablet_meta_mem_bytes);
     registry->register_metric("compaction_mem_bytes", &_memory_metrics->compaction_mem_bytes);
     registry->register_metric("schema_change_mem_bytes", &_memory_metrics->schema_change_mem_bytes);
+    registry->register_metric("column_pool_mem_bytes", &_memory_metrics->column_pool_mem_bytes);
     registry->register_metric("clone_mem_bytes", &_memory_metrics->clone_mem_bytes);
     registry->register_metric("consistency_mem_bytes", &_memory_metrics->consistency_mem_bytes);
 
@@ -321,6 +323,10 @@ void SystemMetrics::_update_memory_metrics() {
     }
     if (ExecEnv::GetInstance()->clone_mem_tracker() != nullptr) {
         _memory_metrics->clone_mem_bytes.set_value(ExecEnv::GetInstance()->clone_mem_tracker()->consumption());
+    }
+    if (ExecEnv::GetInstance()->column_pool_mem_tracker() != nullptr) {
+        _memory_metrics->column_pool_mem_bytes.set_value(
+                ExecEnv::GetInstance()->column_pool_mem_tracker()->consumption());
     }
     if (ExecEnv::GetInstance()->consistency_mem_tracker() != nullptr) {
         _memory_metrics->consistency_mem_bytes.set_value(
