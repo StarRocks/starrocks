@@ -15,8 +15,6 @@ class Column;
 
 namespace segment_v2 {
 
-class FileColumnIterator;
-
 // TODO: rename to ArrayColumnIterator
 // TODO: more unit tests
 class ArrayFileColumnIterator final : public ColumnIterator {
