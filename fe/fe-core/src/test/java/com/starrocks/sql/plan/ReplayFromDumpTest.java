@@ -175,7 +175,7 @@ public class ReplayFromDumpTest {
         // Check the size of the left and right tables
         Assert.assertTrue(replayPair.second.contains("|  \n" +
                 "  |----21:EXCHANGE\n" +
-                "  |       cardinality: 102\n" +
+                "  |       cardinality: 101\n" +
                 "  |    \n" +
                 "  5:OlapScanNode\n" +
                 "     table: customer, rollup: customer\n"));

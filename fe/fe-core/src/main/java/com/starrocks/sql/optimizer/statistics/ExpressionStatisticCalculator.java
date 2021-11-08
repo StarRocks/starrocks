@@ -111,14 +111,17 @@ public class ExpressionStatisticCalculator {
         private ColumnStatistic binaryExpressionCalculate(CallOperator callOperator, ColumnStatistic left,
                                                           ColumnStatistic right) {
             double distinctValues = Math.max(left.getDistinctValuesCount(), right.getMaxValue());
+            double nullsFraction = 1 - ((1 - left.getNullsFraction()) * (1 - right.getNullsFraction()));
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.ADD:
                     return new ColumnStatistic(left.getMinValue() + right.getMinValue(),
-                            left.getMaxValue() + right.getMaxValue(), 0, callOperator.getType().getSlotSize(),
+                            left.getMaxValue() + right.getMaxValue(), nullsFraction,
+                            callOperator.getType().getSlotSize(),
                             distinctValues);
                 case FunctionSet.SUBTRACT:
                     return new ColumnStatistic(left.getMinValue() - right.getMaxValue(),
-                            left.getMaxValue() - right.getMinValue(), 0, callOperator.getType().getSlotSize(),
+                            left.getMaxValue() - right.getMinValue(), nullsFraction,
+                            callOperator.getType().getSlotSize(),
                             distinctValues);
                 case FunctionSet.MULTIPLY:
                     double multiplyMinValue = Math.min(Math.min(
@@ -129,20 +132,21 @@ public class ExpressionStatisticCalculator {
                             Math.max(left.getMinValue() * right.getMinValue(),
                                     left.getMinValue() * right.getMaxValue()),
                             left.getMaxValue() * right.getMinValue()), left.getMaxValue() * right.getMaxValue());
-                    return new ColumnStatistic(multiplyMinValue, multiplyMaxValue, 0,
+                    return new ColumnStatistic(multiplyMinValue, multiplyMaxValue, nullsFraction,
                             callOperator.getType().getSlotSize(), distinctValues);
                 case FunctionSet.DIVIDE:
                     double divideMinValue = Math.min(Math.min(
-                            Math.min(left.getMinValue() / divisorNotZero(right.getMinValue()),
-                                    left.getMinValue() / divisorNotZero(right.getMaxValue())),
-                            left.getMaxValue() / divisorNotZero(right.getMinValue())),
+                                    Math.min(left.getMinValue() / divisorNotZero(right.getMinValue()),
+                                            left.getMinValue() / divisorNotZero(right.getMaxValue())),
+                                    left.getMaxValue() / divisorNotZero(right.getMinValue())),
                             left.getMaxValue() / divisorNotZero(right.getMaxValue()));
                     double divideMaxValue = Math.max(Math.max(
-                            Math.max(left.getMinValue() / divisorNotZero(right.getMinValue()),
-                                    left.getMinValue() / divisorNotZero(right.getMaxValue())),
-                            left.getMaxValue() / divisorNotZero(right.getMinValue())),
+                                    Math.max(left.getMinValue() / divisorNotZero(right.getMinValue()),
+                                            left.getMinValue() / divisorNotZero(right.getMaxValue())),
+                                    left.getMaxValue() / divisorNotZero(right.getMinValue())),
                             left.getMaxValue() / divisorNotZero(right.getMaxValue()));
-                    return new ColumnStatistic(divideMinValue, divideMaxValue, 0, callOperator.getType().getSlotSize(),
+                    return new ColumnStatistic(divideMinValue, divideMaxValue, nullsFraction,
+                            callOperator.getType().getSlotSize(),
                             distinctValues);
                 default:
                     // return child column statistic default
