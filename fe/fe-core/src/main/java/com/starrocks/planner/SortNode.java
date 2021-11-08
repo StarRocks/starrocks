@@ -297,4 +297,12 @@ public class SortNode extends PlanNode {
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
+
+    @Override
+    public boolean canPushDownRuntimeFilter() {
+        if (useTopN) {
+            return false;
+        }
+        return true;
+    }
 }
