@@ -47,7 +47,7 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
-    int32_t _decrement_num_result_sinks() { return _num_result_sinks.fetch_add(-1, std::memory_order_release) - 1; }
+    int32_t _decrement_num_result_sinks() { return _num_result_sinks.fetch_add(-1, std::memory_order_acq_rel) - 1; }
 
     TResultSinkType::type _sink_type;
     std::vector<ExprContext*> _output_expr_ctxs;
