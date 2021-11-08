@@ -17,15 +17,14 @@ class ResultSinkOperator final : public Operator {
 public:
     ResultSinkOperator(int32_t id, int32_t plan_node_id, TResultSinkType::type sink_type,
                        const std::vector<ExprContext*>& output_expr_ctxs,
-                       const std::shared_ptr<BufferControlBlock>& sender, const size_t& result_sinks_num,
-                       std::atomic<size_t>& closed_result_sinks_num, std::atomic<int64_t>& written_rows_num)
+                       const std::shared_ptr<BufferControlBlock>& sender, std::atomic<int32_t>& num_result_sinks,
+                       std::atomic<int64_t>& num_written_rows)
             : Operator(id, "result_sink", plan_node_id),
               _sink_type(sink_type),
               _output_expr_ctxs(output_expr_ctxs),
               _sender(sender),
-              _result_sinks_num(result_sinks_num),
-              _closed_result_sinks_num(closed_result_sinks_num),
-              _written_rows_num(written_rows_num) {}
+              _num_result_sinks(num_result_sinks),
+              _num_written_rows(num_written_rows) {}
 
     ~ResultSinkOperator() override = default;
 
@@ -48,15 +47,16 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
+    int32_t _decrement_num_result_sinks() { return _num_result_sinks.fetch_add(-1, std::memory_order_release) - 1; }
+
     TResultSinkType::type _sink_type;
     std::vector<ExprContext*> _output_expr_ctxs;
 
     /// The following four fields are shared by all the ResultSinkOperators
     /// created by the same ResultSinkOperatorFactory.
     const std::shared_ptr<BufferControlBlock>& _sender;
-    const size_t& _result_sinks_num;
-    std::atomic<size_t>& _closed_result_sinks_num;
-    std::atomic<int64_t>& _written_rows_num;
+    std::atomic<int32_t>& _num_result_sinks;
+    std::atomic<int64_t>& _num_written_rows;
 
     std::shared_ptr<ResultWriter> _writer;
     mutable TFetchDataResultPtr _fetch_data_result;
@@ -78,9 +78,13 @@ public:
     ~ResultSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        ++_result_sinks_num;
+        // _num_result_sinks is incremented when creating a ResultSinkOperator instance here at the preparing
+        // phase of FragmentExecutor, and decremented and read when closing ResultSinkOperator. The visibility
+        // of increasing _num_result_sinks to ResultSinkOperator::close is guaranteed by pipeline driver queue,
+        // so it doesn't need memory barrier here.
+        _increment_num_result_sinks_no_barrier();
         return std::make_shared<ResultSinkOperator>(_id, _plan_node_id, _sink_type, _output_expr_ctxs, _sender,
-                                                    _result_sinks_num, _closed_result_sinks_num, _written_rows_num);
+                                                    _num_result_sinks, _num_written_rows);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -88,6 +92,8 @@ public:
     void close(RuntimeState* state) override;
 
 private:
+    void _increment_num_result_sinks_no_barrier() { _num_result_sinks.fetch_add(1, std::memory_order_relaxed); }
+
     TResultSinkType::type _sink_type;
     std::vector<TExpr> _t_output_expr;
     std::vector<ExprContext*> _output_expr_ctxs;
@@ -96,9 +102,8 @@ private:
     // A fragment_instance_id can only have ONE sender, because result_mgr saves the mapping from fragment_instance_id
     // to sender. Therefore, sender is created in this factory and shared by all the ResultSinkOperator instances.
     std::shared_ptr<BufferControlBlock> _sender;
-    size_t _result_sinks_num = 0;
-    std::atomic<size_t> _closed_result_sinks_num = 0;
-    std::atomic<int64_t> _written_rows_num = 0;
+    std::atomic<int32_t> _num_result_sinks = 0;
+    std::atomic<int64_t> _num_written_rows = 0;
 };
 
 } // namespace pipeline

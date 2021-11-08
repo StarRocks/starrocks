@@ -35,13 +35,15 @@ Status ResultSinkOperator::close(RuntimeState* state) {
     // Close the writer
     if (_writer != nullptr) {
         st = _writer->close();
-        _written_rows_num.fetch_add(_writer->get_written_rows(), std::memory_order_release);
+        _num_written_rows.fetch_add(_writer->get_written_rows(), std::memory_order_relaxed);
     }
 
     // Close the shared sender when the last result sink operator is closing.
-    if (1 + _closed_result_sinks_num.fetch_add(1, std::memory_order_release) == _result_sinks_num) {
+    if (_decrement_num_result_sinks() == 0) {
         if (_sender != nullptr) {
-            _sender->update_num_written_rows(_written_rows_num.load(std::memory_order_acquire));
+            // Incrementing and reading _num_written_rows needn't memory barrier, because
+            // the visibility of _num_written_rows is guaranteed by _decrement_num_result_sinks.
+            _sender->update_num_written_rows(_num_written_rows.load(std::memory_order_relaxed));
             _sender->close(st);
         }
 
