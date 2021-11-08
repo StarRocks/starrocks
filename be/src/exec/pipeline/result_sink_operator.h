@@ -38,7 +38,7 @@ public:
 
     bool need_input() const override;
 
-    bool is_finished() const override { return _is_finished && !_fetch_data_result && _sender; }
+    bool is_finished() const override { return _is_finished && !_fetch_data_result; }
 
     void finish(RuntimeState* state) override { _is_finished = true; }
 
