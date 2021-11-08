@@ -820,40 +820,43 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         chunk_start = next_start;
         DCHECK_EQ(chunk_start, chunk->num_rows());
     }
-    chunk_start = _filter_by_expr_predicates(chunk, rowid);
+
+    size_t raw_chunk_size = chunk->num_rows();
+
+    size_t chunk_size = _filter_by_expr_predicates(chunk, rowid);
 
     _opts.stats->block_load_ns += sw.elapsed_time();
 
     int64_t total_read = _opts.stats->raw_rows_read - prev_raw_read;
 
-    DCHECK_EQ(chunk_start, chunk->num_rows());
-    if (UNLIKELY(chunk_start == 0)) {
+    if (UNLIKELY(raw_chunk_size == 0)) {
         // Return directly if chunk_start is zero, i.e, chunk is empty.
         // Otherwise, chunk will be swapped with result, which is incorrect
         // because the chunk is a pointer to _read_chunk instead of _final_chunk.
         return Status::EndOfFile("no more data in segment");
     }
 
-    if (_context->_has_dict_column & (chunk_start > 0)) {
+    if (chunk_size > 0 && _context->_has_dict_column) {
         chunk = _context->_dict_chunk.get();
         SCOPED_RAW_TIMER(&_opts.stats->decode_dict_ns);
         RETURN_IF_ERROR(_decode_dict_codes(_context));
     }
+
     if (_context->_late_materialize) {
         chunk = _context->_final_chunk.get();
         SCOPED_RAW_TIMER(&_opts.stats->late_materialize_ns);
         RETURN_IF_ERROR(_finish_late_materialization(_context));
-        if (_context->_next != nullptr && (chunk_start * 1000 > total_read * _late_materialization_ratio)) {
+        if (_context->_next != nullptr && (chunk_size * 1000 > total_read * _late_materialization_ratio)) {
             need_switch_context = true;
         }
     } else if (_context->_next != nullptr && _context_switch_count < 3 &&
-               chunk_start * 1000 <= total_read * _late_materialization_ratio) {
+               chunk_size * 1000 <= total_read * _late_materialization_ratio) {
         need_switch_context = true;
         _context_switch_count++;
     }
 
     // remove (logical) deleted rows.
-    if (chunk->num_rows() > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty()) {
+    if (chunk_size > 0 && chunk->delete_state() != DEL_NOT_SATISFIED && !_opts.delete_predicates.empty()) {
         SCOPED_RAW_TIMER(&_opts.stats->del_filter_ns);
         size_t old_sz = chunk->num_rows();
         _opts.delete_predicates.evaluate(chunk, _selection.data());
