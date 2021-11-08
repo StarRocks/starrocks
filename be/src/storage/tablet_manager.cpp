@@ -787,7 +787,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
 Status TabletManager::report_tablet_info(TTabletInfo* tablet_info) {
     StarRocksMetrics::instance()->report_tablet_requests_total.increment(1);
 
-    TabletSharedPtr tablet = get_tablet(tablet_info->tablet_id, tablet_info->schema_hash);
+    TabletSharedPtr tablet = get_tablet(tablet_info->tablet_id, false);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to report tablet info: can't find tablet."
                      << " tablet=" << tablet_info->tablet_id;
