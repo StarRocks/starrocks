@@ -25,6 +25,7 @@
 
 #include "common/config.h"
 #include "exec/data_sink.h"
+#include "runtime/exec_env.h"
 #include "runtime/plan_fragment_executor.h"
 #include "runtime/row_batch.h"
 #include "util/monotime.h"
@@ -71,7 +72,7 @@ protected:
 };
 
 TEST_F(FragmentMgrTest, Normal) {
-    FragmentMgr mgr(nullptr);
+    FragmentMgr mgr(ExecEnv::GetInstance());
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(100);
@@ -82,7 +83,7 @@ TEST_F(FragmentMgrTest, Normal) {
 }
 
 TEST_F(FragmentMgrTest, AddNormal) {
-    FragmentMgr mgr(nullptr);
+    FragmentMgr mgr(ExecEnv::GetInstance());
     for (int i = 0; i < 8; ++i) {
         TExecPlanFragmentParams params;
         params.params.fragment_instance_id = TUniqueId();
@@ -93,7 +94,7 @@ TEST_F(FragmentMgrTest, AddNormal) {
 }
 
 TEST_F(FragmentMgrTest, CancelNormal) {
-    FragmentMgr mgr(nullptr);
+    FragmentMgr mgr(ExecEnv::GetInstance());
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(100);
@@ -104,7 +105,7 @@ TEST_F(FragmentMgrTest, CancelNormal) {
 }
 
 TEST_F(FragmentMgrTest, CancelWithoutAdd) {
-    FragmentMgr mgr(nullptr);
+    FragmentMgr mgr(ExecEnv::GetInstance());
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(100);
@@ -114,7 +115,7 @@ TEST_F(FragmentMgrTest, CancelWithoutAdd) {
 
 TEST_F(FragmentMgrTest, PrepareFailed) {
     s_prepare_status = Status::InternalError("Prepare failed.");
-    FragmentMgr mgr(nullptr);
+    FragmentMgr mgr(ExecEnv::GetInstance());
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
     params.params.fragment_instance_id.__set_hi(100);
@@ -126,7 +127,7 @@ TEST_F(FragmentMgrTest, OfferPoolFailed) {
     config::fragment_pool_thread_num_min = 1;
     config::fragment_pool_thread_num_max = 1;
     config::fragment_pool_queue_size = 0;
-    FragmentMgr mgr(nullptr);
+    FragmentMgr mgr(ExecEnv::GetInstance());
 
     TExecPlanFragmentParams params;
     params.params.fragment_instance_id = TUniqueId();
