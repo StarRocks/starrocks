@@ -130,8 +130,11 @@ public:
 
     virtual PredicateType type() const = 0;
 
+    // Constant value in the predicate. And this constant value might be adjusted according to schema.
+    // For example, if column type is char(20), then this constant value might be zero-padded to 20 chars.
     virtual Datum value() const { return Datum(); }
 
+    // Constant value in the predicate in vector form. In contrast to `value()`, these value are un-modified.
     virtual std::vector<Datum> values() const { return std::vector<Datum>{}; }
 
     virtual Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
