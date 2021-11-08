@@ -1533,4 +1533,12 @@ public class ViewPlanTest extends PlanTestBase {
         Assert.assertEquals(sqlPlan, viewPlan);
         starRocksAssert.dropView("alias_view");
     }
+
+    @Test
+    public void testExpressionRewriteView() throws Exception {
+        String sql = "select from_unixtime(unix_timestamp(id_datetime, 'yyyy-MM-dd'), 'yyyy-MM-dd') as x1, sum(t1c) as x3 " +
+                "from test_all_type " +
+                "group by from_unixtime(unix_timestamp(id_datetime, 'yyyy-MM-dd'), 'yyyy-MM-dd')";
+        testView(sql);
+    }
 }
