@@ -47,7 +47,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     // example:
     // case xx when 1 then 2 end => if (xx = 1, 2, NULL)
     ScalarOperator simplifiedCaseWhenToIfFunction(CaseWhenOperator operator) {
-        if (operator.getWhenClauseSize() != -1) {
+        if (operator.getWhenClauseSize() != 1) {
             return operator;
         }
 
@@ -64,12 +64,11 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         if (operator.hasElse()) {
             args.add(operator.getElseClause());
         } else {
-            args.add(ConstantOperator.createNull(operator.getThenClause(0).getType()));
+            args.add(ConstantOperator.createNull(operator.getType()));
         }
 
         Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-        Function fn =
-                Expr.getBuiltinFunction(FunctionSet.IF, argTypes, Function.CompareMode.IS_INDISTINGUISHABLE);
+        Function fn = Expr.getBuiltinFunction(FunctionSet.IF, argTypes, Function.CompareMode.IS_IDENTICAL);
 
         Preconditions.checkState(fn != null);
         if (operator.getChildren().stream().anyMatch(s -> s.getType().isDecimalV3())) {
