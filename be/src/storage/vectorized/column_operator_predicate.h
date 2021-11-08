@@ -7,12 +7,12 @@
 
 namespace starrocks::vectorized {
 
-template <FieldType field_type, class ColumnType, template <FieldType> class PredicateOperator, typename... Args>
-class EvalPredicate final : public ColumnPredicate {
+template <FieldType field_type, class ColumnType, template <FieldType> class ColumnOperator, typename... Args>
+class ColumnOperatorPredicate final : public ColumnPredicate {
 public:
-    using EvalPredicateOperator = PredicateOperator<field_type>;
-    EvalPredicate(const EvalPredicate&) = delete;
-    EvalPredicate(const TypeInfoPtr& type_info, ColumnId id, Args... args)
+    using SpecColumnOperator = ColumnOperator<field_type>;
+    ColumnOperatorPredicate(const ColumnOperatorPredicate&) = delete;
+    ColumnOperatorPredicate(const TypeInfoPtr& type_info, ColumnId id, Args... args)
             : ColumnPredicate(type_info, id), _predicate_operator(std::forward<Args>(args)...) {}
 
     void evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override {
@@ -118,23 +118,23 @@ public:
         return _predicate_operator.zone_map_filter(detail);
     }
 
-    PredicateType type() const override { return EvalPredicateOperator::type(); }
+    PredicateType type() const override { return SpecColumnOperator::type(); }
 
     Datum value() const override { return _predicate_operator.value(); }
 
     std::vector<Datum> values() const override { return _predicate_operator.values(); }
 
-    bool can_vectorized() const override { return EvalPredicateOperator::can_vectorized(); }
+    bool can_vectorized() const override { return SpecColumnOperator::can_vectorized(); }
 
     Status seek_bitmap_dictionary(segment_v2::BitmapIndexIterator* iter, SparseRange* range) const override {
         return _predicate_operator.seek_bitmap_dictionary(iter, range);
     }
 
-    bool support_bloom_filter() const override { return EvalPredicateOperator::support_bloom_filter(); }
+    bool support_bloom_filter() const override { return SpecColumnOperator::support_bloom_filter(); }
 
     bool bloom_filter(const segment_v2::BloomFilter* bf) const override {
         DCHECK(support_bloom_filter()) << "Not support bloom filter";
-        if constexpr (EvalPredicateOperator::support_bloom_filter()) {
+        if constexpr (SpecColumnOperator::support_bloom_filter()) {
             return _predicate_operator.bloom_filter(bf);
         }
         return true;
@@ -150,6 +150,6 @@ public:
     bool padding_zeros(size_t len) override { return _predicate_operator.padding_zeros(len); }
 
 private:
-    PredicateOperator<field_type> _predicate_operator;
+    SpecColumnOperator _predicate_operator;
 };
 } // namespace starrocks::vectorized

@@ -7,7 +7,7 @@
 
 #include "column/datum.h"
 #include "runtime/global_dicts.h"
-#include "storage/vectorized/column_eval_predicate.h"
+#include "storage/vectorized/column_operator_predicate.h"
 #include "storage/vectorized/column_predicate.h"
 
 namespace starrocks::vectorized {
@@ -65,8 +65,8 @@ ColumnPredicate* new_column_dict_conjuct_predicate(const TypeInfoPtr& type_info,
                                                    std::vector<uint8_t> dict_mapping) {
     DCHECK(type_info->type() == OLAP_FIELD_TYPE_INT);
     if (type_info->type() == OLAP_FIELD_TYPE_INT) {
-        return new EvalPredicate<OLAP_FIELD_TYPE_INT, LowCardDictColumn, DictConjuctPredicateOperator,
-                                 decltype(dict_mapping)>(type_info, id, std::move(dict_mapping));
+        return new ColumnOperatorPredicate<OLAP_FIELD_TYPE_INT, LowCardDictColumn, DictConjuctPredicateOperator,
+                                           decltype(dict_mapping)>(type_info, id, std::move(dict_mapping));
     }
 
     return nullptr;
