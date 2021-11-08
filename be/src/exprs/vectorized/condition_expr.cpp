@@ -20,11 +20,9 @@ namespace starrocks::vectorized {
 template <bool isConstC0, bool isConst1, PrimitiveType Type>
 struct SelectIfOP {
     static ColumnPtr eval(ColumnPtr& value0, ColumnPtr& value1, ColumnPtr& selector, ColumnBuilder<Type>& builder) {
+        [[maybe_unused]] Column::Filter& select_vec = ColumnHelper::merge_nullable_filter(selector.get());
         [[maybe_unused]] auto* input_data0 = ColumnHelper::get_data_column(value0.get());
         [[maybe_unused]] auto* input_data1 = ColumnHelper::get_data_column(value1.get());
-
-        auto* select_col = down_cast<BooleanColumn*>(selector.get());
-        auto& select_vec = select_col->get_data();
 
         ColumnPtr res = builder.build(false);
         auto* res_col = down_cast<RunTimeColumnType<Type>*>(res.get());
