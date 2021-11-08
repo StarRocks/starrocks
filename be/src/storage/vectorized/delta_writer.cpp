@@ -63,7 +63,7 @@ void DeltaWriter::_garbage_collection() {
 
 Status DeltaWriter::init() {
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
-    _tablet = tablet_mgr->get_tablet(_req.tablet_id, _req.schema_hash);
+    _tablet = tablet_mgr->get_tablet(_req.tablet_id, false);
     if (_tablet == nullptr) {
         std::stringstream ss;
         ss << "Fail to get tablet. tablet_id=" << _req.tablet_id;

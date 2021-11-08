@@ -73,7 +73,7 @@ OLAPStatus EngineCloneTask::execute() {
     auto tablet_manager = StorageEngine::instance()->tablet_manager();
     // Prevent the snapshot directory from been removed by the path GC worker.
     tablet_manager->register_clone_tablet(_clone_req.tablet_id);
-    auto tablet = tablet_manager->get_tablet(_clone_req.tablet_id, _clone_req.schema_hash);
+    auto tablet = tablet_manager->get_tablet(_clone_req.tablet_id, false);
     if (tablet != nullptr) {
         std::shared_lock rlock(tablet->get_migration_lock(), std::try_to_lock);
         if (!rlock.owns_lock()) {

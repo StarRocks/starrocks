@@ -555,7 +555,7 @@ Status Tablet::capture_consistent_versions(const Version& spec_version, std::vec
                          << ", version already has been merged. spec_version: " << spec_version;
             return Status::VersionAlreadyMerged("");
         } else {
-            LOG(WARNING) << "tablet:" << full_name() << " missed version " << spec_version;
+            LOG(WARNING) << "tablet" << tablet_id() << " missed version " << spec_version;
             _print_missed_versions(missed_versions);
             return Status::NotFound("has missed versions");
         }
