@@ -49,7 +49,7 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
     }
 
     std::string name = strings::Substitute("$0 (id=$1)", print_plan_node_type(param._node_type), param._node_id);
-    _runtime_profile.reset(new RuntimeProfile(std::move(name)));
+    _runtime_profile = std::make_shared<RuntimeProfile>(std::move(name));
     _runtime_profile->set_metadata(param._node_id);
 
     if (param._hash_join_node.__isset.sql_join_predicates) {
