@@ -51,6 +51,22 @@ inline void avx2_select_if_const_var(uint8_t*& selector, T*& dst, const T a, T*&
 }
 
 template <typename T, std::enable_if_t<sizeof(T) == 1, int> = 1>
+inline void avx2_select_if_var_const(uint8_t*& selector, T*& dst, T*& a, const T b, int size) {
+    __m256i vec_b = _mm256_set1_epi8(b);
+    const T* dst_end = dst + size;
+    while (dst + 32 < dst_end) {
+        __m256i loaded_mask = _mm256_loadu_si256(reinterpret_cast<__m256i*>(selector));
+        loaded_mask = _mm256_cmpgt_epi8(loaded_mask, _mm256_setzero_si256());
+        __m256i vec_a = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(a));
+        __m256i res = _mm256_blendv_epi8(vec_b, vec_a, loaded_mask);
+        _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), res);
+        dst += 32;
+        selector += 32;
+        a += 32;
+    }
+}
+
+template <typename T, std::enable_if_t<sizeof(T) == 1, int> = 1>
 inline void avx2_select_if_const_const(uint8_t*& selector, T*& dst, const T a, T b, int size) {
     __m256i vec_a = _mm256_set1_epi8(a);
     __m256i vec_b = _mm256_set1_epi8(b);
@@ -163,14 +179,27 @@ public:
         }
     }
 
-    // select if const var
-    // dst[i] = select_vec[i] ? a : b[i]
+    // select if var const
+    // dst[i] = select_vec[i] ? a[i] : b
     static void select_if(SelectVec select_vec, Container& dst, Container& a, const CppType b) {
-        [[maybe_unused]] int size = dst.size();
-        for (int i = 0; i < size; ++i) {
-            select_vec[i] = 1 - select_vec[i];
+        int size = dst.size();
+        auto* start_dst = dst.data();
+        auto* end_dst = dst.data() + size;
+
+        auto* start_a = a.data();
+
+#ifdef __AVX2__
+        if constexpr (sizeof(RunTimeCppType<TYPE>) == 1) {
+            avx2_select_if_var_const(select_vec, start_dst, start_a, b, size);
         }
-        select_if(select_vec, dst, b, a);
+#endif
+
+        while (start_dst < end_dst) {
+            *start_dst = *select_vec ? *start_a : b;
+            select_vec++;
+            start_dst++;
+            start_a++;
+        }
     }
 
     // select if const const

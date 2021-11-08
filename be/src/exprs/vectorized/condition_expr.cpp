@@ -20,6 +20,9 @@ namespace starrocks::vectorized {
 template <bool isConstC0, bool isConst1, PrimitiveType Type>
 struct SelectIfOP {
     static ColumnPtr eval(ColumnPtr& value0, ColumnPtr& value1, ColumnPtr& selector, ColumnBuilder<Type>& builder) {
+        [[maybe_unused]] auto* input_data0 = ColumnHelper::get_data_column(value0.get());
+        [[maybe_unused]] auto* input_data1 = ColumnHelper::get_data_column(value1.get());
+
         auto* select_col = down_cast<BooleanColumn*>(selector.get());
         auto& select_vec = select_col->get_data();
 
@@ -33,15 +36,15 @@ struct SelectIfOP {
             SIMD_selector<Type>::select_if(select_vec.data(), res_data, v0, v1);
         } else if constexpr (isConstC0 && !isConst1) {
             auto v0 = ColumnHelper::get_const_value<Type>(value0);
-            auto* raw_col1 = ColumnHelper::as_raw_column<RunTimeColumnType<Type>>(value1);
+            auto* raw_col1 = down_cast<RunTimeColumnType<Type>*>(input_data1);
             SIMD_selector<Type>::select_if(select_vec.data(), res_data, v0, raw_col1->get_data());
         } else if constexpr (!isConstC0 && isConst1) {
-            auto* raw_col0 = ColumnHelper::as_raw_column<RunTimeColumnType<Type>>(value0);
+            auto* raw_col0 = down_cast<RunTimeColumnType<Type>*>(input_data0);
             auto v1 = ColumnHelper::get_const_value<Type>(value1);
             SIMD_selector<Type>::select_if(select_vec.data(), res_data, raw_col0->get_data(), v1);
         } else if constexpr (!isConstC0 && !isConst1) {
-            auto* raw_col0 = ColumnHelper::as_raw_column<RunTimeColumnType<Type>>(value0);
-            auto* raw_col1 = ColumnHelper::as_raw_column<RunTimeColumnType<Type>>(value1);
+            auto* raw_col0 = down_cast<RunTimeColumnType<Type>*>(input_data0);
+            auto* raw_col1 = down_cast<RunTimeColumnType<Type>*>(input_data1);
             SIMD_selector<Type>::select_if(select_vec.data(), res_data, raw_col0->get_data(), raw_col1->get_data());
         }
         return res;
