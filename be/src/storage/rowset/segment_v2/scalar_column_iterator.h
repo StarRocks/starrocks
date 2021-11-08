@@ -31,10 +31,10 @@ namespace starrocks {
 namespace segment_v2 {
 
 // TODO: rename to ScalarColumnIterator
-class FileColumnIterator final : public ColumnIterator {
+class ScalarColumnIterator final : public ColumnIterator {
 public:
-    explicit FileColumnIterator(ColumnReader* reader);
-    ~FileColumnIterator() override;
+    explicit ScalarColumnIterator(ColumnReader* reader);
+    ~ScalarColumnIterator() override;
 
     Status init(const ColumnIteratorOptions& opts) override;
 
@@ -140,13 +140,13 @@ private:
     // page indexes those are DEL_PARTIAL_SATISFIED
     std::unordered_set<uint32_t> _delete_partial_satisfied_pages;
 
-    int (FileColumnIterator::*_dict_lookup_func)(const Slice&) = nullptr;
-    Status (FileColumnIterator::*_next_dict_codes_func)(size_t* n, vectorized::Column* dst) = nullptr;
-    Status (FileColumnIterator::*_decode_dict_codes_func)(const int32_t* codes, size_t size,
-                                                          vectorized::Column* words) = nullptr;
-    Status (FileColumnIterator::*_init_dict_decoder_func)() = nullptr;
+    int (ScalarColumnIterator::*_dict_lookup_func)(const Slice&) = nullptr;
+    Status (ScalarColumnIterator::*_next_dict_codes_func)(size_t* n, vectorized::Column* dst) = nullptr;
+    Status (ScalarColumnIterator::*_decode_dict_codes_func)(const int32_t* codes, size_t size,
+                                                            vectorized::Column* words) = nullptr;
+    Status (ScalarColumnIterator::*_init_dict_decoder_func)() = nullptr;
 
-    Status (FileColumnIterator::*_fetch_all_dict_words_func)(std::vector<Slice>* words) const = nullptr;
+    Status (ScalarColumnIterator::*_fetch_all_dict_words_func)(std::vector<Slice>* words) const = nullptr;
 
     // whether all data pages are dict-encoded.
     bool _all_dict_encoded = false;
