@@ -19,9 +19,9 @@
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/primitive_type.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::vectorized {
@@ -233,6 +233,12 @@ Status OlapScanNode::_rewrite_descriptor() {
 }
 
 void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
+    DeferOp op([&] {
+        tls_thread_status.set_mem_tracker(prev_tracker);
+        _running_threads.fetch_sub(1, std::memory_order_release);
+    });
+
     tls_thread_status.set_query_id(scanner->runtime_state()->query_id());
 
     Status status = scanner->open(_runtime_state);
@@ -321,7 +327,6 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
     if (_closed_scanners.load(std::memory_order_acquire) == _num_scanners) {
         _result_chunks.shutdown();
     }
-    _running_threads.fetch_sub(1, std::memory_order_release);
     tls_thread_status.set_query_id(TUniqueId());
     // DO NOT touch any shared variables since here, as they may have been destructed.
 }

@@ -186,7 +186,7 @@ Status ExecEnv::init_mem_tracker() {
     }
 
     _mem_tracker = new MemTracker(MemTracker::PROCESS, bytes_limit, "process");
-    _query_pool_mem_tracker = new MemTracker(MemTracker::QUERY_POOL, bytes_limit * 0.9, "query_pool", nullptr);
+    _query_pool_mem_tracker = new MemTracker(MemTracker::QUERY_POOL, bytes_limit * 0.9, "query_pool", _mem_tracker);
 
     int64_t load_mem_limit = calc_process_max_load_memory(_mem_tracker->limit());
     _load_mem_tracker = new MemTracker(MemTracker::LOAD, load_mem_limit, "load", nullptr);
