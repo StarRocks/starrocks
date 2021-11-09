@@ -352,7 +352,7 @@ public class HiveTable extends Table {
                     .getTable(resourceName, this.hiveDb, this.hiveTable);
             String hiveTableType = hiveTable.getTableType();
             switch (hiveTableType) {
-                case "VIRTUAL_VIEW": // hive view tale not supported
+                case "VIRTUAL_VIEW": // hive view table not supported
                     throw new DdlException("Hive view table is not supported.");
                 case "EXTERNAL_TABLE": // hive external table supported
                 case "MANAGED_TABLE": // basic hive table supported
