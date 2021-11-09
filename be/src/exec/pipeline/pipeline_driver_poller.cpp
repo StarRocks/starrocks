@@ -19,10 +19,8 @@ void PipelineDriverPoller::start() {
 
 void PipelineDriverPoller::shutdown() {
     if (this->_is_shutdown.load() == false) {
-        {
-            this->_is_shutdown.store(true, std::memory_order_release);
-            _cond.notify_one();
-        }
+        this->_is_shutdown.store(true, std::memory_order_release);
+        _cond.notify_one();
     }
 }
 
