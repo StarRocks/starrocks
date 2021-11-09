@@ -25,14 +25,13 @@ Status ScanOperator::prepare(RuntimeState* state) {
 }
 
 Status ScanOperator::close(RuntimeState* state) {
+    // decrement global counter num_scan_operators.
+    state->exec_env()->decrement_num_scan_operators(1);
     if (!_is_io_task_active.load(std::memory_order_acquire)) {
         if (_chunk_source) {
             _chunk_source->close(state);
             _chunk_source = nullptr;
         }
-        // A ScanOperator that has no pending io tasks never submit io tasks again, so it should decrement
-        // global counter num_scan_operators.
-        state->exec_env()->decrement_num_scan_operators(1);
     }
     Operator::close(state);
     return Status::OK();
@@ -70,9 +69,6 @@ bool ScanOperator::pending_finish() {
         return true;
     } else {
         if (_chunk_source) {
-            // A ScanOperator in pending_finish state should decrement global counter num_scan_operators when
-            // its pending io tasks are done.
-            _state->exec_env()->decrement_num_scan_operators(1);
             _chunk_source->close(_state);
             _chunk_source = nullptr;
         }
