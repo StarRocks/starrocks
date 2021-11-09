@@ -470,7 +470,9 @@ void StorageEngine::stop() {
     }
     _bg_worker_stopped = true;
 
+#ifndef BE_TEST
     sleep(30); // wait five seconds to exit all threads gracefully
+#endif
 
     SAFE_DELETE(_index_stream_lru_cache);
     _file_cache.reset();
