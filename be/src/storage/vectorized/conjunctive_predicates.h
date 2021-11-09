@@ -72,6 +72,9 @@ public:
 
     std::string debug_string() const;
 
+    std::vector<const ColumnPredicate*>& vec_preds() { return _vec_preds; }
+    std::vector<const ColumnPredicate*>& non_vec_preds() { return _non_vec_preds; }
+
 private:
     void _evaluate_and(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const;
 

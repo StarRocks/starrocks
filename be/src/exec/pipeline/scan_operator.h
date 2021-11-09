@@ -6,6 +6,7 @@
 
 #include "exec/pipeline/source_operator.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "runtime/global_dicts.h"
 #include "util/blocking_queue.hpp"
 #include "util/priority_thread_pool.hpp"
 
