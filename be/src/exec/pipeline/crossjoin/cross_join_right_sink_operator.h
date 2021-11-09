@@ -5,11 +5,11 @@
 #include <utility>
 
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/crossjoin/cross_join_context.h"
 #include "exec/pipeline/operator.h"
 
-namespace starrocks {
-namespace pipeline {
-class CrossJoinContext;
+namespace starrocks::pipeline {
+
 class CrossJoinRightSinkOperator final : public Operator {
 public:
     CrossJoinRightSinkOperator(int32_t id, int32_t plan_node_id,
@@ -18,21 +18,23 @@ public:
 
     ~CrossJoinRightSinkOperator() override = default;
 
-    Status prepare(RuntimeState* state) override;
-
-    Status close(RuntimeState* state) override;
-
     bool has_output() const override { return false; }
 
-    bool need_input() const override;
+    bool need_input() const override { return !is_finished(); }
 
     bool is_finished() const override { return _is_finished; }
+
+    void finish(RuntimeState* state) override {
+        if (!_is_finished) {
+            // Used to notify cross_join_left_operator.
+            _cross_join_context->set_right_complete();
+            _is_finished = true;
+        }
+    }
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
-
-    void finish(RuntimeState* state) override;
 
 private:
     bool _is_finished = false;
@@ -53,12 +55,8 @@ public:
         return ope;
     }
 
-    Status prepare(RuntimeState* state) override;
-    void close(RuntimeState* state) override;
-
 private:
     std::shared_ptr<CrossJoinContext> _cross_join_context;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

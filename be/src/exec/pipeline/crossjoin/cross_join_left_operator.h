@@ -2,14 +2,17 @@
 
 #pragma once
 
+#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/crossjoin/cross_join_context.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks {
 class ExprContext;
+
 namespace pipeline {
-class CrossJoinContext;
+
 class CrossJoinLeftOperator final : public OperatorWithDependency {
 public:
     CrossJoinLeftOperator(int32_t id, int32_t plan_node_id, const std::vector<ExprContext*>& conjunct_ctxs,
@@ -28,6 +31,55 @@ public:
 
     ~CrossJoinLeftOperator() override = default;
 
+    bool is_ready() const override {
+        if (_is_right_complete) {
+            return true;
+        }
+
+        // woke from blocking througth cross join right sink operator by shared _cross_join_context.
+        bool is_complete = _cross_join_context->is_right_complete();
+        if (is_complete) {
+            _is_right_complete = true;
+            if (_cross_join_context->get_build_chunk()->num_rows() > 0) {
+                // Set fields for left table.
+                _total_build_rows = _cross_join_context->get_build_chunk()->num_rows();
+                _build_rows_threshold = (_total_build_rows / config::vector_chunk_size) * config::vector_chunk_size;
+                _build_rows_remainder = _total_build_rows - _build_rows_threshold;
+            }
+        }
+
+        return is_complete;
+    }
+
+    bool has_output() const override { return _probe_chunk != nullptr; }
+
+    // (_probe_chunk == nullptr || _probe_chunk->num_rows() == 0) means that
+    // need take next chunk from left table.
+    bool need_input() const override {
+        if (!_is_right_complete || !_total_build_rows) {
+            return false;
+        }
+
+        return _probe_chunk == nullptr || _probe_chunk->num_rows() == 0;
+    }
+
+    bool is_finished() const override {
+        if (_is_right_complete && !_total_build_rows) {
+            return true;
+        }
+
+        return _is_finished && _probe_chunk == nullptr;
+    }
+
+    void finish(RuntimeState* state) override { _is_finished = true; }
+
+    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+
+    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+
+private:
+    void _init_chunk(vectorized::ChunkPtr* chunk);
+
     void _copy_joined_rows_with_index_base_build(vectorized::ChunkPtr& chunk, size_t row_count, size_t probe_index,
                                                  size_t build_index);
     void _copy_joined_rows_with_index_base_probe(vectorized::ChunkPtr& chunk, size_t row_count, size_t probe_index,
@@ -43,34 +95,20 @@ public:
     void _copy_build_rows_with_index_base_probe(vectorized::ColumnPtr& dest_col, vectorized::ColumnPtr& src_col,
                                                 size_t start_row, size_t row_count);
 
-    void _init_chunk(vectorized::ChunkPtr* chunk);
-    Status prepare(RuntimeState* state) override;
+    const vectorized::Buffer<SlotDescriptor*>& _col_types;
+    const vectorized::Buffer<TupleId>& _output_build_tuple_ids;
+    const vectorized::Buffer<TupleId>& _output_probe_tuple_ids;
+    const size_t& _probe_column_count;
+    const size_t& _build_column_count;
 
-    Status close(RuntimeState* state) override;
+    const std::vector<ExprContext*>& _conjunct_ctxs;
 
-    bool has_output() const override { return _probe_chunk != nullptr; }
-
-    bool need_input() const override;
-
-    bool is_finished() const override {
-        if (_is_right_complete && !_total_build_rows) {
-            return true;
-        }
-
-        return _is_finished && _probe_chunk == nullptr;
-    }
-
-    void finish(RuntimeState* state) override { _is_finished = true; }
-
-    bool is_ready() const override;
-
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
-
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
-
-private:
-    // previsou saved chunk.
-    vectorized::ChunkPtr _pre_output_chunk = nullptr;
+    // Decompose right table rows into multiples of 4096 rows and remainder of 4096 rows.
+    size_t mutable _total_build_rows = 0;
+    // multiples of 4096
+    size_t mutable _build_rows_threshold = 0;
+    // remainder of 4096
+    size_t mutable _build_rows_remainder = 0;
 
     // used when scan rows in [0, _build_rows_threshold) rows.
     size_t _within_threshold_build_rows_index = 0;
@@ -88,25 +126,10 @@ private:
     // And is used when _probe_chunk_index == _probe_chunk->num_rows().
     size_t _probe_rows_index = 0;
 
-    const vectorized::Buffer<SlotDescriptor*>& _col_types;
-    const vectorized::Buffer<TupleId>& _output_build_tuple_ids;
-    const vectorized::Buffer<TupleId>& _output_probe_tuple_ids;
-    const size_t& _probe_column_count;
-    const size_t& _build_column_count;
-
-    const std::vector<ExprContext*>& _conjunct_ctxs;
-
-    // Decompose right table rows into multiples of 4096 rows and remainder of 4096 rows.
-    size_t mutable _total_build_rows = 0;
-    // multiples of 4096
-    size_t mutable _build_rows_threshold = 0;
-    // remainder of 4096
-    size_t mutable _build_rows_remainder = 0;
     // means right table is constructed completely.
     bool mutable _is_right_complete = false;
 
     bool _is_finished = false;
-    vectorized::ChunkPtr _cur_chunk = nullptr;
 
     std::vector<uint32_t> _buf_selective;
 
@@ -139,6 +162,7 @@ public:
 
 private:
     void _init_row_desc();
+
     const RowDescriptor& _row_descriptor;
     const RowDescriptor& _left_row_desc;
     const RowDescriptor& _right_row_desc;

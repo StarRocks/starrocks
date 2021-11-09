@@ -2,26 +2,14 @@
 
 #include "exec/pipeline/crossjoin/cross_join_left_operator.h"
 
-#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exec/exec_node.h"
-#include "exec/pipeline/crossjoin/cross_join_context.h"
 #include "exprs/expr.h"
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
-
-Status CrossJoinLeftOperator::prepare(RuntimeState* state) {
-    Operator::prepare(state);
-    return Status::OK();
-}
-
-Status CrossJoinLeftOperator::close(RuntimeState* state) {
-    Operator::close(state);
-    return Status::OK();
-}
 
 void CrossJoinLeftOperator::_init_chunk(vectorized::ChunkPtr* chunk) {
     vectorized::ChunkPtr new_chunk = std::make_shared<vectorized::Chunk>();
@@ -243,148 +231,107 @@ void CrossJoinLeftOperator::_copy_build_rows_with_index_base_build(vectorized::C
  */
 StatusOr<vectorized::ChunkPtr> CrossJoinLeftOperator::pull_chunk(RuntimeState* state) {
     vectorized::ChunkPtr chunk = nullptr;
-    // If right table is empty, so we just return empty chunk.
-    if (_total_build_rows > 0) {
-        for (;;) {
-            if (chunk == nullptr) {
-                // we need a valid probe chunk to initialize the new chunk.
-                _init_chunk(&chunk);
-            }
+    // we need a valid probe chunk to initialize the new chunk.
+    _init_chunk(&chunk);
 
-            // need row_count to fill in chunk.
-            size_t row_count = config::vector_chunk_size - chunk->num_rows();
+    for (;;) {
+        // need row_count to fill in chunk.
+        size_t row_count = config::vector_chunk_size - chunk->num_rows();
 
-            // means we have scan all chunks of right tables.
-            // we should scan all remain rows of right table.
-            // once _probe_chunk_index == _probe_chunk->num_rows() is true,
-            // this condition will always true for this _probe_chunk,
-            // Until _probe_chunk be done.
-            if (_probe_chunk_index == _probe_chunk->num_rows()) {
-                // get left chunk's size.
-                size_t probe_chunk_size = _probe_chunk_index;
-                // step 2:
-                // if left chunk is bigger than right, we shuld scan left based on right.
-                if (probe_chunk_size > _build_rows_remainder) {
-                    if (row_count > probe_chunk_size - _probe_rows_index) {
-                        row_count = probe_chunk_size - _probe_rows_index;
-                    }
-
-                    _copy_joined_rows_with_index_base_build(chunk, row_count, _probe_rows_index,
-                                                            _beyond_threshold_build_rows_index);
-                    _probe_rows_index += row_count;
-                    // if _probe_rows_index is equal with probe_chunk_size,
-                    // means left chunk is done with the right row, so we get next right row.
-                    if (_probe_rows_index == probe_chunk_size) {
-                        ++_beyond_threshold_build_rows_index;
-                        _probe_rows_index = 0;
-                    }
-
-                    // _probe_chunk is done with _build_chunk.
-                    if (_beyond_threshold_build_rows_index >= _total_build_rows) {
-                        _probe_chunk = nullptr;
-                    }
-                } else {
-                    // if remain rows of right is bigger than left, we should scan right based on left.
-                    if (row_count > _total_build_rows - _beyond_threshold_build_rows_index) {
-                        row_count = _total_build_rows - _beyond_threshold_build_rows_index;
-                    }
-
-                    _copy_joined_rows_with_index_base_probe(chunk, row_count, _probe_rows_index,
-                                                            _beyond_threshold_build_rows_index);
-                    _beyond_threshold_build_rows_index += row_count;
-
-                    if (_beyond_threshold_build_rows_index == _total_build_rows) {
-                        ++_probe_rows_index;
-                        _beyond_threshold_build_rows_index = _build_rows_threshold;
-                    }
-
-                    // _probe_chunk is done with _build_chunk.
-                    if (_probe_rows_index >= probe_chunk_size) {
-                        _probe_chunk = nullptr;
-                    }
-                }
-            } else if (_within_threshold_build_rows_index < _build_rows_threshold) {
-                // step 1:
-                // we scan all chunks of right table.
-                if (row_count > _build_rows_threshold - _within_threshold_build_rows_index) {
-                    row_count = _build_rows_threshold - _within_threshold_build_rows_index;
+        // means we have scan all chunks of right tables.
+        // we should scan all remain rows of right table.
+        // once _probe_chunk_index == _probe_chunk->num_rows() is true,
+        // this condition will always true for this _probe_chunk,
+        // Until _probe_chunk be done.
+        if (_probe_chunk_index == _probe_chunk->num_rows()) {
+            // get left chunk's size.
+            size_t probe_chunk_size = _probe_chunk_index;
+            // step 2:
+            // if left chunk is bigger than right, we shuld scan left based on right.
+            if (probe_chunk_size > _build_rows_remainder) {
+                if (row_count > probe_chunk_size - _probe_rows_index) {
+                    row_count = probe_chunk_size - _probe_rows_index;
                 }
 
-                _copy_joined_rows_with_index_base_probe(chunk, row_count, _probe_chunk_index,
-                                                        _within_threshold_build_rows_index);
-                _within_threshold_build_rows_index += row_count;
-            } else {
-                // step policy decision:
-                DCHECK_EQ(_within_threshold_build_rows_index, _build_rows_threshold);
-
-                if (_build_rows_threshold != 0) {
-                    // scan right chunk_size rows for next row of left chunk.
-                    ++_probe_chunk_index;
-                    if (_probe_chunk_index < _probe_chunk->num_rows()) {
-                        _within_threshold_build_rows_index = 0;
-                    } else {
-                        // if right table is all about chunks, means _probe_chunk is done.
-                        if (_build_rows_threshold == _total_build_rows) {
-                            _probe_chunk = nullptr;
-                        } else {
-                            _beyond_threshold_build_rows_index = _build_rows_threshold;
-                            _probe_rows_index = 0;
-                        }
-                    }
-                } else {
-                    // optimized for smaller right table < 4096 rows.
-                    _probe_chunk_index = _probe_chunk->num_rows();
-                    _beyond_threshold_build_rows_index = _build_rows_threshold;
+                _copy_joined_rows_with_index_base_build(chunk, row_count, _probe_rows_index,
+                                                        _beyond_threshold_build_rows_index);
+                _probe_rows_index += row_count;
+                // if _probe_rows_index is equal with probe_chunk_size,
+                // means left chunk is done with the right row, so we get next right row.
+                if (_probe_rows_index == probe_chunk_size) {
+                    ++_beyond_threshold_build_rows_index;
                     _probe_rows_index = 0;
                 }
-                continue;
+
+                // _probe_chunk is done with _build_chunk.
+                if (_beyond_threshold_build_rows_index >= _total_build_rows) {
+                    _probe_chunk = nullptr;
+                }
+            } else {
+                // if remain rows of right is bigger than left, we should scan right based on left.
+                if (row_count > _total_build_rows - _beyond_threshold_build_rows_index) {
+                    row_count = _total_build_rows - _beyond_threshold_build_rows_index;
+                }
+
+                _copy_joined_rows_with_index_base_probe(chunk, row_count, _probe_rows_index,
+                                                        _beyond_threshold_build_rows_index);
+                _beyond_threshold_build_rows_index += row_count;
+
+                if (_beyond_threshold_build_rows_index == _total_build_rows) {
+                    ++_probe_rows_index;
+                    _beyond_threshold_build_rows_index = _build_rows_threshold;
+                }
+
+                // _probe_chunk is done with _build_chunk.
+                if (_probe_rows_index >= probe_chunk_size) {
+                    _probe_chunk = nullptr;
+                }
+            }
+        } else if (_within_threshold_build_rows_index < _build_rows_threshold) {
+            // step 1:
+            // we scan all chunks of right table.
+            if (row_count > _build_rows_threshold - _within_threshold_build_rows_index) {
+                row_count = _build_rows_threshold - _within_threshold_build_rows_index;
             }
 
-            if (chunk->num_rows() < config::vector_chunk_size && _probe_chunk != nullptr) {
-                continue;
-            }
+            _copy_joined_rows_with_index_base_probe(chunk, row_count, _probe_chunk_index,
+                                                    _within_threshold_build_rows_index);
+            _within_threshold_build_rows_index += row_count;
+        } else {
+            // step policy decision:
+            DCHECK_EQ(_within_threshold_build_rows_index, _build_rows_threshold);
 
+            if (_build_rows_threshold != 0) {
+                // scan right chunk_size rows for next row of left chunk.
+                ++_probe_chunk_index;
+                if (_probe_chunk_index < _probe_chunk->num_rows()) {
+                    _within_threshold_build_rows_index = 0;
+                } else {
+                    // if right table is all about chunks, means _probe_chunk is done.
+                    if (_build_rows_threshold == _total_build_rows) {
+                        _probe_chunk = nullptr;
+                    } else {
+                        _beyond_threshold_build_rows_index = _build_rows_threshold;
+                        _probe_rows_index = 0;
+                    }
+                }
+            } else {
+                // optimized for smaller right table < 4096 rows.
+                _probe_chunk_index = _probe_chunk->num_rows();
+                _beyond_threshold_build_rows_index = _build_rows_threshold;
+                _probe_rows_index = 0;
+            }
+            continue;
+        }
+
+        // we get result chunk.
+        if (chunk->num_rows() >= config::vector_chunk_size || _probe_chunk == nullptr) {
             ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
-
-            // we get result chunk.
             break;
         }
-    } else {
-        chunk = std::make_shared<vectorized::Chunk>();
-        _probe_chunk = nullptr;
     }
 
     return chunk;
-}
-
-// (_probe_chunk == nullptr || _probe_chunk->num_rows() == 0) means that
-// need take next chunk from left table.
-bool CrossJoinLeftOperator::need_input() const {
-    if (!_is_right_complete || !_total_build_rows) {
-        return false;
-    }
-
-    return _probe_chunk == nullptr || _probe_chunk->num_rows() == 0;
-}
-
-bool CrossJoinLeftOperator::is_ready() const {
-    if (_is_right_complete) {
-        return true;
-    }
-
-    // woke from blocking througth cross join right sink operator by shared _cross_join_context.
-    bool is_complete = _cross_join_context->is_right_complete();
-    if (is_complete) {
-        _is_right_complete = true;
-        if (_cross_join_context->get_build_chunk()->num_rows() > 0) {
-            // Set fields for left table.
-            _total_build_rows = _cross_join_context->get_build_chunk()->num_rows();
-            _build_rows_threshold = (_total_build_rows / config::vector_chunk_size) * config::vector_chunk_size;
-            _build_rows_remainder = _total_build_rows - _build_rows_threshold;
-        }
-    }
-
-    return is_complete;
 }
 
 Status CrossJoinLeftOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
@@ -416,15 +363,20 @@ void CrossJoinLeftOperatorFactory::_init_row_desc() {
 }
 
 Status CrossJoinLeftOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorWithDependencyFactory::prepare(state));
+
     _init_row_desc();
     RowDescriptor row_desc;
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+
     return Status::OK();
 }
 
 void CrossJoinLeftOperatorFactory::close(RuntimeState* state) {
     Expr::close(_conjunct_ctxs, state);
+
+    OperatorWithDependencyFactory::close(state);
 }
 
 } // namespace starrocks::pipeline
