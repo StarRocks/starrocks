@@ -878,8 +878,10 @@ Status SchemaChangeHandler::process_alter_tablet_v2(const TAlterTabletReqV2& req
         return Status::InternalError("failed to obtain schema change lock");
     }
 
+    DeferOp release_lock(
+            [&] { StorageEngine::instance()->tablet_manager()->release_schema_change_lock(request.base_tablet_id); });
+
     Status status = _do_process_alter_tablet_v2(request);
-    StorageEngine::instance()->tablet_manager()->release_schema_change_lock(request.base_tablet_id);
     LOG(INFO) << "finished alter tablet process, status=" << status.to_string()
               << " duration: " << timer.elapsed_time() / 1000000 << "ms";
     return status;
@@ -942,77 +944,87 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     OLAPStatus res = OLAP_SUCCESS;
     // begin to find deltas to convert from base tablet to new tablet so that
     // obtain base tablet and new tablet's push lock and header write lock to prevent loading data
-    base_tablet->obtain_push_lock();
-    new_tablet->obtain_push_lock();
-    base_tablet->obtain_header_wrlock();
-    new_tablet->obtain_header_wrlock();
-
-    // check if the tablet has alter task
-    // if it has alter task, it means it is under old alter process
-
-    std::vector<Version> versions_to_be_changed;
-    Status status = _get_versions_to_be_changed(base_tablet, &versions_to_be_changed);
-    if (!status.ok()) {
-        LOG(WARNING) << "fail to get version to be changed. res=" << res;
-        return status;
-    }
-    LOG(INFO) << "versions to be changed size:" << versions_to_be_changed.size();
-    std::vector<RowsetSharedPtr> rowsets_to_change;
-    for (auto& version : versions_to_be_changed) {
-        RowsetSharedPtr rowset = base_tablet->get_rowset_by_version(version);
-        rowsets_to_change.push_back(rowset);
-    }
-    LOG(INFO) << "rowsets_to_change size is:" << rowsets_to_change.size();
 
     std::vector<ColumnId> return_columns;
-    size_t num_cols = base_tablet->tablet_schema().num_columns();
-    return_columns.resize(num_cols);
-    for (int i = 0; i < num_cols; ++i) {
-        return_columns[i] = i;
-    }
-
-    Version max_version = base_tablet->max_version();
-    RowsetSharedPtr max_rowset = base_tablet->rowset_with_max_version();
-    if (max_rowset == nullptr || max_version.second < request.alter_version) {
-        LOG(WARNING) << "base tablet's max version=" << (max_rowset == nullptr ? 0 : max_rowset->end_version())
-                     << " is less than request version=" << request.alter_version;
-
-        return Status::InternalError("base tablet's max version is less than request version");
-    }
-
-    LOG(INFO) << "begin to remove all data from new tablet to prevent rewrite."
-              << " new_tablet=" << new_tablet->full_name();
-    std::vector<RowsetSharedPtr> rowsets_to_delete;
-    std::vector<Version> new_tablet_versions;
-    new_tablet->list_versions(&new_tablet_versions);
-    for (auto& version : new_tablet_versions) {
-        if (version.second <= max_rowset->end_version()) {
-            RowsetSharedPtr rowset = new_tablet->get_rowset_by_version(version);
-            rowsets_to_delete.push_back(rowset);
-        }
-    }
-    LOG(INFO) << "rowsets_to_delete size is:" << rowsets_to_delete.size()
-              << " version is:" << max_rowset->end_version();
-    new_tablet->modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete);
-    new_tablet->set_cumulative_layer_point(-1);
-    new_tablet->save_meta();
-    for (auto& rowset : rowsets_to_delete) {
-        // do not call rowset.remove directly, using gc thread to delete it
-        StorageEngine::instance()->add_unused_rowset(rowset);
-    }
-
-    // init one delete handler
+    RowsetSharedPtr max_rowset;
+    std::vector<RowsetSharedPtr> rowsets_to_change;
     int32_t end_version = -1;
-    for (auto& version : versions_to_be_changed) {
-        if (version.second > end_version) {
-            end_version = version.second;
+    Status status;
+    {
+        base_tablet->obtain_push_lock();
+        DeferOp base_tablet_push_lock_release_guard([&]() { base_tablet->release_push_lock(); });
+
+        new_tablet->obtain_push_lock();
+        DeferOp new_tablet_push_lock_release_guard([&]() { new_tablet->release_push_lock(); });
+
+        base_tablet->obtain_header_wrlock();
+        DeferOp base_tablet_header_wrlock_release_guard([&]() { base_tablet->release_header_lock(); });
+
+        new_tablet->obtain_header_wrlock();
+        DeferOp new_tablet_header_wrlock_release_guard([&]() { new_tablet->release_header_lock(); });
+
+        // check if the tablet has alter task
+        // if it has alter task, it means it is under old alter process
+
+        std::vector<Version> versions_to_be_changed;
+        Status status = _get_versions_to_be_changed(base_tablet, &versions_to_be_changed);
+        if (!status.ok()) {
+            LOG(WARNING) << "fail to get version to be changed. res=" << res;
+            return status;
+        }
+        LOG(INFO) << "versions to be changed size:" << versions_to_be_changed.size();
+        std::vector<RowsetSharedPtr> rowsets_to_change;
+        for (auto& version : versions_to_be_changed) {
+            RowsetSharedPtr rowset = base_tablet->get_rowset_by_version(version);
+            rowsets_to_change.push_back(rowset);
+        }
+        LOG(INFO) << "rowsets_to_change size is:" << rowsets_to_change.size();
+
+        std::vector<ColumnId> return_columns;
+        size_t num_cols = base_tablet->tablet_schema().num_columns();
+        return_columns.resize(num_cols);
+        for (int i = 0; i < num_cols; ++i) {
+            return_columns[i] = i;
+        }
+
+        Version max_version = base_tablet->max_version();
+        RowsetSharedPtr max_rowset = base_tablet->rowset_with_max_version();
+        if (max_rowset == nullptr || max_version.second < request.alter_version) {
+            LOG(WARNING) << "base tablet's max version=" << (max_rowset == nullptr ? 0 : max_rowset->end_version())
+                         << " is less than request version=" << request.alter_version;
+
+            return Status::InternalError("base tablet's max version is less than request version");
+        }
+
+        LOG(INFO) << "begin to remove all data from new tablet to prevent rewrite."
+                  << " new_tablet=" << new_tablet->full_name();
+        std::vector<RowsetSharedPtr> rowsets_to_delete;
+        std::vector<Version> new_tablet_versions;
+        new_tablet->list_versions(&new_tablet_versions);
+        for (auto& version : new_tablet_versions) {
+            if (version.second <= max_rowset->end_version()) {
+                RowsetSharedPtr rowset = new_tablet->get_rowset_by_version(version);
+                rowsets_to_delete.push_back(rowset);
+            }
+        }
+        LOG(INFO) << "rowsets_to_delete size is:" << rowsets_to_delete.size()
+                  << " version is:" << max_rowset->end_version();
+        new_tablet->modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete);
+        new_tablet->set_cumulative_layer_point(-1);
+        new_tablet->save_meta();
+        for (auto& rowset : rowsets_to_delete) {
+            // do not call rowset.remove directly, using gc thread to delete it
+            StorageEngine::instance()->add_unused_rowset(rowset);
+        }
+
+        // init one delete handler
+        int32_t end_version = -1;
+        for (auto& version : versions_to_be_changed) {
+            if (version.second > end_version) {
+                end_version = version.second;
+            }
         }
     }
-
-    new_tablet->release_header_lock();
-    base_tablet->release_header_lock();
-    new_tablet->release_push_lock();
-    base_tablet->release_push_lock();
 
     Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema(), return_columns);
     Version delete_predicates_version(0, max_rowset->version().second);
@@ -1209,10 +1221,10 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         // Add the new version of the data to the header,
         // To prevent deadlocks, be sure to lock the old table first and then the new one
         sc_params.new_tablet->obtain_push_lock();
+        DeferOp new_tablet_release_lock([&] { sc_params.new_tablet->release_push_lock(); });
         RowsetSharedPtr new_rowset = rowset_writer->build();
         if (new_rowset == nullptr) {
             LOG(WARNING) << "failed to build rowset, exit alter process";
-            sc_params.new_tablet->release_push_lock();
             break;
         }
         LOG(INFO) << "new rowset has " << new_rowset->num_segments() << " segments";
@@ -1228,13 +1240,11 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
                          << " tablet=" << sc_params.new_tablet->full_name() << ", version=" << sc_params.version.first
                          << "-" << sc_params.version.second;
             StorageEngine::instance()->add_unused_rowset(new_rowset);
-            sc_params.new_tablet->release_push_lock();
             break;
         } else {
             VLOG(3) << "register new version. tablet=" << sc_params.new_tablet->full_name()
                     << ", version=" << sc_params.version.first << "-" << sc_params.version.second;
         }
-        sc_params.new_tablet->release_push_lock();
 
         VLOG(10) << "succeed to convert a history version."
                  << " version=" << sc_params.version.first << "-" << sc_params.version.second;

@@ -18,6 +18,7 @@
 #include "storage/vectorized/predicate_parser.h"
 #include "storage/vectorized/seek_range.h"
 #include "storage/vectorized/union_iterator.h"
+#include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 
@@ -36,8 +37,8 @@ void TabletReader::close() {
 
 Status TabletReader::prepare() {
     _tablet->obtain_header_rdlock();
+    DeferOp release_lock([&] { _tablet->release_header_lock(); });
     auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
-    _tablet->release_header_lock();
     return st;
 }
 
@@ -209,6 +210,7 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
     PredicateParser pred_parser(_tablet->tablet_schema());
 
     _tablet->obtain_header_rdlock();
+    DeferOp release_lock([&] { _tablet->release_header_lock(); });
 
     for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {
         if (pred_pb.version() > _delete_predicates_version.second) {
@@ -220,7 +222,6 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
             TCondition cond;
             if (!DeleteHandler::parse_condition(pred_pb.sub_predicates(i), &cond)) {
                 LOG(WARNING) << "invalid delete condition: " << pred_pb.sub_predicates(i) << "]";
-                _tablet->release_header_lock();
                 return Status::InternalError("invalid delete condition string");
             }
             size_t idx = _tablet->tablet_schema().field_index(cond.column_name);
@@ -267,7 +268,6 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
         dels->add(pred_pb.version(), conjunctions);
     }
 
-    _tablet->release_header_lock();
     return Status::OK();
 }
 
