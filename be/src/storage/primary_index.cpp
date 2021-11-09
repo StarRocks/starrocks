@@ -230,7 +230,7 @@ public:
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks, uint32_t idx_begin,
                   uint32_t idx_end) override {
         const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
-        DCHECK(idx_end == rowids.size());
+        DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
