@@ -147,19 +147,7 @@ void DictOptimizeParser::eval_expr(RuntimeState* state, ExprContext* expr_ctx, D
     // Slice -> dict-code
     auto& column_dict_map = _mutable_dict_maps->at(need_decode_slot_id).first;
 
-    std::vector<Slice> slices;
-    std::vector<int> codes;
-
-    slices.reserve(column_dict_map.size());
-    codes.reserve(column_dict_map.size());
-
-    for (auto& [slice, code] : column_dict_map) {
-        slices.emplace_back(slice);
-        codes.emplace_back(code);
-    }
-
-    auto binary_column = BinaryColumn::create();
-    binary_column->append_strings(slices);
+    auto [binary_column, codes] = extract_column_with_codes(column_dict_map);
 
     ChunkPtr temp_chunk = std::make_shared<Chunk>();
     temp_chunk->append_column(binary_column, need_decode_slot_id);
@@ -228,19 +216,7 @@ void DictOptimizeParser::eval_conjuncts(ExprContext* conjunct, DictOptimizeConte
     // Slice -> dict-code
     auto& column_dict_map = _mutable_dict_maps->at(need_decode_slot_id).first;
 
-    std::vector<Slice> slices;
-    std::vector<int> codes;
-
-    slices.reserve(column_dict_map.size());
-    codes.reserve(column_dict_map.size());
-
-    for (auto& [slice, code] : column_dict_map) {
-        slices.emplace_back(slice);
-        codes.emplace_back(code);
-    }
-
-    auto binary_column = BinaryColumn::create();
-    binary_column->append_strings(slices);
+    auto [binary_column, codes] = extract_column_with_codes(column_dict_map);
 
     ChunkPtr temp_chunk = std::make_shared<Chunk>();
     temp_chunk->append_column(binary_column, need_decode_slot_id);
@@ -310,6 +286,51 @@ void DictOptimizeParser::close(RuntimeState* state) noexcept {
 
 void DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
     _check_could_apply_dict_optimize<false>(expr_ctx, dict_opt_ctx);
+}
+
+std::pair<std::shared_ptr<BinaryColumn>, std::vector<int32_t>> extract_column_with_codes(
+        const GlobalDictMap& dict_map) {
+    std::vector<Slice> slices;
+    std::vector<int> codes;
+
+    slices.reserve(dict_map.size());
+    codes.reserve(dict_map.size());
+
+    for (auto& [slice, code] : dict_map) {
+        slices.emplace_back(slice);
+        codes.emplace_back(code);
+    }
+
+    auto binary_column = BinaryColumn::create();
+    binary_column->append_strings(slices);
+
+    return std::make_pair(std::move(binary_column), std::move(codes));
+}
+
+void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, std::vector<SlotDescriptor*> slot_descs,
+                                            std::vector<ExprContext*>& conjunct_ctxs,
+                                            const std::map<int32_t, int32_t>& dict_slots_mapping) {
+    const auto& global_dict = runtime_state->get_global_dict_map();
+    if (global_dict.empty()) return;
+
+    for (auto& slot : slot_descs) {
+        if (global_dict.count(slot->id())) {
+            slot->type().type = TYPE_VARCHAR;
+        }
+    }
+
+    // rewrite slot-id for conjunct
+    std::vector<SlotId> slots;
+    for (auto& conjunct : conjunct_ctxs) {
+        slots.clear();
+        Expr* expr_root = conjunct->root();
+        if (expr_root->get_slot_ids(&slots) == 1) {
+            if (auto iter = dict_slots_mapping.find(slots[0]); iter != dict_slots_mapping.end()) {
+                ColumnRef* column_ref = expr_root->get_column_ref();
+                column_ref->set_slot_id(iter->second);
+            }
+        }
+    }
 }
 
 } // namespace starrocks::vectorized

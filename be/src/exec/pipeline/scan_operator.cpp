@@ -4,6 +4,7 @@
 
 #include "column/chunk.h"
 #include "exec/pipeline/olap_chunk_source.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
@@ -140,6 +141,10 @@ Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RowDescriptor row_desc;
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+
+    auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
+    vectorized::DictOptimizeParser::rewrite_descriptor(state, tuple_desc->slots(), _conjunct_ctxs,
+                                                       _olap_scan_node.dict_string_id_to_int_ids);
     return Status::OK();
 }
 

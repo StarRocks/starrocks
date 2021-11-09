@@ -10,8 +10,10 @@
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/primitive_type.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/column_predicate_rewriter.h"
 #include "storage/vectorized/predicate_parser.h"
 #include "storage/vectorized/projection_iterator.h"
 
@@ -23,6 +25,8 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     _slots = &tuple_desc->slots();
 
     _init_counter(state);
+
+    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
 
     OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status);
     OlapScanConjunctsManager& cm = _conjuncts_manager;
@@ -95,6 +99,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 Status OlapChunkSource::_build_scan_range(RuntimeState* state) {
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
+    _dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state);
 
     // FixMe(kks): Ensure this logic is right.
     int scanners_per_tablet = 64;
@@ -149,6 +154,12 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
         } else {
             _not_push_down_predicates.add(p);
         }
+    }
+
+    {
+        vectorized::ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
+                                                                                  *_params.global_dictmaps);
+        not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool);
     }
 
     // Range
@@ -332,6 +343,7 @@ Status OlapChunkSource::close(RuntimeState* state) {
     _prj_iter->close();
     _reader.reset();
     _predicate_free_pool.clear();
+    _dict_optimize_parser.close(state);
     return Status::OK();
 }
 

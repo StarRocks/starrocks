@@ -102,7 +102,6 @@ private:
     Status _get_status();
 
     void _fill_chunk_pool(int count, bool force_column_pool);
-    Status _rewrite_descriptor();
     bool _submit_scanner(TabletScanner* scanner, bool blockable);
     void _close_pending_scanners();
     int _compute_priority(int32_t num_submitted_tasks);

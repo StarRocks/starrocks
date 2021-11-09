@@ -91,6 +91,7 @@ private:
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
     std::vector<OlapScanRange*> _scanner_ranges;
     vectorized::OlapScanConjunctsManager _conjuncts_manager;
+    vectorized::DictOptimizeParser _dict_optimize_parser;
 
     std::shared_ptr<vectorized::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
