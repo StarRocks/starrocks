@@ -355,9 +355,10 @@ public class HiveTable extends Table {
                 if ("VIRTUAL_VIEW".equals(hiveTableType)) {
                     throw new DdlException("Hive view table is not supported.");
                 } else if ("EXTERNAL_TABLE".equals(hiveTableType)) {
-                    throw new DdlException("Hive external table is not supported.");
+                    // hive external table is supported
+                } else {
+                    throw new DdlException("unsupported hive table type [" + hiveTableType + "].");
                 }
-                throw new DdlException("unsupported hive table type [" + hiveTableType + "].");
             }
             List<FieldSchema> unPartHiveColumns = hiveTable.getSd().getCols();
             List<FieldSchema> partHiveColumns = hiveTable.getPartitionKeys();
