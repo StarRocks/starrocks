@@ -34,6 +34,12 @@ namespace starrocks {
 SelectNode::SelectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs), _child_eos(false) {}
 
+SelectNode::~SelectNode() {
+    if (runtime_state() != nullptr) {
+        ExecNode::close(runtime_state());
+    }
+}
+
 Status SelectNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     if (use_vectorized()) {

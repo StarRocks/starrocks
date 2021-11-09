@@ -4,9 +4,11 @@
 
 #include "column/chunk.h"
 #include "gen_cpp/BackendService.h"
+#include "runtime/current_thread.h"
 #include "util/blocking_queue.hpp"
 #include "util/brpc_stub_cache.h"
 #include "util/callback_closure.h"
+#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 
@@ -14,31 +16,30 @@ struct TransmitChunkInfo {
     size_t channel_id;
     PTransmitChunkParams params;
     doris::PBackendService_Stub* brpc_stub;
+
+    // for protocol header.
+    butil::IOBuf attachment;
 };
 
+// TODO(hcf) There is a potential optimization point that different channels can be parallel
 class SinkBuffer {
 public:
-    SinkBuffer(size_t channel_number, size_t num_sinkers)
-            : _closure_size(channel_number), _num_sinkers_per_channel(channel_number, num_sinkers) {
-        for (size_t i = 0; i < channel_number; ++i) {
-            auto _chunk_closure = new CallBackClosure<PTransmitChunkResult>();
-            _chunk_closure->ref();
-            _chunk_closure->addFailedHandler([this]() noexcept {
-                _in_flight_rpc_num--;
-                _is_cancelled = true;
-                LOG(WARNING) << " transmit chunk rpc failed, ";
-            });
+    SinkBuffer(MemTracker* mem_tracker, size_t channel_number, size_t num_sinkers)
+            : _mem_tracker(mem_tracker), _num_sinkers_per_channel(channel_number, num_sinkers) {
+        _closure = new CallBackClosure<PTransmitChunkResult>();
+        _closure->ref();
+        _closure->addFailedHandler([this]() noexcept {
+            _is_cancelled = true;
+            LOG(WARNING) << " transmit chunk rpc failed";
+        });
 
-            _chunk_closure->addSuccessHandler([this](const PTransmitChunkResult& result) noexcept {
-                _in_flight_rpc_num--;
-                Status status(result.status());
-                if (!status.ok()) {
-                    _is_cancelled = true;
-                    LOG(WARNING) << " transmit chunk rpc failed, ";
-                }
-            });
-            _closures.push_back(_chunk_closure);
-        }
+        _closure->addSuccessHandler([this](const PTransmitChunkResult& result) noexcept {
+            Status status(result.status());
+            if (!status.ok()) {
+                _is_cancelled = true;
+                LOG(WARNING) << " transmit chunk rpc failed, " << status.message();
+            }
+        });
         try {
             _thread = std::thread{&SinkBuffer::process, this};
         } catch (const std::exception& exp) {
@@ -51,23 +52,20 @@ public:
     ~SinkBuffer() {
         _pending_chunks.shutdown();
         _thread.join();
-        for (auto* closure : _closures) {
-            if (closure->unref()) {
-                delete closure;
-            }
+        if (_closure->unref()) {
+            delete _closure;
         }
     }
 
-    void add_request(const TransmitChunkInfo& request) {
-        _in_flight_rpc_num++;
-        _pending_chunks.put(request);
-    }
+    void add_request(const TransmitChunkInfo& request) { _pending_chunks.put(request); }
 
     void process() {
         try {
+            MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+            DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
             while (true) {
-                // If the head closure has flight rpc, means all closures are busy
-                if (_closures.front()->has_in_flight_rpc()) {
+                if (_closure->has_in_flight_rpc()) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     continue;
                 }
@@ -88,9 +86,9 @@ public:
         }
     }
 
-    bool is_full() const { return _in_flight_rpc_num >= _closure_size; }
+    bool is_full() const { return _pending_chunks.get_size() >= config::pipeline_io_cache_size; }
 
-    bool is_finished() const { return _in_flight_rpc_num == 0 || _is_cancelled; }
+    bool is_finished() const { return (_pending_chunks.empty() && !_closure->has_in_flight_rpc()) || _is_cancelled; }
 
     bool is_cancelled() const { return _is_cancelled; }
 
@@ -102,7 +100,6 @@ private:
             // ExchangeSourceOperator and eos is sent exactly-once.
             if (--_num_sinkers_per_channel[request.channel_id] > 0) {
                 if (request.params.chunks_size() == 0) {
-                    _in_flight_rpc_num--;
                     return;
                 } else {
                     request.params.set_eos(false);
@@ -110,25 +107,22 @@ private:
             }
         }
         request.params.set_sequence(_request_seq);
-        auto* closure = _closures.front();
-        DCHECK(!closure->has_in_flight_rpc());
+        DCHECK(!_closure->has_in_flight_rpc());
         // Move the closure has flight rpc to tail
-        _closures.pop_front();
-        _closures.push_back(closure);
-        closure->ref();
-        closure->cntl.Reset();
-        closure->cntl.set_timeout_ms(500);
-        request.brpc_stub->transmit_chunk(&closure->cntl, &request.params, &closure->result, closure);
+        _closure->ref();
+        _closure->cntl.Reset();
+        _closure->cntl.set_timeout_ms(500);
+        _closure->cntl.request_attachment().append(request.attachment);
+        request.brpc_stub->transmit_chunk(&_closure->cntl, &request.params, &_closure->result, _closure);
         _request_seq++;
     }
 
     // To avoid lock
-    const int32_t _closure_size;
+    MemTracker* _mem_tracker = nullptr;
     vector<size_t> _num_sinkers_per_channel;
     int64_t _request_seq = 0;
-    std::atomic<int32_t> _in_flight_rpc_num = 0;
     std::atomic<bool> _is_cancelled{false};
-    std::deque<CallBackClosure<PTransmitChunkResult>*> _closures;
+    CallBackClosure<PTransmitChunkResult>* _closure;
     std::thread _thread;
     UnboundedBlockingQueue<TransmitChunkInfo> _pending_chunks;
 };

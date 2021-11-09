@@ -63,7 +63,7 @@ void DeltaWriter::_garbage_collection() {
 
 Status DeltaWriter::init() {
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
-    _tablet = tablet_mgr->get_tablet(_req.tablet_id, _req.schema_hash);
+    _tablet = tablet_mgr->get_tablet(_req.tablet_id, false);
     if (_tablet == nullptr) {
         std::stringstream ss;
         ss << "Fail to get tablet. tablet_id=" << _req.tablet_id;
@@ -124,7 +124,6 @@ Status DeltaWriter::init() {
     }
 
     RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
-    writer_context.mem_tracker = _mem_tracker.get();
     writer_context.rowset_id = _storage_engine->next_rowset_id();
     writer_context.tablet_uid = _tablet->tablet_uid();
     writer_context.tablet_id = _req.tablet_id;

@@ -17,6 +17,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
@@ -30,6 +31,8 @@ public class PushDownPredicateScanRule extends TransformationRule {
             new PushDownPredicateScanRule(OperatorType.LOGICAL_OLAP_SCAN);
     public static final PushDownPredicateScanRule ES_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_ES_SCAN);
+
+    private ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
 
     public PushDownPredicateScanRule(OperatorType type) {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_SCAN, Pattern.create(OperatorType.LOGICAL_FILTER, type));
@@ -45,6 +48,8 @@ public class PushDownPredicateScanRule extends TransformationRule {
         ScalarOperator predicates = Utils.compoundAnd(lfo.getPredicate(), logicalScanOperator.getPredicate());
         ScalarRangePredicateExtractor rangeExtractor = new ScalarRangePredicateExtractor();
         predicates = rangeExtractor.rewriteOnlyColumn(predicates);
+        predicates = scalarOperatorRewriter.rewrite(predicates,
+                ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
 
         if (logicalScanOperator instanceof LogicalOlapScanOperator) {
             LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) logicalScanOperator;

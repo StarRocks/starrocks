@@ -39,6 +39,7 @@
 
 #include "common/status.h"
 #include "env/env.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/data_dir.h"
 #include "storage/fs/file_block_manager.h"
@@ -56,6 +57,7 @@
 #include "storage/utils.h"
 #include "storage/vectorized/base_compaction.h"
 #include "storage/vectorized/cumulative_compaction.h"
+#include "util/defer_op.h"
 #include "util/file_utils.h"
 #include "util/pretty_printer.h"
 #include "util/scoped_cleanup.h"
@@ -490,8 +492,8 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
         // each tablet
         for (auto& tablet_info : tablet_infos) {
             // should use tablet uid to ensure clean txn correctly
-            TabletSharedPtr tablet = _tablet_manager->get_tablet(
-                    tablet_info.first.tablet_id, tablet_info.first.schema_hash, tablet_info.first.tablet_uid);
+            TabletSharedPtr tablet =
+                    _tablet_manager->get_tablet(tablet_info.first.tablet_id, tablet_info.first.tablet_uid);
             // The tablet may be dropped or altered, leave a INFO log and go on process other tablet
             if (tablet == nullptr) {
                 LOG(INFO) << "tablet is no longer exist, tablet_id=" << tablet_info.first.tablet_id
@@ -530,7 +532,10 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
 
     StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
-    vectorized::CumulativeCompaction cumulative_compaction(_options.compaction_mem_tracker, best_tablet);
+
+    std::unique_ptr<MemTracker> mem_tracker =
+            std::make_unique<MemTracker>(config::compaction_mem_limit, "", _options.compaction_mem_tracker);
+    vectorized::CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
 
     Status res = cumulative_compaction.compact();
     if (!res.ok()) {
@@ -566,7 +571,11 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
     TRACE("found best tablet $0", best_tablet->get_tablet_info().tablet_id);
 
     StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
-    vectorized::BaseCompaction base_compaction(_options.compaction_mem_tracker, best_tablet);
+
+    std::unique_ptr<MemTracker> mem_tracker =
+            std::make_unique<MemTracker>(config::compaction_mem_limit, "", _options.compaction_mem_tracker);
+    vectorized::BaseCompaction base_compaction(mem_tracker.get(), best_tablet);
+
     Status res = base_compaction.compact();
     if (!res.ok()) {
         best_tablet->set_last_base_compaction_failure_time(UnixMillis());
@@ -607,7 +616,9 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     {
         StarRocksMetrics::instance()->update_compaction_request_total.increment(1);
         SCOPED_RAW_TIMER(&duration_ns);
-        res = best_tablet->updates()->compaction(_options.compaction_mem_tracker);
+
+        std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1, "", _options.compaction_mem_tracker);
+        res = best_tablet->updates()->compaction(mem_tracker.get());
     }
     StarRocksMetrics::instance()->update_compaction_duration_us.increment(duration_ns / 1000);
     if (!res.ok()) {
@@ -691,8 +702,7 @@ void StorageEngine::_clean_unused_rowset_metas() {
             return true;
         }
 
-        TabletSharedPtr tablet =
-                _tablet_manager->get_tablet(rowset_meta->tablet_id(), rowset_meta->tablet_schema_hash(), tablet_uid);
+        TabletSharedPtr tablet = _tablet_manager->get_tablet(rowset_meta->tablet_id(), tablet_uid);
         if (tablet == nullptr) {
             return true;
         }
@@ -716,8 +726,7 @@ void StorageEngine::_clean_unused_txns() {
     std::set<TabletInfo> tablet_infos;
     _txn_manager->get_all_related_tablets(&tablet_infos);
     for (auto& tablet_info : tablet_infos) {
-        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id, tablet_info.schema_hash,
-                                                             tablet_info.tablet_uid, true);
+        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id, tablet_info.tablet_uid, true);
         if (tablet == nullptr) {
             // TODO(ygl) :  should check if tablet still in meta, it's a improvement
             // case 1: tablet still in meta, just remove from memory
@@ -911,7 +920,7 @@ OLAPStatus StorageEngine::execute_task(EngineTask* task) {
         sort(tablet_infos.begin(), tablet_infos.end());
         std::vector<TabletSharedPtr> related_tablets;
         for (TabletInfo& tablet_info : tablet_infos) {
-            TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id, tablet_info.schema_hash);
+            TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id);
             if (tablet != nullptr) {
                 related_tablets.push_back(tablet);
                 tablet->obtain_header_wrlock();
@@ -945,7 +954,7 @@ OLAPStatus StorageEngine::execute_task(EngineTask* task) {
         sort(tablet_infos.begin(), tablet_infos.end());
         std::vector<TabletSharedPtr> related_tablets;
         for (TabletInfo& tablet_info : tablet_infos) {
-            TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id, tablet_info.schema_hash);
+            TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id);
             if (tablet != nullptr) {
                 related_tablets.push_back(tablet);
                 tablet->obtain_header_wrlock();

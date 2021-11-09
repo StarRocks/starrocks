@@ -89,7 +89,7 @@ HASH_PARTITIONED: 69: year
 30:Project
 |  <slot 69> : year(CAST(40: O_ORDERDATE AS DATETIME))
 |  <slot 70> : 76: multiply
-|  <slot 71> : CASE WHEN 61: N_NAME = 'IRAN' THEN 76: multiply ELSE 0.0 END
+|  <slot 71> : if(61: N_NAME = 'IRAN', 76: multiply, 0.0)
 |  common expressions:
 |  <slot 75> : 1.0 - 25: L_DISCOUNT
 |  <slot 76> : 24: L_EXTENDEDPRICE * 75: subtract

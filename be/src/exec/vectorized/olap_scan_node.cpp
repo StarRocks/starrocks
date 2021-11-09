@@ -3,27 +3,25 @@
 #include "exec/vectorized/olap_scan_node.h"
 
 #include <chrono>
-#include <limits>
 #include <thread>
 
 #include "column/column_pool.h"
 #include "column/type_traits.h"
+#include "common/global_types.h"
 #include "common/status.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan_operator.h"
 #include "exec/vectorized/olap_scan_prepare.h"
-#include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
-#include "gutil/casts.h"
 #include "gutil/map_util.h"
-#include "runtime/current_mem_tracker.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
+#include "runtime/primitive_type.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::vectorized {
@@ -54,6 +52,10 @@ Status OlapScanNode::prepare(RuntimeState* state) {
         _runtime_profile->add_info_string("Predicates", _olap_scan_node.sql_predicates);
     }
     _runtime_state = state;
+    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
+    DictOptimizeParser::rewrite_descriptor(state, _tuple_desc->slots(), _conjunct_ctxs,
+                                           _olap_scan_node.dict_string_id_to_int_ids);
+
     return Status::OK();
 }
 
@@ -61,7 +63,6 @@ Status OlapScanNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(ExecNode::open(state));
-    CurrentThread::set_mem_tracker(mem_tracker());
 
     Status status;
     OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status);
@@ -132,7 +133,6 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         // true to ensure that the newly allocated column objects will be returned back into the column
         // pool.
         _fill_chunk_pool(1, first_call);
-        mem_tracker()->release(ptr->memory_usage());
         *chunk = std::shared_ptr<Chunk>(ptr);
         eval_join_runtime_filters(chunk);
         _num_rows_returned += (*chunk)->num_rows();
@@ -173,16 +173,16 @@ Status OlapScanNode::close(RuntimeState* state) {
     // free chunks in _chunk_pool.
     while (!_chunk_pool.empty()) {
         Chunk* chunk = _chunk_pool.pop();
-        mem_tracker()->release(chunk->memory_usage());
         delete chunk;
     }
 
-    // free chunks in _result_chunks and release memory tracker.
+    // free chunks in _result_chunks
     Chunk* chunk = nullptr;
     while (_result_chunks.blocking_get(&chunk)) {
-        mem_tracker()->release(chunk->memory_usage());
         delete chunk;
     }
+
+    _dict_optimize_parser.close(state);
 
     // Reduce the memory usage if the the average string size is greater than 512.
     release_large_columns<BinaryColumn>(config::vector_chunk_size * 512);
@@ -198,7 +198,6 @@ void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
     const size_t capacity = config::vector_chunk_size;
     for (int i = 0; i < count; i++) {
         Chunk* chk = ChunkHelper::new_chunk_pooled(*_chunk_schema, capacity, force_column_pool);
-        mem_tracker()->consume(chk->memory_usage());
 
         std::lock_guard<std::mutex> l(_mtx);
         _chunk_pool.push(chk);
@@ -206,8 +205,13 @@ void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
 }
 
 void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
-    CurrentThread::set_query_id(scanner->runtime_state()->query_id());
-    CurrentThread::set_mem_tracker(mem_tracker());
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
+    DeferOp op([&] {
+        tls_thread_status.set_mem_tracker(prev_tracker);
+        _running_threads.fetch_sub(1, std::memory_order_release);
+    });
+
+    tls_thread_status.set_query_id(scanner->runtime_state()->query_id());
 
     Status status = scanner->open(_runtime_state);
     if (!status.ok()) {
@@ -247,7 +251,6 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
         DCHECK_CHUNK(chunk);
         // _result_chunks will be shutdown if error happened or has reached limit.
         if (!_result_chunks.put(chunk)) {
-            mem_tracker()->release(chunk->memory_usage());
             status = Status::Aborted("_result_chunks has been shutdown");
             delete chunk;
             break;
@@ -296,9 +299,7 @@ void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
     if (_closed_scanners.load(std::memory_order_acquire) == _num_scanners) {
         _result_chunks.shutdown();
     }
-    _running_threads.fetch_sub(1, std::memory_order_release);
-    CurrentThread::set_query_id(TUniqueId());
-    CurrentThread::set_mem_tracker(nullptr);
+    tls_thread_status.set_query_id(TUniqueId());
     // DO NOT touch any shared variables since here, as they may have been destructed.
 }
 
@@ -371,6 +372,7 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _bi_filter_timer = ADD_CHILD_TIMER(_scan_profile, "BitmapIndexFilter", "SegmentInit");
     _bi_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BitmapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _bf_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BloomFilterFilterRows", TUnit::UNIT, "SegmentInit");
+    _seg_zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _sk_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
 
@@ -453,6 +455,8 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&key_ranges));
     std::vector<ExprContext*> conjunct_ctxs;
     _conjuncts_manager.get_not_push_down_conjuncts(&conjunct_ctxs);
+
+    _dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state);
 
     int scanners_per_tablet = std::max(1, 64 / (int)_scan_ranges.size());
     for (auto& scan_range : _scan_ranges) {

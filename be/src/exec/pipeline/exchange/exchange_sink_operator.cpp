@@ -19,7 +19,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/dpp_sink_internal.h"
 #include "runtime/exec_env.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/raw_value.h"
 #include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
@@ -54,6 +53,11 @@ public:
 
     // Send one chunk to remote, this chunk may be batched in this channel.
     Status send_one_chunk(const vectorized::Chunk* chunk, bool eos);
+
+    // Send one chunk to remote, this chunk may be batched in this channel.
+    // When the chunk is sent really rather than bachend, *is_real_sent will
+    // be set to true.
+    Status send_one_chunk(const vectorized::Chunk* chunk, bool eos, bool* is_real_sent);
 
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
@@ -146,6 +150,13 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chun
 }
 
 Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, bool eos) {
+    bool is_real_sent = false;
+    return send_one_chunk(chunk, eos, &is_real_sent);
+}
+
+Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, bool eos, bool* is_real_sent) {
+    *is_real_sent = false;
+
     PTransmitChunkParams request;
     request.set_allocated_finst_id(&_finst_id);
     request.set_node_id(_dest_node_id);
@@ -163,11 +174,15 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
     // last packet
     if (_current_request_bytes > _parent->_request_bytes_threshold || eos) {
         request.set_eos(eos);
-        TransmitChunkInfo info = {this->_channel_id, std::move(request), _brpc_stub};
+        butil::IOBuf attachment;
+        _parent->construct_brpc_attachment(&request, &attachment);
+        TransmitChunkInfo info = {this->_channel_id, std::move(request), _brpc_stub, attachment};
         _parent->_buffer->add_request(info);
         _current_request_bytes = 0;
         // The original design is bad, we must release_finst_id here!
         info.params.release_finst_id();
+
+        *is_real_sent = true;
     }
 
     return Status::OK();
@@ -181,7 +196,7 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParams* p
 
     params->set_eos(false);
     // TODO (by satanson): eliminate redundant copy in broadcast scenarios
-    TransmitChunkInfo info = {this->_channel_id, *params, _brpc_stub};
+    TransmitChunkInfo info = {this->_channel_id, *params, _brpc_stub, attachment};
     _parent->_buffer->add_request(info);
 
     // The original design is bad, we must release_finst_id here!
@@ -326,12 +341,22 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         // 3. if request bytes exceede the threshold, send current request
         if (_current_request_bytes > _request_bytes_threshold) {
             butil::IOBuf attachment;
-            // construct_brpc_attachment(&_chunk_request, &attachment);
+            construct_brpc_attachment(&_chunk_request, &attachment);
             for (const auto& channel : _channels) {
                 RETURN_IF_ERROR(channel->send_chunk_request(&_chunk_request, attachment));
             }
             _current_request_bytes = 0;
             _chunk_request.clear_chunks();
+        }
+    } else if (_part_type == TPartitionType::RANDOM) {
+        // Round-robin batches among channels. Wait for the current channel to finish its
+        // rpc before overwriting its batch.
+        // 1. Get request of that channel
+        auto& channel = _channels[_curr_random_channel_idx];
+        bool real_sent = false;
+        RETURN_IF_ERROR(channel->send_one_chunk(chunk.get(), false, &real_sent));
+        if (real_sent) {
+            _curr_random_channel_idx = (_curr_random_channel_idx + 1) % _channels.size();
         }
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
@@ -494,17 +519,8 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(int32_t id, int32_t pla
           _partition_expr_ctxs(std::move(partition_expr_ctxs)) {}
 
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    if (_part_type == TPartitionType::UNPARTITIONED || _destinations.size() == 1) {
-        return std::make_shared<ExchangeSinkOperator>(_id, _plan_node_id, _buffer, _part_type, _destinations,
-                                                      _sender_id, _dest_node_id, _partition_expr_ctxs);
-    } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
-               _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
-        return std::make_shared<ExchangeSinkOperator>(_id, _plan_node_id, _buffer, _part_type, _destinations,
-                                                      _sender_id, _dest_node_id, _partition_expr_ctxs);
-    } else {
-        DCHECK(false) << " Shouldn't reach here!";
-        return nullptr;
-    }
+    return std::make_shared<ExchangeSinkOperator>(_id, _plan_node_id, _buffer, _part_type, _destinations, _sender_id,
+                                                  _dest_node_id, _partition_expr_ctxs);
 }
 
 Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {

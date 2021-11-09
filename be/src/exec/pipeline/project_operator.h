@@ -3,6 +3,7 @@
 #pragma once
 
 #include "exec/pipeline/operator.h"
+#include "runtime/global_dicts.h"
 
 namespace starrocks {
 class ExprContext;
@@ -70,8 +71,8 @@ public:
                                                  _common_sub_column_ids, _common_sub_expr_ctxs);
     }
 
-    Status prepare(RuntimeState* state);
-    void close(RuntimeState* state);
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
 
 private:
     std::vector<int32_t> _column_ids;
@@ -80,6 +81,7 @@ private:
 
     std::vector<int32_t> _common_sub_column_ids;
     std::vector<ExprContext*> _common_sub_expr_ctxs;
+    vectorized::DictOptimizeParser _dict_optimize_parser;
 };
 
 } // namespace pipeline

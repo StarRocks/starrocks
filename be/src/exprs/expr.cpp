@@ -658,6 +658,19 @@ ColumnPtr Expr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
     return nullptr;
 }
 
+vectorized::ColumnRef* Expr::get_column_ref() {
+    if (this->is_slotref()) {
+        return down_cast<vectorized::ColumnRef*>(this);
+    }
+    for (auto child : this->children()) {
+        vectorized::ColumnRef* ref = nullptr;
+        if ((ref = child->get_column_ref()) != nullptr) {
+            return ref;
+        }
+    }
+    return nullptr;
+}
+
 } // namespace starrocks
 
 #pragma clang diagnostic pop

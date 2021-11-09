@@ -22,13 +22,11 @@
 #include "runtime/mem_tracker.h"
 
 #include <boost/algorithm/string/join.hpp>
-#include <cstdint>
 #include <memory>
 #include <utility>
 
 #include "exec/exec_node.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/debug_util.h"
@@ -96,14 +94,10 @@ void MemTracker::Init() {
     DCHECK_EQ(_all_trackers[0], this);
 }
 
-// TODO chenhao , set MemTracker close state
-void MemTracker::close() {}
-
 MemTracker::~MemTracker() {
-    DCHECK_EQ(0, consumption()) << CurrentThread::query_id_string();
-    if (UNLIKELY(consumption() > 0)) {
-        release(consumption());
-    }
+    // return memory to root mem_tracker
+    release_without_root();
+
     if (_auto_unregister && parent()) {
         unregister_from_parent();
     }

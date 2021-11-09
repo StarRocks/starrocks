@@ -65,7 +65,9 @@ import java.util.stream.Collectors;
 
 public class Explain {
     public static String toString(OptExpression root, List<ColumnRefOperator> outputColumns) {
-        String outputBuilder = "- Output => " + outputColumns;
+        String outputBuilder = "- Output => " + outputColumns.stream().map(c -> new ExpressionPrinter().print(c))
+                .collect(Collectors.joining(", "));
+
         OperatorStr optStrings = new OperatorPrinter().visit(root, new OperatorPrinter.ExplainContext(1));
         OperatorStr rootOperatorStr = new OperatorStr(outputBuilder, 0, Lists.newArrayList(optStrings));
         return rootOperatorStr.toString();
@@ -239,7 +241,9 @@ public class Explain {
             OperatorStr child = visit(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
             PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder("- AGGREGATE(").append(aggregate.getType()).append(") ");
-            sb.append(aggregate.getGroupBys());
+            sb.append(aggregate.getGroupBys().stream().map(c -> new ExpressionPrinter().print(c))
+                    .collect(Collectors.joining(", ")));
+
             sb.append(buildOutputColumns(aggregate, ""));
             sb.append("\n");
 
@@ -336,7 +340,7 @@ public class Explain {
                 StringBuilder valuesRow = new StringBuilder();
                 for (List<ScalarOperator> row : values.getRows()) {
                     valuesRow.append("{");
-                    valuesRow.append(row.stream().map(new ExpressionPrinter()::print).collect(Collectors.joining(",")));
+                    valuesRow.append(row.stream().map(new ExpressionPrinter()::print).collect(Collectors.joining(", ")));
                     valuesRow.append("}, ");
                 }
                 valuesRow.delete(valuesRow.length() - 2, valuesRow.length());
@@ -440,12 +444,12 @@ public class Explain {
 
         @Override
         public String visitArray(ArrayOperator array, Void context) {
-            return array.getChildren().stream().map(this::print).collect(Collectors.joining(","));
+            return array.getChildren().stream().map(this::print).collect(Collectors.joining(", "));
         }
 
         @Override
         public String visitArrayElement(ArrayElementOperator array, Void context) {
-            return array.getChildren().stream().map(this::print).collect(Collectors.joining(","));
+            return array.getChildren().stream().map(this::print).collect(Collectors.joining(", "));
         }
 
         @Override

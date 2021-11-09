@@ -1156,6 +1156,9 @@ public class MaterializedViewHandler extends AlterHandler {
         Optional<AlterClause> alterClauseOptional = alterClauses.stream().findAny();
         if (alterClauseOptional.isPresent()) {
             if (alterClauseOptional.get() instanceof AddRollupClause) {
+                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    throw new DdlException("Do not support add rollup on primary key table[" + olapTable.getName() + "]");
+                }
                 processBatchAddRollup(alterClauses, db, olapTable);
             } else if (alterClauseOptional.get() instanceof DropRollupClause) {
                 processBatchDropRollup(alterClauses, db, olapTable);

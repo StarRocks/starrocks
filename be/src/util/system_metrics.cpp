@@ -81,6 +81,12 @@ public:
     METRIC_DEFINE_INT_GAUGE(compaction_mem_bytes, MetricUnit::BYTES);
     // SchemaChange memory usage
     METRIC_DEFINE_INT_GAUGE(schema_change_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(column_pool_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(storage_page_cache_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(update_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(chunk_allocator_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(clone_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(consistency_mem_bytes, MetricUnit::BYTES);
 
     // column pool metrics.
     METRIC_DEFINE_INT_GAUGE(column_pool_total_bytes, MetricUnit::BYTES);
@@ -249,6 +255,12 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("tablet_meta_mem_bytes", &_memory_metrics->tablet_meta_mem_bytes);
     registry->register_metric("compaction_mem_bytes", &_memory_metrics->compaction_mem_bytes);
     registry->register_metric("schema_change_mem_bytes", &_memory_metrics->schema_change_mem_bytes);
+    registry->register_metric("column_pool_mem_bytes", &_memory_metrics->column_pool_mem_bytes);
+    registry->register_metric("storage_page_cache_mem_bytes", &_memory_metrics->storage_page_cache_mem_bytes);
+    registry->register_metric("update_mem_bytes", &_memory_metrics->update_mem_bytes);
+    registry->register_metric("chunk_allocator_mem_bytes", &_memory_metrics->chunk_allocator_mem_bytes);
+    registry->register_metric("clone_mem_bytes", &_memory_metrics->clone_mem_bytes);
+    registry->register_metric("consistency_mem_bytes", &_memory_metrics->consistency_mem_bytes);
 
     registry->register_metric("total_column_pool_bytes", &_memory_metrics->column_pool_total_bytes);
     registry->register_metric("local_column_pool_bytes", &_memory_metrics->column_pool_local_bytes);
@@ -314,6 +326,28 @@ void SystemMetrics::_update_memory_metrics() {
     if (ExecEnv::GetInstance()->schema_change_mem_tracker() != nullptr) {
         _memory_metrics->schema_change_mem_bytes.set_value(
                 ExecEnv::GetInstance()->schema_change_mem_tracker()->consumption());
+    }
+    if (ExecEnv::GetInstance()->page_cache_mem_tracker() != nullptr) {
+        _memory_metrics->storage_page_cache_mem_bytes.set_value(
+                ExecEnv::GetInstance()->page_cache_mem_tracker()->consumption());
+    }
+    if (ExecEnv::GetInstance()->update_mem_tracker() != nullptr) {
+        _memory_metrics->update_mem_bytes.set_value(ExecEnv::GetInstance()->update_mem_tracker()->consumption());
+    }
+    if (ExecEnv::GetInstance()->chunk_allocator_mem_tracker() != nullptr) {
+        _memory_metrics->chunk_allocator_mem_bytes.set_value(
+                ExecEnv::GetInstance()->chunk_allocator_mem_tracker()->consumption());
+    }
+    if (ExecEnv::GetInstance()->clone_mem_tracker() != nullptr) {
+        _memory_metrics->clone_mem_bytes.set_value(ExecEnv::GetInstance()->clone_mem_tracker()->consumption());
+    }
+    if (ExecEnv::GetInstance()->column_pool_mem_tracker() != nullptr) {
+        _memory_metrics->column_pool_mem_bytes.set_value(
+                ExecEnv::GetInstance()->column_pool_mem_tracker()->consumption());
+    }
+    if (ExecEnv::GetInstance()->consistency_mem_tracker() != nullptr) {
+        _memory_metrics->consistency_mem_bytes.set_value(
+                ExecEnv::GetInstance()->consistency_mem_tracker()->consumption());
     }
 
 #define UPDATE_COLUMN_POOL_METRIC(var, type)                                         \

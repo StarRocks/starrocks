@@ -27,7 +27,6 @@
 
 #include "env/env.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/fs/block_manager.h"
 #include "storage/rowset/segment_v2/bloom_filter.h" // for BloomFilterOptions, BloomFilter
 #include "storage/rowset/segment_v2/common.h"

@@ -23,9 +23,11 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Arrays;
@@ -35,6 +37,8 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class Utils {
@@ -122,16 +126,24 @@ public class Utils {
     }
 
     public static void extractOlapScanOperator(GroupExpression groupExpression, List<LogicalOlapScanOperator> list) {
-        if (OperatorType.LOGICAL_OLAP_SCAN.equals(groupExpression.getOp().getOpType())) {
-            LogicalOlapScanOperator loso = (LogicalOlapScanOperator) groupExpression.getOp();
-            list.add(loso);
+        extractOperator(groupExpression, list, p -> OperatorType.LOGICAL_OLAP_SCAN.equals(p.getOpType()));
+    }
+
+    public static void extractScanOperator(GroupExpression groupExpression, List<LogicalScanOperator> list) {
+        extractOperator(groupExpression, list, p -> p instanceof LogicalScanOperator);
+    }
+
+    private static <E extends Operator> void extractOperator(GroupExpression root, List<E> list,
+                                                             Predicate<Operator> lambda) {
+        if (lambda.test(root.getOp())) {
+            list.add((E) root.getOp());
             return;
         }
 
-        List<Group> groups = groupExpression.getInputs();
+        List<Group> groups = root.getInputs();
         for (Group group : groups) {
             GroupExpression expression = group.getFirstLogicalExpression();
-            extractOlapScanOperator(expression, list);
+            extractOperator(expression, list, lambda);
         }
     }
 
@@ -325,6 +337,10 @@ public class Utils {
         return dateTime.atZone(ZoneId.systemDefault()).toInstant().getEpochSecond();
     }
 
+    public static LocalDateTime getDatetimeFromLong(long dateTime) {
+        return LocalDateTime.ofInstant(Instant.ofEpochSecond(dateTime), ZoneId.systemDefault());
+    }
+
     public static long convertBitSetToLong(BitSet bitSet, int length) {
         long gid = 0;
         for (int b = 0; b < length; ++b) {
@@ -358,7 +374,7 @@ public class Utils {
         int schemaHash = table.getSchemaHashByIndexId(selectedIndexId);
         for (Long partitionId : selectedPartitionId) {
             Partition partition = table.getPartition(partitionId);
-            if (partition.getReplicaCount() < backendSize) {
+            if (table.getPartitionInfo().getReplicationNum(partitionId) < backendSize) {
                 return false;
             }
             long visibleVersion = partition.getVisibleVersion();
@@ -385,5 +401,33 @@ public class Utils {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Try cast op to descType, return empty if failed
+     */
+    public static Optional<ScalarOperator> tryCastConstant(ScalarOperator op, Type descType) {
+        // Forbidden cast float, because behavior isn't same with before
+        if (!op.isConstantRef() || op.getType().matchesType(descType) || Type.FLOAT.equals(op.getType())
+                || descType.equals(Type.FLOAT)) {
+            return Optional.empty();
+        }
+
+        try {
+            if (((ConstantOperator) op).isNull()) {
+                return Optional.of(ConstantOperator.createNull(descType));
+            }
+
+            ConstantOperator result = ((ConstantOperator) op).castTo(descType);
+            if (result.toString().equalsIgnoreCase(op.toString())) {
+                return Optional.of(result);
+            } else if (descType.isDate() && (op.getType().isIntegerType() || op.getType().isStringType())) {
+                if (op.toString().equalsIgnoreCase(result.toString().replaceAll("-", ""))) {
+                    return Optional.of(result);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return Optional.empty();
     }
 }

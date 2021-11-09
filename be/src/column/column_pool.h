@@ -21,6 +21,7 @@ DIAGNOSTIC_POP
 #include "common/config.h"
 #include "common/type_list.h"
 #include "gutil/dynamic_annotations.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks::vectorized {
 
@@ -149,6 +150,10 @@ class CACHELINE_ALIGNED ColumnPool {
             auto bytes = column_bytes(obj);
             _curr_free.bytes -= bytes;
             UPDATE_BVAR(g_column_pool_total_local_bytes, -bytes);
+
+            tls_thread_status.mem_consume(bytes);
+            _pool->mem_tracker()->release(bytes);
+
             return obj;
         }
 
@@ -163,6 +168,10 @@ class CACHELINE_ALIGNED ColumnPool {
                 ASAN_POISON_MEMORY_REGION(ptr, sizeof(T));
                 _curr_free.ptrs[_curr_free.nfree++] = ptr;
                 _curr_free.bytes += bytes;
+
+                tls_thread_status.mem_release(bytes);
+                _pool->mem_tracker()->consume(bytes);
+
                 UPDATE_BVAR(g_column_pool_total_local_bytes, bytes);
                 return;
             }
@@ -172,6 +181,10 @@ class CACHELINE_ALIGNED ColumnPool {
                 _curr_free.nfree = 1;
                 _curr_free.ptrs[0] = ptr;
                 _curr_free.bytes = bytes;
+
+                tls_thread_status.mem_release(bytes);
+                _pool->mem_tracker()->consume(bytes);
+
                 UPDATE_BVAR(g_column_pool_total_local_bytes, bytes);
                 return;
             }
@@ -197,6 +210,9 @@ class CACHELINE_ALIGNED ColumnPool {
     };
 
 public:
+    void set_mem_tracker(MemTracker* mem_tracker) { _mem_tracker = mem_tracker; }
+    MemTracker* mem_tracker() { return _mem_tracker; }
+
     static std::enable_if_t<std::is_default_constructible_v<T>, ColumnPool*> singleton() {
         static ColumnPool p;
         return &p;
@@ -243,6 +259,10 @@ public:
             freed_bytes += blk->bytes;
             _release_free_block(blk);
         }
+
+        _mem_tracker->release(freed_bytes);
+        tls_thread_status.mem_consume(freed_bytes);
+
         UPDATE_BVAR(g_column_pool_total_central_bytes, -freed_bytes);
         return freed_bytes;
     }
@@ -366,6 +386,8 @@ private:
     ColumnPool() { _free_blocks.reserve(32); }
 
     ~ColumnPool() = default;
+
+    MemTracker* _mem_tracker = nullptr;
 
     static __thread LocalPool* _local_pool; // NOLINT
     static std::atomic<long> _nlocal;       // NOLINT

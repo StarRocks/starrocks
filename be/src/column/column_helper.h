@@ -94,6 +94,70 @@ public:
         return column;
     }
 
+    static ColumnPtr copy_and_unfold_const_column(const TypeDescriptor& dst_type_desc, bool dst_nullable,
+                                                  const ColumnPtr& src_column, int num_rows) {
+        ColumnPtr dst_column = create_column(dst_type_desc, dst_nullable);
+        dst_column->reserve(num_rows);
+
+        if (src_column->only_null()) {
+            // 1. If src is constant and nullable, create an only null dest column.
+            DCHECK(dst_nullable);
+            [[maybe_unused]] bool ok = dst_column->append_nulls(num_rows);
+            DCHECK(ok);
+        } else {
+            // 2. If src is constant and non-nullable, copy and unfold the constant column.
+            auto* const_column = as_raw_column<vectorized::ConstColumn>(src_column);
+            // Note: we must create a new column every time here,
+            // because VectorizedLiteral always return a same shared_ptr and we will modify it later.
+            dst_column->append(*const_column->data_column(), 0, 1);
+            dst_column->assign(num_rows, 0);
+        }
+
+        return dst_column;
+    }
+
+    // Update column according to whether the dest column and source column are nullable or not.
+    static ColumnPtr update_column_nullable(const TypeDescriptor& dst_type_desc, bool dst_nullable,
+                                            const ColumnPtr& src_column, int num_rows) {
+        if (src_column->is_nullable()) {
+            if (dst_nullable) {
+                // 1. Src column and dest column are both nullable.
+                return src_column;
+            } else {
+                // 2. src column is nullable, and dest column is non-nullable.
+                auto* nullable_column = as_raw_column<NullableColumn>(src_column);
+                DCHECK(!nullable_column->has_null());
+                return nullable_column->data_column();
+            }
+        } else {
+            // 3. Src column and dest column are both non-nullable.
+            if (!dst_nullable) {
+                return src_column;
+            } else {
+                // 4. src column is non-nullable, and dest column is nullable.
+                ColumnPtr nullable_column = NullableColumn::create(src_column, NullColumn::create(num_rows, 0));
+                return nullable_column;
+            }
+        }
+    }
+
+    // Move the source column according to the specific dest type and nullable.
+    static ColumnPtr move_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, const ColumnPtr& src_column,
+                                 int num_rows) {
+        if (src_column->is_constant()) {
+            return copy_and_unfold_const_column(dst_type_desc, dst_nullable, src_column, num_rows);
+        }
+
+        return update_column_nullable(dst_type_desc, dst_nullable, src_column, num_rows);
+    }
+
+    // Copy the source column according to the specific dest type and nullable.
+    static ColumnPtr clone_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, const ColumnPtr& src_column,
+                                  int num_rows) {
+        auto dst_column = update_column_nullable(dst_type_desc, dst_nullable, src_column, num_rows);
+        return dst_column->clone_shared();
+    }
+
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
 
     // If is_const is true, you must pass the size arg

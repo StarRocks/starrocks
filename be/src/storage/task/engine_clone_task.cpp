@@ -32,6 +32,7 @@
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
 #include "runtime/client_cache.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
@@ -53,22 +54,26 @@ const uint32_t DOWNLOAD_FILE_MAX_RETRY = 3;
 const uint32_t LIST_REMOTE_FILE_TIMEOUT = 15;
 const uint32_t GET_LENGTH_TIMEOUT = 10;
 
-EngineCloneTask::EngineCloneTask(MemTracker* tablet_meta_mem_tracker, const TCloneReq& clone_req,
-                                 const TMasterInfo& master_info, int64_t signature, std::vector<string>* error_msgs,
+EngineCloneTask::EngineCloneTask(MemTracker* mem_tracker, const TCloneReq& clone_req, const TMasterInfo& master_info,
+                                 int64_t signature, std::vector<string>* error_msgs,
                                  std::vector<TTabletInfo>* tablet_infos, AgentStatus* res_status)
-        : _tablet_meta_mem_tracker(tablet_meta_mem_tracker),
-          _clone_req(clone_req),
+        : _clone_req(clone_req),
           _error_msgs(error_msgs),
           _tablet_infos(tablet_infos),
           _res_status(res_status),
           _signature(signature),
-          _master_info(master_info) {}
+          _master_info(master_info) {
+    _mem_tracker = std::make_unique<MemTracker>(-1, "clone task", mem_tracker);
+}
 
 OLAPStatus EngineCloneTask::execute() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     auto tablet_manager = StorageEngine::instance()->tablet_manager();
     // Prevent the snapshot directory from been removed by the path GC worker.
     tablet_manager->register_clone_tablet(_clone_req.tablet_id);
-    auto tablet = tablet_manager->get_tablet(_clone_req.tablet_id, _clone_req.schema_hash);
+    auto tablet = tablet_manager->get_tablet(_clone_req.tablet_id, false);
     if (tablet != nullptr) {
         std::shared_lock rlock(tablet->get_migration_lock(), std::try_to_lock);
         if (!rlock.owns_lock()) {
@@ -216,8 +221,7 @@ void EngineCloneTask::_set_tablet_info(Status status, bool is_new_tablet) {
                              << ", schema_hash:" << _clone_req.schema_hash << ", signature:" << _signature
                              << ", version:" << tablet_info.version
                              << ", expected_version: " << _clone_req.committed_version;
-                Status drop_status = StorageEngine::instance()->tablet_manager()->drop_tablet(_clone_req.tablet_id,
-                                                                                              _clone_req.schema_hash);
+                Status drop_status = StorageEngine::instance()->tablet_manager()->drop_tablet(_clone_req.tablet_id);
                 if (!drop_status.ok() && !drop_status.is_not_found()) {
                     // just log
                     LOG(WARNING) << "Fail to drop stale cloned table. tablet id=" << _clone_req.tablet_id;
@@ -445,11 +449,10 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 
     tablet->obtain_push_lock();
     tablet->obtain_header_wrlock();
-    MemTracker mem_tracker;
     do {
         // load src header
         std::string header_file = strings::Substitute("$0/$1.hdr", clone_dir, tablet->tablet_id());
-        TabletMeta cloned_tablet_meta(&mem_tracker);
+        TabletMeta cloned_tablet_meta;
         res = cloned_tablet_meta.create_from_file(header_file);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to load load tablet meta from " << header_file;
@@ -629,8 +632,8 @@ Status EngineCloneTask::_clone_full_data(Tablet* tablet, TabletMeta* cloned_tabl
     // but some rowset is useless, so that remove them here
     for (auto& rs_meta_ptr : rs_metas_found_in_src) {
         RowsetSharedPtr rowset_to_remove;
-        if (auto s = RowsetFactory::create_rowset(_tablet_meta_mem_tracker, &(cloned_tablet_meta->tablet_schema()),
-                                                  tablet->tablet_path(), rs_meta_ptr, &rowset_to_remove);
+        if (auto s = RowsetFactory::create_rowset(&(cloned_tablet_meta->tablet_schema()), tablet->tablet_path(),
+                                                  rs_meta_ptr, &rowset_to_remove);
             !s.ok()) {
             LOG(WARNING) << "failed to init rowset to remove: " << rs_meta_ptr->rowset_id().to_string();
             continue;

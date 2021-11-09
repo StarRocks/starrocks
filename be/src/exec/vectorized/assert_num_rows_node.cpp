@@ -56,6 +56,12 @@ Status AssertNumRowsNode::open(RuntimeState* state) {
         }
     }
 
+    int64_t usage = 0;
+    for (auto& item : _input_chunks) {
+        usage += item->memory_usage();
+    }
+    _mem_tracker->set(usage);
+
     return Status::OK();
 }
 
@@ -135,7 +141,7 @@ pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::Pipelin
 
     OpFactories operator_before_assert_num_rows_source = _children[0]->decompose_to_pipeline(context);
     operator_before_assert_num_rows_source =
-            context->maybe_interpolate_local_exchange(operator_before_assert_num_rows_source);
+            context->maybe_interpolate_local_passthrough_exchange(operator_before_assert_num_rows_source);
 
     auto source_factory = std::make_shared<AssertNumRowsOperatorFactory>(
             context->next_operator_id(), id(), _desired_num_rows, _subquery_string, std::move(_assertion));

@@ -5,6 +5,11 @@
 #include <memory>
 
 #include "column/column_helper.h"
+#include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/set/intersect_build_sink_operator.h"
+#include "exec/pipeline/set/intersect_context.h"
+#include "exec/pipeline/set/intersect_output_source_operator.h"
+#include "exec/pipeline/set/intersect_probe_sink_operator.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
@@ -50,6 +55,7 @@ Status IntersectNode::prepare(RuntimeState* state) {
     for (int i = 0; i < size_column_type; ++i) {
         _types[i].result_type = _tuple_desc->slots()[i]->type();
         _types[i].is_constant = _child_expr_lists[0][i]->root()->is_constant();
+        _types[i].is_nullable = _child_expr_lists[0][i]->root()->is_nullable();
     }
 
     return Status::OK();
@@ -77,7 +83,7 @@ Status IntersectNode::open(RuntimeState* state) {
     }
 
     // initial build hash table used for record hitting.
-    _hash_set = std::make_unique<HashSerializeSet>();
+    _hash_set = std::make_unique<IntersectHashSerializeSet>();
 
     ChunkPtr chunk = nullptr;
     RETURN_IF_ERROR(child(0)->open(state));
@@ -87,11 +93,9 @@ Status IntersectNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(child(0)->get_next(state, &chunk, &eos));
     if (!eos) {
         ScopedTimer<MonotonicStopWatch> build_timer(_build_set_timer);
-        std::vector<IntersectColumnTypes>* types = &_types;
-        RETURN_IF_ERROR(_hash_set->build_set(
-                state, chunk, _child_expr_lists[0], _build_pool.get(),
-                [=](const ColumnPtr& column, int i) -> void { (*types)[i].is_nullable = column->is_nullable(); }));
+        RETURN_IF_ERROR(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get()));
         while (true) {
+            RETURN_IF_ERROR(state->check_query_state("IntersectNode"));
             RETURN_IF_CANCELLED(state);
             build_timer.stop();
             RETURN_IF_ERROR(child(0)->get_next(state, &chunk, &eos));
@@ -103,13 +107,12 @@ Status IntersectNode::open(RuntimeState* state) {
             if (chunk->num_rows() == 0) {
                 continue;
             }
-            RETURN_IF_ERROR(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get(),
-                                                 [](const ColumnPtr& column, int i) -> void {}));
+            RETURN_IF_ERROR(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get()));
         }
     }
 
     // if a table is empty, the result must be empty
-    if (_hash_set->hash_set->empty()) {
+    if (_hash_set->empty()) {
         _hash_set_iterator = _hash_set->begin();
         return Status::OK();
     }
@@ -133,7 +136,7 @@ Status IntersectNode::open(RuntimeState* state) {
         }
 
         // if a table is empty, the result must be empty
-        if (_hash_set->hash_set->empty()) {
+        if (_hash_set->empty()) {
             _hash_set_iterator = _hash_set->begin();
             return Status::OK();
         }
@@ -159,10 +162,10 @@ Status IntersectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
     }
 
     int32_t read_index = 0;
-    _hash_set->_results.resize(config::vector_chunk_size);
+    _remained_keys.resize(config::vector_chunk_size);
     while (_hash_set_iterator != _hash_set->end() && read_index < config::vector_chunk_size) {
         if (_hash_set_iterator->hit_times == _intersect_times) {
-            _hash_set->_results[read_index] = _hash_set_iterator->slice;
+            _remained_keys[read_index] = _hash_set_iterator->slice;
             ++read_index;
         }
         ++_hash_set_iterator;
@@ -179,7 +182,7 @@ Status IntersectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) 
 
         {
             SCOPED_TIMER(_get_result_timer);
-            _hash_set->insert_keys_to_columns(_hash_set->_results, result_columns, read_index);
+            _hash_set->deserialize_to_columns(_remained_keys, result_columns, read_index);
         }
 
         for (size_t i = 0; i < result_columns.size(); i++) {
@@ -218,6 +221,38 @@ Status IntersectNode::close(RuntimeState* state) {
     }
 
     return ExecNode::close(state);
+}
+
+pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    pipeline::IntersectPartitionContextFactoryPtr intersect_partition_ctx_factory =
+            std::make_shared<pipeline::IntersectPartitionContextFactory>(_tuple_id, _children.size() - 1);
+
+    // Use the first child to build the hast table by IntersectBuildSinkOperator.
+    pipeline::OpFactories operators_with_intersect_build_sink = child(0)->decompose_to_pipeline(context);
+    operators_with_intersect_build_sink = context->maybe_interpolate_local_shuffle_exchange(
+            operators_with_intersect_build_sink, _child_expr_lists[0]);
+    operators_with_intersect_build_sink.emplace_back(std::make_shared<pipeline::IntersectBuildSinkOperatorFactory>(
+            context->next_operator_id(), id(), intersect_partition_ctx_factory, _child_expr_lists[0]));
+    context->add_pipeline(operators_with_intersect_build_sink);
+
+    // Use the rest children to erase keys from the hast table by IntersectProbeSinkOperator.
+    for (size_t i = 1; i < _children.size(); i++) {
+        pipeline::OpFactories operators_with_intersect_probe_sink = child(i)->decompose_to_pipeline(context);
+        operators_with_intersect_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
+                operators_with_intersect_probe_sink, _child_expr_lists[i]);
+        operators_with_intersect_probe_sink.emplace_back(std::make_shared<pipeline::IntersectProbeSinkOperatorFactory>(
+                context->next_operator_id(), id(), intersect_partition_ctx_factory, _child_expr_lists[i], i - 1));
+        context->add_pipeline(operators_with_intersect_probe_sink);
+    }
+
+    // IntersectOutputSourceOperator is used to assemble the undeleted keys to output chunks.
+    pipeline::OpFactories operators_with_intersect_output_source;
+    auto intersect_output_source = std::make_shared<pipeline::IntersectOutputSourceOperatorFactory>(
+            context->next_operator_id(), id(), intersect_partition_ctx_factory, _children.size() - 1);
+    intersect_output_source->set_degree_of_parallelism(context->degree_of_parallelism());
+    operators_with_intersect_output_source.emplace_back(std::move(intersect_output_source));
+
+    return operators_with_intersect_output_source;
 }
 
 } // namespace starrocks::vectorized

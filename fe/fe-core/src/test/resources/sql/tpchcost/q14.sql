@@ -45,7 +45,7 @@ UNPARTITIONED
 |  use vectorized: true
 |
 5:Project
-|  <slot 28> : CASE WHEN 22: P_TYPE LIKE 'PROMO%' THEN 34: multiply ELSE 0.0 END
+|  <slot 28> : if(22: P_TYPE LIKE 'PROMO%', 34: multiply, 0.0)
 |  <slot 29> : 34: multiply
 |  common expressions:
 |  <slot 33> : 1.0 - 7: L_DISCOUNT

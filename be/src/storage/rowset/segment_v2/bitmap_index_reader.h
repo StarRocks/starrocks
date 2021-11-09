@@ -26,7 +26,6 @@
 #include "common/status.h"
 #include "gen_cpp/segment_v2.pb.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/column_block.h"
 #include "storage/rowset/segment_v2/common.h"
 #include "storage/rowset/segment_v2/indexed_column_reader.h"

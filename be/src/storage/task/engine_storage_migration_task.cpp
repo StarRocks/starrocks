@@ -34,7 +34,7 @@ EngineStorageMigrationTask::EngineStorageMigrationTask(TTabletId tablet_id, TSch
 OLAPStatus EngineStorageMigrationTask::execute() {
     StarRocksMetrics::instance()->storage_migrate_requests_total.increment(1);
 
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, _schema_hash);
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
     if (tablet == nullptr) {
         LOG(WARNING) << "failed to find tablet. tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash;
         return OLAP_ERR_TABLE_NOT_FOUND;
@@ -132,9 +132,8 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
             return OLAP_ERR_FILE_ALREADY_EXIST;
         }
 
-        auto mem_tracker = std::make_unique<MemTracker>();
-        TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta(mem_tracker.get()));
-        Status st = TabletMetaManager::get_tablet_meta(_dest_store, _tablet_id, _schema_hash, new_tablet_meta);
+        TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta());
+        Status st = TabletMetaManager::get_tablet_meta(_dest_store, _tablet_id, _schema_hash, new_tablet_meta.get());
         if (st.ok()) {
             LOG(WARNING) << "tablet_meta already exists. data_dir:" << _dest_store->path()
                          << "tablet:" << tablet->full_name();
@@ -184,9 +183,8 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
             break;
         }
 
-        auto mem_tracker = std::make_unique<MemTracker>();
-        TabletMetaSharedPtr new_tablet_meta(new (std::nothrow) TabletMeta(mem_tracker.get()));
-        Status st = TabletMetaManager::get_tablet_meta(_dest_store, _tablet_id, _schema_hash, new_tablet_meta);
+        auto new_tablet_meta = std::make_shared<TabletMeta>();
+        Status st = TabletMetaManager::get_tablet_meta(_dest_store, _tablet_id, _schema_hash, new_tablet_meta.get());
         if (st.ok()) {
             LOG(WARNING) << "tablet_meta already exists. data_dir:" << _dest_store->path()
                          << "tablet:" << tablet->full_name();
@@ -259,7 +257,7 @@ OLAPStatus EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) 
 
         // if old tablet finished schema change, then the schema change status of the new tablet is DONE
         // else the schema change status of the new tablet is FAILED
-        TabletSharedPtr new_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, _schema_hash);
+        TabletSharedPtr new_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
         if (new_tablet == nullptr) {
             // tablet already loaded success.
             // just log, and not set need_remove_new_path.

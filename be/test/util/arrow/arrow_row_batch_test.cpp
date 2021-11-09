@@ -80,9 +80,8 @@ TEST_F(ArrowRowBatchTest, PrettyPrint) {
     RowDescriptor* row_desc;
     auto starrocks_st = convert_to_row_desc(&obj_pool, *record_batch->schema(), &row_desc);
     ASSERT_TRUE(starrocks_st.ok());
-    MemTracker tracker;
     std::shared_ptr<RowBatch> row_batch;
-    starrocks_st = convert_to_row_batch(*record_batch, *row_desc, &tracker, &row_batch);
+    starrocks_st = convert_to_row_batch(*record_batch, *row_desc, &row_batch);
     ASSERT_TRUE(starrocks_st.ok());
 
     {

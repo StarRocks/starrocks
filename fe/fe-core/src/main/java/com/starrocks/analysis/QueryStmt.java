@@ -683,6 +683,11 @@ public abstract class QueryStmt extends StatementBase {
     public abstract void substituteSelectList(Analyzer analyzer, List<String> newColLabels)
             throws AnalysisException, UserException;
 
+    public void substituteSelectListForCreateView(Analyzer analyzer, List<String> newColLabels)
+            throws AnalysisException, UserException {
+        substituteSelectList(analyzer, newColLabels);
+    }
+
     public void setOutFileClause(OutFileClause outFileClause) {
         this.outFileClause = outFileClause;
     }

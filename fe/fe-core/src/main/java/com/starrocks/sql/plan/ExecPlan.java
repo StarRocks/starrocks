@@ -26,6 +26,7 @@ public class ExecPlan {
     private final DescriptorTable descTbl = new DescriptorTable();
     private final Map<ColumnRefOperator, Expr> colRefToExpr = new HashMap<>();
     private final ArrayList<PlanFragment> fragments = new ArrayList<>();
+    private int planCount = 0;
 
     private final OptExpression physicalPlan;
     private final List<ColumnRefOperator> outputColumns;
@@ -71,8 +72,12 @@ public class ExecPlan {
         return colRefToExpr;
     }
 
-    public OptExpression getPhysicalPlan() {
-        return physicalPlan;
+    public void setPlanCount(int planCount) {
+        this.planCount = planCount;
+    }
+
+    public int getPlanCount() {
+        return planCount;
     }
 
     public String getExplainString(TExplainLevel level) {
@@ -80,6 +85,10 @@ public class ExecPlan {
         if (level == null) {
             str.append(Explain.toString(physicalPlan, outputColumns));
         } else {
+            if (planCount != 0) {
+                str.append("There are ").append(planCount).append(" plans in optimizer search space\n");
+            }
+
             for (int i = 0; i < fragments.size(); ++i) {
                 PlanFragment fragment = fragments.get(i);
                 if (i > 0) {

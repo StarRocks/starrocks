@@ -29,6 +29,8 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
              << _aggregator->needs_finalize();
 
     while (true) {
+        RETURN_IF_ERROR(state->check_query_state("AggrNode"));
+
         bool eos = false;
         RETURN_IF_CANCELLED(state);
         RETURN_IF_ERROR(_children[0]->get_next(state, &chunk, &eos));
@@ -61,8 +63,6 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
                     break;
                 }
             }
-
-            RETURN_IF_ERROR(_aggregator->check_hash_set_memory_usage(state));
         }
     }
 
@@ -82,6 +82,9 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
 #undef HASH_SET_METHOD
 
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
+
+    _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() + _aggregator->mem_pool()->total_reserved_bytes());
+
     return Status::OK();
 }
 
@@ -124,7 +127,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
-    operators_with_sink = context->maybe_interpolate_local_exchange(operators_with_sink);
+    operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
 
     // shared by sink operator and source operator
     AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode);

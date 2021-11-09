@@ -34,6 +34,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
              _conjunct_ctxs.empty() &&                     // no 'having' clause
              _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
     while (true) {
+        RETURN_IF_ERROR(state->check_query_state("AggrNode"));
         bool eos = false;
         RETURN_IF_CANCELLED(state);
         RETURN_IF_ERROR(_children[0]->get_next(state, &chunk, &eos));
@@ -63,7 +64,8 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
                 APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
 
-                RETURN_IF_ERROR(_aggregator->check_hash_map_memory_usage(state));
+                _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
+                                  _aggregator->mem_pool()->total_reserved_bytes());
                 _aggregator->try_convert_to_two_level_map();
             }
             if (_aggregator->is_none_group_by_exprs()) {
@@ -110,6 +112,9 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
         }
     }
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
+
+    _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() + _aggregator->mem_pool()->total_reserved_bytes());
+
     return Status::OK();
 }
 
@@ -157,7 +162,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
-    operators_with_sink = context->maybe_interpolate_local_exchange(operators_with_sink);
+    operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(operators_with_sink);
 
     // shared by sink operator and source operator
     AggregatorPtr aggregator = std::make_shared<Aggregator>(_tnode);

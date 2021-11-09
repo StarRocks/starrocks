@@ -25,8 +25,6 @@
 
 #include <string>
 
-#include "util/logging.h"
-
 namespace starrocks {
 
 TEST(MemPoolTest, Basic) {

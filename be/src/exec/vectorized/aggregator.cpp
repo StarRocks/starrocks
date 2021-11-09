@@ -17,11 +17,11 @@ Status Aggregator::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, MemTracker* mem_tracker,
-                           RuntimeProfile* runtime_profile) {
+Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
+                           MemTracker* mem_tracker) {
     _pool = pool;
-    _mem_tracker = mem_tracker;
     _runtime_profile = runtime_profile;
+    _mem_tracker = mem_tracker;
 
     _limit = _tnode.limit;
     _needs_finalize = _tnode.agg_node.need_finalize;
@@ -238,9 +238,6 @@ Status Aggregator::close(RuntimeState* state) {
 
         _mem_pool->free_all();
     }
-
-    _mem_tracker->release(_last_agg_func_memory_usage);
-    _mem_tracker->release(_last_ht_memory_usage);
 
     Expr::close(_group_by_expr_ctxs, state);
     for (const auto& i : _agg_expr_ctxs) {
@@ -460,35 +457,6 @@ void Aggregator::output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* 
     output_chunk_by_streaming(chunk);
 }
 
-Status Aggregator::check_hash_map_memory_usage(RuntimeState* state) {
-    if ((_num_input_rows & memory_check_batch_size) < config::vector_chunk_size) {
-        int64_t delta_memory_usage = static_cast<int64_t>(_hash_map_variant.memory_usage()) - _last_ht_memory_usage;
-        _mem_tracker->consume(delta_memory_usage);
-        _last_ht_memory_usage = _hash_map_variant.memory_usage();
-
-        int64_t agg_func_memory_usage = 0;
-        for (auto& _agg_fn_ctx : _agg_fn_ctxs) {
-            agg_func_memory_usage += _agg_fn_ctx->impl()->mem_usage();
-        }
-        _mem_tracker->consume(agg_func_memory_usage - _last_agg_func_memory_usage);
-        _last_agg_func_memory_usage = agg_func_memory_usage;
-
-        RETURN_IF_ERROR(state->check_query_state("Aggregation Node"));
-    }
-    return Status::OK();
-}
-
-Status Aggregator::check_hash_set_memory_usage(RuntimeState* state) {
-    if ((_num_input_rows & memory_check_batch_size) < config::vector_chunk_size) {
-        int64_t delta_memory_usage = static_cast<int64_t>(_hash_set_variant.memory_usage()) - _last_ht_memory_usage;
-        _mem_tracker->consume(delta_memory_usage);
-        _last_ht_memory_usage = _hash_set_variant.memory_usage();
-
-        RETURN_IF_ERROR(state->check_query_state("Aggregation Node"));
-    }
-    return Status::OK();
-}
-
 #define CONVERT_TO_TWO_LEVEL(DST, SRC)                                                             \
     if (_hash_map_variant.type == vectorized::HashMapVariant::Type::SRC) {                         \
         _hash_map_variant.DST = std::make_unique<decltype(_hash_map_variant.DST)::element_type>(); \
@@ -501,7 +469,7 @@ Status Aggregator::check_hash_set_memory_usage(RuntimeState* state) {
     }
 
 void Aggregator::try_convert_to_two_level_map() {
-    if (_last_ht_memory_usage > two_level_memory_threshold) {
+    if (_mem_tracker->consumption() > two_level_memory_threshold) {
         CONVERT_TO_TWO_LEVEL(phase1_slice_two_level, phase1_slice);
         CONVERT_TO_TWO_LEVEL(phase2_slice_two_level, phase2_slice);
     }

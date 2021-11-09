@@ -52,14 +52,14 @@ TEST_F(TabletMetaManagerTest, test_save_load_tablet_meta) {
     c0->set_type("INT");
     c0->set_index_length(4);
 
-    MemTracker tracker;
-    auto meta = std::make_shared<TabletMeta>(&tracker);
+    auto meta = std::make_shared<TabletMeta>();
     meta->init_from_pb(&meta_pb);
 
     ASSERT_TRUE(TabletMetaManager::save(_data_dir.get(), meta->tablet_id(), meta->schema_hash(), meta).ok());
-    auto load_meta = std::make_shared<TabletMeta>(&tracker);
-    ASSERT_TRUE(TabletMetaManager::get_tablet_meta(_data_dir.get(), meta->tablet_id(), meta->schema_hash(), load_meta)
-                        .ok());
+    auto load_meta = std::make_shared<TabletMeta>();
+    ASSERT_TRUE(
+            TabletMetaManager::get_tablet_meta(_data_dir.get(), meta->tablet_id(), meta->schema_hash(), load_meta.get())
+                    .ok());
     ASSERT_EQ(1, load_meta->table_id());
     ASSERT_EQ(2, load_meta->tablet_id());
     ASSERT_EQ(3, load_meta->schema_hash());
@@ -73,7 +73,7 @@ TEST_F(TabletMetaManagerTest, test_save_load_tablet_meta) {
     ASSERT_EQ(true, load_meta->tablet_schema().column(0).is_key());
     ASSERT_EQ(OLAP_FIELD_TYPE_INT, load_meta->tablet_schema().column(0).type());
 
-    load_meta.reset(new TabletMeta(&tracker));
+    load_meta.reset(new TabletMeta());
     auto visit_func = [&](long tablet_id, long schema_hash, const std::string& meta) -> bool {
         CHECK(load_meta->deserialize(meta).ok());
         return true;

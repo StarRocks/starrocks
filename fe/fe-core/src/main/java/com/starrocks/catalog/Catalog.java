@@ -3034,9 +3034,6 @@ public class Catalog {
         } else if (engineName.equals("mysql")) {
             createMysqlTable(db, stmt);
             return;
-        } else if (engineName.equals("broker")) {
-            createBrokerTable(db, stmt);
-            return;
         } else if (engineName.equalsIgnoreCase("elasticsearch") || engineName.equalsIgnoreCase("es")) {
             createEsTable(db, stmt);
             return;
@@ -4013,6 +4010,8 @@ public class Catalog {
         // if failed in any step, use this set to do clear things
         Set<Long> tabletIdSet = new HashSet<Long>();
 
+        boolean createTblSuccess = false;
+        boolean addToColocateGroupSuccess = false;
         // create partition
         try {
             // do not create partition for external table
@@ -4063,12 +4062,20 @@ public class Catalog {
                 if (getDb(db.getFullName()) == null) {
                     throw new DdlException("database has been dropped when creating table");
                 }
-                if (!db.createTableWithLock(olapTable, false, stmt.isSetIfNotExists())) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                createTblSuccess = db.createTableWithLock(olapTable, false);
+                if (!createTblSuccess) {
+                    if (!stmt.isSetIfNotExists()) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                    } else {
+                        LOG.info("create table[{}] which already exists", tableName);
+                        return;
+                    }
                 }
             } finally {
                 unlock();
             }
+
+            // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
 
             // we have added these index to memory, only need to persist here
             if (getColocateTableIndex().isColocateTable(tableId)) {
@@ -4077,23 +4084,23 @@ public class Catalog {
                 ColocatePersistInfo info =
                         ColocatePersistInfo.createForAddTable(groupId, tableId, backendsPerBucketSeq);
                 editLog.logColocateAddTable(info);
+                addToColocateGroupSuccess = true;
             }
             LOG.info("successfully create table[{};{}]", tableName, tableId);
             // register or remove table from DynamicPartition after table created
             DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), olapTable);
             dynamicPartitionScheduler.createOrUpdateRuntimeInfo(
                     tableName, DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
-        } catch (DdlException e) {
-            for (Long tabletId : tabletIdSet) {
-                Catalog.getCurrentInvertedIndex().deleteTablet(tabletId);
+        } finally {
+            if (!createTblSuccess) {
+                for (Long tabletId : tabletIdSet) {
+                    Catalog.getCurrentInvertedIndex().deleteTablet(tabletId);
+                }
             }
-
             // only remove from memory, because we have not persist it
-            if (getColocateTableIndex().isColocateTable(tableId)) {
+            if (getColocateTableIndex().isColocateTable(tableId) && !addToColocateGroupSuccess) {
                 getColocateTableIndex().removeTable(tableId);
             }
-
-            throw e;
         }
     }
 
@@ -4114,18 +4121,22 @@ public class Catalog {
             if (getDb(db.getFullName()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
-            if (!db.createTableWithLock(mysqlTable, false, stmt.isSetIfNotExists())) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+            if (!db.createTableWithLock(mysqlTable, false)) {
+                if (!stmt.isSetIfNotExists()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                } else {
+                    LOG.info("create table[{}] which already exists", tableName);
+                    return;
+                }
             }
         } finally {
             unlock();
         }
 
         LOG.info("successfully create table[{}-{}]", tableName, tableId);
-        return;
     }
 
-    private Table createEsTable(Database db, CreateTableStmt stmt) throws DdlException {
+    private void createEsTable(Database db, CreateTableStmt stmt) throws DdlException {
         String tableName = stmt.getTableName();
 
         // create columns
@@ -4157,45 +4168,19 @@ public class Catalog {
             if (getDb(db.getFullName()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
-            if (!db.createTableWithLock(esTable, false, stmt.isSetIfNotExists())) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+            if (!db.createTableWithLock(esTable, false)) {
+                if (!stmt.isSetIfNotExists()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                } else {
+                    LOG.info("create table[{}] which already exists", tableName);
+                    return;
+                }
             }
         } finally {
             unlock();
         }
 
         LOG.info("successfully create table{} with id {}", tableName, tableId);
-        return esTable;
-    }
-
-    private void createBrokerTable(Database db, CreateTableStmt stmt) throws DdlException {
-        String tableName = stmt.getTableName();
-
-        List<Column> columns = stmt.getColumns();
-
-        long tableId = Catalog.getCurrentCatalog().getNextId();
-        BrokerTable brokerTable = new BrokerTable(tableId, tableName, columns, stmt.getProperties());
-        brokerTable.setComment(stmt.getComment());
-        brokerTable.setBrokerProperties(stmt.getExtProperties());
-
-        // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
-        }
-        try {
-            if (getDb(db.getFullName()) == null) {
-                throw new DdlException("database has been dropped when creating table");
-            }
-            if (!db.createTableWithLock(brokerTable, false, stmt.isSetIfNotExists())) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
-            }
-        } finally {
-            unlock();
-        }
-
-        LOG.info("successfully create table[{}-{}]", tableName, tableId);
-
-        return;
     }
 
     private void createHiveTable(Database db, CreateTableStmt stmt) throws DdlException {
@@ -4219,8 +4204,13 @@ public class Catalog {
             if (getDb(db.getFullName()) == null) {
                 throw new DdlException("database has been dropped when creating table");
             }
-            if (!db.createTableWithLock(hiveTable, false, stmt.isSetIfNotExists())) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+            if (!db.createTableWithLock(hiveTable, false)) {
+                if (!stmt.isSetIfNotExists()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                } else {
+                    LOG.info("create table[{}] which already exists", tableName);
+                    return;
+                }
             }
         } finally {
             unlock();
@@ -4524,7 +4514,7 @@ public class Catalog {
 
     public void replayCreateTable(String dbName, Table table) {
         Database db = this.fullNameToDb.get(dbName);
-        db.createTableWithLock(table, true, false);
+        db.createTableWithLock(table, true);
 
         if (!isCheckpointThread()) {
             // add to inverted index
@@ -5983,8 +5973,13 @@ public class Catalog {
             if (getDb(db.getFullName()) == null) {
                 throw new DdlException("database has been dropped when creating view");
             }
-            if (!db.createTableWithLock(newView, false, stmt.isSetIfNotExists())) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+            if (!db.createTableWithLock(newView, false)) {
+                if (!stmt.isSetIfNotExists()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                } else {
+                    LOG.info("create table[{}] which already exists", tableName);
+                    return;
+                }
             }
         } finally {
             unlock();

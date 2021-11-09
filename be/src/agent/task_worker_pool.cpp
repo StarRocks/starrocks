@@ -313,8 +313,7 @@ void* TaskWorkerPool::_create_tablet_worker_thread_callback(void* arg_this) {
         } else {
             ++_s_report_version;
             // get path hash of the created tablet
-            TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(
-                    create_tablet_req.tablet_id, create_tablet_req.tablet_schema.schema_hash);
+            auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
             DCHECK(tablet != nullptr);
             TTabletInfo tablet_info;
             tablet_info.tablet_id = tablet->tablet_id();
@@ -368,11 +367,10 @@ void* TaskWorkerPool::_drop_tablet_worker_thread_callback(void* arg_this) {
         TStatusCode::type status_code = TStatusCode::OK;
         std::vector<std::string> error_msgs;
         TStatus task_status;
-        TabletSharedPtr dropped_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(
-                drop_tablet_req.tablet_id, drop_tablet_req.schema_hash);
+        TabletSharedPtr dropped_tablet =
+                StorageEngine::instance()->tablet_manager()->get_tablet(drop_tablet_req.tablet_id);
         if (dropped_tablet != nullptr) {
-            Status drop_status = StorageEngine::instance()->tablet_manager()->drop_tablet(drop_tablet_req.tablet_id,
-                                                                                          drop_tablet_req.schema_hash);
+            Status drop_status = StorageEngine::instance()->tablet_manager()->drop_tablet(drop_tablet_req.tablet_id);
             if (!drop_status.ok()) {
                 LOG(WARNING) << "drop table failed! signature: " << agent_task_req.signature;
                 error_msgs.emplace_back("drop table failed!");
@@ -475,7 +473,8 @@ void TaskWorkerPool::_alter_tablet(TaskWorkerPool* worker_pool_this, const TAgen
     if (status == STARROCKS_SUCCESS) {
         new_tablet_id = agent_task_req.alter_tablet_req_v2.new_tablet_id;
         new_schema_hash = agent_task_req.alter_tablet_req_v2.new_schema_hash;
-        EngineAlterTabletTask engine_task(agent_task_req.alter_tablet_req_v2, signature, task_type, &error_msgs,
+        EngineAlterTabletTask engine_task(ExecEnv::GetInstance()->schema_change_mem_tracker(),
+                                          agent_task_req.alter_tablet_req_v2, signature, task_type, &error_msgs,
                                           process_name);
         OLAPStatus sc_status = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
         if (sc_status != OLAP_SUCCESS) {
@@ -788,8 +787,8 @@ void* TaskWorkerPool::_update_tablet_meta_worker_thread_callback(void* arg_this)
         TStatus task_status;
 
         for (const auto& tablet_meta_info : update_tablet_meta_req.tabletMetaInfos) {
-            TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(
-                    tablet_meta_info.tablet_id, tablet_meta_info.schema_hash);
+            TabletSharedPtr tablet =
+                    StorageEngine::instance()->tablet_manager()->get_tablet(tablet_meta_info.tablet_id);
             if (tablet == nullptr) {
                 LOG(WARNING) << "could not find tablet when update partition id"
                              << " tablet_id=" << tablet_meta_info.tablet_id
@@ -894,7 +893,7 @@ void* TaskWorkerPool::_clone_worker_thread_callback(void* arg_this) {
                 }
             }
         } else {
-            EngineCloneTask engine_task(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), clone_req,
+            EngineCloneTask engine_task(ExecEnv::GetInstance()->clone_mem_tracker(), clone_req,
                                         worker_pool_this->_master_info, agent_task_req.signature, &error_msgs,
                                         &tablet_infos, &status);
             OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
@@ -961,7 +960,7 @@ void* TaskWorkerPool::_storage_medium_migrate_worker_thread_callback(void* arg_t
             TSchemaHash schema_hash = storage_medium_migrate_req.schema_hash;
             TStorageMedium::type storage_medium = storage_medium_migrate_req.storage_medium;
 
-            TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash);
+            TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
             if (tablet == nullptr) {
                 LOG(WARNING) << "can't find tablet. tablet_id=" << tablet_id << ", schema_hash=" << schema_hash;
                 status_code = TStatusCode::RUNTIME_ERROR;
@@ -1053,7 +1052,8 @@ void* TaskWorkerPool::_check_consistency_worker_thread_callback(void* arg_this) 
         TStatus task_status;
 
         uint32_t checksum = 0;
-        EngineChecksumTask engine_task(check_consistency_req.tablet_id, check_consistency_req.schema_hash,
+        EngineChecksumTask engine_task(ExecEnv::GetInstance()->consistency_mem_tracker(),
+                                       check_consistency_req.tablet_id, check_consistency_req.schema_hash,
                                        check_consistency_req.version, check_consistency_req.version_hash, &checksum);
         OLAPStatus res = worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
         if (res != OLAP_SUCCESS) {
@@ -1544,7 +1544,7 @@ void* TaskWorkerPool::_move_dir_thread_callback(void* arg_this) {
 
 AgentStatus TaskWorkerPool::_move_dir(const TTabletId tablet_id, const TSchemaHash schema_hash, const std::string& src,
                                       int64_t job_id, bool overwrite, std::vector<std::string>* error_msgs) {
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash);
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     if (tablet == nullptr) {
         LOG(INFO) << "Fail to get tablet_id=" << tablet_id << " schema hash=" << schema_hash;
         error_msgs->push_back("failed to get tablet");

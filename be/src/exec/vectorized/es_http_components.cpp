@@ -152,6 +152,7 @@ Status ScrollParser::fill_chunk(ChunkPtr* chunk, bool* line_eos) {
         *line_eos = true;
         return Status::OK();
     }
+    *line_eos = false;
 
     *chunk = std::make_shared<Chunk>();
     std::vector<SlotDescriptor*> slot_descs = _tuple_desc->slots();
@@ -528,7 +529,7 @@ Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* colum
         if (col[0].IsString()) {
             RETURN_IF_ERROR(append_strval(col[0], column));
         } else {
-            append_timestamp(col, column);
+            append_timestamp(col[0], column);
         }
 
     } else {

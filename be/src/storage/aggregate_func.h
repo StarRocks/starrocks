@@ -22,7 +22,7 @@
 #pragma once
 
 #include "common/object_pool.h"
-#include "runtime/date_value.h"
+#include "runtime/date_value.hpp"
 #include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
 #include "runtime/mem_pool.h"

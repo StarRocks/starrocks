@@ -124,8 +124,7 @@ OLAPStatus PushHandler::_do_streaming_ingestion(const TabletSharedPtr& tablet, c
                       << "tablet=" << tablet->full_name() << ", related_tablet_id=" << related_tablet_id
                       << ", related_schema_hash=" << related_schema_hash
                       << ", transaction_id=" << request.transaction_id;
-            TabletSharedPtr related_tablet =
-                    StorageEngine::instance()->tablet_manager()->get_tablet(related_tablet_id, related_schema_hash);
+            TabletSharedPtr related_tablet = StorageEngine::instance()->tablet_manager()->get_tablet(related_tablet_id);
 
             // if related tablet not exists, only push current tablet
             if (related_tablet == nullptr) {
@@ -260,7 +259,6 @@ OLAPStatus PushHandler::_convert(const TabletSharedPtr& cur_tablet, RowsetShared
         // 2. init RowsetBuilder of cur_tablet for current push
         VLOG(3) << "init RowsetBuilder.";
         RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
-        context.mem_tracker = ExecEnv::GetInstance()->load_mem_tracker();
         context.rowset_id = StorageEngine::instance()->next_rowset_id();
         context.tablet_uid = cur_tablet->tablet_uid();
         context.tablet_id = cur_tablet->tablet_id();
@@ -324,7 +322,6 @@ OLAPStatus PushHandler::_convert_v2(const TabletSharedPtr& cur_tablet, RowsetSha
         VLOG(3) << "init rowset builder. tablet=" << cur_tablet->full_name()
                 << ", block_row_size=" << cur_tablet->num_rows_per_row_block();
         RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
-        context.mem_tracker = ExecEnv::GetInstance()->load_mem_tracker();
         context.rowset_id = StorageEngine::instance()->next_rowset_id();
         context.tablet_uid = cur_tablet->tablet_uid();
         context.tablet_id = cur_tablet->tablet_id();
@@ -480,11 +477,7 @@ OLAPStatus PushBrokerReader::init(const Schema* schema, const TBrokerScanRange& 
     _runtime_state->set_desc_tbl(desc_tbl);
     _runtime_profile = _runtime_state->runtime_profile();
     _runtime_profile->set_name("PushBrokerReader");
-    status = _runtime_state->init_mem_trackers(dummy_id);
-    if (UNLIKELY(!status.ok())) {
-        LOG(WARNING) << "Failed to init mem trackers, msg: " << status.get_error_msg();
-        return OLAP_ERR_PUSH_INIT_ERROR;
-    }
+    _runtime_state->init_mem_trackers(dummy_id);
     _mem_pool = std::make_unique<MemPool>();
 
     switch (t_scan_range.ranges[0].format_type) {

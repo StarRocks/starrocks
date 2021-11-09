@@ -85,21 +85,17 @@ private:
 
 class SchemaChange {
 public:
-    SchemaChange(MemTracker* mem_tracker) { _mem_tracker = std::make_unique<MemTracker>(-1, "", mem_tracker, true); }
+    SchemaChange() {}
     virtual ~SchemaChange() {}
 
     virtual bool process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
                          TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
-
-protected:
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 };
 
 class LinkedSchemaChange : public SchemaChange {
 public:
-    explicit LinkedSchemaChange(MemTracker* mem_tracker, ChunkChanger& chunk_changer)
-            : SchemaChange(mem_tracker), _chunk_changer(chunk_changer) {}
-    ~LinkedSchemaChange() { _mem_tracker->release(_mem_tracker->consumption()); }
+    explicit LinkedSchemaChange(ChunkChanger& chunk_changer) : SchemaChange(), _chunk_changer(chunk_changer) {}
+    ~LinkedSchemaChange() {}
 
     bool process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
@@ -112,12 +108,9 @@ private:
 // @brief schema change without sorting.
 class SchemaChangeDirectly : public SchemaChange {
 public:
-    explicit SchemaChangeDirectly(MemTracker* mem_tracker, ChunkChanger& chunk_changer)
-            : SchemaChange(mem_tracker), _chunk_changer(chunk_changer), _chunk_allocator(nullptr) {}
-    virtual ~SchemaChangeDirectly() {
-        SAFE_DELETE(_chunk_allocator);
-        _mem_tracker->release(_mem_tracker->consumption());
-    }
+    explicit SchemaChangeDirectly(ChunkChanger& chunk_changer)
+            : SchemaChange(), _chunk_changer(chunk_changer), _chunk_allocator(nullptr) {}
+    virtual ~SchemaChangeDirectly() { SAFE_DELETE(_chunk_allocator); }
 
     bool process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
@@ -131,7 +124,7 @@ private:
 // @breif schema change with sorting
 class SchemaChangeWithSorting : public SchemaChange {
 public:
-    explicit SchemaChangeWithSorting(MemTracker* mem_tracker, ChunkChanger& chunk_changer, size_t memory_limitation);
+    explicit SchemaChangeWithSorting(ChunkChanger& chunk_changer, size_t memory_limitation);
     virtual ~SchemaChangeWithSorting();
 
     bool process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
@@ -168,7 +161,7 @@ public:
         AlterTabletType alter_tablet_type;
         TabletSharedPtr base_tablet;
         TabletSharedPtr new_tablet;
-        std::vector<vectorized::TabletReader*> rowset_readers;
+        std::vector<std::unique_ptr<vectorized::TabletReader>> rowset_readers;
         Version version;
         std::unordered_map<std::string, AlterMaterializedViewParam> materialized_params_map;
         std::vector<RowsetSharedPtr> rowsets_to_change;

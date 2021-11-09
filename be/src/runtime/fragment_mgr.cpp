@@ -39,6 +39,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/client_cache.h"
+#include "runtime/current_thread.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -46,6 +47,7 @@
 #include "runtime/runtime_filter_worker.h"
 #include "service/backend_options.h"
 #include "util/debug_util.h"
+#include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/threadpool.h"
@@ -122,8 +124,12 @@ public:
 
     int get_timeout_second() const { return _timeout_second; }
 
+    std::shared_ptr<RuntimeState> runtime_state() { return _runtime_state; }
+
 private:
     void coordinator_callback(const Status& status, RuntimeProfile* profile, bool done);
+
+    std::shared_ptr<RuntimeState> _runtime_state = nullptr;
 
     // Id of this query
     TUniqueId _query_id;
@@ -166,6 +172,11 @@ FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId&
 FragmentExecState::~FragmentExecState() = default;
 
 Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
+    _runtime_state = std::make_shared<RuntimeState>(params.params.query_id, params.params.fragment_instance_id,
+                                                    params.query_options, params.query_globals, _exec_env);
+    _runtime_state->init_mem_trackers(_query_id);
+    _executor.set_runtime_state(_runtime_state.get());
+
     if (params.__isset.query_options) {
         _timeout_second = params.query_options.query_timeout;
     }
@@ -356,22 +367,32 @@ FragmentMgr::~FragmentMgr() {
 
 static void empty_function(PlanFragmentExecutor* exec) {}
 
-void FragmentMgr::exec_actual(const std::shared_ptr<FragmentExecState>& exec_state, const FinishCallback& cb) {
-    exec_state->execute();
+void FragmentMgr::exec_actual(std::shared_ptr<FragmentExecState>* exec_state, const FinishCallback& cb) {
+    // This writing is to ensure that MemTracker will not be destructed before the thread ends.
+    // This writing method is a bit tricky, and when there is a better way, replace it
+    auto profile = (*exec_state)->runtime_state()->runtime_profile_ptr();
+    auto q_tracker = (*exec_state)->runtime_state()->query_mem_tracker_ptr();
+    auto s_tracker = (*exec_state)->runtime_state()->instance_mem_tracker_ptr();
+
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(s_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
+    (*exec_state)->execute();
+
+    // Callback after remove from this id
+    cb((*exec_state)->executor());
 
     {
         std::lock_guard<std::mutex> lock(_lock);
-        auto iter = _fragment_map.find(exec_state->fragment_instance_id());
+        auto iter = _fragment_map.find((*exec_state)->fragment_instance_id());
         if (iter != _fragment_map.end()) {
             _fragment_map.erase(iter);
         } else {
             // Impossible
             LOG(WARNING) << "missing entry in fragment exec state map: instance_id="
-                         << exec_state->fragment_instance_id();
+                         << (*exec_state)->fragment_instance_id();
         }
     }
-    // Callback after remove from this id
-    cb(exec_state->executor());
     // NOTE: 'exec_state' is desconstructed here without lock
 }
 
@@ -394,6 +415,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
                                            params.coord));
     RETURN_IF_ERROR_WITH_WARN(exec_state->prepare(params), "Fail to prepare Fragment");
 
+    std::shared_ptr<FragmentExecState>* exec_state_ptr = nullptr;
     {
         std::lock_guard<std::mutex> lock(_lock);
         auto iter = _fragment_map.find(fragment_instance_id);
@@ -402,20 +424,22 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
             return Status::InternalError("Double execute");
         }
         // register exec_state before starting exec thread
-        _fragment_map.insert(std::make_pair(fragment_instance_id, exec_state));
+        auto exec_state_iter = _fragment_map.insert(std::make_pair(fragment_instance_id, exec_state));
+        exec_state_ptr = &exec_state_iter.first->second;
+        exec_state.reset();
     }
 
-    auto st = _thread_pool->submit_func([this, exec_state, cb] { exec_actual(exec_state, cb); });
+    auto st = _thread_pool->submit_func([this, exec_state_ptr, cb] { exec_actual(exec_state_ptr, cb); });
     if (!st.ok()) {
+        (*exec_state_ptr)->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR);
+        std::string error_msg = strings::Substitute("Put planfragment $0 to thread pool failed. err = $1",
+                                                    print_id(fragment_instance_id), st.get_error_msg());
+        LOG(WARNING) << error_msg;
         {
             // Remove the exec state added
             std::lock_guard<std::mutex> lock(_lock);
             _fragment_map.erase(fragment_instance_id);
         }
-        exec_state->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR);
-        std::string error_msg = strings::Substitute("Put planfragment $0 to thread pool failed. err = $1",
-                                                    print_id(fragment_instance_id), st.get_error_msg());
-        LOG(WARNING) << error_msg;
         return Status::InternalError(error_msg);
     }
 
@@ -433,7 +457,11 @@ Status FragmentMgr::cancel(const TUniqueId& id, const PPlanFragmentCancelReason&
         }
         exec_state = iter->second;
     }
+    auto profile = exec_state->runtime_state()->runtime_profile_ptr();
+    auto q_tracker = exec_state->runtime_state()->query_mem_tracker_ptr();
+    auto s_tracker = exec_state->runtime_state()->instance_mem_tracker_ptr();
     exec_state->cancel(reason);
+    exec_state.reset();
 
     return Status::OK();
 }
@@ -460,8 +488,12 @@ void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& par
         if (!found) {
             VLOG_FILE << "FragmentMgr::receive_runtime_filter: finst not found. finst_id = " << frag_inst_id;
         } else {
+            auto profile = exec_state->runtime_state()->runtime_profile_ptr();
+            auto q_tracker = exec_state->runtime_state()->query_mem_tracker_ptr();
+            auto s_tracker = exec_state->runtime_state()->instance_mem_tracker_ptr();
             exec_state->executor()->runtime_state()->runtime_filter_port()->receive_shared_runtime_filter(
                     params.filter_id(), shared_rf);
+            exec_state.reset();
         }
     }
 }

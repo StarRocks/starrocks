@@ -14,23 +14,8 @@ const int YY_PART_YEAR = 70;
 const uint64_t LOG_10_INT[] = {1,         10,         100,         1000,         10000UL,       100000UL,
                                1000000UL, 10000000UL, 100000000UL, 1000000000UL, 10000000000UL, 100000000000UL};
 
-struct JulianToDateEntry {
-    // 14 bits
-    uint16_t year;
-
-    // 4 bits
-    uint8_t month;
-
-    // 5 bits
-    uint8_t day;
-
-    // 1-53, Base on 6 bits
-    uint8_t week_th_of_year;
-};
-
 // Date Cache
-static const uint32_t CACHE_JULIAN_DAYS = 200 * 366;
-static JulianToDateEntry g_julian_to_date_cache[CACHE_JULIAN_DAYS];
+JulianToDateEntry g_julian_to_date_cache[CACHE_JULIAN_DAYS];
 
 static const uint32_t CACHE_DATE_LITERAL_START = 19900101;
 static const uint32_t CACHE_DATE_LITERAL_END = 20250101;
@@ -109,40 +94,6 @@ int date::get_days_after_monday(JulianDate julian) {
         // Because It's Sunday.
         return 6;
     }
-}
-
-void date::to_date(JulianDate julian, int* year, int* month, int* day) {
-    int quad;
-    int extra;
-    int y;
-
-    julian += 32044;
-    quad = julian / 146097;
-    extra = (julian - quad * 146097) * 4 + 3;
-    julian += 60 + quad * 3 + extra / 146097;
-    quad = julian / 1461;
-    julian -= quad * 1461;
-    y = julian * 4 / 1461;
-    julian = ((y != 0) ? ((julian + 305) % 365) : ((julian + 306) % 366)) + 123;
-    y += quad * 4;
-    quad = julian * 2141 / 65536;
-
-    *year = y - 4800;
-    *day = julian - 7834 * quad / 256;
-    *month = (quad + 10) % MONTHS_PER_YEAR + 1;
-}
-
-void date::to_date_with_cache(JulianDate julian, int* year, int* month, int* day) {
-    if (julian >= date::UNIX_EPOCH_JULIAN && julian < date::UNIX_EPOCH_JULIAN + CACHE_JULIAN_DAYS) {
-        int p = julian - date::UNIX_EPOCH_JULIAN;
-        *year = g_julian_to_date_cache[p].year;
-        *month = g_julian_to_date_cache[p].month;
-        *day = g_julian_to_date_cache[p].day;
-
-        return;
-    }
-
-    return to_date(julian, year, month, day);
 }
 
 bool date::get_weeks_of_year_with_cache(JulianDate julian, int* weeks) {
@@ -578,17 +529,6 @@ void date::to_string(int year, int month, int day, char* to) {
 
     to[8] = day / 10 + '0';
     to[9] = day % 10 + '0';
-}
-
-void timestamp::to_time(Timestamp timestamp, int* hour, int* minute, int* second, int* microsecond) {
-    Timestamp time = to_time(timestamp);
-
-    *hour = time / USECS_PER_HOUR;
-    time -= (*hour) * USECS_PER_HOUR;
-    *minute = time / USECS_PER_MINUTE;
-    time -= (*minute) * USECS_PER_MINUTE;
-    *second = time / USECS_PER_SEC;
-    *microsecond = time - (*second * USECS_PER_SEC);
 }
 
 bool timestamp::check_time(int hour, int minute, int second, int microsecond) {

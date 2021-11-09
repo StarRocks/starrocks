@@ -19,8 +19,6 @@ Status SelectOperator::close(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
-    ExecNode::eval_conjuncts(_conjunct_ctxs, _curr_chunk.get());
-
     auto batch_size = state->batch_size();
 
     /*
@@ -33,7 +31,7 @@ StatusOr<vectorized::ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
     if (!_pre_output_chunk) {
         auto cur_size = _curr_chunk->num_rows();
         if (cur_size >= batch_size / 2) {
-            std::move(_curr_chunk);
+            return std::move(_curr_chunk);
         } else {
             _pre_output_chunk = std::move(_curr_chunk);
         }
@@ -76,6 +74,7 @@ bool SelectOperator::need_input() const {
 }
 
 Status SelectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+    ExecNode::eval_conjuncts(_conjunct_ctxs, chunk.get());
     _curr_chunk = chunk;
     return Status::OK();
 }

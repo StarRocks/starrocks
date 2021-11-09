@@ -125,7 +125,9 @@ Status ExchangeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
 
     if (_is_merging) {
-        return get_next_merging(state, chunk, eos);
+        RETURN_IF_ERROR(get_next_merging(state, chunk, eos));
+        eval_join_runtime_filters(chunk);
+        return Status::OK();
     }
 
     do {

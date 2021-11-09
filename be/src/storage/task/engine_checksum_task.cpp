@@ -23,21 +23,28 @@
 
 #include <memory>
 
+#include "runtime/current_thread.h"
+#include "storage/reader.h"
 #include "storage/vectorized/chunk_helper.h"
 #include "storage/vectorized/tablet_reader.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
 
-EngineChecksumTask::EngineChecksumTask(TTabletId tablet_id, TSchemaHash schema_hash, TVersion version,
-                                       TVersionHash version_hash, uint32_t* checksum)
+EngineChecksumTask::EngineChecksumTask(MemTracker* mem_tracker, TTabletId tablet_id, TSchemaHash schema_hash,
+                                       TVersion version, TVersionHash version_hash, uint32_t* checksum)
         : _tablet_id(tablet_id),
           _schema_hash(schema_hash),
           _version(version),
           _version_hash(version_hash),
-          _checksum(checksum) {}
+          _checksum(checksum) {
+    _mem_tracker = std::make_unique<MemTracker>(-1, "checksum instance", mem_tracker);
+}
 
 OLAPStatus EngineChecksumTask::execute() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     OLAPStatus res = _compute_checksum();
     return res;
 } // execute
@@ -51,7 +58,7 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
         return OLAP_ERR_CE_CMD_PARAMS_ERROR;
     }
 
-    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, _schema_hash);
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
     if (nullptr == tablet.get()) {
         LOG(WARNING) << "can't find tablet. tablet_id=" << _tablet_id << " schema_hash=" << _schema_hash;
         return OLAP_ERR_TABLE_NOT_FOUND;
@@ -109,6 +116,14 @@ OLAPStatus EngineChecksumTask::_compute_checksum() {
     st = reader.get_next(chunk.get());
 
     while (st.ok()) {
+#ifndef BE_TEST
+        Status st = _mem_tracker->check_mem_limit("ConsistencyCheck");
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to finish compute checksum. " << st.message() << std::endl;
+            return OLAP_ERR_OTHER_ERROR;
+        }
+#endif
+
         num_rows = chunk->num_rows();
         for (auto& column : chunk->columns()) {
             column->crc32_hash(hash_codes, 0, num_rows);

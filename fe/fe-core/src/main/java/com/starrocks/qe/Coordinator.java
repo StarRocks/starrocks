@@ -1122,7 +1122,7 @@ public class Coordinator {
                     }
 
                     // 1. Handle replicated scan node if need
-                    boolean isReplicated = isRelicatedFragment(fragment.getPlanRoot());
+                    boolean isReplicated = isReplicatedFragment(fragment.getPlanRoot());
                     if (isReplicated) {
                         for (Integer planNodeId : value.keySet()) {
                             if (!replicateScanIds.contains(planNodeId)) {
@@ -1163,14 +1163,19 @@ public class Coordinator {
         }
 
         boolean childHasColocate = false;
-        for (PlanNode childNode : node.getChildren()) {
-            childHasColocate |= isColocateFragment(childNode);
+        if (node.isReplicated()) {
+            // Only check left if node is replicate join
+            childHasColocate = isColocateFragment(node.getChild(0));
+        } else {
+            for (PlanNode childNode : node.getChildren()) {
+                childHasColocate |= isColocateFragment(childNode);
+            }
         }
 
         return childHasColocate;
     }
 
-    private boolean isRelicatedFragment(PlanNode node) {
+    private boolean isReplicatedFragment(PlanNode node) {
         if (replicateFragmentIds.contains(node.getFragmentId().asInt())) {
             return true;
         }
@@ -1182,7 +1187,7 @@ public class Coordinator {
 
         boolean childHasColocate = false;
         for (PlanNode childNode : node.getChildren()) {
-            childHasColocate |= isRelicatedFragment(childNode);
+            childHasColocate |= isReplicatedFragment(childNode);
         }
 
         return childHasColocate;
@@ -1335,8 +1340,8 @@ public class Coordinator {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
                 boolean hasBucket =
                         isBucketShuffleJoin(scanNode.getFragmentId().asInt(), scanNode.getFragment().getPlanRoot());
-                boolean hasRelicated = isRelicatedFragment(scanNode.getFragment().getPlanRoot());
-                if (assignment.size() > 0 && hasRelicated && scanNode.canDoReplicatedJoin()) {
+                boolean hasReplicated = isReplicatedFragment(scanNode.getFragment().getPlanRoot());
+                if (assignment.size() > 0 && hasReplicated && scanNode.canDoReplicatedJoin()) {
                     BackendSelector selector = new RelicatedBackendSelector(scanNode, locations, assignment);
                     selector.computeScanRangeAssignment();
                     replicateScanIds.add(scanNode.getId().asInt());
@@ -1820,7 +1825,8 @@ public class Coordinator {
                 // For broker load, the ConnectContext.get() is null
                 if (ConnectContext.get() != null &&
                         ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
-                    params.setIs_pipeline(fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
+                    params.setIs_pipeline(
+                            fragment.getPlanRoot().canUsePipeLine() && fragment.getSink().canUsePipeLine());
                 }
                 paramsList.add(params);
             }
@@ -1963,6 +1969,28 @@ public class Coordinator {
                     scanRangeParamsList.add(scanRangeParams);
                 }
             }
+            // If this fragment has bucket/colocate join, there need to fill fragmentIdBucketSeqToScanRangeMap here.
+            // For example:
+            //                       join(replicated)
+            //                    /                    \
+            //            join(bucket/colocate)       scan(C)
+            //              /           \
+            //            scan(A)         scan(B)
+            // There are replicate join and bucket/colocate join in same fragment. for each bucket A,B used, we need to
+            // add table C all tablet because of the character of the replicate join.
+            BucketSeqToScanRange bucketSeqToScanRange = fragmentIdBucketSeqToScanRangeMap.get(scanNode.getFragmentId());
+            if (bucketSeqToScanRange != null && !bucketSeqToScanRange.isEmpty()) {
+                for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> entry : bucketSeqToScanRange.entrySet()) {
+                    for (TScanRangeLocations scanRangeLocations : locations) {
+                        List<TScanRangeParams> scanRangeParamsList = findOrInsert(
+                                entry.getValue(), scanNode.getId().asInt(), new ArrayList<>());
+                        // add scan range
+                        TScanRangeParams scanRangeParams = new TScanRangeParams();
+                        scanRangeParams.scan_range = scanRangeLocations.scan_range;
+                        scanRangeParamsList.add(scanRangeParams);
+                    }
+                }
+            }
         }
     }
 
@@ -2001,8 +2029,6 @@ public class Coordinator {
                     Map<Integer, List<TScanRangeParams>> scanRanges =
                             bucketSeqToScanRange.computeIfAbsent(bucketSeq, k -> Maps.newHashMap());
 
-                    assignment.computeIfAbsent(bucketSeqToAddress.get(bucketSeq), k -> scanRanges);
-
                     List<TScanRangeParams> scanRangeParamsList =
                             scanRanges.computeIfAbsent(scanNode.getId().asInt(), k -> Lists.newArrayList());
 
@@ -2011,6 +2037,15 @@ public class Coordinator {
                     scanRangeParams.scan_range = location.scan_range;
                     scanRangeParamsList.add(scanRangeParams);
                 }
+            }
+            // use bucketSeqToScanRange to fill FragmentScanRangeAssignment
+            for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> entry : bucketSeqToScanRange.entrySet()) {
+                Integer bucketSeq = entry.getKey();
+                Map<Integer, List<TScanRangeParams>> scanRanges =
+                        assignment.computeIfAbsent(bucketSeqToAddress.get(bucketSeq), k -> Maps.newHashMap());
+                List<TScanRangeParams> scanRangeParamsList =
+                        scanRanges.computeIfAbsent(scanNode.getId().asInt(), k -> Lists.newArrayList());
+                scanRangeParamsList.addAll(entry.getValue().get(scanNode.getId().asInt()));
             }
         }
 

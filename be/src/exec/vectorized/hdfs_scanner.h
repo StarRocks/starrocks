@@ -148,6 +148,8 @@ public:
     bool keep_priority() const { return _keep_priority; }
     void update_counter();
 
+    RuntimeState* runtime_state() { return _runtime_state; }
+
     virtual Status do_open(RuntimeState* runtime_state) = 0;
     virtual Status do_close(RuntimeState* runtime_state) = 0;
     virtual Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) = 0;

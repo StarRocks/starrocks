@@ -22,7 +22,7 @@ void PipelineTestBase::start_test() {
     _execute();
 }
 
-OpFactories PipelineTestBase::maybe_interpolate_local_exchange(OpFactories& pred_operators) {
+OpFactories PipelineTestBase::maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators) {
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
     auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
     if (source_operator->degree_of_parallelism() > 1) {
@@ -71,7 +71,7 @@ void PipelineTestBase::_prepare() {
     _runtime_state = _fragment_ctx->runtime_state();
 
     _runtime_state->set_batch_size(config::vector_chunk_size);
-    ASSERT_TRUE(_runtime_state->init_mem_trackers(query_id).ok());
+    _runtime_state->init_mem_trackers(query_id);
     _runtime_state->set_be_number(_request.backend_num);
 
     _obj_pool = _runtime_state->obj_pool();

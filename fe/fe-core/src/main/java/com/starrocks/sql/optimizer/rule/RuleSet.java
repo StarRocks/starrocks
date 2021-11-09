@@ -40,23 +40,29 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeApplyWithTableFuncti
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithSortRule;
-import com.starrocks.sql.optimizer.rule.transformation.MergePredicateScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.MergePredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
+import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPredicatePrune;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneExceptColumnsRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneExceptEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneFilterColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneHiveScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneIntersectColumnsRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneIntersectEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneJoinColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneProjectColumnsRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneProjectEmptyRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneRepeatColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTableFunctionColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTopNColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneUnionEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneWindowColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownApplyAggFilterRule;
@@ -86,6 +92,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregate
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
 
@@ -184,9 +191,10 @@ public class RuleSet {
                 new PushDownPredicateExceptRule(),
                 new PushDownPredicateIntersectRule(),
                 new PushDownPredicateTableFunctionRule(),
-                MergePredicateScanRule.HIVE_SCAN,
-                MergePredicateScanRule.SCHEMA_SCAN,
-                MergePredicateScanRule.MYSQL_SCAN,
+                MergePredicateRule.HIVE_SCAN,
+                MergePredicateRule.SCHEMA_SCAN,
+                MergePredicateRule.MYSQL_SCAN,
+                MergePredicateRule.REPEAT_NODE,
                 new MergeTwoFiltersRule()
         ));
 
@@ -215,6 +223,18 @@ public class RuleSet {
                 new RewriteMultiDistinctRule(),
                 new RewriteDuplicateAggregateFnRule()
         ));
+
+        rewriteRules.put(RuleSetType.PRUNE_SET_OPERATOR, ImmutableList.of(
+                new PruneUnionEmptyRule(),
+                new PruneIntersectEmptyRule(),
+                new PruneExceptEmptyRule()
+        ));
+
+        rewriteRules.put(RuleSetType.PRUNE_PROJECT, ImmutableList.of(
+                new PruneProjectRule(),
+                new PruneProjectEmptyRule(),
+                new MergeTwoProjectRule()
+        ));
     }
 
     public RuleSet() {
@@ -224,6 +244,7 @@ public class RuleSet {
     }
 
     public void addJoinTransformationRules() {
+        transformRules.add(new SemiReorderRule());
         transformRules.add(JoinCommutativityRule.getInstance());
         transformRules.add(JoinAssociativityRule.getInstance());
     }

@@ -7,7 +7,6 @@
 #include "column/type_traits.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "util/orlp/pdqsort.h"
 #include "util/stopwatch.hpp"
@@ -16,11 +15,7 @@ namespace starrocks::vectorized {
 
 ChunksSorter::ChunksSorter(const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* is_asc,
                            const std::vector<bool>* is_null_first, size_t size_of_chunk_batch)
-        : _sort_exprs(sort_exprs),
-
-          _size_of_chunk_batch(size_of_chunk_batch),
-          _mem_tracker(nullptr),
-          _last_memory_usage(0) {
+        : _sort_exprs(sort_exprs), _size_of_chunk_batch(size_of_chunk_batch) {
     DCHECK(_sort_exprs != nullptr);
     DCHECK(is_asc != nullptr);
     DCHECK(is_null_first != nullptr);
@@ -40,27 +35,13 @@ ChunksSorter::ChunksSorter(const std::vector<ExprContext*>* sort_exprs, const st
     }
 }
 
-ChunksSorter::~ChunksSorter() {
-    if (_mem_tracker != nullptr) {
-        _mem_tracker->release(_last_memory_usage);
-    }
-}
+ChunksSorter::~ChunksSorter() {}
 
-void ChunksSorter::setup_runtime(MemTracker* mem_tracker, RuntimeProfile* profile, const std::string& parent_timer) {
-    _mem_tracker = mem_tracker;
+void ChunksSorter::setup_runtime(RuntimeProfile* profile, const std::string& parent_timer) {
     _build_timer = ADD_CHILD_TIMER(profile, "1-BuildingTime", parent_timer);
     _sort_timer = ADD_CHILD_TIMER(profile, "2-SortingTime", parent_timer);
     _merge_timer = ADD_CHILD_TIMER(profile, "3-MergingTime", parent_timer);
     _output_timer = ADD_CHILD_TIMER(profile, "4-OutputTime", parent_timer);
-}
-
-Status ChunksSorter::_consume_and_check_memory_limit(RuntimeState* state, int64_t mem_bytes) {
-    if ((_mem_tracker != nullptr) && (state != nullptr)) {
-        _mem_tracker->consume(mem_bytes);
-        _last_memory_usage += mem_bytes;
-        RETURN_IF_ERROR(state->check_query_state("ChunksSorter"));
-    }
-    return Status::OK();
 }
 
 Status ChunksSorter::finish(RuntimeState* state) {

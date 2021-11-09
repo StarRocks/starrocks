@@ -2,9 +2,16 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -13,6 +20,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -27,6 +35,52 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     // 2. return direct if first always true
     @Override
     public ScalarOperator visitCaseWhenOperator(CaseWhenOperator operator, ScalarOperatorRewriteContext context) {
+        ScalarOperator result = simplifiedCaseWhenConstClause(operator);
+        if (!(result instanceof CaseWhenOperator)) {
+            return result;
+        }
+        return simplifiedCaseWhenToIfFunction((CaseWhenOperator) result);
+
+    }
+
+    // Trans one case when to if function, if function fast than case-when in BE
+    // example:
+    // case xx when 1 then 2 end => if (xx = 1, 2, NULL)
+    ScalarOperator simplifiedCaseWhenToIfFunction(CaseWhenOperator operator) {
+        if (operator.getWhenClauseSize() != 1) {
+            return operator;
+        }
+
+        List<ScalarOperator> args = Lists.newArrayList();
+        if (operator.hasCase()) {
+            args.add(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, operator.getCaseClause(),
+                    operator.getWhenClause(0)));
+        } else {
+            args.add(operator.getWhenClause(0));
+        }
+
+        args.add(operator.getThenClause(0));
+
+        if (operator.hasElse()) {
+            args.add(operator.getElseClause());
+        } else {
+            args.add(ConstantOperator.createNull(operator.getType()));
+        }
+
+        Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
+        Function fn = Expr.getBuiltinFunction(FunctionSet.IF, argTypes, Function.CompareMode.IS_IDENTICAL);
+
+        Preconditions.checkState(fn != null);
+        if (operator.getChildren().stream().anyMatch(s -> s.getType().isDecimalV3())) {
+            Function decimalFn = ScalarFunction.createVectorizedBuiltin(fn.getId(), fn.getFunctionName().getFunction(),
+                    Arrays.stream(argTypes).collect(Collectors.toList()), fn.hasVarArgs(), operator.getType());
+            return new CallOperator("if", operator.getType(), args, decimalFn);
+        }
+
+        return new CallOperator("if", operator.getType(), args, fn);
+    }
+
+    ScalarOperator simplifiedCaseWhenConstClause(CaseWhenOperator operator) {
         // 0. if all result is same, direct return
         if (operator.hasElse()) {
             Set<ScalarOperator> result = Sets.newHashSet();
@@ -206,28 +260,42 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     }
 
     //Simplify the comparison result of the same column
-    //eg a>=a with not nullable transform to true constant;
+    //eg a >= a with not nullable transform to true constant;
     @Override
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
                                                ScalarOperatorRewriteContext context) {
         if (predicate.getChild(0).isVariable() && predicate.getChild(0).equals(predicate.getChild(1))) {
-            if (predicate.getChild(0).isNullable() &&
-                    predicate.getBinaryType().equals(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL)) {
+            if (predicate.getBinaryType().equals(BinaryPredicateOperator.BinaryType.EQ_FOR_NULL)) {
                 return ConstantOperator.createBoolean(true);
-            } else if (!predicate.getChild(0).isNullable()) {
-                switch (predicate.getBinaryType()) {
-                    case EQ:
-                    case EQ_FOR_NULL:
-                    case GE:
-                    case LE:
-                        return ConstantOperator.createBoolean(true);
-                    case NE:
-                    case LT:
-                    case GT:
-                        return ConstantOperator.createBoolean(false);
-                }
             }
         }
         return predicate;
+    }
+
+    @Override
+    public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
+        if (FunctionSet.IF.equalsIgnoreCase(call.getFnName())) {
+            return ifCall(call);
+        } else if (FunctionSet.IF_NULL.equalsIgnoreCase(call.getFnName())) {
+            return ifNull(call);
+        }
+
+        return call;
+    }
+
+    private static ScalarOperator ifNull(CallOperator call) {
+        if (!call.getChild(0).isConstantRef()) {
+            return call;
+        }
+
+        return ((ConstantOperator) call.getChild(0)).isNull() ? call.getChild(1) : call.getChild(0);
+    }
+
+    private static ScalarOperator ifCall(CallOperator call) {
+        if (!call.getChild(0).isConstantRef()) {
+            return call;
+        }
+
+        return ((ConstantOperator) call.getChild(0)).getBoolean() ? call.getChild(1) : call.getChild(2);
     }
 }

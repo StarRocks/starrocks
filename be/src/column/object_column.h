@@ -58,8 +58,6 @@ public:
 
     size_t size() const override { return _pool.size(); }
 
-    size_t capacity() const override { return _pool.capacity(); }
-
     size_t type_size() const override { return sizeof(T); }
 
     size_t byte_size() const override { return byte_size(0, size()); }
@@ -186,10 +184,14 @@ public:
     std::string debug_string() const override {
         std::stringstream ss;
         ss << "[";
-        for (int i = 0; i < size() - 1; ++i) {
+        size_t size = this->size();
+        for (int i = 0; i < size - 1; ++i) {
             ss << debug_item(i) << ", ";
         }
-        ss << debug_item(size() - 1) << "]";
+        if (size > 0) {
+            ss << debug_item(size - 1);
+        }
+        ss << "]";
         return ss.str();
     }
 

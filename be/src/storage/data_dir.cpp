@@ -488,8 +488,7 @@ OLAPStatus DataDir::load() {
     // 2. add visible rowset to tablet
     // ignore any errors when load tablet or rowset, because fe will repair them after report
     for (const auto& rowset_meta : dir_rowset_metas) {
-        TabletSharedPtr tablet =
-                _tablet_manager->get_tablet(rowset_meta->tablet_id(), rowset_meta->tablet_schema_hash());
+        TabletSharedPtr tablet = _tablet_manager->get_tablet(rowset_meta->tablet_id(), false);
         // tablet maybe dropped, but not drop related rowset meta
         if (tablet == nullptr) {
             // LOG(WARNING) << "could not find tablet id: " << rowset_meta->tablet_id()
@@ -499,9 +498,7 @@ OLAPStatus DataDir::load() {
         }
         RowsetSharedPtr rowset;
         OLAPStatus create_status =
-                RowsetFactory::create_rowset(_tablet_manager->tablet_meta_mem_tracker(), &tablet->tablet_schema(),
-                                             tablet->tablet_path(), rowset_meta, &rowset)
-                                .ok()
+                RowsetFactory::create_rowset(&tablet->tablet_schema(), tablet->tablet_path(), rowset_meta, &rowset).ok()
                         ? OLAP_SUCCESS
                         : OLAP_ERR_OTHER_ERROR;
         if (create_status != OLAP_SUCCESS) {
@@ -572,7 +569,7 @@ void DataDir::perform_path_gc_by_tablet() {
             LOG(WARNING) << "invalid tablet id " << tablet_id << " or schema hash " << schema_hash << ", path=" << path;
             continue;
         }
-        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, schema_hash);
+        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, false);
         if (tablet != nullptr) {
             // could find the tablet, then skip check it
             continue;
@@ -620,7 +617,7 @@ void DataDir::perform_path_gc_by_rowsetid() {
             RowsetId rowset_id;
             bool is_rowset_file = TabletManager::get_rowset_id_from_path(path, &rowset_id);
             if (is_rowset_file) {
-                TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, schema_hash);
+                TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, false);
                 if (tablet != nullptr) {
                     if (!tablet->check_rowset_id(rowset_id) &&
                         !StorageEngine::instance()->check_rowset_id_in_unused_rowsets(rowset_id)) {

@@ -5,11 +5,12 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
+#include "runtime/mem_tracker.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 class Expr;
 class ExprContext;
-class MemTracker;
 class RuntimeProfile;
 class RuntimeState;
 namespace pipeline {
@@ -18,6 +19,8 @@ using OperatorPtr = std::shared_ptr<Operator>;
 using Operators = std::vector<OperatorPtr>;
 
 class Operator {
+    friend class PipelineDriver;
+
 public:
     Operator(int32_t id, const std::string& name, int32_t plan_node_id);
     virtual ~Operator() = default;
@@ -54,8 +57,6 @@ public:
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
 
-    MemTracker* get_memtracker() const { return _mem_tracker.get(); }
-
     RuntimeProfile* get_runtime_profile() const { return _runtime_profile.get(); }
 
     std::string get_name() const {
@@ -70,7 +71,16 @@ protected:
     // Which plan node this operator belongs to
     int32_t _plan_node_id = -1;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
-    std::shared_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<MemTracker> _mem_tracker;
+
+    // Common metrics
+    RuntimeProfile::Counter* _push_timer = nullptr;
+    RuntimeProfile::Counter* _pull_timer = nullptr;
+
+    RuntimeProfile::Counter* _push_chunk_num_counter = nullptr;
+    RuntimeProfile::Counter* _push_row_num_counter = nullptr;
+    RuntimeProfile::Counter* _pull_chunk_num_counter = nullptr;
+    RuntimeProfile::Counter* _pull_row_num_counter = nullptr;
 };
 
 class OperatorFactory {

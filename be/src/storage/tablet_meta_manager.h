@@ -80,7 +80,7 @@ public:
     static Status get_primary_meta(KVStore* meta, TTabletId tablet_id, TabletMetaPB& tablet_meta_pb, string* json_meta);
 
     static Status get_tablet_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash,
-                                  const TabletMetaSharedPtr& tablet_meta);
+                                  TabletMeta* tablet_meta);
 
     static Status get_json_meta(DataDir* store, TTabletId tablet_id, TSchemaHash schema_hash, std::string* json_meta);
 

@@ -21,6 +21,7 @@
 
 #include "exec/data_sink.h"
 
+#include <algorithm>
 #include <map>
 #include <memory>
 
@@ -41,8 +42,7 @@ namespace starrocks {
 Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink,
                                   const std::vector<TExpr>& output_exprs, const TPlanFragmentExecParams& params,
                                   const RowDescriptor& row_desc, std::unique_ptr<DataSink>* sink) {
-    DataSink* tmp_sink = nullptr;
-
+    DCHECK(sink != nullptr);
     switch (thrift_sink.type) {
     case TDataSinkType::DATA_STREAM_SINK: {
         if (!thrift_sink.__isset.stream_sink) {
@@ -52,11 +52,9 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
                                                               ? params.send_query_statistics_with_every_batch
                                                               : false;
         // TODO: figure out good buffer size based on size of output row
-        tmp_sink =
-                new DataStreamSender(pool, params.use_vectorized, params.sender_id, row_desc, thrift_sink.stream_sink,
-                                     params.destinations, 16 * 1024, send_query_statistics_with_every_batch);
-        // RETURN_IF_ERROR(sender->prepare(state->obj_pool(), thrift_sink.stream_sink));
-        sink->reset(tmp_sink);
+        *sink = std::make_unique<DataStreamSender>(pool, params.use_vectorized, params.sender_id, row_desc,
+                                                   thrift_sink.stream_sink, params.destinations, 16 * 1024,
+                                                   send_query_statistics_with_every_batch);
         break;
     }
     case TDataSinkType::RESULT_SINK:
@@ -65,25 +63,20 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
         }
 
         // TODO: figure out good buffer size based on size of output row
-        tmp_sink = new ResultSink(row_desc, output_exprs, thrift_sink.result_sink, 1024);
-        sink->reset(tmp_sink);
+        *sink = std::make_unique<ResultSink>(row_desc, output_exprs, thrift_sink.result_sink, 1024);
         break;
     case TDataSinkType::MEMORY_SCRATCH_SINK:
         if (!thrift_sink.__isset.memory_scratch_sink) {
             return Status::InternalError("Missing data buffer sink.");
         }
-
-        tmp_sink = new MemoryScratchSink(row_desc, output_exprs, thrift_sink.memory_scratch_sink);
-        sink->reset(tmp_sink);
+        *sink = std::make_unique<MemoryScratchSink>(row_desc, output_exprs, thrift_sink.memory_scratch_sink);
         break;
     case TDataSinkType::MYSQL_TABLE_SINK: {
         if (!thrift_sink.__isset.mysql_table_sink) {
             return Status::InternalError("Missing data buffer sink.");
         }
-
         // TODO: figure out good buffer size based on size of output row
-        MysqlTableSink* mysql_tbl_sink = new MysqlTableSink(pool, row_desc, output_exprs);
-        sink->reset(mysql_tbl_sink);
+        *sink = std::make_unique<MysqlTableSink>(pool, row_desc, output_exprs);
         break;
     }
 
@@ -91,9 +84,7 @@ Status DataSink::create_data_sink(ObjectPool* pool, const TDataSink& thrift_sink
         if (!thrift_sink.__isset.export_sink) {
             return Status::InternalError("Missing export sink sink.");
         }
-
-        std::unique_ptr<ExportSink> export_sink(new ExportSink(pool, row_desc, output_exprs));
-        sink->reset(export_sink.release());
+        *sink = std::make_unique<ExportSink>(pool, row_desc, output_exprs);
         break;
     }
     case TDataSinkType::OLAP_TABLE_SINK: {

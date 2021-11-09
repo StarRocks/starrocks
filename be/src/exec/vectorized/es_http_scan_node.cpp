@@ -11,6 +11,8 @@
 #include "exec/es/es_query_builder.h"
 #include "exec/es/es_scan_reader.h"
 #include "exec/es/es_scroll_query.h"
+#include "runtime/current_thread.h"
+#include "util/defer_op.h"
 #include "util/spinlock.h"
 
 namespace starrocks::vectorized {
@@ -114,7 +116,7 @@ Status EsHttpScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         }
     }
 
-    _update_status(Status::EndOfFile("EOF of HdfsScanNode"));
+    _update_status(Status::EndOfFile("EOF of ESScanNode"));
     *eos = true;
     status = _acquire_status();
     return status.is_end_of_file() ? Status::OK() : status;
@@ -280,6 +282,18 @@ Status EsHttpScanNode::_create_scanner(int scanner_idx, std::unique_ptr<EsHttpSc
 }
 
 void EsHttpScanNode::_scanner_scan(std::unique_ptr<EsHttpScanner> scanner, std::promise<Status>& p_status) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
+    DeferOp op([&] {
+        tls_thread_status.set_mem_tracker(prev_tracker);
+
+        // This scanner will finish
+        _num_running_scanners--;
+
+        if (_num_running_scanners == 0) {
+            _result_chunks.shutdown();
+        }
+    });
+
     auto status = scanner->open();
     if (!status.ok()) {
         _update_status(status);
@@ -288,12 +302,6 @@ void EsHttpScanNode::_scanner_scan(std::unique_ptr<EsHttpScanner> scanner, std::
     status = _acquire_chunks(scanner.get());
 
     _update_status(status);
-    // This scanner will finish
-    _num_running_scanners--;
-
-    if (_num_running_scanners == 0) {
-        _result_chunks.shutdown();
-    }
 
     p_status.set_value(status);
 }
@@ -308,6 +316,9 @@ Status EsHttpScanNode::_acquire_chunks(EsHttpScanner* scanner) {
                 return Status::Cancelled("Cancelled because of runtime state is cancelled");
             }
             RETURN_IF_ERROR(scanner->get_next(_runtime_state, &chunk, &scanner_eof));
+            if (chunk != nullptr && chunk->has_rows()) {
+                break;
+            }
         }
         // push to block queue
         if (chunk != nullptr && chunk->has_rows()) {

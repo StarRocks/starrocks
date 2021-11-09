@@ -7,12 +7,13 @@
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter.h"
 #include "gutil/map_util.h"
-#include "runtime/current_mem_tracker.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/primitive_type.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/column_predicate_rewriter.h"
 #include "storage/vectorized/predicate_parser.h"
 #include "storage/vectorized/projection_iterator.h"
 
@@ -20,9 +21,12 @@ namespace starrocks::pipeline {
 using namespace vectorized;
 Status OlapChunkSource::prepare(RuntimeState* state) {
     _runtime_state = state;
-    _scan_profile = state->runtime_profile();
     const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(_tuple_id);
     _slots = &tuple_desc->slots();
+
+    _init_counter(state);
+
+    _dict_optimize_parser.set_mutable_dict_maps(state->mutable_global_dict_map());
 
     OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status);
     OlapScanConjunctsManager& cm = _conjuncts_manager;
@@ -50,9 +54,52 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+void OlapChunkSource::_init_counter(RuntimeState* state) {
+    _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
+    _bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
+    _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
+
+    _scan_profile = _runtime_profile->create_child("SCAN", true, false);
+
+    _create_seg_iter_timer = ADD_TIMER(_scan_profile, "CreateSegmentIter");
+
+    _read_compressed_counter = ADD_COUNTER(_scan_profile, "CompressedBytesRead", TUnit::BYTES);
+    _read_uncompressed_counter = ADD_COUNTER(_scan_profile, "UncompressedBytesRead", TUnit::BYTES);
+
+    _raw_rows_counter = ADD_COUNTER(_scan_profile, "RawRowsRead", TUnit::UNIT);
+    _total_pages_num_counter = ADD_COUNTER(_scan_profile, "TotalPagesNum", TUnit::UNIT);
+    _cached_pages_num_counter = ADD_COUNTER(_scan_profile, "CachedPagesNum", TUnit::UNIT);
+    _pushdown_predicates_counter = ADD_COUNTER(_scan_profile, "PushdownPredicates", TUnit::UNIT);
+
+    // SegmentInit
+    _seg_init_timer = ADD_TIMER(_scan_profile, "SegmentInit");
+    _bi_filter_timer = ADD_CHILD_TIMER(_scan_profile, "BitmapIndexFilter", "SegmentInit");
+    _bi_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BitmapIndexFilterRows", TUnit::UNIT, "SegmentInit");
+    _bf_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BloomFilterFilterRows", TUnit::UNIT, "SegmentInit");
+    _zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, "SegmentInit");
+    _sk_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
+
+    // SegmentRead
+    _block_load_timer = ADD_TIMER(_scan_profile, "SegmentRead");
+    _block_fetch_timer = ADD_CHILD_TIMER(_scan_profile, "BlockFetch", "SegmentRead");
+    _block_load_counter = ADD_CHILD_COUNTER(_scan_profile, "BlockFetchCount", TUnit::UNIT, "SegmentRead");
+    _block_seek_timer = ADD_CHILD_TIMER(_scan_profile, "BlockSeek", "SegmentRead");
+    _block_seek_counter = ADD_CHILD_COUNTER(_scan_profile, "BlockSeekCount", TUnit::UNIT, "SegmentRead");
+    _pred_filter_timer = ADD_CHILD_TIMER(_scan_profile, "PredFilter", "SegmentRead");
+    _pred_filter_counter = ADD_CHILD_COUNTER(_scan_profile, "PredFilterRows", TUnit::UNIT, "SegmentRead");
+    _del_vec_filter_counter = ADD_CHILD_COUNTER(_scan_profile, "DelVecFilterRows", TUnit::UNIT, "SegmentRead");
+    _chunk_copy_timer = ADD_CHILD_TIMER(_scan_profile, "ChunkCopy", "SegmentRead");
+    _decompress_timer = ADD_CHILD_TIMER(_scan_profile, "DecompressT", "SegmentRead");
+    _index_load_timer = ADD_CHILD_TIMER(_scan_profile, "IndexLoad", "SegmentRead");
+
+    // IOTime
+    _io_timer = ADD_TIMER(_scan_profile, "IOTime");
+}
+
 Status OlapChunkSource::_build_scan_range(RuntimeState* state) {
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
+    _dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state);
 
     // FixMe(kks): Ensure this logic is right.
     int scanners_per_tablet = 64;
@@ -76,7 +123,7 @@ Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
 
     std::string err;
-    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, schema_hash, true, &err);
+    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
     if (!_tablet) {
         std::stringstream ss;
         ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
@@ -89,14 +136,13 @@ Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
 
 Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
                                             const std::vector<uint32_t>& scanner_columns,
-                                            std::vector<uint32_t>& reader_columns,
-                                            vectorized::TabletReaderParams* params) {
-    params->reader_type = READER_QUERY;
-    params->skip_aggregation = _skip_aggregation;
-    params->profile = _scan_profile;
-    params->runtime_state = _runtime_state;
-    params->use_page_cache = !config::disable_storage_page_cache;
-    params->chunk_size = config::vector_chunk_size;
+                                            std::vector<uint32_t>& reader_columns) {
+    _params.reader_type = READER_QUERY;
+    _params.skip_aggregation = _skip_aggregation;
+    _params.profile = _scan_profile;
+    _params.runtime_state = _runtime_state;
+    _params.use_page_cache = !config::disable_storage_page_cache;
+    _params.chunk_size = config::vector_chunk_size;
 
     PredicateParser parser(_tablet->tablet_schema());
     std::vector<vectorized::ColumnPredicate*> preds;
@@ -104,10 +150,16 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
     for (auto* p : preds) {
         _predicate_free_pool.emplace_back(p);
         if (parser.can_pushdown(p)) {
-            params->predicates.push_back(p);
+            _params.predicates.push_back(p);
         } else {
             _not_push_down_predicates.add(p);
         }
+    }
+
+    {
+        vectorized::ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
+                                                                                  *_params.global_dictmaps);
+        not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool);
     }
 
     // Range
@@ -116,11 +168,11 @@ Status OlapChunkSource::_init_reader_params(const std::vector<OlapScanRange*>& k
             continue;
         }
 
-        params->range = key_range->begin_include ? "ge" : "gt";
-        params->end_range = key_range->end_include ? "le" : "lt";
+        _params.range = key_range->begin_include ? "ge" : "gt";
+        _params.end_range = key_range->end_include ? "le" : "lt";
 
-        params->start_key.push_back(key_range->begin_scan_range);
-        params->end_key.push_back(key_range->end_scan_range);
+        _params.start_key.push_back(key_range->begin_scan_range);
+        _params.end_key.push_back(key_range->end_scan_range);
     }
 
     // Return columns
@@ -168,11 +220,11 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> scanner_columns;
     // columns fetched from |_reader|.
     std::vector<uint32_t> reader_columns;
-    vectorized::TabletReaderParams params;
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
+    RETURN_IF_ERROR(_init_global_dicts(&_params));
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
-    RETURN_IF_ERROR(_init_reader_params(_scanner_ranges, scanner_columns, reader_columns, &params));
+    RETURN_IF_ERROR(_init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
     starrocks::vectorized::Schema child_schema =
             ChunkHelper::convert_schema_to_format_v2(tablet_schema, reader_columns);
@@ -188,8 +240,12 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     if (!_not_push_down_conjuncts.empty() || !_not_push_down_predicates.empty()) {
         _expr_filter_timer = ADD_TIMER(_scan_profile, "ExprFilterTime");
     }
+
+    DCHECK(_params.global_dictmaps != nullptr);
+    RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
+
     RETURN_IF_ERROR(_reader->prepare());
-    RETURN_IF_ERROR(_reader->open(params));
+    RETURN_IF_ERROR(_reader->open(_params));
     return Status::OK();
 }
 
@@ -199,25 +255,55 @@ bool OlapChunkSource::has_next_chunk() const {
     return _status.ok();
 }
 
-StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk() {
+bool OlapChunkSource::has_output() const {
+    return !_chunk_cache.empty();
+}
+
+StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_cache() {
+    vectorized::ChunkPtr chunk = nullptr;
+    _chunk_cache.try_get(&chunk);
+    return chunk;
+}
+
+Status OlapChunkSource::cache_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) {
     if (!_status.ok()) {
         return _status;
     }
     using namespace vectorized;
-    ChunkUniquePtr chunk(ChunkHelper::new_chunk_pooled(_prj_iter->schema(), config::vector_chunk_size, true));
-    _status = _read_chunk_from_storage(_runtime_state, chunk.get());
-    if (!_status.ok()) {
-        return _status;
+
+    for (size_t i = 0; i < batch_size && !can_finish; ++i) {
+        ChunkUniquePtr chunk(
+                ChunkHelper::new_chunk_pooled(_prj_iter->encoded_schema(), config::vector_chunk_size, true));
+        _status = _read_chunk_from_storage(_runtime_state, chunk.get());
+        if (!_status.ok()) {
+            break;
+        }
+        _chunk_cache.put(std::move(chunk));
     }
-    return std::move(chunk);
+    return _status;
 }
 
-void OlapChunkSource::cache_next_chunk_blocking() {
-    _chunk = get_next_chunk();
-}
+// mapping a slot-column-id to schema-columnid
+Status OlapChunkSource::_init_global_dicts(vectorized::TabletReaderParams* params) {
+    const auto& global_dict_map = _runtime_state->get_global_dict_map();
+    auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
+    // mapping column id to storage column ids
+    const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(_tuple_id);
+    for (auto slot : tuple_desc->slots()) {
+        if (!slot->is_materialized()) {
+            continue;
+        }
+        auto iter = global_dict_map.find(slot->id());
+        if (iter != global_dict_map.end()) {
+            auto& dict_map = iter->second.first;
+            int32_t index = _tablet->field_index(slot->col_name());
+            DCHECK(index >= 0);
+            global_dict->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
+        }
+    }
+    params->global_dictmaps = global_dict;
 
-StatusOr<vectorized::ChunkUniquePtr> OlapChunkSource::get_next_chunk_nonblocking() {
-    return std::move(_chunk);
+    return Status::OK();
 }
 
 Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized::Chunk* chunk) {
@@ -236,20 +322,16 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
         }
 
         if (!_not_push_down_predicates.empty()) {
-            int64_t old_mem_usage = chunk->memory_usage();
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
             _not_push_down_predicates.evaluate(chunk, _selection.data(), 0, nrows);
             chunk->filter(_selection);
-            CurrentMemTracker::consume((int64_t)chunk->memory_usage() - old_mem_usage);
             DCHECK_CHUNK(chunk);
         }
         if (!_not_push_down_conjuncts.empty()) {
-            int64_t old_mem_usage = chunk->memory_usage();
             SCOPED_TIMER(_expr_filter_timer);
             ExecNode::eval_conjuncts(_not_push_down_conjuncts, chunk);
-            CurrentMemTracker::consume((int64_t)chunk->memory_usage() - old_mem_usage);
             DCHECK_CHUNK(chunk);
         }
     } while (chunk->num_rows() == 0);
@@ -257,10 +339,71 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
 }
 
 Status OlapChunkSource::close(RuntimeState* state) {
+    _update_counter();
     _prj_iter->close();
     _reader.reset();
     _predicate_free_pool.clear();
+    _dict_optimize_parser.close(state);
     return Status::OK();
+}
+
+void OlapChunkSource::_update_counter() {
+    COUNTER_UPDATE(_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);
+    COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
+
+    COUNTER_UPDATE(_io_timer, _reader->stats().io_ns);
+    COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
+    _compressed_bytes_read += _reader->stats().compressed_bytes_read;
+    COUNTER_UPDATE(_decompress_timer, _reader->stats().decompress_ns);
+    COUNTER_UPDATE(_read_uncompressed_counter, _reader->stats().uncompressed_bytes_read);
+    COUNTER_UPDATE(_bytes_read_counter, _reader->stats().bytes_read);
+
+    COUNTER_UPDATE(_block_load_timer, _reader->stats().block_load_ns);
+    COUNTER_UPDATE(_block_load_counter, _reader->stats().blocks_load);
+    COUNTER_UPDATE(_block_fetch_timer, _reader->stats().block_fetch_ns);
+    COUNTER_UPDATE(_block_seek_timer, _reader->stats().block_seek_ns);
+
+    COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
+    _raw_rows_read += _reader->mutable_stats()->raw_rows_read;
+    COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
+
+    COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
+
+    COUNTER_UPDATE(_pred_filter_timer, _reader->stats().vec_cond_evaluate_ns);
+    COUNTER_UPDATE(_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
+    COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
+
+    COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
+    COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
+    COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
+    COUNTER_UPDATE(_index_load_timer, _reader->stats().index_load_ns);
+
+    COUNTER_UPDATE(_total_pages_num_counter, _reader->stats().total_pages_num);
+    COUNTER_UPDATE(_cached_pages_num_counter, _reader->stats().cached_pages_num);
+
+    COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
+    COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+    COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
+
+    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.predicates.size());
+
+    StarRocksMetrics::instance()->query_scan_bytes.increment(_compressed_bytes_read);
+    StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
+
+    if (_reader->stats().decode_dict_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_scan_profile, "DictDecode");
+        COUNTER_UPDATE(c, _reader->stats().decode_dict_ns);
+    }
+    if (_reader->stats().late_materialize_ns > 0) {
+        RuntimeProfile::Counter* c = ADD_TIMER(_scan_profile, "LateMaterialize");
+        COUNTER_UPDATE(c, _reader->stats().late_materialize_ns);
+    }
+    if (_reader->stats().del_filter_ns > 0) {
+        RuntimeProfile::Counter* c1 = ADD_TIMER(_scan_profile, "DeleteFilter");
+        RuntimeProfile::Counter* c2 = ADD_COUNTER(_scan_profile, "DeleteFilterRows", TUnit::UNIT);
+        COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
+        COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
+    }
 }
 
 } // namespace starrocks::pipeline

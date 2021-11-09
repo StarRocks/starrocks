@@ -81,8 +81,6 @@ public:
     // Return number of values in column.
     virtual size_t size() const = 0;
 
-    virtual size_t capacity() const = 0;
-
     bool empty() const { return size() == 0; }
 
     virtual size_t type_size() const = 0;

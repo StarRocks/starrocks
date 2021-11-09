@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "column/column.h"
+#include "column/column_viewer.h"
 #include "exprs/slot_ref.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
@@ -38,7 +39,6 @@ namespace starrocks {
 
 class Status;
 class ExprContext;
-class ExtBinaryPredicate;
 class EsPredicate;
 
 class ExtLiteral {
@@ -80,7 +80,26 @@ class VExtLiteral : public ExtLiteral {
 public:
     VExtLiteral(PrimitiveType type, ColumnPtr column) {
         DCHECK(!column->empty());
-        _value = _value_to_string(column);
+        // We need to convert the predicate column into the corresponding string.
+        // Some types require special handling, because the default behavior of Datum may not match the behavior of ES.
+        if (type == TYPE_DATE) {
+            vectorized::ColumnViewer<TYPE_DATE> viewer(column);
+            DCHECK(!viewer.is_null(0));
+            _value = viewer.value(0).to_string();
+        } else if (type == TYPE_DATETIME) {
+            vectorized::ColumnViewer<TYPE_DATETIME> viewer(column);
+            DCHECK(!viewer.is_null(0));
+            _value = viewer.value(0).to_string();
+        } else if (type == TYPE_BOOLEAN) {
+            vectorized::ColumnViewer<TYPE_BOOLEAN> viewer(column);
+            if (viewer.value(0)) {
+                _value = "true";
+            } else {
+                _value = "false";
+            }
+        } else {
+            _value = _value_to_string(column);
+        }
     }
     VExtLiteral() = default;
     const std::string& to_string() const override { return _value; }

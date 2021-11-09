@@ -54,8 +54,6 @@ public:
 
     size_t size() const override { return _size; }
 
-    size_t capacity() const override { return UINT32_MAX; }
-
     size_t type_size() const override { return _data->type_size(); }
 
     size_t byte_size() const override { return _data->byte_size() + sizeof(_size); }

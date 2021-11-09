@@ -34,6 +34,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -661,6 +663,13 @@ public class PlanTestBase {
                 UtFrameUtils.getNewPlanAndFragment(connectContext, sql).second.getFragments());
     }
 
+    public static int getPlanCount(String sql) throws Exception {
+        connectContext.getSessionVariable().setUseNthExecPlan(1);
+        int planCount = UtFrameUtils.getNewPlanAndFragment(connectContext, sql).second.getPlanCount();
+        connectContext.getSessionVariable().setUseNthExecPlan(0);
+        return planCount;
+    }
+
     public void runFileUnitTest(String filename, boolean debug) {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + filename + ".sql");
@@ -673,6 +682,7 @@ public class PlanTestBase {
         StringBuilder comment = new StringBuilder();
         StringBuilder fragmentStatistics = new StringBuilder();
         StringBuilder dumpInfoString = new StringBuilder();
+        StringBuilder planEnumerate = new StringBuilder();
 
         boolean isDebug = debug;
         boolean isComment = false;
@@ -680,6 +690,7 @@ public class PlanTestBase {
         boolean hasFragment = false;
         boolean hasFragmentStatistics = false;
         boolean isDump = false;
+        boolean isEnumerate = false;
 
         File debugFile = new File(file.getPath() + ".debug");
         BufferedWriter writer = null;
@@ -694,6 +705,8 @@ public class PlanTestBase {
             System.out.println("DEBUG MODE!");
         }
 
+        String pattern = "\\[plan-(\\d+)]";
+        Pattern r = Pattern.compile(pattern);
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             while ((tempStr = reader.readLine()) != null) {
                 if (tempStr.startsWith("/*")) {
@@ -708,6 +721,15 @@ public class PlanTestBase {
 
                 if (isComment || tempStr.startsWith("//")) {
                     comment.append(tempStr);
+                    continue;
+                }
+
+                Matcher m = r.matcher(tempStr);
+                if (m.find()) {
+                    isEnumerate = true;
+                    planEnumerate = new StringBuilder();
+                    mode = "enum";
+                    connectContext.getSessionVariable().setUseNthExecPlan(Integer.parseInt(m.group(1)));
                     continue;
                 }
 
@@ -776,10 +798,13 @@ public class PlanTestBase {
                                     Assert.assertEquals(dumpInfoString.toString().trim(), dumpStr.trim());
                                 }
                             }
-
                             if (isDebug) {
                                 debugSQL(writer, hasResult, hasFragment, isDump, hasFragmentStatistics, sql.toString(),
                                         pair.first, fra, dumpStr, statistic, comment.toString());
+                            }
+                            if (isEnumerate) {
+                                Assert.assertEquals(planEnumerate.toString().trim(), pair.first.trim());
+                                connectContext.getSessionVariable().setUseNthExecPlan(0);
                             }
                         } catch (Error error) {
                             collector.addError(new Throwable("\n" + sql.toString(), error));
@@ -808,6 +833,9 @@ public class PlanTestBase {
                         break;
                     case "dump":
                         dumpInfoString.append(tempStr).append("\n");
+                        break;
+                    case "enum":
+                        planEnumerate.append(tempStr).append("\n");
                         break;
                 }
             }

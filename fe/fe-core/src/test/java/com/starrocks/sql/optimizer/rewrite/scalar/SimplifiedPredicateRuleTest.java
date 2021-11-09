@@ -25,7 +25,8 @@ public class SimplifiedPredicateRuleTest {
     @Test
     public void applyCaseWhen() {
         CaseWhenOperator cwo1 = new CaseWhenOperator(Type.INT, new ColumnRefOperator(1, Type.INT, "id", true), null,
-                Lists.newArrayList(ConstantOperator.createInt(1), ConstantOperator.createVarchar("test")));
+                Lists.newArrayList(ConstantOperator.createInt(1), ConstantOperator.createVarchar("test"),
+                        ConstantOperator.createInt(2), ConstantOperator.createVarchar("test2")));
         assertEquals(cwo1, rule.apply(cwo1, null));
 
         CaseWhenOperator cwo2 = new CaseWhenOperator(Type.INT, ConstantOperator.createNull(Type.BOOLEAN), null,
@@ -37,7 +38,8 @@ public class SimplifiedPredicateRuleTest {
         assertEquals(OI_100, rule.apply(cwo3, null));
 
         CaseWhenOperator cwo4 = new CaseWhenOperator(Type.INT, null, null,
-                Lists.newArrayList(new ColumnRefOperator(1, Type.BOOLEAN, "id", true), OI_200));
+                Lists.newArrayList(new ColumnRefOperator(1, Type.BOOLEAN, "id", true), OI_200,
+                        new ColumnRefOperator(2, Type.BOOLEAN, "id", true), OI_100));
         assertEquals(cwo4, rule.apply(cwo4, null));
 
         CaseWhenOperator cwo5 = new CaseWhenOperator(Type.INT, null, null,

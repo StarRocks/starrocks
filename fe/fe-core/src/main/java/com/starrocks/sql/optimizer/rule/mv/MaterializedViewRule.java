@@ -723,7 +723,7 @@ public class MaterializedViewRule extends Rule {
 
         if (queryFnChild0.getUsedColumns().equals(mvColumnFnChild0.getUsedColumns())) {
             return true;
-        } else if (queryFnChild0 instanceof CaseWhenOperator) {
+        } else if (isSupportScalarOperator(queryFnChild0)) {
             int[] queryColumnIds = queryFnChild0.getUsedColumns().getColumnIds();
             Set<Integer> mvColumnIdSet = mvColumnExprList.stream()
                     .map(u -> u.getUsedColumns().getFirstId())
@@ -762,11 +762,9 @@ public class MaterializedViewRule extends Rule {
             return true;
         }
 
-        if (queryFnChild0 instanceof CaseWhenOperator) {
-            CaseWhenOperator caseWhenOperator = (CaseWhenOperator) queryFnChild0;
-            IsNoCallChildrenValidator validator =
-                    new IsNoCallChildrenValidator();
-            if (caseWhenOperator.accept(validator, null)) {
+        if (isSupportScalarOperator(queryFnChild0)) {
+            IsNoCallChildrenValidator validator = new IsNoCallChildrenValidator();
+            if (queryFnChild0.accept(validator, null)) {
                 return true;
             }
         }
@@ -798,5 +796,14 @@ public class MaterializedViewRule extends Rule {
             this.mvColumnRef = mvColumnRef;
             this.mvColumn = mvColumn;
         }
+    }
+
+    private boolean isSupportScalarOperator(ScalarOperator operator) {
+        if (operator instanceof CaseWhenOperator) {
+            return true;
+        }
+
+        return operator instanceof CallOperator &&
+                FunctionSet.IF.equalsIgnoreCase(((CallOperator) operator).getFnName());
     }
 }

@@ -220,7 +220,7 @@ public class CostModel {
             Statistics inputStatistics = context.getChildStatistics(0);
             CostEstimate otherExtraCost = computeAggFunExtraCost(node, statistics, inputStatistics);
             return CostEstimate.addCost(CostEstimate.of(inputStatistics.getComputeSize(),
-                            CostEstimate.isZero(otherExtraCost) ? statistics.getComputeSize() : 0, 0),
+                    CostEstimate.isZero(otherExtraCost) ? statistics.getComputeSize() : 0, 0),
                     otherExtraCost);
         }
 
