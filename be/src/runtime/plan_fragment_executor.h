@@ -126,7 +126,10 @@ public:
     void release_thread_token();
 
     // call these only after prepare()
-    RuntimeState* runtime_state() { return _runtime_state.get(); }
+    RuntimeState* runtime_state() { return _runtime_state; }
+
+    void set_runtime_state(RuntimeState* runtime_state) { _runtime_state = runtime_state; }
+
     const RowDescriptor& row_desc();
 
     // Profile information for plan and output sink.
@@ -180,7 +183,7 @@ private:
 
     // note that RuntimeState should be constructed before and destructed after `_sink' and `_row_batch',
     // therefore we declare it before `_sink' and `_row_batch'
-    std::unique_ptr<RuntimeState> _runtime_state;
+    RuntimeState* _runtime_state = nullptr;
     // Output sink for rows sent to this fragment. May not be set, in which case rows are
     // returned via get_next's row batch
     // Created in prepare (if required), owned by this object.

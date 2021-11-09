@@ -51,7 +51,6 @@ class SlotRef;
 class TPlan;
 class TupleRow;
 class DataSink;
-class MemTracker;
 
 namespace pipeline {
 class OperatorFactory;
@@ -332,45 +331,6 @@ protected:
 private:
     bool _is_closed;
 };
-
-#define LIMIT_EXCEEDED(tracker, state, msg)                                                       \
-    do {                                                                                          \
-        stringstream str;                                                                         \
-        str << "Memory exceed limit. " << msg << " ";                                             \
-        str << "Backend: " << BackendOptions::get_localhost() << ", ";                            \
-        if (state != nullptr) {                                                                   \
-            str << "fragment: " << print_id(state->fragment_instance_id()) << " ";                \
-        }                                                                                         \
-        str << "Used: " << tracker->consumption() << ", Limit: " << tracker->limit() << ". ";     \
-        switch (tracker->type()) {                                                                \
-        case MemTracker::NO_SET:                                                                  \
-            break;                                                                                \
-        case MemTracker::QUERY:                                                                   \
-            str << "Mem usage has exceed the limit of single query, You can change the limit by " \
-                   "set session variable exec_mem_limit.";                                        \
-            break;                                                                                \
-        case MemTracker::PROCESS:                                                                 \
-            str << "Mem usage has exceed the limit of BE";                                        \
-            break;                                                                                \
-        case MemTracker::QUERY_POOL:                                                              \
-            str << "Mem usage has exceed the limit of query pool";                                \
-            break;                                                                                \
-        case MemTracker::LOAD:                                                                    \
-            str << "Mem usage has exceed the limit of load";                                      \
-            break;                                                                                \
-        default:                                                                                  \
-            break;                                                                                \
-        }                                                                                         \
-        return Status::MemoryLimitExceeded(str.str());                                            \
-    } while (false)
-
-#define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                \
-    do {                                                                                    \
-        MemTracker* tracker = state->instance_mem_tracker()->find_limit_exceeded_tracker(); \
-        if (tracker != nullptr) {                                                           \
-            LIMIT_EXCEEDED(tracker, state, msg);                                            \
-        }                                                                                   \
-    } while (false)
 } // namespace starrocks
 
 #endif

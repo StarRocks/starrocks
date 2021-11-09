@@ -186,8 +186,6 @@ private:
     RuntimeProfile::Counter* _shuffle_dispatch_timer{};
     RuntimeProfile::Counter* _shuffle_hash_timer{};
 
-    std::unique_ptr<MemTracker> _mem_tracker;
-
     // Throughput per total time spent in sender
     RuntimeProfile::Counter* _overall_throughput{};
 
