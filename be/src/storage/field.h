@@ -116,9 +116,9 @@ public:
     virtual size_t get_variable_len() const { return 0; }
 
     virtual Field* clone() const {
-        auto* local = new Field();
-        this->clone(local);
-        return local;
+        std::unique_ptr<Field> local = std::make_unique<Field>();
+        this->clone(local.get());
+        return local.release();
     }
 
     // Test if these two cell is equal with each other
@@ -455,9 +455,9 @@ public:
     }
 
     CharField* clone() const override {
-        auto* local = new CharField();
-        Field::clone(local);
-        return local;
+        std::unique_ptr<CharField> local = std::make_unique<CharField>();
+        Field::clone(local.get());
+        return local.release();
     }
 
     char* allocate_value(MemPool* pool) const override { return Field::allocate_string_value(pool); }
@@ -486,9 +486,9 @@ public:
     }
 
     VarcharField* clone() const override {
-        auto* local = new VarcharField();
-        Field::clone(local);
-        return local;
+        std::unique_ptr<VarcharField> local = std::make_unique<VarcharField>();
+        Field::clone(local.get());
+        return local.release();
     }
 
     char* allocate_value(MemPool* pool) const override { return Field::allocate_string_value(pool); }
@@ -518,9 +518,9 @@ public:
     }
 
     BitmapAggField* clone() const override {
-        auto* local = new BitmapAggField();
-        Field::clone(local);
-        return local;
+        std::unique_ptr<BitmapAggField> local = std::make_unique<BitmapAggField>();
+        Field::clone(local.get());
+        return local.release();
     }
 };
 
@@ -542,9 +542,9 @@ public:
     }
 
     HllAggField* clone() const override {
-        auto* local = new HllAggField();
-        Field::clone(local);
-        return local;
+        std::unique_ptr<HllAggField> local = std::make_unique<HllAggField>();
+        Field::clone(local.get());
+        return local.release();
     }
 };
 
@@ -566,9 +566,9 @@ public:
     }
 
     PercentileAggField* clone() const override {
-        auto* local = new PercentileAggField();
-        Field::clone(local);
-        return local;
+        std::unique_ptr<PercentileAggField> local = std::make_unique<PercentileAggField>();
+        Field::clone(local.get());
+        return local.release();
     }
 };
 
@@ -617,9 +617,9 @@ public:
                 return new VarcharField(column);
             case OLAP_FIELD_TYPE_ARRAY: {
                 std::unique_ptr<Field> item_field(FieldFactory::create(column.subcolumn(0)));
-                auto* local = new Field(column);
+                std::unique_ptr<Field> local = std::make_unique<Field>(column);
                 local->add_sub_field(std::move(item_field));
-                return local;
+                return local.release();
             }
             case OLAP_FIELD_TYPE_DECIMAL32:
                 return new Field(column, std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL32>>(

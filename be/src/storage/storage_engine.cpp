@@ -182,21 +182,23 @@ Status StorageEngine::_open() {
 }
 
 Status StorageEngine::_init_store_map() {
-    std::vector<DataDir*> tmp_stores;
+    std::vector<std::unique_ptr<DataDir>> tmp_stores;
     std::vector<std::thread> threads;
     SpinLock error_msg_lock;
     std::string error_msg;
     for (auto& path : _options.store_paths) {
-        DataDir* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
-        tmp_stores.emplace_back(store);
-        threads.emplace_back([store, &error_msg_lock, &error_msg]() {
-            auto st = store->init();
+        auto store =
+                std::make_unique<DataDir>(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
+        DataDir* store_ptr = store.get();
+        tmp_stores.emplace_back(std::move(store));
+        threads.emplace_back([store_ptr, &error_msg_lock, &error_msg]() {
+            auto st = store_ptr->init();
             if (!st.ok()) {
                 {
                     std::lock_guard<SpinLock> l(error_msg_lock);
                     error_msg.append(st.to_string() + ";");
                 }
-                LOG(WARNING) << "Store load failed, status=" << st.to_string() << ", path=" << store->path();
+                LOG(WARNING) << "Store load failed, status=" << st.to_string() << ", path=" << store_ptr->path();
             }
         });
     }
@@ -205,14 +207,11 @@ Status StorageEngine::_init_store_map() {
     }
 
     if (!error_msg.empty()) {
-        for (auto store : tmp_stores) {
-            delete store;
-        }
         return Status::InternalError(strings::Substitute("init path failed, error=$0", error_msg));
     }
 
-    for (auto store : tmp_stores) {
-        _store_map.emplace(store->path(), store);
+    for (auto& store : tmp_stores) {
+        _store_map.emplace(store->path(), store.release());
     }
     return Status::OK();
 }
@@ -919,6 +918,11 @@ OLAPStatus StorageEngine::execute_task(EngineTask* task) {
         task->get_related_tablets(&tablet_infos);
         sort(tablet_infos.begin(), tablet_infos.end());
         std::vector<TabletSharedPtr> related_tablets;
+        DeferOp release_lock([&]() {
+            for (TabletSharedPtr& tablet : related_tablets) {
+                tablet->release_header_lock();
+            }
+        });
         for (TabletInfo& tablet_info : tablet_infos) {
             TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id);
             if (tablet != nullptr) {
@@ -930,9 +934,6 @@ OLAPStatus StorageEngine::execute_task(EngineTask* task) {
         }
         // add write lock to all related tablets
         OLAPStatus prepare_status = task->prepare();
-        for (TabletSharedPtr& tablet : related_tablets) {
-            tablet->release_header_lock();
-        }
         if (prepare_status != OLAP_SUCCESS) {
             return prepare_status;
         }
@@ -953,6 +954,11 @@ OLAPStatus StorageEngine::execute_task(EngineTask* task) {
         task->get_related_tablets(&tablet_infos);
         sort(tablet_infos.begin(), tablet_infos.end());
         std::vector<TabletSharedPtr> related_tablets;
+        DeferOp release_lock([&]() {
+            for (TabletSharedPtr& tablet : related_tablets) {
+                tablet->release_header_lock();
+            }
+        });
         for (TabletInfo& tablet_info : tablet_infos) {
             TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_info.tablet_id);
             if (tablet != nullptr) {
@@ -964,9 +970,6 @@ OLAPStatus StorageEngine::execute_task(EngineTask* task) {
         }
         // add write lock to all related tablets
         OLAPStatus fin_status = task->finish();
-        for (TabletSharedPtr& tablet : related_tablets) {
-            tablet->release_header_lock();
-        }
         return fin_status;
     }
 }

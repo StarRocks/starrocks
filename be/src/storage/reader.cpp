@@ -725,9 +725,9 @@ void Reader::_init_conditions_param(const ReaderParams& read_params) {
     _conditions.set_tablet_schema(&_tablet->tablet_schema());
     for (const auto& condition : read_params.conditions) {
         _conditions.append_condition(condition);
-        ColumnPredicate* predicate = _parse_to_predicate(condition);
+        std::unique_ptr<ColumnPredicate> predicate(_parse_to_predicate(condition));
         if (predicate != nullptr) {
-            _col_predicates.push_back(predicate);
+            _col_predicates.push_back(predicate.release());
         }
     }
 }

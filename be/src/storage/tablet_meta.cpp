@@ -472,9 +472,8 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
 
     // generate AlterTabletTask
     if (tablet_meta_pb.has_alter_task()) {
-        AlterTabletTask* alter_tablet_task = new AlterTabletTask();
-        alter_tablet_task->init_from_pb(tablet_meta_pb.alter_task());
-        _alter_task.reset(alter_tablet_task);
+        _alter_task = std::make_shared<AlterTabletTask>();
+        _alter_task->init_from_pb(tablet_meta_pb.alter_task());
     }
 
     if (tablet_meta_pb.has_in_restore_mode()) {
@@ -766,9 +765,9 @@ Status TabletMeta::set_alter_state(AlterTabletState alter_state) {
         LOG(WARNING) << "original alter task is null, could not set state";
         return Status::InternalError("original alter task is null");
     } else {
-        auto alter_tablet_task = new AlterTabletTask(*_alter_task);
+        auto alter_tablet_task = std::make_unique<AlterTabletTask>(*_alter_task);
         RETURN_IF_ERROR(alter_tablet_task->set_alter_state(alter_state));
-        _alter_task.reset(alter_tablet_task);
+        _alter_task = std::move(alter_tablet_task);
         return Status::OK();
     }
 }

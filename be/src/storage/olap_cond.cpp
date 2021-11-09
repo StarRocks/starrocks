@@ -578,9 +578,9 @@ OLAPStatus Conditions::append_condition(const TCondition& tcond) {
 
     auto it = _columns.find(index);
     if (it == _columns.end()) {
-        auto cond_col = new CondColumn(*_schema, index);
-        _columns[index] = cond_col;
-        return cond_col->add_cond(tcond, column);
+        std::unique_ptr<CondColumn> cond_col = std::make_unique<CondColumn>(*_schema, index);
+        _columns[index] = cond_col.release();
+        return _columns[index]->add_cond(tcond, column);
     } else {
         return it->second->add_cond(tcond, column);
     }

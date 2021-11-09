@@ -50,6 +50,12 @@ using google::protobuf::RepeatedPtrField;
 
 namespace starrocks {
 
+DeleteConditions::~DeleteConditions() {
+    if (del_cond != nullptr) {
+        delete del_cond;
+    }
+}
+
 OLAPStatus DeleteConditionHandler::generate_delete_predicate(const TabletSchema& schema,
                                                              const std::vector<TCondition>& conditions,
                                                              DeletePredicatePB* del_pred) {
@@ -349,7 +355,6 @@ void DeleteHandler::finalize() {
 
     for (auto& _del_cond : _del_conds) {
         _del_cond.del_cond->finalize();
-        delete _del_cond.del_cond;
     }
 
     _del_conds.clear();
