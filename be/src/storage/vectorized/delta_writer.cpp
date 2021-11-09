@@ -224,7 +224,7 @@ Status DeltaWriter::wait_memtable_flushed() {
 }
 
 void DeltaWriter::_reset_mem_table() {
-    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), _tablet_schema, _req.slots, _rowset_writer.get(),
+    _mem_table = std::make_shared<MemTable>(_tablet->tablet_id(), _tablet_schema, _req.slots, _rowset_writer.get(),
                                             _mem_tracker.get());
 }
 
