@@ -34,8 +34,8 @@
 #include "util/dynamic_util.h"
 #include "util/file_utils.h"
 #include "util/md5.h"
-#include "util/spinlock.h"
 #include "util/scoped_cleanup.h"
+#include "util/spinlock.h"
 
 namespace starrocks {
 
