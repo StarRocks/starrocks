@@ -691,7 +691,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
             // shuffle aggregation
             DistributionSpec distributionSpec = DistributionSpec.createHashDistributionSpec(
-                    new HashDistributionDesc(columns, HashDistributionDesc.SourceType.SHUFFLE_AGG));
+                    new HashDistributionDesc(columns, HashDistributionDesc.SourceType.SHUFFLE_JOIN));
             DistributionProperty distributionProperty = new DistributionProperty(distributionSpec);
             outputInputProps.add(new Pair<>(new PhysicalPropertySet(distributionProperty),
                     Lists.newArrayList(new PhysicalPropertySet(distributionProperty))));
@@ -915,7 +915,7 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
             DistributionProperty distributionProperty = new DistributionProperty(DistributionSpec
                     .createHashDistributionSpec(
                             new HashDistributionDesc(partitionColumnRefSet,
-                                    HashDistributionDesc.SourceType.SHUFFLE_AGG)));
+                                    HashDistributionDesc.SourceType.SHUFFLE_JOIN)));
             outputInputProps.add(new Pair<>(new PhysicalPropertySet(distributionProperty, sortProperty),
                     Lists.newArrayList(new PhysicalPropertySet(distributionProperty, sortProperty))));
 
