@@ -132,7 +132,6 @@ Status FileScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         if (!_chunk_queue.empty()) {
             temp_chunk = _chunk_queue.front();
             _chunk_queue.pop_front();
-            mem_tracker()->release(temp_chunk->memory_usage());
         }
     }
 
@@ -181,7 +180,6 @@ Status FileScanNode::close(RuntimeState* state) {
     }
 
     while (!_chunk_queue.empty()) {
-        mem_tracker()->release(_chunk_queue.front()->memory_usage());
         _chunk_queue.pop_front();
     }
 
@@ -248,7 +246,7 @@ Status FileScanNode::scanner_scan(const TBrokerScanRange& scan_range, const std:
                    // 1. too many batches in queue, or
                    // 2. at least one batch in queue and memory exceed limit.
                    (_chunk_queue.size() >= _max_queue_size ||
-                    (mem_tracker()->any_limit_exceeded() && !_chunk_queue.empty()))) {
+                    (_runtime_state->instance_mem_tracker()->any_limit_exceeded() && !_chunk_queue.empty()))) {
                 _queue_writer_cond.wait_for(l, std::chrono::seconds(1));
             }
             // Process already set failed, so we just return OK
@@ -265,7 +263,6 @@ Status FileScanNode::scanner_scan(const TBrokerScanRange& scan_range, const std:
             }
             // Queue size Must be smaller than _max_queue_size
             _chunk_queue.push_back(std::move(temp_chunk));
-            mem_tracker()->consume(_chunk_queue.back()->memory_usage());
 
             // Notify reader to
             _queue_reader_cond.notify_one();

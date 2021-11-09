@@ -7,6 +7,7 @@
 #include "exprs/expr_context.h"
 #include "runtime/mem_pool.h"
 #include "util/phmap/phmap.h"
+#include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
 
 namespace starrocks::vectorized {
@@ -14,11 +15,6 @@ namespace starrocks::vectorized {
 class ExceptSliceFlag;
 struct ExceptSliceFlagEqual;
 struct ExceptSliceFlagHash;
-template <typename HashSet>
-class ExceptHashSet;
-
-using ExceptHashSerializeSet =
-        ExceptHashSet<phmap::flat_hash_set<ExceptSliceFlag, ExceptSliceFlagHash, ExceptSliceFlagEqual>>;
 
 class ExceptSliceFlag {
 public:
@@ -67,6 +63,8 @@ public:
 
     void deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t batch_size);
 
+    int64_t mem_usage() { return _hash_set->dump_bound() + _mem_pool->total_reserved_bytes(); }
+
 private:
     size_t _get_max_serialize_size(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs);
 
@@ -81,5 +79,8 @@ private:
     std::unique_ptr<MemPool> _mem_pool;
     uint8_t* _buffer;
 };
+
+using ExceptHashSerializeSet =
+        ExceptHashSet<phmap::flat_hash_set<ExceptSliceFlag, ExceptSliceFlagHash, ExceptSliceFlagEqual>>;
 
 } // namespace starrocks::vectorized

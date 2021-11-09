@@ -12,7 +12,6 @@
 #include "exec/vectorized/intersect_hash_set.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
@@ -36,6 +35,16 @@ public:
     Status close(RuntimeState* state) override;
 
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+    int64_t mem_usage() const {
+        int64_t usage = 0;
+        if (_hash_set != nullptr) {
+            usage += _hash_set->mem_usage();
+        }
+        if (_build_pool != nullptr) {
+            usage += _build_pool->total_reserved_bytes();
+        }
+        return usage;
+    }
 
 private:
     // Tuple id resolved in Prepare() to set tuple_desc_;

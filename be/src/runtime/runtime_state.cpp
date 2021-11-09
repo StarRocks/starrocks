@@ -113,8 +113,6 @@ RuntimeState::~RuntimeState() {
     if (_exec_env != nullptr && _exec_env->thread_mgr() != nullptr) {
         _exec_env->thread_mgr()->unregister_pool(_resource_pool);
     }
-
-    _instance_mem_pool.reset();
 }
 
 Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
