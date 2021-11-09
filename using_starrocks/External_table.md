@@ -1,6 +1,6 @@
 # 外部表
 
-StarRocks 支持以外部表的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、HDFS、ElasticSearch、Hive以及StarRocks。**对于StarRocks数据源，现阶段只支持Insert写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
+StarRocks 支持以外部表的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、ElasticSearch、Hive以及StarRocks。**对于StarRocks数据源，现阶段只支持Insert写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
 
 <br/>
 
@@ -41,42 +41,6 @@ PROPERTIES
 * **password**：MySQL登陆的密码
 * **database**：MySQL相关数据库名
 * **table**：MySQL相关数据表名
-
-<br/>
-
-## HDFS外部表
-
-与访问MySQL类似，StarRocks访问HDFS文件之前，也需提前建立好与之相对应的外部表，如下图。
-
-~~~sql
-CREATE EXTERNAL TABLE hdfs_external_table (
-    k1 DATE,
-    k2 INT,
-    k3 SMALLINT,
-    k4 VARCHAR(2048),
-    k5 DATETIME
-)
-ENGINE=broker
-PROPERTIES (
-    "broker_name" = "broker_name",
-    "path" = "hdfs://hdfs_host:hdfs_port/data1",
-    "column_separator" = "|",
-    "line_delimiter" = "\n"
-)
-BROKER PROPERTIES (
-    "username" = "hdfs_username",
-    "password" = "hdfs_password"
-)
-~~~
-
-参数说明：
-
-* **broker_name**：Broker名字
-* **path**：HDFS文件路径
-* **column_separator**：列分隔符
-* **line_delimiter**：行分隔符
-
-StarRocks不能直接访问HDFS文件，需要通过Broker进行访问。所以，建表时除了需要指定HDFS文件的相关信息之外，还需要指定Broker的相关信息。关于Broker的相关介绍，可以参见[Broker导入](../loading/BrokerLoad.md)。
 
 <br/>
 
