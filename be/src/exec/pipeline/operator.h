@@ -5,6 +5,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
+#include "runtime/mem_tracker.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -70,6 +71,7 @@ protected:
     // Which plan node this operator belongs to
     int32_t _plan_node_id = -1;
     std::shared_ptr<RuntimeProfile> _runtime_profile;
+    std::unique_ptr<MemTracker> _mem_tracker;
 
     // Common metrics
     RuntimeProfile::Counter* _push_timer = nullptr;
