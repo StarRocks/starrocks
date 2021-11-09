@@ -353,11 +353,11 @@ public class HiveTable extends Table {
             String hiveTableType = hiveTable.getTableType();
             if (!"MANAGED_TABLE".equals(hiveTableType)) {
                 if ("VIRTUAL_VIEW".equals(hiveTableType)) {
-                    throw new DdlException("create external hive view table is not supported.");
+                    throw new DdlException("Hive view table is not supported.");
                 } else if ("EXTERNAL_TABLE".equals(hiveTableType)) {
-                    throw new DdlException("create external hive external table is not supported.");
+                    throw new DdlException("Hive external table is not supported.");
                 }
-                throw new DdlException("unsupported hive table type [" + hiveTable.getTableType() + "].");
+                throw new DdlException("unsupported hive table type [" + hiveTableType + "].");
             }
             List<FieldSchema> unPartHiveColumns = hiveTable.getSd().getCols();
             List<FieldSchema> partHiveColumns = hiveTable.getPartitionKeys();
