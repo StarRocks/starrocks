@@ -21,32 +21,34 @@
 
 #include "exec/decompressor.h"
 
+#include <memory>
+
+#include "fmt/compile.h"
+
 namespace starrocks {
 
-Status Decompressor::create_decompressor(CompressionTypePB type, Decompressor** decompressor) {
+Status Decompressor::create_decompressor(CompressionTypePB type, std::unique_ptr<Decompressor>* decompressor) {
     switch (type) {
     case CompressionTypePB::NO_COMPRESSION:
         *decompressor = nullptr;
         break;
     case CompressionTypePB::GZIP:
-        *decompressor = new GzipDecompressor(false);
+        *decompressor = std::make_unique<GzipDecompressor>(false);
         break;
     case CompressionTypePB::DEFLATE:
-        *decompressor = new GzipDecompressor(true);
+        *decompressor = std::make_unique<GzipDecompressor>(true);
         break;
     case CompressionTypePB::BZIP2:
-        *decompressor = new Bzip2Decompressor();
+        *decompressor = std::make_unique<Bzip2Decompressor>();
         break;
     case CompressionTypePB::LZ4_FRAME:
-        *decompressor = new Lz4FrameDecompressor();
+        *decompressor = std::make_unique<Lz4FrameDecompressor>();
         break;
     case CompressionTypePB::ZSTD:
-        *decompressor = new ZstandardDecompressor();
+        *decompressor = std::make_unique<ZstandardDecompressor>();
         break;
     default:
-        std::stringstream ss;
-        ss << "Unknown compress type: " << type;
-        return Status::InternalError(ss.str());
+        return Status::InternalError(fmt::format("Unknown compress type: {}", type));
     }
 
     Status st = Status::OK();
@@ -56,8 +58,6 @@ Status Decompressor::create_decompressor(CompressionTypePB type, Decompressor** 
 
     return st;
 }
-
-Decompressor::~Decompressor() = default;
 
 std::string Decompressor::debug_info() {
     return "Decompressor";
