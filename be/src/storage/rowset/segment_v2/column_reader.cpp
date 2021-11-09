@@ -373,14 +373,12 @@ Status ColumnReader::bloom_filter(const std::vector<const vectorized::ColumnPred
 Status ColumnReader::_load_ordinal_index(bool use_page_cache, bool kept_in_memory) {
     Status st;
     if (_flags[kHasOrdinalIndexMetaPos]) {
-        //auto* index_meta = _ordinal_index.meta;
         std::unique_ptr<OrdinalIndexPB> index_meta(_ordinal_index.meta);
+        _flags.set(kHasOrdinalIndexMetaPos, false);
         _ordinal_index.reader = new OrdinalIndexReader();
+        _flags.set(kHasOrdinalIndexReaderPos, true);
         st = _ordinal_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), _num_rows, use_page_cache,
                                          kept_in_memory);
-        //delete index_meta;
-        _flags.set(kHasOrdinalIndexMetaPos, false);
-        _flags.set(kHasOrdinalIndexReaderPos, true);
     }
     return st;
 }
@@ -388,13 +386,12 @@ Status ColumnReader::_load_ordinal_index(bool use_page_cache, bool kept_in_memor
 Status ColumnReader::_load_zone_map_index(bool use_page_cache, bool kept_in_memory) {
     Status st;
     if (_flags[kHasZoneMapIndexMetaPos]) {
-        //auto* index_meta = _zone_map_index.meta;
-	std::unique_ptr<ZoneMapIndexPB> index_meta(_zone_map_index.meta);
-        _zone_map_index.reader = new ZoneMapIndexReader();
-        st = _zone_map_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), use_page_cache, kept_in_memory);
-        //delete index_meta;
+        std::unique_ptr<ZoneMapIndexPB> index_meta(_zone_map_index.meta);
         _flags.set(kHasZoneMapIndexMetaPos, false);
+        _zone_map_index.reader = new ZoneMapIndexReader();
         _flags.set(kHasZoneMapIndexReaderPos, true);
+        st = _zone_map_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), use_page_cache,
+                                          kept_in_memory);
     }
     return st;
 }
@@ -402,13 +399,11 @@ Status ColumnReader::_load_zone_map_index(bool use_page_cache, bool kept_in_memo
 Status ColumnReader::_load_bitmap_index(bool use_page_cache, bool kept_in_memory) {
     Status st;
     if (_flags[kHasBitmapIndexMetaPos]) {
-        //auto* index_meta = _bitmap_index.meta;
-	std::unique_ptr<BitmapIndexPB> index_meta(_bitmap_index.meta);
-        _bitmap_index.reader = new BitmapIndexReader();
-        st = _bitmap_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), use_page_cache, kept_in_memory);
-        //delete index_meta;
+        std::unique_ptr<BitmapIndexPB> index_meta(_bitmap_index.meta);
         _flags.set(kHasBitmapIndexMetaPos, false);
+        _bitmap_index.reader = new BitmapIndexReader();
         _flags.set(kHasBitmapIndexReaderPos, true);
+        st = _bitmap_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), use_page_cache, kept_in_memory);
     }
     return st;
 }
@@ -416,13 +411,12 @@ Status ColumnReader::_load_bitmap_index(bool use_page_cache, bool kept_in_memory
 Status ColumnReader::_load_bloom_filter_index(bool use_page_cache, bool kept_in_memory) {
     Status st;
     if (_flags[kHasBloomFilterIndexMetaPos]) {
-        //auto* index_meta = _bloom_filter_index.meta;
         std::unique_ptr<BloomFilterIndexPB> index_meta(_bloom_filter_index.meta);
-        _bloom_filter_index.reader = new BloomFilterIndexReader();
-        st = _bloom_filter_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), use_page_cache, kept_in_memory);
-        //delete index_meta;
         _flags.set(kHasBloomFilterIndexMetaPos, false);
+        _bloom_filter_index.reader = new BloomFilterIndexReader();
         _flags.set(kHasBloomFilterIndexReaderPos, true);
+        st = _bloom_filter_index.reader->load(_opts.block_mgr, _file_name, index_meta.get(), use_page_cache,
+                                              kept_in_memory);
     }
     return st;
 }

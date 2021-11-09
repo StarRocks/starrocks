@@ -295,7 +295,7 @@ Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn*
             std::unique_ptr<ColumnWriter> element_writer;
             RETURN_IF_ERROR(ColumnWriter::create(element_options, &element_column, _wblock, &element_writer));
 
-            ScalarColumnWriter* null_writer = nullptr;
+            std::unique_ptr<ScalarColumnWriter> null_writer = nullptr;
             if (opts.meta->is_nullable()) {
                 ColumnWriterOptions null_options;
                 null_options.meta = opts.meta->add_children_columns();
@@ -307,7 +307,7 @@ Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn*
                 null_options.meta->set_compression(LZ4);
                 null_options.meta->set_is_nullable(false);
                 std::unique_ptr<Field> bool_field(FieldFactory::create_by_type(FieldType::OLAP_FIELD_TYPE_BOOL));
-                null_writer = new ScalarColumnWriter(null_options, std::move(bool_field), _wblock);
+                null_writer.reset(new ScalarColumnWriter(null_options, std::move(bool_field), _wblock));
             }
 
             ColumnWriterOptions array_size_options;
@@ -323,12 +323,10 @@ Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn*
             array_size_options.need_bloom_filter = false;
             array_size_options.need_bitmap_index = false;
             std::unique_ptr<Field> bigint_field(FieldFactory::create_by_type(FieldType::OLAP_FIELD_TYPE_INT));
-            ScalarColumnWriter* offset_writer =
-                    new ScalarColumnWriter(array_size_options, std::move(bigint_field), _wblock);
-
-            std::unique_ptr<ColumnWriter> writer_local = std::unique_ptr<ColumnWriter>(new ArrayColumnWriter(
-                    opts, std::move(field), null_writer, offset_writer, std::move(element_writer)));
-            *writer = std::move(writer_local);
+            std::unique_ptr<ScalarColumnWriter> offset_writer =
+                    std::make_unique<ScalarColumnWriter>(array_size_options, std::move(bigint_field), _wblock);
+            writer->reset(new ArrayColumnWriter(opts, std::move(field), std::move(null_writer),
+                                                std::move(offset_writer), std::move(element_writer)));
             return Status::OK();
         }
         default:
@@ -757,15 +755,16 @@ Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags
 ////////////////////////////////////////////////////////////////////////////////
 
 ArrayColumnWriter::ArrayColumnWriter(const ColumnWriterOptions& opts, std::unique_ptr<Field> field,
-                                     ScalarColumnWriter* null_writer, ScalarColumnWriter* offset_writer,
+                                     std::unique_ptr<ScalarColumnWriter> null_writer,
+                                     std::unique_ptr<ScalarColumnWriter> offset_writer,
                                      std::unique_ptr<ColumnWriter> element_writer)
         : ColumnWriter(std::move(field), opts.meta->is_nullable()), _element_writer(std::move(element_writer)) {
     if (is_nullable()) {
-        _null_writer.reset(null_writer);
+        _null_writer = std::move(null_writer);
     } else {
         _null_writer = nullptr;
     }
-    _array_size_writer.reset(offset_writer);
+    _array_size_writer = std::move(offset_writer);
 }
 
 Status ArrayColumnWriter::init() {
