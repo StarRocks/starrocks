@@ -1162,9 +1162,19 @@ Status SegmentIterator::_init_context() {
 }
 
 void SegmentIterator::_rewrite_predicates() {
+    //
     ColumnPredicateRewriter rewriter(_column_iterators, _opts.predicates, _schema, _predicate_need_rewrite,
                                      _predicate_columns, _scan_range);
     rewriter.rewrite_predicate(&_obj_pool);
+
+    // for each delete predicate,
+    // If the global dictionary optimization is enabled for the column,
+    // then the output column is of type INT, and we need to rewrite the delete condition
+    // so that the input is of type INT (the original input is of type String)
+    for (auto& conjunct_predicate : _opts.delete_predicates.predicate_list()) {
+        ConjunctivePredicatesRewriter crewriter(conjunct_predicate, *_opts.global_dictmaps);
+        crewriter.rewrite_predicate(&_obj_pool);
+    }
 }
 
 Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
