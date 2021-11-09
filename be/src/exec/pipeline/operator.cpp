@@ -15,6 +15,7 @@ Operator::Operator(int32_t id, const std::string& name, int32_t plan_node_id)
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("$0 (id=$1)", upper_name, _id));
     _runtime_profile->set_metadata(_id);
+    _mem_tracker = std::make_unique<MemTracker>(_runtime_profile.get(), -1, _runtime_profile->name(), nullptr);
 }
 
 Status Operator::prepare(RuntimeState* state) {

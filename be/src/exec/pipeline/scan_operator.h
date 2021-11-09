@@ -47,7 +47,7 @@ private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
     void _pickup_morsel(RuntimeState* state);
-    void _trigger_next_scan();
+    void _trigger_next_scan(RuntimeState* state);
 
 private:
     // TODO(hcf) ugly, remove this later

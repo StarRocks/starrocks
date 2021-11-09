@@ -64,6 +64,8 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
                 APPLY_FOR_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
 
+                _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
+                                  _aggregator->mem_pool()->total_reserved_bytes());
                 _aggregator->try_convert_to_two_level_map();
             }
             if (_aggregator->is_none_group_by_exprs()) {
