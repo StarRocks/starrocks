@@ -369,7 +369,8 @@ public class PlanFragmentBuilder {
             Map<SlotId, Expr> projectMap = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : node.getStringFunctions().entrySet()) {
                 Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(), node.getStringFunctions()));
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
+                                node.getStringFunctions()));
 
                 projectMap.put(new SlotId(entry.getKey().getId()), expr);
                 Preconditions.checkState(context.getColRefToExpr().containsKey(entry.getKey()));
@@ -475,6 +476,8 @@ public class PlanFragmentBuilder {
             // set isPreAggregation
             scanNode.setIsPreAggregation(node.isPreAggregation(), node.getTurnOffReason());
             scanNode.setDictStringIdToIntIds(node.getDictStringIdToIntIds());
+            scanNode.updateAppliedDictStringColumns(node.getGlobalDicts().stream().
+                    map(entry -> entry.first).collect(Collectors.toSet()));
 
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
