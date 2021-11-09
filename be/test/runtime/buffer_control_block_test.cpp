@@ -52,7 +52,7 @@ TEST_F(BufferControlBlockTest, add_one_get_one) {
     add_result->result_batch.rows.push_back("hello test");
     ASSERT_TRUE(control_block.add_batch(add_result).ok());
 
-    std::unique_ptr<TFetchDataResult> get_result;
+    auto get_result = std::make_unique<TFetchDataResult>();
     ASSERT_TRUE(control_block.get_batch(get_result).ok());
     ASSERT_FALSE(get_result->eos);
     ASSERT_EQ(1U, get_result->result_batch.rows.size());
@@ -64,7 +64,7 @@ TEST_F(BufferControlBlockTest, get_one_after_close) {
     ASSERT_TRUE(control_block.init().ok());
 
     control_block.close(Status::OK());
-    std::unique_ptr<TFetchDataResult> get_result;
+    auto get_result = std::make_unique<TFetchDataResult>();
     ASSERT_TRUE(control_block.get_batch(get_result).ok());
     ASSERT_TRUE(get_result->eos);
 }
@@ -78,7 +78,7 @@ TEST_F(BufferControlBlockTest, get_add_after_cancel) {
     add_result->result_batch.rows.push_back("hello test");
     ASSERT_FALSE(control_block.add_batch(add_result).ok());
 
-    std::unique_ptr<TFetchDataResult> get_result;
+    auto get_result = std::make_unique<TFetchDataResult>();
     ASSERT_FALSE(control_block.get_batch(get_result).ok());
 }
 
@@ -110,7 +110,7 @@ TEST_F(BufferControlBlockTest, add_then_cancel) {
         ASSERT_FALSE(control_block.add_batch(add_result).ok());
     }
 
-    std::unique_ptr<TFetchDataResult> get_result;
+    auto get_result = std::make_unique<TFetchDataResult>();
     ASSERT_FALSE(control_block.get_batch(get_result).ok());
 
     pthread_join(id, NULL);
@@ -124,7 +124,7 @@ TEST_F(BufferControlBlockTest, get_then_cancel) {
     pthread_create(&id, NULL, cancel_thread, &control_block);
 
     // get block until cancel
-    std::unique_ptr<TFetchDataResult> get_result;
+    auto get_result = std::make_unique<TFetchDataResult>();
     ASSERT_FALSE(control_block.get_batch(get_result).ok());
 
     pthread_join(id, NULL);
@@ -150,7 +150,7 @@ TEST_F(BufferControlBlockTest, get_then_add) {
     pthread_create(&id, NULL, add_thread, &control_block);
 
     // get block until a batch add
-    std::unique_ptr<TFetchDataResult> get_result;
+    auto get_result = std::make_unique<TFetchDataResult>();
     ASSERT_TRUE(control_block.get_batch(get_result).ok());
     ASSERT_FALSE(get_result->eos);
     ASSERT_EQ(2U, get_result->result_batch.rows.size());
@@ -175,7 +175,7 @@ TEST_F(BufferControlBlockTest, get_then_close) {
     pthread_create(&id, NULL, close_thread, &control_block);
 
     // get block until a batch add
-    std::unique_ptr<TFetchDataResult> get_result;
+    auto get_result = std::make_unique<TFetchDataResult>();
     ASSERT_TRUE(control_block.get_batch(get_result).ok());
     ASSERT_TRUE(get_result->eos);
     ASSERT_EQ(0U, get_result->result_batch.rows.size());
