@@ -36,6 +36,7 @@ class TupleRow;
 class SelectNode : public ExecNode {
 public:
     SelectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
+    ~SelectNode();
 
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
