@@ -1289,7 +1289,8 @@ public class Coordinator {
             // 3.construct instanceExecParam add the scanRange should be scan by instance
             for (List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>> perInstanceScanRange : perInstanceScanRanges) {
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, addressScanRange.getKey(), 0, params);
-
+                // record replicate scan id in set, to avoid add replicate scan range repeatedly when they are in different buckets
+                Set<Integer> replicateScanSet = new HashSet<>();
                 for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> nodeScanRangeMap : perInstanceScanRange) {
                     instanceParam.addBucketSeq(nodeScanRangeMap.getKey());
                     for (Map.Entry<Integer, List<TScanRangeParams>> nodeScanRange : nodeScanRangeMap.getValue()
@@ -1299,10 +1300,10 @@ public class Coordinator {
                             instanceParam.perNodeScanRanges.put(scanId, new ArrayList<>());
                         }
                         if (replicateScanIds.contains(scanId)) {
-                            List<TScanRangeParams> scanRangeParams =
-                                    fragmentExecParamsMap.get(fragmentId).scanRangeAssignment.
-                                            get(addressScanRange.getKey()).get(scanId);
-                            instanceParam.perNodeScanRanges.get(scanId).addAll(scanRangeParams);
+                            if (!replicateScanSet.contains(scanId)) {
+                                instanceParam.perNodeScanRanges.get(scanId).addAll(nodeScanRange.getValue());
+                                replicateScanSet.add(scanId);
+                            }
                         } else {
                             instanceParam.perNodeScanRanges.get(scanId).addAll(nodeScanRange.getValue());
                         }
@@ -2041,11 +2042,14 @@ public class Coordinator {
             // use bucketSeqToScanRange to fill FragmentScanRangeAssignment
             for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> entry : bucketSeqToScanRange.entrySet()) {
                 Integer bucketSeq = entry.getKey();
-                Map<Integer, List<TScanRangeParams>> scanRanges =
-                        assignment.computeIfAbsent(bucketSeqToAddress.get(bucketSeq), k -> Maps.newHashMap());
-                List<TScanRangeParams> scanRangeParamsList =
-                        scanRanges.computeIfAbsent(scanNode.getId().asInt(), k -> Lists.newArrayList());
-                scanRangeParamsList.addAll(entry.getValue().get(scanNode.getId().asInt()));
+                // fill FragmentScanRangeAssignment only when there are scan id in the bucket
+                if (entry.getValue().containsKey(scanNode.getId().asInt())) {
+                    Map<Integer, List<TScanRangeParams>> scanRanges =
+                            assignment.computeIfAbsent(bucketSeqToAddress.get(bucketSeq), k -> Maps.newHashMap());
+                    List<TScanRangeParams> scanRangeParamsList =
+                            scanRanges.computeIfAbsent(scanNode.getId().asInt(), k -> Lists.newArrayList());
+                    scanRangeParamsList.addAll(entry.getValue().get(scanNode.getId().asInt()));
+                }
             }
         }
 
