@@ -586,7 +586,8 @@ void* TaskWorkerPool::_push_worker_thread_callback(void* arg_this) {
                   << " push_type: " << push_req.push_type;
         std::vector<TTabletInfo> tablet_infos;
 
-        EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req.signature, &status);
+        EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req.signature, &status,
+                                        ExecEnv::GetInstance()->load_mem_tracker());
         worker_pool_this->_env->storage_engine()->execute_task(&engine_task);
 
 #ifndef BE_TEST
