@@ -35,8 +35,6 @@ public:
     OlapTablePartitionParamTest() {}
     virtual ~OlapTablePartitionParamTest() {}
     void SetUp() override {}
-
-private:
 };
 
 TOlapTableSchemaParam get_schema(TDescriptorTable* desc_tbl) {

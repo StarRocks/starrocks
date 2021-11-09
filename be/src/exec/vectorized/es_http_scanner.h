@@ -39,6 +39,8 @@ public:
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk, bool* eos);
     void close();
 
+    RuntimeState* runtime_state() { return _state; }
+
 private:
     RuntimeState* _state;
     RuntimeProfile* _profile;
