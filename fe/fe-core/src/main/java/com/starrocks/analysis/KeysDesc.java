@@ -36,7 +36,7 @@ import java.util.List;
 
 public class KeysDesc implements Writable {
     private KeysType type;
-    private List<String> keysColumnNames;
+    private final List<String> keysColumnNames;
 
     public KeysDesc() {
         this.type = KeysType.AGG_KEYS;
