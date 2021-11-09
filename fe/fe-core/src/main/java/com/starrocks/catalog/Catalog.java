@@ -3035,8 +3035,7 @@ public class Catalog {
             createMysqlTable(db, stmt);
             return;
         } else if (engineName.equals("broker")) {
-            createBrokerTable(db, stmt);
-            return;
+            throw new DdlException("Broker table is deprecated.");
         } else if (engineName.equalsIgnoreCase("elasticsearch") || engineName.equalsIgnoreCase("es")) {
             createEsTable(db, stmt);
             return;
@@ -4186,6 +4185,7 @@ public class Catalog {
         LOG.info("successfully create table{} with id {}", tableName, tableId);
     }
 
+    @Deprecated
     private void createBrokerTable(Database db, CreateTableStmt stmt) throws DdlException {
         String tableName = stmt.getTableName();
 
