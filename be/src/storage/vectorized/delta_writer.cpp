@@ -264,7 +264,6 @@ Status DeltaWriter::close_wait(google::protobuf::RepeatedPtrField<PTabletInfo>* 
     if (_flush_token->wait() != OLAPStatus::OLAP_SUCCESS) {
         return Status::InternalError("Fail to flush memtable");
     }
-    DCHECK_EQ(_mem_tracker->consumption(), 0);
 
     // use rowset meta manager to save meta
     _cur_rowset = _rowset_writer->build();
