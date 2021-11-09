@@ -16,9 +16,14 @@ void PipelineDriverPoller::start() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
+
 void PipelineDriverPoller::shutdown() {
-    this->_is_shutdown.store(true, std::memory_order_release);
-    this->_polling_thread->join();
+    if (this->_is_shutdown.load() == false) {
+        {
+            this->_is_shutdown.store(true, std::memory_order_release);
+            _cond.notify_one();
+        }
+    }
 }
 
 void PipelineDriverPoller::run_internal() {
@@ -31,9 +36,13 @@ void PipelineDriverPoller::run_internal() {
             std::unique_lock<std::mutex> lock(this->_mutex);
             local_blocked_drivers.splice(local_blocked_drivers.end(), _blocked_drivers);
             if (local_blocked_drivers.empty() && _blocked_drivers.empty()) {
-                _cond.wait(lock, [this]() {
-                    return !this->_is_shutdown.load(std::memory_order_acquire) && !this->_blocked_drivers.empty();
-                });
+                std::cv_status cv_status;
+                while (!_is_shutdown.load(std::memory_order_acquire) && this->_blocked_drivers.empty()) {
+                    cv_status = _cond.wait_for(lock, std::chrono::milliseconds(10));
+                }
+                if (cv_status == std::cv_status::timeout) {
+                    continue;
+                }
                 if (_is_shutdown.load(std::memory_order_acquire)) {
                     break;
                 }
