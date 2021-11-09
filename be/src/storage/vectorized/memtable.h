@@ -27,6 +27,7 @@ public:
 
     // the total memory used (contain tmp chunk and aggregator chunk)
     size_t memory_usage() const;
+    MemTracker* mem_tracker() { return _mem_tracker; }
 
     // buffer memory usage for write segment
     size_t write_buffer_size() const;
