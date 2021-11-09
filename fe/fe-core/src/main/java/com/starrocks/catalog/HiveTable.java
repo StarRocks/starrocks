@@ -351,13 +351,17 @@ public class HiveTable extends Table {
             org.apache.hadoop.hive.metastore.api.Table hiveTable = Catalog.getCurrentCatalog().getHiveRepository()
                     .getTable(resourceName, this.hiveDb, this.hiveTable);
             String hiveTableType = hiveTable.getTableType();
-            if (!"MANAGED_TABLE".equals(hiveTableType)) {
-                if ("VIRTUAL_VIEW".equals(hiveTableType)) {
+            if (hiveTableType == null) {
+                throw new DdlException("Unknown hive table type.");
+            }
+            switch (hiveTableType) {
+                case "VIRTUAL_VIEW": // hive view table not supported
                     throw new DdlException("Hive view table is not supported.");
-                } else if ("EXTERNAL_TABLE".equals(hiveTableType)) {
-                    throw new DdlException("Hive external table is not supported.");
-                }
-                throw new DdlException("unsupported hive table type [" + hiveTableType + "].");
+                case "EXTERNAL_TABLE": // hive external table supported
+                case "MANAGED_TABLE": // basic hive table supported
+                    break;
+                default:
+                    throw new DdlException("unsupported hive table type [" + hiveTableType + "].");
             }
             List<FieldSchema> unPartHiveColumns = hiveTable.getSd().getCols();
             List<FieldSchema> partHiveColumns = hiveTable.getPartitionKeys();
