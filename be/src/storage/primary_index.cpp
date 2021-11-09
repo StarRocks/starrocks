@@ -235,16 +235,16 @@ public:
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
             FixSlice<S> prefetch_keys[PREFETCHN];
-            size_t prefetch_hashs[PREFETCHN];
+            size_t prefetch_hashes[PREFETCHN];
             for (uint32_t i = 0; i < PREFETCHN; i++) {
                 prefetch_keys[i].assign(keys[idx_begin + i]);
-                prefetch_hashs[i] = FixSliceHash<S>()(prefetch_keys[i]);
-                _map.prefetch_hash(prefetch_hashs[i]);
+                prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
+                _map.prefetch_hash(prefetch_hashes[i]);
             }
             for (uint32_t i = idx_begin; i < idx_end; i++) {
                 uint64_t v = base + rowids[i];
                 uint32_t pslot = (i - idx_begin) % PREFETCHN;
-                auto p = _map.emplace_with_hash(prefetch_hashs[pslot], prefetch_keys[pslot], v);
+                auto p = _map.emplace_with_hash(prefetch_hashes[pslot], prefetch_keys[pslot], v);
                 if (!p.second) {
                     uint64_t old = p.first->second.value;
                     std::string msg = strings::Substitute(
@@ -258,8 +258,8 @@ public:
                 uint32_t prefetch_i = i + PREFETCHN;
                 if (LIKELY(prefetch_i < idx_end)) {
                     prefetch_keys[pslot].assign(keys[prefetch_i]);
-                    prefetch_hashs[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                    _map.prefetch_hash(prefetch_hashs[pslot]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
                 }
             }
         } else {
@@ -288,16 +288,16 @@ public:
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
             FixSlice<S> prefetch_keys[PREFETCHN];
-            size_t prefetch_hashs[PREFETCHN];
+            size_t prefetch_hashes[PREFETCHN];
             for (uint32_t i = 0; i < PREFETCHN; i++) {
                 prefetch_keys[i].assign(keys[idx_begin + i]);
-                prefetch_hashs[i] = FixSliceHash<S>()(prefetch_keys[i]);
-                _map.prefetch_hash(prefetch_hashs[i]);
+                prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
+                _map.prefetch_hash(prefetch_hashes[i]);
             }
             for (uint32_t i = idx_begin; i < idx_end; i++) {
                 uint64_t v = base + i;
                 uint32_t pslot = (i - idx_begin) % PREFETCHN;
-                auto p = _map.emplace_with_hash(prefetch_hashs[pslot], prefetch_keys[pslot], v);
+                auto p = _map.emplace_with_hash(prefetch_hashes[pslot], prefetch_keys[pslot], v);
                 if (!p.second) {
                     uint64_t old = p.first->second.value;
                     if ((old >> 32) == rssid) {
@@ -310,8 +310,8 @@ public:
                 uint32_t prefetch_i = i + PREFETCHN;
                 if (LIKELY(prefetch_i < idx_end)) {
                     prefetch_keys[pslot].assign(keys[prefetch_i]);
-                    prefetch_hashs[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                    _map.prefetch_hash(prefetch_hashs[pslot]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
                 }
             }
         } else {
@@ -338,15 +338,15 @@ public:
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
             FixSlice<S> prefetch_keys[PREFETCHN];
-            size_t prefetch_hashs[PREFETCHN];
+            size_t prefetch_hashes[PREFETCHN];
             for (uint32_t i = 0; i < PREFETCHN; i++) {
                 prefetch_keys[i].assign(keys[idx_begin + i]);
-                prefetch_hashs[i] = FixSliceHash<S>()(prefetch_keys[i]);
-                _map.prefetch_hash(prefetch_hashs[i]);
+                prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
+                _map.prefetch_hash(prefetch_hashes[i]);
             }
             for (uint32_t i = idx_begin; i < idx_end; i++) {
                 uint32_t pslot = (i - idx_begin) % PREFETCHN;
-                auto p = _map.find(prefetch_keys[pslot], prefetch_hashs[pslot]);
+                auto p = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
                 if (p != _map.end() && ((uint32_t)(p->second.value >> 32) == src_rssid[i])) {
                     // matched, can replace
                     p->second.value = base + i;
@@ -357,8 +357,8 @@ public:
                 uint32_t prefetch_i = i + PREFETCHN;
                 if (LIKELY(prefetch_i < idx_end)) {
                     prefetch_keys[pslot].assign(keys[prefetch_i]);
-                    prefetch_hashs[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                    _map.prefetch_hash(prefetch_hashs[pslot]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
                 }
             }
         } else {
@@ -380,15 +380,15 @@ public:
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
             FixSlice<S> prefetch_keys[PREFETCHN];
-            size_t prefetch_hashs[PREFETCHN];
+            size_t prefetch_hashes[PREFETCHN];
             for (uint32_t i = 0; i < PREFETCHN; i++) {
                 prefetch_keys[i].assign(keys[idx_begin + i]);
-                prefetch_hashs[i] = FixSliceHash<S>()(prefetch_keys[i]);
-                _map.prefetch_hash(prefetch_hashs[i]);
+                prefetch_hashes[i] = FixSliceHash<S>()(prefetch_keys[i]);
+                _map.prefetch_hash(prefetch_hashes[i]);
             }
             for (auto i = idx_begin; i < idx_end; i++) {
                 uint32_t pslot = (i - idx_begin) % PREFETCHN;
-                auto iter = _map.find(prefetch_keys[pslot], prefetch_hashs[pslot]);
+                auto iter = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
                 if (iter != _map.end()) {
                     uint64_t old = iter->second.value;
                     (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
@@ -397,8 +397,8 @@ public:
                 uint32_t prefetch_i = i + PREFETCHN;
                 if (LIKELY(prefetch_i < idx_end)) {
                     prefetch_keys[pslot].assign(keys[prefetch_i]);
-                    prefetch_hashs[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
-                    _map.prefetch_hash(prefetch_hashs[pslot]);
+                    prefetch_hashes[pslot] = FixSliceHash<S>()(prefetch_keys[pslot]);
+                    _map.prefetch_hash(prefetch_hashes[pslot]);
                 }
             }
         } else {
@@ -593,6 +593,7 @@ private:
             return p.get();
         }
         }
+#undef CASE_LEN
     }
 
 public:
