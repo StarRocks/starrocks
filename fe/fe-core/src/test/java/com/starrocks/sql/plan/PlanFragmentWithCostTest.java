@@ -622,7 +622,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testSemiJoinPushDownPredicate() throws Exception {
-        String sql  = "select * from t0 left semi join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
+        String sql = "select * from t0 left semi join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -634,7 +634,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
     @Test
     public void testOuterJoinPushDownPredicate() throws Exception {
-        String sql  = "select * from t0 left outer join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
+        String sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
@@ -674,6 +674,35 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "\n" +
                 "  1:OlapScanNode\n" +
                 "     TABLE: t2"));
+        setTableStatistics(t0, 10000);
+    }
+
+    @Test
+    public void testNotPushDownRuntimeFilterToSortNode() throws Exception {
+        Catalog catalog = connectContext.getCatalog();
+        OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
+        setTableStatistics(t0, 10);
+
+        OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
+        setTableStatistics(t1, 1000000000L);
+
+        String sql = "select t0.v1 from (select v4 from t1 order by v4 limit 1000000000) as t1x join [broadcast] t0 where t0.v1 = t1x.v4";
+        String planFragment = getVerboseExplain(sql);
+
+        Assert.assertTrue(planFragment.contains("  1:TOP-N\n" +
+                "  |  order by: [1, BIGINT, true] ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 1000000000\n" +
+                "  |  cardinality: 1000000000\n" +
+                "  |  \n" +
+                "  0:OlapScanNode"));
+
+        Assert.assertTrue(planFragment.contains("  2:MERGING-EXCHANGE\n" +
+                "     limit: 1000000000\n" +
+                "     cardinality: 1000000000\n" +
+                "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (1: v4)"));
+
         setTableStatistics(t0, 10000);
     }
 }

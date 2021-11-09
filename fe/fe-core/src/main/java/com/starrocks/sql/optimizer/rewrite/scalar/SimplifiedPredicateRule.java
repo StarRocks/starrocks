@@ -2,11 +2,13 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -18,6 +20,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -61,15 +64,16 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         if (operator.hasElse()) {
             args.add(operator.getElseClause());
         } else {
-            args.add(ConstantOperator.createNull(operator.getThenClause(0).getType()));
+            args.add(ConstantOperator.createNull(operator.getType()));
         }
 
         Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-        Function fn =
-                Expr.getBuiltinFunction(FunctionSet.IF, argTypes, Function.CompareMode.IS_IDENTICAL);
+        Function fn = Expr.getBuiltinFunction(FunctionSet.IF, argTypes, Function.CompareMode.IS_IDENTICAL);
 
+        Preconditions.checkState(fn != null);
         if (operator.getChildren().stream().anyMatch(s -> s.getType().isDecimalV3())) {
-            Function decimalFn = new Function(fn.getFunctionName(), argTypes, operator.getType(), fn.hasVarArgs());
+            Function decimalFn = ScalarFunction.createVectorizedBuiltin(fn.getId(), fn.getFunctionName().getFunction(),
+                    Arrays.stream(argTypes).collect(Collectors.toList()), fn.hasVarArgs(), operator.getType());
             return new CallOperator("if", operator.getType(), args, decimalFn);
         }
 

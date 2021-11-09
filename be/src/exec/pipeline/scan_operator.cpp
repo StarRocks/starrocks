@@ -4,6 +4,7 @@
 
 #include "column/chunk.h"
 #include "exec/pipeline/olap_chunk_source.h"
+#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
@@ -25,9 +26,10 @@ Status ScanOperator::prepare(RuntimeState* state) {
 }
 
 Status ScanOperator::close(RuntimeState* state) {
+    // decrement global counter num_scan_operators.
+    state->exec_env()->decrement_num_scan_operators(1);
     if (!_is_io_task_active.load(std::memory_order_acquire)) {
         if (_chunk_source) {
-            state->exec_env()->decrement_num_scan_operators(1);
             _chunk_source->close(state);
             _chunk_source = nullptr;
         }
@@ -68,7 +70,6 @@ bool ScanOperator::pending_finish() {
         return true;
     } else {
         if (_chunk_source) {
-            _state->exec_env()->decrement_num_scan_operators(1);
             _chunk_source->close(_state);
             _chunk_source = nullptr;
         }
@@ -140,6 +141,10 @@ Status ScanOperatorFactory::prepare(RuntimeState* state) {
     RowDescriptor row_desc;
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state, row_desc));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+
+    auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
+    vectorized::DictOptimizeParser::rewrite_descriptor(state, tuple_desc->slots(), _conjunct_ctxs,
+                                                       _olap_scan_node.dict_string_id_to_int_ids);
     return Status::OK();
 }
 

@@ -46,8 +46,6 @@ HashJoiner::HashJoiner(const THashJoinNode& hash_join_node, TPlanNodeId node_id,
         _build_runtime_filters_from_planner = hash_join_node.build_runtime_filters_from_planner;
     }
 
-    _expr_mem_tracker = std::make_unique<MemTracker>(-1, "Exprs", nullptr);
-
     std::string name = strings::Substitute("$0 (id=$1)", print_plan_node_type(node_type), node_id);
     _runtime_profile.reset(new RuntimeProfile(std::move(name)));
     _runtime_profile->set_metadata(node_id);
@@ -110,7 +108,6 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
     param->row_desc = &_row_descriptor;
-    param->mem_tracker = _expr_mem_tracker.get();
     param->build_row_desc = &_build_row_descriptor;
     param->probe_row_desc = &_probe_row_descriptor;
     param->search_ht_timer = _search_ht_timer;

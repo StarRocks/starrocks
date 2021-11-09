@@ -161,7 +161,7 @@ public:
         AlterTabletType alter_tablet_type;
         TabletSharedPtr base_tablet;
         TabletSharedPtr new_tablet;
-        std::vector<vectorized::TabletReader*> rowset_readers;
+        std::vector<std::unique_ptr<vectorized::TabletReader>> rowset_readers;
         Version version;
         std::unordered_map<std::string, AlterMaterializedViewParam> materialized_params_map;
         std::vector<RowsetSharedPtr> rowsets_to_change;

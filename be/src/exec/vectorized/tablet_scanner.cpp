@@ -14,6 +14,7 @@
 #include "exec/vectorized/olap_scan_node.h"
 #include "storage/storage_engine.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "storage/vectorized/column_predicate_rewriter.h"
 #include "storage/vectorized/predicate_parser.h"
 #include "storage/vectorized/projection_iterator.h"
 
@@ -130,6 +131,9 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
             _predicates.add(p);
         }
     }
+
+    ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
+    not_pushdown_predicate_rewriter.rewrite_predicate(&_parent->_obj_pool);
 
     // Range
     for (auto key_range : *key_ranges) {

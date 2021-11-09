@@ -6,6 +6,7 @@
 
 #include "exec/pipeline/source_operator.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "runtime/global_dicts.h"
 #include "util/blocking_queue.hpp"
 #include "util/priority_thread_pool.hpp"
 
@@ -52,7 +53,7 @@ private:
     // TODO(hcf) ugly, remove this later
     RuntimeState* _state = nullptr;
 
-    const size_t _batch_size = 16;
+    const size_t _batch_size = config::pipeline_io_cache_size;
     mutable bool _is_finished = false;
     std::atomic_bool _is_io_task_active = false;
     const TOlapScanNode& _olap_scan_node;

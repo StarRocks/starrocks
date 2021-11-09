@@ -175,8 +175,10 @@ void* my_alloc(size_t size) __THROW {
     void* ptr = tc_malloc(size);
 
 #ifndef BE_TEST
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    if (LIKELY(ptr != nullptr)) {
+        size_t actual_size = tc_nallocx(size, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size);
+    }
 #endif
 
     return ptr;
@@ -194,16 +196,20 @@ void my_free(void* p) __THROW {
 
 // realloc
 void* my_realloc(void* p, size_t size) __THROW {
+    void* ptr = tc_realloc(p, size);
+
 #ifndef BE_TEST
-    int64_t old_size = 0;
-    if (p != 0) {
-        old_size = tc_malloc_size(p);
+    if (LIKELY(ptr != nullptr)) {
+        int64_t old_size = 0;
+        if (p != nullptr) {
+            old_size = tc_malloc_size(p);
+        }
+        int64_t actual_size = tc_nallocx(size, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size - old_size);
     }
-    int64_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size - old_size);
 #endif
 
-    return tc_realloc(p, size);
+    return ptr;
 }
 
 // calloc
@@ -211,8 +217,10 @@ void* my_calloc(size_t n, size_t size) __THROW {
     void* ptr = tc_calloc(n, size);
 
 #ifndef BE_TEST
-    size_t actual_size = tc_nallocx(n * size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    if (LIKELY(ptr != nullptr)) {
+        size_t actual_size = tc_nallocx(n * size, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size);
+    }
 #endif
 
     return ptr;
@@ -232,8 +240,10 @@ void* my_memalign(size_t align, size_t size) __THROW {
     void* ptr = tc_memalign(align, size);
 
 #ifndef BE_TEST
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    if (LIKELY(ptr != nullptr)) {
+        size_t actual_size = tc_nallocx(size, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size);
+    }
 #endif
 
     return ptr;
@@ -244,8 +254,10 @@ void* my_aligned_alloc(size_t align, size_t size) __THROW {
     void* ptr = tc_memalign(align, size);
 
 #ifndef BE_TEST
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    if (LIKELY(ptr != nullptr)) {
+        size_t actual_size = tc_nallocx(size, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size);
+    }
 #endif
 
     return ptr;
@@ -256,8 +268,10 @@ void* my_valloc(size_t size) __THROW {
     void* ptr = tc_valloc(size);
 
 #ifndef BE_TEST
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    if (LIKELY(ptr != nullptr)) {
+        size_t actual_size = tc_nallocx(size, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size);
+    }
 #endif
 
     return ptr;
@@ -268,8 +282,10 @@ void* my_pvalloc(size_t size) __THROW {
     void* ptr = tc_pvalloc(size);
 
 #ifndef BE_TEST
-    size_t actual_size = tc_nallocx(size, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    if (LIKELY(ptr != nullptr)) {
+        size_t actual_size = tc_nallocx(size, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size);
+    }
 #endif
 
     return ptr;
@@ -280,8 +296,10 @@ int my_posix_memalign(void** r, size_t a, size_t s) __THROW {
     int ret = tc_posix_memalign(r, a, s);
 
 #ifndef BE_TEST
-    size_t actual_size = tc_nallocx(s, 0);
-    starrocks::tls_thread_status.mem_consume(actual_size);
+    if (LIKELY(ret == 0)) {
+        size_t actual_size = tc_nallocx(s, 0);
+        starrocks::tls_thread_status.mem_consume(actual_size);
+    }
 #endif
 
     return ret;

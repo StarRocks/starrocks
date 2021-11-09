@@ -21,16 +21,16 @@
 
 #include "runtime/memory/chunk_allocator.h"
 
-#include <atomic>
-#include <list>
 #include <memory>
 #include <mutex>
 
 #include "gutil/dynamic_annotations.h"
+#include "runtime/current_thread.h"
 #include "runtime/memory/chunk.h"
 #include "runtime/memory/system_allocator.h"
 #include "util/bit_util.h"
 #include "util/cpu_info.h"
+#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 #include "util/spinlock.h"
 #include "util/starrocks_metrics.h"
@@ -52,7 +52,7 @@ ChunkAllocator* ChunkAllocator::instance() {
     std::lock_guard<std::mutex> l(s_mutex);
     if (_s_instance == nullptr) {
         CpuInfo::init();
-        ChunkAllocator::init_instance(4096);
+        ChunkAllocator::init_instance(nullptr, 4096);
     }
     return _s_instance;
 }
@@ -62,14 +62,14 @@ ChunkAllocator* ChunkAllocator::instance() {
 // This class is thread-safe.
 class ChunkArena {
 public:
-    ChunkArena() : _chunk_lists(64) {}
+    ChunkArena(MemTracker* mem_tracker) : _mem_tracker(mem_tracker), _chunk_lists(64) {}
 
     ~ChunkArena() {
         for (int i = 0; i < 64; ++i) {
             if (_chunk_lists[i].empty()) continue;
             size_t size = (uint64_t)1 << i;
             for (auto ptr : _chunk_lists[i]) {
-                SystemAllocator::free(ptr, size);
+                SystemAllocator::free(_mem_tracker, ptr, size);
             }
         }
     }
@@ -99,13 +99,14 @@ public:
     }
 
 private:
+    MemTracker* _mem_tracker = nullptr;
     SpinLock _lock;
     std::vector<std::vector<uint8_t*>> _chunk_lists;
 };
 
-void ChunkAllocator::init_instance(size_t reserve_limit) {
+void ChunkAllocator::init_instance(MemTracker* mem_tracker, size_t reserve_limit) {
     if (_s_instance != nullptr) return;
-    _s_instance = new ChunkAllocator(reserve_limit);
+    _s_instance = new ChunkAllocator(mem_tracker, reserve_limit);
 
 #define REGISTER_METIRC_WITH_NAME(name, metric) StarRocksMetrics::instance()->metrics()->register_metric(#name, &metric)
 
@@ -121,14 +122,29 @@ void ChunkAllocator::init_instance(size_t reserve_limit) {
     REGISTER_METIRC(system_free_cost_ns);
 }
 
-ChunkAllocator::ChunkAllocator(size_t reserve_limit)
-        : _reserve_bytes_limit(reserve_limit), _reserved_bytes(0), _arenas(CpuInfo::get_max_num_cores()) {
+ChunkAllocator::ChunkAllocator(MemTracker* mem_tracker, size_t reserve_limit)
+        : _mem_tracker(mem_tracker),
+          _reserve_bytes_limit(reserve_limit),
+          _reserved_bytes(0),
+          _arenas(CpuInfo::get_max_num_cores()) {
     for (auto& _arena : _arenas) {
-        _arena = std::make_unique<ChunkArena>();
+        _arena = std::make_unique<ChunkArena>(_mem_tracker);
     }
 }
 
 bool ChunkAllocator::allocate(size_t size, Chunk* chunk) {
+    bool ret = true;
+#ifndef BE_TEST
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] {
+        if (ret) {
+            _mem_tracker->release(chunk->size);
+            prev_tracker->consume(chunk->size);
+        }
+        tls_thread_status.set_mem_tracker(prev_tracker);
+    });
+#endif
+
     // fast path: allocate from current core arena
     int core_id = CpuInfo::get_current_core();
     chunk->size = size;
@@ -137,7 +153,8 @@ bool ChunkAllocator::allocate(size_t size, Chunk* chunk) {
     if (_arenas[core_id]->pop_free_chunk(size, &chunk->data)) {
         _reserved_bytes.fetch_sub(size);
         local_core_alloc_count.increment(1);
-        return true;
+        ret = true;
+        return ret;
     }
     if (_reserved_bytes > size) {
         // try to allocate from other core's arena
@@ -148,7 +165,8 @@ bool ChunkAllocator::allocate(size_t size, Chunk* chunk) {
                 other_core_alloc_count.increment(1);
                 // reset chunk's core_id to other
                 chunk->core_id = core_id % _arenas.size();
-                return true;
+                ret = true;
+                return ret;
             }
         }
     }
@@ -157,17 +175,29 @@ bool ChunkAllocator::allocate(size_t size, Chunk* chunk) {
     {
         SCOPED_RAW_TIMER(&cost_ns);
         // allocate from system allocator
-        chunk->data = SystemAllocator::allocate(size);
+        chunk->data = SystemAllocator::allocate(_mem_tracker, size);
     }
     system_alloc_count.increment(1);
     system_alloc_cost_ns.increment(cost_ns);
     if (chunk->data == nullptr) {
-        return false;
+        ret = false;
+        return ret;
     }
-    return true;
+    ret = true;
+    return ret;
 }
 
 void ChunkAllocator::free(const Chunk& chunk) {
+#ifndef BE_TEST
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] {
+        int64_t chunk_size = chunk.size;
+        prev_tracker->release(chunk_size);
+        _mem_tracker->consume(chunk_size);
+        tls_thread_status.set_mem_tracker(prev_tracker);
+    });
+#endif
+
     int64_t old_reserved_bytes = _reserved_bytes;
     int64_t new_reserved_bytes = 0;
     do {
@@ -176,7 +206,7 @@ void ChunkAllocator::free(const Chunk& chunk) {
             int64_t cost_ns = 0;
             {
                 SCOPED_RAW_TIMER(&cost_ns);
-                SystemAllocator::free(chunk.data, chunk.size);
+                SystemAllocator::free(_mem_tracker, chunk.data, chunk.size);
             }
             system_free_count.increment(1);
             system_free_cost_ns.increment(cost_ns);

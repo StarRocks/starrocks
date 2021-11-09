@@ -56,6 +56,12 @@ Status AssertNumRowsNode::open(RuntimeState* state) {
         }
     }
 
+    int64_t usage = 0;
+    for (auto& item : _input_chunks) {
+        usage += item->memory_usage();
+    }
+    _mem_tracker->set(usage);
+
     return Status::OK();
 }
 

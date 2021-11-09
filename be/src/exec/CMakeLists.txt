@@ -87,6 +87,7 @@ set(EXEC_FILES
     vectorized/parquet_reader.cpp
     vectorized/file_scan_node.cpp
     vectorized/assert_num_rows_node.cpp
+    vectorized/intersect_hash_set.cpp
     vectorized/intersect_node.cpp
     vectorized/hdfs_scanner.cpp
     vectorized/hdfs_scanner_orc.cpp
@@ -175,6 +176,10 @@ set(EXEC_FILES
     pipeline/set/except_build_sink_operator.cpp
     pipeline/set/except_probe_sink_operator.cpp
     pipeline/set/except_output_source_operator.cpp
+    pipeline/set/intersect_context.cpp
+    pipeline/set/intersect_build_sink_operator.cpp
+    pipeline/set/intersect_probe_sink_operator.cpp
+    pipeline/set/intersect_output_source_operator.cpp
 )
 
 set(EXEC_FILES

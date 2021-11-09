@@ -17,7 +17,6 @@ namespace starrocks {
 class RuntimeState;
 class RuntimeProfile;
 class ExprContext;
-class MemTracker;
 class TupleDescriptor;
 
 namespace vectorized {

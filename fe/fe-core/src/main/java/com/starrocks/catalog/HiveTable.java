@@ -350,6 +350,19 @@ public class HiveTable extends Table {
             // 3. check hive partition column exists in table column list
             org.apache.hadoop.hive.metastore.api.Table hiveTable = Catalog.getCurrentCatalog().getHiveRepository()
                     .getTable(resourceName, this.hiveDb, this.hiveTable);
+            String hiveTableType = hiveTable.getTableType();
+            if (hiveTableType == null) {
+                throw new DdlException("Unknown hive table type.");
+            }
+            switch (hiveTableType) {
+                case "VIRTUAL_VIEW": // hive view table not supported
+                    throw new DdlException("Hive view table is not supported.");
+                case "EXTERNAL_TABLE": // hive external table supported
+                case "MANAGED_TABLE": // basic hive table supported
+                    break;
+                default:
+                    throw new DdlException("unsupported hive table type [" + hiveTableType + "].");
+            }
             List<FieldSchema> unPartHiveColumns = hiveTable.getSd().getCols();
             List<FieldSchema> partHiveColumns = hiveTable.getPartitionKeys();
             Map<String, FieldSchema> allHiveColumns = unPartHiveColumns.stream()

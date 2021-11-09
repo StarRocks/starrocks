@@ -32,11 +32,13 @@
 
 #include "column/chunk.h"
 #include "gen_cpp/data.pb.h"
+#include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/row_batch.h"
 #include "runtime/vectorized/sorted_chunks_merger.h"
 #include "util/block_compression.h"
 #include "util/debug_util.h"
+#include "util/defer_op.h"
 #include "util/faststring.h"
 #include "util/logging.h"
 #include "util/runtime_profile.h"
@@ -249,7 +251,7 @@ void DataStreamRecvr::SenderQueue::add_batch(const PRowBatch& pb_batch, int be_n
     auto iter = _packet_seq_map.find(be_number);
     if (iter != _packet_seq_map.end()) {
         if (iter->second >= packet_seq) {
-            LOG(WARNING) << "packet already exist [cur_packet_id= " << iter->second
+            LOG(WARNING) << "packet already exist [cur_packet_id=" << iter->second
                          << " receive_packet_id=" << packet_seq << "]";
             return;
         }
@@ -380,7 +382,7 @@ Status DataStreamRecvr::SenderQueue::_add_chunks_internal(const PTransmitChunkPa
         auto iter = _packet_seq_map.find(be_number);
         if (iter != _packet_seq_map.end()) {
             if (iter->second >= sequence) {
-                LOG(WARNING) << "packet already exist [cur_packet_id= " << iter->second
+                LOG(WARNING) << "packet already exist [cur_packet_id=" << iter->second
                              << " receive_packet_id=" << sequence << "]";
                 return Status::OK();
             }
@@ -596,7 +598,7 @@ Status DataStreamRecvr::create_merger_for_pipeline(const SortExecExprs* exprs, c
     return Status::OK();
 }
 
-DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_tracker, const RowDescriptor& row_desc,
+DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* mem_tracker, const RowDescriptor& row_desc,
                                  const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders,
                                  bool is_merging, int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
                                  std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
@@ -608,15 +610,10 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, MemTracker* parent_t
           _row_desc(row_desc),
           _is_merging(is_merging),
           _num_buffered_bytes(0),
+          _mem_tracker(mem_tracker),
           _profile(std::move(profile)),
           _sub_plan_query_statistics_recvr(std::move(sub_plan_query_statistics_recvr)),
           _is_pipeline(is_pipeline) {
-    (void)parent_tracker;
-    // TODO: Now the parent tracker may cause problem when we need spill to disk, so we
-    // replace parent_tracker with nullptr, fix future
-    _mem_tracker = std::make_unique<MemTracker>(_profile.get(), -1, "DataStreamRecvr", nullptr);
-    // _mem_tracker.reset(new MemTracker(_profile.get(), -1, "DataStreamRecvr", parent_tracker));
-
     // Create one queue per sender if is_merging is true.
 
     int num_queues = is_merging ? num_senders : 1;
@@ -665,6 +662,9 @@ void DataStreamRecvr::add_batch(const PRowBatch& batch, int sender_id, int be_nu
 }
 
 Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     SCOPED_TIMER(_sender_total_timer);
     COUNTER_UPDATE(_request_received_counter, 1);
     int use_sender_id = _is_merging ? request.sender_id() : 0;
@@ -697,7 +697,6 @@ void DataStreamRecvr::close() {
     _mgr->deregister_recvr(fragment_instance_id(), dest_node_id());
     _mgr = nullptr;
     _chunks_merger.reset();
-    _mem_tracker.reset();
 }
 
 DataStreamRecvr::~DataStreamRecvr() {

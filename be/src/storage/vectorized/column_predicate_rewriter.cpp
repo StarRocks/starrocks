@@ -3,6 +3,7 @@
 #include "storage/vectorized/column_predicate_rewriter.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <utility>
 
 #include "column/binary_column.h"
@@ -14,10 +15,12 @@
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "runtime/global_dicts.h"
 #include "simd/simd.h"
 #include "storage/rowset/segment_v2/column_reader.h"
-#include "storage/rowset/segment_v2/file_column_iterator.h"
+#include "storage/rowset/segment_v2/scalar_column_iterator.h"
 #include "storage/vectorized/column_expr_predicate.h"
+#include "storage/vectorized/column_predicate.h"
 
 namespace starrocks::vectorized {
 constexpr static const FieldType kDictCodeType = OLAP_FIELD_TYPE_INT;
@@ -134,7 +137,8 @@ bool ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPt
         }
         if (PredicateType::kGE == pred->type() || PredicateType::kGT == pred->type()) {
             _get_segment_dict(&sorted_dicts, _column_iterators[cid]);
-            auto value = pred->value().get_slice().to_string();
+            // use non-padding string value.
+            auto value = pred->values()[0].get_slice().to_string();
             auto iter = std::lower_bound(
                     sorted_dicts.begin(), sorted_dicts.end(), value,
                     [](const auto& entity, const auto& value) { return entity.first.compare(value) < 0; });
@@ -160,11 +164,12 @@ bool ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPt
         }
         if (PredicateType::kLE == pred->type() || PredicateType::kLT == pred->type()) {
             _get_segment_dict(&sorted_dicts, _column_iterators[cid]);
-            std::vector<std::string> str_codewords;
-            auto value = pred->value().get_slice().to_string();
+            // use non-padding string value.
+            auto value = pred->values()[0].get_slice().to_string();
             auto iter = std::lower_bound(
                     sorted_dicts.begin(), sorted_dicts.end(), value,
                     [](const auto& entity, const auto& value) { return entity.first.compare(value) < 0; });
+            std::vector<std::string> str_codewords;
             auto begin_iter = sorted_dicts.begin();
             // X < 3.5 find 4, range(-inf, 3)
             // X < 3 find 3, range(-inf, 2)
@@ -225,7 +230,7 @@ void ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::strin
     if (!dicts->empty()) {
         return;
     }
-    auto column_iterator = down_cast<segment_v2::FileColumnIterator*>(iter);
+    auto column_iterator = down_cast<segment_v2::ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
     int dict_codes[dict_size];
     std::iota(dict_codes, dict_codes + dict_size, 0);
@@ -243,7 +248,7 @@ void ColumnPredicateRewriter::_get_segment_dict(std::vector<std::pair<std::strin
 
 void ColumnPredicateRewriter::_get_segment_dict_vec(segment_v2::ColumnIterator* iter, ColumnPtr* dict_column,
                                                     ColumnPtr* code_column, bool field_nullable) {
-    auto column_iterator = down_cast<segment_v2::FileColumnIterator*>(iter);
+    auto column_iterator = down_cast<segment_v2::ScalarColumnIterator*>(iter);
     auto dict_size = column_iterator->dict_size();
     int dict_codes[dict_size];
     std::iota(dict_codes, dict_codes + dict_size, 0);
@@ -342,6 +347,40 @@ bool ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool, const Co
     filter->close(state);
 
     return true;
+}
+
+// member function for ConjunctivePredicatesRewriter
+
+void ConjunctivePredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
+    std::vector<uint8_t> selection;
+    auto pred_rewrite = [&](std::vector<const ColumnPredicate*>& preds) {
+        for (auto& pred : preds) {
+            if (column_need_rewrite(pred->column_id())) {
+                const auto& dict = _dict_maps.at(pred->column_id());
+                ChunkPtr temp_chunk = std::make_shared<Chunk>();
+
+                auto [binary_column, codes] = extract_column_with_codes(*dict);
+
+                int dict_rows = codes.size();
+                selection.resize(dict_rows);
+
+                pred->evaluate(binary_column.get(), selection.data(), 0, dict_rows);
+
+                std::vector<uint8_t> code_mapping;
+                code_mapping.resize(DICT_DECODE_MAX_SIZE + 1);
+                for (int i = 0; i < codes.size(); ++i) {
+                    code_mapping[codes[i]] = selection[i];
+                }
+
+                pred = new_column_dict_conjuct_predicate(get_type_info(kDictCodeType), pred->column_id(),
+                                                         std::move(code_mapping));
+                pool->add(const_cast<ColumnPredicate*>(pred));
+            }
+        }
+    };
+
+    pred_rewrite(_predicates.non_vec_preds());
+    pred_rewrite(_predicates.vec_preds());
 }
 
 } // namespace starrocks::vectorized

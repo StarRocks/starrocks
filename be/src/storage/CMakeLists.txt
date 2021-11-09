@@ -92,7 +92,7 @@ add_library(Olap STATIC
     rowset/segment_v2/column_writer.cpp
     rowset/segment_v2/default_value_column_iterator.cpp
     rowset/segment_v2/encoding_info.cpp
-    rowset/segment_v2/file_column_iterator.cpp
+    rowset/segment_v2/scalar_column_iterator.cpp
     rowset/segment_v2/index_page.cpp
     rowset/segment_v2/indexed_column_reader.cpp
     rowset/segment_v2/indexed_column_writer.cpp
@@ -160,4 +160,5 @@ add_library(Olap STATIC
     vectorized/compaction.cpp
     vectorized/rowset_merger.cpp
     vectorized/column_predicate_rewriter.cpp
+    vectorized/column_predicate_dict_conjuct.cpp
 )

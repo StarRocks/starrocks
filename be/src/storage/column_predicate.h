@@ -34,6 +34,7 @@ namespace starrocks {
 
 class VectorizedRowBatch;
 class Schema;
+class ObjectPool;
 
 class ColumnPredicate {
 public:

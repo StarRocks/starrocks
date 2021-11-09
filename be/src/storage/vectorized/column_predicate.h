@@ -51,6 +51,7 @@ enum class PredicateType {
     kOr = 12,
     kExpr = 13,
     kTrue = 14,
+    kMap = 15,
 };
 
 template <typename T>
@@ -130,8 +131,11 @@ public:
 
     virtual PredicateType type() const = 0;
 
+    // Constant value in the predicate. And this constant value might be adjusted according to schema.
+    // For example, if column type is char(20), then this constant value might be zero-padded to 20 chars.
     virtual Datum value() const { return Datum(); }
 
+    // Constant value in the predicate in vector form. In contrast to `value()`, these value are un-modified.
     virtual std::vector<Datum> values() const { return std::vector<Datum>{}; }
 
     virtual Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
@@ -281,6 +285,9 @@ ColumnPredicate* new_column_in_predicate(const TypeInfoPtr& type, ColumnId id,
 ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type, ColumnId id,
                                              const std::vector<std::string>& operands);
 ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type, ColumnId, bool is_null);
+
+ColumnPredicate* new_column_dict_conjuct_predicate(const TypeInfoPtr& type_info, ColumnId id,
+                                                   std::vector<uint8_t> dict_mapping);
 
 template <FieldType field_type, template <FieldType> typename Predicate, typename NewColumnPredicateFunc>
 Status predicate_convert_to(Predicate<field_type> const& input_predicate,

@@ -140,7 +140,7 @@ public class HiveRepository {
                 result.add(future.get());
             } catch (InterruptedException | ExecutionException e) {
                 LOG.warn("get table {}.{} partition meta info failed.", dbName, tableName,  e);
-                throw new DdlException("get table " + dbName + "." + tableName + " partition meta info failed.", e);
+                throw new DdlException(e.getMessage());
             }
         }
         return result;
@@ -172,7 +172,7 @@ public class HiveRepository {
                 result.add(future.get());
             } catch (InterruptedException | ExecutionException e) {
                 LOG.warn("get table {}.{} partition stats meta info failed.", dbName, tableName,  e);
-                throw new DdlException("get table " + dbName + "." + tableName + " partition meta info failed.", e);
+                throw new DdlException(e.getMessage());
             }
         }
         return result;
