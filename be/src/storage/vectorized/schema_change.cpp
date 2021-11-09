@@ -1021,19 +1021,20 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
 
-    std::vector<vectorized::TabletReader*> readers;
+    std::vector<std::unique_ptr<vectorized::TabletReader>> readers;
     for (auto rowset : rowsets_to_change) {
-        vectorized::TabletReader* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
+        auto tablet_rowset_reader =
+                std::make_unique<vectorized::TabletReader>(base_tablet, rowset->version(), base_schema);
         tablet_rowset_reader->set_delete_predicates_version(delete_predicates_version);
         RETURN_IF_ERROR(tablet_rowset_reader->prepare());
         RETURN_IF_ERROR(tablet_rowset_reader->open(read_params));
-        readers.emplace_back(tablet_rowset_reader);
+        readers.emplace_back(std::move(tablet_rowset_reader));
     }
 
     SchemaChangeParams sc_params;
     sc_params.base_tablet = base_tablet;
     sc_params.new_tablet = new_tablet;
-    sc_params.rowset_readers = readers;
+    sc_params.rowset_readers = std::move(readers);
     sc_params.version = Version(0, end_version);
     sc_params.rowsets_to_change = rowsets_to_change;
     if (request.__isset.materialized_view_params) {
@@ -1199,7 +1200,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             return status;
         }
 
-        if (!sc_procedure->process(sc_params.rowset_readers[i], rowset_writer.get(), new_tablet, base_tablet,
+        if (!sc_procedure->process(sc_params.rowset_readers[i].get(), rowset_writer.get(), new_tablet, base_tablet,
                                    sc_params.rowsets_to_change[i])) {
             LOG(WARNING) << "failed to process the version."
                          << " version=" << sc_params.version.first << "-" << sc_params.version.second;
