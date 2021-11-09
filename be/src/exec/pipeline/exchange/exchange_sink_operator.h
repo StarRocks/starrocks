@@ -78,7 +78,7 @@ private:
 
     std::vector<std::shared_ptr<Channel>> _channels;
     // Index of current channel to send to if _part_type == RANDOM.
-    int _current_channel_idx = 0;
+    int _curr_random_channel_idx = 0;
 
     // Only used when broadcast
     PTransmitChunkParams _chunk_request;

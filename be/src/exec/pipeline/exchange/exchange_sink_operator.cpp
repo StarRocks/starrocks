@@ -352,11 +352,11 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         // Round-robin batches among channels. Wait for the current channel to finish its
         // rpc before overwriting its batch.
         // 1. Get request of that channel
-        auto& channel = _channels[_current_channel_idx];
+        auto& channel = _channels[_curr_random_channel_idx];
         bool real_sent = false;
         RETURN_IF_ERROR(channel->send_one_chunk(chunk.get(), false, &real_sent));
         if (real_sent) {
-            _current_channel_idx = (_current_channel_idx + 1) % _channels.size();
+            _curr_random_channel_idx = (_curr_random_channel_idx + 1) % _channels.size();
         }
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED) {
