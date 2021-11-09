@@ -351,6 +351,9 @@ public class HiveTable extends Table {
             org.apache.hadoop.hive.metastore.api.Table hiveTable = Catalog.getCurrentCatalog().getHiveRepository()
                     .getTable(resourceName, this.hiveDb, this.hiveTable);
             String hiveTableType = hiveTable.getTableType();
+            if (hiveTableType == null) {
+                throw new DdlException("Unknown hive table type.");
+            }
             switch (hiveTableType) {
                 case "VIRTUAL_VIEW": // hive view table not supported
                     throw new DdlException("Hive view table is not supported.");
