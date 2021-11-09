@@ -141,48 +141,44 @@ rapidjson::Value* JsonFunctions::get_json_object_from_parsed_json(const std::vec
     return root;
 }
 
-std::vector<simdjson::dom::element> JsonFunctions::extract_from_element(
-        simdjson::dom::element& elem, const std::vector<JsonPath>& jsonpath) {
-    std::vector<simdjson::dom::element> output;
-
-    if (elem.is_null()) {
-        return output;
+bool JsonFunctions::extract_from_element(simdjson::ondemand::object& obj, const std::vector<JsonPath>& jsonpath,
+                                         simdjson::ondemand::value& value) {
+    if (obj.is_empty()) {
+        return false;
     }
 
-    output.emplace_back(std::move(elem));
+    simdjson::ondemand::value tvalue;
 
     // Skip the first $.
     for (int i = 1; i < jsonpath.size(); i++) {
         if (UNLIKELY(!jsonpath[i].is_valid)) {
-            return output;
+            return false;
         }
 
         const std::string& col = jsonpath[i].key;
         int index = jsonpath[i].idx;
+        
+        // TODO: ignore json path index, eg: $.data[0]
+        if(index != -1) {
+            return false;
+        }
 
-        decltype(output) filtered;
-
-        for (auto& val : output) {
-            if (LIKELY(!col.empty())) {
-                auto col_val = val.at_key(col);
-
-                if (UNLIKELY(index != -1 && col_val.is_array())) {
-                    auto arr = col_val.get_array();
-                    if(index >= arr.size()) {
-                        continue;
-                    }
-                    col_val = arr.at(index);
-                }
-
-                filtered.emplace_back(std::move(col_val));
+        if(i == 1) {
+            auto err = obj.find_field(col).get(tvalue);
+            if (err) {
+                return false;
+            }
+        } else {
+            auto err = tvalue.find_field(col).get(tvalue);
+            if (err) {
+                return false;
             }
         }
-
-        if (!filtered.empty()) {
-            std::swap(output, filtered);
-        }
     }
-    return output;
+
+    std::swap(value, tvalue);
+
+    return true;
 }
 
 rapidjson::Value* JsonFunctions::match_value(const std::vector<JsonPath>& parsed_paths, rapidjson::Value* document,
