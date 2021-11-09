@@ -76,9 +76,6 @@ public:
     int64_t peer_group_start() { return _peer_group_start; }
     int64_t peer_group_end() { return _peer_group_end; }
 
-    int64_t last_memory_usage() { return _last_memory_usage; }
-    void set_last_memory_usage(int64_t last_memory_usage) { _last_memory_usage = last_memory_usage; }
-
     const std::vector<starrocks_udf::FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
     const std::vector<std::vector<ExprContext*>>& agg_expr_ctxs() { return _agg_expr_ctxs; }
     const std::vector<std::vector<vectorized::ColumnPtr>>& agg_intput_columns() { return _agg_intput_columns; }
@@ -168,8 +165,6 @@ private:
     // if type is CURRENT ROW or UNBOUNDED PRECEDING/FOLLOWING.
     int64_t _rows_start_offset = 0;
     int64_t _rows_end_offset = 0;
-
-    int64_t _last_memory_usage = 0;
 
     // The offset of the n-th window function in a row of window functions.
     std::vector<size_t> _agg_states_offsets;

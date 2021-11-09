@@ -5,7 +5,6 @@
 #include "column/type_traits.h"
 #include "exprs/expr.h"
 #include "gutil/casts.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "util/orlp/pdqsort.h"
 #include "util/stopwatch.hpp"
@@ -237,13 +236,6 @@ ChunksSorterFullSort::ChunksSorterFullSort(const std::vector<ExprContext*>* sort
 ChunksSorterFullSort::~ChunksSorterFullSort() = default;
 
 Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) {
-    // Calculate the memory of BigChunk, but every time the mem_usage() of BigChunk is called,
-    // the performance may be poor for the Object type.
-    // So accumulate the memory of each small Chunk to estimate the total memory.
-    // But in some scenarios, Chunk will reserve 4096 rows, but only used 1.
-    // So use the shrink_memory_usage() to estimate memory usage
-    RETURN_IF_ERROR(_consume_and_check_memory_limit(state, chunk->shrink_memory_usage()));
-
     if (UNLIKELY(_big_chunk == nullptr)) {
         _big_chunk = chunk->clone_empty();
     }
@@ -328,9 +320,6 @@ Status ChunksSorterFullSort::_build_sorting_data(RuntimeState* state) {
     size_t row_count = _big_chunk->num_rows();
 
     _sorted_segment = std::make_unique<DataSegment>(_sort_exprs, ChunkPtr(_big_chunk.release()));
-
-    int64_t mem_usage = row_count * sizeof(PermutationItem);
-    RETURN_IF_ERROR(_consume_and_check_memory_limit(state, mem_usage));
 
     _sorted_permutation.resize(row_count);
     for (uint32_t i = 0; i < row_count; ++i) {

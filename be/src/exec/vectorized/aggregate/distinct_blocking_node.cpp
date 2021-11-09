@@ -29,6 +29,8 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
              << _aggregator->needs_finalize();
 
     while (true) {
+        RETURN_IF_ERROR(state->check_query_state("AggrNode"));
+
         bool eos = false;
         RETURN_IF_CANCELLED(state);
         RETURN_IF_ERROR(_children[0]->get_next(state, &chunk, &eos));
@@ -80,6 +82,9 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
 #undef HASH_SET_METHOD
 
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
+
+    _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() + _aggregator->mem_pool()->total_reserved_bytes());
+
     return Status::OK();
 }
 

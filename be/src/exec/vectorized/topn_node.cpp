@@ -5,8 +5,6 @@
 #include <memory>
 
 #include "column/column_helper.h"
-#include "exec/pipeline/exchange/local_exchange.h"
-#include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/sort/sort_sink_operator.h"
@@ -15,7 +13,6 @@
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "gutil/casts.h"
-#include "runtime/mem_tracker.h"
 
 namespace starrocks::vectorized {
 
@@ -83,6 +80,8 @@ Status TopNNode::open(RuntimeState* state) {
     Status status = _consume_chunks(state, data_source);
     data_source->close(state);
 
+    _mem_tracker->set(_chunks_sorter->mem_usage());
+
     return status;
 }
 
@@ -146,8 +145,9 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
     }
 
     bool eos = false;
-    _chunks_sorter->setup_runtime(mem_tracker(), runtime_profile(), "ChunksSorter");
+    _chunks_sorter->setup_runtime(runtime_profile(), "ChunksSorter");
     do {
+        RETURN_IF_ERROR(state->check_query_state("IntersectNode"));
         RETURN_IF_CANCELLED(state);
         ChunkPtr chunk;
         timer.stop();

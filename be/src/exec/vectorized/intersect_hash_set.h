@@ -13,12 +13,6 @@ namespace starrocks::vectorized {
 
 class IntersectSliceFlag;
 struct IntersectSliceFlagEqual;
-struct IntersectSliceFlagHash;
-template <typename HashSet>
-class IntersectHashSet;
-
-using IntersectHashSerializeSet =
-        IntersectHashSet<phmap::flat_hash_set<IntersectSliceFlag, IntersectSliceFlagHash, IntersectSliceFlagEqual>>;
 
 class IntersectSliceFlag {
 public:
@@ -67,6 +61,8 @@ public:
 
     void deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t batch_size);
 
+    int64_t mem_usage() const;
+
 private:
     void _serialize_columns(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs, size_t chunk_size);
 
@@ -80,4 +76,8 @@ private:
     uint8_t* _buffer;
 };
 
+template class IntersectHashSet<
+        phmap::flat_hash_set<IntersectSliceFlag, IntersectSliceFlagHash, IntersectSliceFlagEqual>>;
+using IntersectHashSerializeSet =
+        IntersectHashSet<phmap::flat_hash_set<IntersectSliceFlag, IntersectSliceFlagHash, IntersectSliceFlagEqual>>;
 } // namespace starrocks::vectorized

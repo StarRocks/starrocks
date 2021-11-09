@@ -34,6 +34,8 @@ public:
     // pull_chunk for pipeline.
     bool pull_chunk(ChunkPtr* chunk) override;
 
+    int64_t mem_usage() const override { return _raw_chunks.mem_usage() + _merged_segment.mem_usage(); }
+
 private:
     inline size_t _get_number_of_rows_to_sort() const { return _offset + _limit; }
 
@@ -71,6 +73,14 @@ private:
     struct RawChunks {
         std::vector<ChunkPtr> chunks;
         size_t size_of_rows = 0;
+
+        int64_t mem_usage() const {
+            int64_t usage = 0;
+            for (auto& chunk : chunks) {
+                usage += chunk->memory_usage();
+            }
+            return usage;
+        }
 
         void clear() {
             chunks.clear();

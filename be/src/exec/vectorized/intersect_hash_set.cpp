@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
 #include "exec/vectorized/intersect_hash_set.h"
+#include "util/phmap/phmap_dump.h"
 
 #include "exec/exec_node.h"
 
@@ -83,6 +84,18 @@ void IntersectHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, const Co
 }
 
 template <typename HashSet>
+int64_t IntersectHashSet<HashSet>::mem_usage() const {
+    int64_t size = 0;
+    if (_hash_set != nullptr) {
+        size += _hash_set->dump_bound();
+    }
+    if (_mem_pool != nullptr) {
+        size += _mem_pool->total_reserved_bytes();
+    }
+    return size;
+}
+
+template <typename HashSet>
 size_t IntersectHashSet<HashSet>::_get_max_serialize_size(const ChunkPtr& chunkPtr,
                                                           const std::vector<ExprContext*>& exprs) {
     size_t max_size = 0;
@@ -111,8 +124,5 @@ void IntersectHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunkPtr, con
         }
     }
 }
-
-template class IntersectHashSet<
-        phmap::flat_hash_set<IntersectSliceFlag, IntersectSliceFlagHash, IntersectSliceFlagEqual>>;
 
 } // namespace starrocks::vectorized
