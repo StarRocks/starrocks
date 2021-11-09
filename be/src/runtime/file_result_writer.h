@@ -60,6 +60,7 @@ struct ResultFileOptions {
             broker_properties = t_opt.broker_properties;
         }
     }
+    ~ResultFileOptions() = default;
 };
 
 // write result to file

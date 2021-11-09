@@ -45,12 +45,12 @@ TEST_F(PlainTextLineReaderTest, uncompressed_normal_use) {
     auto st = file_reader.open();
     ASSERT_TRUE(st.ok());
 
-    Decompressor* decompressor;
+    std::unique_ptr<Decompressor> decompressor;
     st = Decompressor::create_decompressor(CompressionTypePB::NO_COMPRESSION, &decompressor);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(decompressor == nullptr);
 
-    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor, -1, '\n');
+    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor.get(), -1, '\n');
     const uint8_t* ptr;
     size_t size;
     bool eof;
@@ -96,12 +96,12 @@ TEST_F(PlainTextLineReaderTest, uncompressed_no_newline) {
     auto st = file_reader.open();
     ASSERT_TRUE(st.ok());
 
-    Decompressor* decompressor;
+    std::unique_ptr<Decompressor> decompressor;
     st = Decompressor::create_decompressor(CompressionTypePB::NO_COMPRESSION, &decompressor);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(decompressor == nullptr);
 
-    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor, -1, '\n');
+    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor.get(), -1, '\n');
     const uint8_t* ptr;
     size_t size;
     bool eof;
@@ -131,12 +131,12 @@ TEST_F(PlainTextLineReaderTest, uncompressed_test_limit) {
     auto st = file_reader.open();
     ASSERT_TRUE(st.ok());
 
-    Decompressor* decompressor;
+    std::unique_ptr<Decompressor> decompressor;
     st = Decompressor::create_decompressor(CompressionTypePB::NO_COMPRESSION, &decompressor);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(decompressor == nullptr);
 
-    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor, 8, '\n');
+    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor.get(), 8, '\n');
     const uint8_t* ptr;
     size_t size;
     bool eof;
@@ -168,12 +168,12 @@ TEST_F(PlainTextLineReaderTest, uncompressed_test_limit2) {
     auto st = file_reader.open();
     ASSERT_TRUE(st.ok());
 
-    Decompressor* decompressor;
+    std::unique_ptr<Decompressor> decompressor;
     st = Decompressor::create_decompressor(CompressionTypePB::NO_COMPRESSION, &decompressor);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(decompressor == nullptr);
 
-    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor, 6, '\n');
+    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor.get(), 6, '\n');
     const uint8_t* ptr;
     size_t size;
     bool eof;
@@ -193,13 +193,13 @@ TEST_F(PlainTextLineReaderTest, uncompressed_test_limit3) {
     auto st = file_reader.open();
     ASSERT_TRUE(st.ok());
 
-    Decompressor* decompressor;
+    std::unique_ptr<Decompressor> decompressor;
     st = Decompressor::create_decompressor(CompressionTypePB::NO_COMPRESSION, &decompressor);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(decompressor == nullptr);
 
-    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor, 7, '\n');
+    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor.get(), 7, '\n');
     const uint8_t* ptr;
     size_t size;
     bool eof;
@@ -225,12 +225,12 @@ TEST_F(PlainTextLineReaderTest, uncompressed_test_limit4) {
     auto st = file_reader.open();
     ASSERT_TRUE(st.ok());
 
-    Decompressor* decompressor;
+    std::unique_ptr<Decompressor> decompressor;
     st = Decompressor::create_decompressor(CompressionTypePB::NO_COMPRESSION, &decompressor);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(decompressor == nullptr);
 
-    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor, 7, '\n');
+    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor.get(), 7, '\n');
     const uint8_t* ptr;
     size_t size;
     bool eof;
@@ -256,12 +256,12 @@ TEST_F(PlainTextLineReaderTest, uncompressed_test_limit5) {
     auto st = file_reader.open();
     ASSERT_TRUE(st.ok());
 
-    Decompressor* decompressor;
+    std::unique_ptr<Decompressor> decompressor;
     st = Decompressor::create_decompressor(CompressionTypePB::NO_COMPRESSION, &decompressor);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(decompressor == nullptr);
 
-    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor, 0, '\n');
+    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor.get(), 0, '\n');
     const uint8_t* ptr;
     size_t size;
     bool eof;
@@ -277,13 +277,13 @@ TEST_F(PlainTextLineReaderTest, uncompressed_test_empty) {
     auto st = file_reader.open();
     ASSERT_TRUE(st.ok());
 
-    Decompressor* decompressor;
+    std::unique_ptr<Decompressor> decompressor;
     st = Decompressor::create_decompressor(CompressionTypePB::NO_COMPRESSION, &decompressor);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(decompressor == nullptr);
 
     // set min length larger than 0 to test
-    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor, 10, '\n');
+    PlainTextLineReader line_reader(&_profile, &file_reader, decompressor.get(), 10, '\n');
     const uint8_t* ptr;
     size_t size;
     bool eof;
