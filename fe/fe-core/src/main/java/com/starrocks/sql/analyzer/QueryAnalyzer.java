@@ -939,23 +939,34 @@ public class QueryAnalyzer {
                 }
             } else {
                 if (groupByClause.getGroupingType().equals(GroupByClause.GroupingType.GROUPING_SETS)) {
-
                     List<List<Expr>> groupingSets = new ArrayList<>();
                     Set<Expr> groupBySet = new HashSet<>();
                     for (ArrayList<Expr> g : groupByClause.getGroupingSetList()) {
-                        groupingSets.add(g);
-                        g.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
-                        groupBySet.addAll(g);
+                        List<Expr> rewriteGrouping = g.stream().map(e -> {
+                            RewriteAliasVisitor visitor =
+                                    new RewriteAliasVisitor(sourceScope, outputScope, outputExpressions, session);
+                            Expr rewrite = e.accept(visitor, null);
+                            analyzeExpression(rewrite, analyzeState, sourceScope);
+                            return rewrite;
+                        }).collect(Collectors.toList());
+
+                        groupingSets.add(rewriteGrouping);
+                        groupBySet.addAll(rewriteGrouping);
                     }
 
                     groupByExpressions.addAll(groupBySet);
                     analyzeState.setGroupingSetsList(groupingSets);
                 } else if (groupByClause.getGroupingType().equals(GroupByClause.GroupingType.CUBE)) {
-                    groupByExpressions.addAll(groupByClause.getGroupingExprs());
-                    groupByClause.getGroupingExprs().forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
+                    List<Expr> rewriteGrouping = groupByClause.getGroupingExprs().stream().map(e -> {
+                        RewriteAliasVisitor visitor =
+                                new RewriteAliasVisitor(sourceScope, outputScope, outputExpressions, session);
+                        Expr rewrite = e.accept(visitor, null);
+                        analyzeExpression(rewrite, analyzeState, sourceScope);
+                        return rewrite;
+                    }).collect(Collectors.toList());
+                    groupByExpressions.addAll(rewriteGrouping);
 
-                    Set<Set<Expr>> cube = Sets.powerSet(new HashSet<>(groupByClause.getGroupingExprs()));
-
+                    Set<Set<Expr>> cube = Sets.powerSet(new HashSet<>(rewriteGrouping));
                     List<List<Expr>> groupingSets = new ArrayList<>();
                     for (Set<Expr> s : cube) {
                         groupingSets.add(new ArrayList<>(s));
@@ -963,12 +974,17 @@ public class QueryAnalyzer {
 
                     analyzeState.setGroupingSetsList(groupingSets);
                 } else if (groupByClause.getGroupingType().equals(GroupByClause.GroupingType.ROLLUP)) {
-                    List<Expr> rollup = groupByClause.getGroupingExprs();
-                    rollup.forEach(e -> analyzeExpression(e, analyzeState, sourceScope));
-                    groupByExpressions.addAll(rollup);
+                    List<Expr> rewriteGrouping = groupByClause.getGroupingExprs().stream().map(e -> {
+                        RewriteAliasVisitor visitor =
+                                new RewriteAliasVisitor(sourceScope, outputScope, outputExpressions, session);
+                        Expr rewrite = e.accept(visitor, null);
+                        analyzeExpression(rewrite, analyzeState, sourceScope);
+                        return rewrite;
+                    }).collect(Collectors.toList());
+                    groupByExpressions.addAll(rewriteGrouping);
 
-                    List<List<Expr>> groupingSets = IntStream.rangeClosed(0, rollup.size())
-                            .mapToObj(i -> rollup.subList(0, i)).collect(Collectors.toList());
+                    List<List<Expr>> groupingSets = IntStream.rangeClosed(0, rewriteGrouping.size())
+                            .mapToObj(i -> rewriteGrouping.subList(0, i)).collect(Collectors.toList());
 
                     analyzeState.setGroupingSetsList(groupingSets);
                 } else {
