@@ -171,10 +171,14 @@ OLAPStatus Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& ro
         StorageEngine::instance()->add_unused_rowset(it->second);
         _rs_version_map.erase(it);
     }
-    for (auto& it : _inc_rs_version_map) {
-        StorageEngine::instance()->add_unused_rowset(it.second);
+    for (auto& [v, rowset] : _inc_rs_version_map) {
+        StorageEngine::instance()->add_unused_rowset(rowset);
+    }
+    for (auto& [v, rowset] : _stale_rs_version_map) {
+        StorageEngine::instance()->add_unused_rowset(rowset);
     }
     _inc_rs_version_map.clear();
+    _stale_rs_version_map.clear();
 
     for (auto& rs_meta : rowsets_to_clone) {
         Version version = {rs_meta->start_version(), rs_meta->end_version()};
