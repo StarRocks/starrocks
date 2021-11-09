@@ -519,9 +519,6 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(int32_t id, int32_t pla
           _partition_expr_ctxs(std::move(partition_expr_ctxs)) {}
 
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    DCHECK(_part_type == TPartitionType::UNPARTITIONED || _destinations.size() == 1 ||
-           _part_type == TPartitionType::RANDOM || _part_type == TPartitionType::HASH_PARTITIONED ||
-           _part_type == TPartitionType::BUCKET_SHFFULE_HASH_PARTITIONED);
     return std::make_shared<ExchangeSinkOperator>(_id, _plan_node_id, _buffer, _part_type, _destinations, _sender_id,
                                                   _dest_node_id, _partition_expr_ctxs);
 }
