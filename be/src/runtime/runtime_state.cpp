@@ -173,6 +173,7 @@ void RuntimeState::init_mem_trackers(const TUniqueId& query_id) {
                                                       _exec_env->query_pool_mem_tracker());
     _instance_mem_tracker =
             std::make_shared<MemTracker>(_profile.get(), -1, runtime_profile()->name(), _query_mem_tracker.get());
+    _instance_mem_pool = std::make_unique<MemPool>();
 }
 
 Status RuntimeState::init_instance_mem_tracker() {
