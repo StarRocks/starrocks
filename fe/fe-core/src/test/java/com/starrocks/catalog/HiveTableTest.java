@@ -85,6 +85,7 @@ public class HiveTableTest {
         Table msTable = new Table();
         msTable.setPartitionKeys(partKeys);
         msTable.setSd(sd);
+        msTable.setTableType("MANAGED_TABLE");
 
         new Expectations() {
             {
