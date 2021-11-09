@@ -4,9 +4,11 @@
 
 #include "column/chunk.h"
 #include "gen_cpp/BackendService.h"
+#include "runtime/current_thread.h"
 #include "util/blocking_queue.hpp"
 #include "util/brpc_stub_cache.h"
 #include "util/callback_closure.h"
+#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 
@@ -22,7 +24,8 @@ struct TransmitChunkInfo {
 // TODO(hcf) There is a potential optimization point that different channels can be parallel
 class SinkBuffer {
 public:
-    SinkBuffer(size_t channel_number, size_t num_sinkers) : _num_sinkers_per_channel(channel_number, num_sinkers) {
+    SinkBuffer(MemTracker* mem_tracker, size_t channel_number, size_t num_sinkers)
+            : _mem_tracker(mem_tracker), _num_sinkers_per_channel(channel_number, num_sinkers) {
         _closure = new CallBackClosure<PTransmitChunkResult>();
         _closure->ref();
         _closure->addFailedHandler([this]() noexcept {
@@ -58,6 +61,9 @@ public:
 
     void process() {
         try {
+            MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+            DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
             while (true) {
                 if (_closure->has_in_flight_rpc()) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -112,6 +118,7 @@ private:
     }
 
     // To avoid lock
+    MemTracker* _mem_tracker = nullptr;
     vector<size_t> _num_sinkers_per_channel;
     int64_t _request_seq = 0;
     std::atomic<bool> _is_cancelled{false};

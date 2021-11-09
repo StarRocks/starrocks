@@ -4,9 +4,11 @@
 
 #include "column/chunk.h"
 #include "exec/pipeline/olap_chunk_source.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 
@@ -89,7 +91,7 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     DCHECK(_chunk_source != nullptr);
     if (!_chunk_source->has_output()) {
         if (_chunk_source->has_next_chunk()) {
-            _trigger_next_scan();
+            _trigger_next_scan(state);
         } else {
             _pickup_morsel(state);
         }
@@ -99,14 +101,18 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     return _chunk_source->get_next_chunk_from_cache();
 }
 
-void ScanOperator::_trigger_next_scan() {
+void ScanOperator::_trigger_next_scan(RuntimeState* state) {
     DCHECK(!_is_io_task_active.load(std::memory_order_acquire));
 
     PriorityThreadPool::Task task;
     _is_io_task_active.store(true, std::memory_order_release);
-    task.work_function = [this]() {
+    task.work_function = [this, state]() {
+        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(state->instance_mem_tracker());
+        DeferOp op([&] {
+            tls_thread_status.set_mem_tracker(prev_tracker);
+            _is_io_task_active.store(false, std::memory_order_release);
+        });
         _chunk_source->cache_next_batch_chunks_blocking(_batch_size, _is_finished);
-        _is_io_task_active.store(false, std::memory_order_release);
     };
     // TODO(by satanson): set a proper priority
     task.priority = 20;
@@ -133,7 +139,7 @@ void ScanOperator::_pickup_morsel(RuntimeState* state) {
                 std::move(morsel), _olap_scan_node.tuple_id, _conjunct_ctxs, _runtime_profile.get(), _runtime_filters,
                 _olap_scan_node.key_column_name, _olap_scan_node.is_preaggregation);
         _chunk_source->prepare(state);
-        _trigger_next_scan();
+        _trigger_next_scan(state);
     }
 }
 

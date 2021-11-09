@@ -9,7 +9,7 @@ Status AggregateStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     // _aggregator is shared by sink operator and source operator
     // we must only prepare it at sink operator
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), get_runtime_profile()));
+    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), get_runtime_profile(), _mem_tracker.get()));
     return _aggregator->open(state);
 }
 
@@ -71,7 +71,9 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const
         _aggregator->compute_batch_agg_states(chunk_size);
     }
 
+    _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() + _aggregator->mem_pool()->total_reserved_bytes());
     _aggregator->try_convert_to_two_level_map();
+
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     return Status::OK();
 }
@@ -105,7 +107,10 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
             _aggregator->compute_batch_agg_states(chunk_size);
         }
 
+        _mem_tracker->set(_aggregator->hash_map_variant().memory_usage() +
+                          _aggregator->mem_pool()->total_reserved_bytes());
         _aggregator->try_convert_to_two_level_map();
+
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     } else {
         {
