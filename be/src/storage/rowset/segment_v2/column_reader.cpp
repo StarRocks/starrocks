@@ -31,7 +31,7 @@
 #include "column/datum_convert.h"
 #include "common/logging.h"
 #include "storage/olap_cond.h"
-#include "storage/rowset/segment_v2/array_file_column_iterator.h"
+#include "storage/rowset/segment_v2/array_column_iterator.h"
 #include "storage/rowset/segment_v2/binary_dict_page.h" // for BinaryDictPageDecoder
 #include "storage/rowset/segment_v2/bitmap_index_reader.h"
 #include "storage/rowset/segment_v2/bloom_filter_index_reader.h"
@@ -505,7 +505,7 @@ Status ColumnReader::new_iterator(ColumnIterator** iterator) {
         ColumnIterator* array_size_iterator;
         RETURN_IF_ERROR((*_sub_readers)[col]->new_iterator(&array_size_iterator));
 
-        *iterator = new ArrayFileColumnIterator(null_iterator, array_size_iterator, element_iterator);
+        *iterator = new ArrayColumnIterator(null_iterator, array_size_iterator, element_iterator);
         return Status::OK();
     } else {
         return Status::NotSupported("unsupported type to create iterator: " + std::to_string(_column_type));
