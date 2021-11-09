@@ -1,10 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
-#include "exec/pipeline/set/except_context.h"
+#include "exec/pipeline/set/intersect_context.h"
 
 namespace starrocks::pipeline {
 
-Status ExceptContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs) {
+Status IntersectContext::prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs) {
     _build_pool = std::make_unique<MemPool>();
 
     _dst_tuple_desc = state->desc_tbl().get_tuple_descriptor(_dst_tuple_id);
@@ -16,7 +16,7 @@ Status ExceptContext::prepare(RuntimeState* state, const std::vector<ExprContext
     return Status::OK();
 }
 
-Status ExceptContext::close(RuntimeState* state) {
+Status IntersectContext::close(RuntimeState* state) {
     if (_build_pool != nullptr) {
         _build_pool->free_all();
     }
@@ -24,22 +24,22 @@ Status ExceptContext::close(RuntimeState* state) {
     return Status::OK();
 }
 
-Status ExceptContext::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk,
-                                         const std::vector<ExprContext*>& dst_exprs) {
+Status IntersectContext::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk,
+                                            const std::vector<ExprContext*>& dst_exprs) {
     return _hash_set->build_set(state, chunk, dst_exprs, _build_pool.get());
 }
 
-Status ExceptContext::erase_chunk_from_ht(RuntimeState* state, const ChunkPtr& chunk,
-                                          const std::vector<ExprContext*>& dst_exprs) {
-    return _hash_set->erase_duplicate_row(state, chunk, dst_exprs);
+Status IntersectContext::refine_chunk_from_ht(RuntimeState* state, const ChunkPtr& chunk,
+                                              const std::vector<ExprContext*>& dst_exprs, const int hit_times) {
+    return _hash_set->refine_intersect_row(state, chunk, dst_exprs, hit_times);
 }
 
-StatusOr<vectorized::ChunkPtr> ExceptContext::pull_chunk(RuntimeState* state) {
+StatusOr<vectorized::ChunkPtr> IntersectContext::pull_chunk(RuntimeState* state) {
     // 1. Get at most *config::vector_chunk_size* remained keys from ht.
     size_t num_remained_keys = 0;
     _remained_keys.resize(config::vector_chunk_size);
     while (_next_processed_iter != _hash_set->end() && num_remained_keys < config::vector_chunk_size) {
-        if (!_next_processed_iter->deleted) {
+        if (_next_processed_iter->hit_times == _intersect_times) {
             _remained_keys[num_remained_keys++] = _next_processed_iter->slice;
         }
         ++_next_processed_iter;

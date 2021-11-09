@@ -14,6 +14,7 @@ Status ExceptBuildSinkOperator::push_chunk(RuntimeState* state, const vectorized
 
 Status ExceptBuildSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+
     return _except_ctx->prepare(state, _dst_exprs);
 }
 
@@ -28,9 +29,9 @@ Status ExceptBuildSinkOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void ExceptBuildSinkOperatorFactory::close(RuntimeState* state) {
-    OperatorFactory::close(state);
-
     Expr::close(_dst_exprs, state);
+
+    OperatorFactory::close(state);
 }
 
 } // namespace starrocks::pipeline
