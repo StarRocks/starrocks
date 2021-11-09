@@ -88,8 +88,8 @@ public:
     SchemaChange() {}
     virtual ~SchemaChange() {}
 
-    virtual bool process(std::shared_ptr<vectorized::TabletReader> reader, RowsetWriter* new_rowset_writer,
-                         TabletSharedPtr tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
+    virtual bool process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
+                         TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
 };
 
 class LinkedSchemaChange : public SchemaChange {
@@ -97,8 +97,8 @@ public:
     explicit LinkedSchemaChange(ChunkChanger& chunk_changer) : SchemaChange(), _chunk_changer(chunk_changer) {}
     ~LinkedSchemaChange() {}
 
-    bool process(std::shared_ptr<vectorized::TabletReader> reader, RowsetWriter* new_rowset_writer,
-                 TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+    bool process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                 TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
     ChunkChanger& _chunk_changer;
@@ -112,8 +112,8 @@ public:
             : SchemaChange(), _chunk_changer(chunk_changer), _chunk_allocator(nullptr) {}
     virtual ~SchemaChangeDirectly() { SAFE_DELETE(_chunk_allocator); }
 
-    bool process(std::shared_ptr<vectorized::TabletReader> reader, RowsetWriter* new_rowset_writer,
-                 TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+    bool process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                 TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
     ChunkChanger& _chunk_changer;
@@ -127,8 +127,8 @@ public:
     explicit SchemaChangeWithSorting(ChunkChanger& chunk_changer, size_t memory_limitation);
     virtual ~SchemaChangeWithSorting();
 
-    bool process(std::shared_ptr<vectorized::TabletReader> reader, RowsetWriter* new_rowset_writer,
-                 TabletSharedPtr new_tablet, TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
+    bool process(vectorized::TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+                 TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
     bool _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet);
@@ -161,7 +161,7 @@ public:
         AlterTabletType alter_tablet_type;
         TabletSharedPtr base_tablet;
         TabletSharedPtr new_tablet;
-        std::vector<std::shared_ptr<vectorized::TabletReader>> rowset_readers;
+        std::vector<std::unique_ptr<vectorized::TabletReader>> rowset_readers;
         Version version;
         std::unordered_map<std::string, AlterMaterializedViewParam> materialized_params_map;
         std::vector<RowsetSharedPtr> rowsets_to_change;
