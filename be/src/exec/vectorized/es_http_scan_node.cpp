@@ -11,6 +11,8 @@
 #include "exec/es/es_query_builder.h"
 #include "exec/es/es_scan_reader.h"
 #include "exec/es/es_scroll_query.h"
+#include "runtime/current_thread.h"
+#include "util/defer_op.h"
 #include "util/spinlock.h"
 
 namespace starrocks::vectorized {
@@ -280,6 +282,18 @@ Status EsHttpScanNode::_create_scanner(int scanner_idx, std::unique_ptr<EsHttpSc
 }
 
 void EsHttpScanNode::_scanner_scan(std::unique_ptr<EsHttpScanner> scanner, std::promise<Status>& p_status) {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
+    DeferOp op([&] {
+        tls_thread_status.set_mem_tracker(prev_tracker);
+
+        // This scanner will finish
+        _num_running_scanners--;
+
+        if (_num_running_scanners == 0) {
+            _result_chunks.shutdown();
+        }
+    });
+
     auto status = scanner->open();
     if (!status.ok()) {
         _update_status(status);
@@ -288,12 +302,6 @@ void EsHttpScanNode::_scanner_scan(std::unique_ptr<EsHttpScanner> scanner, std::
     status = _acquire_chunks(scanner.get());
 
     _update_status(status);
-    // This scanner will finish
-    _num_running_scanners--;
-
-    if (_num_running_scanners == 0) {
-        _result_chunks.shutdown();
-    }
 
     p_status.set_value(status);
 }
