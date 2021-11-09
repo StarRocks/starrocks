@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
 
 #include "exec/vectorized/intersect_hash_set.h"
-#include "util/phmap/phmap_dump.h"
 
 #include "exec/exec_node.h"
+#include "util/phmap/phmap_dump.h"
 
 namespace starrocks::vectorized {
 
