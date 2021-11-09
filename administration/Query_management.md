@@ -70,19 +70,19 @@ connection_id 可以通过show processlist; 或者select connection_id(); 查询
 
 ```plain text
  show processlist;
-+------+------------+---------------------+-----------------+---------------+---------+------+-------+------+
-| Id   | User       | Host                | Cluster         | Db            | Command | Time | State | Info |
-+------+------------+---------------------+-----------------+---------------+---------+------+-------+------+
++------+--------------+---------------------+-----------------+-------------------+---------+------+-------+------+
+| Id   | User         | Host                | Cluster         | Db                | Command | Time | State | Info |
++------+--------------+---------------------+-----------------+-------------------+---------+------+-------+------+
 |    1 | starrocksmgr | 172.26.34.147:56208 | default_cluster | starrocks_monitor | Sleep   |    8 |       |      |
-|  129 | root       | 172.26.92.139:54818 | default_cluster |               | Query   |    0 |       |      |
-|  114 | test       | 172.26.34.147:57974 | default_cluster | ssb_100g      | Query   |    3 |       |      |
+|  129 | root         | 172.26.92.139:54818 | default_cluster |                   | Query   |    0 |       |      |
+|  114 | test         | 172.26.34.147:57974 | default_cluster | ssb_100g          | Query   |    3 |       |      |
 |    3 | starrocksmgr | 172.26.34.147:57268 | default_cluster | starrocks_monitor | Sleep   |    8 |       |      |
-|  100 | root       | 172.26.34.147:58472 | default_cluster | ssb_100       | Sleep   |  637 |       |      |
+|  100 | root         | 172.26.34.147:58472 | default_cluster | ssb_100           | Sleep   |  637 |       |      |
 |  117 | starrocksmgr | 172.26.34.147:33790 | default_cluster | starrocks_monitor | Sleep   |    8 |       |      |
 |    6 | starrocksmgr | 172.26.34.147:57632 | default_cluster | starrocks_monitor | Sleep   |    8 |       |      |
 |  119 | starrocksmgr | 172.26.34.147:33804 | default_cluster | starrocks_monitor | Sleep   |    8 |       |      |
-|  111 | root       | 172.26.92.139:55472 | default_cluster |               | Sleep   | 2758 |       |      |
-+------+------------+---------------------+-----------------+---------------+---------+------+-------+------+
+|  111 | root         | 172.26.92.139:55472 | default_cluster |                   | Sleep   | 2758 |       |      |
++------+--------------+---------------------+-----------------+-------------------+---------+------+-------+------+
 9 rows in set (0.00 sec)
 
 mysql> select connection_id();
