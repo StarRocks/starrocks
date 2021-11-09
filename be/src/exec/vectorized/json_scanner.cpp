@@ -279,75 +279,83 @@ Status JsonReader::close() {
  *      value2     30
  */
 Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vector<SlotDescriptor*>& slot_descs) {
+    // Only operator != is impletement for simdjson::ondemand::document_stream::iterator.
     if (!(_doc_stream_itr != _doc_stream.end())) {
         RETURN_IF_ERROR(_read_and_parse_json());
     }
 
     for (; _doc_stream_itr != _doc_stream.end(); ++_doc_stream_itr) {
-
-        auto v = (*_doc_stream_itr).value();
-        std::vector<simdjson::dom::element> elems;
-
-        if (_strip_outer_array && v.is_array()) {
-            // Expand the array.
-            auto array = v.get_array();
-            for (auto a : array) {
-                if (!_scanner->_root_paths.empty()) {
-                    auto va = JsonFunctions::extract_from_element(a, _scanner->_root_paths);
-                    elems.emplace(elems.end(), va.begin(), va.end());
-                } else {
-                    elems.emplace_back(a);
-                }
-            }
-        } else {
-            if (!_scanner->_root_paths.empty()) {
-                auto vv = JsonFunctions::extract_from_element(v, _scanner->_root_paths);
-                elems.insert(elems.end(), vv.begin(), vv.end());
-            } else {
-                elems.emplace_back(std::move(v));
-            }
+        auto doc = (*_doc_stream_itr);
+        if(doc.error()) {
+            std::string err_msg("Invalid JSON");
+            _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
+            _counter->num_rows_filtered++;
+            return Status::DataQualityError(err_msg.c_str());
         }
 
-        for (auto& elem : elems) {
-            if (!_scanner->_json_paths.empty()) {
-                size_t slot_size = slot_descs.size();
-                size_t jsonpath_size = _scanner->_json_paths.size();
+        switch (doc.type()) {
+            case simdjson::ondemand::json_type::array: {
+            auto arr = doc.get_array().value();
+            RETURN_IF_ERROR(_process_array(chunk, slot_descs, arr));
+            break;
+            }
 
-                for (size_t i = 0; i < slot_size; i++) {
-                    if (slot_descs[i] == nullptr) {
-                        continue;
-                    }
-                    ColumnPtr& column = chunk->get_column_by_slot_id(slot_descs[i]->id());
-                    if (i >= jsonpath_size) {
-                        column->append_nulls(1);
-                        continue;
-                    }
-                    auto values = JsonFunctions::extract_from_element(elem, _scanner->_json_paths[i]);
+            case simdjson::ondemand::json_type::object: {
+                auto obj = doc.get_object().value();
+                RETURN_IF_ERROR(_process_object(chunk, slot_descs, obj));
+                break;
+            }
 
-                    for (auto& val : values) {
-                        _construct_column(val, column.get(), slot_descs[i]->type());
-                    }
-                }
-            } else {
-                for (SlotDescriptor* slot_desc : slot_descs) {
-                    if (slot_desc == nullptr) {
-                        continue;
-                    }
-
-                    ColumnPtr& column = chunk->get_column_by_slot_id(slot_desc->id());
-                    auto col_name = slot_desc->col_name();
-
-                    auto val = elem.at_key(col_name).value();
-                    _construct_column(val, column.get(), slot_desc->type());
-                }
+            default: {
+                std::string err_msg("JSON data type is not supported");
+                _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
+                _counter->num_rows_filtered++;
+                return Status::DataQualityError(err_msg.c_str());
             }
         }
     }
     return Status::OK();
 }
 
-// read one json string from file read and parse it to json doc.
-Status JsonReader::_read_and_parse_json() {
+Status JsonReader::_process_array(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
+                                   simdjson::ondemand::array& arr) {
+    for (auto a : arr) {
+        if(a.error()) {
+            std::string err_msg("JSON data type is not supported");
+            _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
+            _counter->num_rows_filtered++;
+            return Status::DataQualityError(err_msg.c_str());
+        }
+        if(a.type() == simdjson::ondemand::json_type::object) {
+            auto obj = a.get_object();
+            RETURN_IF_ERROR(_process_object(chunk, slot_descs, obj.value()));
+        }
+    }
+    return Status::OK();
+}
+
+Status JsonReader::_process_object(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs,
+                                   simdjson::ondemand::object& obj) {
+    for (SlotDescriptor* slot_desc : slot_descs) {
+        if (slot_desc == nullptr) {
+            continue;
+        }
+
+        ColumnPtr& column = chunk->get_column_by_slot_id(slot_desc->id());
+        auto col_name = slot_desc->col_name();
+
+        auto val = obj[col_name];
+        if(val.error()) {
+            column->append_nulls(1);
+            continue;
+        }
+        _construct_column(val.value(), column.get(), slot_desc->type());
+    }
+    return Status::OK();
+}
+
+    // read one json string from file read and parse it to json doc.
+    Status JsonReader::_read_and_parse_json() {
 #ifdef BE_TEST
     [[maybe_unused]] size_t message_size = 0;
     Slice result(_buf.data(), _buf_size);
@@ -358,14 +366,15 @@ Status JsonReader::_read_and_parse_json() {
     auto err = _parser.parse_many(result.data, result.size).get(_doc_stream);
 
 #else
-    std::unique_ptr<uint8_t[]> json_binary = nullptr;
     size_t length = 0;
     StreamPipeSequentialFile* stream_file = reinterpret_cast<StreamPipeSequentialFile*>(_file.get());
-    RETURN_IF_ERROR(stream_file->read_one_message(&json_binary, &length));
+    RETURN_IF_ERROR(stream_file->read_one_message(&json_binary_ptr_, &length));
     if (length == 0) {
         return Status::EndOfFile("EOF of reading file");
     }
-    auto err = _parser.parse_many(json_binary.get(), length, 32 * 1024 * 1024).get(_doc_stream);
+
+    //TODO: Pre-allocate 200MB memory. We could process big array in stream. 
+    auto err = _parser.iterate_many(json_binary_ptr_.get(), length, 200 * 1024 * 1024).get(_doc_stream);
 #endif
 
     if (err) {
@@ -382,24 +391,54 @@ Status JsonReader::_read_and_parse_json() {
 }
 
 // _construct_column constructs column based on no value.
-void JsonReader::_construct_column(simdjson::dom::element& elem, Column* column, const TypeDescriptor& type_desc) {
-    if (elem.is_null()) {
+void JsonReader::_construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc) {
+    switch (value.type()) {
+    case simdjson::ondemand::json_type::null: {
         column->append_nulls(1);
-    } else if (elem.is_bool()) {
-        if (elem.get_bool()) {
+        break;
+    }
+
+    case simdjson::ondemand::json_type::boolean: {
+        if (value.get_bool()) {
             column->append_strings(std::vector<Slice>{Slice("1")});
         } else {
             column->append_strings(std::vector<Slice>{Slice("0")});
         }
-    } else if (elem.is_uint64() || elem.is_int64()) {
-        auto f = fmt::format_int(elem.get_int64());
-        column->append_strings(std::vector<Slice>{Slice(f.data(), f.size())});
-    } else if (elem.is_string()) {
-        column->append_strings(std::vector<Slice>{Slice(elem.get_c_str(), elem.get_string_length())});
-    } else if (elem.is_object()) {
-        column->append_strings(std::vector<Slice>{Slice(simdjson::to_string(elem))});
-    } else {
+        break;
+    }
+
+    case simdjson::ondemand::json_type::number: {
+        switch (value.get_number_type()) {
+        case simdjson::ondemand::number_type::signed_integer: {
+            auto f = fmt::format_int(value.get_int64());
+            column->append_strings(std::vector<Slice>{Slice(f.data(), f.size())});
+            break;
+        }
+
+        case simdjson::ondemand::number_type::unsigned_integer: {
+            auto f = fmt::format_int(value.get_int64());
+            column->append_strings(std::vector<Slice>{Slice(f.data(), f.size())});
+            break;
+        }
+
+        default: {
+            // TODO: float number support.
+            column->append_nulls(1);
+            break;
+        }
+        }
+        break;
+    }
+
+    case simdjson::ondemand::json_type::string: {
+        auto s = value.get_string().value();
+        column->append_strings(std::vector<Slice>{Slice(s.data(), s.length())});
+        break;
+    }
+    default: {
         column->append_nulls(1);
+        break;
+    }
     }
 }
 

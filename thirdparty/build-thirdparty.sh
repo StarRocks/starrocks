@@ -325,9 +325,7 @@ build_simdjson() {
     cmake --build .
     mkdir -p $TP_INSTALL_DIR/lib && cp $TP_SOURCE_DIR/$SIMDJSON_SOURCE/$BUILD_DIR/libsimdjson.a $TP_INSTALL_DIR/lib
 
-    rm -rf $TP_INSTALL_DIR/simdjson
-    mkdir -p $TP_INSTALL_DIR/simdjson
-    cp $TP_SOURCE_DIR/$SIMDJSON_SOURCE/singleheader/simdjson.h $TP_INCLUDE_DIR/
+    cp -r $TP_SOURCE_DIR/$SIMDJSON_SOURCE/include/* $TP_INCLUDE_DIR/
 }
 
 # snappy

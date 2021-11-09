@@ -82,10 +82,14 @@ public:
 
     Status close();
 
-    void _construct_column(simdjson::dom::element& elem, Column* column,
-                           const TypeDescriptor& type_desc);
 private:
     Status _read_and_parse_json();
+
+    void _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc);
+
+    Status _process_array(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs, simdjson::ondemand::array& arr);
+
+    Status _process_object(Chunk* chunk, const std::vector<SlotDescriptor*>& slot_descs, simdjson::ondemand::object& obj);
 
 private:
     RuntimeState* _state = nullptr;
@@ -101,10 +105,11 @@ private:
     std::vector<std::vector<JsonPath>> _json_paths;
     std::vector<JsonPath> _root_paths;
 
-    simdjson::dom::parser _parser;
-    simdjson::dom::document_stream _doc_stream;
-    simdjson::dom::document_stream::iterator _doc_stream_itr;
-    std::vector<simdjson::dom::document_stream::iterator::value_type> _values;
+    std::unique_ptr<uint8_t[]> json_binary_ptr_;
+
+    simdjson::ondemand::parser _parser;
+    simdjson::ondemand::document_stream _doc_stream;
+    simdjson::ondemand::document_stream::iterator _doc_stream_itr;
 
     rapidjson::Document _origin_json_doc;  // origin json document object from parsed json string
     rapidjson::Value* _json_doc = nullptr; // _json_doc equals _final_json_doc iff not set `json_root`
