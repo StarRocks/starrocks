@@ -84,7 +84,7 @@ private:
     std::unique_ptr<Column> _deletes;
 
     // memory statistic
-    std::unique_ptr<MemTracker> _mem_tracker;
+    MemTracker* _mem_tracker = nullptr;
     // memory usage and bytes usage calculation cost of object column is high,
     // so cache calculated memory usage and bytes usage to avoid repeated calculation.
     size_t _chunk_memory_usage = 0;

@@ -45,6 +45,7 @@ struct FlushStatistic {
     int64_t flush_time_ns = 0;
     int64_t flush_count = 0;
     int64_t flush_size_bytes = 0;
+    int64_t cur_flush_count = 0;
 };
 
 std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat);
