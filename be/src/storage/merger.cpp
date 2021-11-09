@@ -24,13 +24,13 @@
 #include <memory>
 #include <vector>
 
+#include "runtime/exec_env.h"
 #include "storage/olap_define.h"
 #include "storage/reader.h"
 #include "storage/row_cursor.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "util/trace.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 

@@ -21,10 +21,10 @@
 
 #include "storage/task/engine_storage_migration_task.h"
 
+#include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "util/defer_op.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks {
 

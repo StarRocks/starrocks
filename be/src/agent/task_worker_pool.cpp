@@ -1271,7 +1271,7 @@ void* TaskWorkerPool::_report_tablet_worker_thread_callback(void* arg_this) {
             StorageEngine::instance()->wait_for_report_notify(config::report_tablet_interval_seconds, true);
             continue;
 #else
-            return (void*)0;
+        return (void*)0;
 #endif
         }
         int64_t max_compaction_score =

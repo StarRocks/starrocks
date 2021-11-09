@@ -464,7 +464,7 @@ void StorageEngine::stop() {
         for (auto& store_pair : _store_map) {
             store_pair.second->stop_bg_worker();
             delete store_pair.second;
-           store_pair.second = nullptr;
+            store_pair.second = nullptr;
         }
         _store_map.clear();
     }

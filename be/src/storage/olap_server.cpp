@@ -40,14 +40,14 @@ using std::string;
 namespace starrocks {
 
 // TODO(yingchun): should be more graceful in the future refactor.
-#define SLEEP_IN_BG_WORKER(seconds)                    \
-    int64_t left_seconds = (seconds);                  \
-    while (!_bg_worker_stopped && left_seconds > 0) {  \
-        sleep(1);                                      \
-        --left_seconds;                                \
-    }                                                  \
-    if (_bg_worker_stopped) {                          \
-        break;                                         \
+#define SLEEP_IN_BG_WORKER(seconds)                   \
+    int64_t left_seconds = (seconds);                 \
+    while (!_bg_worker_stopped && left_seconds > 0) { \
+        sleep(1);                                     \
+        --left_seconds;                               \
+    }                                                 \
+    if (_bg_worker_stopped) {                         \
+        break;                                        \
     }
 
 // number of running SCHEMA-CHANGE threads

@@ -236,9 +236,8 @@ int main(int argc, char** argv) {
     }
 
     // 3. http service
-    std::unique_ptr<starrocks::HttpService> http_service =
-        std::make_unique<starrocks::HttpService>(exec_env, starrocks::config::webserver_port,
-                                                 starrocks::config::webserver_num_workers);
+    std::unique_ptr<starrocks::HttpService> http_service = std::make_unique<starrocks::HttpService>(
+            exec_env, starrocks::config::webserver_port, starrocks::config::webserver_num_workers);
     status = http_service->start();
     if (!status.ok()) {
         LOG(ERROR) << "Internal Error:" << status.message();
@@ -261,14 +260,13 @@ int main(int argc, char** argv) {
     }
 
     status = heartbeat_thrift_server->start();
-     if (!status.ok()) {
-        LOG(ERROR) << "Doris BE HeartBeat Service did not start correctly. Error="
-                   << status.to_string();
-         starrocks::shutdown_logging();
-         exit(1);
-     } else {
-         LOG(INFO) << "Doris BE HeartBeat Service started correctly.";
-     }
+    if (!status.ok()) {
+        LOG(ERROR) << "Doris BE HeartBeat Service did not start correctly. Error=" << status.to_string();
+        starrocks::shutdown_logging();
+        exit(1);
+    } else {
+        LOG(INFO) << "Doris BE HeartBeat Service started correctly.";
+    }
 
     while (!starrocks::k_starrocks_exit) {
         sleep(10);

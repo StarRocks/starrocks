@@ -405,7 +405,7 @@ OLAPStatus PushHandler::_convert_v2(const TabletSharedPtr& cur_tablet, RowsetSha
                     num_rows++;
                 }
                 bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-             }
+            }
 
             if (bg_worker_stopped) {
                 res = OLAP_ERR_PUSH_INPUT_DATA_ERROR;

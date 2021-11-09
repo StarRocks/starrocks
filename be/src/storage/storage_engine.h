@@ -172,14 +172,13 @@ public:
     Status start_bg_threads();
 
     void stop();
-    
+
     bool bg_worker_stopped() { return _bg_worker_stopped; }
 
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
     Status _open();
-
 
     Status _init_store_map();
 

@@ -684,7 +684,9 @@ bool SchemaChangeDirectly::process(vectorized::TabletReader* reader, RowsetWrite
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     do {
         bool bg_worker_stopped = ExecEnv::GetInstance()->storage_engine()->bg_worker_stopped();
-        if (bg_worker_stopped) { return false; }    
+        if (bg_worker_stopped) {
+            return false;
+        }
 #ifndef BE_TEST
         Status st = tls_thread_status.mem_tracker()->check_mem_limit("DirectSchemaChange");
         if (!st.ok()) {
