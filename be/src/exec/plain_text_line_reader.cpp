@@ -21,6 +21,8 @@
 
 #include "exec/plain_text_line_reader.h"
 
+#include <memory>
+
 #include "common/status.h"
 #include "exec/decompressor.h"
 #include "exec/file_reader.h"
@@ -72,17 +74,7 @@ PlainTextLineReader::~PlainTextLineReader() {
     close();
 }
 
-void PlainTextLineReader::close() {
-    if (_input_buf != nullptr) {
-        delete[] _input_buf;
-        _input_buf = nullptr;
-    }
-
-    if (_output_buf != nullptr) {
-        delete[] _output_buf;
-        _output_buf = nullptr;
-    }
-}
+void PlainTextLineReader::close() {}
 
 inline bool PlainTextLineReader::update_eof() {
     if (done()) {
@@ -114,7 +106,7 @@ void PlainTextLineReader::extend_output_buf() {
         capacity = capacity + _output_buf_pos;
         if (capacity >= target) {
             // move the read remainings to the begining of the current output buf,
-            memmove(_output_buf, _output_buf + _output_buf_pos, output_buf_read_remaining());
+            memmove(_output_buf.get(), _output_buf.get() + _output_buf_pos, output_buf_read_remaining());
             _output_buf_limit -= _output_buf_pos;
             _output_buf_pos = 0;
             break;
@@ -125,11 +117,10 @@ void PlainTextLineReader::extend_output_buf() {
             _output_buf_size = _output_buf_size * 2;
         }
 
-        uint8_t* new_output_buf = new uint8_t[_output_buf_size];
-        memmove(new_output_buf, _output_buf + _output_buf_pos, output_buf_read_remaining());
-        delete[] _output_buf;
+        std::unique_ptr<uint8_t[]> new_output_buf(new uint8_t[_output_buf_size]);
+        memmove(new_output_buf.get(), _output_buf.get() + _output_buf_pos, output_buf_read_remaining());
 
-        _output_buf = new_output_buf;
+        _output_buf = std::move(new_output_buf);
         _output_buf_limit -= _output_buf_pos;
         _output_buf_pos = 0;
     } while (false);
@@ -150,7 +141,7 @@ Status PlainTextLineReader::read_line(const uint8_t** ptr, size_t* size, bool* e
     size_t offset = 0;
     while (!done()) {
         // find row delimiter in current decompressed data
-        uint8_t* cur_ptr = _output_buf + _output_buf_pos;
+        uint8_t* cur_ptr = _output_buf.get() + _output_buf_pos;
         uint8_t* pos = update_field_pos_and_find_row_delimiter(cur_ptr + offset, output_buf_read_remaining() - offset);
 
         if (pos == nullptr) {
@@ -168,12 +159,12 @@ Status PlainTextLineReader::read_line(const uint8_t** ptr, size_t* size, bool* e
                 uint8_t* file_buf;
                 if (_decompressor == nullptr) {
                     // uncompressed file, read directly into output buf
-                    file_buf = _output_buf + _output_buf_limit;
+                    file_buf = _output_buf.get() + _output_buf_limit;
                     read_len = _output_buf_size - _output_buf_limit;
                 } else {
                     // here we are sure that all data in input buf has been consumed.
                     // which means input pos and limit should be reset.
-                    file_buf = _input_buf;
+                    file_buf = _input_buf.get();
                     read_len = _input_buf_size;
                     // reset input pos and limit
                     _input_buf_pos = 0;
@@ -214,11 +205,11 @@ Status PlainTextLineReader::read_line(const uint8_t** ptr, size_t* size, bool* e
                 // 2. decompress
                 size_t input_read_bytes = 0;
                 size_t output_bytes_written = 0;
-                RETURN_IF_ERROR(_decompressor->decompress(_input_buf + _input_buf_pos,       /* input */
+                RETURN_IF_ERROR(_decompressor->decompress(_input_buf.get() + _input_buf_pos, /* input */
                                                           _input_buf_limit - _input_buf_pos, /* input_len */
                                                           &input_read_bytes,
-                                                          _output_buf + _output_buf_limit,      /* output */
-                                                          _output_buf_size - _output_buf_limit, /* output_len */
+                                                          _output_buf.get() + _output_buf_limit, /* output */
+                                                          _output_buf_size - _output_buf_limit,  /* output_len */
                                                           &output_bytes_written, &_stream_end));
 
                 // update pos and limit
@@ -251,7 +242,7 @@ Status PlainTextLineReader::read_line(const uint8_t** ptr, size_t* size, bool* e
         }
     } // while (!done())
 
-    *ptr = _output_buf + _output_buf_pos;
+    *ptr = _output_buf.get() + _output_buf_pos;
     *size = offset;
 
     // Skip offset and _row_delimiter size;

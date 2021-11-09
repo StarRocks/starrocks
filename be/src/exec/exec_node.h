@@ -324,11 +324,14 @@ protected:
 
     void init_runtime_profile(const std::string& name);
 
+    RuntimeState* runtime_state() { return _runtime_state; }
+
     // Executes _debug_action if phase matches _debug_phase.
     // 'phase' must not be INVALID.
     Status exec_debug_action(TExecNodePhase::type phase);
 
 private:
+    RuntimeState* _runtime_state;
     bool _is_closed;
 };
 } // namespace starrocks
