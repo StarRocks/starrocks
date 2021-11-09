@@ -83,6 +83,7 @@ public:
     METRIC_DEFINE_INT_GAUGE(schema_change_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(column_pool_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(storage_page_cache_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(update_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(chunk_allocator_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(clone_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(consistency_mem_bytes, MetricUnit::BYTES);
@@ -256,6 +257,7 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("schema_change_mem_bytes", &_memory_metrics->schema_change_mem_bytes);
     registry->register_metric("column_pool_mem_bytes", &_memory_metrics->column_pool_mem_bytes);
     registry->register_metric("storage_page_cache_mem_bytes", &_memory_metrics->storage_page_cache_mem_bytes);
+    registry->register_metric("update_mem_bytes", &_memory_metrics->update_mem_bytes);
     registry->register_metric("chunk_allocator_mem_bytes", &_memory_metrics->chunk_allocator_mem_bytes);
     registry->register_metric("clone_mem_bytes", &_memory_metrics->clone_mem_bytes);
     registry->register_metric("consistency_mem_bytes", &_memory_metrics->consistency_mem_bytes);
@@ -328,6 +330,9 @@ void SystemMetrics::_update_memory_metrics() {
     if (ExecEnv::GetInstance()->page_cache_mem_tracker() != nullptr) {
         _memory_metrics->storage_page_cache_mem_bytes.set_value(
                 ExecEnv::GetInstance()->page_cache_mem_tracker()->consumption());
+    }
+    if (ExecEnv::GetInstance()->update_mem_tracker() != nullptr) {
+        _memory_metrics->update_mem_bytes.set_value(ExecEnv::GetInstance()->update_mem_tracker()->consumption());
     }
     if (ExecEnv::GetInstance()->chunk_allocator_mem_tracker() != nullptr) {
         _memory_metrics->chunk_allocator_mem_bytes.set_value(
