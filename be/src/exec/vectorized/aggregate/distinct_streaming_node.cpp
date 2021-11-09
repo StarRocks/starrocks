@@ -60,6 +60,7 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                 break;
             } else if (_aggregator->streaming_preaggregation_mode() ==
                        TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
+                RETURN_IF_ERROR(state->check_query_state("AggrNode"));
                 SCOPED_TIMER(_aggregator->agg_compute_timer());
 
                 if (false) {
@@ -81,6 +82,10 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                 }
 
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
+
+                _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
+                                  _aggregator->mem_pool()->total_reserved_bytes());
+
                 continue;
             } else {
                 // TODO: calc the real capacity of hashtable, will add one interface in the class of habletable
@@ -92,6 +97,7 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     _aggregator->should_expand_preagg_hash_tables(_children[0]->rows_returned(), input_chunk_size,
                                                                   _aggregator->mem_pool()->total_allocated_bytes(),
                                                                   _aggregator->hash_set_variant().size())) {
+                    RETURN_IF_ERROR(state->check_query_state("AggrNode"));
                     // hash table is not full or allow expand the hash table according reduction rate
                     SCOPED_TIMER(_aggregator->agg_compute_timer());
 
@@ -114,6 +120,10 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     }
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
+
+                    _mem_tracker->set(_aggregator->hash_set_variant().memory_usage() +
+                                      _aggregator->mem_pool()->total_reserved_bytes());
+
                     continue;
                 } else {
                     {

@@ -44,14 +44,6 @@ Status JoinBuildFunc<PT>::construct_hash_table(JoinHashTableItems* table_items,
 template <PrimitiveType PT>
 Status FixedSizeJoinBuildFunc<PT>::prepare(RuntimeState* state, JoinHashTableItems* table_items,
                                            HashTableProbeState* probe_state) {
-    size_t serialize_mem_usage = sizeof(CppType) * (table_items->row_count + 1);
-    size_t bucket_array_mem_usage = sizeof(uint32_t) * config::vector_chunk_size;
-    size_t null_array_mem_usage = sizeof(uint8_t) * config::vector_chunk_size;
-
-    RETURN_IF_ERROR(JoinHashMapHelper::check_and_add_memory_usage(
-            state, table_items,
-            serialize_mem_usage + bucket_array_mem_usage + null_array_mem_usage));
-
     table_items->build_key_column = ColumnType::create(table_items->row_count + 1);
     probe_state->buckets.resize(config::vector_chunk_size);
     probe_state->is_nulls.resize(config::vector_chunk_size);

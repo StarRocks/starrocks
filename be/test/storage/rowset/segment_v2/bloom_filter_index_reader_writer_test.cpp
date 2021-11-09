@@ -23,6 +23,7 @@
 
 #include "common/logging.h"
 #include "env/env_memory.h"
+#include "runtime/mem_tracker.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/key_coder.h"
 #include "storage/olap_common.h"

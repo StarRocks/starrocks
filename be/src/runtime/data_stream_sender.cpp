@@ -40,7 +40,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/dpp_sink_internal.h"
 #include "runtime/exec_env.h"
-#include "runtime/mem_tracker.h"
 #include "runtime/raw_value.h"
 #include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"

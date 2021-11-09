@@ -41,6 +41,10 @@ Status CrossJoinNode::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(child(0)->open(state));
 
+    if (_build_chunk != nullptr) {
+        _mem_tracker->set(_build_chunk->memory_usage());
+    }
+
     return Status::OK();
 }
 
@@ -456,6 +460,7 @@ Status CrossJoinNode::_build(RuntimeState* state) {
     RETURN_IF_ERROR(child(1)->open(state));
 
     while (true) {
+        RETURN_IF_ERROR(state->check_query_state("CrossJoin"));
         bool eos = false;
         ChunkPtr chunk = nullptr;
         RETURN_IF_CANCELLED(state);
