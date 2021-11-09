@@ -3034,8 +3034,6 @@ public class Catalog {
         } else if (engineName.equals("mysql")) {
             createMysqlTable(db, stmt);
             return;
-        } else if (engineName.equals("broker")) {
-            throw new DdlException("Broker table is deprecated.");
         } else if (engineName.equalsIgnoreCase("elasticsearch") || engineName.equalsIgnoreCase("es")) {
             createEsTable(db, stmt);
             return;
@@ -4183,40 +4181,6 @@ public class Catalog {
         }
 
         LOG.info("successfully create table{} with id {}", tableName, tableId);
-    }
-
-    @Deprecated
-    private void createBrokerTable(Database db, CreateTableStmt stmt) throws DdlException {
-        String tableName = stmt.getTableName();
-
-        List<Column> columns = stmt.getColumns();
-
-        long tableId = Catalog.getCurrentCatalog().getNextId();
-        BrokerTable brokerTable = new BrokerTable(tableId, tableName, columns, stmt.getProperties());
-        brokerTable.setComment(stmt.getComment());
-        brokerTable.setBrokerProperties(stmt.getExtProperties());
-
-        // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire catalog lock. Try again");
-        }
-        try {
-            if (getDb(db.getFullName()) == null) {
-                throw new DdlException("database has been dropped when creating table");
-            }
-            if (!db.createTableWithLock(brokerTable, false)) {
-                if (!stmt.isSetIfNotExists()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
-                } else {
-                    LOG.info("create table[{}] which already exists", tableName);
-                    return;
-                }
-            }
-        } finally {
-            unlock();
-        }
-
-        LOG.info("successfully create table[{}-{}]", tableName, tableId);
     }
 
     private void createHiveTable(Database db, CreateTableStmt stmt) throws DdlException {
