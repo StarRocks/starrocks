@@ -13,7 +13,6 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "util/hash_util.hpp"
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
