@@ -10,7 +10,6 @@ import java.util.Objects;
 public class HashDistributionDesc {
     public enum SourceType {
         LOCAL, // hash property from scan node
-//        SHUFFLE_JOIN, // hash property from shuffle agg,
         SHUFFLE_JOIN, // hash property from shuffle join
         BUCKET_JOIN, // hash property from bucket join
         // @Todo: It's a temporary solution
