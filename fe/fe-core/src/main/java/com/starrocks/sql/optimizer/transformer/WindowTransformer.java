@@ -230,7 +230,7 @@ public class WindowTransformer {
      * SortGroup represent the window functions that can be calculated in one SortNode
      * to reduce the generation of SortNode
      */
-    public static List<WindowTransformer.SortGroup> reorderWindowOperator(
+    public static List<WindowTransformer.PartitionGroup> reorderWindowOperator(
             List<WindowOperator> windowOperators, ColumnRefFactory columnRefFactory, OptExprBuilder subOpt) {
         /*
          * Step 1.
@@ -295,23 +295,22 @@ public class WindowTransformer {
         for (LogicalWindowOperator windowOperator : logicalWindowOperators) {
             boolean find = false;
             for (WindowTransformer.SortGroup windowInSorted : sortedGroups) {
-                if (!isPrefixHyperPartitionSet(new ArrayList<>(windowInSorted.getPartitionExprs()),
-                        new ArrayList<>(windowOperator.getPartitionExpressions())) &&
-                        !isPrefixHyperPartitionSet(new ArrayList<>(windowOperator.getPartitionExpressions()),
-                                new ArrayList<>(windowInSorted.getPartitionExprs()))) {
+                if (!isPrefixHyperPartitionSet(windowOperator.getPartitionExpressions(),
+                        windowInSorted.getPartitionExprs())
+                        && !isPrefixHyperPartitionSet(windowInSorted.getPartitionExprs(),
+                        windowOperator.getPartitionExpressions())) {
                     continue;
                 }
 
-                if (isPrefixHyperSortSet(new ArrayList<>(windowOperator.getEnforceSortColumns()),
-                        new ArrayList<>(windowInSorted.getEnforceSortColumns()))) {
+                if (isPrefixHyperSortSet(windowOperator.getEnforceSortColumns(),
+                        windowInSorted.getEnforceSortColumns())) {
                     windowInSorted.setEnforceSortColumns(windowOperator.getEnforceSortColumns());
-                } else if (!isPrefixHyperSortSet(new ArrayList<>(windowInSorted.getEnforceSortColumns()),
-                        new ArrayList<>(windowOperator.getEnforceSortColumns()))) {
+                } else if (!isPrefixHyperSortSet(windowInSorted.getEnforceSortColumns(),
+                        windowOperator.getEnforceSortColumns())) {
                     continue;
                 }
-
-                if (isPrefixHyperPartitionSet(new ArrayList<>(windowOperator.getPartitionExpressions()),
-                        new ArrayList<>(windowInSorted.getPartitionExprs()))) {
+                if (isPrefixHyperPartitionSet(windowOperator.getPartitionExpressions(),
+                        windowInSorted.getPartitionExprs())) {
                     windowInSorted.setPartitionExpressions(windowOperator.getPartitionExpressions());
                 }
                 windowInSorted.addWindowOperator(windowOperator);
@@ -337,38 +336,48 @@ public class WindowTransformer {
 
         /*
          * Step4.
-         * The SortGroup with fewer partition columns are placed at the top level,
-         * and the nodes with the same partition are placed together to reduce the generation of Exchange nodes.
+         * The nodes with the same partition group are placed together to reduce the generation of Exchange nodes.
          */
-        sortedGroups.sort((o1, o2) -> {
-            if (o1.getPartitionExprs().size() > o2.getPartitionExprs().size()) {
-                return -1;
-            } else if (o1.getPartitionExprs().size() < o2.getPartitionExprs().size()) {
-                return 1;
-            } else {
-                int sortKey = 0;
-                for (int i = 0; i < o1.getPartitionExprs().size(); ++i) {
-                    sortKey += ((ColumnRefOperator) (o1.getPartitionExprs().get(i))).getId()
-                            - ((ColumnRefOperator) (o2.getPartitionExprs().get(i))).getId();
+        List<PartitionGroup> partitionGroups = new ArrayList<>();
+        for (SortGroup sortGroup : sortedGroups) {
+            boolean find = false;
+            for (PartitionGroup partitionGroup : partitionGroups) {
+                if (isPrefixHyperPartitionSet(sortGroup.partitionExpressions, partitionGroup.partitionExpressions)) {
+                    partitionGroup.addSortGroup(sortGroup);
+                    find = true;
+                    break;
+                } else if (isPrefixHyperPartitionSet(partitionGroup.partitionExpressions,
+                        sortGroup.partitionExpressions)) {
+                    partitionGroup.setPartitionExpressions(sortGroup.partitionExpressions);
+                    partitionGroup.addSortGroup(sortGroup);
+                    find = true;
+                    break;
                 }
-                return sortKey;
             }
-        });
-        return sortedGroups;
+            if (!find) {
+                PartitionGroup partitionGroup = new PartitionGroup();
+                partitionGroup.setPartitionExpressions(sortGroup.partitionExpressions);
+                partitionGroup.addSortGroup(sortGroup);
+                partitionGroups.add(partitionGroup);
+            }
+        }
+        partitionGroups.forEach(partitionGroup -> partitionGroup.sortGroups.sort(
+                Comparator.comparingInt(s -> s.getPartitionExprs().size())));
+        partitionGroups.sort(Comparator.comparingInt(p -> p.partitionExpressions.size() * -1));
+
+        return partitionGroups;
     }
 
-    private static boolean isPrefixHyperPartitionSet(List<Object> hyperSet, List<Object> subSet) {
+    private static boolean isPrefixHyperPartitionSet(List<ScalarOperator> hyperSet, List<ScalarOperator> subSet) {
         if (hyperSet.isEmpty() && subSet.isEmpty()) {
             return true;
         }
 
-        List<List<Object>> partitionPrefix = IntStream.rangeClosed(1, hyperSet.size())
-                .mapToObj(i -> hyperSet.subList(0, i)).collect(Collectors.toList());
-        return partitionPrefix.contains(subSet);
+        return hyperSet.containsAll(subSet) && !subSet.isEmpty();
     }
 
-    private static boolean isPrefixHyperSortSet(List<Object> hyperSet, List<Object> subSet) {
-        List<List<Object>> partitionPrefix = IntStream.rangeClosed(0, hyperSet.size())
+    private static boolean isPrefixHyperSortSet(List<Ordering> hyperSet, List<Ordering> subSet) {
+        List<List<Ordering>> partitionPrefix = IntStream.rangeClosed(0, hyperSet.size())
                 .mapToObj(i -> hyperSet.subList(0, i)).collect(Collectors.toList());
         return partitionPrefix.contains(subSet);
     }
@@ -415,6 +424,28 @@ public class WindowTransformer {
 
         public List<LogicalWindowOperator> getWindowOperators() {
             return windowOperators;
+        }
+    }
+
+    public static class PartitionGroup {
+        private List<SortGroup> sortGroups;
+        private List<ScalarOperator> partitionExpressions;
+
+        public PartitionGroup() {
+            sortGroups = new ArrayList<>();
+        }
+
+        public void addSortGroup(SortGroup sortGroup) {
+            sortGroups.add(sortGroup);
+        }
+
+        public List<SortGroup> getSortGroups() {
+            return sortGroups;
+        }
+
+        public void setPartitionExpressions(
+                List<ScalarOperator> partitionExpressions) {
+            this.partitionExpressions = partitionExpressions;
         }
     }
 

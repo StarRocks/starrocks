@@ -247,14 +247,16 @@ class QueryTransformer {
             }
         }
 
-        List<WindowTransformer.SortGroup> sortedGroups =
+        List<WindowTransformer.PartitionGroup> partitionGroups =
                 WindowTransformer.reorderWindowOperator(windowOperators, columnRefFactory, subOpt);
-        for (WindowTransformer.SortGroup sortGroup : sortedGroups) {
-            for (LogicalWindowOperator logicalWindowOperator : sortGroup.getWindowOperators()) {
-                LogicalWindowOperator newLogicalWindowOperator =
-                        new LogicalWindowOperator.Builder().withOperator(logicalWindowOperator)
-                                .setEnforceSortColumns(sortGroup.getEnforceSortColumns()).build();
-                subOpt = subOpt.withNewRoot(newLogicalWindowOperator);
+        for (WindowTransformer.PartitionGroup partitionGroup : partitionGroups) {
+            for (WindowTransformer.SortGroup sortGroup : partitionGroup.getSortGroups()) {
+                for (LogicalWindowOperator logicalWindowOperator : sortGroup.getWindowOperators()) {
+                    LogicalWindowOperator newLogicalWindowOperator =
+                            new LogicalWindowOperator.Builder().withOperator(logicalWindowOperator)
+                                    .setEnforceSortColumns(sortGroup.getEnforceSortColumns()).build();
+                    subOpt = subOpt.withNewRoot(newLogicalWindowOperator);
+                }
             }
         }
 
