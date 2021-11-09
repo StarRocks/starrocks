@@ -34,6 +34,8 @@ public class IsNoCallChildrenValidator extends ScalarOperatorVisitor<Boolean, Vo
         }
 
         if (operator.getChild(0).isConstantRef()) {
+            // SUM(NULL) always NULL,
+            // SUM(1) on base table result is 10, but in mv maybe is 5 because mv will aggregate by key
             return ((ConstantOperator) operator.getChild(0)).isNull();
         }
 
@@ -51,7 +53,6 @@ public class IsNoCallChildrenValidator extends ScalarOperatorVisitor<Boolean, Vo
 
     @Override
     public Boolean visitCaseWhenOperator(CaseWhenOperator operator, Void context) {
-        // now support simple type: all of element is constant or column ref operator
         if (operator.hasCase() &&
                 !Utils.extractColumnRef(operator.getCaseClause()).stream().allMatch(keyColumns::contains)) {
             return false;
@@ -59,6 +60,8 @@ public class IsNoCallChildrenValidator extends ScalarOperatorVisitor<Boolean, Vo
 
         if (operator.hasElse()) {
             ScalarOperator elseClause = operator.getElseClause();
+            // e.g. select v1, SUM(case v2 when 2 then v3 when 4 then v4 else v5 end) from xxx;
+            // return result must be column or NULL, const value will cause error result.
             if ((elseClause.isColumnRef() && aggregateColumns.contains((ColumnRefOperator) elseClause)) ||
                     (elseClause.isConstantRef() && ((ConstantOperator) elseClause).isNull())) {
                 // pass
@@ -83,23 +86,21 @@ public class IsNoCallChildrenValidator extends ScalarOperatorVisitor<Boolean, Vo
 
     @Override
     public Boolean visitCall(CallOperator operator, Void context) {
-        if (!FunctionSet.IF.equalsIgnoreCase(operator.getFnName())) {
-            return false;
-        }
+        if (FunctionSet.IF.equalsIgnoreCase(operator.getFnName())) {
+            if (!Utils.extractColumnRef(operator.getChild(0)).stream().allMatch(keyColumns::contains)) {
+                return false;
+            }
 
-        if (!Utils.extractColumnRef(operator.getChild(0)).stream().allMatch(keyColumns::contains)) {
-            return false;
-        }
+            if (!Utils.extractColumnRef(operator.getChild(1)).stream().allMatch(aggregateColumns::contains)) {
+                return false;
+            }
 
-        if (!Utils.extractColumnRef(operator.getChild(1)).stream().allMatch(aggregateColumns::contains)) {
-            return false;
+            if (!Utils.extractColumnRef(operator.getChild(2)).stream().allMatch(aggregateColumns::contains)) {
+                return false;
+            }
+            return true;
         }
-
-        if (!Utils.extractColumnRef(operator.getChild(2)).stream().allMatch(aggregateColumns::contains)) {
-            return false;
-        }
-
-        return true;
+        return false;
     }
 
     @Override
