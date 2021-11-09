@@ -24,7 +24,7 @@ public:
               _is_shutdown(false) {}
 
     using DriverList = std::list<DriverRawPtr>;
-    ~PipelineDriverPoller() = default;
+    ~PipelineDriverPoller() { shutdown(); };
     // start poller thread
     void start();
     // shutdown poller thread
