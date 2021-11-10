@@ -120,6 +120,7 @@ private:
     std::string _cluster_id_path() const { return _path + CLUSTER_ID_PREFIX; }
     Status _init_cluster_id();
     Status _init_data_dir();
+    Status _init_tmp_dir();
     Status _init_file_system();
     Status _init_meta(bool read_only = false);
 
