@@ -34,7 +34,8 @@ import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
 
 public class CacheDictManager implements IDictManager {
     private static final Logger LOG = LogManager.getLogger(CacheDictManager.class);
-    private static final Set<ColumnIdentifier> NoDictStringColumns = Sets.newHashSet();
+    private static final Set<ColumnIdentifier> noDictStringColumns = Sets.newHashSet();
+    private static final Set<Long> forbiddenDictTableIds = Sets.newHashSet();
 
     public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
 
@@ -136,8 +137,13 @@ public class CacheDictManager implements IDictManager {
     @Override
     public boolean hasGlobalDict(long tableId, String columnName, long versionTime) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
-        if (NoDictStringColumns.contains(columnIdentifier)) {
+        if (noDictStringColumns.contains(columnIdentifier)) {
             LOG.debug("{} isn't low cardinality string column", columnName);
+            return false;
+        }
+
+        if (forbiddenDictTableIds.contains(tableId)) {
+            LOG.debug("table {} forbit low cardinality global dict", tableId);
             return false;
         }
 
@@ -192,6 +198,12 @@ public class CacheDictManager implements IDictManager {
     }
 
     @Override
+    public void forbitGlobalDict(long tableId) {
+        LOG.debug("remove dict for table {}", tableId);
+        forbiddenDictTableIds.add(tableId);
+    }
+
+    @Override
     public void updateGlobalDict(long tableId, String columnName, long versionTime) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (!dictStatistics.synchronous().asMap().containsKey(columnIdentifier)) {
@@ -222,5 +234,4 @@ public class CacheDictManager implements IDictManager {
         Preconditions.checkArgument(false, "Shouldn't run here");
         return null;
     }
-
 }
