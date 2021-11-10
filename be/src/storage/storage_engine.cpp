@@ -539,7 +539,9 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
 
     Status res = cumulative_compaction.compact();
     if (!res.ok()) {
-        best_tablet->set_last_cumu_compaction_failure_time(UnixMillis());
+        if (!res.is_mem_limit_exceeded()) {
+            best_tablet->set_last_cumu_compaction_failure_time(UnixMillis());
+        }
         if (!res.is_not_found()) {
             StarRocksMetrics::instance()->cumulative_compaction_request_failed.increment(1);
             LOG(WARNING) << "Fail to vectorized compact table=" << best_tablet->full_name()
