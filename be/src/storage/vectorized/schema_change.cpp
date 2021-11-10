@@ -967,7 +967,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         // if it has alter task, it means it is under old alter process
 
         std::vector<Version> versions_to_be_changed;
-        Status status = _get_versions_to_be_changed(base_tablet, &versions_to_be_changed);
+        status = _get_versions_to_be_changed(base_tablet, &versions_to_be_changed);
         if (!status.ok()) {
             LOG(WARNING) << "fail to get version to be changed. res=" << res;
             return status;
