@@ -8,6 +8,7 @@ public class HdfsFileBlockDesc {
     private long[] replicaHostIds;
     private long[] diskIds;
     private HiveMetaClient metaClient;
+    private boolean splittable;
 
     public HdfsFileBlockDesc(long offset, long length, long[] replicaHostIds,
                              long[] diskIds, HiveMetaClient metaClient) {
@@ -16,6 +17,13 @@ public class HdfsFileBlockDesc {
         this.replicaHostIds = replicaHostIds;
         this.diskIds = diskIds;
         this.metaClient = metaClient;
+        this.splittable = false;
+    }
+
+    public HdfsFileBlockDesc(long offset, long length, long[] replicaHostIds,
+                             long[] diskIds, HiveMetaClient metaClient, boolean splittable) {
+        this(offset, length, replicaHostIds, diskIds, metaClient);
+        this.splittable = splittable;
     }
 
     public String getDataNodeIp(long hostId) {
@@ -36,5 +44,9 @@ public class HdfsFileBlockDesc {
 
     public long[] getDiskIds() {
         return diskIds;
+    }
+
+    public boolean isSplittable() {
+        return splittable;
     }
 }
