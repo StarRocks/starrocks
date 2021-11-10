@@ -3,14 +3,6 @@
 #pragma once
 
 #include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <rapidjson/document.h>
-DIAGNOSTIC_POP
-
-#include <rapidjson/error/en.h>
-#include <rapidjson/stringbuffer.h>
-#include <rapidjson/writer.h>
 
 #include "env/env.h"
 #include "env/env_stream_pipe.h"
@@ -117,18 +109,13 @@ private:
     simdjson::ondemand::document_stream _doc_stream;
     simdjson::ondemand::document_stream::iterator _doc_stream_itr;
 
-    rapidjson::Document _origin_json_doc;  // origin json document object from parsed json string
-    rapidjson::Value* _json_doc = nullptr; // _json_doc equals _final_json_doc iff not set `json_root`
-
     // only used in unit test.
     // TODO: The semantics of Streaming Load And Routine Load is non-consistent.
     //       Import a json library supporting streaming parse.
 #if BE_TEST
     size_t _buf_size = 1048576; // 1MB, the buf size for parsing json in unit test
-#else
-    size_t _buf_size = 104857600; // 100MB, the max size rapidjson can parse
-#endif
     raw::RawVector<char> _buf;
+#endif
 };
 
 } // namespace starrocks::vectorized

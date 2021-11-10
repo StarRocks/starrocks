@@ -141,7 +141,7 @@ rapidjson::Value* JsonFunctions::get_json_object_from_parsed_json(const std::vec
     return root;
 }
 
-bool JsonFunctions::extract_from_element(simdjson::ondemand::object& obj, const std::vector<JsonPath>& jsonpath,
+bool JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const std::vector<JsonPath>& jsonpath,
                                          simdjson::ondemand::value& value) {
     if (obj.is_empty()) {
         return false;
@@ -276,46 +276,6 @@ rapidjson::Value* JsonFunctions::match_value(const std::vector<JsonPath>& parsed
         }
     }
     return root;
-}
-
-void JsonFunctions::get_matched_values_from_stream(
-        const std::string& name, simdjson::dom::document_stream& stream,
-        std::vector<simdjson::dom::document_stream::iterator::value_type> output) {
-    for (auto doc : stream) {
-        output.emplace_back(std::move(doc.at_key(name)));
-    }
-}
-
-void JsonFunctions::get_values_from_stream(const std::vector<JsonPath>& parsed_paths,
-                                           simdjson::dom::document_stream& stream,
-                                           std::vector<simdjson::dom::document_stream::iterator::value_type> values) {
-    for (int i = 1; i < parsed_paths.size(); i++) {
-        VLOG(10) << "parsed_paths: " << parsed_paths[i].debug_string();
-
-        if (UNLIKELY(!parsed_paths[i].is_valid)) {
-            return;
-        }
-
-        const std::string& col = parsed_paths[i].key;
-        int index = parsed_paths[i].idx;
-
-        if (LIKELY(!col.empty())) {
-            get_matched_values_from_stream(col, stream, values);
-        }
-
-        if (UNLIKELY(index != -1)) {
-            if (index == -2) {
-                // TODO:
-            } else if (index >= values.size()) {
-                values.clear();
-            } else {
-                auto value = values.at(index);
-                values.clear();
-                values.emplace_back(std::move(value));
-            }
-        }
-    }
-    return;
 }
 
 void JsonFunctions::parse_json_paths(const std::string& path_string, std::vector<JsonPath>* parsed_paths) {

@@ -235,8 +235,7 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::vectorized::Sc
           _file(std::move(file)),
           _next_line(0),
           _total_lines(0),
-          _closed(false),
-          _buf(_buf_size) {
+          _closed(false) {
     _doc_stream_itr = _doc_stream.end();
 }
 
@@ -287,8 +286,9 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
     for (; _doc_stream_itr != _doc_stream.end(); ++_doc_stream_itr) {
         auto doc = (*_doc_stream_itr);
         if(doc.error()) {
-            std::string err_msg("Invalid JSON");
-            _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
+            std::string err_msg = strings::Substitute("Failed to parse string to json. code=$0, error=$1", doc.error(),
+                                                      simdjson::error_message(doc.error()));
+            _state->append_error_msg_to_file("", err_msg);
             _counter->num_rows_filtered++;
             return Status::DataQualityError(err_msg.c_str());
         }
@@ -316,7 +316,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
 
         default: {
             std::string err_msg("JSON data type is not supported");
-            _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
+            _state->append_error_msg_to_file("", err_msg);
             _counter->num_rows_filtered++;
             return Status::DataQualityError(err_msg.c_str());
         }
@@ -329,8 +329,9 @@ Status JsonReader::_process_array(Chunk* chunk, const std::vector<SlotDescriptor
                                   simdjson::ondemand::array& arr) {
     for (auto a : arr) {
         if (a.error()) {
-            std::string err_msg("JSON data type is not supported");
-            _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
+            std::string err_msg = strings::Substitute("Failed to parse json in array. code=$0, error=$1", a.error(),
+                                                      simdjson::error_message(a.error()));
+            _state->append_error_msg_to_file("", err_msg);
             _counter->num_rows_filtered++;
             return Status::DataQualityError(err_msg.c_str());
         }
@@ -347,8 +348,9 @@ Status JsonReader::_process_array_with_json_path(Chunk* chunk, const std::vector
     for (auto a : arr) {
 
         if (a.error()) {
-            std::string err_msg("JSON data type is not supported");
-            _state->append_error_msg_to_file(JsonFunctions::get_raw_json_string(_origin_json_doc), err_msg);
+            std::string err_msg = strings::Substitute("Failed to parse json. code=$0, error=$1", a.error(),
+                                                      simdjson::error_message(a.error()));
+            _state->append_error_msg_to_file("", err_msg);
             _counter->num_rows_filtered++;
             return Status::DataQualityError(err_msg.c_str());
         }
@@ -397,7 +399,7 @@ Status JsonReader::_process_object_with_json_path(Chunk* chunk, const std::vecto
         }
 
         simdjson::ondemand::value val;
-        if (!JsonFunctions::extract_from_element(obj, _scanner->_json_paths[i], val)) {
+        if (!JsonFunctions::extract_from_object(obj, _scanner->_json_paths[i], val)) {
             column->append_nulls(1);
         } else {
             _construct_column(val, column.get(), slot_descs[i]->type());
@@ -415,7 +417,7 @@ Status JsonReader::_read_and_parse_json() {
     if (result.size == 0) {
         return Status::EndOfFile("EOF of reading file");
     }
-    auto err = _parser.parse_many(result.data, result.size).get(_doc_stream);
+    auto err = _parser.iterate_many(result.data, result.size, 32 * 1024 * 1024).get(_doc_stream);
 
 #else
     size_t length = 0;
