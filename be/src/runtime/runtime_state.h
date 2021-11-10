@@ -187,6 +187,8 @@ public:
     // doesn't continue if the query terminates abnormally.
     Status check_query_state(const std::string& msg);
 
+    Status check_mem_limit(const std::string& msg);
+
     std::vector<std::string>& output_files() { return _output_files; }
 
     void set_import_label(const std::string& import_label) { _import_label = import_label; }

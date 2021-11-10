@@ -248,11 +248,15 @@ Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_
 Status RuntimeState::check_query_state(const std::string& msg) {
     // TODO: it would be nice if this also checked for cancellation, but doing so breaks
     // cases where we use Status::Cancelled("Cancelled") to indicate that the limit was reached.
+    return query_status();
+}
+
+Status RuntimeState::check_mem_limit(const std::string& msg) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnonnull-compare"
     RETURN_IF_LIMIT_EXCEEDED(this, msg);
 #pragma pop
-    return query_status();
+    return Status::OK();
 }
 
 const int64_t MAX_ERROR_NUM = 50;
