@@ -292,7 +292,7 @@ TEST_F(TestDeltaWriter, open) {
     load_id.set_lo(0);
     WriteRequest write_req = {10003, 270068375, WriteType::LOAD, 20001, 30001, load_id, tuple_desc};
     std::shared_ptr<DeltaWriter> delta_writer;
-    DeltaWriter::open(&write_req, k_tablet_meta_mem_tracker, delta_writer);
+    DeltaWriter::open(&write_req, k_tablet_meta_mem_tracker, &delta_writer);
     ASSERT_NE(delta_writer.get(), nullptr);
     OLAPStatus res = delta_writer->close();
     ASSERT_EQ(OLAP_SUCCESS, res);
@@ -327,7 +327,7 @@ TEST_F(TestDeltaWriter, write) {
     WriteRequest write_req = {10004, 270068376, WriteType::LOAD, 20002,
                               30002, load_id,   tuple_desc,      &(tuple_desc->slots())};
     std::shared_ptr<DeltaWriter> delta_writer;
-    DeltaWriter::open(&write_req, k_tablet_meta_mem_tracker, delta_writer);
+    DeltaWriter::open(&write_req, k_tablet_meta_mem_tracker, &delta_writer);
     ASSERT_NE(delta_writer.get(), nullptr);
 
     MemPool pool;

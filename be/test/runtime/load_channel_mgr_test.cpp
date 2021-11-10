@@ -57,11 +57,11 @@ OLAPStatus DeltaWriter::init() {
     return OLAP_SUCCESS;
 }
 
-OLAPStatus DeltaWriter::open(WriteRequest* req, MemTracker* mem_tracker, std::shared_ptr<DeltaWriter>& writer) {
+OLAPStatus DeltaWriter::open(WriteRequest* req, MemTracker* mem_tracker, std::shared_ptr<DeltaWriter>* writer) {
     if (open_status != OLAP_SUCCESS) {
         return open_status;
     }
-    writer = std::shared_ptr<DeltaWriter>(new DeltaWriter(req, mem_tracker, nullptr));
+    *writer = std::shared_ptr<DeltaWriter>(new DeltaWriter(req, mem_tracker, nullptr));
     return open_status;
 }
 
