@@ -190,7 +190,8 @@ public class DecodeRewriteTest extends PlanTestBase{
     @Test
     public void testDecodeRewrite9Scan() throws Exception {
         String sql = "select S_ADDRESS from supplier";
-        String plan = getThriftPlan(sql);
+        String plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("Decode"));
     }
 
     @Test
