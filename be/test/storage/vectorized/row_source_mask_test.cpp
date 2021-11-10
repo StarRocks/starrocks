@@ -11,7 +11,7 @@ namespace starrocks::vectorized {
 class RowSourceMaskTest : public testing::Test {
 protected:
     void SetUp() override {
-        _max_mask_memory_bytes = config::vertical_compaction_max_mask_memory_bytes;
+        _max_row_source_mask_memory_bytes = config::max_row_source_mask_memory_bytes;
 
         // create tmp dir
         std::stringstream tmp_dir_s;
@@ -21,7 +21,7 @@ protected:
     }
 
     void TearDown() override {
-        config::vertical_compaction_max_mask_memory_bytes = _max_mask_memory_bytes;
+        config::max_row_source_mask_memory_bytes = _max_row_source_mask_memory_bytes;
 
         // remove tmp dir
         if (!_tmp_dir.empty()) {
@@ -29,7 +29,7 @@ protected:
         }
     }
 
-    int64_t _max_mask_memory_bytes;
+    int64_t _max_row_source_mask_memory_bytes;
     std::string _tmp_dir;
 };
 
@@ -56,7 +56,7 @@ TEST_F(RowSourceMaskTest, mask) {
 TEST_F(RowSourceMaskTest, memory_masks) {
     RowSourceMaskBuffer buffer(0, config::storage_root_path);
     std::vector<RowSourceMask> source_masks;
-    config::vertical_compaction_max_mask_memory_bytes = 1024;
+    config::max_row_source_mask_memory_bytes = 1024;
 
     source_masks.emplace_back(RowSourceMask(0, false));
     source_masks.emplace_back(RowSourceMask(1, true));
@@ -137,7 +137,7 @@ TEST_F(RowSourceMaskTest, memory_masks) {
 TEST_F(RowSourceMaskTest, memory_masks_with_persistence) {
     RowSourceMaskBuffer buffer(1, config::storage_root_path);
     std::vector<RowSourceMask> source_masks;
-    config::vertical_compaction_max_mask_memory_bytes = 1;
+    config::max_row_source_mask_memory_bytes = 1;
 
     source_masks.emplace_back(RowSourceMask(0, false));
     source_masks.emplace_back(RowSourceMask(1, true));

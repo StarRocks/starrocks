@@ -21,7 +21,9 @@ RowSourceMaskBuffer::~RowSourceMaskBuffer() {
 }
 
 Status RowSourceMaskBuffer::write(const std::vector<RowSourceMask>& source_masks) {
-    if (_mask_column->byte_size() >= config::vertical_compaction_max_mask_memory_bytes) {
+    size_t source_masks_size = source_masks.size() * sizeof(RowSourceMask);
+    if (_mask_column->byte_size() + source_masks_size >= config::max_row_source_mask_memory_bytes &&
+        !_mask_column->empty()) {
         if (_tmp_file_fd == -1) {
             RETURN_IF_ERROR(_create_tmp_file());
         }
@@ -73,7 +75,7 @@ Status RowSourceMaskBuffer::flip() {
     if (_tmp_file_fd > 0) {
         off_t offset = lseek(_tmp_file_fd, 0, SEEK_SET);
         if (offset != 0) {
-            LOG(WARNING) << "fail to seek to offset 0. offset=" << offset;
+            PLOG(WARNING) << "fail to seek to offset 0. offset=" << offset;
             return Status::InternalError("fail to seek to offset 0");
         }
         _reset_mask_column();
@@ -97,7 +99,7 @@ Status RowSourceMaskBuffer::_create_tmp_file() {
     std::string tmp_file_path = tmp_file_path_s.str();
     _tmp_file_fd = mkstemp(tmp_file_path.data());
     if (_tmp_file_fd < 0) {
-        LOG(WARNING) << "fail to create mask tmp file. path=" << tmp_file_path;
+        PLOG(WARNING) << "fail to create mask tmp file. path=" << tmp_file_path;
         return Status::InternalError("fail to create mask tmp file");
     }
     unlink(tmp_file_path.data());
@@ -108,7 +110,7 @@ Status RowSourceMaskBuffer::_serialize_masks() {
     size_t content_size = _mask_column->serialize_size();
     ssize_t w_size = ::write(_tmp_file_fd, &content_size, sizeof(uint64_t));
     if (w_size != sizeof(uint64_t)) {
-        LOG(WARNING) << "fail to write masks size to mask file. write size=" << w_size;
+        PLOG(WARNING) << "fail to write masks size to mask file. write size=" << w_size;
         return Status::InternalError("fail to write masks size to mask file");
     }
 
@@ -117,7 +119,7 @@ Status RowSourceMaskBuffer::_serialize_masks() {
     _mask_column->serialize_column((uint8_t*)(content.data()));
     w_size = ::write(_tmp_file_fd, content.data(), content_size);
     if (w_size != content_size) {
-        LOG(WARNING) << "fail to write masks to mask file. write size=" << w_size;
+        PLOG(WARNING) << "fail to write masks to mask file. write size=" << w_size;
         return Status::InternalError("fail to write masks to mask file");
     }
     return Status::OK();
@@ -129,7 +131,7 @@ Status RowSourceMaskBuffer::_deserialize_masks() {
     if (r_size == 0) {
         return Status::EndOfFile("end of file");
     } else if (r_size != sizeof(uint64_t)) {
-        LOG(WARNING) << "fail to read masks size from mask file. read size=" << r_size;
+        PLOG(WARNING) << "fail to read masks size from mask file. read size=" << r_size;
         return Status::InternalError("fail to read masks size from mask file");
     }
 
@@ -137,7 +139,7 @@ Status RowSourceMaskBuffer::_deserialize_masks() {
     content.resize(content_size);
     r_size = ::read(_tmp_file_fd, content.data(), content_size);
     if (r_size != content_size) {
-        LOG(WARNING) << "fail to read masks from mask file. read size=" << r_size;
+        PLOG(WARNING) << "fail to read masks from mask file. read size=" << r_size;
         return Status::InternalError("fail to read masks from mask file");
     }
     _mask_column->deserialize_column((uint8_t*)(content.data()));
