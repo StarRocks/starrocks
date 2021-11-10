@@ -38,19 +38,21 @@ public:
 
     virtual void reserve(size_t size) = 0;
 
+    // batch insert a range [idx_begin, idx_end) of keys
     virtual Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks,
                           uint32_t idx_begin, uint32_t idx_end) = 0;
+    // batch upsert a range [idx_begin, idx_end) of keys
     virtual void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
                         uint32_t idx_end, DeletesMap* deletes) = 0;
+    // batch try_replace a range [idx_begin, idx_end) of keys
     virtual void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
                              const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
                              vector<uint32_t>* failed) = 0;
+    // batch erase a range [idx_begin, idx_end) of keys
     virtual void erase(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) = 0;
 
-    // just an estimate value for now.
+    // just an estimate value for now
     virtual std::size_t memory_usage() const = 0;
-
-    virtual std::string memory_info() const = 0;
 };
 
 #pragma pack(push)
@@ -86,6 +88,7 @@ public:
 };
 
 const uint32_t PREFETCHN = 8;
+const uint32_t ROWID_MASK = 0xffffffff;
 
 template <typename Key>
 class HashIndexImpl : public HashIndex {
@@ -119,7 +122,7 @@ public:
                 std::string msg = strings::Substitute(
                         "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
                         "key=$4",
-                        rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & 0xffffffff), keys[i]);
+                        rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i]);
                 LOG(ERROR) << msg;
                 return Status::InternalError(msg);
             }
@@ -142,7 +145,7 @@ public:
                     LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i] << " idx=" << i
                                << " rowid=" << rowid_start + i;
                 }
-                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
+                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 p.first->second = v;
             }
         }
@@ -175,7 +178,7 @@ public:
             auto iter = _map.find(keys[i]);
             if (iter != _map.end()) {
                 uint64_t old = iter->second.value;
-                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
+                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 _map.erase(iter);
             }
         }
@@ -183,10 +186,6 @@ public:
 
     std::size_t memory_usage() const final {
         return _map.capacity() * (1 + (sizeof(Key) + 3) / 4 * 4 + sizeof(RowIdPack4));
-    }
-
-    std::string memory_info() const override {
-        return Substitute("$0M($1/$2)", memory_usage() / (1024 * 1024), size(), capacity());
     }
 };
 
@@ -250,7 +249,7 @@ public:
                     std::string msg = strings::Substitute(
                             "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
                             "key=$4 [$5]",
-                            rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & 0xffffffff), keys[i].to_string(),
+                            rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
                             hexdump(keys[i].data, keys[i].size));
                     LOG(ERROR) << msg;
                     return Status::InternalError(msg);
@@ -271,7 +270,7 @@ public:
                     std::string msg = strings::Substitute(
                             "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
                             "key=$4 [$5]",
-                            rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & 0xffffffff), keys[i].to_string(),
+                            rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
                             hexdump(keys[i].data, keys[i].size));
                     LOG(ERROR) << msg;
                     return Status::InternalError(msg);
@@ -304,7 +303,7 @@ public:
                         LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
                                    << " [" << hexdump(keys[i].data, keys[i].size) << "]";
                     }
-                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
+                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                     p.first->second = v;
                 }
                 uint32_t prefetch_i = i + PREFETCHN;
@@ -324,7 +323,7 @@ public:
                         LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
                                    << " [" << hexdump(keys[i].data, keys[i].size) << "]";
                     }
-                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
+                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                     p.first->second = v;
                 }
             }
@@ -391,7 +390,7 @@ public:
                 auto iter = _map.find(prefetch_keys[pslot], prefetch_hashes[pslot]);
                 if (iter != _map.end()) {
                     uint64_t old = iter->second.value;
-                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
+                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                     _map.erase(iter);
                 }
                 uint32_t prefetch_i = i + PREFETCHN;
@@ -406,7 +405,7 @@ public:
                 auto iter = _map.find(FixSlice<S>(keys[i]));
                 if (iter != _map.end()) {
                     uint64_t old = iter->second.value;
-                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
+                    (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                     _map.erase(iter);
                 }
             }
@@ -414,10 +413,6 @@ public:
     }
 
     std::size_t memory_usage() const final { return _map.capacity() * (1 + S * 4 + sizeof(RowIdPack4)); }
-
-    std::string memory_info() const override {
-        return Substitute("$0M($1/$2)", memory_usage() / (1024 * 1024), size(), capacity());
-    }
 };
 
 struct StringHash {
@@ -455,7 +450,7 @@ public:
                 std::string msg = strings::Substitute(
                         "insert found duplicate key new(rssid=$0 rowid=$1) old(rssid=$2 rowid=$3) "
                         "key=$4 [$5]",
-                        rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & 0xffffffff), keys[i].to_string(),
+                        rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
                         hexdump(keys[i].data, keys[i].size));
                 LOG(ERROR) << msg;
                 return Status::InternalError(msg);
@@ -478,7 +473,7 @@ public:
                     LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid << " key=" << keys[i].to_string()
                                << " [" << hexdump(keys[i].data, keys[i].size) << "]";
                 }
-                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
+                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 p.first->second = v;
             } else {
                 _total_length += keys[i].size;
@@ -509,7 +504,7 @@ public:
             auto p = _map.find(keys[i].to_string());
             if (p != _map.end()) {
                 uint64_t old = p->second;
-                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & 0xffffffff));
+                (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
                 _map.erase(p);
                 _total_length -= keys[i].size;
             }
@@ -526,10 +521,6 @@ public:
             ret += size() * 8;
         }
         return ret;
-    }
-
-    std::string memory_info() const override {
-        return Substitute("$0M($1/$2)", memory_usage() / (1024 * 1024), size(), capacity());
     }
 };
 
@@ -689,16 +680,6 @@ public:
         for (int i = 0; i < max_fix_length; i++) {
             if (_maps[i]) {
                 ret += _maps[i]->memory_usage();
-            }
-        }
-        return ret;
-    }
-
-    std::string memory_info() const override {
-        string ret;
-        for (int i = 0; i < max_fix_length; i++) {
-            if (_maps[i]) {
-                StringAppendF(&ret, "%d:%s", i, _maps[i]->memory_info().c_str());
             }
         }
         return ret;
@@ -951,10 +932,6 @@ void PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
 
 std::size_t PrimaryIndex::memory_usage() const {
     return _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->memory_usage() : 0;
-}
-
-std::string PrimaryIndex::memory_info() const {
-    return _pkey_to_rssid_rowid ? _pkey_to_rssid_rowid->memory_info() : "Null";
 }
 
 std::size_t PrimaryIndex::size() const {

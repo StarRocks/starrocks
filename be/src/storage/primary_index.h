@@ -77,9 +77,6 @@ public:
     std::size_t memory_usage() const;
 
     // [not thread-safe]
-    std::string memory_info() const;
-
-    // [not thread-safe]
     std::size_t size() const;
 
     // [not thread-safe]
