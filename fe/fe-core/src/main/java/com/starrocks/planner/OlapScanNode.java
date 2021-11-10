@@ -178,6 +178,18 @@ public class OlapScanNode extends ScanNode {
         this.dictStringIdToIntIds = dictStringIdToIntIds;
     }
 
+    // The column names applied dict optimization
+    // used for explain
+    private List<String> appliedDictStringColumns = new ArrayList<>();
+
+    public void updateAppliedDictStringColumns(Set<Integer> appliedColumnIds) {
+        for (SlotDescriptor slot : desc.getSlots()) {
+            if (appliedColumnIds.contains(slot.getId().asInt())) {
+                appliedDictStringColumns.add(slot.getColumn().getName());
+            }
+        }
+    }
+
     /**
      * This method is mainly used to update scan range info in OlapScanNode by the new materialized selector.
      * Situation1:
@@ -627,10 +639,32 @@ public class OlapScanNode extends ScanNode {
             output.append(prefix).append("Predicates: ").append(getVerboseExplain(conjuncts)).append("\n");
         }
 
+        if (!dictStringIdToIntIds.isEmpty()) {
+            List<String> flatDictList = dictStringIdToIntIds.entrySet().stream().limit(5)
+                    .map((entry) -> "(" + entry.getKey() + "," + entry.getValue() + ")").collect(Collectors.toList());
+            String format_template = "dictStringIdToIntIds=%s";
+            if (dictStringIdToIntIds.size() > 5) {
+                format_template = format_template + "...";
+            }
+            output.append(prefix).append(String.format(format_template, Joiner.on(",").join(flatDictList)));
+            output.append("\n");
+        }
+
+        if (!appliedDictStringColumns.isEmpty()) {
+            int maxSize = Math.min(appliedDictStringColumns.size(), 5);
+            List<String> printList = appliedDictStringColumns.subList(0, maxSize);
+            String format_template = "dict_col=%s";
+            if (dictStringIdToIntIds.size() > 5) {
+                format_template = format_template + "...";
+            }
+            output.append(prefix).append(String.format(format_template, Joiner.on(",").join(printList)));
+            output.append("\n");
+        }
+
         output.append(prefix).append(String.format(
-                "partitionsRatio=%s/%s",
-                selectedPartitionNum,
-                olapTable.getPartitions().size())).append(", ")
+                        "partitionsRatio=%s/%s",
+                        selectedPartitionNum,
+                        olapTable.getPartitions().size())).append(", ")
                 .append(String.format("tabletsRatio=%s/%s", selectedTabletsNum, totalTabletsNum)).append("\n");
 
         if (scanTabletIds.size() > 10) {
@@ -642,9 +676,9 @@ public class OlapScanNode extends ScanNode {
         output.append("\n");
 
         output.append(prefix).append(String.format(
-                "actualRows=%s", actualRows))
+                        "actualRows=%s", actualRows))
                 .append(", ").append(String.format(
-                "avgRowSize=%s", avgRowSize)).append("\n");
+                        "avgRowSize=%s", avgRowSize)).append("\n");
         return output.toString();
     }
 
@@ -677,7 +711,8 @@ public class OlapScanNode extends ScanNode {
             msg.olap_scan_node.setSort_column(sortColumn);
         }
         if (ConnectContext.get() != null) {
-            msg.olap_scan_node.setEnable_column_expr_predicate(ConnectContext.get().getSessionVariable().getEnableColumnExprPredicate());
+            msg.olap_scan_node.setEnable_column_expr_predicate(
+                    ConnectContext.get().getSessionVariable().getEnableColumnExprPredicate());
         }
         msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
     }
