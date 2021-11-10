@@ -195,7 +195,7 @@ Status ExecEnv::init_mem_tracker() {
     _schema_change_mem_tracker = new MemTracker(-1, "schema_change", _mem_tracker);
     _column_pool_mem_tracker = new MemTracker(-1, "column_pool", _mem_tracker);
     _page_cache_mem_tracker = new MemTracker(-1, "page_cache", _mem_tracker);
-    _update_mem_tracker = new MemTracker(bytes_limit * 0.6, "update", _mem_tracker);
+    _update_mem_tracker = new MemTracker(bytes_limit * 0.6, "update", nullptr);
     _chunk_allocator_mem_tracker = new MemTracker(-1, "chunk_allocator", _mem_tracker);
     _clone_mem_tracker = new MemTracker(-1, "clone", _mem_tracker);
     _consistency_mem_tracker = new MemTracker(-1, "consistency", _mem_tracker);
