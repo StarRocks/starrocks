@@ -256,16 +256,20 @@ bool OlapChunkSource::has_next_chunk() const {
 }
 
 bool OlapChunkSource::has_output() const {
-    return !_chunk_cache.empty();
+    return !_chunk_buffer.empty();
 }
 
-StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_cache() {
+size_t OlapChunkSource::get_buffer_size() const {
+    return _chunk_buffer.get_size();
+}
+
+StatusOr<vectorized::ChunkPtr> OlapChunkSource::get_next_chunk_from_buffer() {
     vectorized::ChunkPtr chunk = nullptr;
-    _chunk_cache.try_get(&chunk);
+    _chunk_buffer.try_get(&chunk);
     return chunk;
 }
 
-Status OlapChunkSource::cache_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) {
+Status OlapChunkSource::buffer_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) {
     if (!_status.ok()) {
         return _status;
     }
@@ -278,7 +282,7 @@ Status OlapChunkSource::cache_next_batch_chunks_blocking(size_t batch_size, bool
         if (!_status.ok()) {
             break;
         }
-        _chunk_cache.put(std::move(chunk));
+        _chunk_buffer.put(std::move(chunk));
     }
     return _status;
 }

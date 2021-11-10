@@ -47,7 +47,7 @@ bool ScanOperator::has_output() const {
 
     DCHECK(_chunk_source != nullptr);
 
-    // Still have cached chunks
+    // Still have buffered chunks
     if (_chunk_source->has_output()) {
         return true;
     }
@@ -98,7 +98,14 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         return nullptr;
     }
 
-    return _chunk_source->get_next_chunk_from_cache();
+    auto&& chunk = _chunk_source->get_next_chunk_from_buffer();
+    // If buffer size is smaller than half of batch_size,
+    // we can start the next scan task ahead of time to obtain better continuity
+    if (_chunk_source->get_buffer_size() < (_batch_size >> 1) && !_is_io_task_active.load(std::memory_order_acquire) &&
+        _chunk_source->has_next_chunk()) {
+        _trigger_next_scan(state);
+    }
+    return chunk;
 }
 
 void ScanOperator::_trigger_next_scan(RuntimeState* state) {
@@ -112,7 +119,7 @@ void ScanOperator::_trigger_next_scan(RuntimeState* state) {
             tls_thread_status.set_mem_tracker(prev_tracker);
             _is_io_task_active.store(false, std::memory_order_release);
         });
-        _chunk_source->cache_next_batch_chunks_blocking(_batch_size, _is_finished);
+        _chunk_source->buffer_next_batch_chunks_blocking(_batch_size, _is_finished);
     };
     // TODO(by satanson): set a proper priority
     task.priority = 20;
