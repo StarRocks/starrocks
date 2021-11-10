@@ -14,6 +14,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.UserException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
@@ -472,12 +473,15 @@ public class HiveMetaClient {
         long hdfsBlockSize = Config.hdfs_block_size;
         long osBlockSize = Config.object_storage_block_size;
         if (!isObjectStorage(dirPath)) {
-            if (hdfsBlockSize < 0) {
+            if (hdfsBlockSize <= 0) {
                 return getHdfsFileDescsByAPI(dirPath);
             } else {
                 return getHdfsFileDescsByBlockSize(dirPath, hdfsBlockSize);
             }
         } else {
+            if (osBlockSize <= 0) {
+                throw new UserException("invalid config [object_storage_block_size] value: " + osBlockSize);
+            }
             return getHdfsFileDescsByBlockSize(dirPath, osBlockSize);
         }
     }
