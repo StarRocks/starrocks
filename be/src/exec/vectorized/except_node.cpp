@@ -92,7 +92,7 @@ Status ExceptNode::open(RuntimeState* state) {
         ScopedTimer<MonotonicStopWatch> build_timer(_build_set_timer);
         RETURN_IF_ERROR(_hash_set->build_set(state, chunk, _child_expr_lists[0], _build_pool.get()));
         while (true) {
-            RETURN_IF_ERROR(state->check_query_state("ExceptNode"));
+            RETURN_IF_ERROR(state->check_mem_limit("ExceptNode"));
             RETURN_IF_CANCELLED(state);
             build_timer.stop();
             RETURN_IF_ERROR(child(0)->get_next(state, &chunk, &eos));

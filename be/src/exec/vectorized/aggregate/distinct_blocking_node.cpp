@@ -29,7 +29,7 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
              << _aggregator->needs_finalize();
 
     while (true) {
-        RETURN_IF_ERROR(state->check_query_state("AggrNode"));
+        RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
 
         bool eos = false;
         RETURN_IF_CANCELLED(state);
