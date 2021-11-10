@@ -1015,14 +1015,15 @@ TEST_F(AggregateIteratorTest, gen_source_masks) {
 
     auto pk = std::vector<int64_t>{1, 1, 2, 3, 3, 3, 4, 5, 5};
     auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_BIGINT(pk));
+    child_iter->chunk_size(1024);
     std::vector<RowSourceMask> source_masks{1, 1, 1, 2, 2, 2, 3, 3, 3};
-    auto agg_iter = new_aggregate_iterator(child_iter, 0, true, true, &source_masks);
+    auto agg_iter = new_aggregate_iterator(child_iter, 0, true, true);
 
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;
     while (true) {
         chunk->reset();
-        st = agg_iter->get_next(chunk.get());
+        st = agg_iter->get_next(chunk.get(), &source_masks);
         if (!st.ok()) {
             break;
         }
@@ -1032,7 +1033,7 @@ TEST_F(AggregateIteratorTest, gen_source_masks) {
     // check agg flag
     std::vector<bool> expected{false, true, false, false, true, true, false, false, true};
     for (size_t i = 0; i < source_masks.size(); ++i) {
-        ASSERT_EQ(expected[i], source_masks.at(i).get_agg_flag());
+        ASSERT_EQ(expected[i], source_masks[i].get_agg_flag());
     }
 
     agg_iter->close();
@@ -1049,18 +1050,19 @@ TEST_F(AggregateIteratorTest, sum_from_source_masks) {
 
     auto v1 = std::vector<int16_t>{1, 2, 3, 4, 5, 6, 7, 8, 9};
     auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_SMALLINT(v1));
+    child_iter->chunk_size(1024);
     // pk is {1, 1, 2, 3, 3, 3, 4, 5, 5}
     // only last 9 masks are used to represent pk.
     std::vector<RowSourceMask> source_masks{{1, false}, {2, false}, {1, false}, {1, true},  {1, false}, {2, false},
                                             {2, true},  {2, true},  {3, false}, {3, false}, {3, true}};
-    auto agg_iter = new_aggregate_iterator(child_iter, 0, true, false, &source_masks);
+    auto agg_iter = new_aggregate_iterator(child_iter, 0, true, false);
 
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;
     std::vector<int16_t> values;
     while (true) {
         chunk->reset();
-        st = agg_iter->get_next(chunk.get());
+        st = agg_iter->get_next(chunk.get(), &source_masks);
         if (!st.ok()) {
             break;
         }
@@ -1092,17 +1094,18 @@ TEST_F(AggregateIteratorTest, max_from_source_masks) {
 
     auto v1 = std::vector<int16_t>{2, 1, 3, 4, 6, 5, 7, 8, 9};
     auto child_iter = std::make_shared<VectorChunkIterator>(schema, COL_SMALLINT(v1));
+    child_iter->chunk_size(1024);
     // pk is {1, 1, 2, 3, 3, 3, 4, 5, 5}
     std::vector<RowSourceMask> source_masks{{1, false}, {1, true},  {1, false}, {2, false}, {2, true},
                                             {2, true},  {3, false}, {3, false}, {3, true}};
-    auto agg_iter = new_aggregate_iterator(child_iter, 0, true, false, &source_masks);
+    auto agg_iter = new_aggregate_iterator(child_iter, 0, true, false);
 
     ChunkPtr chunk = ChunkHelper::new_chunk(agg_iter->schema(), config::vector_chunk_size);
     Status st;
     std::vector<int16_t> values;
     while (true) {
         chunk->reset();
-        st = agg_iter->get_next(chunk.get());
+        st = agg_iter->get_next(chunk.get(), &source_masks);
         if (!st.ok()) {
             break;
         }

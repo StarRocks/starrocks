@@ -42,6 +42,7 @@ public:
 
 public:
     Status do_get_next(Chunk* chunk) override;
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
 
 private:
     using PredicateList = std::vector<const ColumnPredicate*>;
@@ -75,7 +76,6 @@ private:
     bool _is_vertical_merge = false;
     bool _is_key = false;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
-    std::unique_ptr<std::vector<RowSourceMask>> _source_masks = nullptr;
 };
 
 } // namespace starrocks::vectorized

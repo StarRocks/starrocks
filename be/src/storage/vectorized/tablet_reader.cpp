@@ -33,8 +33,7 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schem
           _version(version),
           _is_vertical_merge(true),
           _is_key(is_key),
-          _mask_buffer(mask_buffer),
-          _source_masks(std::make_unique<std::vector<RowSourceMask>>()) {
+          _mask_buffer(mask_buffer) {
     DCHECK(_mask_buffer);
     _delete_predicates_version = version;
 }
@@ -65,19 +64,14 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
 }
 
 Status TabletReader::do_get_next(Chunk* chunk) {
-    if (_is_vertical_merge) {
-        RETURN_IF_ERROR(_collect_iter->get_next(chunk, _source_masks.get()));
-        if (_is_key) {
-            if (!_source_masks->empty()) {
-                RETURN_IF_ERROR(_mask_buffer->write(*_source_masks));
-            }
-        }
-        if (!_source_masks->empty()) {
-            _source_masks->clear();
-        }
-    } else {
-        RETURN_IF_ERROR(_collect_iter->get_next(chunk));
-    }
+    DCHECK(!_is_vertical_merge);
+    RETURN_IF_ERROR(_collect_iter->get_next(chunk));
+    return Status::OK();
+}
+
+Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
+    DCHECK(_is_vertical_merge);
+    RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks));
     return Status::OK();
 }
 

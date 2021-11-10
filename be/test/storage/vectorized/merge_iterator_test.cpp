@@ -49,7 +49,7 @@ TEST_F(MergeIteratorTest, heap_merge_overlapping) {
 
     std::vector<RowSourceMask> source_masks;
 
-    auto iter = new_heap_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3}, &source_masks);
+    auto iter = new_heap_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3});
 
     std::vector<int32_t> expected;
     expected.insert(expected.end(), v1.begin(), v1.end());
@@ -59,7 +59,7 @@ TEST_F(MergeIteratorTest, heap_merge_overlapping) {
 
     std::vector<int32_t> real;
     ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
-    while (iter->get_next(chunk.get()).ok()) {
+    while (iter->get_next(chunk.get(), &source_masks).ok()) {
         ColumnPtr& c = chunk->get_column_by_index(0);
         for (size_t i = 0; i < c->size(); i++) {
             real.push_back(c->get(i).get_int32());
@@ -71,7 +71,7 @@ TEST_F(MergeIteratorTest, heap_merge_overlapping) {
         EXPECT_EQ(expected[i], real[i]);
     }
     chunk->reset();
-    ASSERT_TRUE(iter->get_next(chunk.get()).is_end_of_file());
+    ASSERT_TRUE(iter->get_next(chunk.get(), &source_masks).is_end_of_file());
 
     // check source masks
     std::vector<uint16_t> expected_sources{0, 0, 0, 0, 0, 0, 1, 1, 2, 1, 2, 2, 1, 1, 1, 1, 2, 2};
@@ -166,7 +166,7 @@ TEST_F(MergeIteratorTest, mask_merge) {
     mask_buffer.flip();
     source_masks.clear();
 
-    auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3}, &mask_buffer, &source_masks);
+    auto iter = new_mask_merge_iterator(std::vector<ChunkIteratorPtr>{sub1, sub2, sub3}, &mask_buffer);
 
     std::vector<int32_t> expected;
     expected.insert(expected.end(), v1.begin(), v1.end());
@@ -176,7 +176,7 @@ TEST_F(MergeIteratorTest, mask_merge) {
 
     std::vector<int32_t> real;
     ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
-    while (iter->get_next(chunk.get()).ok()) {
+    while (iter->get_next(chunk.get(), &source_masks).ok()) {
         ColumnPtr& c = chunk->get_column_by_index(0);
         for (size_t i = 0; i < c->size(); i++) {
             real.push_back(c->get(i).get_int32());
@@ -188,7 +188,7 @@ TEST_F(MergeIteratorTest, mask_merge) {
         ASSERT_EQ(expected[i], real[i]);
     }
     chunk->reset();
-    ASSERT_TRUE(iter->get_next(chunk.get()).is_end_of_file());
+    ASSERT_TRUE(iter->get_next(chunk.get(), &source_masks).is_end_of_file());
 
     // check source masks
     for (size_t i = 0; i < expected_sources.size(); i++) {
