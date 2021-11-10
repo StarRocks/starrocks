@@ -79,6 +79,8 @@ public:
     }
 
 protected:
+    RuntimeState* _runtime_state = nullptr;
+
     // Set to true after close() has been called. subclasses should check and set this in
     // close().
     bool _closed{false};

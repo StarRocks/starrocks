@@ -31,6 +31,7 @@
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/row_batch.h"
 #include "runtime/runtime_state.h"
@@ -39,6 +40,7 @@
 #include "simd/simd.h"
 #include "storage/hll.h"
 #include "util/brpc_stub_cache.h"
+#include "util/defer_op.h"
 #include "util/monotime.h"
 #include "util/uid_util.h"
 
@@ -255,6 +257,7 @@ Status NodeChannel::add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_id
         {
             SCOPED_RAW_TIMER(&_queue_push_lock_ns);
             std::lock_guard<std::mutex> l(_pending_batches_lock);
+            _mem_tracker->consume(_cur_chunk->memory_usage());
             _pending_chunks.emplace(std::move(_cur_chunk), _cur_add_chunk_request);
             _pending_batches_num++;
         }
@@ -280,6 +283,7 @@ Status NodeChannel::mark_close() {
         {
             std::lock_guard<std::mutex> l(_pending_batches_lock);
             DCHECK(_cur_chunk != nullptr);
+            _mem_tracker->consume(_cur_chunk->memory_usage());
             _pending_chunks.emplace(std::move(_cur_chunk), _cur_add_chunk_request);
             _pending_batches_num++;
         }
@@ -352,6 +356,7 @@ int NodeChannel::try_send_chunk_and_fetch_status() {
             DCHECK(!_pending_chunks.empty());
             send_chunk = std::move(_pending_chunks.front());
             _pending_chunks.pop();
+            _mem_tracker->release(send_chunk.first->memory_usage());
             _pending_batches_num--;
         }
 
@@ -1083,6 +1088,9 @@ void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
 }
 
 void OlapTableSink::_send_chunk_process() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_runtime_state->instance_mem_tracker());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     SCOPED_RAW_TIMER(&_non_blocking_send_ns);
     while (true) {
         int running_channels_num = 0;

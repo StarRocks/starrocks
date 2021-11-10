@@ -121,6 +121,7 @@ Status DataSink::init(const TDataSink& thrift_sink) {
 }
 
 Status DataSink::prepare(RuntimeState* state) {
+    _runtime_state = state;
     return Status::OK();
 }
 
