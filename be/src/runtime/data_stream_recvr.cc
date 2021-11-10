@@ -663,7 +663,7 @@ void DataStreamRecvr::add_batch(const PRowBatch& batch, int sender_id, int be_nu
 
 Status DataStreamRecvr::add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
     SCOPED_TIMER(_sender_total_timer);
     COUNTER_UPDATE(_request_received_counter, 1);
