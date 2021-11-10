@@ -33,8 +33,8 @@
 
 namespace starrocks {
 
-OLAPStatus DeltaWriter::open(WriteRequest* req, MemTracker* mem_tracker, std::shared_ptr<DeltaWriter>& writer) {
-    writer = std::shared_ptr<DeltaWriter>(new DeltaWriter(req, mem_tracker, StorageEngine::instance()));
+OLAPStatus DeltaWriter::open(WriteRequest* req, MemTracker* mem_tracker, std::shared_ptr<DeltaWriter>* writer) {
+    *writer = std::shared_ptr<DeltaWriter>(new DeltaWriter(req, mem_tracker, StorageEngine::instance()));
     return OLAP_SUCCESS;
 }
 

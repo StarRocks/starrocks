@@ -471,7 +471,7 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
             request.global_dicts = &_global_dicts;
 
             std::shared_ptr<vectorized::DeltaWriter> writer;
-            auto st = vectorized::DeltaWriter::open(&request, _mem_tracker.get(), writer);
+            auto st = vectorized::DeltaWriter::open(&request, _mem_tracker.get(), &writer);
             if (!st.ok()) {
                 std::stringstream ss;
                 ss << "open delta writer failed, tablet_id=" << tablet.tablet_id() << ", txn_id=" << _txn_id
@@ -502,7 +502,7 @@ Status TabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& params)
             request.slots = index_slots;
 
             std::shared_ptr<DeltaWriter> writer;
-            auto st = DeltaWriter::open(&request, _mem_tracker.get(), writer);
+            auto st = DeltaWriter::open(&request, _mem_tracker.get(), &writer);
             if (st != OLAP_SUCCESS) {
                 std::stringstream ss;
                 ss << "open delta writer failed, tablet_id=" << tablet.tablet_id() << ", txn_id=" << _txn_id
