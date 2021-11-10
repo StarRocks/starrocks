@@ -62,7 +62,7 @@ public:
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
     // by all the channels.
-    Status send_chunk_request(PTransmitChunkParams* params, const butil::IOBuf& attachment);
+    Status send_chunk_request(PTransmitChunkParamsPtr chunk_request, const butil::IOBuf& attachment);
 
     // Used when doing shuffle.
     // This function will copy selective rows in chunks to batch.
@@ -97,6 +97,7 @@ private:
     TNetworkAddress _brpc_dest_addr;
 
     PUniqueId _finst_id;
+    PTransmitChunkParamsPtr _chunk_request;
 
     doris::PBackendService_Stub* _brpc_stub = nullptr;
 
@@ -156,16 +157,17 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
 
 Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, bool eos, bool* is_real_sent) {
     *is_real_sent = false;
-
-    PTransmitChunkParams request;
-    request.set_allocated_finst_id(&_finst_id);
-    request.set_node_id(_dest_node_id);
-    request.set_sender_id(_parent->_sender_id);
-    request.set_be_number(_parent->_be_number);
+    if (_chunk_request == nullptr) {
+        _chunk_request = std::make_shared<PTransmitChunkParams>();
+        _chunk_request->set_allocated_finst_id(&_finst_id);
+        _chunk_request->set_node_id(_dest_node_id);
+        _chunk_request->set_sender_id(_parent->_sender_id);
+        _chunk_request->set_be_number(_parent->_be_number);
+    }
 
     // If chunk is not null, append it to request
     if (chunk != nullptr) {
-        auto pchunk = request.add_chunks();
+        auto pchunk = _chunk_request->add_chunks();
         RETURN_IF_ERROR(_parent->serialize_chunk(chunk, pchunk, &_is_first_chunk));
         _current_request_bytes += pchunk->data().size();
     }
@@ -173,34 +175,29 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
     // Try to accumulate enough bytes before sending a RPC. When eos is true we should send
     // last packet
     if (_current_request_bytes > _parent->_request_bytes_threshold || eos) {
-        request.set_eos(eos);
+        _chunk_request->set_eos(eos);
         butil::IOBuf attachment;
-        _parent->construct_brpc_attachment(&request, &attachment);
-        TransmitChunkInfo info = {this->_channel_id, std::move(request), _brpc_stub, attachment};
+        _parent->construct_brpc_attachment(_chunk_request, attachment);
+        TransmitChunkInfo info = {this->_channel_id, _brpc_stub, std::move(_chunk_request), attachment};
         _parent->_buffer->add_request(info);
         _current_request_bytes = 0;
-        // The original design is bad, we must release_finst_id here!
-        info.params.release_finst_id();
-
+        _chunk_request.reset();
         *is_real_sent = true;
     }
 
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParams* params, const butil::IOBuf& attachment) {
-    params->mutable_finst_id()->CopyFrom(_finst_id);
-    params->set_node_id(_dest_node_id);
-    params->set_sender_id(_parent->_sender_id);
-    params->set_be_number(_parent->_be_number);
+Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr chunk_request,
+                                                         const butil::IOBuf& attachment) {
+    chunk_request->set_allocated_finst_id(&_finst_id);
+    chunk_request->set_node_id(_dest_node_id);
+    chunk_request->set_sender_id(_parent->_sender_id);
+    chunk_request->set_be_number(_parent->_be_number);
+    chunk_request->set_eos(false);
 
-    params->set_eos(false);
-    // TODO (by satanson): eliminate redundant copy in broadcast scenarios
-    TransmitChunkInfo info = {this->_channel_id, *params, _brpc_stub, attachment};
+    TransmitChunkInfo info = {this->_channel_id, _brpc_stub, std::move(chunk_request), attachment};
     _parent->_buffer->add_request(info);
-
-    // The original design is bad, we must release_finst_id here!
-    info.params.release_finst_id();
 
     return Status::OK();
 }
@@ -305,9 +302,6 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
         RETURN_IF_ERROR(_channel->init(state));
     }
 
-    // set eos for all channels.
-    // It will be set to true when closing.
-    _chunk_request.set_eos(false);
     _row_indexes.resize(config::vector_chunk_size);
 
     return Status::OK();
@@ -332,21 +326,26 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         return Status::OK();
     }
     if (_part_type == TPartitionType::UNPARTITIONED || _channels.size() == 1) {
+        if (_chunk_request == nullptr) {
+            _chunk_request = std::make_shared<PTransmitChunkParams>();
+        }
+
         // We use sender request to avoid serialize chunk many times.
         // 1. create a new chunk PB to serialize
-        ChunkPB* pchunk = _chunk_request.add_chunks();
+        ChunkPB* pchunk = _chunk_request->add_chunks();
         // 2. serialize input chunk to pchunk
         RETURN_IF_ERROR(serialize_chunk(chunk.get(), pchunk, &_is_first_chunk, _channels.size()));
         _current_request_bytes += pchunk->data().size();
         // 3. if request bytes exceede the threshold, send current request
         if (_current_request_bytes > _request_bytes_threshold) {
             butil::IOBuf attachment;
-            construct_brpc_attachment(&_chunk_request, &attachment);
+            construct_brpc_attachment(_chunk_request, attachment);
             for (const auto& channel : _channels) {
-                RETURN_IF_ERROR(channel->send_chunk_request(&_chunk_request, attachment));
+                PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
+                RETURN_IF_ERROR(channel->send_chunk_request(copy, attachment));
             }
             _current_request_bytes = 0;
-            _chunk_request.clear_chunks();
+            _chunk_request.reset();
         }
     } else if (_part_type == TPartitionType::RANDOM) {
         // Round-robin batches among channels. Wait for the current channel to finish its
@@ -424,8 +423,19 @@ void ExchangeSinkOperator::finish(RuntimeState* state) {
     if (_is_finished) {
         return;
     }
-
     _is_finished = true;
+
+    if (_chunk_request != nullptr) {
+        butil::IOBuf attachment;
+        construct_brpc_attachment(_chunk_request, attachment);
+        for (const auto& channel : _channels) {
+            PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
+            channel->send_chunk_request(copy, attachment);
+        }
+        _current_request_bytes = 0;
+        _chunk_request.reset();
+    }
+
     for (auto& _channel : _channels) {
         _channel->close(state);
     }
@@ -495,11 +505,11 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
     return Status::OK();
 }
 
-void ExchangeSinkOperator::construct_brpc_attachment(PTransmitChunkParams* params, butil::IOBuf* attachment) {
-    for (int i = 0; i < params->chunks().size(); ++i) {
-        auto chunk = params->mutable_chunks(i);
+void ExchangeSinkOperator::construct_brpc_attachment(PTransmitChunkParamsPtr chunk_request, butil::IOBuf& attachment) {
+    for (int i = 0; i < chunk_request->chunks().size(); ++i) {
+        auto chunk = chunk_request->mutable_chunks(i);
         chunk->set_data_size(chunk->data().size());
-        attachment->append(chunk->data());
+        attachment.append(chunk->data());
         chunk->clear_data();
     }
 }
