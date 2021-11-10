@@ -24,8 +24,10 @@
 #include <functional>
 #include <memory>
 
+#include "runtime/current_thread.h"
 #include "storage/memtable.h"
 #include "storage/vectorized/memtable.h"
+#include "util/defer_op.h"
 #include "util/scoped_cleanup.h"
 
 namespace starrocks {
@@ -53,7 +55,16 @@ Status FlushToken::submit(const std::shared_ptr<vectorized::MemTable>& memtable)
         ss << "tablet_id = " << memtable->tablet_id() << " flush_status error ";
         return Status::InternalError(ss.str());
     }
-    _flush_token->submit_func([this, memtable] { _flush_vectorized_memtable(memtable); });
+    _flush_token->submit_func([this, memtable] {
+        _stats.cur_flush_count++;
+        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(memtable->mem_tracker());
+        DeferOp op([&] {
+            const_cast<std::shared_ptr<vectorized::MemTable>&>(memtable).reset();
+            tls_thread_status.set_mem_tracker(prev_tracker);
+            _stats.cur_flush_count--;
+        });
+        _flush_vectorized_memtable(memtable);
+    });
     return Status::OK();
 }
 

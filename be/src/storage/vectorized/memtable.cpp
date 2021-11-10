@@ -6,10 +6,12 @@
 
 #include "column/type_traits.h"
 #include "common/logging.h"
+#include "runtime/current_thread.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/schema.h"
 #include "storage/vectorized/chunk_helper.h"
+#include "util/defer_op.h"
 #include "util/orlp/pdqsort.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
@@ -27,8 +29,8 @@ MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const s
           _slot_descs(slot_descs),
           _keys_type(tablet_schema->keys_type()),
           _rowset_writer(rowset_writer),
-          _aggregator(nullptr) {
-    _mem_tracker = std::make_unique<MemTracker>(-1, "memtable", mem_tracker, true);
+          _aggregator(nullptr),
+          _mem_tracker(mem_tracker) {
     _vectorized_schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
     if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema
@@ -47,9 +49,7 @@ MemTable::MemTable(int64_t tablet_id, const TabletSchema* tablet_schema, const s
     }
 }
 
-MemTable::~MemTable() {
-    _mem_tracker->release(_mem_tracker->consumption());
-}
+MemTable::~MemTable() {}
 
 size_t MemTable::memory_usage() const {
     size_t size = 0;
@@ -119,7 +119,6 @@ bool MemTable::insert(Chunk* chunk, const uint32_t* indexes, uint32_t from, uint
         suggest_flush = true;
     }
 
-    _mem_tracker->consume(static_cast<int64_t>(memory_usage()) - _mem_tracker->consumption());
     return suggest_flush;
 }
 
@@ -174,11 +173,8 @@ Status MemTable::finalize() {
             _aggregator.reset();
             _aggregator_memory_usage = 0;
             _aggregator_bytes_usage = 0;
-            // TODO: release _permutations, _selective_values
-            _mem_tracker->release(_mem_tracker->consumption() - _result_chunk->memory_usage());
         } else {
             _sort(true);
-            _mem_tracker->release(_mem_tracker->consumption() - _result_chunk->memory_usage());
         }
     }
 
