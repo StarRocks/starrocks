@@ -134,7 +134,7 @@ void* add_thread(void* param) {
     BufferControlBlock* control_block = static_cast<BufferControlBlock*>(param);
     sleep(1);
     {
-        std::unique_ptr<TFetchDataResult> add_result;
+        std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
         add_result->result_batch.rows.push_back("hello test1");
         add_result->result_batch.rows.push_back("hello test2");
         control_block->add_batch(add_result);
