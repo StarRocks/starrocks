@@ -21,11 +21,12 @@ namespace starrocks::vectorized {
  */
 class AggregateIterator final : public ChunkIterator {
 public:
-    explicit AggregateIterator(ChunkIteratorPtr child, int factor)
+    explicit AggregateIterator(ChunkIteratorPtr child, int factor, bool is_vertical_merge, bool is_key,
+                               std::vector<RowSourceMask>* source_masks)
             : ChunkIterator(child->schema(), child->chunk_size()),
               _child(std::move(child)),
               _pre_aggregate_factor(factor),
-              _aggregator(&_schema, _chunk_size, _pre_aggregate_factor / 100),
+              _aggregator(&_schema, _chunk_size, _pre_aggregate_factor / 100, is_vertical_merge, is_key, source_masks),
               _fetch_finish(false) {
         CHECK_LT(_schema.num_key_fields(), std::numeric_limits<uint16_t>::max());
 
@@ -134,8 +135,9 @@ void AggregateIterator::close() {
     _aggregator.close();
 }
 
-ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, int factor) {
-    return std::make_shared<AggregateIterator>(std::move(child), factor);
+ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, int factor, bool is_vertical_merge, bool is_key,
+                                        std::vector<RowSourceMask>* source_masks) {
+    return std::make_shared<AggregateIterator>(std::move(child), factor, is_vertical_merge, is_key, source_masks);
 }
 
 } // namespace starrocks::vectorized

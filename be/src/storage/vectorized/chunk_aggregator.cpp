@@ -137,6 +137,14 @@ ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, ui
 ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, uint32_t aggregate_rows, double factor)
         : ChunkAggregator(schema, aggregate_rows, aggregate_rows, factor) {}
 
+ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, uint32_t aggregate_rows, double factor,
+                                 bool is_vertical_merge, bool is_key, std::vector<RowSourceMask>* source_masks)
+        : ChunkAggregator(schema, aggregate_rows, aggregate_rows, factor) {
+    _is_vertical_merge = is_vertical_merge;
+    _is_key = is_key;
+    _source_masks = source_masks;
+}
+
 CompareFN ChunkAggregator::_choose_comparator(const FieldPtr& field) {
     switch (field->type()->type()) {
     case OLAP_FIELD_TYPE_TINYINT:
@@ -201,20 +209,41 @@ bool ChunkAggregator::_row_equal(const Chunk* lhs, size_t m, const Chunk* rhs, s
 }
 
 void ChunkAggregator::update_source(ChunkPtr& chunk) {
-    _is_eq.assign(chunk->num_rows(), 1);
+    size_t is_eq_size = chunk->num_rows();
+    _is_eq.assign(is_eq_size, 1);
     _source_row = 0;
     _source_size = 0;
     _do_aggregate = true;
 
-    size_t factor = chunk->num_rows() * _factor;
-    for (int i = _key_fields - 1; i >= 0; --i) {
-        _comparator[i](chunk->get_column_by_index(i).get(), _is_eq.data());
+    if (_is_vertical_merge && !_is_key) {
+        // update _is_eq from source masks
+        DCHECK(_source_masks);
+        size_t masks_size = _source_masks->size();
+        DCHECK_GE(masks_size, is_eq_size);
+        size_t start_offset = masks_size - is_eq_size;
+        for (int i = 0; i < is_eq_size; ++i) {
+            _is_eq[i] = _source_masks->at(start_offset + i).get_agg_flag() ? 1 : 0;
+        }
+    } else {
+        // update _is_eq by key comparison
+        size_t factor = chunk->num_rows() * _factor;
+        for (int i = _key_fields - 1; i >= 0; --i) {
+            _comparator[i](chunk->get_column_by_index(i).get(), _is_eq.data());
 
-        if (_factor > 0 && SIMD::count_nonzero(_is_eq) < factor) {
-            _do_aggregate = false;
-            return;
+            if (_factor > 0 && SIMD::count_nonzero(_is_eq) < factor) {
+                _do_aggregate = false;
+                return;
+            }
+        }
+
+        if (_aggregate_chunk->num_rows() > 0 && _key_fields > 0) {
+            _is_eq[0] = _row_equal(_aggregate_chunk.get(), _aggregate_chunk->num_rows() - 1, chunk.get(), 0);
+        } else {
+            _is_eq[0] = 0;
         }
     }
+
+    _merged_rows += SIMD::count_nonzero(_is_eq);
 
     // update source column
     for (int j = 0; j < _num_fields; ++j) {
@@ -222,12 +251,16 @@ void ChunkAggregator::update_source(ChunkPtr& chunk) {
     }
     _source_size = chunk->num_rows();
 
-    if (_aggregate_chunk->num_rows() > 0 && _key_fields > 0) {
-        _is_eq[0] = _row_equal(_aggregate_chunk.get(), _aggregate_chunk->num_rows() - 1, chunk.get(), 0);
-    } else {
-        _is_eq[0] = 0;
+    // update source masks from _is_eq
+    if (_is_vertical_merge && _is_key) {
+        DCHECK(_source_masks);
+        size_t masks_size = _source_masks->size();
+        DCHECK_GE(masks_size, is_eq_size);
+        size_t start_offset = masks_size - is_eq_size;
+        for (int i = 0; i < is_eq_size; ++i) {
+            _source_masks->at(start_offset + i).set_agg_flag(_is_eq[i] != 0);
+        }
     }
-    _merged_rows += SIMD::count_nonzero(_is_eq);
 }
 
 void ChunkAggregator::aggregate() {

@@ -228,7 +228,7 @@ StatusOr<vectorized::ChunkIteratorPtr> BetaRowset::new_iterator(const vectorized
     if (seg_iters.empty()) {
         return vectorized::new_empty_iterator(schema, options.chunk_size);
     } else if (options.sorted) {
-        return vectorized::new_merge_iterator(seg_iters);
+        return vectorized::new_heap_merge_iterator(seg_iters);
     } else {
         return vectorized::new_union_iterator(std::move(seg_iters));
     }

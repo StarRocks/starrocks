@@ -5,10 +5,11 @@
 #include <vector>
 
 #include "storage/vectorized/chunk_iterator.h"
+#include "storage/vectorized/row_source_mask.h"
 
 namespace starrocks::vectorized {
 
-// new_merge_iterator create a sorted iterator based on merge-sort algorithm.
+// new_heap_merge_iterator create a sorted iterator based on merge-sort algorithm.
 // the order of rows is determinate by the key columns.
 // if two rows compared equal, their order is determinate by the index of the source iterator
 // in the vector |children|. the one with a lower index will come first.
@@ -20,6 +21,14 @@ namespace starrocks::vectorized {
 //  - |children| are sorted iterators, i.e, each iterator in |children|
 //    should return rows in an ascending order based on the key columns.
 // one typical usage of this iterator is merging rows of the segments in the same `rowset`.
-ChunkIteratorPtr new_merge_iterator(const std::vector<ChunkIteratorPtr>& children);
+//
+// If source_masks is not null, row source mask sequence will be generated and can be used by MaskMergeIterator.
+ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
+                                         std::vector<RowSourceMask>* source_masks = nullptr);
+
+// new_mask_merge_iterator create an iterator based on source masks.
+// the order of rows is determinate by mask sequence.
+ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
+                                         RowSourceMaskBuffer* mask_buffer, std::vector<RowSourceMask>* source_masks);
 
 } // namespace starrocks::vectorized
