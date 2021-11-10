@@ -97,7 +97,8 @@ Status TabletsChannel::add_batch(const PTabletWriterAddBatchRequest& params) {
     }
 
     RowBatch row_batch(*_row_desc, params.row_batch());
-    if (row_batch.init(params.row_batch())) {
+    Status status = row_batch.init(params.row_batch());
+    if (!status.ok()) {
         return Status::InternalError("batch init failed for tablet to append data");
     }
 

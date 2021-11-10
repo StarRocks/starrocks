@@ -294,7 +294,8 @@ void DataStreamRecvr::SenderQueue::add_batch(const PRowBatch& pb_batch, int be_n
         // to _batch_queue. It is not valid to create the row batch and destroy
         // it in this thread.
         batch = std::make_unique<RowBatch>(_recvr->row_desc(), pb_batch);
-        if (batch->init(pb_batch)) {
+        Status status = batch->init(pb_batch);
+        if (!status.ok()) {
             LOG(WARNING) << "batch init failed, [cur_packet_id= " << iter->second << " receive_packet_id=" << packet_seq
                          << "]";
             return;

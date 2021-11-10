@@ -46,7 +46,7 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, int capacity)
           _tuple_data_pool(new MemPool()) {}
 
 // called after construction function above
-bool RowBatch::init() {
+Status RowBatch::init() {
     DCHECK_GT(_capacity, 0);
     _tuple_ptrs_size = _capacity * _num_tuples_per_row * sizeof(Tuple*);
     DCHECK_GT(_tuple_ptrs_size, 0);
@@ -55,7 +55,11 @@ bool RowBatch::init() {
     } else {
         _tuple_ptrs = reinterpret_cast<Tuple**>(_tuple_data_pool->allocate(_tuple_ptrs_size));
     }
-    return _tuple_ptrs == nullptr;
+    if (_tuple_ptrs) {
+        return Status::OK();
+    } else {
+        return Status::MemoryAllocFailed("RowBatch::init");
+    }
 }
 
 // TODO: we want our input_batch's tuple_data to come from our (not yet implemented)
@@ -74,7 +78,7 @@ RowBatch::RowBatch(const RowDescriptor& row_desc, const PRowBatch& input_batch)
           _tuple_data_pool(new MemPool()) {}
 
 // called after construction function above
-bool RowBatch::init(const PRowBatch& input_batch) {
+Status RowBatch::init(const PRowBatch& input_batch) {
     _tuple_ptrs_size = _num_rows * _num_tuples_per_row * sizeof(Tuple*);
     DCHECK_GT(_tuple_ptrs_size, 0);
     if (config::enable_partitioned_aggregation) {
@@ -84,7 +88,7 @@ bool RowBatch::init(const PRowBatch& input_batch) {
     }
 
     if (nullptr == _tuple_ptrs) {
-        return true;
+        return Status::MemoryAllocFailed("RowBatch::init");
     }
 
     uint8_t* tuple_data = nullptr;
@@ -116,7 +120,7 @@ bool RowBatch::init(const PRowBatch& input_batch) {
 
     // Check whether we have slots that require offset-to-pointer conversion.
     if (!_row_desc.has_varlen_slots()) {
-        return false;
+        return Status::OK();
     }
     const std::vector<TupleDescriptor*>& tuple_descs = _row_desc.tuple_descriptors();
 
@@ -150,7 +154,7 @@ bool RowBatch::init(const PRowBatch& input_batch) {
             }
         }
     }
-    return false;
+    return Status::OK();
 }
 
 // TODO: we want our input_batch's tuple_data to come from our (not yet implemented)
