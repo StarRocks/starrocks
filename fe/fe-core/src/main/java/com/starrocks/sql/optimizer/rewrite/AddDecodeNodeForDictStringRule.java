@@ -75,6 +75,9 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
     private static final Type ID_TYPE = Type.INT;
 
     static class DecodeContext {
+        // The parent operators whether need the child operators to encode
+        boolean needEncode = false;
+        // The child operators whether have encoded
         boolean hasEncoded = false;
         final ColumnRefFactory columnRefFactory;
         final Map<Long, List<Integer>> tableIdToStringColumnIds;
@@ -132,6 +135,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         private void visitProjectionBefore(OptExpression optExpression, DecodeContext context) {
             if (optExpression.getOp().getProjection() != null) {
+                context.needEncode = true;
                 Projection projection = optExpression.getOp().getProjection();
                 projection.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns);
             }
@@ -176,6 +180,10 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         @Override
         public OptExpression visitPhysicalOlapScan(OptExpression optExpression, DecodeContext context) {
             visitProjectionBefore(optExpression, context);
+
+            if (!context.needEncode) {
+                return optExpression;
+            }
 
             PhysicalOlapScanOperator scanOperator = (PhysicalOlapScanOperator) optExpression.getOp();
             long tableId = scanOperator.getTable().getId();
@@ -473,6 +481,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         @Override
         public OptExpression visitPhysicalHashJoin(OptExpression optExpression, DecodeContext context) {
             visitProjectionBefore(optExpression, context);
+            context.needEncode = true;
 
             PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) optExpression.getOp();
             joinOperator.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns);
@@ -501,6 +510,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         @Override
         public OptExpression visitPhysicalHashAggregate(OptExpression aggExpr, DecodeContext context) {
             visitProjectionBefore(aggExpr, context);
+            context.needEncode = true;
 
             OptExpression childExpr = aggExpr.inputAt(0);
             context.hasEncoded = false;
@@ -643,6 +653,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         result.setLogicalProperty(childExpr.get(0).getLogicalProperty());
         return result;
     }
+
 
     private static class CouldApplyDictOptimizeVisitor extends ScalarOperatorVisitor<Boolean, Void> {
 
