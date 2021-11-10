@@ -62,6 +62,7 @@ public class HiveMetaClient {
     private static final String SCHEME_S3 = "s3://";
     private static final String SCHEME_S3N = "s3n://";
     private static final String SCHEME_S3_PREFIX = "s3";
+    private static final String SCHEME_OSS_PREFIX = "oss";
 
     private final LinkedList<AutoCloseClient> clientPool = new LinkedList<>();
     private final Object clientPoolLock = new Object();
@@ -494,7 +495,7 @@ public class HiveMetaClient {
     }
 
     private boolean isObjectStorage(String path) {
-        return path.startsWith(SCHEME_S3_PREFIX);
+        return path.startsWith(SCHEME_S3_PREFIX) || path.startsWith(SCHEME_OSS_PREFIX);
     }
 
     private boolean isValidDataFile(FileStatus fileStatus) {
