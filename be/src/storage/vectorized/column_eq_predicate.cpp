@@ -27,52 +27,33 @@ public:
 
     ~ColumnEqPredicate() override = default;
 
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    template <typename Op>
+    inline void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
         auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
         auto* sel = selection;
         if (!column->has_null()) {
             for (size_t i = from; i < to; i++) {
-                sel[i] = v[i] == _value;
+                sel[i] = Op::apply(sel[i], (uint8_t)(v[i] == _value));
             }
         } else {
             /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
             for (size_t i = from; i < to; i++) {
-                sel[i] = (!is_null[i]) & (v[i] == _value);
+                sel[i] = Op::apply(sel[i], (uint8_t)((!is_null[i]) & (v[i] == _value)));
             }
         }
+    }
+
+    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
     }
 
     void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
-        auto* sel = selection;
-        if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
-                sel[i] &= (v[i] == _value);
-            }
-        } else {
-            /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
-            const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
-                sel[i] &= (uint8_t)(!is_null[i] & (v[i] == _value));
-            }
-        }
+        t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
     }
 
     void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
-        auto* sel = selection;
-        if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
-                sel[i] |= (v[i] == _value);
-            }
-        } else {
-            /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
-            const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
-                sel[i] |= (uint8_t)(!is_null[i] & (v[i] == _value));
-            }
-        }
+        t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
     }
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
@@ -140,36 +121,33 @@ public:
 
     ~BinaryColumnEqPredicate() override = default;
 
-    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+    template <typename Op>
+    inline void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
         auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
         auto* sel = selection;
         if (!column->has_null()) {
             for (size_t i = from; i < to; i++) {
-                sel[i] = v[i] == _value;
+                sel[i] = Op::apply(sel[i], (uint8_t)(v[i] == _value));
             }
         } else {
             /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
             const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
             for (size_t i = from; i < to; i++) {
-                sel[i] = (!is_null[i]) && (v[i] == _value);
+                sel[i] = Op::apply(sel[i], (uint8_t)((!is_null[i]) && (v[i] == _value)));
             }
         }
     }
 
+    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
+    }
+
     void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
-        auto* sel = selection;
-        if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
-                sel[i] &= (v[i] == _value);
-            }
-        } else {
-            /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
-            const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
-                sel[i] = sel[i] && (!is_null[i] & (v[i] == _value));
-            }
-        }
+        t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
+    }
+
+    void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
     }
 
     uint16_t evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
@@ -200,22 +178,6 @@ public:
             }
         }
         return new_size;
-    }
-
-    void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
-        auto* sel = selection;
-        if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
-                sel[i] = sel[i] || (v[i] == _value);
-            }
-        } else {
-            /* must use const uint8_t* to make vectorized effect, vector<uint8_t> not work */
-            const uint8_t* is_null = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
-                sel[i] = sel[i] || (!is_null[i] & (v[i] == _value));
-            }
-        }
     }
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
