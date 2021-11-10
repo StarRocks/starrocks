@@ -37,6 +37,10 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
+    public void forbitGlobalDict(long tableId) {
+    }
+
+    @Override
     public ColumnDict getGlobalDict(long tableId, String columnName) {
         return columnDict;
     }
