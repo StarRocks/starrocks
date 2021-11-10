@@ -94,6 +94,7 @@ Status DataDir::init(bool read_only) {
     RETURN_IF_ERROR_WITH_WARN(update_capacity(), "update_capacity failed");
     RETURN_IF_ERROR_WITH_WARN(_init_cluster_id(), "_init_cluster_id failed");
     RETURN_IF_ERROR_WITH_WARN(_init_data_dir(), "_init_data_dir failed");
+    RETURN_IF_ERROR_WITH_WARN(_init_tmp_dir(), "_init_tmp_dir failed");
     RETURN_IF_ERROR_WITH_WARN(_init_file_system(), "_init_file_system failed");
     RETURN_IF_ERROR_WITH_WARN(_init_meta(read_only), "_init_meta failed");
 
@@ -183,7 +184,15 @@ Status DataDir::_init_data_dir() {
         RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("failed to create data root path $0", data_path)),
                                   "check_exist failed");
     }
+    return Status::OK();
+}
 
+Status DataDir::_init_tmp_dir() {
+    std::string tmp_path = _path + TMP_PREFIX;
+    if (!FileUtils::check_exist(tmp_path) && !FileUtils::create_dir(tmp_path).ok()) {
+        RETURN_IF_ERROR_WITH_WARN(Status::IOError(strings::Substitute("failed to create tmp path $0", tmp_path)),
+                                  "check_exist failed");
+    }
     return Status::OK();
 }
 
