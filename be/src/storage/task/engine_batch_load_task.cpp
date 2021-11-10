@@ -31,12 +31,14 @@
 #include <string>
 
 #include "gen_cpp/AgentService_types.h"
+#include "runtime/current_thread.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/push_handler.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/push_handler.h"
+#include "util/defer_op.h"
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 
@@ -48,12 +50,17 @@ using std::vector;
 namespace starrocks {
 
 EngineBatchLoadTask::EngineBatchLoadTask(TPushReq& push_req, std::vector<TTabletInfo>* tablet_infos, int64_t signature,
-                                         AgentStatus* res_status)
-        : _push_req(push_req), _tablet_infos(tablet_infos), _signature(signature), _res_status(res_status) {}
+                                         AgentStatus* res_status, MemTracker* mem_tracker)
+        : _push_req(push_req), _tablet_infos(tablet_infos), _signature(signature), _res_status(res_status) {
+    _mem_tracker = std::make_unique<MemTracker>(-1, "BatchLoad", mem_tracker);
+}
 
 EngineBatchLoadTask::~EngineBatchLoadTask() = default;
 
 OLAPStatus EngineBatchLoadTask::execute() {
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
     AgentStatus status = STARROCKS_SUCCESS;
     if (_push_req.push_type == TPushType::LOAD_V2) {
         status = _init();
