@@ -288,13 +288,15 @@ Status EsPredicate::_build_binary_predicate(const Expr* conjunct, bool* handled)
             RETURN_ERROR_IF_EXPR_IS_NOT_SLOTREF(conjunct->get_child(0));
             // process cast expr, such as:
             // k (float) > 2.0, k(int) > 3.2
-            column_ref = (ColumnRef*)Expr::expr_without_cast(conjunct->get_child(0));
+            column_ref = const_cast<ColumnRef*>(
+                    down_cast<const ColumnRef*>(Expr::expr_without_cast(conjunct->get_child(0))));
             op = conjunct->op();
         } else if (TExprNodeType::SLOT_REF == conjunct->get_child(1)->node_type() ||
                    TExprNodeType::CAST_EXPR == conjunct->get_child(1)->node_type()) {
             expr = conjunct->get_child(0);
             RETURN_ERROR_IF_EXPR_IS_NOT_SLOTREF(conjunct->get_child(1));
-            column_ref = (ColumnRef*)Expr::expr_without_cast(conjunct->get_child(1));
+            column_ref = const_cast<ColumnRef*>(
+                    down_cast<const ColumnRef*>(Expr::expr_without_cast(conjunct->get_child(1))));
             op = conjunct->op();
         } else {
             return Status::InternalError("build disjuncts failed: no SLOT_REF child");
@@ -356,7 +358,9 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
             // conjunct->get_child(0)->node_type() == TExprNodeType::FUNCTION_CALL, at present doris on es can not support push down function
             RETURN_ERROR_IF_EXPR_IS_NOT_SLOTREF(conjunct->get_child(0));
 
-            ColumnRef* column_ref = (ColumnRef*)(conjunct->get_child(0));
+            ColumnRef* column_ref = const_cast<ColumnRef*>(
+                    down_cast<const ColumnRef*>(Expr::expr_without_cast(conjunct->get_child(0))));
+
             const SlotDescriptor* slot_desc = get_slot_desc(column_ref->slot_id());
 
             if (slot_desc == nullptr) {
@@ -379,10 +383,10 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
             Expr* expr = nullptr;
             if (TExprNodeType::SLOT_REF == conjunct->get_child(0)->node_type()) {
                 expr = conjunct->get_child(1);
-                column_ref = (ColumnRef*)(conjunct->get_child(0));
+                column_ref = const_cast<ColumnRef*>(down_cast<const ColumnRef*>(conjunct->get_child(0)));
             } else if (TExprNodeType::SLOT_REF == conjunct->get_child(1)->node_type()) {
                 expr = conjunct->get_child(0);
-                column_ref = (ColumnRef*)(conjunct->get_child(1));
+                column_ref = const_cast<ColumnRef*>(down_cast<const ColumnRef*>(conjunct->get_child(1)));
             } else {
                 return Status::InternalError("build disjuncts failed: no SLOT_REF child");
             }
