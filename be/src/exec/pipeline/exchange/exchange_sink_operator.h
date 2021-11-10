@@ -55,7 +55,7 @@ public:
     // For other chunk, only serialize the chunk data to ChunkPB.
     Status serialize_chunk(const vectorized::Chunk* chunk, ChunkPB* dst, bool* is_first_chunk, int num_receivers = 1);
 
-    void construct_brpc_attachment(PTransmitChunkParamsPtr _chunk_request, IOBufPtr attachment);
+    void construct_brpc_attachment(PTransmitChunkParamsPtr _chunk_request, butil::IOBuf& attachment);
 
     RuntimeProfile* profile() { return _profile; }
 

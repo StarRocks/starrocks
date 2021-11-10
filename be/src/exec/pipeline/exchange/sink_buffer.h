@@ -16,13 +16,12 @@
 namespace starrocks::pipeline {
 
 using PTransmitChunkParamsPtr = std::shared_ptr<PTransmitChunkParams>;
-using IOBufPtr = std::shared_ptr<butil::IOBuf>;
 
 struct TransmitChunkInfo {
     size_t channel_id;
     doris::PBackendService_Stub* brpc_stub;
     PTransmitChunkParamsPtr params;
-    IOBufPtr attachment;
+    butil::IOBuf attachment;
 };
 
 class SinkBuffer {
@@ -46,7 +45,7 @@ public:
                 }
             });
             _closures.push_back(closure);
-            _caches.emplace_back();
+            _buffers.emplace_back();
         }
         try {
             _thread = std::thread{&SinkBuffer::process, this};
@@ -59,19 +58,38 @@ public:
 
     ~SinkBuffer() {
         _is_finished = true;
-        _cache_empty_cv.notify_one();
+        _buffer_empty_cv.notify_one();
         _thread.join();
+
+        // TODO(hcf) is_finish() unable to judge such situation that when process()
+        // pickup request from buffer and before transmitting through brpc.
+        // at this moment, _in_flight_rpc_num equals 0 and no closure is in flight
+        // but it is going to send packet. To handle this properly, we need to wait
+        // all the closure finish its io job
         for (auto* closure : _closures) {
+            auto cntl = &closure->cntl;
+            brpc::Join(cntl->call_id());
             if (closure->unref()) {
                 delete closure;
+            }
+        }
+        for (auto& buffer : _buffers) {
+            while (!buffer.empty()) {
+                auto& info = buffer.front();
+                info.params->release_finst_id();
+                buffer.pop();
             }
         }
     }
 
     void add_request(const TransmitChunkInfo& request) {
+        if (_is_finished) {
+            request.params->release_finst_id();
+            return;
+        }
         std::lock_guard<std::mutex> l(_mutex);
-        _caches[request.channel_id].push(request);
-        _cache_empty_cv.notify_one();
+        _buffers[request.channel_id].push(request);
+        _buffer_empty_cv.notify_one();
     }
 
     void process() {
@@ -82,15 +100,15 @@ public:
             while (!_is_finished) {
                 {
                     std::unique_lock<std::mutex> l(_mutex);
-                    bool is_cache_empty = true;
-                    for (auto& cache : _caches) {
-                        if (!cache.empty()) {
-                            is_cache_empty = false;
+                    bool is_buffer_empty = true;
+                    for (auto& buffer : _buffers) {
+                        if (!buffer.empty()) {
+                            is_buffer_empty = false;
                             break;
                         }
                     }
-                    if (is_cache_empty) {
-                        _cache_empty_cv.wait(l);
+                    if (is_buffer_empty) {
+                        _buffer_empty_cv.wait(l);
                     }
                 }
 
@@ -99,19 +117,19 @@ public:
 
                 for (; spin_iter < spin_threshould; ++spin_iter) {
                     bool find_any = false;
-                    for (auto& cache : _caches) {
-                        if (cache.empty()) {
+                    for (auto& buffer : _buffers) {
+                        if (buffer.empty()) {
                             continue;
                         }
 
                         // std::queue' read is concurrent safe without mutex
-                        if (!_closures[cache.front().channel_id]->has_in_flight_rpc()) {
-                            TransmitChunkInfo info = cache.front();
+                        if (!_closures[buffer.front().channel_id]->has_in_flight_rpc()) {
+                            TransmitChunkInfo info = buffer.front();
                             find_any = true;
                             _send_rpc(info);
                             {
                                 std::lock_guard<std::mutex> l(_mutex);
-                                cache.pop();
+                                buffer.pop();
                             }
                             info.params->release_finst_id();
                         }
@@ -139,15 +157,37 @@ public:
     bool is_full() const {
         // TODO(hcf) if one channel is congested, it may cause all other channel unwritable
         // std::queue' read is concurrent safe without mutex
-        for (auto& cache : _caches) {
-            if (cache.size() > config::pipeline_io_cache_size) {
+        for (auto& buffer : _buffers) {
+            if (buffer.size() > config::pipeline_io_buffer_size) {
                 return true;
             }
         }
         return false;
     }
 
-    bool is_finished() const { return _in_flight_rpc_num == 0 || _is_cancelled; }
+    bool is_finished() const {
+        if (_is_cancelled) {
+            return true;
+        }
+
+        if (_in_flight_rpc_num > 0) {
+            return false;
+        }
+
+        for (auto* closure : _closures) {
+            if (closure->has_in_flight_rpc()) {
+                return false;
+            }
+        }
+
+        for (auto& buffer : _buffers) {
+            if (!buffer.empty()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     bool is_cancelled() const { return _is_cancelled; }
 
@@ -172,7 +212,7 @@ private:
         closure->ref();
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(500);
-        closure->cntl.request_attachment().append(*request.attachment);
+        closure->cntl.request_attachment().append(request.attachment);
         _in_flight_rpc_num++;
         request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
         _request_seq++;
@@ -186,8 +226,8 @@ private:
     std::atomic_bool _is_cancelled = false;
 
     std::vector<CallBackClosure<PTransmitChunkResult>*> _closures;
-    std::vector<std::queue<TransmitChunkInfo>> _caches;
-    std::condition_variable _cache_empty_cv;
+    std::vector<std::queue<TransmitChunkInfo>> _buffers;
+    std::condition_variable _buffer_empty_cv;
     std::mutex _mutex;
 
     std::thread _thread;
