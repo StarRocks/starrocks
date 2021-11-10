@@ -21,11 +21,13 @@
 
 #include "storage/utils.h"
 
+#include <fmt/format.h>
 #include <dirent.h>
 #include <lz4/lz4.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <boost/regex.hpp>
 #include <cerrno>
 #include <cstdarg>
@@ -77,6 +79,8 @@ OLAPStatus gen_timestamp_string(string* out_string) {
 }
 
 OLAPStatus move_to_trash(const std::filesystem::path& schema_hash_root, const std::filesystem::path& file_path) {
+    static std::atomic<uint64_t> delete_counter{0}; // a global counter to avoid file name duplication.
+
     OLAPStatus res = OLAP_SUCCESS;
     string old_file_path = file_path.string();
     string old_file_name = file_path.filename().string();
@@ -95,45 +99,30 @@ OLAPStatus move_to_trash(const std::filesystem::path& schema_hash_root, const st
     }
 
     // 2. generate new file path
-    static uint64_t delete_counter = 0; // a global counter to avoid file name duplication.
-    static std::mutex lock;             // lock for delete_counter
-    std::stringstream new_file_dir_stream;
-    lock.lock();
     // when file_path points to a schema_path, we need to save tablet info in trash_path,
     // so we add file_path.parent_path().filename() in new_file_path.
     // other conditions are not considered, for they are nothing serious.
-    new_file_dir_stream << storage_root << TRASH_PREFIX << "/" << time_str << "." << delete_counter++ << "/"
-                        << file_path.parent_path().filename().string();
-    lock.unlock();
-    string new_file_dir = new_file_dir_stream.str();
+    string new_file_dir = fmt::format("{}{}/{}.{}/{}", storage_root,
+                                      TRASH_PREFIX, time_str, delete_counter.fetch_add(1, std::memory_order_relaxed),
+                                      file_path.parent_path().filename().string());
     string new_file_path = new_file_dir + "/" + old_file_name;
     // create target dir, or the rename() function will fail.
-    if (!FileUtils::check_exist(new_file_dir) && !FileUtils::create_dir(new_file_dir).ok()) {
-        LOG(WARNING) << "delete file failed. due to mkdir failed. file=" << old_file_path
-                     << " new_dir=" << new_file_dir;
+    if (auto st = FileUtils::create_dir(new_file_dir); !st.ok()) {
+        LOG(WARNING) << "Fail to create directory " << new_file_dir << ": " << st;
         return OLAP_ERR_OS_ERROR;
     }
 
     // 3. remove file to trash
-    VLOG(3) << "move file to trash. " << old_file_path << " -> " << new_file_path;
     if (rename(old_file_path.c_str(), new_file_path.c_str()) < 0) {
-        LOG(WARNING) << "move file to trash failed. file=" << old_file_path << " target=" << new_file_path;
+        PLOG(WARNING) << "Fail to rename " << old_file_path << " to " << new_file_path;
         return OLAP_ERR_OS_ERROR;
     }
 
-    // 4. check parent dir of source file, delete it when empty
+    // 4. remove parent dir if empty.
     string source_parent_dir = schema_hash_root.parent_path().string(); // tablet_id level
-    std::set<std::string> sub_dirs, sub_files;
-
-    RETURN_CODE_IF_ERROR_WITH_WARN(FileUtils::list_dirs_files(source_parent_dir, &sub_dirs, &sub_files, Env::Default()),
-                                   OLAP_SUCCESS, "access dir failed. [dir=" + source_parent_dir + "].");
-
-    if (sub_dirs.empty() && sub_files.empty()) {
-        LOG(INFO) << "remove empty dir " << source_parent_dir;
-        // no need to exam return status
-        Env::Default()->delete_dir(source_parent_dir);
+    if (::rmdir(source_parent_dir.c_str()) != 0) {
+        PLOG(WARNING) << "Fail to remove " << source_parent_dir;
     }
-
     return OLAP_SUCCESS;
 }
 

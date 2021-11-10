@@ -72,7 +72,7 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
     if (old_tablet == nullptr) {
         RETURN_IF_ERROR(_update_tablet_map_and_partition_info(new_tablet));
     } else if (force) {
-        RETURN_IF_ERROR(_drop_tablet_unlocked(old_tablet->tablet_id(), true));
+        RETURN_IF_ERROR(_drop_tablet_unlocked(new_tablet->tablet_id(), true));
         RETURN_IF_ERROR(_update_tablet_map_and_partition_info(new_tablet));
     } else {
         if (old_tablet->tablet_path() == new_tablet->tablet_path()) {
@@ -94,7 +94,7 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
         old_tablet->release_header_lock();
         bool replace_old = (new_version > old_version) || (new_version == old_version && new_time > old_time);
         if (replace_old) {
-            RETURN_IF_ERROR(_drop_tablet_unlocked(old_tablet->tablet_id(), false));
+            RETURN_IF_ERROR(_drop_tablet_unlocked(new_tablet->tablet_id(), false));
             RETURN_IF_ERROR(_update_tablet_map_and_partition_info(new_tablet));
             LOG(INFO) << "Added duplicated tablet. tablet_id=" << new_tablet->tablet_id()
                       << " old_tablet_path=" << old_tablet->tablet_path()
@@ -318,12 +318,12 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
     return nullptr;
 }
 
-Status TabletManager::drop_tablet(TTabletId tablet_id, bool keep_state) {
+Status TabletManager::drop_tablet(TTabletId tablet_id, bool keep_storage) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
     std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
-    return _drop_tablet_unlocked(tablet_id, keep_state);
+    return _drop_tablet_unlocked(tablet_id, keep_storage);
 }
 
 // Drop specified tablet, the main logical is as follows:
@@ -334,7 +334,7 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, bool keep_state) {
 //          base-tablet cannot be dropped;
 //      b. other cases:
 //          drop specified tablet directly and clear schema change info.
-Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, bool keep_state) {
+Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, bool keep_storage) {
     StarRocksMetrics::instance()->drop_tablet_requests_total.increment(1);
 
     // Fetch tablet which need to be dropped
@@ -349,7 +349,9 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, bool keep_state
     // in schema-change state.
     AlterTabletTaskSharedPtr alter_task = tablet_to_drop->alter_task();
     if (alter_task == nullptr) {
-        return _drop_tablet_directly_unlocked(tablet_id, keep_state);
+        // Important, must release our reference to the tablet, otherwise the tablet cannot be deleted synchronously.
+        tablet_to_drop.reset();
+        return _drop_tablet_directly_unlocked(tablet_id, keep_storage);
     }
 
     AlterTabletState alter_state = alter_task->alter_state();
@@ -357,10 +359,12 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, bool keep_state
 
     TabletSharedPtr related_tablet = _get_tablet_unlocked(related_tablet_id);
     if (related_tablet == nullptr) {
+        // Important, must release our reference to the tablet, otherwise the tablet cannot be deleted synchronously.
+        tablet_to_drop.reset();
         // TODO(lingbin): in what case, can this happen?
         LOG(WARNING) << "Dropping tablet directly when related tablet not found. "
                      << " tablet_id=" << related_tablet_id;
-        return _drop_tablet_directly_unlocked(tablet_id, keep_state);
+        return _drop_tablet_directly_unlocked(tablet_id, keep_storage);
     }
 
     // Check whether the tablet we want to delete is in schema-change state
@@ -400,7 +404,9 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, bool keep_state
         related_tablet->save_meta();
     }
     related_tablet->release_header_lock();
-    Status res = _drop_tablet_directly_unlocked(tablet_id, keep_state);
+    // Important, must release our reference to the tablet, otherwise the tablet cannot be deleted synchronously.
+    tablet_to_drop.reset();
+    Status res = _drop_tablet_directly_unlocked(tablet_id, keep_storage);
     if (!res.ok()) {
         LOG(WARNING) << "Fail to drop tablet which in schema change. tablet=" << tablet_to_drop->full_name();
         return res;
@@ -894,50 +900,15 @@ Status TabletManager::start_trash_sweep() {
                            << ". tablet_uid=" << tablet->tablet_uid();
                 continue;
             }
-            // move data to trash
-            const std::string& tablet_path = tablet->tablet_path();
-            st = Env::Default()->path_exists(tablet_path);
-            if (st.ok() && config::trash_file_expire_time_sec > 0) {
-                // take snapshot of tablet meta for recovery
-                if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
-                    if (st = SnapshotManager::instance()->make_snapshot_on_tablet_meta(tablet); !st.ok()) {
-                        LOG(WARNING) << "Fail to make_snapshot_on_tablet_meta, tablet_id=" << tablet->tablet_id()
-                                     << " schema_hash=" << tablet->schema_hash() << ", status=" << st.to_string();
-                        continue;
-                    }
-                } else {
-                    std::string meta_file_path =
-                            path_util::join_path_segments(tablet_path, std::to_string(tablet->tablet_id()) + ".hdr");
-                    tablet->tablet_meta()->save(meta_file_path);
-                }
-                if (move_to_trash(tablet_path, tablet_path) == OLAP_SUCCESS) {
-                    LOG(INFO) << "Moved " << tablet_path << " to trash";
-                } else {
-                    LOG(WARNING) << "Fail to move " << tablet_path << " to trash";
-                    continue;
-                }
-            } else if (st.ok()) {
-                // Ignore the result.
-                (void)FileUtils::remove_all(tablet_path);
-            } else if (st.is_not_found()) {
-                st = Status::OK();
-            } else {
-                LOG(WARNING) << "Fail to check " << tablet_path << ": " << st;
-                continue;
-            }
-            DCHECK(st.ok()) << st;
-            if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
-                st = tablet->updates()->clear_meta();
-            } else {
-                st = TabletMetaManager::remove(tablet->data_dir(), tablet->tablet_id(), tablet->schema_hash());
-            }
-
+            st = _move_tablet_to_trash(tablet);
             if (st.ok()) {
                 finished_tablets.push_back(tablet->tablet_id());
-            } else {
-                LOG(WARNING) << "Fail to clear tablet meta: " << st;
             }
         } else if (st.is_not_found()) {
+            // The tablet meta has been deleted, but it's possible that the tablet directory
+            // has not been deleted, but we cannot delete the tablet directory here, without
+            // holding the lock of tablet shards, just leave the tablet directory to the path
+            // gc module.
             finished_tablets.push_back(tablet->tablet_id());
         } else {
             LOG(WARNING) << "Fail to get tablet meta: " << st;
@@ -1196,17 +1167,23 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
                               rowset_type, tablet_meta);
 }
 
-Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, bool keep_state) {
+Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, bool keep_storage) {
     TabletMap& tablet_map = _get_tablet_map(tablet_id);
     auto it = tablet_map.find(tablet_id);
     if (it == tablet_map.end()) {
         LOG(WARNING) << "Fail to drop nonexistent tablet " << tablet_id;
         return Status::NotFound("");
     }
+    Status st;
     TabletSharedPtr dropped_tablet = it->second;
     tablet_map.erase(it);
     _remove_tablet_from_partition(*dropped_tablet);
-    if (!keep_state) {
+    if (keep_storage) {
+        dropped_tablet->deregister_tablet_from_dir();
+        return Status::OK();
+    } else if (dropped_tablet.use_count() == 1 && config::enable_sync_tablet_drop) {
+        RETURN_IF_ERROR(_move_tablet_to_trash(dropped_tablet));
+    } else {
         LOG(INFO) << "Shutting down tablet " << tablet_id;
         // drop tablet will update tablet meta, should lock
         std::unique_lock wrlock(dropped_tablet->get_header_lock());
@@ -1217,10 +1194,9 @@ Status TabletManager::_drop_tablet_directly_unlocked(TTabletId tablet_id, bool k
         // To avoid this exception, we first set the state of the tablet to `SHUTDOWN`.
         dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
         dropped_tablet->save_meta();
-        {
-            std::unique_lock wlock(_shutdown_tablets_lock);
-            _shutdown_tablets.emplace(dropped_tablet->tablet_id(), dropped_tablet);
-        }
+
+        std::unique_lock wlock(_shutdown_tablets_lock);
+        _shutdown_tablets.emplace(dropped_tablet->tablet_id(), dropped_tablet);
     }
     dropped_tablet->deregister_tablet_from_dir();
     return Status::OK();
@@ -1362,6 +1338,53 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     auto st = _add_tablet_unlocked(tablet, true, false);
     LOG_IF(WARNING, !st.ok()) << "Fail to add cloned tablet " << tablet_id << ": " << st;
     return st;
+}
+
+Status TabletManager::_remove_tablet_meta(const TabletSharedPtr& tablet) {
+    if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
+        return tablet->updates()->clear_meta();
+    } else {
+        return TabletMetaManager::remove(tablet->data_dir(), tablet->tablet_id(), tablet->schema_hash());
+    }
+}
+
+Status TabletManager::_delete_tablet(const TabletSharedPtr& tablet) {
+    auto tablet_path = tablet->tablet_path();
+    RETURN_IF_ERROR(_remove_tablet_meta(tablet));
+    auto st = FileUtils::remove_all(tablet_path);
+    LOG_IF(INFO, st.ok()) << "Removed " << tablet_path;
+    LOG_IF(WARNING, !st.ok()) << "Fail to remove " << tablet_path << ": " << st;
+    // Once the tablet meta has been removed from RocksDB, the tablet will be considered as deleted.
+    return Status::OK();
+}
+
+Status TabletManager::_move_tablet_to_trash(const TabletSharedPtr& tablet) {
+    if (config::trash_file_expire_time_sec == 0) {
+        return _delete_tablet(tablet);
+    }
+    const std::string& tablet_path = tablet->tablet_path();
+    Status st = Env::Default()->path_exists(tablet_path);
+    if (st.ok()) {
+        // take snapshot of tablet meta for recovery
+        if (tablet->keys_type() == KeysType::PRIMARY_KEYS) {
+            RETURN_IF_ERROR(SnapshotManager::instance()->make_snapshot_on_tablet_meta(tablet));
+        } else {
+            std::string meta_file_path =
+                    path_util::join_path_segments(tablet_path, std::to_string(tablet->tablet_id()) + ".hdr");
+            tablet->tablet_meta()->save(meta_file_path);
+        }
+        // NOTE: must delete tablet meta before moving tablet directory.
+        RETURN_IF_ERROR(_remove_tablet_meta(tablet));
+        auto ost = move_to_trash(tablet_path, tablet_path);
+        LOG_IF(INFO, ost == OLAP_SUCCESS) << "Moved " << tablet_path << " to trash";
+        LOG_IF(WARNING, ost != OLAP_SUCCESS) << "Fail to move " << tablet_path << " to trash, ignored this error";
+        return Status::OK();
+    } else if (st.is_not_found()) {
+        RETURN_IF_ERROR(_remove_tablet_meta(tablet));
+        return Status::OK();
+    } else {
+        return st;
+    }
 }
 
 } // end namespace starrocks

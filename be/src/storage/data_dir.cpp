@@ -569,7 +569,7 @@ void DataDir::perform_path_gc_by_tablet() {
             LOG(WARNING) << "invalid tablet id " << tablet_id << " or schema hash " << schema_hash << ", path=" << path;
             continue;
         }
-        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, false);
+        TabletSharedPtr tablet = _tablet_manager->get_tablet(tablet_id, true);
         if (tablet != nullptr) {
             // could find the tablet, then skip check it
             continue;

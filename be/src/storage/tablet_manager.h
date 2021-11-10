@@ -64,7 +64,7 @@ public:
     // task to be fail, even if there is enough space on other disks
     Status create_tablet(const TCreateTabletReq& request, std::vector<DataDir*> stores);
 
-    Status drop_tablet(TTabletId tablet_id, bool keep_state = false);
+    Status drop_tablet(TTabletId tablet_id, bool keep_storage = false);
 
     Status drop_tablets_on_error_root_path(const std::vector<TabletInfo>& tablet_info_vec);
 
@@ -168,9 +168,9 @@ private:
 
     Status _create_inital_rowset_unlocked(const TCreateTabletReq& request, Tablet* tablet);
 
-    Status _drop_tablet_directly_unlocked(TTabletId tablet_id, bool keep_state = false);
+    Status _drop_tablet_directly_unlocked(TTabletId tablet_id, bool keep_storage = false);
 
-    Status _drop_tablet_unlocked(TTabletId tablet_id, bool keep_state);
+    Status _drop_tablet_unlocked(TTabletId tablet_id, bool keep_storage);
 
     TabletSharedPtr _get_tablet_unlocked(TTabletId tablet_id);
     TabletSharedPtr _get_tablet_unlocked(TTabletId tablet_id, bool include_deleted, std::string* err);
@@ -183,6 +183,12 @@ private:
                                                          const std::vector<DataDir*>& data_dirs);
     Status _create_tablet_meta_unlocked(const TCreateTabletReq& request, DataDir* store, bool is_schema_change_tablet,
                                         const Tablet* base_tablet, TabletMetaSharedPtr* tablet_meta);
+
+    Status _remove_tablet_meta(const TabletSharedPtr& tablet);
+
+    Status _move_tablet_to_trash(const TabletSharedPtr& tablet);
+
+    Status _delete_tablet(const TabletSharedPtr& tablet);
 
     void _build_tablet_stat();
 

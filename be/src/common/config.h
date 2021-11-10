@@ -639,7 +639,8 @@ CONF_Int64(pipeline_io_buffer_size, "64");
 CONF_Int16(bitmap_serialize_version, "1");
 // schema change vectorized
 CONF_Bool(enable_schema_change_vectorized, "true");
-
+// Whether or not enable synchronous tablet dropping
+CONF_Bool(enable_sync_tablet_drop, false);
 } // namespace config
 
 } // namespace starrocks
