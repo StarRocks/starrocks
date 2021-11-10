@@ -468,6 +468,21 @@ public class HiveMetaClient {
     }
 
     private List<HdfsFileDesc> getHdfsFileDescs(String dirPath) throws Exception {
+        // NOTE get the configure value to local variable, because the config value can be changed at runtime.
+        long hdfsBlockSize = Config.hdfs_block_size;
+        long osBlockSize = Config.object_storage_block_size;
+        if (!isObjectStorage(dirPath)) {
+            if (hdfsBlockSize < 0) {
+                return getHdfsFileDescsByAPI(dirPath);
+            } else {
+                return getHdfsFileDescsByBlockSize(dirPath, hdfsBlockSize);
+            }
+        } else {
+            return getHdfsFileDescsByBlockSize(dirPath, osBlockSize);
+        }
+    }
+
+    private List<HdfsFileDesc> getHdfsFileDescsByAPI(String dirPath) throws Exception {
         URI uri = new URI(dirPath);
         FileSystem fileSystem = getFileSystem(uri);
         List<HdfsFileDesc> fileDescs = Lists.newArrayList();
@@ -483,12 +498,38 @@ public class HiveMetaClient {
                 }
                 String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
-                List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations, isObjectStorage(dirPath));
+                List<HdfsFileBlockDesc> fileBlockDescs = Lists.newArrayList();
+                for (BlockLocation blockLocation : blockLocations) {
+                    fileBlockDescs.add(buildHdfsFileBlockDesc(
+                            blockLocation.getOffset(),
+                            blockLocation.getLength(),
+                            getReplicaHostIds(blockLocation.getNames()))
+                    );
+                }
                 fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
                         ImmutableList.copyOf(fileBlockDescs)));
             }
         } catch (FileNotFoundException ignored) {
             // hive empty partition may not create directory
+        }
+        return fileDescs;
+    }
+
+    private List<HdfsFileDesc> getHdfsFileDescsByBlockSize(String dirPath, long blockSize) throws Exception {
+        URI uri = new URI(dirPath);
+        FileSystem fileSystem = getFileSystem(uri);
+        FileStatus[] files = fileSystem.listStatus(new Path(uri.getPath()));
+        List<HdfsFileDesc> fileDescs = Lists.newArrayList();
+
+        for (FileStatus fileStatus : files) {
+            if (!isValidDataFile(fileStatus)) {
+                continue;
+            }
+            String fileName = Utils.getSuffixName(dirPath, fileStatus.getPath().toString());
+            // if hdfs_block_size_mb is bigger than 0, using the configure value to split file block
+            // else using the hdfs api to get the file blocks
+            fileDescs.add(new HdfsFileDesc(fileName, "", fileStatus.getLen(),
+                    ImmutableList.copyOf(getHdfsFileBlockDescsByBlockSize(fileStatus, blockSize * 1024L * 1024L))));
         }
         return fileDescs;
     }
@@ -507,22 +548,41 @@ public class HiveMetaClient {
                 lcFileName.endsWith(".copying") || lcFileName.endsWith(".tmp"));
     }
 
-    private List<HdfsFileBlockDesc> getHdfsFileBlockDescs(BlockLocation[] blockLocations,
-                                                          boolean isObjectStorage) throws IOException {
-        List<HdfsFileBlockDesc> fileBlockDescs = Lists.newArrayList();
-        for (BlockLocation blockLocation : blockLocations) {
-            if (isObjectStorage) {
-                // For object storage, the blockLocation size is always the full file size
-                // We should split into smaller blocks to increase the degree of parallelism
-                fileBlockDescs.addAll(splitObjectStorageBlock(blockLocation));
+    private List<HdfsFileBlockDesc> getHdfsFileBlockDescsByBlockSize(FileStatus fileStatus, long blockSize) {
+        List<HdfsFileBlockDesc> fileBlockDescs = new ArrayList<>();
+        long remainingBytes = fileStatus.getLen();
+        String[] hostNames = new String[] {"localhost:50010"};
+        do {
+            if (remainingBytes <= blockSize) {
+                fileBlockDescs.add(buildHdfsFileBlockDesc(
+                        fileStatus.getLen() - remainingBytes,
+                        remainingBytes,
+                        getReplicaHostIds(hostNames)
+                ));
+                remainingBytes = 0;
+            } else if (remainingBytes <= 2 * blockSize) {
+                long mid = (remainingBytes + 1) / 2;
+                fileBlockDescs.add(buildHdfsFileBlockDesc(
+                        fileStatus.getLen() - remainingBytes,
+                        mid,
+                        getReplicaHostIds(hostNames)
+                ));
+                fileBlockDescs.add(buildHdfsFileBlockDesc(
+                        fileStatus.getLen() - remainingBytes + mid,
+                        remainingBytes - mid,
+                        getReplicaHostIds(hostNames)
+                ));
+                remainingBytes = 0;
             } else {
                 fileBlockDescs.add(buildHdfsFileBlockDesc(
-                        blockLocation.getOffset(),
-                        blockLocation.getLength(),
-                        getReplicaHostIds(blockLocation.getNames()))
-                );
+                        fileStatus.getLen() - remainingBytes,
+                        blockSize,
+                        getReplicaHostIds(hostNames)
+                ));
+                remainingBytes -= blockSize;
             }
-        }
+        } while (remainingBytes > 0);
+
         return fileBlockDescs;
     }
 
@@ -545,46 +605,6 @@ public class HiveMetaClient {
                 new long[] {UNKNOWN_STORAGE_ID},
                 this
         );
-    }
-
-    private List<HdfsFileBlockDesc> splitObjectStorageBlock(BlockLocation blockLocation) throws IOException {
-        List<HdfsFileBlockDesc> fileBlockDescs = new ArrayList<>();
-        long remainingBytes = blockLocation.getLength();
-        // NOTE: Config.object_storage_block_size should be extracted to a local variable,
-        // because it may be changed in the loop
-        long blockSize = Config.object_storage_block_size;
-        do {
-            if (remainingBytes <= blockSize) {
-                fileBlockDescs.add(buildHdfsFileBlockDesc(
-                        blockLocation.getOffset() + blockLocation.getLength() - remainingBytes,
-                        remainingBytes,
-                        getReplicaHostIds(blockLocation.getNames())
-                ));
-                remainingBytes = 0;
-            } else if (remainingBytes <= 2 * blockSize) {
-                long mid = (remainingBytes + 1) / 2;
-                fileBlockDescs.add(buildHdfsFileBlockDesc(
-                        blockLocation.getOffset() + blockLocation.getLength() - remainingBytes,
-                        mid,
-                        getReplicaHostIds(blockLocation.getNames())
-                ));
-                fileBlockDescs.add(buildHdfsFileBlockDesc(
-                        blockLocation.getOffset() + blockLocation.getLength() - remainingBytes + mid,
-                        remainingBytes - mid,
-                        getReplicaHostIds(blockLocation.getNames())
-                ));
-                remainingBytes = 0;
-            } else {
-                fileBlockDescs.add(buildHdfsFileBlockDesc(
-                        blockLocation.getOffset() + blockLocation.getLength() - remainingBytes,
-                        blockSize,
-                        getReplicaHostIds(blockLocation.getNames())
-                ));
-                remainingBytes -= blockSize;
-            }
-        } while (remainingBytes > 0);
-
-        return fileBlockDescs;
     }
 
     private FileSystem getFileSystem(URI uri) throws IOException {

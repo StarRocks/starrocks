@@ -1284,6 +1284,13 @@ public class Config extends ConfigBase {
     public static long object_storage_block_size = 64L * 1024L * 1024L;
 
     /**
+     * Used to split hdfs files into blocks for hive external table.
+     * If you want to use the default block size of hdfs, set this parameter to -1
+     */
+    @ConfField(mutable = true)
+    public static long hdfs_block_size = 64L * 1024L * 1024L;
+
+    /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
      */
     @ConfField
