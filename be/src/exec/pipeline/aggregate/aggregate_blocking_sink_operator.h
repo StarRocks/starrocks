@@ -44,11 +44,10 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateBlockingSinkOperator>(_id, _plan_node_id,
-                                                               _aggregator_factory->get_or_create(_aggregator_idx++));
+                                                               _aggregator_factory->get_or_create(driver_sequence));
     }
 
 private:
     AggregatorFactoryPtr _aggregator_factory = nullptr;
-    size_t _aggregator_idx = 0;
 };
 } // namespace starrocks::pipeline
