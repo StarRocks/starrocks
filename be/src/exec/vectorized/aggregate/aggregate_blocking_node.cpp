@@ -34,7 +34,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
              _conjunct_ctxs.empty() &&                     // no 'having' clause
              _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
     while (true) {
-        RETURN_IF_ERROR(state->check_query_state("AggrNode"));
+        RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
         bool eos = false;
         RETURN_IF_CANCELLED(state);
         RETURN_IF_ERROR(_children[0]->get_next(state, &chunk, &eos));
