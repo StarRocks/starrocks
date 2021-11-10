@@ -386,4 +386,22 @@ public class DecodeRewriteTest extends PlanTestBase{
         Assert.assertTrue(plan.contains("TDataPartition(type:UNPARTITIONED, partition_exprs:[]))), " +
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), global_dicts:[TGlobalDict(columnId:28"));
     }
+
+    @Test
+    public void testCountDistinctMultiColumns() throws Exception {
+        String sql = "select count(distinct S_SUPPKEY, S_COMMENT) from supplier";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("3:Decode\n" +
+                "  |  <dict id 10> : <string id 7>"));
+        Assert.assertTrue(plan.contains(":AGGREGATE (update serialize)\n" +
+                "  |  output: count(if(1: S_SUPPKEY IS NULL, NULL, 7))"));
+
+        sql = "select count(distinct S_ADDRESS, S_COMMENT) from supplier";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("4:Decode\n" +
+                "  |  <dict id 10> : <string id 3>\n" +
+                "  |  <dict id 11> : <string id 7>"));
+        Assert.assertTrue(plan.contains(" 5:AGGREGATE (update serialize)\n" +
+                "  |  output: count(if(3 IS NULL, NULL, 7))"));
+    }
 }
