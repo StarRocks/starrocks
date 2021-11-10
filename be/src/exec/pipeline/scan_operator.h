@@ -53,7 +53,7 @@ private:
     // TODO(hcf) ugly, remove this later
     RuntimeState* _state = nullptr;
 
-    const size_t _batch_size = config::pipeline_io_cache_size;
+    const size_t _batch_size = config::pipeline_io_buffer_size;
     mutable bool _is_finished = false;
     std::atomic_bool _is_io_task_active = false;
     const TOlapScanNode& _olap_scan_node;
