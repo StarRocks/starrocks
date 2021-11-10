@@ -699,6 +699,21 @@ public class SetOperationStmt extends QueryStmt {
         }
     }
 
+    @Override
+    public void substituteSelectListForCreateView(Analyzer analyzer, List<String> newColLabels)
+            throws UserException {
+        for (SetOperand operand : operands) {
+            operand.getQueryStmt().substituteSelectListForCreateView(analyzer, newColLabels);
+        }
+        // substitute order by
+        if (orderByElements != null) {
+            orderByElements = OrderByElement.substitute(orderByElements,
+                    operands.get(0).getQueryStmt().aliasSMap, analyzer);
+        }
+
+        toSqlString = null;
+    }
+
     /**
      * Represents an operand to a SetOperand. It consists of a query statement and its left
      * all/distinct qualifier (null for the first operand).
