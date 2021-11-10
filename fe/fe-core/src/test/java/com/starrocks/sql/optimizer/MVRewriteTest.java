@@ -791,6 +791,7 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createUserTagMVSql);
         String query = "select `" + FunctionSet.HLL_UNION + "`(" + FunctionSet.HLL_HASH + "(tag_id)) from " +
                 USER_TAG_TABLE_NAME + ";";
+        System.out.println(starRocksAssert.query(query).explainQuery());
         starRocksAssert.query(query).explainContains(USER_TAG_MV_NAME);
         query = "select hll_union_agg(" + FunctionSet.HLL_HASH + "(tag_id)) from " + USER_TAG_TABLE_NAME + ";";
         starRocksAssert.query(query).explainContains(USER_TAG_MV_NAME, FunctionSet.HLL_UNION_AGG);
@@ -1097,5 +1098,46 @@ public class MVRewriteTest {
         starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS_MV);
         query = "select count(distinct deptno), MAX(ssalary) from (" + query + ") as zxcv123 group by deptno";
         starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testCaseWhenAggregate() throws Exception {
+        String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select empid, deptno, sum(salary) "
+                + "from " + EMPS_TABLE_NAME + " group by empid, deptno;";
+        String query =
+                "select deptno, sum(case salary when 1 then 2 when 2 then 3 end) as ssalary from " + EMPS_TABLE_NAME +
+                        " group by deptno";
+        starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
+
+        query = "select deptno, sum(case deptno when 1 then 2 when 2 then 3 end) as ssalary from " + EMPS_TABLE_NAME +
+                " group by deptno";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+
+        query = "select deptno, sum(case deptno when 1 then salary when 2 then 3 end) as ssalary from " +
+                EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
+
+        query = "select deptno, sum(case deptno when 1 then salary when 2 then salary end) as ssalary from " +
+                EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+
+        query = "select deptno, sum(case empid when 1 then salary when 2 then salary end) as ssalary from " +
+                EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testCast() throws Exception {
+        String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select empid, deptno, sum(salary) "
+                + "from " + EMPS_TABLE_NAME + " group by empid, deptno;";
+        String query =
+                "select deptno, sum(cast(salary as smallint)) as ssalary from " + EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainContains(QUERY_USE_EMPS);
+
+        query = "select deptno, sum(cast(salary as bigint)) as ssalary from " + EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+
+        query = "select deptno, sum(cast(salary as decimal(9, 3))) as ssalary from " + EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS);
     }
 }
