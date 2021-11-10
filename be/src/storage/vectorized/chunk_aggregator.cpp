@@ -90,12 +90,14 @@ inline CompareFN get_comparator(bool null_type) {
 }
 
 ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, uint32_t reserve_rows,
-                                 uint32_t aggregate_rows, double factor)
+                                 uint32_t aggregate_rows, double factor, bool is_vertical_merge, bool is_key)
         : _schema(schema),
           _reserve_rows(reserve_rows),
           _aggregate_rows(aggregate_rows),
           _factor(factor),
-          _has_aggregate(false) {
+          _has_aggregate(false),
+          _is_vertical_merge(is_vertical_merge),
+          _is_key(is_key) {
 #ifndef NDEBUG
     // ensure that the key fields are sorted by id and placed before others.
     for (size_t i = 0; i < _schema->num_key_fields(); i++) {
@@ -134,16 +136,15 @@ ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, ui
     aggregate_reset();
 }
 
-ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, uint32_t aggregate_rows, double factor)
-        : ChunkAggregator(schema, aggregate_rows, aggregate_rows, factor) {}
+ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t aggregate_rows, double factor)
+        : ChunkAggregator(schema, aggregate_rows, aggregate_rows, factor, false, false) {}
 
-ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, uint32_t aggregate_rows, double factor,
-                                 bool is_vertical_merge, bool is_key, std::vector<RowSourceMask>* source_masks)
-        : ChunkAggregator(schema, aggregate_rows, aggregate_rows, factor) {
-    _is_vertical_merge = is_vertical_merge;
-    _is_key = is_key;
-    _source_masks = source_masks;
-}
+ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t aggregate_rows, double factor)
+        : ChunkAggregator(schema, reserve_rows, aggregate_rows, factor, false, false) {}
+
+ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t aggregate_rows, double factor, bool is_vertical_merge,
+                                 bool is_key)
+        : ChunkAggregator(schema, aggregate_rows, aggregate_rows, factor, is_vertical_merge, is_key) {}
 
 CompareFN ChunkAggregator::_choose_comparator(const FieldPtr& field) {
     switch (field->type()->type()) {
@@ -208,7 +209,7 @@ bool ChunkAggregator::_row_equal(const Chunk* lhs, size_t m, const Chunk* rhs, s
     return true;
 }
 
-void ChunkAggregator::update_source(ChunkPtr& chunk) {
+void ChunkAggregator::update_source(ChunkPtr& chunk, std::vector<RowSourceMask>* source_masks) {
     size_t is_eq_size = chunk->num_rows();
     _is_eq.assign(is_eq_size, 1);
     _source_row = 0;
@@ -217,12 +218,12 @@ void ChunkAggregator::update_source(ChunkPtr& chunk) {
 
     if (_is_vertical_merge && !_is_key) {
         // update _is_eq from source masks
-        DCHECK(_source_masks);
-        size_t masks_size = _source_masks->size();
+        DCHECK(source_masks);
+        size_t masks_size = source_masks->size();
         DCHECK_GE(masks_size, is_eq_size);
         size_t start_offset = masks_size - is_eq_size;
         for (int i = 0; i < is_eq_size; ++i) {
-            _is_eq[i] = _source_masks->at(start_offset + i).get_agg_flag() ? 1 : 0;
+            _is_eq[i] = (*source_masks)[start_offset + i].get_agg_flag() ? 1 : 0;
         }
     } else {
         // update _is_eq by key comparison
@@ -253,12 +254,12 @@ void ChunkAggregator::update_source(ChunkPtr& chunk) {
 
     // update source masks from _is_eq
     if (_is_vertical_merge && _is_key) {
-        DCHECK(_source_masks);
-        size_t masks_size = _source_masks->size();
+        DCHECK(source_masks);
+        size_t masks_size = source_masks->size();
         DCHECK_GE(masks_size, is_eq_size);
         size_t start_offset = masks_size - is_eq_size;
         for (int i = 0; i < is_eq_size; ++i) {
-            _source_masks->at(start_offset + i).set_agg_flag(_is_eq[i] != 0);
+            (*source_masks)[start_offset + i].set_agg_flag(_is_eq[i] != 0);
         }
     }
 }

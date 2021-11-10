@@ -7,5 +7,5 @@
 
 namespace starrocks::vectorized {
 ChunkIteratorPtr new_aggregate_iterator(ChunkIteratorPtr child, int factor = 0, bool is_vertical_merge = false,
-                                        bool is_key = false, std::vector<RowSourceMask>* source_masks = nullptr);
+                                        bool is_key = false);
 }

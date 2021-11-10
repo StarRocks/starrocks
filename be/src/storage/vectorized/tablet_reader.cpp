@@ -65,8 +65,8 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
 }
 
 Status TabletReader::do_get_next(Chunk* chunk) {
-    RETURN_IF_ERROR(_collect_iter->get_next(chunk));
     if (_is_vertical_merge) {
+        RETURN_IF_ERROR(_collect_iter->get_next(chunk, _source_masks.get()));
         if (_is_key) {
             if (!_source_masks->empty()) {
                 RETURN_IF_ERROR(_mask_buffer->write(*_source_masks));
@@ -75,6 +75,8 @@ Status TabletReader::do_get_next(Chunk* chunk) {
         if (!_source_masks->empty()) {
             _source_masks->clear();
         }
+    } else {
+        RETURN_IF_ERROR(_collect_iter->get_next(chunk));
     }
     return Status::OK();
 }
@@ -141,12 +143,10 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
         //       |           |           |
         // SegmentIterator  ...    SegmentIterator
         //
-        if (!_is_vertical_merge) {
-            _collect_iter = new_heap_merge_iterator(seg_iters);
-        } else if (_is_key) {
-            _collect_iter = new_heap_merge_iterator(seg_iters, _source_masks.get());
+        if (_is_vertical_merge && !_is_key) {
+            _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
         } else {
-            _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, _source_masks.get());
+            _collect_iter = new_heap_merge_iterator(seg_iters);
         }
     } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr) ||
                (select_all_keys && seg_iters.size() == 1)) {
@@ -179,32 +179,28 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
             RuntimeProfile::Counter* sort_timer = ADD_TIMER(p, "sort");
             RuntimeProfile::Counter* aggr_timer = ADD_TIMER(p, "aggr");
 
-            if (!_is_vertical_merge) {
-                _collect_iter = new_heap_merge_iterator(seg_iters);
-            } else if (_is_key) {
-                _collect_iter = new_heap_merge_iterator(seg_iters, _source_masks.get());
+            if (_is_vertical_merge && !_is_key) {
+                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
             } else {
-                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, _source_masks.get());
+                _collect_iter = new_heap_merge_iterator(seg_iters);
             }
             _collect_iter = timed_chunk_iterator(_collect_iter, sort_timer);
             if (!_is_vertical_merge) {
                 _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);
             } else {
-                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0, true, _is_key, _source_masks.get());
+                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0, true, _is_key);
             }
             _collect_iter = timed_chunk_iterator(_collect_iter, aggr_timer);
         } else {
-            if (!_is_vertical_merge) {
-                _collect_iter = new_heap_merge_iterator(seg_iters);
-            } else if (_is_key) {
-                _collect_iter = new_heap_merge_iterator(seg_iters, _source_masks.get());
+            if (_is_vertical_merge && !_is_key) {
+                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
             } else {
-                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, _source_masks.get());
+                _collect_iter = new_heap_merge_iterator(seg_iters);
             }
             if (!_is_vertical_merge) {
                 _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);
             } else {
-                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0, true, _is_key, _source_masks.get());
+                _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0, true, _is_key);
             }
         }
     } else if (keys_type == AGG_KEYS) {

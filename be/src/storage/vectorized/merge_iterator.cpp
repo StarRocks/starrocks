@@ -26,12 +26,30 @@ inline int compare_chunk(size_t key_columns, const Chunk& lhs, size_t m, const C
     return 0;
 }
 
-// Compare two chunks by the one specific row of each other.
-class ComparableChunk {
+// MergeChunk contains a chunk for merge and an index of compared row.
+class MergeChunk {
 public:
-    ComparableChunk() {}
+    MergeChunk() {}
+    explicit MergeChunk(Chunk* chunk) : _chunk(chunk) {}
+
+    size_t compared_row() const { return _compared_row; }
+
+    void advance(size_t row) { _compared_row += row; }
+
+    size_t remaining_rows() const { return _chunk->num_rows() - _compared_row; }
+
+protected:
+    friend class MaskMergeIterator;
+
+    Chunk* _chunk = nullptr;
+    uint16_t _compared_row = 0;
+};
+
+// Compare two chunks by the one specific row of each other.
+class ComparableChunk : public MergeChunk {
+public:
     explicit ComparableChunk(Chunk* chunk, size_t order, size_t key_columns)
-            : _chunk(chunk), _order(order), _key_columns(key_columns) {}
+            : MergeChunk(chunk), _order(order), _key_columns(key_columns) {}
 
     bool operator>(const ComparableChunk& rhs) const {
         DCHECK_EQ(_key_columns, rhs._key_columns);
@@ -48,21 +66,12 @@ public:
         return (r < 0) | ((r == 0) & (_order < rhs._order));
     }
 
-    size_t compared_row() const { return _compared_row; }
-
-    void advance(size_t row) { _compared_row += row; }
-
-    size_t remaining_rows() const { return _chunk->num_rows() - _compared_row; }
-
 private:
     friend class HeapMergeIterator;
-    friend class MaskMergeIterator;
 
-    Chunk* _chunk;
     // used to determinate the order of two rows when their key columns are all equals.
     uint16_t _order;
     uint16_t _key_columns;
-    uint16_t _compared_row = 0;
 };
 
 class MergeIterator : public ChunkIterator {
@@ -147,11 +156,11 @@ inline void MergeIterator::close() {
 
 class HeapMergeIterator final : public MergeIterator {
 public:
-    explicit HeapMergeIterator(std::vector<ChunkIteratorPtr> children, std::vector<RowSourceMask>* source_masks)
-            : MergeIterator(std::move(children)), _source_masks(source_masks) {}
+    explicit HeapMergeIterator(std::vector<ChunkIteratorPtr> children) : MergeIterator(std::move(children)) {}
 
 protected:
-    Status do_get_next(Chunk* chunk) override;
+    Status do_get_next(Chunk* chunk) override { return do_get_next(chunk, nullptr); }
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
     Status fill(size_t child) override;
 
 private:
@@ -160,11 +169,9 @@ private:
     using ChunkHeap = MinPriorityQueue<ComparableChunk>;
 
     ChunkHeap _heap;
-
-    std::vector<RowSourceMask>* _source_masks = nullptr;
 };
 
-inline Status HeapMergeIterator::do_get_next(Chunk* chunk) {
+inline Status HeapMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
     if (!_inited) {
         RETURN_IF_ERROR(init());
     }
@@ -181,9 +188,9 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk) {
         if (offset == 0 && (_heap.empty() || min_chunk.less_than_all(_heap.top()))) {
             if (rows == 0) {
                 chunk->swap_chunk(*min_chunk._chunk);
-                if (_source_masks) {
-                    _source_masks->insert(_source_masks->end(), chunk->num_rows(),
-                                          RowSourceMask{min_chunk._order, false});
+                if (source_masks) {
+                    source_masks->insert(source_masks->end(), chunk->num_rows(),
+                                         RowSourceMask{min_chunk._order, false});
                 }
                 return fill(min_chunk._order);
             } else {
@@ -196,8 +203,8 @@ inline Status HeapMergeIterator::do_get_next(Chunk* chunk) {
         chunk->append(*min_chunk._chunk, offset, 1);
         min_chunk.advance(1);
         rows += 1;
-        if (_source_masks) {
-            _source_masks->emplace_back(RowSourceMask{min_chunk._order, false});
+        if (source_masks) {
+            source_masks->emplace_back(RowSourceMask{min_chunk._order, false});
         }
         if (min_chunk.remaining_rows() > 0) {
             _heap.push(min_chunk);
@@ -236,8 +243,7 @@ inline Status HeapMergeIterator::fill(size_t child) {
     return Status::OK();
 }
 
-ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
-                                         std::vector<RowSourceMask>* source_masks) {
+ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children) {
     DCHECK(!children.empty());
     if (children.size() == 1) {
         return children[0];
@@ -248,7 +254,7 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
     const static size_t kMaxChildrenSize = std::numeric_limits<uint16_t>::max();
 
     if (children.size() <= kMaxChildrenSize) {
-        return std::make_shared<HeapMergeIterator>(children, source_masks);
+        return std::make_shared<HeapMergeIterator>(children);
     }
     std::vector<ChunkIteratorPtr> sub_merge_iterators;
     sub_merge_iterators.reserve((children.size() + kMaxChildrenSize - 1) / kMaxChildrenSize);
@@ -264,29 +270,22 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
 // The order of rows is determinate by mask sequence.
 class MaskMergeIterator final : public MergeIterator {
 public:
-    explicit MaskMergeIterator(std::vector<ChunkIteratorPtr> children, RowSourceMaskBuffer* mask_buffer,
-                               std::vector<RowSourceMask>* source_masks)
-            : MergeIterator(std::move(children)),
-              _chunks(_children.size()),
-              _mask_buffer(mask_buffer),
-              _source_masks(source_masks) {
-#ifndef NDEBUG
+    explicit MaskMergeIterator(std::vector<ChunkIteratorPtr> children, RowSourceMaskBuffer* mask_buffer)
+            : MergeIterator(std::move(children)), _chunks(_children.size()), _mask_buffer(mask_buffer) {
         DCHECK(_mask_buffer);
-        DCHECK(_source_masks);
-#endif
     }
 
 protected:
-    Status do_get_next(Chunk* chunk) override;
+    Status do_get_next(Chunk* chunk) override { return Status::NotSupported("get chunk not supported"); }
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
     Status fill(size_t child) override;
 
 private:
-    std::vector<ComparableChunk> _chunks;
+    std::vector<MergeChunk> _chunks;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
-    std::vector<RowSourceMask>* _source_masks = nullptr;
 };
 
-inline Status MaskMergeIterator::do_get_next(Chunk* chunk) {
+inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
     if (!_inited) {
         RETURN_IF_ERROR(init());
     }
@@ -310,7 +309,7 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk) {
             if (rows == 0) {
                 chunk->swap_chunk(*min_chunk._chunk);
                 for (int i = 0; i < min_chunk_num_rows; ++i) {
-                    _source_masks->emplace_back(_mask_buffer->current());
+                    source_masks->emplace_back(_mask_buffer->current());
                     _mask_buffer->advance();
                 }
                 return fill(child);
@@ -323,7 +322,7 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk) {
         chunk->append(*min_chunk._chunk, offset, 1);
         min_chunk.advance(1);
         rows += 1;
-        _source_masks->emplace_back(mask);
+        source_masks->emplace_back(mask);
         _mask_buffer->advance();
         if (min_chunk.remaining_rows() == 0) {
             st = fill(child);
@@ -357,7 +356,7 @@ inline Status MaskMergeIterator::fill(size_t child) {
     Status st = _children[child]->get_next(chunk);
     if (st.ok()) {
         DCHECK_GT(chunk->num_rows(), 0u);
-        _chunks[child] = ComparableChunk(chunk, child, 0);
+        _chunks[child] = MergeChunk(chunk);
     } else if (st.is_end_of_file()) {
         // ignore Status::EndOfFile.
         close_child(child);
@@ -369,9 +368,9 @@ inline Status MaskMergeIterator::fill(size_t child) {
 }
 
 ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
-                                         RowSourceMaskBuffer* mask_buffer, std::vector<RowSourceMask>* source_masks) {
+                                         RowSourceMaskBuffer* mask_buffer) {
     DCHECK(children.size() > 1 && children.size() <= RowSourceMask::MAX_SOURCES);
-    return std::make_shared<MaskMergeIterator>(std::move(children), mask_buffer, source_masks);
+    return std::make_shared<MaskMergeIterator>(std::move(children), mask_buffer);
 }
 
 } // namespace starrocks::vectorized

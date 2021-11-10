@@ -22,13 +22,11 @@ namespace starrocks::vectorized {
 //    should return rows in an ascending order based on the key columns.
 // one typical usage of this iterator is merging rows of the segments in the same `rowset`.
 //
-// If source_masks is not null, row source mask sequence will be generated and can be used by MaskMergeIterator.
-ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
-                                         std::vector<RowSourceMask>* source_masks = nullptr);
+ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children);
 
 // new_mask_merge_iterator create an iterator based on source masks.
 // the order of rows is determinate by mask sequence.
 ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
-                                         RowSourceMaskBuffer* mask_buffer, std::vector<RowSourceMask>* source_masks);
+                                         RowSourceMaskBuffer* mask_buffer);
 
 } // namespace starrocks::vectorized
