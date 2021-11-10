@@ -445,10 +445,17 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 
     // clone and compaction operation should be performed sequentially
     tablet->obtain_base_compaction_lock();
+    DeferOp base_compaction_lock_release_guard([&tablet]() { tablet->release_base_compaction_lock(); });
+
     tablet->obtain_cumulative_lock();
+    DeferOp cumulative_lock_release_guard([&tablet]() { tablet->release_cumulative_lock(); });
 
     tablet->obtain_push_lock();
+    DeferOp push_lock_release_guard([&tablet]() { tablet->release_push_lock(); });
+
     tablet->obtain_header_wrlock();
+    DeferOp header_wrlock_release_guard([&tablet]() { tablet->release_header_lock(); });
+
     do {
         // load src header
         std::string header_file = strings::Substitute("$0/$1.hdr", clone_dir, tablet->tablet_id());
@@ -515,11 +522,7 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
     if (!res.ok()) {
         FileUtils::remove_paths(linked_success_files);
     }
-    tablet->release_header_lock();
-    tablet->release_push_lock();
 
-    tablet->release_cumulative_lock();
-    tablet->release_base_compaction_lock();
     return res;
 }
 
