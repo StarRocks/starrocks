@@ -34,7 +34,7 @@ void PipelineDriverPoller::run_internal() {
             std::unique_lock<std::mutex> lock(this->_mutex);
             local_blocked_drivers.splice(local_blocked_drivers.end(), _blocked_drivers);
             if (local_blocked_drivers.empty() && _blocked_drivers.empty()) {
-                std::cv_status cv_status;
+                std::cv_status cv_status = std::cv_status::no_timeout;
                 while (!_is_shutdown.load(std::memory_order_acquire) && this->_blocked_drivers.empty()) {
                     cv_status = _cond.wait_for(lock, std::chrono::milliseconds(10));
                 }
