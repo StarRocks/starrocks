@@ -213,6 +213,8 @@ TEST_F(LoadChannelMgrTest, normal) {
         request.add_tablet_ids(20);
 
         RowBatch row_batch(row_desc, 1024);
+        Status status = row_batch.init();
+        ASSERT_TRUE(status.ok());
 
         // row1
         {
@@ -379,6 +381,8 @@ TEST_F(LoadChannelMgrTest, add_failed) {
         request.add_tablet_ids(20);
 
         RowBatch row_batch(row_desc, 1024);
+        Status status = row_batch.init();
+        ASSERT_TRUE(status.ok());
 
         // row1
         {
@@ -469,6 +473,8 @@ TEST_F(LoadChannelMgrTest, close_failed) {
         request.add_partition_ids(11);
 
         RowBatch row_batch(row_desc, 1024);
+        Status status = row_batch.init();
+        ASSERT_TRUE(status.ok());
 
         // row1
         {
@@ -558,6 +564,8 @@ TEST_F(LoadChannelMgrTest, unknown_tablet) {
         request.add_tablet_ids(20);
 
         RowBatch row_batch(row_desc, 1024);
+        Status status = row_batch.init();
+        ASSERT_TRUE(status.ok());
 
         // row1
         {
@@ -644,6 +652,8 @@ TEST_F(LoadChannelMgrTest, duplicate_packet) {
         request.add_tablet_ids(20);
 
         RowBatch row_batch(row_desc, 1024);
+        Status status = row_batch.init();
+        ASSERT_TRUE(status.ok());
 
         // row1
         {
