@@ -184,7 +184,7 @@ Status Compaction::merge_rowsets(int64_t mem_limit, Statistics* stats_output) {
         Status st = tls_thread_status.mem_tracker()->check_mem_limit("Compaction");
         if (!st.ok()) {
             LOG(WARNING) << "fail to execute compaction: " << st.message() << std::endl;
-            return Status::InternalError(st.message());
+            return Status::MemoryLimitExceeded(st.message());
         }
 #endif
 
