@@ -82,6 +82,18 @@ public class AggTableTest extends PlanTestBase {
     public void testSingleAgg10() throws Exception {
         String sql = getFragmentPlan("select SUM(case k1 when k2 then v3 when 2 then v5 else v6 end) from test_agg");
         assertTestAggON(sql);
+
+        sql = getFragmentPlan("select SUM(case k1 when k2 then v3 else v6 end) from test_agg");
+        assertTestAggON(sql);
+
+        sql = getFragmentPlan("select SUM(if(k1 = k2, v3, v6)) from test_agg");
+        assertTestAggON(sql);
+
+        sql = getFragmentPlan("select SUM(if(k1, v3, NULL)) from test_agg");
+        assertTestAggON(sql);
+
+        sql = getFragmentPlan("select SUM(if(k1 = k2, 1, v6)) from test_agg");
+        assertTestAggOFF(sql, "The result of THEN isn't value column");
     }
 
     @Test

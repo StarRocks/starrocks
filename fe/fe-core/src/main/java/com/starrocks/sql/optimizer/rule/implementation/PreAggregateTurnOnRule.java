@@ -189,6 +189,12 @@ public class PreAggregateTurnOnRule {
 
                 ScalarOperator child = call.getChild(0);
 
+                if (child instanceof CallOperator &&
+                        FunctionSet.IF.equalsIgnoreCase(((CallOperator) child).getFnName())) {
+                    child = new CaseWhenOperator(child.getType(), null, child.getChild(2),
+                            Lists.newArrayList(child.getChild(0), child.getChild(1)));
+                }
+
                 List<ColumnRefOperator> returns = Lists.newArrayList();
                 List<ColumnRefOperator> conditions = Lists.newArrayList();
 
@@ -202,11 +208,11 @@ public class PreAggregateTurnOnRule {
                         scan.setTurnOffReason("The parameter of aggregate function isn't numeric type");
                         return true;
                     }
-                } else if (call.getChild(0) instanceof CaseWhenOperator) {
-                    CaseWhenOperator cwo = (CaseWhenOperator) call.getChild(0);
+                } else if (child instanceof CaseWhenOperator) {
+                    CaseWhenOperator cwo = (CaseWhenOperator) child;
 
                     for (int i = 0; i < cwo.getWhenClauseSize(); i++) {
-                        if (!OperatorType.VARIABLE.equals(cwo.getThenClause(i).getOpType())) {
+                        if (!cwo.getThenClause(i).isColumnRef()) {
                             scan.setTurnOffReason("The result of THEN isn't value column");
                             return true;
                         }
