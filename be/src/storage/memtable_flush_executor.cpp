@@ -98,11 +98,7 @@ void FlushToken::_flush_memtable(std::shared_ptr<MemTable> memtable) {
 }
 
 void FlushToken::_flush_vectorized_memtable(std::shared_ptr<vectorized::MemTable> memtable) {
-    _stats.cur_flush_count++;
-    SCOPED_CLEANUP({
-        memtable.reset();
-        _stats.cur_flush_count--;
-    });
+    SCOPED_CLEANUP({ memtable.reset(); });
 
     // If previous flush has failed, return directly
     if (_flush_status.load() != OLAP_SUCCESS) {
