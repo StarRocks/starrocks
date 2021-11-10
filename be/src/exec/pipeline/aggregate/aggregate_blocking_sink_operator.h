@@ -36,16 +36,19 @@ private:
 
 class AggregateBlockingSinkOperatorFactory final : public OperatorFactory {
 public:
-    AggregateBlockingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorPtr aggregator)
-            : OperatorFactory(id, "aggregate_blocking_sink", plan_node_id), _aggregator(std::move(aggregator)) {}
+    AggregateBlockingSinkOperatorFactory(int32_t id, int32_t plan_node_id, AggregatorFactoryPtr aggregator_factory)
+            : OperatorFactory(id, "aggregate_blocking_sink", plan_node_id),
+              _aggregator_factory(std::move(aggregator_factory)) {}
 
     ~AggregateBlockingSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<AggregateBlockingSinkOperator>(_id, _plan_node_id, _aggregator);
+        return std::make_shared<AggregateBlockingSinkOperator>(_id, _plan_node_id,
+                                                               _aggregator_factory->get_or_create(_aggregator_idx++));
     }
 
 private:
-    AggregatorPtr _aggregator = nullptr;
+    AggregatorFactoryPtr _aggregator_factory = nullptr;
+    size_t _aggregator_idx = 0;
 };
 } // namespace starrocks::pipeline
