@@ -14,6 +14,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.external.ObejctStorageUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
@@ -57,12 +58,6 @@ public class HiveMetaClient {
     public static final String PARTITION_NULL_VALUE = "__HIVE_DEFAULT_PARTITION__";
     // Maximum number of idle metastore connections in the connection pool at any point.
     private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
-
-    private static final String SCHEME_S3A = "s3a://";
-    private static final String SCHEME_S3 = "s3://";
-    private static final String SCHEME_S3N = "s3n://";
-    private static final String SCHEME_S3_PREFIX = "s3";
-    private static final String SCHEME_OSS_PREFIX = "oss";
 
     private final LinkedList<AutoCloseClient> clientPool = new LinkedList<>();
     private final Object clientPoolLock = new Object();
@@ -192,7 +187,7 @@ public class HiveMetaClient {
                 throw new DdlException("unsupported file format [" + sd.getInputFormat() + "]");
             }
 
-            String path = formatObjectStoragePath(sd.getLocation());
+            String path = ObejctStorageUtils.formatObjectStoragePath(sd.getLocation());
             List<HdfsFileDesc> fileDescs = getHdfsFileDescs(path);
             return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
         } catch (NoSuchObjectException e) {
@@ -203,17 +198,6 @@ public class HiveMetaClient {
             LOG.warn("get partition failed", e);
             throw new DdlException("get hive partition meta data failed: " + e.getMessage());
         }
-    }
-
-    private String formatObjectStoragePath(String path) {
-        if (path.startsWith(SCHEME_S3)) {
-            return SCHEME_S3A + path.substring(5);
-        }
-        if (path.startsWith(SCHEME_S3N)) {
-            return SCHEME_S3A + path.substring(6);
-        }
-
-        return path;
     }
 
     public HiveTableStats getTableStats(String dbName, String tableName) throws DdlException {
@@ -484,7 +468,8 @@ public class HiveMetaClient {
                 }
                 String fileName = Utils.getSuffixName(dirPath, locatedFileStatus.getPath().toString());
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
-                List<HdfsFileBlockDesc> fileBlockDescs = getHdfsFileBlockDescs(blockLocations, isObjectStorage(dirPath));
+                List<HdfsFileBlockDesc> fileBlockDescs =
+                        getHdfsFileBlockDescs(blockLocations, ObejctStorageUtils.isObjectStorage(dirPath));
                 fileDescs.add(new HdfsFileDesc(fileName, "", locatedFileStatus.getLen(),
                         ImmutableList.copyOf(fileBlockDescs)));
             }
@@ -492,10 +477,6 @@ public class HiveMetaClient {
             // hive empty partition may not create directory
         }
         return fileDescs;
-    }
-
-    private boolean isObjectStorage(String path) {
-        return path.startsWith(SCHEME_S3_PREFIX) || path.startsWith(SCHEME_OSS_PREFIX);
     }
 
     private boolean isValidDataFile(FileStatus fileStatus) {
