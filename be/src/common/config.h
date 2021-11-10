@@ -633,7 +633,7 @@ CONF_Int64(pipeline_io_thread_pool_thread_num, "3");
 CONF_Int64(pipeline_io_thread_pool_queue_size, "102400");
 // the number of execution threads for pipeline engine.
 CONF_Int64(pipeline_exec_thread_pool_thread_num, "3");
-// the cache size of io task
+// the buffer size of io task
 CONF_Int64(pipeline_io_buffer_size, "64");
 // bitmap serialize version
 CONF_Int16(bitmap_serialize_version, "1");

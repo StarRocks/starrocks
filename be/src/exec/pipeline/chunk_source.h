@@ -30,9 +30,11 @@ public:
     // Whether cache is empty or not
     virtual bool has_output() const = 0;
 
-    virtual StatusOr<vectorized::ChunkPtr> get_next_chunk_from_cache() = 0;
+    virtual size_t get_buffer_size() const = 0;
 
-    virtual Status cache_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) = 0;
+    virtual StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer() = 0;
+
+    virtual Status buffer_next_batch_chunks_blocking(size_t batch_size, bool& can_finish) = 0;
 
 protected:
     // The morsel will own by pipeline driver
