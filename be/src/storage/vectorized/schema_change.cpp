@@ -973,14 +973,12 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
             return status;
         }
         LOG(INFO) << "versions to be changed size:" << versions_to_be_changed.size();
-        std::vector<RowsetSharedPtr> rowsets_to_change;
         for (auto& version : versions_to_be_changed) {
             RowsetSharedPtr rowset = base_tablet->get_rowset_by_version(version);
             rowsets_to_change.push_back(rowset);
         }
         LOG(INFO) << "rowsets_to_change size is:" << rowsets_to_change.size();
 
-        std::vector<ColumnId> return_columns;
         size_t num_cols = base_tablet->tablet_schema().num_columns();
         return_columns.resize(num_cols);
         for (int i = 0; i < num_cols; ++i) {
@@ -988,7 +986,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         }
 
         Version max_version = base_tablet->max_version();
-        RowsetSharedPtr max_rowset = base_tablet->rowset_with_max_version();
+        max_rowset = base_tablet->rowset_with_max_version();
         if (max_rowset == nullptr || max_version.second < request.alter_version) {
             LOG(WARNING) << "base tablet's max version=" << (max_rowset == nullptr ? 0 : max_rowset->end_version())
                          << " is less than request version=" << request.alter_version;
@@ -1018,7 +1016,6 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         }
 
         // init one delete handler
-        int32_t end_version = -1;
         for (auto& version : versions_to_be_changed) {
             if (version.second > end_version) {
                 end_version = version.second;
