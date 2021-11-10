@@ -25,32 +25,31 @@ public:
 
     ~ColumnInPredicate() override = default;
 
-    void evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override {
+    template <typename Op>
+    inline void t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
         auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
         if (!column->has_null()) {
             for (size_t i = from; i < to; i++) {
-                sel[i] = _values.contains(v[i]);
+                sel[i] = Op::apply(sel[i], (uint8_t)(_values.contains(v[i])));
             }
         } else {
             const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
             for (size_t i = from; i < to; i++) {
-                sel[i] = !null_data[i] && _values.contains(v[i]);
+                sel[i] = Op::apply(sel[i], (uint8_t)(!null_data[i] && _values.contains(v[i])));
             }
         }
     }
 
-    void evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
-        if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
-                sel[i] = sel[i] && _values.contains(v[i]);
-            }
-        } else {
-            const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
-                sel[i] = (sel[i] && !null_data[i] && _values.contains(v[i]));
-            }
-        }
+    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
+    }
+
+    void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
+    }
+
+    void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
     }
 
     uint16_t evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
@@ -73,20 +72,6 @@ public:
             }
         }
         return new_size;
-    }
-
-    void evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
-        if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
-                sel[i] = (sel[i] || _values.contains(v[i]));
-            }
-        } else {
-            const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
-                sel[i] = (sel[i] || (!null_data[i] && _values.contains(v[i])));
-            }
-        }
     }
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override {
@@ -189,7 +174,8 @@ public:
 
     ~BinaryColumnInPredicate() override = default;
 
-    void evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override {
+    template <typename Op>
+    inline void t_evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const {
         // Get BinaryColumn
         const BinaryColumn* binary_column;
         if (column->is_nullable()) {
@@ -201,61 +187,27 @@ public:
         }
         if (!column->has_null()) {
             for (size_t i = from; i < to; i++) {
-                sel[i] = _slices.contains(binary_column->get_slice(i));
+                sel[i] = Op::apply(sel[i], (uint8_t)(_slices.contains(binary_column->get_slice(i))));
             }
         } else {
             /* must use uint8_t* to make vectorized effect */
             const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
             for (size_t i = from; i < to; i++) {
-                sel[i] = !null_data[i] && _slices.contains(binary_column->get_slice(i));
+                sel[i] = Op::apply(sel[i], (uint8_t)(!null_data[i] && _slices.contains(binary_column->get_slice(i))));
             }
         }
     }
 
-    void evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override {
-        // Get BinaryColumn
-        const BinaryColumn* binary_column;
-        if (column->is_nullable()) {
-            // This is NullableColumn, get its data_column
-            binary_column =
-                    down_cast<const BinaryColumn*>(down_cast<const NullableColumn*>(column)->data_column().get());
-        } else {
-            binary_column = down_cast<const BinaryColumn*>(column);
-        }
-        if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
-                sel[i] = (sel[i] && _slices.contains(binary_column->get_slice(i)));
-            }
-        } else {
-            /* must use uint8_t* to make vectorized effect */
-            const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
-                sel[i] = (sel[i] && !null_data[i] && _slices.contains(binary_column->get_slice(i)));
-            }
-        }
+    void evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
     }
 
-    void evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override {
-        // Get BinaryColumn
-        const BinaryColumn* binary_column;
-        if (column->is_nullable()) {
-            // This is NullableColumn, get its data_column
-            binary_column =
-                    down_cast<const BinaryColumn*>(down_cast<const NullableColumn*>(column)->data_column().get());
-        } else {
-            binary_column = down_cast<const BinaryColumn*>(column);
-        }
-        if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
-                sel[i] = (sel[i] || _slices.contains(binary_column->get_slice(i)));
-            }
-        } else {
-            /* must use uint8_t* to make vectorized effect */
-            const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
-                sel[i] = (sel[i] || (!null_data[i] && _slices.contains(binary_column->get_slice(i))));
-            }
-        }
+    void evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
+    }
+
+    void evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
+        t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
     }
 
     uint16_t evaluate_branchless(const Column* column, uint16_t* sel, uint16_t sel_size) const override {
