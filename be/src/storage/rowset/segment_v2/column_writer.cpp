@@ -307,7 +307,7 @@ Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn*
                 null_options.meta->set_compression(LZ4);
                 null_options.meta->set_is_nullable(false);
                 std::unique_ptr<Field> bool_field(FieldFactory::create_by_type(FieldType::OLAP_FIELD_TYPE_BOOL));
-                null_writer.reset(new ScalarColumnWriter(null_options, std::move(bool_field), _wblock));
+                null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(bool_field), _wblock);
             }
 
             ColumnWriterOptions array_size_options;
@@ -325,8 +325,8 @@ Status ColumnWriter::create(const ColumnWriterOptions& opts, const TabletColumn*
             std::unique_ptr<Field> bigint_field(FieldFactory::create_by_type(FieldType::OLAP_FIELD_TYPE_INT));
             std::unique_ptr<ScalarColumnWriter> offset_writer =
                     std::make_unique<ScalarColumnWriter>(array_size_options, std::move(bigint_field), _wblock);
-            writer->reset(new ArrayColumnWriter(opts, std::move(field), std::move(null_writer),
-                                                std::move(offset_writer), std::move(element_writer)));
+            *writer = std::make_unique<ArrayColumnWriter>(opts, std::move(field), std::move(null_writer),
+                                                          std::move(offset_writer), std::move(element_writer));
             return Status::OK();
         }
         default:
