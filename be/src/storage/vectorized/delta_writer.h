@@ -43,8 +43,6 @@ public:
 
     ~DeltaWriter();
 
-    Status init();
-
     Status write(Chunk* chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
     // flush the last memtable to flush queue, must call it before close_wait()
@@ -69,6 +67,8 @@ public:
 
 private:
     DeltaWriter(WriteRequest* req, MemTracker* parent, StorageEngine* storage_engine);
+
+    Status _init();
 
     // push a full memtable to flush executor
     Status _flush_memtable_async();

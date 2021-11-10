@@ -249,7 +249,6 @@ Status NodeChannel::add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_id
 
     if (_cur_chunk->columns().empty()) {
         _cur_chunk = chunk->clone_empty_with_slot();
-        _mem_tracker->consume(_cur_chunk->memory_usage());
     }
 
     if (_cur_chunk->num_rows() >= config::vector_chunk_size) {
@@ -260,14 +259,10 @@ Status NodeChannel::add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_id
             _pending_batches_num++;
         }
         _cur_chunk = chunk->clone_empty_with_slot();
-        _mem_tracker->consume(_cur_chunk->memory_usage());
         _cur_add_chunk_request.clear_tablet_ids();
     }
 
-    int64_t chunk_memory_usage = _cur_chunk->memory_usage();
     _cur_chunk->append_selective(*chunk, indexes, from, size);
-    chunk_memory_usage = static_cast<int64_t>(_cur_chunk->memory_usage()) - chunk_memory_usage;
-    _mem_tracker->consume(chunk_memory_usage);
     for (size_t i = 0; i < size; ++i) {
         _cur_add_chunk_request.add_tablet_ids(tablet_ids[indexes[from + i]]);
     }
@@ -388,7 +383,6 @@ int NodeChannel::try_send_chunk_and_fetch_status() {
         _add_batch_closure->set_in_flight();
         _stub->tablet_writer_add_chunk(&_add_batch_closure->cntl, &request, &_add_batch_closure->result,
                                        _add_batch_closure);
-        _mem_tracker->release(chunk->memory_usage());
         _next_packet_seq++;
     }
 
@@ -414,12 +408,9 @@ void NodeChannel::clear_all_batches() {
     std::lock_guard<std::mutex> lg(_pending_batches_lock);
     if (_is_vectorized) {
         while (!_pending_chunks.empty()) {
-            auto& chunk = _pending_chunks.front().first;
-            _mem_tracker->release(chunk->memory_usage());
             _pending_chunks.pop();
         }
         if (_cur_chunk != nullptr) {
-            _mem_tracker->release(_cur_chunk->memory_usage());
             _cur_chunk.reset();
         }
     }
@@ -516,12 +507,6 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 
     // profile must add to state's object pool
     _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
-    int64_t load_mem_limit = state->get_load_mem_limit();
-    if (load_mem_limit == 0) {
-        _mem_tracker = std::make_unique<MemTracker>(-1, "OlapTableSink", state->instance_mem_tracker());
-    } else {
-        _mem_tracker = std::make_unique<MemTracker>(load_mem_limit, "OlapTableSink", state->instance_mem_tracker());
-    }
 
     SCOPED_TIMER(_profile->total_time_counter());
 
