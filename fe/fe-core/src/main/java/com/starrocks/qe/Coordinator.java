@@ -1289,8 +1289,8 @@ public class Coordinator {
             // 3.construct instanceExecParam add the scanRange should be scan by instance
             for (List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>> perInstanceScanRange : perInstanceScanRanges) {
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, addressScanRange.getKey(), 0, params);
-                // record replicate scan id in set, to avoid add replicate scan range repeatedly when they are in different buckets
-                Set<Integer> replicateScanSet = new HashSet<>();
+                // record each instance replicate scan id in set, to avoid add replicate scan range repeatedly when they are in different buckets
+                Set<Integer> instanceReplicateScanSet = new HashSet<>();
                 for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> nodeScanRangeMap : perInstanceScanRange) {
                     instanceParam.addBucketSeq(nodeScanRangeMap.getKey());
                     for (Map.Entry<Integer, List<TScanRangeParams>> nodeScanRange : nodeScanRangeMap.getValue()
@@ -1300,9 +1300,9 @@ public class Coordinator {
                             instanceParam.perNodeScanRanges.put(scanId, new ArrayList<>());
                         }
                         if (replicateScanIds.contains(scanId)) {
-                            if (!replicateScanSet.contains(scanId)) {
+                            if (!instanceReplicateScanSet.contains(scanId)) {
                                 instanceParam.perNodeScanRanges.get(scanId).addAll(nodeScanRange.getValue());
-                                replicateScanSet.add(scanId);
+                                instanceReplicateScanSet.add(scanId);
                             }
                         } else {
                             instanceParam.perNodeScanRanges.get(scanId).addAll(nodeScanRange.getValue());
