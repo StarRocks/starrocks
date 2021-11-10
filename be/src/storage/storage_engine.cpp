@@ -211,7 +211,10 @@ Status StorageEngine::_init_store_map() {
     }
 
     for (auto& store : tmp_stores) {
-        _store_map.emplace(store->path(), store.release());
+        // when call emplace(), store.release() will call first, store->path() will invalid
+        // so need to make a copy of store->path first
+        std::string path = store->path();
+        _store_map.emplace(path, store.release());
     }
     return Status::OK();
 }

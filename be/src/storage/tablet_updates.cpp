@@ -1036,6 +1036,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     newversion->creation_time = creation_time;
     newversion->rowsets.swap(nrs);
     newversion->compaction.swap(*pinfo);
+    EditVersionInfo* newversion_ptr = newversion.get();
     _versions.emplace_back(std::move(newversion));
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
@@ -1052,14 +1053,15 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
         std::lock_guard lg(_rowset_stats_lock);
         _rowset_stats.emplace(rowsetid, std::move(rowset_stats));
     }
-    LOG(INFO) << "commit compaction tablet:" << _tablet.tablet_id() << " version:" << newversion->version.to_string()
-              << " rowset:" << rowsetid << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
+    LOG(INFO) << "commit compaction tablet:" << _tablet.tablet_id()
+              << " version:" << newversion_ptr->version.to_string() << " rowset:" << rowsetid
+              << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
               << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
               << " #pending:" << _pending_commits.size()
               << " state_memory:" << PrettyPrinter::print(_compaction_state->memory_usage(), TUnit::BYTES);
     VLOG(1) << "update compaction commit " << _debug_string(false, true);
     _check_for_apply();
-    *commit_version = newversion->version;
+    *commit_version = newversion_ptr->version;
     return Status::OK();
 }
 

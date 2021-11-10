@@ -34,6 +34,7 @@
 #include "storage/olap_common.h"
 #include "storage/olap_cond.h"
 #include "storage/utils.h"
+#include "util/scoped_cleanup.h"
 
 using apache::thrift::ThriftDebugString;
 using std::numeric_limits;
@@ -50,10 +51,11 @@ using google::protobuf::RepeatedPtrField;
 
 namespace starrocks {
 
-DeleteConditions::~DeleteConditions() {
-    if (del_cond != nullptr) {
-        delete del_cond;
+DeleteHandler::~DeleteHandler() {
+    for (auto& _del_cond : _del_conds) {
+        delete _del_cond.del_cond;
     }
+    _del_conds.clear();
 }
 
 OLAPStatus DeleteConditionHandler::generate_delete_predicate(const TabletSchema& schema,
@@ -273,6 +275,7 @@ OLAPStatus DeleteHandler::init(const TabletSchema& schema, const DelPredicateArr
         temp.filter_version = it->version();
 
         temp.del_cond = new (std::nothrow) Conditions();
+        ScopedCleanup del_cond_delete_guard([&]() { delete temp.del_cond; });
 
         if (temp.del_cond == nullptr) {
             LOG(FATAL) << "fail to malloc Conditions. size=" << sizeof(Conditions);
@@ -315,6 +318,7 @@ OLAPStatus DeleteHandler::init(const TabletSchema& schema, const DelPredicateArr
         }
 
         _del_conds.push_back(temp);
+        del_cond_delete_guard.cancel();
     }
 
     _is_inited = true;
@@ -355,6 +359,7 @@ void DeleteHandler::finalize() {
 
     for (auto& _del_cond : _del_conds) {
         _del_cond.del_cond->finalize();
+        delete _del_cond.del_cond;
     }
 
     _del_conds.clear();
