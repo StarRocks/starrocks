@@ -468,7 +468,7 @@ void StorageEngine::stop() {
         }
         _store_map.clear();
     }
-    _bg_worker_stopped = true;
+    _bg_worker_stopped.store(true, std::memory_order_release);
 
     _update_cache_expire_thread.join();
     _unused_rowset_monitor_thread.join();

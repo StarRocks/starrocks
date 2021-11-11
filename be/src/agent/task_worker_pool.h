@@ -72,19 +72,19 @@ public:
     typedef void* (*CALLBACK_FUNCTION)(void*);
 
     TaskWorkerPool(const TaskWorkerType task_worker_type, ExecEnv* env, const TMasterInfo& master_info, int worker_num);
-    virtual ~TaskWorkerPool();
+    ~TaskWorkerPool();
 
     // start the task worker callback thread
-    virtual void start();
+    void start();
 
     // stop the task worker callback thread
-    virtual void stop();
+    void stop();
 
     // Submit task to task pool
     //
     // Input parameters:
     // * task: the task need callback thread to do
-    virtual void submit_task(const TAgentTaskRequest& task);
+    void submit_task(const TAgentTaskRequest& task);
 
 private:
     bool _register_task_info(const TTaskType::type task_type, int64_t signature);

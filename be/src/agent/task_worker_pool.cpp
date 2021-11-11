@@ -83,12 +83,6 @@ TaskWorkerPool::TaskWorkerPool(const TaskWorkerType task_worker_type, ExecEnv* e
 }
 
 TaskWorkerPool::~TaskWorkerPool() {
-    // We should notify all waiting threads to destroy this condition variable
-    // If we don't notify, pthread_cond_destroy will hang in some GLIBC version.
-    // See https://bugzilla.redhat.com/show_bug.cgi?id=1647381
-    // "In glibc 2.25 we implemented a new version of POSIX condition variables to provide stronger
-    // ordering guarantees. The change in the implementation caused the undefined behaviour
-    // to change."
     stop();
     delete _worker_thread_condition_variable;
 }
@@ -172,7 +166,6 @@ void TaskWorkerPool::stop() {
         return;
     }
     _stopped = true;
-    std::lock_guard l(_worker_thread_lock);
     _worker_thread_condition_variable->notify_all();
     for (uint32_t i = 0; i < _worker_count; ++i) {
         _worker_threads[i].join();

@@ -173,7 +173,7 @@ public:
 
     void stop();
 
-    bool bg_worker_stopped() { return _bg_worker_stopped; }
+    bool bg_worker_stopped() { return _bg_worker_stopped.load(std::memory_order_consume); }
 
 private:
     // Instance should be inited from `static open()`
@@ -283,7 +283,7 @@ private:
     // map<rowset_id(str), RowsetSharedPtr>, if we use RowsetId as the key, we need custom hash func
     std::unordered_map<std::string, RowsetSharedPtr> _unused_rowsets;
 
-    bool _bg_worker_stopped = false;
+    std::atomic<bool> _bg_worker_stopped{false};
     // thread to expire update cache;
     std::thread _update_cache_expire_thread;
     std::thread _unused_rowset_monitor_thread;
