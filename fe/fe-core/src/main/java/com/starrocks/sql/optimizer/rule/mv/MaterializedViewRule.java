@@ -728,8 +728,8 @@ public class MaterializedViewRule extends Rule {
         // sum(x2) result of materialized view maybe greater x2, like many x2 = 100, cast(part_sum(x2) as tinyint) maybe will
         // overflow, but x2(100) isn't overflow
         if (queryFnChild0 instanceof CastOperator && (queryFnChild0.getType().isDecimalOfAnyVersion() ||
-                (queryFnChild0.getChild(0).getType().isNumericType() &&
-                        queryFnChild0.getType().getSlotSize() >= queryFnChild0.getChild(0).getType().getSlotSize()))) {
+                queryFnChild0.getType().isFloatingPointType() || (queryFnChild0.getChild(0).getType().isNumericType() &&
+                queryFnChild0.getType().getSlotSize() >= queryFnChild0.getChild(0).getType().getSlotSize()))) {
             queryFnChild0 = queryFnChild0.getChild(0);
         }
         ScalarOperator mvColumnFnChild0 = mvColumnFn.getChild(0);

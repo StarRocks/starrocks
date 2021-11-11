@@ -39,7 +39,7 @@ public class IsNoCallChildrenValidator extends ScalarOperatorVisitor<Boolean, Vo
             return ((ConstantOperator) operator.getChild(0)).isNull();
         }
 
-        if (operator.getType().isDecimalOfAnyVersion()) {
+        if (operator.getType().isDecimalOfAnyVersion() || operator.getType().isFloatingPointType()) {
             return operator.getChild(0).accept(this, context);
         }
 
