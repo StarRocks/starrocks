@@ -44,7 +44,7 @@ private:
     std::condition_variable _cond;
     DriverList _blocked_drivers;
     DriverQueue* _dispatch_queue;
-    Thread* _polling_thread;
+    scoped_refptr<Thread> _polling_thread;
     std::atomic<bool> _is_polling_thread_initialized;
     std::atomic<bool> _is_shutdown;
 };
