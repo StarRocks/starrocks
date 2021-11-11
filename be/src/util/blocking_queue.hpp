@@ -56,8 +56,7 @@ public:
     }
 
     template <class Rep, class Period>
-    std::cv_status wait_for(std::unique_lock<std::mutex>& lock,
-                            const std::chrono::duration<Rep, Period>& rel_time) {
+    std::cv_status wait_for(std::unique_lock<std::mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time) {
         MonotonicStopWatch t;
         t.start();
         std::cv_status r = _cv.wait_for(lock, rel_time);
@@ -67,8 +66,8 @@ public:
     }
 
     template <class Rep, class Period, class Predicate>
-    bool wait_for(std::unique_lock<std::mutex>& lock,
-                  const std::chrono::duration<Rep, Period>& rel_time, Predicate pred) {
+    bool wait_for(std::unique_lock<std::mutex>& lock, const std::chrono::duration<Rep, Period>& rel_time,
+                  Predicate pred) {
         MonotonicStopWatch t;
         t.start();
         bool r = _cv.wait_for(lock, rel_time, std::move(pred));
@@ -89,8 +88,8 @@ public:
     }
 
     template <class Clock, class Duration, class Pred>
-    bool wait_until(std::unique_lock<std::mutex>& lock,
-                    const std::chrono::time_point<Clock, Duration>& timeout_time, Pred pred) {
+    bool wait_until(std::unique_lock<std::mutex>& lock, const std::chrono::time_point<Clock, Duration>& timeout_time,
+                    Pred pred) {
         MonotonicStopWatch t;
         t.start();
         bool r = _cv.wait_until(lock, timeout_time, std::move(pred));
@@ -112,6 +111,7 @@ template <typename T, typename Container = std::deque<T>, typename Lock = std::m
 class BlockingQueue {
 public:
     explicit BlockingQueue(size_t capacity) : _capacity(capacity), _shutdown(false) {}
+    ~BlockingQueue() { shutdown(); }
 
     // Return false iff empty *AND* has been shutdown.
     bool blocking_get(T* out) {
@@ -175,6 +175,7 @@ public:
     // Shutdown the queue, this will wake up all waiting threads.
     void shutdown() {
         std::lock_guard<Lock> guard(_lock);
+        if (_shutdown) return;
         _shutdown = true;
         _not_empty.notify_all();
         _not_full.notify_all();
@@ -207,7 +208,8 @@ template <typename T, typename Container = std::deque<T>, typename Lock = std::m
           typename CV = std::condition_variable>
 class UnboundedBlockingQueue {
 public:
-    UnboundedBlockingQueue()  {}
+    UnboundedBlockingQueue() {}
+    ~UnboundedBlockingQueue() { shutdown(); }
 
     // Return false iff empty *AND* has been shutdown.
     bool blocking_get(T* out) {
@@ -261,9 +263,9 @@ public:
 
     // Shutdown the queue, this will wake up all waiting threads.
     void shutdown() {
-        _lock.lock();
+        std::lock_guard<Lock> guard(_lock);
+        if (_shutdown) return;
         _shutdown = true;
-        _lock.unlock();
         _not_empty.notify_all();
     }
 
@@ -285,8 +287,7 @@ protected:
 };
 
 template <typename T>
-class TimedBlockingQueue
-        : public BlockingQueue<T, std::list<T>, std::mutex, TimedConditionVariable> {
+class TimedBlockingQueue : public BlockingQueue<T, std::list<T>, std::mutex, TimedConditionVariable> {
     using Base = BlockingQueue<T, std::list<T>, std::mutex, TimedConditionVariable>;
 
 public:

@@ -29,7 +29,9 @@ namespace starrocks {
 
 MysqlLoadErrorHub::MysqlLoadErrorHub(const TMysqlErrorHubInfo& info) : _info(info) {}
 
-MysqlLoadErrorHub::~MysqlLoadErrorHub() = default;
+MysqlLoadErrorHub::~MysqlLoadErrorHub() {
+    close();
+}
 
 Status MysqlLoadErrorHub::prepare() {
     _is_valid = true;
@@ -58,6 +60,8 @@ Status MysqlLoadErrorHub::close() {
     if (!_is_valid) {
         return Status::OK();
     }
+
+    _is_valid = false;
 
     if (!_error_msgs.empty()) {
         RETURN_IF_ERROR(write_mysql());
