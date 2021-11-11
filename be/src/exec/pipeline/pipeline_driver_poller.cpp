@@ -6,9 +6,9 @@
 namespace starrocks::pipeline {
 
 void PipelineDriverPoller::start() {
-    DCHECK(this->_polling_thread == nullptr);
+    DCHECK(this->_polling_thread.get() == nullptr);
     auto status = Thread::create(
-            "pipeline", "PipelineDriverPoller", [this]() { run_internal(); }, nullptr);
+            "pipeline", "PipelineDriverPoller", [this]() { run_internal(); }, &this->_polling_thread);
     if (!status.ok()) {
         LOG(FATAL) << "Fail to create PipelineDriverPoller: error=" << status.to_string();
     }
@@ -18,14 +18,14 @@ void PipelineDriverPoller::start() {
 }
 
 void PipelineDriverPoller::shutdown() {
-    if (this->_is_shutdown.load() == false) {
+    if (this->_is_shutdown.load() == false && _polling_thread.get() != nullptr) {
         this->_is_shutdown.store(true, std::memory_order_release);
         _cond.notify_one();
+        _polling_thread->join();
     }
 }
 
 void PipelineDriverPoller::run_internal() {
-    this->_polling_thread = Thread::current_thread();
     this->_is_polling_thread_initialized.store(true, std::memory_order_release);
     typeof(this->_blocked_drivers) local_blocked_drivers;
     int spin_count = 0;
