@@ -113,6 +113,9 @@ private:
 
     template <PrimitiveType primitive_type>
     static ColumnPtr _iterate_rows(FunctionContext* context, const Columns& columns);
+
+    template <PrimitiveType primitive_type>
+    static void _build_column(ColumnBuilder<primitive_type>& result, simdjson::ondemand::value& value);
 };
 
 } // namespace vectorized

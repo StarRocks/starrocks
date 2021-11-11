@@ -436,4 +436,58 @@ TEST_F(JsonSannerTest, normal_simple_arrayjson) {
     }
 }
 
+// ndjson format: http://ndjson.org/
+TEST_F(JsonSannerTest, ndjson) {
+    FileScanNode scan_node(&_obj_pool, _tnode, *_desc_tbl);
+    auto status = scan_node.prepare(&_runtime_state);
+    ASSERT_TRUE(status.ok());
+
+    // set scan range
+    std::vector<TScanRangeParams> scan_ranges;
+    {
+        TScanRangeParams scan_range_params;
+
+        TBrokerScanRange broker_scan_range;
+        broker_scan_range.params = _params;
+        TBrokerRangeDesc range;
+        range.start_offset = 0;
+        range.size = -1;
+        range.format_type = TFileFormatType::FORMAT_JSON;
+        range.strip_outer_array = true;
+        range.__isset.strip_outer_array = true;
+        range.splittable = true;
+        range.path = "./be/test/exec/test_data/json_scanner/ndjson.json";
+        range.file_type = TFileType::FILE_LOCAL;
+        broker_scan_range.ranges.push_back(range);
+        scan_range_params.scan_range.__set_broker_scan_range(broker_scan_range);
+        scan_ranges.push_back(scan_range_params);
+    }
+
+    scan_node.set_scan_ranges(scan_ranges);
+    status = scan_node.open(&_runtime_state);
+    ASSERT_TRUE(status.ok());
+
+    MemTracker tracker;
+    // Get batch
+    RowBatch batch(scan_node.row_desc(), _runtime_state.batch_size(), &tracker);
+    bool eof = false;
+    status = scan_node.get_next(&_runtime_state, &batch, &eof);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(2, batch.num_rows());
+    ASSERT_FALSE(eof);
+    batch.reset();
+
+    status = scan_node.get_next(&_runtime_state, &batch, &eof);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(0, batch.num_rows());
+    ASSERT_TRUE(eof);
+
+    scan_node.close(&_runtime_state);
+    {
+        std::stringstream ss;
+        scan_node.runtime_profile()->pretty_print(&ss);
+        LOG(INFO) << ss.str();
+    }
+}
+
 } // namespace starrocks

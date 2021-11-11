@@ -114,11 +114,6 @@ bool JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const s
         const std::string& col = jsonpath[i].key;
         int index = jsonpath[i].idx;
 
-        // TODO: ignore json path index, eg: $.data[0]
-        if (index != -1) {
-            return false;
-        }
-
         if (i == 1) {
             auto err = obj.find_field(col).get(tvalue);
             if (err) {
@@ -128,6 +123,23 @@ bool JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const s
             auto err = tvalue.find_field(col).get(tvalue);
             if (err) {
                 return false;
+            }
+        }
+
+        if (index != -1) {
+            auto arr = tvalue.get_array();
+            if (arr.error()) {
+                return false;
+            }
+
+            int idx = 0;
+            for (auto a : arr) {
+                if (a.error()) {
+                    return false;
+                }
+                if (idx++ == index) {
+                    tvalue = a.value();
+                }
             }
         }
     }
@@ -193,71 +205,106 @@ ColumnPtr JsonFunctions::_iterate_rows(FunctionContext* context, const Columns& 
             continue;
         }
 
-        // Object only.
-        if (doc.type() != simdjson::ondemand::json_type::object) {
-            result.append_null();
-            continue;
-        }
-
-        auto res = doc.get_object();
-        if (res.error()) {
-            result.append_null();
-            continue;
-        }
-
-        auto obj = res.value();
-
         std::vector<JsonPath> jsonpath;
         parse_json_paths(path_string, &jsonpath);
 
-        simdjson::ondemand::value value;
-        if (!extract_from_object(obj, jsonpath, value)) {
-            result.append_null();
-            continue;
+        switch (doc.type()) {
+        case simdjson::ondemand::json_type::object: {
+            auto res = doc.get_object();
+            if (res.error()) {
+                result.append_null();
+                continue;
+            }
+            auto obj = res.value();
+
+            simdjson::ondemand::value value;
+            if (!extract_from_object(obj, jsonpath, value)) {
+                result.append_null();
+                continue;
+            }
+
+            _build_column(result, value);
+            break;
         }
 
-        if constexpr (primitive_type == TYPE_INT) {
-            if (value.type() == simdjson::ondemand::json_type::number) {
-                switch (value.get_number_type()) {
-                case simdjson::ondemand::number_type::signed_integer: {
-                    result.append(value.get_int64());
-                    break;
+        case simdjson::ondemand::json_type::array: {
+            auto arr = doc.get_array();
+            for (auto a : arr) {
+                if (a.type() != simdjson::ondemand::json_type::object) {
+                    result.append_null();
+                    continue;
                 }
 
-                case simdjson::ondemand::number_type::unsigned_integer: {
-                    result.append(value.get_uint64());
-                    break;
-                }
-                default: {
+                auto res = a.get_object();
+                if (res.error()) {
                     result.append_null();
-                    break;
+                    continue;
                 }
-                }
-            } else {
-                result.append_null();
-            }
+                auto obj = res.value();
 
-        } else if constexpr (primitive_type == TYPE_DOUBLE) {
-            if (value.type() == simdjson::ondemand::json_type::number &&
-                value.get_number_type() == simdjson::ondemand::number_type::floating_point_number) {
-                result.append(value.get_double());
-            } else {
-                result.append_null();
-            }
-        } else if constexpr (primitive_type == TYPE_VARCHAR) {
-            if (value.type() == simdjson::ondemand::json_type::string) {
-                auto v = value.get_string();
-                if(v.error()) {
+                simdjson::ondemand::value value;
+                if (!extract_from_object(obj, jsonpath, value)) {
                     result.append_null();
+                    continue;
                 }
-                auto s = v.value();
-                result.append(Slice{s.data(), s.size()});
-            } else {
-                result.append_null();
+
+                _build_column(result, value);
             }
+            break;
+        }
+
+        default: {
+            result.append_null();
+            break;
+        }
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+template <PrimitiveType primitive_type>
+void JsonFunctions::_build_column(ColumnBuilder<primitive_type>& result, simdjson::ondemand::value& value) {
+    if constexpr (primitive_type == TYPE_INT) {
+        if (value.type() == simdjson::ondemand::json_type::number) {
+            switch (value.get_number_type()) {
+            case simdjson::ondemand::number_type::signed_integer: {
+                result.append(value.get_int64());
+                break;
+            }
+
+            case simdjson::ondemand::number_type::unsigned_integer: {
+                result.append(value.get_uint64());
+                break;
+            }
+            default: {
+                result.append_null();
+                break;
+            }
+            }
+        } else {
+            result.append_null();
+        }
+
+    } else if constexpr (primitive_type == TYPE_DOUBLE) {
+        if (value.type() == simdjson::ondemand::json_type::number &&
+            value.get_number_type() == simdjson::ondemand::number_type::floating_point_number) {
+            result.append(value.get_double());
+        } else {
+            result.append_null();
+        }
+    } else if constexpr (primitive_type == TYPE_VARCHAR) {
+        if (value.type() == simdjson::ondemand::json_type::string) {
+            auto v = value.get_string();
+            if (v.error()) {
+                result.append_null();
+            }
+            auto sv = v.value();
+            std::string s{sv.data(), sv.size()};
+            result.append(Slice{s});
+        } else {
+            result.append_null();
+        }
+    }
 }
 
 ColumnPtr JsonFunctions::get_json_int(FunctionContext* context, const Columns& columns) {

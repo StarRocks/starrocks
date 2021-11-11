@@ -103,10 +103,10 @@ TEST_F(JsonFunctionsTest, get_json_stringTest) {
 
     std::string values[] = {"{\"k1\":\"v1\", \"k2\":\"v2\"}", "{\"k1\":\"v1\", \"my.key\":[\"e1\", \"e2\", \"e3\"]}",
                             "{\"k1.key\":{\"k2\":[\"v1\", \"v2\"]}}",
-                            "[{\"k1\":\"v1\"}, {\"k2\":\"v2\"}, {\"k1\":\"v3\"}, {\"k1\":\"v4\"}]"};
+                            "[{\"k1\":\"v1\"}, {\"k1\":\"v2\"}, {\"k1\":\"v3\"}, {\"k1\":\"v4\"}]"};
 
     std::string strs[] = {"$.k1", "$.\"my.key\"[1]", "$.\"k1.key\".k2[0]", "$.k1"};
-    std::string length_strings[] = {"v1", "e2", "v1", "[\"v1\",\"v3\",\"v4\"]"};
+    std::string length_strings[] = {"v1", "e2", "v1", "v1", "v2", "v3", "v4"};
 
     for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
         strings->append(values[j]);
@@ -209,6 +209,40 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
 
         std::string values[] = {"{\"k1\":1.3, \"k2\":\"2\"}", "{\"k1\":\"v1\", \"my.key\":[1.1, 2.2, 3.3]}"};
         std::string strs[] = {"", ""};
+
+        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+            ints->append(values[j]);
+            ints2->append(strs[j]);
+        }
+
+        columns.emplace_back(ints);
+        columns.emplace_back(ints2);
+
+        ctx.get()->impl()->set_constant_columns(columns);
+        ASSERT_TRUE(
+                JsonFunctions::json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+        ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns);
+
+        auto v = ColumnHelper::as_column<NullableColumn>(result);
+
+        for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
+            ASSERT_TRUE(v->is_null(j));
+        }
+
+        ASSERT_TRUE(JsonFunctions::json_path_close(ctx.get(),
+                                                   FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+    }
+
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        Columns columns;
+        auto ints = BinaryColumn::create();
+        auto ints2 = BinaryColumn::create();
+
+        std::string values[] = {"{\"k1\":1.3, \"k2\":\"2\"}", "{\"k1\":\"v1\", \"my.key\":[1.1, 2.2, 3.3]}"};
+        std::string strs[] = {"$.k3", "$.k4"};
 
         for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
             ints->append(values[j]);

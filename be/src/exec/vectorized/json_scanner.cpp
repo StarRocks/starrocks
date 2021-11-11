@@ -295,6 +295,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read, const std::vec
 
         switch (doc.type()) {
         case simdjson::ondemand::json_type::array: {
+            // Expand array.
             auto arr = doc.get_array().value();
             if (_scanner->_json_paths.empty()) {
                 RETURN_IF_ERROR(_process_array(chunk, slot_descs, arr));
