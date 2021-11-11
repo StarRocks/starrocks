@@ -48,15 +48,7 @@ public class HashDistributionDesc {
     }
 
     public static boolean isColumnsSatisfy(List<Integer> left, List<Integer> right) {
-        if (right.size() < left.size()) {
-            return false;
-        }
-        for (int i = 0; i < left.size(); ++i) {
-            if (!right.get(i).equals(left.get(i))) {
-                return false;
-            }
-        }
-        return true;
+        return right.containsAll(left);
     }
 
     @Override
