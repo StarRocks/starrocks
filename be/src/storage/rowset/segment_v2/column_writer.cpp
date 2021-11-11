@@ -758,14 +758,10 @@ ArrayColumnWriter::ArrayColumnWriter(const ColumnWriterOptions& opts, std::uniqu
                                      std::unique_ptr<ScalarColumnWriter> null_writer,
                                      std::unique_ptr<ScalarColumnWriter> offset_writer,
                                      std::unique_ptr<ColumnWriter> element_writer)
-        : ColumnWriter(std::move(field), opts.meta->is_nullable()), _element_writer(std::move(element_writer)) {
-    if (is_nullable()) {
-        _null_writer = std::move(null_writer);
-    } else {
-        _null_writer = nullptr;
-    }
-    _array_size_writer = std::move(offset_writer);
-}
+        : ColumnWriter(std::move(field), opts.meta->is_nullable()),
+          _null_writer(std::move(null_writer)),
+          _array_size_writer(std::move(offset_writer)),
+          _element_writer(std::move(element_writer)) {}
 
 Status ArrayColumnWriter::init() {
     if (is_nullable()) {
