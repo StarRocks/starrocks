@@ -50,10 +50,10 @@ TEST_F(BufferControlBlockTest, add_one_get_one) {
 
     std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
     add_result->result_batch.rows.push_back("hello test");
-    ASSERT_TRUE(control_block.add_batch(add_result).ok());
+    ASSERT_TRUE(control_block.add_batch(std::move(add_result)).ok());
 
     auto get_result = std::make_unique<TFetchDataResult>();
-    ASSERT_TRUE(control_block.get_batch(get_result).ok());
+    ASSERT_TRUE(control_block.get_batch(&get_result).ok());
     ASSERT_FALSE(get_result->eos);
     ASSERT_EQ(1U, get_result->result_batch.rows.size());
     ASSERT_STREQ("hello test", get_result->result_batch.rows[0].c_str());
@@ -65,7 +65,7 @@ TEST_F(BufferControlBlockTest, get_one_after_close) {
 
     control_block.close(Status::OK());
     auto get_result = std::make_unique<TFetchDataResult>();
-    ASSERT_TRUE(control_block.get_batch(get_result).ok());
+    ASSERT_TRUE(control_block.get_batch(&get_result).ok());
     ASSERT_TRUE(get_result->eos);
 }
 
@@ -76,10 +76,10 @@ TEST_F(BufferControlBlockTest, get_add_after_cancel) {
     ASSERT_TRUE(control_block.cancel().ok());
     std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
     add_result->result_batch.rows.push_back("hello test");
-    ASSERT_FALSE(control_block.add_batch(add_result).ok());
+    ASSERT_FALSE(control_block.add_batch(std::move(add_result)).ok());
 
     auto get_result = std::make_unique<TFetchDataResult>();
-    ASSERT_FALSE(control_block.get_batch(get_result).ok());
+    ASSERT_FALSE(control_block.get_batch(&get_result).ok());
 }
 
 void* cancel_thread(void* param) {
@@ -101,17 +101,17 @@ TEST_F(BufferControlBlockTest, add_then_cancel) {
         std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
         add_result->result_batch.rows.push_back("hello test1");
         add_result->result_batch.rows.push_back("hello test2");
-        ASSERT_TRUE(control_block.add_batch(add_result).ok());
+        ASSERT_TRUE(control_block.add_batch(std::move(add_result)).ok());
     }
     {
         std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
         add_result->result_batch.rows.push_back("hello test1");
         add_result->result_batch.rows.push_back("hello test2");
-        ASSERT_FALSE(control_block.add_batch(add_result).ok());
+        ASSERT_FALSE(control_block.add_batch(std::move(add_result)).ok());
     }
 
     auto get_result = std::make_unique<TFetchDataResult>();
-    ASSERT_FALSE(control_block.get_batch(get_result).ok());
+    ASSERT_FALSE(control_block.get_batch(&get_result).ok());
 
     pthread_join(id, NULL);
 }
@@ -125,7 +125,7 @@ TEST_F(BufferControlBlockTest, get_then_cancel) {
 
     // get block until cancel
     auto get_result = std::make_unique<TFetchDataResult>();
-    ASSERT_FALSE(control_block.get_batch(get_result).ok());
+    ASSERT_FALSE(control_block.get_batch(&get_result).ok());
 
     pthread_join(id, NULL);
 }
@@ -137,7 +137,7 @@ void* add_thread(void* param) {
         std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
         add_result->result_batch.rows.push_back("hello test1");
         add_result->result_batch.rows.push_back("hello test2");
-        control_block->add_batch(add_result);
+        control_block->add_batch(std::move(add_result));
     }
     return NULL;
 }
@@ -151,7 +151,7 @@ TEST_F(BufferControlBlockTest, get_then_add) {
 
     // get block until a batch add
     auto get_result = std::make_unique<TFetchDataResult>();
-    ASSERT_TRUE(control_block.get_batch(get_result).ok());
+    ASSERT_TRUE(control_block.get_batch(&get_result).ok());
     ASSERT_FALSE(get_result->eos);
     ASSERT_EQ(2U, get_result->result_batch.rows.size());
     ASSERT_STREQ("hello test1", get_result->result_batch.rows[0].c_str());
@@ -176,7 +176,7 @@ TEST_F(BufferControlBlockTest, get_then_close) {
 
     // get block until a batch add
     auto get_result = std::make_unique<TFetchDataResult>();
-    ASSERT_TRUE(control_block.get_batch(get_result).ok());
+    ASSERT_TRUE(control_block.get_batch(&get_result).ok());
     ASSERT_TRUE(get_result->eos);
     ASSERT_EQ(0U, get_result->result_batch.rows.size());
 

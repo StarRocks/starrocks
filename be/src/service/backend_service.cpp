@@ -120,7 +120,7 @@ void BackendService::transmit_data(TTransmitDataResult& return_val, const TTrans
 void BackendService::fetch_data(TFetchDataResult& return_val, const TFetchDataParams& params) {
     // maybe hang in this function
     auto result = std::make_unique<TFetchDataResult>();
-    Status status = _exec_env->result_mgr()->fetch_data(params.fragment_instance_id, result);
+    Status status = _exec_env->result_mgr()->fetch_data(params.fragment_instance_id, &result);
     return_val = *(result.get());
     status.set_t_status(&return_val);
 }

@@ -246,7 +246,7 @@ Status MysqlResultWriter::append_row_batch(const RowBatch* batch) {
     if (status.ok()) {
         SCOPED_TIMER(_result_send_timer);
         // push this batch to back
-        status = _sinker->add_batch(result);
+        status = _sinker->add_batch(std::move(result));
 
         if (status.ok()) {
             _written_rows += num_rows;
@@ -270,7 +270,7 @@ Status MysqlResultWriter::append_chunk(vectorized::Chunk* chunk) {
 
     TFetchDataResultPtr result = std::move(status.value());
     SCOPED_TIMER(_result_send_timer);
-    auto add_status = _sinker->add_batch(result);
+    auto add_status = _sinker->add_batch(std::move(result));
     if (status.ok()) {
         _written_rows += num_rows;
         return add_status;
@@ -354,10 +354,10 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::process_chunk(vectorized::Chunk
     return result;
 }
 
-StatusOr<bool> MysqlResultWriter::try_add_batch(TFetchDataResultPtr& result) {
+StatusOr<bool> MysqlResultWriter::try_add_batch(TFetchDataResultPtr result) {
     SCOPED_TIMER(_result_send_timer);
     auto num_rows = result->result_batch.rows.size();
-    auto status = _sinker->try_add_batch(result);
+    auto status = _sinker->try_add_batch(std::move(result));
 
     if (status.ok()) {
         // success in add result to ResultQueue of _sinker

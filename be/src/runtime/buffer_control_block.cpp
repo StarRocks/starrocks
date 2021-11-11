@@ -83,7 +83,7 @@ Status BufferControlBlock::init() {
     return Status::OK();
 }
 
-Status BufferControlBlock::add_batch(TFetchDataResultPtr& result) {
+Status BufferControlBlock::add_batch(TFetchDataResultPtr result) {
     std::unique_lock<std::mutex> l(_lock);
 
     if (_is_cancelled) {
@@ -113,7 +113,7 @@ Status BufferControlBlock::add_batch(TFetchDataResultPtr& result) {
     return Status::OK();
 }
 
-StatusOr<bool> BufferControlBlock::try_add_batch(TFetchDataResultPtr& result) {
+StatusOr<bool> BufferControlBlock::try_add_batch(TFetchDataResultPtr result) {
     std::unique_lock<std::mutex> l(_lock);
 
     if (_is_cancelled) {
@@ -139,7 +139,7 @@ StatusOr<bool> BufferControlBlock::try_add_batch(TFetchDataResultPtr& result) {
     return true;
 }
 
-Status BufferControlBlock::get_batch(TFetchDataResultPtr& result) {
+Status BufferControlBlock::get_batch(TFetchDataResultPtr* result) {
     TFetchDataResultPtr item;
     {
         std::unique_lock<std::mutex> l(_lock);
@@ -159,8 +159,8 @@ Status BufferControlBlock::get_batch(TFetchDataResultPtr& result) {
         if (_batch_queue.empty()) {
             if (_is_close) {
                 // no result, normal end
-                result->eos = true;
-                result->__set_packet_num(_packet_num);
+                (*result)->eos = true;
+                (*result)->__set_packet_num(_packet_num);
                 _packet_num++;
                 return Status::OK();
             } else {
@@ -175,8 +175,8 @@ Status BufferControlBlock::get_batch(TFetchDataResultPtr& result) {
         _buffer_rows -= item->result_batch.rows.size();
         _data_removal.notify_one();
     }
-    result.swap(item);
-    result->__set_packet_num(_packet_num);
+    (*result).swap(item);
+    (*result)->__set_packet_num(_packet_num);
     _packet_num++;
 
     return Status::OK();

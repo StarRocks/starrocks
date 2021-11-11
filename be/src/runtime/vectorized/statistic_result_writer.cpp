@@ -78,7 +78,7 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
 
     // Step 4: send
     size_t num_rows = result->result_batch.rows.size();
-    Status status = _sinker->add_batch(result);
+    Status status = _sinker->add_batch(std::move(result));
 
     if (status.ok()) {
         _written_rows += num_rows;

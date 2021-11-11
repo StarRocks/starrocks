@@ -70,12 +70,12 @@ public:
     ~BufferControlBlock();
 
     Status init();
-    Status add_batch(TFetchDataResultPtr& result);
+    Status add_batch(TFetchDataResultPtr result);
     // non-blocking version of add_batch
-    StatusOr<bool> try_add_batch(TFetchDataResultPtr& result);
+    StatusOr<bool> try_add_batch(TFetchDataResultPtr result);
 
     // get result from batch, use timeout?
-    Status get_batch(TFetchDataResultPtr& result);
+    Status get_batch(TFetchDataResultPtr* result);
 
     void get_batch(GetResultBatchCtx* ctx);
 
