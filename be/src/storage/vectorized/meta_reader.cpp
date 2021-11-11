@@ -10,7 +10,6 @@
 #include "storage/rowset/segment_v2/column_reader.h"
 #include "storage/tablet.h"
 #include "storage/vectorized/chunk_helper.h"
-#include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 

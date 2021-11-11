@@ -951,17 +951,10 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     int32_t end_version = -1;
     Status status;
     {
-        base_tablet->obtain_push_lock();
-        DeferOp base_tablet_push_lock_release_guard([&]() { base_tablet->release_push_lock(); });
-
-        new_tablet->obtain_push_lock();
-        DeferOp new_tablet_push_lock_release_guard([&]() { new_tablet->release_push_lock(); });
-
-        base_tablet->obtain_header_wrlock();
-        DeferOp base_tablet_header_wrlock_release_guard([&]() { base_tablet->release_header_lock(); });
-
-        new_tablet->obtain_header_wrlock();
-        DeferOp new_tablet_header_wrlock_release_guard([&]() { new_tablet->release_header_lock(); });
+        std::lock_guard l1(base_tablet->get_push_lock());
+        std::lock_guard l2(new_tablet->get_push_lock());
+        std::lock_guard l3(base_tablet->get_header_lock());
+        std::lock_guard l4(new_tablet->get_header_lock());
 
         // check if the tablet has alter task
         // if it has alter task, it means it is under old alter process

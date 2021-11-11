@@ -18,7 +18,6 @@
 #include "storage/vectorized/predicate_parser.h"
 #include "storage/vectorized/seek_range.h"
 #include "storage/vectorized/union_iterator.h"
-#include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 
