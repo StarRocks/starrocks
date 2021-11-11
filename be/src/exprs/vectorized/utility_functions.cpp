@@ -50,4 +50,15 @@ ColumnPtr UtilityFunctions::last_query_id(FunctionContext* context, const Column
     }
 }
 
+ColumnPtr UtilityFunctions::uuid(FunctionContext*, const Columns& columns) {
+    int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns[columns.size() - 1]);
+
+    ColumnBuilder<TYPE_VARCHAR> result;
+    for (int i = 0; i < num_rows; ++i) {
+        result.append(generate_uuid_string());
+    }
+
+    return result.build(false);
+}
+
 } // namespace starrocks::vectorized
